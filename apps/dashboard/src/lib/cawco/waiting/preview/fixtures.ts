@@ -1,7 +1,8 @@
 /**
  * What an orchestrator of the Cawco-Dev project waits on the person for,
  * shaped as the hub answers it (core session-questions.ts) and the
- * composer's parked asks: the states the session's list reaches.
+ * composer's parked asks (a question folded to its bar): the states the
+ * session's list reaches.
  */
 import type { SessionQuestion } from "@cawco/core/session-questions";
 import { type WaitingAsk, type WaitingRow, waitingRows } from "../rows";
@@ -30,7 +31,7 @@ const BARS: SessionQuestion["artifact"] = {
 };
 const RECORD: SessionQuestion["artifact"] = {
   id: "a-record",
-  kind: "component",
+  kind: "preview",
   title: "A member's record",
 };
 const RAIL: SessionQuestion["artifact"] = {
@@ -85,13 +86,13 @@ const SEVERAL: SessionQuestion[] = [
   },
 ];
 
-/** A permission his turn is parked on. */
+/** The agent's question, folded to its bar on the tray row. */
+export const ASKED =
+  "Ship tonight's nightly with the title bars, or wait for the two host checks?";
+
+/** That question, as its row reads it. */
 const ASK: WaitingAsk[] = [
-  {
-    requestId: "r-1",
-    summary: "Run the title-bars probe on the host as round 474",
-    from: null,
-  },
+  { kind: "question", requestId: "r-question", summary: ASKED, from: null },
 ];
 
 /** A delegate's question, under this session. */

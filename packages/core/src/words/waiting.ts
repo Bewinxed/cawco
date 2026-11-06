@@ -1,7 +1,8 @@
 /**
  * What a session waits on the person for, on the session's own screen: the
  * questions its delegation tree put to him (core session-questions.ts) and
- * the permission asks its turn is parked on.
+ * the asks its tree's turns are parked on (a permission, a question, a
+ * sign-in).
  */
 export const waitingWords = {
   /** The list's title: what waits on him, or, once all is answered, what he answered. */
@@ -26,6 +27,8 @@ export const waitingWords = {
     judge: "To judge",
     pin: "Pin",
     permission: "Permission",
+    question: "Question",
+    connect: "Sign-in",
   },
   /** Each state, its glyph's name. */
   state: {
@@ -38,7 +41,7 @@ export const waitingWords = {
   fromEnded: (title: string) => `From ${title}, ended`,
   /** A row, for a screen reader: what pressing it does. */
   open: (words: string) => `Open: ${words}`,
-  /** A permission ask's row: it is answered in the composer. */
+  /** A parked ask's row: it is answered where it stands, in the composer or the transcript. */
   showAsk: (summary: string) => `Show the ask: ${summary}`,
   /** The list could not be read. */
   readFailed: (why: string) =>

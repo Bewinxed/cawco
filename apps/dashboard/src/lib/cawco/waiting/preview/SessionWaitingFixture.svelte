@@ -1,59 +1,75 @@
 <script lang="ts">
-  import { waitingWords } from "@cawco/core/words/waiting";
+  import { conversationWords } from "@cawco/core/words/project-conversation";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   /**
-   * The session's screen as the person meets it, drawn around where its
-   * list of what waits on him stands, for the canvas to show each place in
-   * each state: the tab strip and the bar's glass over the conversation,
-   * its turns, the composer's tray row (a delegate's chip, the plan ring)
-   * and the composer. The list, its chip and its card are the real ones;
-   * the rest is the kit's own parts in the session's shape, never the live
-   * shell.
+   * A session's screen as the person meets it, for the canvas to draw the
+   * list of what waits on him in each state: the session's tab and the
+   * bar's glass floating over the conversation, its turns, and the real
+   * composer (Composer) with its tray row, where the list's chip
+   * (WaitingChip) stands before the plan's ring and its card (WaitingCard)
+   * rises over the row. `caw`: the same conversation as Caw's docked panel
+   * on a project's page (CawFloat, ProjectConversation), its own bar
+   * floating over its turns.
    *
-   * `place` is where the list lives: `tray`, a chip on the tray row whose
-   * card rises over the row; `bar`, a symbol in the bar's glass whose card
-   * hangs from the glass; `tab`, the session tab's own card, opened by
-   * pressing the tab that wears the hand.
+   * The composer, the chip, the card, the list and the ring are the
+   * product's; the composer's fleet is the app's (composer-fleet.ts), its
+   * delegate tray the one part drawn here (`FixtureTray`: the live tray
+   * reads the hub's store). `asked`: the agent's question folded to its bar
+   * on the tray row (minimized-asks.svelte.ts), the chip beside it.
    */
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import MessageBody from "#lib/cawco/MessageBody.svelte";
+  import { minimizedAsks } from "#lib/cawco/minimized-asks.svelte.js";
+  import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
+  import Composer, {
+    type ComposerAsk,
+  } from "#lib/cawco/transcript/Composer.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
+  import {
+    BarFloat,
+    BarGlass,
+    BarItem,
+  } from "#lib/components/ui/bar-glass/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import {
-    IconChevronDown,
-    IconFiles,
+    IconClose,
+    IconFilesLinear,
+    IconListRowsLinear,
+    IconMoveTabLinear,
     IconNeedsYou,
     IconPlus,
     IconSearch,
-    IconSend,
-    IconServer,
-    IconTick,
+    IconServerLinear,
   } from "#lib/icons.js";
-  import MessageBody from "../../MessageBody.svelte";
-  import PlanRing from "../../plan/PlanRing.svelte";
   import { type WaitingRow, waitingCounts } from "../rows";
   import WaitingCard from "../WaitingCard.svelte";
   import WaitingChip from "../WaitingChip.svelte";
-  import WaitingList from "../WaitingList.svelte";
+  import FixtureTray from "./FixtureTray.svelte";
 
   let {
-    place,
     rows,
     opened = false,
     height = 760,
+    asked = null,
+    caw = false,
   }: {
-    place: "tray" | "bar" | "tab";
     rows: WaitingRow[];
     /** The list stands open. */
     opened?: boolean;
     /** The frame's height, px. */
     height?: number;
+    /** The agent's question, folded to its bar on the tray row. */
+    asked?: string | null;
+    /** The conversation is Caw's, in his panel on the project's page. */
+    caw?: boolean;
   } = $props();
+
+  const SESSION = "s-orchestrator";
 
   // A story's args are the live instance's inputs: the press flips its own copy, and a new arg resets it.
   let shown = $state(false);
@@ -63,264 +79,218 @@
 
   /** A press the fixture answers with nothing: the screen's own opens are the live pane's. */
   const nothing = () => undefined;
+  const fleet = { ...composerFleet, DelegateTray: FixtureTray };
+  const draft = new ComposerDraft();
 
   const counts = $derived(waitingCounts(rows));
-  const waiting = $derived(counts.open > 0);
 
-  const TURNS = [
-    "The Liquid Glass title bars are on main. They'll reach your machines in the next nightly, which I'm holding until two host checks on other fixes pass.",
-    "With the bars landed, I've started the design for seeing a session's pending decisions from its own chat. Its options will come to you on one decision page.",
-  ];
+  /** The question folded to its bar, as the hub parks an AskUserQuestion. */
+  const ask = $derived.by((): ComposerAsk | null => {
+    if (!asked) {
+      return null;
+    }
+    const request: ComposerAsk["request"] = {
+      heard: 0,
+      instanceId: SESSION,
+      requestId: "r-question",
+      toolName: "AskUserQuestion",
+      input: {
+        questions: [
+          {
+            question: asked,
+            header: "Nightly",
+            multiSelect: false,
+            options: [
+              { label: "Ship it now", description: "" },
+              { label: "Wait for the checks", description: "" },
+            ],
+          },
+        ],
+      },
+      presentation: {
+        asker: caw ? "Caw" : "Claude Code",
+        changes: [],
+        fields: [],
+        summary: asked,
+      },
+    };
+    return {
+      request,
+      asker: request.presentation.asker,
+      more: 0,
+      onanswer: () => null,
+    };
+  });
+  $effect.pre(() => {
+    if (ask) {
+      minimizedAsks.set(ask.request.requestId, true);
+    }
+  });
+
+  const TURNS = $derived(
+    caw
+      ? [
+          "Three tasks moved to review this morning. The title bars are on main, and the Comments rail is waiting on your pick of where a pin's replies open on a phone.",
+          "I've started a delegate on the delegate tray at 390. Its preview will come to you to judge once it draws at both widths.",
+        ]
+      : [
+          "The Liquid Glass title bars are on main. They'll reach your machines in the next nightly, which I'm holding until two host checks on other fixes pass.",
+          "With the bars landed, I've started the design for seeing a session's pending decisions from its own chat. Its options will come to you on one decision page.",
+        ]
+  );
 </script>
 
-<TooltipProvider>
+{#snippet trailing()}
+  <WaitingChip
+    answered={counts.answered}
+    onopen={() => {
+      shown = !shown;
+    }}
+    open={counts.open}
+    {shown}
+  />
+  {#if shown && rows.length > 0}
+    <WaitingCard
+      onclose={() => {
+        shown = false;
+      }}
+      onopen={nothing}
+      paneId={SESSION}
+      {rows}
+    />
+  {/if}
+  <PlanRing done={2} onopen={nothing} open={false} total={12} unseen={null} />
+{/snippet}
+
+{#snippet conversation()}
+  <!-- The pane: its turns under the floating bar, then the composer docked over its foot. -->
   <div
-    class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-shelf text-ink-strong"
-    data-slot="session-fixture"
-    style:--fixture-h="{height}px"
-    style:--card-room="calc({height}px - 2 * var(--c-top-bar-h) -
-    var(--c-composer-field) - var(--space-8))"
+    class="relative flex min-h-0 flex-auto flex-col bg-surface-raised"
+    data-slot="pane"
   >
-    <!-- The shelf: the session's tab, then the bar's trailing glass. -->
     <div
-      class="relative z-2 flex h-c-top-bar-h flex-none items-end gap-space-3 ps-space-3 pe-space-2"
+      class={[
+        "min-h-0 flex-auto overflow-hidden px-space-7 max-desk:px-space-5",
+        caw && "pbs-c-top-bar-h",
+      ]}
     >
-      <div class="relative min-w-0 flex-auto">
-        <Tabs value="this" variant="folder">
-          <TabsList aria-label="Sessions">
-            <TabItem
-              aria-expanded={place === "tab" ? shown : undefined}
-              label="Continue CawCo open tasks"
-              onclick={() => {
-                if (place === "tab") {
-                  shown = !shown;
-                }
-              }}
-              value="this"
-            >
-              {#snippet lead()}
-                {#if waiting}
-                  <IconNeedsYou
-                    aria-hidden="true"
-                    class="size-icon-md text-status-attn-glyph"
-                  />
-                {/if}
-              {/snippet}
-            </TabItem>
-          </TabsList>
-        </Tabs>
-        {#if place === "tab" && shown}
-          <section
-            aria-label="Continue CawCo open tasks"
-            class={floatingSurface({
-              class:
-                "absolute start-0 top-[calc(100%+var(--space-1))] z-3 flex max-h-(--card-room) w-[min(var(--c-lead-card-w),calc(100cqw-var(--space-6)))] flex-col p-0",
-            })}
-            data-state="open"
-          >
-            <div
-              class="flex flex-col gap-space-1 px-space-4 pbs-space-4 pbe-space-3"
-            >
-              <h2 class="type-title m-0 text-ink-strong">
-                Continue CawCo open tasks
-              </h2>
-              <p
-                class="type-meta mark-line m-0 flex items-center gap-space-1 text-ink-muted"
-              >
-                {#if waiting}
-                  <IconNeedsYou
-                    aria-hidden="true"
-                    class="size-icon-sm text-status-attn-glyph"
-                  />
-                  <span class="text-status-attn-ink">Needs you</span>
-                  <span aria-hidden="true">·</span>
-                {/if}
-                <span>obelisk-of-light</span>
-              </p>
-            </div>
-            {#if rows.length > 0}
-              <div
-                class="kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain border-bs border-bs-border-hairline px-space-1 pbs-space-2"
-              >
-                <WaitingList onopen={nothing} {rows} />
-              </div>
-            {/if}
-            <div
-              class="flex flex-wrap gap-space-2 border-bs border-bs-border-hairline px-space-4 py-space-3"
-            >
-              {#each ["Opus 5.5", "Xhigh", "Bypass"] as setting (setting)}
-                <span class={chipVariants({ variant: "setting" })}>
-                  <span data-slot="chip-label">{setting}</span>
-                  <IconChevronDown data-slot="chevron" aria-hidden="true" />
-                </span>
-              {/each}
-            </div>
-          </section>
-        {/if}
-      </div>
-      <div class="relative flex-none self-center">
-        <BarGlass form="group">
-          <button
-            aria-label="Files, 100"
-            class="select-none mark-line touch-hit press-tint"
-            data-bar-item
-            data-counted
-            type="button"
-          >
-            <IconFiles data-slot="bar-symbol" aria-hidden="true" />
-            <span data-slot="num" class="num">100</span>
-          </button>
-          {#if place === "bar" && rows.length > 0}
-            <button
-              aria-expanded={shown}
-              aria-haspopup="dialog"
-              aria-label={waitingWords.triggerLabel(
-                counts.open,
-                counts.answered
-              )}
-              class="select-none mark-line touch-hit press-tint"
-              data-bar-item
-              data-counted
-              onclick={() => {
-                shown = !shown;
-              }}
-              type="button"
-            >
-              {#if waiting}
-                <IconNeedsYou
-                  data-slot="bar-symbol"
-                  aria-hidden="true"
-                  class="text-status-attn-glyph"
-                />
-              {:else}
-                <IconTick data-slot="bar-symbol" aria-hidden="true" />
-              {/if}
-              <span data-slot="num" class="num"
-                >{counts.open > 0 ? counts.open : counts.answered}</span
-              >
-            </button>
-          {/if}
-          <button
-            aria-label="Jump to session"
-            class="select-none touch-hit press-tint"
-            data-bar-item
-            type="button"
-          >
-            <IconSearch data-slot="bar-symbol" aria-hidden="true" />
-          </button>
-          <button
-            aria-label="4 machines"
-            class="select-none mark-line touch-hit press-tint"
-            data-bar-item
-            data-counted
-            type="button"
-          >
-            <IconServer data-slot="bar-symbol" aria-hidden="true" />
-            <span data-slot="num" class="num">4</span>
-          </button>
-        </BarGlass>
-        {#if place === "bar" && shown && rows.length > 0}
-          <section
-            aria-label={waitingWords.title(counts.open)}
-            class={floatingSurface({
-              class:
-                "absolute end-0 top-[calc(100%+var(--space-1))] z-3 flex max-h-(--card-room) w-[min(var(--c-lead-card-w),calc(100cqw-var(--space-4)))] flex-col p-0",
-            })}
-            data-state="open"
-          >
-            <h2
-              class="m-0 flex h-c-top-bar-h items-center px-space-4 text-size-label font-medium text-ink-strong"
-            >
-              {waitingWords.title(counts.open)}
-            </h2>
-            <div
-              class="kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain px-space-1 pbe-space-2"
-            >
-              <WaitingList onopen={nothing} {rows} />
-            </div>
-          </section>
-        {/if}
+      <div
+        class="mx-auto flex max-w-c-measure flex-col gap-space-5 pbs-space-4"
+      >
+        {#each TURNS as turn, n (n)}
+          <article class="flex flex-col gap-space-2">
+            <p class="type-label m-0 text-ink-row">
+              {caw ? "Caw" : "Claude Code"}
+            </p>
+            <MessageBody source={turn} wrap="pretty" />
+          </article>
+        {/each}
       </div>
     </div>
-
-    <!-- The pane: its turns, then the dock (tray row and composer). -->
-    <div
-      class="relative flex min-h-0 flex-auto flex-col rounded-t-lg bg-surface-raised @container"
-      data-slot="dock"
-    >
-      <div class="min-h-0 flex-auto overflow-hidden px-space-7 pbs-space-6">
-        <div class="mx-auto flex max-w-c-measure flex-col gap-space-5">
-          {#each TURNS as turn, n (n)}
-            <article class="flex flex-col gap-space-2">
-              <p class="type-label m-0 text-ink-row">Claude Code</p>
-              <MessageBody source={turn} wrap="pretty" />
-            </article>
-          {/each}
-        </div>
-      </div>
-      <div class="relative flex-none px-space-4 pbe-space-4">
-        <div class="relative mx-auto flex max-w-c-measure flex-col gap-space-2">
-          <div class="relative flex items-center gap-space-2" data-slot="tray">
-            <span
-              class={chipVariants({
-                variant: "tray",
-                class: "min-w-0 shrink text-ink-strong",
-              })}
-            >
-              <span
-                class="size-icon-md rounded-xs bg-mark-3"
-                aria-hidden="true"
-                data-box
-              ></span>
-              <span
-                class="min-w-0 max-w-c-tab-max-w overflow-clip text-ellipsis whitespace-nowrap"
-                >Design the Comments rail and sheet whole</span
-              >
-            </span>
-            <span class="ms-auto"></span>
-            {#if place === "tray"}
-              <WaitingChip
-                answered={counts.answered}
-                onopen={() => {
-                  shown = !shown;
-                }}
-                open={counts.open}
-                {shown}
-              />
-            {/if}
-            {#if place === "tray" && shown && rows.length > 0}
-              <WaitingCard
-                onclose={() => {
-                  shown = false;
-                }}
-                onopen={nothing}
-                {rows}
-              />
-            {/if}
-            <PlanRing done={2} onopen={nothing} open={false} total={12} />
-          </div>
-          <div
-            class="flex items-center gap-space-2 rounded-panel border border-border-control bg-surface-raised p-space-2 ps-space-4 shadow-tile"
-          >
-            <span class="type-body min-w-0 flex-auto truncate text-ink-subtle">
-              Message the agent…
-            </span>
-            <Button
-              icon={IconPlus}
-              aria-label="Attach or draw"
-              size="icon-composer"
-              variant="outline"
-            />
-            <Button
-              icon={IconSend}
-              aria-label="Send message"
-              size="icon-composer"
-              variant="default"
-              disabled
-            />
-          </div>
-        </div>
-      </div>
+    <div class="pointer-events-none absolute inset-0 z-1">
+      <Composer
+        agentName={caw ? "Caw" : "Claude Code"}
+        {ask}
+        {draft}
+        {fleet}
+        onstop={nothing}
+        onsubmit={nothing}
+        placeholder={caw ? conversationWords.placeholder.short : undefined}
+        planRing={trailing}
+        showing={SESSION}
+        trayRows={[{ delegatesOf: SESSION, id: SESSION }]}
+      />
     </div>
   </div>
+{/snippet}
+
+<TooltipProvider>
+  {#if caw}
+    <!-- A project's page with Caw's panel docked beside it, a conversation's width. -->
+    <div
+      class="flex h-(--fixture-h) overflow-clip bg-surface-shelf text-ink-strong"
+      data-slot="caw-fixture"
+      style:--fixture-h="{height}px"
+    >
+      <div
+        class="flex min-w-0 flex-auto flex-col gap-space-4 p-space-6 max-desk:hidden"
+      >
+        <h1 class="type-title m-0">Cawco-Dev</h1>
+        <p class="type-body m-0 text-ink-muted">
+          31 tasks · 4 in review · 2 sessions working
+        </p>
+      </div>
+      <div
+        class="relative m-space-2 flex w-c-panel-w flex-none flex-col overflow-clip rounded-lg bg-surface-raised shadow-tile max-desk:m-0 max-desk:w-full max-desk:rounded-none"
+        data-caw-panel
+        style:--bar-room="var(--c-top-bar-h)"
+      >
+        <div class="absolute inset-x-0 top-0 z-2">
+          <BarFloat tint="bg-surface-raised">
+            {#snippet trailing()}
+              <BarGlass form="group">
+                <BarItem
+                  icon={IconListRowsLinear}
+                  label={transcriptWords.sessionDetails}
+                />
+                <BarItem
+                  icon={IconPlus}
+                  label={conversationWords.newConversation}
+                />
+                <BarItem
+                  icon={IconMoveTabLinear}
+                  label={conversationWords.openAsTab}
+                />
+              </BarGlass>
+              <BarGlass form="group">
+                <BarItem icon={IconClose} label={conversationWords.hidePanel} />
+              </BarGlass>
+            {/snippet}
+          </BarFloat>
+        </div>
+        {@render conversation()}
+      </div>
+    </div>
+  {:else}
+    <div
+      class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-shelf text-ink-strong"
+      data-slot="session-fixture"
+      style:--fixture-h="{height}px"
+    >
+      <!-- The shelf: the session's tab, then the bar's trailing glass. -->
+      <div
+        class="relative z-2 flex h-c-top-bar-h flex-none items-end gap-space-3 ps-space-3 pe-space-2"
+      >
+        <div class="relative min-w-0 flex-auto">
+          <Tabs value="this" variant="folder">
+            <TabsList aria-label="Sessions">
+              <TabItem label="Continue CawCo open tasks" value="this">
+                {#snippet lead()}
+                  {#if counts.open > 0}
+                    <IconNeedsYou
+                      aria-hidden="true"
+                      class="size-icon-md text-status-attn-glyph"
+                    />
+                  {/if}
+                {/snippet}
+              </TabItem>
+            </TabsList>
+          </Tabs>
+        </div>
+        <div class="relative flex-none self-center max-desk:hidden">
+          <BarGlass form="group">
+            <BarItem count={100} icon={IconFilesLinear} label="Files, 100" />
+            <BarItem label="Jump to session">
+              <IconSearch
+                aria-hidden="true"
+                class="size-icon-md text-ink-muted"
+              />
+            </BarItem>
+            <BarItem count={4} icon={IconServerLinear} label="4 machines" />
+          </BarGlass>
+        </div>
+      </div>
+      {@render conversation()}
+    </div>
+  {/if}
 </TooltipProvider>

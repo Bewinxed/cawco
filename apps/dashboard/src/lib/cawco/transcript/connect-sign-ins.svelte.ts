@@ -165,8 +165,9 @@ export const connectSignIns = {
 };
 
 /**
- * The conversations whose connect card the reader asked to see (the
- * "1 needs you" chip, ConnectNeedsChip): each transcript brings its card
- * into view and takes its id off.
+ * The conversations whose connect card the reader asked to see (a sign-in's
+ * row in the list of what waits on him, waiting/): each transcript brings
+ * its card into view, its own or a delegate's after its rows, and takes
+ * its id off.
  */
 export const connectReveal = new SvelteSet<string>();

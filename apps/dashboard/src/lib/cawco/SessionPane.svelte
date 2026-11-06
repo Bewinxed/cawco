@@ -1,7 +1,9 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind, PermissionResult } from "@cawco/core/harness";
+  import { questionsOf } from "@cawco/core/question";
   import { CONTINUED_IN } from "@cawco/core/relaunch";
+  import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   /**
@@ -103,13 +105,15 @@
   import TaskPane from "./tasks/TaskPane.svelte";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
   import ConnectCard from "./transcript/ConnectCard.svelte";
-  import ConnectNeedsChip from "./transcript/ConnectNeedsChip.svelte";
   import {
     ComposerDraft,
     paneDrafts,
   } from "./transcript/composer-draft.svelte";
   import { composerFleet } from "./transcript/composer-fleet";
-  import { connectSignIns } from "./transcript/connect-sign-ins.svelte";
+  import {
+    connectReveal,
+    connectSignIns,
+  } from "./transcript/connect-sign-ins.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import { followSends } from "./transcript/follow-sends.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
@@ -120,6 +124,10 @@
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import { trayHasChips } from "./transcript/tray.svelte";
   import { setVoice } from "./turn/voice";
+  import type { WaitingAsk } from "./waiting/rows";
+  import { SessionWaiting } from "./waiting/session-waiting.svelte";
+  import WaitingCard from "./waiting/WaitingCard.svelte";
+  import WaitingChip from "./waiting/WaitingChip.svelte";
   import {
     type ComposerBinding,
     composerBindings,
@@ -228,14 +236,14 @@
   });
   /**
    * The connect asks standing open as cards in this transcript, until the
-   * hub has signed in for one: the chip at the tray row's end leads back to
-   * them (ConnectNeedsChip).
+   * hub has signed in for one: rows of what waits on the person
+   * (`waitingAsks`), each leading back to its card.
    */
   const connectsOpen = $derived(
     (cawco.session(viewId)?.pending ?? []).flatMap((request) =>
       request.connectAsk &&
       connectSignIns.of(request.requestId).stage !== "done"
-        ? [{ asker: agentName, server: request.connectAsk.server }]
+        ? [{ requestId: request.requestId, server: request.connectAsk.server }]
         : []
     )
   );
@@ -1045,6 +1053,68 @@
   const connectsUnder = $derived(
     asksUnder.filter((row) => row.request.connectAsk)
   );
+  /**
+   * The asks its tree's turns are parked on, as rows of what waits on the
+   * person: its permissions and questions (`parked`, the composer grows
+   * into the first), then the sign-ins whose cards stand in this
+   * transcript, its own and its delegates'.
+   */
+  const waitingAsks = $derived<WaitingAsk[]>([
+    ...parked.map((row): WaitingAsk => {
+      const [first] =
+        questionsOf(
+          row.request.toolName,
+          row.request.input as Record<string, unknown>
+        ) ?? [];
+      return {
+        kind: first ? "question" : "permission",
+        requestId: row.request.requestId,
+        summary: first
+          ? first.question || first.header
+          : row.request.presentation.summary,
+        from: row.under
+          ? { ended: false, id: row.under.instanceId, title: row.under.asker }
+          : null,
+      };
+    }),
+    ...connectsOpen.map((ask): WaitingAsk => ({
+      kind: "connect",
+      requestId: ask.requestId,
+      summary: askWords.connect(ask.server),
+      from: null,
+    })),
+    ...connectsUnder.flatMap((row): WaitingAsk[] =>
+      row.request.connectAsk &&
+      connectSignIns.of(row.request.requestId).stage !== "done"
+        ? [
+            {
+              kind: "connect",
+              requestId: row.request.requestId,
+              summary: askWords.connect(row.request.connectAsk.server),
+              from: { ended: false, id: row.instanceId, title: row.asker },
+            },
+          ]
+        : []
+    ),
+  ]);
+  /**
+   * What waits on the person here, on the tray row's chip and the list it
+   * opens (waiting/): the hub's list of what its tree asked him, after its
+   * parked asks. A permission's row brings the composer's ask back up; a
+   * sign-in's brings its card into view.
+   */
+  const waitList = new SessionWaiting({
+    instanceId: () => viewId,
+    onScreen: () => visible,
+    asks: () => waitingAsks,
+    showAsk: (row) => {
+      if (row.kind === "connect") {
+        connectReveal.add(viewId);
+      } else if (firstAsk) {
+        minimizedAsks.set(firstAsk.request.requestId, false);
+      }
+    },
+  });
   /** The first of them, which the composer grows into: one ask at a time. */
   const firstAsk = $derived.by((): ComposerAsk | null => {
     const [first] = parked;
@@ -1181,7 +1251,7 @@
   const trayStands = $derived(
     trayHasChips(viewId) ||
       !!planProgressNow ||
-      connectsOpen.length > 0 ||
+      waitList.rows.length > 0 ||
       (!!firstAsk && minimizedAsks.has(firstAsk.request.requestId))
   );
   /**
@@ -1277,7 +1347,7 @@
       parkedRoom = next.parked;
     },
     get planRing() {
-      return planProgressNow || connectsOpen.length > 0 ? planRing : undefined;
+      return planProgressNow || waitList.rows.length > 0 ? planRing : undefined;
     },
   };
 
@@ -1315,7 +1385,27 @@
 {/snippet}
 
 {#snippet planRing()}
-  <ConnectNeedsChip asks={connectsOpen} instanceId={viewId} />
+  <WaitingChip
+    answered={waitList.counts.answered}
+    onopen={() => {
+      waitList.shown = !waitList.shown;
+    }}
+    open={waitList.counts.open}
+    shown={waitList.shown}
+  />
+  {#if waitList.shown}
+    <WaitingCard
+      again={waitList.again}
+      failure={waitList.failure}
+      faultOf={waitList.faultOf}
+      onclose={() => {
+        waitList.shown = false;
+      }}
+      onopen={waitList.open}
+      paneId={viewId}
+      rows={waitList.rows}
+    />
+  {/if}
   {#if planProgressNow}
     <PlanRing
       done={planProgressNow.done}

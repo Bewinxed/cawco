@@ -78,10 +78,6 @@ export const askWords = {
     `${path} changed since this was proposed, and the proposal no longer applies to it. Reject it; ${proposer} proposes again from what the file says now.`,
   /** While the session's machine is offline. */
   connectOffline: "Machine offline — can't connect yet.",
-  /** The chip at the tray row's end while a card stands open above. */
-  connectNeedsYou: (n: number) => `${n} needs you`,
-  showConnectAsk: (who: string, server: string) =>
-    `Show the connect ask from ${who}: ${server}`,
   /**
    * The line the card becomes once it settled, in the tool row's form:
    * connected, as whom and with what access; not connected; and a kept
