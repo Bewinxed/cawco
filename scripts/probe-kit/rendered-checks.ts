@@ -3503,7 +3503,22 @@ function readInPage(args: InPageArgs): InPageRead {
               continue;
             }
           }
-          const spill = spillOf(d.c, home.c);
+          // A rounded box round the scroller that cuts it meets only what the
+          // scroller lets show: the ring as that scroller's box clips it.
+          const seen =
+            !home.cuts && cutter && cut && home.el.contains(cutter)
+              ? {
+                  ...d.c,
+                  top: Math.max(d.c.top, cut.top),
+                  bottom: Math.min(d.c.bottom, cut.bottom),
+                  left: Math.max(d.c.left, cut.left),
+                  right: Math.min(d.c.right, cut.right),
+                }
+              : d.c;
+          if (seen.bottom <= seen.top || seen.right <= seen.left) {
+            continue;
+          }
+          const spill = spillOf(seen, home.c);
           // A scroller cuts what it scrolls past its edge where there is
           // more to scroll that way: a ring there is scrolled away, never
           // cut by the layout (at the scroll's start or end it is).
@@ -4348,9 +4363,10 @@ function readInPage(args: InPageArgs): InPageRead {
   // each a 40px area.
   if (!skip.has("touch") && matchMedia("(pointer: coarse)").matches) {
     const FLOOR = 44;
-    // A neighbour a layer covers (the page under a sheet) takes no finger,
-    // so it stops nothing: one counts where a press at its centre lands on
-    // it, or where that centre is off the screen.
+    // A control a layer covers (the page under a sheet) takes no finger:
+    // it is not read, and as a neighbour it stops nothing. One counts where
+    // a press at its centre lands on it, or where that centre is off the
+    // screen.
     const touchable = (other: Element) => {
       const o = other.getBoundingClientRect();
       const x = o.left + o.width / 2;
@@ -4367,6 +4383,11 @@ function readInPage(args: InPageArgs): InPageRead {
         (glassFor(el) || inGroove(el))
     );
     for (const el of read) {
+      // A control a layer covers (the rail's segments under its open
+      // Sort menu) takes no finger: it is read when it stands in front.
+      if (!touchable(el)) {
+        continue;
+      }
       const b = el.getBoundingClientRect();
       const area = {
         left: b.left,
