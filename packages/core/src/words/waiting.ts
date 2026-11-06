@@ -35,7 +35,7 @@ export const waitingWords = {
   yourAnswer: (by: SessionAnswerHow, said: string): string => {
     switch (by) {
       case "pick":
-        return `You picked ${said}`;
+        return `You picked “${said}”`;
       case "value":
         return `You set ${said}`;
       case "resolve":
