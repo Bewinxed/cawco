@@ -4997,7 +4997,8 @@
     pin: Pin,
     draft: ComposerDraft,
     peek: boolean,
-    pushed = false
+    pushed = false,
+    sheet = false
   )}
     {#if kit}
       {@const Card = kit.PinCard}
@@ -5016,6 +5017,7 @@
           ? { to: commentWords.comments, onback: backToList }
           : undefined}
         onclose={pushed ? closeSheet : () => closeCard()}
+        sheet={pushed || sheet}
         ondelete={deleteOpenPin}
         ondraft={() => drafts?.changed(pin.id)}
         onfind={() => focusPin(pin.id, true)}
@@ -5065,7 +5067,7 @@
     >
       {#if threadPushed && cardPin && kit && replyDraft}
         {#key cardPin.id}
-          {@render thread(cardPin, replyDraft, false, true)}
+          {@render thread(cardPin, replyDraft, false, true, true)}
         {/key}
       {:else}
         {@render railOf("sheet")}
@@ -5126,7 +5128,7 @@
             tall
             bind:surface={cardFloat}
           >
-            {@render thread(cardPin, replyDraft, false)}
+            {@render thread(cardPin, replyDraft, false, false, true)}
           </ThreadSheet>
         {:else}
           <PinFloat

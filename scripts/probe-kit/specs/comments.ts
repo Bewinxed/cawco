@@ -1143,7 +1143,7 @@ const commentChecks = async (on: On, frame: Frame) => {
       provisional.figure === null &&
       written === 0 &&
       Math.abs((parts?.width ?? 0) - wanted) <= 1 &&
-      parts?.chip === "Hero · A paragraph to comment on, long enough to tap." &&
+      parts?.chip === "A paragraph to comment on, long enough to tap." &&
       parts.hint === commentWords.composeHint.full &&
       parts.send === "Comment" &&
       parts.sendOff === true,
@@ -1216,8 +1216,8 @@ const commentChecks = async (on: On, frame: Frame) => {
   );
   const head = await headOf(card);
   on.kit.check(
-    "1: the thread's head names pin 1 in words, its component and the paragraph's text, never its selector; no chain line for an element the page's root holds; its words drawn under it",
-    head.name === "Hero · A paragraph to comment on, long enough to tap." &&
+    "1: the thread's head names pin 1 as a person would, by the paragraph's own words (agent spot-name.ts), never its component or selector; no chain line for an element the page's root holds; its words drawn under it",
+    head.name === "A paragraph to comment on, long enough to tap." &&
       !head.shown.includes("#para") &&
       head.shown.includes("Bolder, perhaps.") &&
       (await card.locator('[data-slot="chain"]').count()) === 0,

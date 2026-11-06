@@ -3,7 +3,9 @@
  * comment_read and artifact_list on 2026-11-05, cut to the fields the panel
  * draws. The pins are the owner's five on the decision page title-bars-close,
  * each thread as it stands (long replies cut at
- * a sentence). The artifacts are the session's, newest first, each with
+ * a sentence), each named as the overlay now names a spot (agent
+ * spot-name.ts: "Search comments field"), where the hub kept the old
+ * component-and-text names. The artifacts are the session's, newest first, each with
  * the title the hub gave it (a decision page's own program title).
  */
 
@@ -43,7 +45,7 @@ export const PINS: Pin[] = [
     "2d664dcd-8ace-480f-9dc0-c5ad76417fe4",
     1,
     "2026-11-03T16:15:49.810Z",
-    "Input · Search comments",
+    "Search comments field",
     [
       said(
         "29c65622",
@@ -76,7 +78,7 @@ export const PINS: Pin[] = [
     "3010a590-dd84-4be9-8742-6d879f2a172e",
     2,
     "2026-11-05T09:26:30.436Z",
-    "Tooltip primitive provider · Open Resolved No open comments",
+    "Comments tabs",
     [
       said(
         "c7c3cf13",
@@ -150,7 +152,7 @@ export const PINS: Pin[] = [
     "b1932ca8-a423-4914-bd73-03441aec746f",
     5,
     "2026-11-05T09:38:10.489Z",
-    "Floating layer anchor · Title bars close",
+    "Usage limits card",
     [
       said(
         "d3d79a29",
@@ -281,21 +283,21 @@ export const HELD: Pin[] = [
     "44523ab2-addd-4b52-91b9-47ce15636812",
     6,
     "2026-11-05T18:30:13.321Z",
-    "Tabs list · Interact Comment Draw",
+    "Preview mode tabs",
     "is this also how liquid glass ios HIG defines the tool group? cause this is not rounded yet the others are rounded, is this normal?"
   ),
   heldPin(
     "4734f782-f9f3-4fee-9609-e568b5198298",
     7,
     "2026-11-05T18:30:32.179Z",
-    "Comment rail · Open 5",
+    "Comments rail",
     "do you think the close button size is mismatched vs the search/add? or are you using oversized icons or?"
   ),
   heldPin(
     "f02cf2eb-07bf-4177-8028-68f7d3cc0430",
     8,
     "2026-11-05T18:30:55.079Z",
-    "Comment rail · Open 5",
+    "Comments rail",
     "why is this text so big? no ui does it this way i think"
   ),
 ];

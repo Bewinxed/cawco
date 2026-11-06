@@ -60,13 +60,11 @@
     BarGlass,
     BarItem,
     BarMenu,
-    BarPopover,
   } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
@@ -155,11 +153,11 @@
     /** A comment on the whole page: its composer opens. */
     onpage: () => void;
     /**
-     * Beside the page: the whole-page comment's composer stands, hung from
-     * the glass its + is in (BarPopover), never far from it over the page.
+     * Beside the page: the whole-page comment's composer stands, unfolded
+     * under the rail's bar where its + is, as Send all's note does.
      */
     pageOpen?: boolean;
-    /** That composer put away (Escape, a press outside it). */
+    /** That composer put away (Escape, its + pressed again). */
     onpageclose?: () => void;
     /** That composer, as the pane draws it. */
     pageComposer?: Snippet;
@@ -441,10 +439,6 @@
     return unread.has(pin.id) ? "unread" : null;
   };
 
-  /** A part's ink: its own dress, or `selected-ink` on the selection wash. */
-  const ink = (washed: boolean, own: string) =>
-    washed ? "text-selected-ink" : own;
-
   /** Send all's note standing open under the bar, its words, and why the last Send all didn't go. */
   let noting = $state(false);
   let note = $state("");
@@ -503,20 +497,24 @@
   {@const attached = attachedTo(pin)}
   {@const back = backOf(pin)}
   {@const gone = !!pin.movedAt}
-  {@const washed = pin.id === current}
+  {@const chosen = pin.id === current}
   {@const firstWords =
     pin.thread[0]?.text.trim() || attached.map((one) => one.name).join(", ")}
   <li class="group/row relative" out:rowOut>
     <!-- The row is the comment and the press that opens its thread; Resolve
-         stands over its end. On the selection wash (its thread open) every
-         word is `selected-ink` (DESIGN.md, Colors: Selected); off it, each
-         part wears its dress (The Row Dress Rule). -->
+         stands over its end. Its headline (what the spot is called) leads
+         at the body's size and weight 500, the comment's words under it in
+         the row ink, the last word and age in meta: each part keeps its
+         dress (The Row Dress Rule), its thread open too, where the row
+         stands on the hover's ground ringed, so no level merges into a
+         wash and the pin keeps its own ground. The hover is the item's
+         (`group-hover/row`), so it stays while the pointer is on Resolve. -->
     <button
       data-slot="pin-row"
-      aria-current={washed || undefined}
+      aria-current={chosen || undefined}
       data-focused={pin.id === focused || undefined}
       data-moved={gone || undefined}
-      class="flex items-start gap-space-3 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+      class="flex items-start gap-space-3 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:inset-ring-1 aria-current:inset-ring-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>
@@ -545,8 +543,8 @@
           <span
             data-slot="title"
             class={[
-              "min-w-0 truncate type-label font-medium",
-              ink(washed, gone ? "text-ink-subtle" : "text-ink-row"),
+              "min-w-0 truncate type-body font-medium",
+              gone ? "text-ink-subtle" : "text-ink-strong",
             ]}
             >{#each segments(gone ? said.elementGone : pinName(pin)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
@@ -556,7 +554,7 @@
             data-slot="age"
             class={[
               "ms-auto flex-none type-meta num transition-opacity duration-(--dur-control) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
-              ink(washed, "text-ink-muted"),
+              "text-ink-muted",
             ]}>{formatAgeShort(Date.parse(lastActivity(pin)))}</span
           >
         </span>
@@ -565,7 +563,7 @@
             data-line="words"
             class={[
               "mt-space-row line-clamp-2 type-body text-pretty wrap-anywhere",
-              ink(washed, "text-ink-strong"),
+              "text-ink-row",
             ]}
             >{#each segments(wordsOf(pin, firstWords)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
@@ -598,9 +596,8 @@
               {/if}
             {/each}
             {#if attached.length > STRIP}
-              <span
-                class={["type-meta num", ink(washed, "text-ink-muted")]}
-                data-slot="more">+{attached.length - STRIP}</span
+              <span class={["type-meta num", "text-ink-muted"]} data-slot="more"
+                >+{attached.length - STRIP}</span
               >
             {/if}
           </span>
@@ -609,14 +606,14 @@
           <span
             class={[
               "mt-space-1 type-meta line-clamp-2 text-pretty wrap-anywhere",
-              ink(washed, "text-status-fail-ink"),
+              "text-status-fail-ink",
             ]}
             data-line="back"
             data-not-sent="">{said.notSent(back.why)}</span
           >
         {:else if back?.kind === "held"}
           <span
-            class={["mt-space-1 type-meta", ink(washed, "text-ink-muted")]}
+            class={["mt-space-1 type-meta", "text-ink-muted"]}
             data-line="back"
             data-held="">{said.unsent}</span
           >
@@ -625,7 +622,7 @@
           <span
             class={[
               "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
-              ink(washed, back.unread ? "text-ink-strong" : "text-ink-muted"),
+              back.unread ? "text-ink-strong" : "text-ink-muted",
             ]}
             data-line="back"
             data-unread={back.unread || undefined}
@@ -635,7 +632,7 @@
               aria-hidden="true"
               class={[
                 "grid size-icon-sm flex-none place-items-center",
-                back.by === "you" && !washed && "text-brand-ink",
+                back.by === "you" && "text-brand-ink",
               ]}
               data-box
               data-speaker={back.by}><Speaker class="size-icon-sm" /></span
@@ -860,29 +857,23 @@
           bind:ref={searchButton}
         />
         {#if layout === "beside" && pageComposer}
-          <!-- A comment on the whole page: its composer hangs from this glass,
-               connected to its +, as every card a bar opens does. -->
-          <Popover.Root
-            onOpenChange={(next) => {
-              if (next) {
-                onpage();
-              } else {
+          <!-- A comment on the whole page: its composer unfolds under the
+               bar, inside the rail, as Send all's note does: every field the
+               bar opens takes the one place, at the rail's width. -->
+          <BarItem
+            expanded={pageOpen}
+            icon={IconPlus}
+            label={said.onWholePage}
+            onclick={() => {
+              if (pageOpen) {
                 onpageclose?.();
+              } else {
+                noting = false;
+                onpage();
               }
             }}
             open={pageOpen}
-          >
-            <Popover.Trigger>
-              {#snippet child({ props })}
-                <BarItem icon={IconPlus} label={said.onWholePage} {props} />
-              {/snippet}
-            </Popover.Trigger>
-            <BarPopover label={said.onWholePage}>
-              <div class="w-c-pin-card-w max-w-full p-space-2">
-                {@render pageComposer()}
-              </div>
-            </BarPopover>
-          </Popover.Root>
+          />
         {:else}
           <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
         {/if}
@@ -900,6 +891,9 @@
           onclick={() => {
             noting = !noting;
             noteRefused = null;
+            if (noting && pageOpen) {
+              onpageclose?.();
+            }
           }}
           shape="capsule"
           variant={noting ? "outline" : "default"}
@@ -908,6 +902,16 @@
       {/if}
     {/if}
   </header>
+  {#if layout === "beside" && pageOpen && pageComposer}
+    <!-- The whole page's composer, under the bar where + was pressed. -->
+    <div
+      class="flex flex-none flex-col px-space-3 pb-space-3"
+      data-slot="page-composer"
+      transition:unfold
+    >
+      {@render pageComposer()}
+    </div>
+  {/if}
   {#if noting && held > 0 && onsendheld}
     <!-- Send all's note, under the bar where Send was pressed, as Delete
          asks under the card's bar: one note to the agent with everything
@@ -969,7 +973,7 @@
   {/if}
   <div
     data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain kit-edge-fade-block"
+    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain scrollbar-gutter-stable kit-edge-fade-block"
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}

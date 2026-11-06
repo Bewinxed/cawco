@@ -409,7 +409,7 @@
   );
 </script>
 
-{#snippet thread(shown: Pin)}
+{#snippet thread(shown: Pin, sheet = false)}
   <!-- What the thread is on, and the way to it there. -->
   <div
     class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
@@ -449,6 +449,7 @@
     parent={null}
     pin={shown}
     {problem}
+    {sheet}
   />
 {/snippet}
 
@@ -509,7 +510,7 @@
           {open}
           tall
         >
-          {@render thread(pin)}
+          {@render thread(pin, true)}
         </ThreadSheet>
       {/if}
     </div>

@@ -617,6 +617,7 @@
     draft={replyDraft}
     link={`#comment-${one.number}`}
     marked={!phone.current && cardMark !== null}
+    sheet={phone.current}
     name={one.title ?? ""}
     onclose={() => {
       if (phone.current) {
