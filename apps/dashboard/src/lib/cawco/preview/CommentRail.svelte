@@ -699,7 +699,7 @@
   <header
     data-slot="head"
     data-searching={searching || undefined}
-    class="flex flex-none items-center gap-space-1 h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
+    class="flex flex-none items-center gap-space-1 h-c-btn-h-lg coarse:h-auto coarse:py-space-1 px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
   >
     {#if searching}
       <InputGroup.Root class="flex-1" look="bar">

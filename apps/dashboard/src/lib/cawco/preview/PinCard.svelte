@@ -498,7 +498,7 @@
 >
   {#if !peek}
     <div
-      class="flex min-h-c-top-bar-h items-center gap-space-2"
+      class="flex min-h-c-top-bar-h items-center gap-space-2 coarse:py-space-1"
       data-slot="bar"
     >
       {#if sheet}
