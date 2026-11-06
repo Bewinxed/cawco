@@ -64,7 +64,7 @@
           "isolate gap-0 rounded-none bg-transparent [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--radius:var(--radius-sm)] [--sheet:var(--surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },
       fill: {
-        true: "flex w-full min-w-0 [&>[data-slot=ff-tab]]:min-w-0 [&>[data-slot=ff-tab]]:flex-1",
+        true: "flex w-full min-w-0 [&>[data-slot=ff-tab]]:min-w-0 [&>[data-slot=ff-tab]]:flex-1 [&_[data-slot=hit]]:justify-center",
       },
       scrollable: {
         true: "kit-edge-fade no-scrollbar min-w-0 max-w-full flex-[0_1_auto] overflow-x-auto overflow-y-hidden [--edge-room-end:var(--fade-len)] [--edge-room-start:var(--fade-len)] [&>[data-slot=ff-tab]]:shrink-0",

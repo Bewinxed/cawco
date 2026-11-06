@@ -364,9 +364,15 @@
     }
     const twoLines = getComputedStyle(lead).webkitLineClamp === "2";
     // What stands round the words in the title control (its chevron, its
-    // insets), as drawn now.
+    // insets), as drawn now: the control less the part of it that holds the
+    // lead, so a line under the lead (a title's description, cut at the
+    // name's room) is never counted as more the name wants.
     const control = lead.closest("button") ?? lead;
-    const around = laidOut(control) - laidOut(lead);
+    let holder: Element = lead;
+    while (holder.parentElement && holder.parentElement !== control) {
+      holder = holder.parentElement;
+    }
+    const around = laidOut(control) - laidOut(holder);
     const was = lead.style.whiteSpace;
     lead.style.whiteSpace = "nowrap";
     const whole = laidOut(lead) + runsPast(lead);

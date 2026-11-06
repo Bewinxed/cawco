@@ -330,15 +330,18 @@
           {#if line}
             <!-- The title over its line, a window's subtitle: one line each,
                  cut at its end, the chevron beside the title. -->
+            <!-- The title's row is what the name keeps and wants in the
+                 head (SideSurface's `name-lead`): the line under it is cut
+                 at the name's room, never asking the head for more. -->
             <span
               class="flex min-w-0 flex-col items-start text-start"
               data-box
-              data-slot="name-lead"
               in:reveal
             >
               <span
                 class="mark-line flex max-w-full items-center gap-space-1"
                 data-box
+                data-slot="name-lead"
               >
                 <span
                   class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"

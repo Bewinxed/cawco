@@ -76,6 +76,7 @@
     IconAgent,
     IconClose,
     IconDocument,
+    IconMoreLinear,
     IconPlus,
     IconRefresh,
     IconSearch,
@@ -479,6 +480,21 @@
       noting = false;
     }
   });
+  /** Send all stands in the bar: Search, + and Sort fold into More. */
+  const sending = $derived(held > 0 && onsendheld !== undefined);
+  /** + opens the whole page's composer inside the rail (a desk's). */
+  const besidePage = $derived(
+    layout === "beside" && pageComposer !== undefined
+  );
+  /** +, or its row in More: the whole page's composer, opened or put away. */
+  function wholePage() {
+    if (besidePage && pageOpen) {
+      onpageclose?.();
+      return;
+    }
+    noting = false;
+    onpage();
+  }
   function sendHeldNow() {
     const refused = onsendheld?.(note) ?? null;
     noteRefused = refused;
@@ -715,14 +731,35 @@
   </li>
 {/snippet}
 
+<!-- The orders the rows come in, as radio items: Sort's menu, or More's
+     group under its heading while Send all stands. -->
+{#snippet orders(headed: boolean)}
+  <DropdownMenu.RadioGroup
+    onValueChange={(next) => {
+      sort = next === "top" ? "top" : "newest";
+    }}
+    value={sort}
+  >
+    {#if headed}
+      <DropdownMenu.GroupHeading>{said.order}</DropdownMenu.GroupHeading>
+    {/if}
+    <DropdownMenu.RadioItem value="newest"
+      >{said.newestFirst}</DropdownMenu.RadioItem
+    >
+    <DropdownMenu.RadioItem value="top"
+      >{said.topOfPageFirst}</DropdownMenu.RadioItem
+    >
+  </DropdownMenu.RadioGroup>
+{/snippet}
+
 <aside
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  class="flex flex-col min-h-0 w-c-comments-w max-w-full data-[layout=beside]:h-full data-[layout=beside]:pb-space-3 data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
 >
-  <!-- One row: Close leading on the sheet, the title menu, the glass;
-       searching, the field and its Close. The title names a part of the
+  <!-- One row: Close leading on the sheet, the centred title, the glass;
+       searching, the field and its Cancel. The title names a part of the
        panel, so it stands a step under the panel's own (the head's Row, 16px):
        Label, 13px at 500, as HIG Typography sets macOS's Headline (13) for a
        pane's heading, at every width. -->
@@ -783,8 +820,15 @@
     {:else}
       <!-- Leading: Close, on the phone's sheet (HIG, Sheets: a sheet's
            Cancel or Close leads its bar); a cell as wide as the trailing
-           one, so the title stands in the bar's centre. -->
-      <div class="flex min-w-0 flex-1 basis-0 items-center" data-slot="lead">
+           one, so the title stands in the bar's centre. While Send all
+           stands, Search, + and Sort fold into More here: Send beside them
+           left no room either side of a centred title (320px on a desk,
+           368 on a phone), and the title gave way (HIG, Toolbars: "an
+           overflow menu" for what doesn't fit). -->
+      <div
+        class="flex min-w-0 flex-1 basis-0 items-center gap-space-1 coarse:gap-space-5"
+        data-slot="lead"
+      >
         {#if layout === "sheet"}
           <BarGlass form="group">
             <BarItem
@@ -793,6 +837,38 @@
               label={said.closeComments}
               onclick={onclose}
             />
+          </BarGlass>
+        {/if}
+        {#if sending}
+          <!-- A leading group: its menu stands out past its trailing side,
+               into the rail, never over the page. -->
+          <BarGlass flare="end" form="group">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <BarItem
+                    data-slot="more"
+                    icon={IconMoreLinear}
+                    label={said.more}
+                    {props}
+                    bind:ref={searchButton}
+                  />
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <BarMenu label={said.more}>
+                <DropdownMenu.Item onSelect={focusSearch}
+                  ><IconSearch /><span>{said.searchComments}</span
+                  ><DropdownMenu.Shortcut>/</DropdownMenu.Shortcut
+                  ></DropdownMenu.Item
+                >
+                <DropdownMenu.Item onSelect={wholePage}
+                  ><IconPlus /><span>{said.onWholePage}</span
+                  ></DropdownMenu.Item
+                >
+                <DropdownMenu.Separator />
+                {@render orders(true)}
+              </BarMenu>
+            </DropdownMenu.Root>
           </BarGlass>
         {/if}
       </div>
@@ -808,71 +884,47 @@
         class="flex min-w-max flex-1 basis-0 items-center justify-end gap-space-1 coarse:gap-space-5"
         data-slot="trail"
       >
-        <BarGlass form="group">
-          <BarItem
-            aria-keyshortcuts="/"
-            icon={IconSearch}
-            keys="/"
-            label={said.searchComments}
-            onclick={focusSearch}
-            bind:ref={searchButton}
-          />
-          {#if layout === "beside" && pageComposer}
-            <!-- A comment on the whole page: its composer unfolds under the
-               bar, inside the rail, as Send all's note does: every field the
-               bar opens takes the one place, at the rail's width. -->
+        {#if !sending}
+          <BarGlass form="group">
             <BarItem
-              expanded={pageOpen}
+              aria-keyshortcuts="/"
+              icon={IconSearch}
+              keys="/"
+              label={said.searchComments}
+              onclick={focusSearch}
+              bind:ref={searchButton}
+            />
+            <!-- On a desk, a comment on the whole page: its composer
+                 unfolds under the bar, inside the rail, as Send all's note
+                 does: every field the bar opens takes the one place, at the
+                 rail's width. -->
+            <BarItem
+              expanded={besidePage ? pageOpen : undefined}
               icon={IconPlus}
               label={said.onWholePage}
-              onclick={() => {
-                if (pageOpen) {
-                  onpageclose?.();
-                } else {
-                  noting = false;
-                  onpage();
-                }
-              }}
-              open={pageOpen}
+              onclick={wholePage}
+              open={besidePage ? pageOpen : undefined}
             />
-          {:else}
-            <BarItem
-              icon={IconPlus}
-              label={said.onWholePage}
-              onclick={onpage}
-            />
-          {/if}
-          <!-- The order the rows come in, a menu hung from its symbol (HIG,
-             Toolbars: a menu for related choices). -->
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <BarItem
-                  data-slot="sort"
-                  icon={IconSortLinear}
-                  label={said.sort}
-                  {props}
-                />
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <BarMenu label={said.order}>
-              <DropdownMenu.RadioGroup
-                onValueChange={(next) => {
-                  sort = next === "top" ? "top" : "newest";
-                }}
-                value={sort}
-              >
-                <DropdownMenu.RadioItem value="newest"
-                  >{said.newestFirst}</DropdownMenu.RadioItem
-                >
-                <DropdownMenu.RadioItem value="top"
-                  >{said.topOfPageFirst}</DropdownMenu.RadioItem
-                >
-              </DropdownMenu.RadioGroup>
-            </BarMenu>
-          </DropdownMenu.Root>
-        </BarGlass>
-        {#if held > 0 && onsendheld}
+            <!-- The order the rows come in, a menu hung from its symbol
+                 (HIG, Toolbars: a menu for related choices). -->
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <BarItem
+                    data-slot="sort"
+                    icon={IconSortLinear}
+                    label={said.sort}
+                    {props}
+                  />
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <BarMenu label={said.order}>
+                {@render orders(false)}
+              </BarMenu>
+            </DropdownMenu.Root>
+          </BarGlass>
+        {/if}
+        {#if sending}
           <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
              "Only specify one primary action, and put it on the trailing
              side"), its count what it sends; pressed, its note unfolds
@@ -901,8 +953,11 @@
     <!-- The lists, every one in view with its count, as a segmented
          control under the bar, the rail's width (HIG, Segmented controls;
          the owner's pin 5: a dropdown hid the other lists until opened). -->
+    <!-- Under a finger the segments stand clear of the bar's controls
+         over them, so each keeps 44 tall to the midpoint (The 44 Touch
+         Rule). -->
     <div
-      class="flex flex-none *:min-w-0 *:flex-1 px-space-2 pb-space-2"
+      class="flex flex-none *:min-w-0 *:flex-1 px-space-2 pb-space-2 coarse:pt-space-3"
       data-slot="lists"
     >
       <Tabs
