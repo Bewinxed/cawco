@@ -436,7 +436,7 @@
      words stand on the card's text column, its hover reaching out into the
      card's inset. -->
 {#snippet title(flush: boolean)}
-  <div class={["flex min-w-0 flex-1", flush && "-ms-space-3"]}>
+  <div class={["flex min-w-0 flex-1", flush && "-ms-space-3"]} data-slot="head">
     <BarGlass form="title">
       <BarItem
         data-slot="name"
