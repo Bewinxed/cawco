@@ -24,7 +24,7 @@
  * | rule        | read by                     | what it reads |
  * | ----------- | --------------------------- | ------------- |
  * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box; what is hidden (a 1px box, `sr-only`'s `clip-path: inset(50%)`) is not read, and words an open layer covers (a popover, menu or dialog over the page) are named |
- * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, a mark out of the accessibility tree (`data-mark`: a comment's pin) and a region's one coral hairline side (the vermillion section rule) are allowed and named |
+ * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, a mark out of the accessibility tree (`data-mark`: a comment's pin), a found word (`<mark>`, a search's hit) and a region's one coral hairline side (the vermillion section rule) are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does, or one under another bar of its surface, heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) and a foot's lone top hairline (DESIGN.md, Borders are graded) are named, not failed |
  * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
@@ -34,7 +34,7 @@
  * | settled     | own code                    | no finite animation running, fonts loaded (`settle(page)` gets a page there) |
  * | made-up     | own code                    | no fixture or probe words (`PROBE-`, `/tmp/`, `Lorem` …), a lone "Body", text outside the spec's `allowedText` source |
  * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides (DESIGN.md, The Row Grid Rule) |
- * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it |
+ * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it; a fixed strip that takes no press and is hidden from the reader (the screen's edges) is none of those |
  * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a child that paints nothing (a ghost, a wrapper) read by its ink; a row holding a track (a child whose ink all stands out of flow, placed on a scale) is a plot, not read: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
  * | fat-row     | own code                    | one-line rows of a list (its children of its commonest kind) not over 3.4 lines and 48px tall, a row that draws nothing less the margins its children keep inside it |
  * | loose-list  | own code                    | a list's alike rows, where two stand next to each other, not further apart than they are tall, and 24px |
@@ -48,7 +48,7 @@
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
  * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws at five points of the control (its centre and 3px in from each side's middle, composed bottom up, glyphs aside) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered;  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused from the keyboard (a Shift press, then `focus()`, so `:focus-visible` matches and a ring placed on `focusin` draws), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
  * | touch       | own code                    | on a coarse pointer, each control in a bar's capsule of glass and each segment of a groove: its box with its placed pseudos (`touch-hit`), each side stopped at the midpoint to the control beside it there, 44×44 or more |
- * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's corner taking no room, over at most a fifth of the glyph's ink (its shapes' fill and stroke sampled every half pixel) |
+ * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's corner taking no room, over at most a fifth of its own glyph's ink and none of a neighbour's (its shapes' fill and stroke sampled every half pixel) |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
  * each specimen that stands for a screen of its own carries `data-specimen`,
@@ -188,7 +188,7 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
     by: "own code + DevTools CSS.forcePseudoState",
   },
   "glyph-place": {
-    says: "a bar's glyph control draws its glyph at its fill's centre, its count a corner badge over at most a fifth of any glyph's ink (The Earned Count Rule; HIG, Tab bars)",
+    says: "a bar's glyph control draws its glyph at its fill's centre, its count a corner badge over at most a fifth of its own glyph's ink and none of a neighbour's (The Earned Count Rule; HIG, Tab bars)",
     by: "own code",
   },
   touch: {
@@ -928,6 +928,17 @@ function readInPage(args: InPageArgs): InPageRead {
         if (mark && !isControl) {
           named.push(
             `a mark, not the act (DESIGN.md, Coral Action: the reader's own row mark): ${describe(mark)} (${what})`
+          );
+          continue;
+        }
+        // A found word: HTML's own `<mark>` ("a run of text … highlighted
+        // for reference purposes due to its relevance": a search's hits), on
+        // the selection's tint. It says where the words are, not where to
+        // act.
+        const hit = el.closest("mark");
+        if (hit && !isControl) {
+          named.push(
+            `a found word, not the act (HTML mark, the selection's tint): ${describe(hit)} (${what})`
           );
           continue;
         }
@@ -2151,11 +2162,20 @@ function readInPage(args: InPageArgs): InPageRead {
 
   // The Spacing ladder: `space-2` (7px) is the least a drawn button stands
   // under what is above it. The items of one list keep their own rhythm, and
-  // a layer stands over what its button happens to line up with.
+  // a layer stands over what its button happens to line up with. A strip
+  // fixed to the screen that takes no press and says nothing (the screen's
+  // edges, ScreenEdges: Safari's tint behind the status bar) is no field,
+  // line or card above anything.
   if (!skip.has("tight-control")) {
+    const screenChrome = (el: Element) =>
+      style(el).position === "fixed" &&
+      style(el).pointerEvents === "none" &&
+      el.closest('[aria-hidden="true"]') !== null;
     const above = inFlowBoxes
       .filter(
-        (el) => paints(el).length > 0 || el.matches("input, textarea, select")
+        (el) =>
+          (paints(el).length > 0 || el.matches("input, textarea, select")) &&
+          !screenChrome(el)
       )
       .map((el) => ({ el, r: el.getBoundingClientRect() }))
       .filter((one) => one.r.width >= 24 && one.r.height >= 12);
@@ -4376,12 +4396,12 @@ function readInPage(args: InPageArgs): InPageRead {
   if (!skip.has("glyph-place")) {
     const COUNT = /^\d{1,4}\+?$/u;
     /**
-     * The most of a glyph's ink a count may lie on, its own glyph's or a
-     * neighbour's in the same glass: a badge centred on the item's top edge
-     * over the glyph's trailing edge covers that corner, where a glyph drawn
-     * on its grid keeps little ink (the Comments bubble 5.1%, the Reload
-     * glyph beside it 0, 0 and 13.8% at 3, 12 and 150); one laid over the
-     * glyph's middle covers half of it or more.
+     * The most of its own glyph's ink a count may lie on: a badge on the
+     * item's top edge over the glyph's top trailing corner covers that
+     * corner, where a glyph drawn on its grid keeps little ink (the Comments
+     * bubble 5.1%); one laid over the glyph's middle covers half of it or
+     * more. A neighbour's glyph it may not touch at all: a wide count grows
+     * over its own glyph, as an app icon's badge grows over its icon.
      */
     const INK_SHARE = 0.2;
     /** What holds a glyph a count reaches over: a control. */
@@ -4501,7 +4521,7 @@ function readInPage(args: InPageArgs): InPageRead {
           (drawn) => around.contains(drawn) && shown(drawn)
         )) {
           const share = inkUnder(other, c);
-          if (share > INK_SHARE) {
+          if (share > (other === glyph ? INK_SHARE : 0)) {
             const whose =
               other === glyph
                 ? "its glyph's"
@@ -4509,7 +4529,7 @@ function readInPage(args: InPageArgs): InPageRead {
             say(
               "glyph-place",
               el,
-              `its count "${count.textContent?.trim()}" (${px(c.left - box.left)}–${px(c.right - box.left)} × ${px(c.top - box.top)}–${px(c.bottom - box.top)} in the control) lies on ${Math.round(share * 100)}% of ${whose} ink: a corner badge covers at most ${INK_SHARE * 100}%`
+              `its count "${count.textContent?.trim()}" (${px(c.left - box.left)}–${px(c.right - box.left)} × ${px(c.top - box.top)}–${px(c.bottom - box.top)} in the control) lies on ${Math.round(share * 100)}% of ${whose} ink: a corner badge covers at most ${INK_SHARE * 100}% of its own glyph's and none of a neighbour's`
             );
           }
         }

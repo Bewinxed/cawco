@@ -15,14 +15,21 @@
  * Drawn right, the rule finds nothing:
  *
  *  3. corner badge: the counted item its neighbours' size, the glyph at
- *     its centre, the count a 16px badge centred on the item's top edge
- *     over the glyph's trailing edge, covering that corner of a bubble and
- *     of a folder; at 3, 12 and 150, beside a plain neighbour.
- *  4. badge over a neighbour: a count so wide, standing lower, that it
- *     lies on the next item's folder.
- *  5. words: a control with its name beside its glyph is not read.
- *  6. off a bar: a lone glyph button on the page is not read.
- *  7. bare on the bar: a glyph standing off its 44px box's centre on a
+ *     its centre, the count a 16px badge on the item's top edge, its
+ *     trailing end fixed half a badge past the glyph's trailing edge,
+ *     covering that corner of a bubble and of a folder; at 3, 12 and 150,
+ *     beside a plain neighbour.
+ *  4. wide count over its own glyph: 1500 grows toward its own bubble, as
+ *     an app icon's badge grows over its icon, and leaves Reload's alone.
+ *
+ * Drawn wrong again:
+ *
+ *  5. badge over a neighbour: a count that grows toward the trailing side,
+ *     standing lower, lies on the next item's folder (a neighbour's ink at
+ *     all is a finding).
+ *  6. words: a control with its name beside its glyph is not read.
+ *  7. off a bar: a lone glyph button on the page is not read.
+ *  8. bare on the bar: a glyph standing off its 44px box's centre on a
  *     bar's ground, in no glass (the phone's sidebar toggle on the tabs'
  *     line), is not read.
  *
@@ -43,7 +50,7 @@ const BASE = `<!doctype html>
   .glass { display: inline-flex; align-items: center; gap: 4px; block-size: 36px; padding: 4px; border-radius: 999px; background: #fff; }
   .glass button { position: relative; display: inline-flex; align-items: center; justify-content: center; block-size: 28px; min-inline-size: 28px; border-radius: 5px; background: #e6e0d6; }
   .glass svg { inline-size: 20px; block-size: 20px; flex: none; }
-  .badge { position: absolute; top: -8px; inset-inline-start: 16px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; padding-inline: 4px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
+  .badge { position: absolute; top: -8px; inset-inline-end: -4px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; padding-inline: 4px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
 </style>`;
 
 const GLYPH = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/></svg>`;
@@ -80,9 +87,16 @@ const FIXTURES: Record<string, Fixture> = {
 </div></header>`,
     want: null,
   },
+  "wide count over its own glyph": {
+    html: `${BASE}<header><div class="glass">
+  <button type="button" aria-label="Comments, 1500">${GLYPH}<span class="badge">1500</span></button>
+  <button type="button" aria-label="Reload">${GLYPH}</button>
+</div></header>`,
+    want: null,
+  },
   "badge over a neighbour": {
     html: `${BASE}<header><div class="glass">
-  <button class="files" type="button" aria-label="Files, 1500">${FOLDER}<span class="badge" style="top: -4px">1500</span></button>
+  <button class="files" type="button" aria-label="Files, 150">${FOLDER}<span class="badge" style="top: -4px; inset-inline: 16px auto">150</span></button>
   <button type="button" aria-label="Machines">${FOLDER}</button>
 </div></header>`,
     want: "button.files",

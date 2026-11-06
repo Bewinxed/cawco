@@ -65,12 +65,14 @@
          * a one-figure badge centred on the top edge of the box it stands in
          * (moved by `--count-foot`) over the glyph's trailing edge (the
          * glyph `--count-glyph` wide, centred in that box), so it covers only
-         * the glyph's top trailing corner, and a wider count grows toward
-         * the trailing side. In a bar item it straddles the glass's top
-         * edge. Its box is the nearest positioned one round it.
+         * the glyph's top trailing corner. Its trailing end stays there and
+         * a wider count grows toward its own glyph, as an app icon's badge
+         * grows over its icon, never over a neighbour's glyph. In a bar item
+         * it straddles the glass's top edge. Its box is the nearest
+         * positioned one round it.
          */
         corner:
-          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-solid px-space-1 font-medium text-label text-on-ink tabular-nums",
+          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--icon-md)_/_2)] end-[calc(50%_-_var(--count-glyph)_/_2_-_var(--icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-solid px-space-1 font-medium text-label text-on-ink tabular-nums",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

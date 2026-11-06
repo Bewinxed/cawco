@@ -66,15 +66,25 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
     }
     soon(node);
   };
+  /**
+   * Every scroller at or under `node`. The document (or a shadow root) is no Element:
+   * the first sweep over it (`found(root)`, the root layout's mount, which
+   * runs after the page under it has mounted) must still read the scrollers
+   * already standing, or one that grows without a node put into it (a list
+   * drawn whole at its first render) is never read.
+   */
   const found = (node: Node) => {
-    if (!(node instanceof Element)) {
-      return;
-    }
-    if (node.matches(FADES)) {
+    if (node instanceof Element && node.matches(FADES)) {
       watch(node);
     }
-    for (const inner of node.querySelectorAll(FADES)) {
-      watch(inner);
+    if (
+      node instanceof Element ||
+      node instanceof Document ||
+      node instanceof DocumentFragment
+    ) {
+      for (const inner of node.querySelectorAll(FADES)) {
+        watch(inner);
+      }
     }
   };
   /** Parts put into a watched scroller: watched for their size from now on, and the scroller read again. */
