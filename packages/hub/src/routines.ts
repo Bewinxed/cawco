@@ -23,8 +23,9 @@
  *   checkout, its folder on the hub; the hub's own checkout for a routine in
  *   no project), landing
  *   `none` unless the routine says, carrying the routine's budget. Their
- *   parent is the routine (`routine:<id>`): they report to no session, and
- *   this module reads how each ended.
+ *   parent is the routine (`routine:<id>`), which no session's row has:
+ *   this module reads how each ended and sends its report itself
+ *   ({@link surfaceRun}), so a run that answers `NO_REPLY` wakes no one.
  * - **The output contract**, on the run's `finish_item` headline: exactly
  *   `NO_REPLY` is silent; `AUTOMATION_FAILED: <why>` (or an item that
  *   failed) is a failure, its reason the why (a bare token's is the text
@@ -33,11 +34,16 @@
  *   a failed item's its error's first line),
  *   retried once at once (same slot, attempt 2), and a
  *   second failure needs you (a push, and a note in its project's
- *   conversation); anything else is delivered, as a note in its project's
- *   conversation (a push for a routine in no project).
+ *   conversation); anything else is delivered. A delegate run's delivered
+ *   result is its report to the project's lead: a send to the project's
+ *   conversation (caw.ts `tell`, kind `routine-report`) that wakes Caw, as
+ *   any delegate's report wakes the session that started it; with Caw off
+ *   or past the project's cap it is a note saying why he did not hear it.
+ *   A routine in no project pushes it to you.
  * - **Conversation runs** are a send to the project's conversation (caw.ts
  *   `tell`), as any event is, and run on. Caw answers with
- *   `routine_result` under the same output contract, settled the same way.
+ *   `routine_result` under the same output contract, settled the same way,
+ *   save that a delivered result, his own words, is a note.
  *   The turn that read the wake (server.ts `changeSend`) ending without that
  *   answer fails the run; so does a wake his session never reads.
  * - **Event runs**: an inbound event a route sends here (ingress.ts) runs the
@@ -83,6 +89,7 @@ import {
   routineLink,
   routineToolWords,
   SESSION_CHOSEN_MODES,
+  sessionLink,
 } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -504,8 +511,14 @@ const runView = (run: RoutineRunRow): RoutineRunView => ({
   endedAt: ms(run.endedAt),
 });
 
-/** The output contract's three answers, as every run is told them. */
-const ANSWERS = `say exactly ${NO_REPLY} when there is nothing worth telling the owner, ${AUTOMATION_FAILED}: <one sentence on why> when the work could not be done (the owner reads that sentence; the hub retries once, then asks the owner), and anything else is shown to the owner as the result.`;
+/** The output contract's first two answers, as every run is told them. */
+const SILENT_OR_FAILED = `say exactly ${NO_REPLY} when there is nothing worth telling, which wakes nobody; ${AUTOMATION_FAILED}: <one sentence on why> when the work could not be done (the owner reads that sentence; the hub retries once, then asks the owner);`;
+
+/** The output contract's three answers, as a run whose result goes to the owner is told them. */
+const ANSWERS = `${SILENT_OR_FAILED} anything else is shown to the owner as the result.`;
+
+/** The three answers as a project's delegate run is told them: its result is its report to Caw. */
+const LEAD_ANSWERS = `${SILENT_OR_FAILED} anything else is your report to Caw, the project's lead, and wakes him to act on it, as any delegate's report wakes the session that started it.`;
 
 /** A failing answer and its reason: `AUTOMATION_FAILED`, then the why after a colon, dash or space. */
 const FAILED_ANSWER = new RegExp(
@@ -534,8 +547,9 @@ const clipReason = (words: string): string => {
   return `${space > REASON_MAX / 2 ? cut.slice(0, space) : cut}…`;
 };
 
-/** What a delegate run is told about its output, after the routine's prompt. */
-const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${ANSWERS}`;
+/** What a delegate run is told about its output, after the routine's prompt: in a project its result reports to Caw. */
+const contractOf = (routine: Pick<RoutineRow, "projectId">): string =>
+  `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${routine.projectId ? LEAD_ANSWERS : ANSWERS}`;
 
 /** What the project's conversation is told about a run's output, after the routine's prompt. */
 const leadContract = (runId: string): string =>
@@ -545,11 +559,113 @@ const leadContract = (runId: string): string =>
 const NO_RESULT = "Caw ended its turn without saying how the run went";
 
 /** How a run ended, as its answer or its work item says. */
-interface RunEnd {
+export interface RunEnd {
   outcome: RoutineOutcome;
   output: string | null;
   reason: string | null;
 }
+
+/** What {@link surfaceRun} tells and where. */
+export interface SurfaceDeps {
+  /** The project's conversation, Caw (caw.ts `tell`). */
+  readonly caw: Pick<Caw, "tell">;
+  /** A line in the project's conversation's transcript, waking nobody. */
+  readonly note: (
+    routine: RoutineRow,
+    run: RoutineRunRow,
+    phase: "delivered" | "failed",
+    body?: string
+  ) => void;
+  readonly push: Pick<Push, "routine">;
+  /** The run's session as a link and its full report, when it ran one. */
+  readonly reportOf: (
+    run: RoutineRunRow
+  ) => { session: string; summary: string | null } | undefined;
+  /** Starts the run's second attempt at its slot. */
+  readonly retry: (routine: RoutineRow, run: RoutineRunRow) => void;
+}
+
+/**
+ * What a run came to, told. A delivered result of a project's delegate run
+ * reports to the project's lead, Caw, and wakes him, as every delegate's
+ * report wakes the session that started it; with Caw off (or past the
+ * project's cap) it is a note saying why he did not hear it. A conversation
+ * run's result is Caw's own answer, so it is a note. A routine in no project
+ * pushes its result to you. A first failure is retried at once; a second one
+ * is raised to you. Answers whether it needs you.
+ */
+export const surfaceRun = (
+  { caw, note, push, reportOf, retry }: SurfaceDeps,
+  routine: RoutineRow,
+  run: RoutineRunRow,
+  end: RunEnd,
+  instanceId: string | null
+): boolean => {
+  if (end.outcome === "delivered") {
+    const words = (end.output ?? "").slice(0, NOTE_MAX);
+    const { projectId } = routine;
+    if (!projectId) {
+      push.routine({
+        failed: false,
+        instanceId,
+        name: routine.name,
+        output: words,
+        projectId: null,
+        routineId: routine.id,
+        runId: run.id,
+      });
+      return false;
+    }
+    if (routine.target === "conversation") {
+      note(routine, run, "delivered", words);
+      return false;
+    }
+    const unheard = (why: string) =>
+      note(
+        routine,
+        run,
+        "delivered",
+        `${words}\n\nCaw did not hear this result: ${why}`
+      );
+    const report = reportOf(run);
+    const label = slotLabel(run.slot, routine.timeZone);
+    caw
+      .tell(projectId, {
+        by: "event",
+        kind: "routine-report",
+        trigger: `the routine ${routineLink(routine.id, routine.name)}, its ${label} run${report ? ` in ${report.session}` : ""}, delivered its result`,
+        text: `Run ${run.id}. The routine's prompt:\n\n${routine.prompt}\n\n## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}`,
+      })
+      .then(
+        (told) => {
+          if (!told.woke) {
+            unheard(told.why);
+          }
+        },
+        (error: unknown) =>
+          unheard(error instanceof Error ? error.message : String(error))
+      );
+    return false;
+  }
+  if (end.outcome !== "failed") {
+    return false;
+  }
+  if (run.attempt === 1) {
+    retry(routine, run);
+    return false;
+  }
+  note(routine, run, "failed", end.reason ?? undefined);
+  push.routine({
+    failed: true,
+    instanceId,
+    name: routine.name,
+    output: end.reason,
+    projectId: routine.projectId,
+    routineId: routine.id,
+    runId: run.id,
+  });
+  return true;
+};
 
 export const createRoutines = ({
   anyOnline,
@@ -969,7 +1085,7 @@ export const createRoutines = ({
     const begun = await workItems.startForHub(
       {
         title: routine.name,
-        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. ${kind.lead}Its prompt:\n\n${routine.prompt}${kind.input}\n\n${CONTRACT}`,
+        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. ${kind.lead}Its prompt:\n\n${routine.prompt}${kind.input}\n\n${contractOf(routine)}`,
         ...(type ? { type } : {}),
         ...kind.fields,
         ...(routine.budget ? { budget: routine.budget } : {}),
@@ -1188,57 +1304,34 @@ export const createRoutines = ({
     drain(routine.id);
   };
 
-  /**
-   * What a run came to, told: delivered words noted (pushed, for a routine
-   * in no project); a first failure retried at once; a second one raised to
-   * you. Answers whether it needs you.
-   */
+  /** What a run came to, told ({@link surfaceRun}). Answers whether it needs you. */
   const surface = (
     routine: RoutineRow,
     run: RoutineRunRow,
-    end: {
-      outcome: RoutineOutcome;
-      output: string | null;
-      reason: string | null;
-    },
+    end: RunEnd,
     instanceId: string | null
-  ): boolean => {
-    if (end.outcome === "delivered") {
-      const words = (end.output ?? "").slice(0, NOTE_MAX);
-      if (routine.projectId) {
-        note(routine, run, "delivered", words);
-      } else {
-        push.routine({
-          failed: false,
-          instanceId,
-          name: routine.name,
-          output: words,
-          projectId: null,
-          routineId: routine.id,
-          runId: run.id,
-        });
-      }
-      return false;
-    }
-    if (end.outcome !== "failed") {
-      return false;
-    }
-    if (run.attempt === 1) {
-      fireExtra(routine, run.slot, 2);
-      return false;
-    }
-    note(routine, run, "failed", end.reason ?? undefined);
-    push.routine({
-      failed: true,
-      instanceId,
-      name: routine.name,
-      output: end.reason,
-      projectId: routine.projectId,
-      routineId: routine.id,
-      runId: run.id,
-    });
-    return true;
-  };
+  ): boolean =>
+    surfaceRun(
+      {
+        caw,
+        note,
+        push,
+        reportOf: (ran) => {
+          const item = ran.workItemId ? db.workItem(ran.workItemId) : undefined;
+          return item
+            ? {
+                session: sessionLink(item.instanceId, item.title),
+                summary: item.summary,
+              }
+            : undefined;
+        },
+        retry: (again, failed) => fireExtra(again, failed.slot, 2),
+      },
+      routine,
+      run,
+      end,
+      instanceId
+    );
 
   /**
    * A settled run's workspace, archived: its session ended and its clone

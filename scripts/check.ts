@@ -752,6 +752,10 @@ const gated: Gated[] = [
     "packages/core/src/delegate-types.ts",
     "packages/core/src/words/delegate-types.ts",
   ]),
+  bun("scripts/routine-report-check.ts", [
+    "packages/hub/src/routines.ts",
+    "packages/hub/src/caw.ts",
+  ]),
   bun("scripts/open-at-check.ts", [
     "apps/dashboard/src/lib/cawco/transcript/open-at.svelte.ts",
     "apps/dashboard/src/lib/cawco/transcript/rows.ts",

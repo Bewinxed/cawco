@@ -120,6 +120,8 @@ export default {
         "scripts/shell-bodies-check.ts",
         // scripts/check.ts, beside compress-answer-check.ts
         "scripts/type-roles-check.ts",
+        // scripts/check.ts, beside type-roles-check.ts
+        "scripts/routine-report-check.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the tool door's proof (scripts/lib/tool-call.ts).
         "scripts/lib/tool-call.fixtures.ts",
         // scripts/check.ts:538

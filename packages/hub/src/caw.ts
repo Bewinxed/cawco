@@ -239,6 +239,7 @@ export const stagePlaceRef = (
  */
 export const EVENT_SKILLS = {
   "routine-run": "project-routine-run",
+  "routine-report": "project-routine-report",
   "delegate-report": "project-delegate-report",
   "attempt-judgement": "project-attempt-judgement",
   "task-move": "project-task-move",

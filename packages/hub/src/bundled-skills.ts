@@ -40,6 +40,7 @@ export const BUNDLED_SKILLS = [
   // One per kind of event the project's conversation hears, named in each
   // send's context line (caw.ts `EVENT_SKILLS`).
   "project-routine-run",
+  "project-routine-report",
   "project-delegate-report",
   "project-attempt-judgement",
   "project-task-move",

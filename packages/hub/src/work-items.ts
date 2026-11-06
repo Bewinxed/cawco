@@ -304,7 +304,7 @@ const ROUTINE_PARENT = "routine:";
 const routineParentId = (routineId: string): string =>
   `${ROUTINE_PARENT}${routineId}`;
 
-/** Whether a parent id is a routine's: its runs report to no session (routines.ts reads their end). */
+/** Whether a parent id is a routine's: no session's row has it (routines.ts reads their end and sends the report). */
 export const isRoutineParent = (id: string | null | undefined): boolean =>
   !!id?.startsWith(ROUTINE_PARENT);
 
@@ -3003,9 +3003,10 @@ export const createWorkItems = ({
   /**
    * Whether a session's reports and asks go up to its parent at all: only
    * delegated work's do (a work item). A session another session started with `start_session`
-   * nests under it and reports to no one, its asks the person's; a
-   * routine's run reports to nobody either, as its routine reads how it
-   * ended, and a run that answers NO_REPLY must wake no model, the conversation's
+   * nests under it and reports to no one, its asks the person's. A
+   * routine's run has no parent row: routines.ts reads how it ended and
+   * sends its report to the project's conversation itself (`surfaceRun`),
+   * so a run that answers NO_REPLY wakes no model, the conversation's
    * included.
    */
   const reportsBack = (row: InstanceRow): boolean =>
