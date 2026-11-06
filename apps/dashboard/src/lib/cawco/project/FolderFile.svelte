@@ -8,9 +8,9 @@
    * text. A Caw reply's chips, a report's file chips, Configure's project
    * delegate types and a task's attached files link to it. It opens
    * in the page (The Open Page Rule): the card beside the view on a desk
-   * (SideSurface, in the page's Split), its own page with Back under 900px:
-   * its bar Back's symbol and the file's name, its path the page's first
-   * line (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "a path is
+   * (SideSurface, in the page's Split), its own page with Back under 900px
+   * (PageSurface). Either bar names it by the file's name, its path the
+   * body's first line (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "a path is
    * never printed in a bar"; "Back and Close are symbols, named by where
    * they go").
    * A path the hub refuses (not in the folder, outside it) says so in the
@@ -99,15 +99,13 @@
     data-folder-file={path}
   >
     <div class="flex flex-col gap-space-2 p-space-5">
-      {#if page}
-        <!-- Its path, which the bar names by the file alone: words to read
-             and copy, wrapping where it runs long. -->
-        <bdi
-          data-slot="page-path"
-          class="type-meta font-mono liga-none wrap-anywhere text-ink-subtle"
-          >{path}</bdi
-        >
-      {/if}
+      <!-- Its path, which the bar names by the file alone: words to read
+           and copy, wrapping where it runs long. -->
+      <bdi
+        data-slot="page-path"
+        class="type-meta font-mono liga-none wrap-anywhere text-ink-subtle"
+        >{path}</bdi
+      >
       {#if media}
         <TaskOutput
           bare
@@ -157,8 +155,7 @@
     of="file"
     label="A file of the project's folder"
     {onclose}
-    title={path}
-    titleCode
+    title={fileName(path)}
   >
     {@render body()}
   </SideSurface>

@@ -78,7 +78,6 @@
         onclose={() => {
           closed = true;
         }}
-        title="tsk-165"
         what="task"
       >
         {@render face()}

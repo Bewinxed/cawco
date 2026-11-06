@@ -8,10 +8,10 @@
    * transcript live beside it; on a phone its own page, its bar Back's
    * symbol alone, named by where it goes (DESIGN.md, The Title Bars Follow
    * Liquid Glass Rule: "Back and Close are symbols, named by where they
-   * go"). The bar names no task: its title is the head's first heading
-   * under it, and its id, never a bar's ("A title is the view's own short
-   * name, never … an id"), leads the facts line, as it leads the board's
-   * card (TaskCard).
+   * go"). Neither bar names the task: its title is the head's first
+   * heading under it, and its id, never a bar's ("A title is the view's own
+   * short name, never … an id"), leads the facts line, as it leads the
+   * board's card (TaskCard).
    *
    * Its head stands still: the facts line (its stage, Working or Queued,
    * its dates, its labels at the end), then its title; under it a Review ·
@@ -453,14 +453,12 @@
       class="flex flex-none flex-col gap-space-2 pt-space-2 px-(--pane-inline) pb-space-3"
     >
       <div data-slot="meta" class="flex flex-wrap items-center gap-space-2">
-        {#if page}
-          <!-- Its id, which the page's bar never prints: the facts'
-               first, as the board's card leads with it. -->
-          <span
-            data-slot="id"
-            class="type-meta font-mono liga-none text-ink-subtle">{taskId}</span
-          >
-        {/if}
+        <!-- Its id, which no bar prints: the facts' first, as the board's
+             card leads with it. -->
+        <span
+          data-slot="id"
+          class="type-meta font-mono liga-none text-ink-subtle">{taskId}</span
+        >
         {#if shown}
           <!-- What the skeleton stood for, in its reveal. -->
           <span
@@ -835,8 +833,6 @@
     {onclose}
     recessed={false}
     {switcher}
-    title={switcher ? undefined : taskId}
-    titleCode
   >
     {@render content()}
   </SideSurface>

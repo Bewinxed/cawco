@@ -20,7 +20,7 @@
   }: {
     /** What stood in the card. */
     what: "preview" | "task";
-    /** What the pane's head named: the artifact, or the task's id where no switch says Task. */
+    /** What the pane's head named: the artifact's title; a task's head names none (TaskPane). */
     title?: string;
     /** The switch, while more than one has something to show. */
     switcher?: Snippet;
@@ -53,7 +53,6 @@
   recessed={what === "preview"}
   {switcher}
   {title}
-  titleCode={what === "task"}
 >
   <!-- The face runs to the card's top beneath the floating head, its
        scroller padding its top by the head's room. -->

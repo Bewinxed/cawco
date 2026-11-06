@@ -1,12 +1,14 @@
 <script lang="ts">
   /**
-   * A phone's own pages, for the page-heads probe: the real TaskPane and
-   * FolderFile drawn as ProjectPage draws them under 900px (`page`, Back to
-   * the project's name), fed a product-shaped task with no hub, so each
-   * page's body says the hub didn't answer under its head. `?of=task` (the
-   * default) or `?of=file`. The probe reads each head: Back the chevron
-   * alone, named by where it goes; no id or path in the bar; the file's
-   * name its title.
+   * A task's and a folder file's heads, for the page-heads probe: the real
+   * TaskPane and FolderFile fed a product-shaped task with no hub, so each
+   * body says the hub didn't answer under its head. `?of=task` (the
+   * default) or `?of=file`; `?at=phone` (the default) draws each as
+   * ProjectPage does under 900px (`page`, Back to the project's name),
+   * `?at=desk` as the side card beside the board (SideSurface, in a card
+   * as wide as Split stands it). The probe reads each head: Back the
+   * chevron alone, named by where it goes; no id or path in the bar; the
+   * file's name its title.
    */
   import type { StagesView, TaskSummary } from "@cawco/core/task-views";
   import { DAY_MS, MINUTE_MS } from "@cawco/core/time";
@@ -85,14 +87,21 @@
     },
   ];
   const of = $derived(page.url.searchParams.get("of") ?? "task");
+  const desk = $derived(page.url.searchParams.get("at") === "desk");
+  const phonePage = $derived(desk ? undefined : { backTo: PROJECT });
   const noop = () => undefined;
 </script>
 
-<div class="flex h-dvh min-h-0 flex-col" data-bench-page={of}>
+<div
+  class="flex h-dvh min-h-0 flex-col data-desk:w-(--card-w) data-desk:p-space-3"
+  data-bench-page={of}
+  data-desk={desk || undefined}
+  style:--card-w={"max(45vw, var(--c-side-surface-min))"}
+>
   {#if of === "file"}
     <FolderFile
       onclose={noop}
-      page={{ backTo: PROJECT }}
+      page={phonePage}
       path={FILE}
       projectId={PROJECT_ID}
     />
@@ -103,7 +112,7 @@
       onclose={noop}
       onmove={() => Promise.reject(new Error("bench"))}
       onopen={noop}
-      page={{ backTo: PROJECT }}
+      page={phonePage}
       projectId={PROJECT_ID}
       {stages}
       taskId={TASK}

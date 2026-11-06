@@ -30,7 +30,7 @@
   import { cawco, closePreview } from "../client.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
-  import { besideOf, putAway } from "../tasks/beside.svelte";
+  import { putAway } from "../tasks/beside.svelte";
   import FailedSurface from "./FailedSurface.svelte";
   import SideSheet from "./SideSheet.svelte";
   import Split from "./Split.svelte";
@@ -146,9 +146,9 @@
   };
 
   /** What a failed card's head names (FailedSurface): the artifact, or the task's id where no switch says Task. */
-  function failedTitle(what: Shown, switched: boolean): string | undefined {
+  function failedTitle(what: Shown): string | undefined {
     if (what === "task") {
-      return switched ? undefined : besideOf(viewId)?.taskId;
+      return;
     }
     const preview = cawco.previews[viewId];
     return preview?.artifact?.title ?? preview?.title;
@@ -201,7 +201,7 @@
         <FailedSurface
           onclose={() => closeFailed(shown)}
           switcher={switched}
-          title={failedTitle(shown, !!switched)}
+          title={failedTitle(shown)}
           what={shown}
         >
           {@render face()}
@@ -235,7 +235,7 @@
         {#snippet chrome(face)}
           <FailedSurface
             onclose={() => closeFailed("preview")}
-            title={failedTitle("preview", false)}
+            title={failedTitle("preview")}
             what="preview"
           >
             {@render face()}

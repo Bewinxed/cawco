@@ -73,10 +73,8 @@
     switcherAt = "start",
     title,
     titleControl,
-    titleCode = false,
     subtitle,
     subtitleId,
-    subtitleCode = false,
     placement = "beside",
     actions,
     items,
@@ -105,14 +103,10 @@
     title?: string;
     /** What is on show as a control (the artifact panel's menu), in the title's place; its words that keep their width marked `data-slot="name-lead"`, what trails them cut inside the name's box. */
     titleControl?: Snippet;
-    /** The title is a path or an identifier (a folder file's path), set as code. */
-    titleCode?: boolean;
-    /** What describes it (an artifact's ask, a task's id): never a line in the bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "Facts about the surface … are content, never a second line in the bar"); the title's tooltip and its description, and a title control says it in its own menu. */
+    /** What describes it (an artifact's ask): never a line in the bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "Facts about the surface … are content, never a second line in the bar"); the title's tooltip and its description, and a title control says it in its own menu. */
     subtitle?: string;
     /** The description's id, for the control it describes. */
     subtitleId?: string;
-    /** The line is an identifier (a task's id), set as code. */
-    subtitleCode?: boolean;
     /**
      * Where the card stands: beside the page (Close trails, in a group of
      * its own), or a sheet (a phone's): Close leads, as a single-view
@@ -639,19 +633,15 @@
         <h2
           data-slot="title"
           aria-describedby={subtitle ? subtitleId : undefined}
-          data-code={titleCode || undefined}
-          class="m-0 truncate text-ink-strong type-row data-code:type-code"
+          class="m-0 truncate text-ink-strong type-row"
           title={subtitle || undefined}
         >
           {title}
         </h2>
       {/if}
       {#if subtitle}
-        <span
-          data-slot="subtitle"
-          data-code={subtitleCode || undefined}
-          class="sr-only"
-          id={subtitleId}>{subtitle}</span
+        <span data-slot="subtitle" class="sr-only" id={subtitleId}
+          >{subtitle}</span
         >
       {/if}
     </div>

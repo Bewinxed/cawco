@@ -4,6 +4,7 @@
 // by its path from apps/dashboard, as the ESLint config named it.
 import path from "node:path";
 import { defineRule } from "golar/unstable";
+import { backCloseWords } from "./back-close-words.mjs";
 import { barItemsOutsideKit } from "./bar-item.mjs";
 import { detachedBarMenus } from "./bar-menu.mjs";
 import { barSymbols } from "./bar-symbol.mjs";
@@ -331,6 +332,7 @@ const FIND = {
   "house/bar-item-in-kit": barItemsOutsideKit,
   "house/count-in-badge": countBadges,
   "house/bar-symbol-linear": barSymbols,
+  "house/back-close-symbol": backCloseWords,
   "house/no-detached-bar-menu": detachedBarMenus,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
