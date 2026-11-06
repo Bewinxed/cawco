@@ -6,7 +6,8 @@
  *   `.ts` and `.svelte` file;
  * - `golar lint`: the rules below, over the files the change reaches.
  *
- * The rules: the switch check (scripts/lint/switch-exhaustiveness.ts) over
+ * The rules: the hub-path ban (scripts/lint/hub-path-door.ts) over every
+ * caller of the hub's source; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
  * scripts/), cawrier's and the site's, and the design rules (scripts/lint/design) over the dashboard's
@@ -21,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import { getEnvironmentData, isMainThread } from "node:worker_threads";
 import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
+import { hubPathDoor } from "./scripts/lint/hub-path-door.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
 /** The planted mistakes, read by their own globs below and never as product code. */
@@ -29,6 +31,8 @@ const LINT_FIXTURES = "scripts/lint/fixtures/";
 const SWITCH_FIXTURES = `${LINT_FIXTURES}*.ts`;
 /** The planted mistakes each design rule must report (scripts/check.ts). */
 const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
+/** The hub paths the door's rule must refuse, and those it must let stand. */
+const HUB_PATH_FIXTURES = `${LINT_FIXTURES}hub-path.ts`;
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -74,6 +78,19 @@ const switched = within(
     "site/src/**/*.ts"
   )
 ).filter((path) => !path.startsWith(LINT_FIXTURES));
+// Every caller of the hub but the hub itself: the dashboard, the scripts,
+// and the agent's, the CLI's and core's source (scripts/lint/hub-path-door.ts).
+const hubCallers = within(
+  tracked(
+    "apps/dashboard/src/**/*.ts",
+    "apps/dashboard/src/**/*.svelte",
+    "packages/agent/src/**/*.ts",
+    "packages/agent/src/**/*.tsx",
+    "packages/cli/src/**/*.ts",
+    "packages/core/src/**/*.ts",
+    "scripts/**/*.ts"
+  )
+).filter((path) => !path.startsWith(LINT_FIXTURES));
 const designed = within(
   tracked("apps/dashboard/src/**/*.ts", "apps/dashboard/src/**/*.svelte")
 );
@@ -99,6 +116,10 @@ export default defineConfig({
       {
         files: [...designed.map(literal), DESIGN_FIXTURES],
         rules: design,
+      },
+      {
+        files: [...hubCallers.map(literal), HUB_PATH_FIXTURES],
+        rules: [hubPathDoor],
       },
     ],
   },
