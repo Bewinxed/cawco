@@ -1112,6 +1112,13 @@ const state = $state({
    */
   tasksChanged: {} as Record<string, number>,
   /**
+   * How many times a session closed one of its questions to the person
+   * since this page connected (`questions.moved` frames): a session's
+   * list of what it asked him (waiting/questions.svelte.ts) reads again
+   * when it moves, as it does on each `artifact.needs` frame.
+   */
+  questionsMoved: 0,
+  /**
    * How many `tasks.changed` frames have named each task, by
    * `projectId/taskId`, and how many named none, by project id: an open
    * task reads itself again when either moves (`taskChangedOf`).
@@ -3676,6 +3683,11 @@ function handleFrame(frame: FramePayload): void {
     for (const listener of fleetFetchListeners) {
       listener.heard(frame);
     }
+    return;
+  }
+
+  if (frame.kind === "questions.moved") {
+    state.questionsMoved += 1;
     return;
   }
 
@@ -9669,6 +9681,16 @@ export const cawco = {
   get now(): number {
     return minute.now;
   },
+  /**
+   * What says a session's questions to the person may have moved: Needs
+   * you's artifacts (`artifact.needs`, an answer, a new ask, a session
+   * ending) and the count of `questions.moved` frames (a take or a
+   * withdrawal). An effect that calls it runs again on each.
+   */
+  questionsMoved: (): readonly [ArtifactNeed[], number] => [
+    state.artifactNeeds,
+    state.questionsMoved,
+  ],
   /** A count that moves each time the project's tasks change (`tasks.changed`). */
   tasksChangedOf: (projectId: string): number =>
     state.tasksChanged[projectId] ?? 0,

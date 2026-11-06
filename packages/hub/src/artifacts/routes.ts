@@ -326,6 +326,20 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
+    // What the session's tree asked the person, open or answered and not
+    // yet taken (core session-questions.ts): its own screen's list. The
+    // dashboard's alone, so out of the app's API document.
+    .get(
+      "/api/instances/:id/questions",
+      { detail: { hide: true } },
+      ({ params }) => {
+        try {
+          return artifacts.sessionQuestions(params.id);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // Files' search: the session's artifacts a query matches by name or by
     // the words on their page, best first, with the words round a hit.
     .get(

@@ -37549,6 +37549,9 @@
             "$ref": "#/components/schemas/TasksChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/QuestionsMovedFrame"
+          },
+          {
             "$ref": "#/components/schemas/DecisionsChangedFrame"
           },
           {
@@ -37652,6 +37655,7 @@
             "work_item": "#/components/schemas/WorkItemFrame",
             "project_offer": "#/components/schemas/ProjectOfferFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
+            "questions.moved": "#/components/schemas/QuestionsMovedFrame",
             "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
             "blocks.changed": "#/components/schemas/BlocksChangedFrame",
             "starters.changed": "#/components/schemas/StartersChangedFrame",
@@ -65797,6 +65801,26 @@
         "required": [
           "kind",
           "projectId"
+        ]
+      },
+      "QuestionsMovedFrame": {
+        "description": "Hub-originated: a session closed one of its questions to the person\n(`question_close`, taken or withdrawn): what a session's tree asked him\nmoved without anything in Needs you moving, so a screen listing a\nsession's questions (core session-questions.ts) reads them again.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "description": "The artifact that asked it.",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "questions.moved"
+            ]
+          }
+        },
+        "required": [
+          "artifactId",
+          "kind"
         ]
       },
       "DecisionsChangedFrame": {

@@ -1468,6 +1468,7 @@ export type FramePayload =
   | import("./frames").WorkItemFrame
   | import("./frames").ProjectOfferFrame
   | import("./frames").TasksChangedFrame
+  | import("./frames").QuestionsMovedFrame
   | import("./frames").DecisionsChangedFrame
   | import("./frames").BlocksChangedFrame
   | import("./starters").StartersChangedFrame

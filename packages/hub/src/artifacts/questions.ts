@@ -28,6 +28,7 @@
  * (superseded) for good; neither counts as asking him, and nothing is
  * deleted.
  */
+import type { ArtifactStop } from "@cawco/core/artifact-needs";
 import type { AskState } from "@cawco/core/asks";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { noteText } from "@cawco/core/choices";
@@ -35,6 +36,7 @@ import { type Anchor, type Pin, pinAsks } from "@cawco/core/comments";
 import { type DecisionCard, pickMade } from "@cawco/core/decisions";
 import { pinName } from "@cawco/core/pin-name";
 import { artifactLink, decisionLink, pinLink } from "@cawco/core/references";
+import type { SessionQuestionKind } from "@cawco/core/session-questions";
 import { cssEscape } from "./page-changes";
 
 /** The doc's `meta` key holding the agent's closes, by question key: the hub's alone to write. */
@@ -68,10 +70,12 @@ export interface Question {
   close: QuestionClose | null;
   /** Its key in {@link QUESTIONS_CLOSED}: `card:<id>`, `judge`, `pin:<id>`. */
   key: string;
-  kind: "card" | "judge" | "pin";
+  kind: SessionQuestionKind;
   /** What names it to the person and to `question_close`: a card's, the artifact's or a pin's link. */
   link: string;
   state: QuestionState;
+  /** Where the artifact's panel opens to answer it: the card, the pin, or its top. */
+  stop: ArtifactStop;
   /** A card's why; empty for any other. */
   why: string;
   /** The question as asked: a card's, the artifact's ask, the agent's asking reply. */
@@ -229,6 +233,7 @@ const askedOn = (input: QuestionsInput): Asked[] => {
       key: `card:${asked.id}`,
       kind: "card",
       link: decisionLink(artifact.id, asked.id, words),
+      stop: { card: asked.id },
       words,
       why: asked.card?.why.trim() ?? "",
       answer: cardAnswer(
@@ -244,6 +249,7 @@ const askedOn = (input: QuestionsInput): Asked[] => {
           key: "judge",
           kind: "judge",
           link: artifactLink(artifact.id, artifact.title),
+          stop: { top: true },
           words: artifact.ask,
           why: "",
           answer: judgeAnswer(input.state),
@@ -266,6 +272,7 @@ const askedOnPins = (input: QuestionsInput): Asked[] =>
         key: `pin:${pin.id}`,
         kind: "pin",
         link: pinLink(input.artifact.id, pin.number, pinName(pin)),
+        stop: { pin: pin.number },
         words: pin.thread[asking]?.text ?? "",
         why: "",
         answer: pinAsks(pin) ? null : pinAnswer(pin, asking),
