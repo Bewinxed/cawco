@@ -6,9 +6,10 @@
    * delegate chips' and the plan ring's own recipe (ui/chip, `tray`), so
    * the row is one height on one line.
    *
-   * While anything waits on him it wears the needs-you hand and says how
-   * many ("3 need you"); once all are answered and some not yet taken up,
-   * the tick and how many ("2 answered"), in muted ink. At none it is gone
+   * While anything needs him it wears the needs-you hand and says how many
+   * ("3 need you", the fleet's Needs you words); once all he was asked is
+   * answered and the agent has not taken some up, the tick (his side is
+   * done) and whom they need now ("2 need Claude Code"), in muted ink. At none it is gone
    * (DESIGN.md, The Earned Count Rule). Where the tray row is narrower than
    * a phone's (its `tray` container: a phone, Caw's panel) the words fold
    * away and the glyph and the figure stand, so a folded question's bar
@@ -19,11 +20,14 @@
   import { IconNeedsYou, IconTick } from "#lib/icons.js";
 
   let {
+    agent,
     open: waiting,
     answered,
     shown,
     onopen,
   }: {
+    /** The session's agent, by the name the conversation gives it. */
+    agent: string;
     /** How many wait on him. */
     open: number;
     /** How many he answered that the agent has not taken up. */
@@ -37,7 +41,7 @@
 {#if waiting > 0 || answered > 0}
   <button
     data-slot="waiting-chip"
-    aria-label={waitingWords.triggerLabel(waiting, answered)}
+    aria-label={waitingWords.triggerLabel(waiting, answered, agent)}
     aria-pressed={shown}
     class={chipVariants({
       variant: "tray",
@@ -60,7 +64,7 @@
       <IconTick aria-hidden="true" />
       <span aria-hidden="true" class="num whitespace-nowrap"
         >{answered}<span class="@max-phone/tray:hidden"
-          >{` ${waitingWords.answeredWord}`}</span
+          >{` ${waitingWords.needAgentWord(answered, agent)}`}</span
         ></span
       >
     {/if}

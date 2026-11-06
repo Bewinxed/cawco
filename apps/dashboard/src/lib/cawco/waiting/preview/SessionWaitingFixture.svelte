@@ -16,10 +16,24 @@
    * delegate tray the one part drawn here (`FixtureTray`: the live tray
    * reads the hub's store). `asked`: the agent's question folded to its bar
    * on the tray row (minimized-asks.svelte.ts), the chip beside it.
+   *
+   * A row's press lands where the pane sends it (session-waiting.svelte.ts
+   * `open`): a question's or a permission's row puts the list away and the
+   * composer grows into the question, answered there (its row and its bar
+   * go); a sign-in's puts the list away (its card is the transcript's); an
+   * artifact's row opens its page in the panel beside the conversation (a
+   * sheet over it on a phone and in Caw's panel) at its card, the list
+   * staying open. `opened`/`landed` draw a press already made: `ask`, the
+   * question grown; `card`, the first card's page open in the panel.
    */
+  import { MediaQuery, SvelteSet } from "svelte/reactivity";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import { minimizedAsks } from "#lib/cawco/minimized-asks.svelte.js";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
+  import CoverState from "#lib/cawco/preview/CoverState.svelte";
+  import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
+  import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
+  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import Composer, {
     type ComposerAsk,
   } from "#lib/cawco/transcript/Composer.svelte";
@@ -46,7 +60,7 @@
     IconSearch,
     IconServerLinear,
   } from "#lib/icons.js";
-  import { type WaitingRow, waitingCounts } from "../rows";
+  import { isAsk, type WaitingRow, waitingCounts } from "../rows";
   import WaitingCard from "../WaitingCard.svelte";
   import WaitingChip from "../WaitingChip.svelte";
   import FixtureTray from "./FixtureTray.svelte";
@@ -57,6 +71,7 @@
     height = 760,
     asked = null,
     caw = false,
+    landed = null,
   }: {
     rows: WaitingRow[];
     /** The list stands open. */
@@ -67,6 +82,8 @@
     asked?: string | null;
     /** The conversation is Caw's, in his panel on the project's page. */
     caw?: boolean;
+    /** A row's press already made: the question grown in the composer, or the first card's page open beside. */
+    landed?: "ask" | "card" | null;
   } = $props();
 
   /** Each frame's own session, so each frame's composer layer is its own and every frame can stand open at once. */
@@ -79,16 +96,44 @@
     shown = opened;
   });
 
-  /** A press the fixture answers with nothing: the screen's own opens are the live pane's. */
+  /** A press the fixture answers with nothing: the plan's ring and the composer's send are another screen's. */
   const nothing = () => undefined;
   const fleet = { ...composerFleet, DelegateTray: FixtureTray };
   const draft = new ComposerDraft();
+  const agent = $derived(caw ? "Caw" : "Claude Code");
+  const phone = new MediaQuery("(width < 640px)");
 
-  const counts = $derived(waitingCounts(rows));
+  /** The asks answered here: their rows and the question's bar go, as the hub takes them. */
+  const taken = new SvelteSet<string>();
+  /** The artifact row whose page stands open in the panel. */
+  let paged = $state<WaitingRow | null>(null);
+  const live = $derived(
+    rows.filter((row) => !(isAsk(row) && taken.has(row.requestId)))
+  );
+  const counts = $derived(waitingCounts(live));
+
+  /** A row pressed: where the pane sends it (session-waiting.svelte.ts `open`). */
+  function onopen(row: WaitingRow): void {
+    if (isAsk(row)) {
+      shown = false;
+      if (row.kind !== "connect" && ask) {
+        minimizedAsks.set(ask.request.requestId, false);
+      }
+      return;
+    }
+    paged = row;
+  }
+
+  // A press already made, drawn as the story asks.
+  $effect.pre(() => {
+    if (landed === "card") {
+      paged = rows.find((row) => !isAsk(row)) ?? null;
+    }
+  });
 
   /** The question folded to its bar, as the hub parks an AskUserQuestion. */
   const ask = $derived.by((): ComposerAsk | null => {
-    if (!asked) {
+    if (!asked || taken.has("r-question")) {
       return null;
     }
     const request: ComposerAsk["request"] = {
@@ -120,12 +165,19 @@
       request,
       asker: request.presentation.asker,
       more: 0,
-      onanswer: () => null,
+      onanswer: () => {
+        taken.add(request.requestId);
+        return null;
+      },
     };
   });
+  // Folded to its bar as the story opens, unless the story is the press that grew it.
   $effect.pre(() => {
-    if (ask) {
-      minimizedAsks.set(ask.request.requestId, true);
+    if (asked) {
+      minimizedAsks.set("r-question", landed !== "ask");
+      if (landed === "ask") {
+        shown = false;
+      }
     }
   });
 
@@ -144,6 +196,7 @@
 
 {#snippet trailing()}
   <WaitingChip
+    {agent}
     answered={counts.answered}
     onopen={() => {
       shown = !shown;
@@ -151,15 +204,15 @@
     open={counts.open}
     {shown}
   />
-  {#if shown && rows.length > 0}
+  {#if shown && live.length > 0}
     <WaitingCard
-      agent={caw ? "Caw" : "Claude Code"}
+      {agent}
       onclose={() => {
         shown = false;
       }}
-      onopen={nothing}
+      {onopen}
       paneId={SESSION}
-      {rows}
+      rows={live}
     />
   {/if}
   <PlanRing done={2} onopen={nothing} open={false} total={12} unseen={null} />
@@ -207,6 +260,39 @@
   </div>
 {/snippet}
 
+<!-- The page a pressed artifact row opens, in the panel: the decision page
+     at its card where the fixture holds its picture, else the panel's own
+     cover while the page loads. -->
+{#snippet panel(row: WaitingRow, placement: "beside" | "sheet")}
+  {#if !isAsk(row)}
+    <SideSurface
+      label="Preview"
+      of="preview"
+      onclose={() => {
+        paged = null;
+      }}
+      {placement}
+      subtitle={row.words}
+      title={row.artifact.title}
+      float
+    >
+      <div class="size-full overflow-y-auto overscroll-contain no-scrollbar">
+        {#if row.artifact.id === "a-bars"}
+          <img
+            alt={row.artifact.title}
+            class="block h-auto max-w-full"
+            src={placement === "sheet" ? pagePhone : pageDesk}
+          />
+        {:else}
+          <div class="grid size-full place-items-center">
+            <CoverState waiting={{ line: `Opening ${row.artifact.title}` }} />
+          </div>
+        {/if}
+      </div>
+    </SideSurface>
+  {/if}
+{/snippet}
+
 <TooltipProvider>
   {#if caw}
     <!-- A project's page with Caw's panel docked beside it, a conversation's width. -->
@@ -252,6 +338,11 @@
           </BarFloat>
         </div>
         {@render conversation()}
+        {#if paged}
+          <div class="absolute inset-x-0 bottom-0 top-space-6 z-3 flex">
+            {@render panel(paged, "sheet")}
+          </div>
+        {/if}
       </div>
     </div>
   {:else}
@@ -294,7 +385,22 @@
           </BarGlass>
         </div>
       </div>
-      {@render conversation()}
+      <!-- The conversation, and beside it on a desk the panel a pressed
+           row opened; on a phone the panel is a sheet over it. -->
+      <div class="relative flex min-h-0 flex-auto">
+        <div class="flex min-w-0 flex-auto flex-col">
+          {@render conversation()}
+        </div>
+        {#if paged && !phone.current}
+          <div class="flex w-1/2 flex-none p-space-2">
+            {@render panel(paged, "beside")}
+          </div>
+        {:else if paged}
+          <div class="absolute inset-x-0 bottom-0 top-space-6 z-3 flex">
+            {@render panel(paged, "sheet")}
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 </TooltipProvider>

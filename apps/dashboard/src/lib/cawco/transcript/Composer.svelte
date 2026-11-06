@@ -3242,7 +3242,8 @@
   style:--c-composer-w={flush ? "100%" : undefined}
   style:--layer-foot="calc({panel}px + var(--c-tray-row) + var(--space-2))"
 >
-  <!-- The ground under an open layer (the plan, the tray's shelf). Each
+  <!-- The ground under an open layer (the plan, the tray's shelf, the list
+       of what waits on the person). Each
        floats a `space-2` step over the tray row, and the row has no surface
        of its own, so the transcript scrolling behind showed between the two
        as a sliver of a line, cut by the layer's foot mid-glyph. While one is
@@ -3255,7 +3256,7 @@
   <div
     data-slot="layer-ground"
     aria-hidden="true"
-    class="absolute inset-x-0 bottom-(--ground-bottom) -z-1 h-(--ground-h) pointer-events-none bg-(image:--layer-ground-image) opacity-0 invisible transition-fade-hide group-has-slot-plan/dock:opacity-100 group-has-slot-plan/dock:visible group-has-slot-plan/dock:transition-fade-show group-has-slot-shelf/dock:opacity-100 group-has-slot-shelf/dock:visible group-has-slot-shelf/dock:transition-fade-show"
+    class="absolute inset-x-0 bottom-(--ground-bottom) -z-1 h-(--ground-h) pointer-events-none bg-(image:--layer-ground-image) opacity-0 invisible transition-fade-hide group-has-slot-plan/dock:opacity-100 group-has-slot-plan/dock:visible group-has-slot-plan/dock:transition-fade-show group-has-slot-shelf/dock:opacity-100 group-has-slot-shelf/dock:visible group-has-slot-shelf/dock:transition-fade-show group-has-slot-waiting/dock:opacity-100 group-has-slot-waiting/dock:visible group-has-slot-waiting/dock:transition-fade-show"
     style:--layer-ground-image={LAYER_GROUND}
     style:--ground-bottom={GROUND_BOTTOM}
     style:--ground-h={GROUND_H}
@@ -3325,7 +3326,11 @@
            up, so the bar costs the transcript nothing the row did not
            already keep clear; the row's trailing end stays (what waits on
            the person, whose list holds this question too, and the plan's
-           ring), and the bar ends short of it (`--ring-room`). The bar is
+           ring), and the bar ends short of it (`--ring-room`). While that
+           list stands open (`[data-slot="waiting"]`, waiting/WaitingCard)
+           the bar gives way under it: the list's first row
+           is this same question, one press from growing it, so the bar
+           would say it twice a step apart. The bar is
            the tray row's chip (ui/chip, `variant: "tray"`) in its needs tone
            (DelegateTray: a session asking for something is the one loud
            colour), across the composer's width, standing in the tray row as the tray's chips do:
@@ -3334,7 +3339,7 @@
            the bar as it fades. -->
       {@const [first] = askQuestions ?? []}
       <div
-        class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none"
+        class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none transition-fade-show group-has-slot-waiting/dock:opacity-0 group-has-slot-waiting/dock:invisible group-has-slot-waiting/dock:transition-fade-hide"
         style:--ring-room={planRing
           ? `calc(${ringWidth}px + var(--space-2))`
           : undefined}

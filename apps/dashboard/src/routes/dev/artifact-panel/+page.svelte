@@ -60,6 +60,8 @@
   import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
   import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
   import type { RailList, RailSort } from "#lib/cawco/preview/comment-rows.js";
+  import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
+  import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
   import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
   import ModeSwitch from "#lib/cawco/preview/ModeSwitch.svelte";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
@@ -89,8 +91,6 @@
     IconRefreshLinear,
   } from "#lib/icons.js";
   import { page } from "$app/state";
-  import pageDesk from "./page-desk.webp";
-  import pagePhone from "./page-phone.webp";
   import { ARTIFACTS, HELD, LONG, PINS } from "./records";
 
   const INSTANCE = "bench-artifact-panel";

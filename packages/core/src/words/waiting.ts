@@ -6,31 +6,34 @@
  */
 import type { SessionAnswerHow } from "../session-questions";
 
+/** The verb the whole card says: "1 needs you", "3 need Claude Code". */
+const needs = (n: number, who: string) =>
+  n === 1 ? `1 needs ${who}` : `${n} need ${who}`;
+
+/**
+ * One verb, two subjects: everything on the chip and the card says whom an
+ * item needs, the person or the agent, in the fleet's own Needs you words
+ * (common.ts `needsYou`).
+ */
 export const waitingWords = {
-  /**
-   * The list's title: what waits on him; once all he was asked is answered,
-   * whose move it is now, the agent's (the same words as the answered part's
-   * head).
-   */
+  /** The card's title: what needs him; once all he was asked is answered, what needs the agent (the answered part's head). */
   title: (open: number, agent: string) =>
-    open > 0 ? "Waiting on you" : `Waiting on ${agent}`,
-  /** The trigger's figure while something is open: "3"; its word beside it, which folds away where the row is narrow. */
+    open > 0 ? "Needs you" : `Needs ${agent}`,
+  /** The chip's word beside its figure while something needs him ("3 need you"), which folds away where the row is narrow. */
   needYouWord: (n: number) => (n === 1 ? "needs you" : "need you"),
-  /** The trigger's word once all are answered and some not yet taken: "2 answered". */
-  answeredWord: "answered",
-  /** The trigger, for a screen reader. */
-  triggerLabel: (open: number, answered: number) =>
+  /** The chip's word beside its figure once all he was asked is answered and the agent has not taken some up ("2 need Claude Code"). */
+  needAgentWord: (n: number, agent: string) =>
+    n === 1 ? `needs ${agent}` : `need ${agent}`,
+  /** The chip, for a screen reader: both counts in the same words. */
+  triggerLabel: (open: number, answered: number, agent: string) =>
     [
-      open > 0 ? `${open} waiting on you` : "",
-      answered > 0 ? `${answered} answered, not yet taken up` : "",
+      open > 0 ? needs(open, "you") : "",
+      answered > 0 ? needs(answered, agent) : "",
     ]
       .filter(Boolean)
       .join(", "),
-  /**
-   * The second part's heading: what he answered that the agent has not
-   * acted on yet is the agent's move, said as the list's title says his.
-   */
-  answeredHead: (agent: string) => `Waiting on ${agent}`,
+  /** The answered part's head: what he answered that the agent has not acted on yet needs the agent. */
+  answeredHead: (agent: string) => `Needs ${agent}`,
   /** His answer, under an answered question. */
   yourAnswer: (by: SessionAnswerHow, said: string): string => {
     switch (by) {
@@ -55,11 +58,9 @@ export const waitingWords = {
     question: "Question",
     connect: "Sign-in",
   },
-  /** Each state, its glyph's name. */
-  state: {
-    open: "Waiting on you",
-    answered: "Answered, not yet taken up by the agent",
-  },
+  /** A row's state, for a screen reader: whom it needs, in the card's own words. */
+  state: (state: "open" | "answered", agent: string) =>
+    state === "open" ? "Needs you" : `Needs ${agent}`,
   /** Where a delegate's question comes from. */
   fromSession: (title: string) => `From ${title}`,
   /** A delegate's that ended: its parent takes it up. */
