@@ -506,7 +506,7 @@
          at the body's size and weight 500, the comment's words under it in
          the row ink, the last word and age in meta: each part keeps its
          dress (The Row Dress Rule), its thread open too, where the row
-         stands on the hover's ground ringed, so no level merges into a
+         stands on the hover's ground with a hairline line inside its edge, so no level merges into a
          wash and the pin keeps its own ground. The hover is the item's
          (`group-hover/row`), so it stays while the pointer is on Resolve. -->
     <button
@@ -514,7 +514,7 @@
       aria-current={chosen || undefined}
       data-focused={pin.id === focused || undefined}
       data-moved={gone || undefined}
-      class="flex items-start gap-space-3 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:inset-ring-1 aria-current:inset-ring-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+      class="flex items-start gap-space-3 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>

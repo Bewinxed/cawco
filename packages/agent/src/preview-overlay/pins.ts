@@ -834,7 +834,7 @@ export function startPins(deps: PinsDeps): Pins {
       onAction: ["--on-action"],
       raised: ["--surface-raised"],
       recessed: ["--surface-fill-strong"],
-      muted: ["--ink-muted"],
+      strong: ["--ink-strong"],
       focus: ["--focus-ring"],
       shadow: ["--shadow-tint"],
       dot: ["--status-live-glyph"],
@@ -859,7 +859,7 @@ export function startPins(deps: PinsDeps): Pins {
       onAction: read.onAction,
       raised: read.raised,
       recessed: read.recessed,
-      muted: read.muted,
+      strong: read.strong,
       focus: read.focus,
       shadow: read.shadow,
       dot: read.dot,
@@ -964,7 +964,9 @@ export function startPins(deps: PinsDeps): Pins {
         resolved: {
           edge: paint.recessed,
           face: paint.recessed,
-          ink: paint.muted,
+          // Strong ink on the recessed face: the muted ink there reads
+          // 3.9:1, under the 4.5:1 a figure needs.
+          ink: paint.strong,
         },
       };
     const look = faces[state];

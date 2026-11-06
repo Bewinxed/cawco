@@ -3504,6 +3504,21 @@ function readInPage(args: InPageArgs): InPageRead {
             }
           }
           const spill = spillOf(d.c, home.c);
+          // A scroller cuts what it scrolls past its edge where there is
+          // more to scroll that way: a ring there is scrolled away, never
+          // cut by the layout (at the scroll's start or end it is).
+          if (home.cuts && scrolls(home.el)) {
+            const sc = home.el;
+            const more: Record<string, boolean> = {
+              top: sc.scrollTop > 0.5,
+              bottom: sc.scrollTop + sc.clientHeight < sc.scrollHeight - 0.5,
+              left: sc.scrollLeft > 0.5,
+              right: sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 0.5,
+            };
+            if (more[spill.where]) {
+              continue;
+            }
+          }
           if (spill.by > 0.5 && !(worst && worst.by >= spill.by)) {
             worst = {
               by: spill.by,
