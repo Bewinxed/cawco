@@ -654,6 +654,8 @@ const gated: Gated[] = [
     "scripts/scratch-fleet.ts",
     "scripts/binary/",
   ]),
+  // A decision page's dials: the kit's page with {{DIALS}} built, the dials' sheet, a Dials piece's controls, a clip's runs.
+  bun("scripts/decision-dials-check.ts", [...DASH, ...PKG, "bun.lock"]),
   // Every probe's decision page, built as the hub builds it.
   bun("scripts/probe-programs-check.ts", [
     "scripts/probe-kit/",

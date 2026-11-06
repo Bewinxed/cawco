@@ -158,6 +158,8 @@ export default {
         "scripts/probe-groups-check.ts",
         "scripts/probe-creates-check.ts",
         "scripts/probe-programs-check.ts",
+        // scripts/check.ts, beside probe-programs-check.ts
+        "scripts/decision-dials-check.ts",
         // scripts/check.ts:632
         "scripts/resolution-check.ts",
         // scripts/check.ts:634
