@@ -9,6 +9,7 @@
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
+  import { sheetScroller } from "#lib/components/ui/drawer/sheet-head.js";
   import CawLeadSwitch from "./CawLeadSwitch.svelte";
   import type { CawLead } from "./caw-lead.svelte";
 
@@ -23,7 +24,8 @@
     projectName: string;
     /**
      * In the touch sheet: the sheet's header names it and the sheet's own
-     * inset holds it, so the panel draws neither.
+     * inset holds it, so the panel draws neither; it scrolls beneath the
+     * sheet's floating header (`sheetScroller`).
      */
     sheet?: boolean;
   } = $props();
@@ -41,7 +43,12 @@
 
 <div
   data-slot="caw-panel"
-  class="type-label flex w-(--panel-w) flex-col gap-space-2 pt-space-3 pr-space-4 pb-space-4 pl-space-4 text-ink-strong data-sheet:w-full data-sheet:p-0"
+  class={[
+    "type-label flex flex-col gap-space-2 text-ink-strong",
+    sheet
+      ? ["w-full min-h-0 overflow-y-auto", sheetScroller]
+      : "w-(--panel-w) pt-space-3 pr-space-4 pb-space-4 pl-space-4",
+  ]}
   data-sheet={sheet || undefined}
   style:--panel-w="min(var(--c-panel-w), calc(100vw - 2 * var(--space-5)))"
 >

@@ -37,6 +37,13 @@
  *     The tabs are read in their own list: no finding.
  * 13. mixed-icons, a filled symbol in a bar's glass: the same header, a
  *     filled symbol beside the outlined ones in its glass: named.
+ * 14. bar-room, a sheet head claiming a row: a kit bottom sheet (the
+ *     drawer's dialog) whose grabber and header stand in flow, its list's
+ *     scroller starting at the header's foot: the rule names it.
+ * 15. bar-room, a sheet head over its content: the same sheet, its
+ *     grabber and header one stack floating over the sheet's top, the
+ *     list's scroller running to that top under it and clearing it by the
+ *     sheet's room (`--sheet-room`): no finding.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
@@ -106,6 +113,20 @@ const TABS_BAR = `<style>
   .glass { display: flex; margin-inline-start: auto; border-radius: 18px; padding: 4px; background: #eee; }
   .glass button { all: unset; display: grid; place-items: center; inline-size: 32px; block-size: 32px; }
 </style>`;
+
+/** A kit bottom sheet (ui/drawer): its grabber, its header with Close and the title, and a list that scrolls. */
+const SHEET = `<style>
+  .sheet { position: fixed; inset-inline: 0; inset-block-end: 0; display: flex; flex-direction: column; block-size: 420px; padding: 9px 16px 16px; --sheet-room: 92px; }
+  .grab { margin: 7px auto 12px; inline-size: 100px; block-size: 6px; border-radius: 3px; background: #ddd; flex: none; }
+  .sheet [data-slot="drawer-header"] { display: flex; align-items: center; gap: 8px; padding-block-end: 12px; flex: none; }
+  .sheet [data-slot="drawer-header"] h2 { margin: 0; font-size: 20px; }
+  .sheet [data-slot="tools"] button { inline-size: 36px; block-size: 36px; border: 0; background: none; }
+  .float { position: absolute; inset-inline: 0; inset-block-start: 9px; z-index: 2; padding-inline: 16px; }
+  .sheet .list { flex: 1; min-block-size: 0; overflow-y: auto; }
+  .sheet .under { padding-block-start: var(--sheet-room); }
+  .list p { margin: 0; padding: 12px; }
+</style>`;
+const SHEET_HEAD = `<div class="grab"></div><div data-slot="drawer-header"><div data-slot="tools"><button type="button" aria-label="Close">×</button></div><h2>Usage limits</h2></div>`;
 
 interface Case {
   html: string;
@@ -190,6 +211,16 @@ const CASES: Record<string, Case> = {
     rule: "bar-room",
     want: "none",
     html: `${BASE}${CARD}<section class="card" aria-label="Preview"><header data-slot="side-head"><h2>Onboarding</h2></header><iframe title="Onboarding" srcdoc="<p>Step one</p>"></iframe></section>`,
+  },
+  "a sheet head claiming a row": {
+    rule: "bar-room",
+    want: "finding",
+    html: `${BASE}${SHEET}<div class="sheet" role="dialog" aria-label="Usage limits" data-slot="drawer-content">${SHEET_HEAD}<div class="list">${ROWS}${ROWS}</div></div>`,
+  },
+  "a sheet head over its content": {
+    rule: "bar-room",
+    want: "none",
+    html: `${BASE}${SHEET}<div class="sheet" role="dialog" aria-label="Usage limits" data-slot="drawer-content"><div class="float" data-slot="drawer-head">${SHEET_HEAD}</div><div class="list under">${ROWS}${ROWS}</div></div>`,
   },
   "a card not chosen": {
     rule: "coral",

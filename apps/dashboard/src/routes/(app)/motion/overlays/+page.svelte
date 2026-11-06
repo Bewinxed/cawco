@@ -107,7 +107,10 @@
           {/snippet}
         </Sheet.Trigger>
         <Sheet.Content side="left" title="Sheet">
-          <div data-slot="body" class="p-space-4">
+          <div
+            data-slot="body"
+            class={["min-h-0 flex-1 overflow-y-auto p-space-4", Sheet.scroller]}
+          >
             <Button data-inside="sheet" onclick={() => inside("sheet")}
               >Press</Button
             >
@@ -164,7 +167,10 @@
           {/snippet}
         </Drawer.Trigger>
         <Drawer.Content title="Drawer">
-          <div data-slot="body" class="p-space-4">
+          <div
+            data-slot="body"
+            class={["min-h-0 overflow-y-auto p-space-4", Drawer.scroller]}
+          >
             <Button data-inside="drawer" onclick={() => inside("drawer")}
               >Press</Button
             >

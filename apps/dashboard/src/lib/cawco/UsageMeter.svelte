@@ -866,11 +866,15 @@
   <!-- Never taller than the room bits-ui measures beside the strip (inside
        its collision padding), less the popover's 1px edge above and below:
        the head and the foot stand still, and the accounts between them
-       scroll. The sheet: as the popover, the controls at the touch floor. -->
+       scroll. The sheet: as the popover, the controls at the touch floor,
+       under the room of the kit's floating head (`--sheet-room`), since its
+       head stands still over the accounts. -->
   <div
     class={[
       "flex flex-col",
-      sheet ? "max-h-none min-h-0 flex-auto" : "max-h-(--pop-max)",
+      sheet
+        ? "max-h-none min-h-0 flex-auto pt-(--sheet-room)"
+        : "max-h-(--pop-max)",
     ]}
     style:--pop-max="calc(var(--bits-popover-content-available-height) - 2px)"
     style:--ring-ground="var(--surface-raised)"

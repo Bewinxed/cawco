@@ -2219,13 +2219,20 @@
 <svelte:window onkeydown={keydown} />
 <!-- The form's head, body, notices and footer, as children of its frame
      (NewSessionPopover, NewSessionDialog's sheet); in the sheet the head is
-     the kit's, titled `title()`, and step 2's Back is the form's first row. -->
+     the kit's, titled `title()`, floating over the form: the body scrolls
+     beneath it, clearing it at rest by its room (`--sheet-room`); step 2's
+     Back, which stands still over the body, is the form's first row, under
+     that room. -->
 <!-- While a start runs the form takes no input; the footer stays live so
      the pending Start keeps its focus (a focused element in an inert
      subtree drops focus to the body). -->
 {#if sheet}
   {#if moveStep}
-    <div data-slot="back" class="flex flex-none pb-space-2" inert={busy}>
+    <div
+      data-slot="back"
+      class="flex flex-none pt-(--sheet-room) pb-space-2"
+      inert={busy}
+    >
       <Button data-vaul-no-drag onclick={back} size="sm" variant="ghost">
         <IconChevronLeft />
         <span>{spawnWords.form.back}</span>
@@ -2293,7 +2300,15 @@
        what says the form runs on past it. -->
 <div
   data-slot="body"
-  class="fai-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-space-6 max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
+  class={[
+    "fai-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-space-6 max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pb-space-4",
+    sheet && !moveStep
+      ? "max-phone:pt-(--body-top) max-phone:scroll-timeline-transcript-head"
+      : "max-phone:pt-space-3",
+  ]}
+  style:--body-top={sheet && !moveStep
+    ? "calc(var(--sheet-room) + var(--space-3))"
+    : undefined}
   data-stepped={moveStep || undefined}
   data-vaul-no-drag
   inert={busy}

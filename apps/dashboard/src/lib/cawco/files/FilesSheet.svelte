@@ -65,9 +65,11 @@
     title="Files"
   >
     <!-- At the lower stop the sheet stands that share of the screen lower:
-         what it holds ends where the screen does. -->
+         what it holds ends where the screen does. Its search and segmented
+         control stand still over the lists, so it starts under the kit's
+         floating head (`--sheet-room`) rather than beneath it. -->
     <div
-      class="flex min-h-0 flex-auto flex-col pb-(--snap-drop)"
+      class="flex min-h-0 flex-auto flex-col pt-(--sheet-room) pb-(--snap-drop)"
       style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 1}) *
       100dvh)"
     >

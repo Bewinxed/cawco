@@ -49,7 +49,7 @@
 <Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content width="report">
     <div class="flex flex-col gap-space-7">
-      <Dialog.Header>
+      <Dialog.Header foot="report">
         <Dialog.Title lead="glyph">
           <IconAlert class="size-icon-md shrink-0 text-error-9" />
           <span>{title}</span>

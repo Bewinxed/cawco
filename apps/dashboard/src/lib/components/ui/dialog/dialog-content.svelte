@@ -90,9 +90,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import DialogPortal from "./dialog-portal.svelte";
+  import { HeadRoom, provideHeadRoom } from "./head-room.svelte.js";
   import * as Dialog from "./index.js";
 
   let {
@@ -128,11 +130,20 @@
   // new height; it is centred, so it grows from the middle.
   const resize = morph();
   const tray = dialogTrayVariants();
+  /**
+   * The header floats over the body (Dialog.Header, HeadRoom): while one
+   * stands, the body's scroller runs to the body's top beneath it, its top
+   * padded by the header's height, the grabber stands over it on the
+   * phone's sheet, and Close rides in its row, so no first row keeps
+   * Close's room.
+   */
+  const room = provideHeadRoom(new HeadRoom());
+  const headed = $derived(room.height !== null);
   const body = $derived(
     dialogBodyVariants({
       bodyPad,
       body: bodyLook,
-      closed: showCloseButton && bodyPad !== "flush",
+      closed: showCloseButton && bodyPad !== "flush" && !headed,
     })
   );
   $effect(() => {
@@ -187,20 +198,45 @@
         style:pointer-events={pressable(open)}
         style:--sheet-away="translate3d(0, 100%, 0)"
       >
-        <div data-slot="body" class={cn(tray.body(), body.frame())}>
+        <div
+          data-headed={headed || undefined}
+          data-slot="body"
+          class={cn(
+            tray.body(),
+            body.frame(),
+            headed && "overflow-clip timeline-scope-transcript-head phone:pt-0"
+          )}
+          style:--dialog-room={headed ? `${room.height}px` : undefined}
+        >
           <div
             aria-hidden="true"
-            class={cn(grabberVariants(), tray.grabber())}
+            class={cn(
+              grabberVariants(),
+              tray.grabber(),
+              headed && "absolute inset-x-0 top-0 z-3"
+            )}
             data-slot="dialog-grabber"
           ></div>
-          <div data-slot="grid" class={cn(body.grid(), bodyClass)}>
+          {#if headed}
+            <!-- The header's scroll edge effect (HeadFade): what scrolls
+                 beneath it blurs and fades into the body, clear at rest. -->
+            <HeadFade band="var(--dialog-room)" tint="bg-surface-raised" />
+          {/if}
+          <div
+            data-slot="grid"
+            class={cn(
+              body.grid(),
+              headed && "pt-(--dialog-room) scroll-timeline-transcript-head",
+              bodyClass
+            )}
+          >
             {@render children?.()}
           </div>
           {#if showCloseButton}
             <DialogPrimitive.Close data-slot="dialog-close">
               {#snippet child({ props: closeProps })}
                 <Button
-                  class={tray.close()}
+                  class={cn(tray.close(), "z-3")}
                   size="icon-sm"
                   variant="ghost"
                   bind:ref={close}

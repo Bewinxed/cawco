@@ -7,3 +7,4 @@ export {
 export { default as Description } from "./drawer-description.svelte";
 
 export { default as Trigger } from "./drawer-trigger.svelte";
+export { sheetScroller as scroller } from "./sheet-head.js";

@@ -64,11 +64,13 @@
   import { commonWords } from "@cawco/core/words/common";
   import type { ComponentProps, Snippet } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { visible } from "#lib/cawco/visible-viewport.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
@@ -222,6 +224,30 @@
   });
 
   const head = sheetHeadVariants();
+
+  /**
+   * The kit's head floats over the content (DESIGN.md, The Title Bars
+   * Follow Liquid Glass Rule; SideSurface's head is the pattern): the
+   * grabber and the header are one stack laid over the surface's top, and the content runs to that top under it. The
+   * stack's height is the sheet's `--sheet-room`, which the content's
+   * scroller takes as its top padding (`scroller` in the kit's index), so its first
+   * line clears the head at rest, and names the scroll timeline the head's
+   * scroll edge effect plays on (`scroll-timeline-transcript-head`,
+   * HeadFade under the stack), so scrolled it blurs and fades beneath it.
+   * Content that keeps a band still over its scroller (a search field, a
+   * figure) starts under the room instead (`pt-(--sheet-room)`). A sheet
+   * whose host or content draws its head (`hosted`, `ownHead`) draws none
+   * of this.
+   */
+  const floats = $derived(!(hosted || ownHead));
+  let room = $state(0);
+  $effect(() => {
+    const node = ref;
+    if (!(node && floats)) {
+      return;
+    }
+    return holdStyle(node, { "--sheet-room": `${room}px` });
+  });
 </script>
 
 <DrawerPortal {...portalProps}>
@@ -242,6 +268,10 @@
         "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
       contained &&
         "absolute inset-x-0 top-0 h-full max-h-none data-[vaul-drawer-direction=bottom]:pb-0",
+      /* Floating its head, the content starts at the surface's top, inside
+         its 1px edge (the surface `inset-2` and its hairline), so what
+         scrolls runs beneath the head and never over that edge. */
+      floats && "timeline-scope-transcript-head pt-[calc(--spacing(2)+1px)]",
       className
     )}
     data-placed={hosted || contained ? undefined : ""}
@@ -264,8 +294,8 @@
   </DrawerPrimitive.Content>
 </DrawerPortal>
 
-{#snippet body()}
-  {#if !hosted && grabber}
+{#snippet grabbed()}
+  {#if grabber}
     <!-- The grabber's own box is the press: its pill drawn inside it, the
          area round it the touch rule's. A finger's or a mouse's press on it
          is also vaul's release of the sheet: its pointerup sets
@@ -290,7 +320,7 @@
     >
       <span aria-hidden="true" class={cn(grabberVariants(), "my-0")}></span>
     </button>
-  {:else if !hosted}
+  {:else}
     <div
       data-slot="drawer-grabber"
       class={cn(
@@ -299,35 +329,63 @@
       )}
     ></div>
   {/if}
-  {#if hosted || ownHead}
+{/snippet}
+
+{#snippet body()}
+  {#if floats}
+    <!-- The scroll edge effect under the head (HeadFade, as SideSurface
+         draws it): what scrolls beneath the stack blurs and fades into the
+         surface, from the first scroll, clear at rest. Held inside the
+         surface's edge and corners, which the box around it overhangs. -->
+    <div
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-x-[calc(--spacing(2)+1px)] top-[calc(--spacing(2)+1px)] z-1 h-(--sheet-room) overflow-clip rounded-t-[calc(var(--radius-lg)-1px)] group-data-[vaul-drawer-direction=bottom]/drawer-content:inset-x-0"
+      data-slot="drawer-head-fade"
+    >
+      <HeadFade band="var(--sheet-room)" tint="bg-surface-raised" />
+    </div>
+    <!-- The grabber and the header, one stack over
+         the content (`absolute z-2`), its height the sheet's room. -->
+    <div
+      class="absolute inset-x-0 top-[calc(--spacing(2)+1px)] z-2 flex flex-col px-4 pt-[calc(--spacing(2)-1px)]"
+      data-slot="drawer-head"
+      {@attach frameSize((node: HTMLElement) => {
+        room = node.offsetHeight;
+      })}
+    >
+      {@render grabbed()}
+      <div class={head.head()} data-slot="drawer-header">
+        <!-- Close leads, before the title, a bare symbol in a glass group of
+             its own (DESIGN.md, Sheet; HIG, Sheets: a single-view sheet's
+             Cancel on the leading edge of its top toolbar; Toolbars: "Group …
+             critical actions like Done, Close, or Save in dedicated …
+             sections"). -->
+        <BarGlass form="group">
+          <DrawerPrimitive.Close>
+            {#snippet child({ props })}
+              <BarItem icon={IconClose} label={commonWords.close} {props} />
+            {/snippet}
+          </DrawerPrimitive.Close>
+        </BarGlass>
+        <DrawerPrimitive.Title
+          class={cn(head.title(), "me-auto", titleHidden && "sr-only")}
+          data-slot="drawer-title"
+          ><MorphText text={title} wrap /></DrawerPrimitive.Title
+        >
+        {#if actions}
+          <div class="flex flex-none items-center gap-space-2">
+            {@render actions()}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {:else}
+    {#if !hosted}
+      {@render grabbed()}
+    {/if}
     <DrawerPrimitive.Title class="sr-only" data-slot="drawer-title"
       ><MorphText text={title} wrap /></DrawerPrimitive.Title
     >
-  {:else}
-    <div class={head.head()} data-slot="drawer-header">
-      <!-- Close leads, before the title, a bare symbol in a glass group of
-           its own (DESIGN.md, Sheet; HIG, Sheets: a single-view sheet's
-           Cancel on the leading edge of its top toolbar; Toolbars: "Group …
-           critical actions like Done, Close, or Save in dedicated …
-           sections"). -->
-      <BarGlass form="group">
-        <DrawerPrimitive.Close>
-          {#snippet child({ props })}
-            <BarItem icon={IconClose} label={commonWords.close} {props} />
-          {/snippet}
-        </DrawerPrimitive.Close>
-      </BarGlass>
-      <DrawerPrimitive.Title
-        class={cn(head.title(), "me-auto", titleHidden && "sr-only")}
-        data-slot="drawer-title"
-        ><MorphText text={title} wrap /></DrawerPrimitive.Title
-      >
-      {#if actions}
-        <div class="flex flex-none items-center gap-space-2">
-          {@render actions()}
-        </div>
-      {/if}
-    </div>
   {/if}
   <!-- vaul takes pointer capture on every press in the sheet, which leaves
          a text field without iOS's hold-to-select and Paste callout: a press

@@ -67,7 +67,11 @@
     {/snippet}
   </Drawer.Trigger>
   <Drawer.Content title={transcriptWords.messageSheet}>
-    <div data-slot="message-sheet" class="flex flex-col">
+    <!-- Its rows scroll beneath the kit's floating head (Drawer.scroller). -->
+    <div
+      data-slot="message-sheet"
+      class={["flex min-h-0 flex-col overflow-y-auto", Drawer.scroller]}
+    >
       {#each rows as row (row.label)}
         <button
           class={[
