@@ -47,7 +47,7 @@
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
  * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a segment excepted), within 1.5px or a tenth (a quarter at a corner) |
- * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count's box clear of the glyph's box, a badge on the corner taking no room |
+ * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's corner taking no room, over at most a fifth of the glyph's ink (its shapes' fill and stroke sampled every half pixel) |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
  * each specimen that stands for a screen of its own carries `data-specimen`,
@@ -186,7 +186,7 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
     by: "own code + DevTools CSS.forcePseudoState",
   },
   "glyph-place": {
-    says: "a bar's glyph control draws its glyph at its fill's centre, its count a badge clear of the glyph (The Earned Count Rule; HIG, Tab bars)",
+    says: "a bar's glyph control draws its glyph at its fill's centre, its count a corner badge over at most a fifth of any glyph's ink (The Earned Count Rule; HIG, Tab bars)",
     by: "own code",
   },
 };
@@ -3683,7 +3683,14 @@ function readInPage(args: InPageArgs): InPageRead {
           return;
         }
         const r = d.getBoundingClientRect();
-        if (r.width >= b.width / 2 && r.height >= b.height / 2) {
+        // A child that reaches past the control (a badge standing on its
+        // corner) is drawn over it, no fill of it.
+        const inside =
+          r.left >= b.left - 0.5 &&
+          r.top >= b.top - 0.5 &&
+          r.right <= b.right + 0.5 &&
+          r.bottom <= b.bottom + 0.5;
+        if (inside && r.width >= b.width / 2 && r.height >= b.height / 2) {
           withPseudos(d, `child ${i}`, `its ${d.tagName.toLowerCase()}'s`);
         }
       });
@@ -3967,33 +3974,101 @@ function readInPage(args: InPageArgs): InPageRead {
   // in every state, and the fill is the control's own box.
   if (!skip.has("glyph-place")) {
     const COUNT = /^\d{1,4}\+?$/u;
+    /**
+     * The most of a glyph's ink a count may lie on, its own glyph's or a
+     * neighbour's in the same glass: a badge centred on the item's top edge
+     * over the glyph's trailing edge covers that corner, where a glyph drawn
+     * on its grid keeps little ink (the Comments bubble 5.1%, the Reload
+     * glyph beside it 0, 0 and 13.8% at 3, 12 and 150); one laid over the
+     * glyph's middle covers half of it or more.
+     */
+    const INK_SHARE = 0.2;
+    /** What holds a glyph a count reaches over: a control. */
+    const STATE_GLYPH_CONTROL =
+      'button, a[href], [role="button"], [role="tab"], [role="radio"]';
+    /**
+     * The share of `drawn`'s ink under `badge`: the glyph's box sampled every
+     * half pixel, a point inked where one of its shapes drawn at all
+     * (opacity and fill or stroke opacity over a tenth) holds it in its fill
+     * or on its stroke (`isPointInFill`, `isPointInStroke`, in the shape's
+     * own units through the inverse of its screen matrix).
+     */
+    const inkUnder = (drawn: Element, badge: DOMRect): number => {
+      const shapes = [
+        ...drawn.querySelectorAll<SVGGeometryElement>(
+          "path, circle, rect, ellipse, line, polyline, polygon"
+        ),
+      ].flatMap((shape) => {
+        const st = style(shape);
+        const seen = (v: string) => Number.parseFloat(v || "1") > 0.1;
+        const m = shape.getScreenCTM()?.inverse();
+        if (
+          !m ||
+          st.display === "none" ||
+          st.visibility === "hidden" ||
+          !seen(st.opacity)
+        ) {
+          return [];
+        }
+        const filled = st.fill !== "none" && seen(st.fillOpacity);
+        const stroked = st.stroke !== "none" && seen(st.strokeOpacity);
+        return filled || stroked ? [{ shape, m, filled, stroked }] : [];
+      });
+      const g = drawn.getBoundingClientRect();
+      let inked = 0;
+      let covered = 0;
+      for (let y = g.top + 0.25; y < g.bottom; y += 0.5) {
+        for (let x = g.left + 0.25; x < g.right; x += 0.5) {
+          const hit = shapes.some(({ shape, m, filled, stroked }) => {
+            const p = new DOMPoint(x, y).matrixTransform(m);
+            return (
+              (filled && shape.isPointInFill(p)) ||
+              (stroked && shape.isPointInStroke(p))
+            );
+          });
+          if (hit) {
+            inked += 1;
+            if (
+              x >= badge.left &&
+              x <= badge.right &&
+              y >= badge.top &&
+              y <= badge.bottom
+            ) {
+              covered += 1;
+            }
+          }
+        }
+      }
+      return inked > 0 ? covered / inked : 0;
+    };
     /** Whether a contour is a capsule: every corner round at half its shorter side. */
     const capsule = (c: Contour) => {
       const half = Math.min(c.right - c.left, c.bottom - c.top) / 2;
       return c.r.every(([x, y]) => Math.min(x, y) >= half - 0.5);
     };
-    /** Whether `el` stands in a capsule of glass: the nearest box over it that draws is one. */
-    const inGlass = (el: Element) => {
+    /** The capsule of glass `el` stands in: the nearest box over it that draws, when it is one. */
+    const glassAround = (el: Element): Element | null => {
       for (
         let up = el.parentElement;
         up && up !== document.body;
         up = up.parentElement
       ) {
         if (paints(up).length > 0) {
-          return capsule(contourOf(up));
+          return capsule(contourOf(up)) ? up : null;
         }
         for (const which of ["::before", "::after"] as const) {
           const ps = pseudoOf(up, which);
           const c = ps && paintsOf(ps).length > 0 ? pseudoBox(up, ps) : null;
           if (c) {
-            return capsule(c);
+            return capsule(c) ? up : null;
           }
         }
       }
-      return false;
+      return null;
     };
     for (const el of controls) {
-      if (!(el.closest(BAR) && inGlass(el))) {
+      const around = el.closest(BAR) ? glassAround(el) : null;
+      if (!around) {
         continue;
       }
       const marks = glyphs.filter((drawn) => {
@@ -4031,16 +4106,36 @@ function readInPage(args: InPageArgs): InPageRead {
         continue;
       }
       for (const count of counts) {
-        const c = count.getBoundingClientRect();
-        if (
-          Math.min(c.right, g.right) - Math.max(c.left, g.left) > 0.5 &&
-          Math.min(c.bottom, g.bottom) - Math.max(c.top, g.top) > 0.5
+        // The badge its figures stand in: the nearest box round them inside
+        // the control that draws (its pill), else the figures' own.
+        let pill: Element = count;
+        for (
+          let up = count.parentElement;
+          up && up !== el;
+          up = up.parentElement
         ) {
-          say(
-            "glyph-place",
-            el,
-            `its count "${count.textContent?.trim()}" (${px(c.left - box.left)}–${px(c.right - box.left)} × ${px(c.top - box.top)}–${px(c.bottom - box.top)} in the control) lies on its glyph (${px(start)}–${px(start + g.width)} × ${px(top)}–${px(top + g.height)})`
-          );
+          if (paints(up).length > 0) {
+            pill = up;
+            break;
+          }
+        }
+        const c = pill.getBoundingClientRect();
+        // Its own glyph, and every other glyph in the glass it reaches over.
+        for (const other of glyphs.filter(
+          (drawn) => around.contains(drawn) && shown(drawn)
+        )) {
+          const share = inkUnder(other, c);
+          if (share > INK_SHARE) {
+            const whose =
+              other === glyph
+                ? "its glyph's"
+                : `its neighbour ${selectorOf(other.closest(STATE_GLYPH_CONTROL) ?? other)}'s glyph's`;
+            say(
+              "glyph-place",
+              el,
+              `its count "${count.textContent?.trim()}" (${px(c.left - box.left)}–${px(c.right - box.left)} × ${px(c.top - box.top)}–${px(c.bottom - box.top)} in the control) lies on ${Math.round(share * 100)}% of ${whose} ink: a corner badge covers at most ${INK_SHARE * 100}%`
+            );
+          }
         }
       }
     }

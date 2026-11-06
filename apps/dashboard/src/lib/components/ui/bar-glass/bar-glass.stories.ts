@@ -57,62 +57,6 @@ export const Selected = {
   parameters: { viewport: 1440 },
 };
 
-/** A counted item at rest: its neighbour's size, its bubble centred, 5 on its corner. */
-export const Counted = {
-  component: BarGroupFrame,
-  args: { holds: "counted", count: 5 },
-  parameters: { viewport: 1440 },
-};
-
-/** The counted item on: the selected wash, the badge still clear of the bubble. */
-export const CountedOn = {
-  component: BarGroupFrame,
-  args: { holds: "counted", count: 5, pressed: true },
-  parameters: { viewport: 1440 },
-};
-
-/** A count of 150: the badge grows toward the trailing side, the item keeps its size. */
-export const CountedMany = {
-  component: BarGroupFrame,
-  args: { holds: "counted", count: 150 },
-  parameters: { viewport: 1440 },
-};
-
-/** 150 with the item on. */
-export const CountedManyOn = {
-  component: BarGroupFrame,
-  args: { holds: "counted", count: 150, pressed: true },
-  parameters: { viewport: 1440 },
-};
-
-/** The counted item on a phone at rest. */
-export const CountedPhone = {
-  component: BarGroupFrame,
-  args: { width: 390, holds: "counted", count: 5 },
-  parameters: { viewport: 390 },
-};
-
-/** The counted item on, on a phone. */
-export const CountedOnPhone = {
-  component: BarGroupFrame,
-  args: { width: 390, holds: "counted", count: 5, pressed: true },
-  parameters: { viewport: 390 },
-};
-
-/** 150 on a phone. */
-export const CountedManyPhone = {
-  component: BarGroupFrame,
-  args: { width: 390, holds: "counted", count: 150 },
-  parameters: { viewport: 390 },
-};
-
-/** 150 with the item on, on a phone. */
-export const CountedManyOnPhone = {
-  component: BarGroupFrame,
-  args: { width: 390, holds: "counted", count: 150, pressed: true },
-  parameters: { viewport: 390 },
-};
-
 /** The group with its middle item on, on a phone. */
 export const SelectedPhone = {
   component: BarGroupFrame,
@@ -145,5 +89,89 @@ export const ModeSwitchPhone = {
 export const KitInGlassPhone = {
   component: BarGroupFrame,
   args: { width: 390, holds: "kit" },
+  parameters: { viewport: 390 },
+};
+
+/** A count of 3, at rest: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted3 = {
+  component: BarGroupFrame,
+  args: { holds: "counted", count: 3 },
+  parameters: { viewport: 1440 },
+};
+
+/** A count of 3, at rest on a phone: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted3Phone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "counted", count: 3 },
+  parameters: { viewport: 390 },
+};
+
+/** A count of 3, the item on: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted3On = {
+  component: BarGroupFrame,
+  args: { holds: "counted", count: 3, pressed: true },
+  parameters: { viewport: 1440 },
+};
+
+/** A count of 3, the item on on a phone: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted3OnPhone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "counted", count: 3, pressed: true },
+  parameters: { viewport: 390 },
+};
+
+/** A count of 12, at rest: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted12 = {
+  component: BarGroupFrame,
+  args: { holds: "counted", count: 12 },
+  parameters: { viewport: 1440 },
+};
+
+/** A count of 12, at rest on a phone: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted12Phone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "counted", count: 12 },
+  parameters: { viewport: 390 },
+};
+
+/** A count of 12, the item on: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted12On = {
+  component: BarGroupFrame,
+  args: { holds: "counted", count: 12, pressed: true },
+  parameters: { viewport: 1440 },
+};
+
+/** A count of 12, the item on on a phone: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted12OnPhone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "counted", count: 12, pressed: true },
+  parameters: { viewport: 390 },
+};
+
+/** A count of 150, at rest: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted150 = {
+  component: BarGroupFrame,
+  args: { holds: "counted", count: 150 },
+  parameters: { viewport: 1440 },
+};
+
+/** A count of 150, at rest on a phone: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted150Phone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "counted", count: 150 },
+  parameters: { viewport: 390 },
+};
+
+/** A count of 150, the item on: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted150On = {
+  component: BarGroupFrame,
+  args: { holds: "counted", count: 150, pressed: true },
+  parameters: { viewport: 1440 },
+};
+
+/** A count of 150, the item on on a phone: the item its neighbour's size, the badge on its glyph's corner. */
+export const Counted150OnPhone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "counted", count: 150, pressed: true },
   parameters: { viewport: 390 },
 };

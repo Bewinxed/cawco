@@ -7,6 +7,7 @@ import { defineRule } from "golar/unstable";
 import { barItemsOutsideKit } from "./bar-item.mjs";
 import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
+import { countBadges } from "./count-badge.mjs";
 import { followsProps } from "./follows-props.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
@@ -29,6 +30,8 @@ import {
 import { variantOrder } from "./variant-order.mjs";
 
 const KIT = "src/lib/components/ui/";
+/** The kit's Badge: the one place a count badge's classes are written (house/count-in-badge). */
+const BADGE = "src/lib/components/ui/badge/";
 /** The bar's glass and its item: the one place the bar item's mark is written (house/bar-item-in-kit). */
 const BAR_GLASS = "src/lib/components/ui/bar-glass/";
 /** The motion helpers that write the curves out (house/no-raw-motion). */
@@ -273,6 +276,8 @@ function optionsFor(rule, file) {
       return file === "src/lib/cawco/motion/curves.svelte.ts" ? null : {};
     case "house/bar-item-in-kit":
       return file.startsWith(BAR_GLASS) ? null : {};
+    case "house/count-in-badge":
+      return file.startsWith(BADGE) ? null : {};
     case "house/no-raw-motion":
       // The token build's own output reads nothing; the helpers that hold
       // the curves as functions of t (DESIGN.md, The House Helper Rule) may
@@ -322,6 +327,7 @@ const FIND = {
   "house/no-raw-motion": rawMotion,
   "house/follows-props": followsProps,
   "house/bar-item-in-kit": barItemsOutsideKit,
+  "house/count-in-badge": countBadges,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

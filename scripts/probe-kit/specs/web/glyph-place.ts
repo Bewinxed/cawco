@@ -10,17 +10,19 @@
  *     trailing one, the glyph off its centre (his pin: "the hover highlight
  *     has no padding from the left, and has lots of space on the right").
  *  2. badge on the glyph: the count drawn as a dark oval laid over the
- *     bubble.
+ *     bubble's middle, on more than a fifth of its ink.
  *
  * Drawn right, the rule finds nothing:
  *
  *  3. corner badge: the counted item its neighbours' size, the glyph at
- *     its centre, the count a badge standing on its top trailing corner,
- *     its foot on the glyph's top line; at 5 and at 150, beside a plain
- *     neighbour.
- *  4. words: a control with its name beside its glyph is not read.
- *  5. off a bar: a lone glyph button on the page is not read.
- *  6. bare on the bar: a glyph standing off its 44px box's centre on a
+ *     its centre, the count a 16px badge centred on the item's top edge
+ *     over the glyph's trailing edge, covering that corner of a bubble and
+ *     of a folder; at 3, 12 and 150, beside a plain neighbour.
+ *  4. badge over a neighbour: a count so wide, standing lower, that it
+ *     lies on the next item's folder.
+ *  5. words: a control with its name beside its glyph is not read.
+ *  6. off a bar: a lone glyph button on the page is not read.
+ *  7. bare on the bar: a glyph standing off its 44px box's centre on a
  *     bar's ground, in no glass (the phone's sidebar toggle on the tabs'
  *     line), is not read.
  *
@@ -41,10 +43,12 @@ const BASE = `<!doctype html>
   .glass { display: inline-flex; align-items: center; gap: 4px; block-size: 36px; padding: 4px; border-radius: 999px; background: #fff; }
   .glass button { position: relative; display: inline-flex; align-items: center; justify-content: center; block-size: 28px; min-inline-size: 28px; border-radius: 5px; background: #e6e0d6; }
   .glass svg { inline-size: 20px; block-size: 20px; flex: none; }
-  .badge { position: absolute; bottom: calc(100% - 4px); inset-inline-start: calc(50% + 5px); display: grid; place-items: center; block-size: 12px; min-inline-size: 12px; padding-inline: 2px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 12px/1 sans-serif; }
+  .badge { position: absolute; top: -8px; inset-inline-start: 16px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; padding-inline: 4px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
 </style>`;
 
 const GLYPH = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/></svg>`;
+/** A folder's shape: a rounded box filling its grid, ink in every corner but the round. */
+const FOLDER = `<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="3" fill="currentColor"/></svg>`;
 
 interface Fixture {
   html: string;
@@ -62,18 +66,26 @@ const FIXTURES: Record<string, Fixture> = {
   },
   "badge on the glyph": {
     html: `${BASE}<header><div class="glass">
-  <button class="comments" type="button" aria-label="Comments, 5">${GLYPH}<span class="badge" style="bottom: auto; top: 10px; inset-inline-start: 10px">5</span></button>
+  <button class="comments" type="button" aria-label="Comments, 5">${GLYPH}<span class="badge" style="top: 6px; inset-inline-start: 6px">5</span></button>
   <button type="button" aria-label="Reload">${GLYPH}</button>
 </div></header>`,
     want: "button.comments",
   },
   "corner badge": {
     html: `${BASE}<header><div class="glass">
-  <button type="button" aria-label="Comments, 5">${GLYPH}<span class="badge">5</span></button>
+  <button type="button" aria-label="Comments, 3">${GLYPH}<span class="badge">3</span></button>
+  <button type="button" aria-label="Machines, 12">${FOLDER}<span class="badge">12</span></button>
   <button type="button" aria-label="Reload">${GLYPH}</button>
-  <button type="button" aria-label="Files, 150">${GLYPH}<span class="badge">150</span></button>
+  <button type="button" aria-label="Files, 150">${FOLDER}<span class="badge">150</span></button>
 </div></header>`,
     want: null,
+  },
+  "badge over a neighbour": {
+    html: `${BASE}<header><div class="glass">
+  <button class="files" type="button" aria-label="Files, 1500">${FOLDER}<span class="badge" style="top: -4px">1500</span></button>
+  <button type="button" aria-label="Machines">${FOLDER}</button>
+</div></header>`,
+    want: "button.files",
   },
   words: {
     html: `${BASE}<header><div class="glass">

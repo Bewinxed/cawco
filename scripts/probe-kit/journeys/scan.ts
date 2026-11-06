@@ -324,6 +324,27 @@ export function scan(): string[] {
     return fill || edge || s.boxShadow !== "none";
   };
 
+  /**
+   * The badge standing on `control` that holds `el` (a count,
+   * bar-glass's BarItem and ui/badge's `corner`): the nearest box from `el`
+   * up to the control that stands out of flow and draws its own fill. Its
+   * words are held to the badge, and lie over the control's corner and its
+   * neighbour's by design: rendered-checks' glyph-place holds how much of a
+   * glyph's ink they may cover.
+   */
+  const badgeOf = (el: Element, control: Element): Element | null => {
+    for (
+      let up: Element | null = el;
+      up && up !== control;
+      up = up.parentElement
+    ) {
+      if (style(up).position === "absolute" && painted(up)) {
+        return up;
+      }
+    }
+    return null;
+  };
+
   // Every text node: past the screen, out of its control, out of its box.
   const texts: { boxes: Box[]; node: Text; parent: Element }[] = [];
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -363,13 +384,7 @@ export function scan(): string[] {
     // a box placed out of the control's flow that draws its own fill, the
     // frame its words are held to, as the HIG's badge on a tab or a toolbar
     // item stands half past the item's edge.
-    const badge =
-      control &&
-      control !== parent &&
-      style(parent).position === "absolute" &&
-      painted(parent)
-        ? parent
-        : null;
+    const badge = control ? badgeOf(parent, control) : null;
     if (control && !clipsOverflow(style(control))) {
       const frame = (badge ?? control).getBoundingClientRect();
       const out = boxes.find(
@@ -426,10 +441,12 @@ export function scan(): string[] {
     }
     const block = blockOf(control);
     for (const text of texts) {
+      const holder = controlOf(text.parent);
       if (
         control.contains(text.node) ||
         !block.contains(text.node) ||
-        controlOf(text.parent)?.contains(control)
+        holder?.contains(control) ||
+        (holder && badgeOf(text.parent, holder))
       ) {
         continue;
       }

@@ -30,9 +30,11 @@
  *  8. a face that darkens: a glass's only item holding a face (Caw's
  *     head), a 20px disc drawn at rest that darkens under the press; the
  *     disc is the drawing, no state's fill, and its own fill is concentric.
- *  9. round with its own fill: the round Close filling itself, and one
+ *  9. a counted item on: its badge, a child standing on its corner
+ *     past its box, is drawn over it, no fill of it.
+ * 10. round with its own fill: the round Close filling itself, and one
  *     whose child fill takes its radius (`border-radius: inherit`).
- * 10. a button alone: a 10px button on the page, and one in the middle of
+ * 11. a button alone: a 10px button on the page, and one in the middle of
  *     a 12px card, clear of its corners.
  *
  *   bun scripts/probe-kit/run.ts web state-shape
@@ -144,6 +146,17 @@ const FIXTURES: Record<string, Fixture> = {
 </style>
 <div class="glass" role="toolbar" aria-label="Bar">
   <button type="button" aria-label="Caw"><span class="face"></span></button>
+</div>`,
+    want: null,
+  },
+  "a counted item on": {
+    html: `${BASE}<style>
+  .glass button { position: relative; border-radius: 15px; }
+  .glass button[aria-pressed="true"] { background: #e6e0d6; }
+  .badge { position: absolute; top: -8px; inset-inline-start: 15px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
+</style>
+<div class="glass" role="toolbar" aria-label="Bar">
+  <button type="button" aria-pressed="true" aria-label="Comments, 3"><span class="glyph"></span><span class="badge">3</span></button>
 </div>`,
     want: null,
   },

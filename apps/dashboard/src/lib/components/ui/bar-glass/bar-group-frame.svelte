@@ -32,7 +32,7 @@
   let {
     width,
     holds,
-    count = 5,
+    count = 3,
     pressed = false,
   }: {
     /** The frame's width, px. */

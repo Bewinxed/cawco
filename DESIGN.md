@@ -412,7 +412,7 @@ The shell is a resizable rail (228px by default, the reader's own width wins), a
 - **A title only where it helps.** A panel opened by its name carries none, its actions floating over its content. A title is the view's own short name, never the app's name, an id, a path or a breadcrumb.
 - **A place shown as a place.** A machine is its OS mark and name; a path is never printed in a bar.
 - **No bar ground.** A bar draws no fill, hairline or shadow; content runs to the top edge and the scroll edge effect blurs it under the controls, from the first scroll.
-- **Floating groups of bare symbols.** At most three groups (leading, centre, trailing), each one capsule of the panel's glass. Items are bare symbols until hovered, named in their tooltip; words only where no symbol says it. Each is a BarItem, which alone draws its hover, pressed, selected and count (The Glass Contour Rule); a count is a badge on its top trailing corner, taking no room. Trailing: what acts on the view, More, the prominent action, then Close (a sheet's leads, before its title).
+- **Floating groups of bare symbols.** At most three groups (leading, centre, trailing), each one capsule of the panel's glass. Items are bare symbols until hovered, named in their tooltip; words only where no symbol says it. Each is a BarItem, which alone draws its hover, pressed, selected and count (The Glass Contour Rule); its count is the Badge's `corner` form, taking no room. Trailing: what acts on the view, More, the prominent action, then Close (a sheet's leads, before its title).
 - **One prominent action**, trailing, on `action-surface`; colour on the glass is for it and for status alone.
 - **Back and Close are symbols**, named by where they go, never the words Back or Close.
 

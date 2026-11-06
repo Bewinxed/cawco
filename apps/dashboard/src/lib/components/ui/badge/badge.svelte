@@ -26,6 +26,13 @@
         "note-improved": "bg-note-improved-bg text-note-improved-ink",
         "note-fixed": "bg-note-fixed-bg text-note-fixed-ink",
         link: "bg-transparent text-link-ink underline-offset-4 hover:underline",
+        /* A count of what is set in its control's own hue (a filter's
+           active count): the brand wash under brand ink. */
+        brand: "bg-brand-wash text-brand-ink",
+        /* A count of what waits on the person (a settings section's
+           faults): the attention pair, filled, for a figure with no word to
+           carry the Status dot. */
+        "attn-count": "bg-status-attn-bg text-status-attn-ink",
       },
       /* The looks its callers draw over a variant, each as they drew it. */
       /**
@@ -44,6 +51,26 @@
           "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start",
         count:
           "pointer-events-none px-[clamp(var(--space-1),calc(var(--space-2)_-_var(--tight,0px)_*_1000),var(--space-2))] text-meta tabular-nums",
+        /** A count standing in its row (a filter's, a section's faults): at least square, its figures in the meta role and tabular widths, centred. */
+        tally: "min-w-icon-lg px-space-1 text-meta tabular-nums",
+        /**
+         * A control's count, the usual notification badge on its glyph's
+         * top trailing corner (HIG, Tab bars: "a badge — a red oval
+         * containing white text and either a number or an exclamation point
+         * — on a tab"; SwiftUI `badge(_:)`: "Badges appear in list rows, tab
+         * bars, toolbar items, and menus"): a pill in ink-solid (the house
+         * keeps red for status), its figures in the label role at medium
+         * weight and tabular widths, as tall as the medium icon and at least
+         * as wide. It takes no room in its control: it stands out of flow,
+         * a one-figure badge centred on the top edge of the box it stands in
+         * (moved by `--count-foot`) over the glyph's trailing edge (the
+         * glyph `--count-glyph` wide, centred in that box), so it covers only
+         * the glyph's top trailing corner, and a wider count grows toward
+         * the trailing side. In a bar item it straddles the glass's top
+         * edge. Its box is the nearest positioned one round it.
+         */
+        corner:
+          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-solid px-space-1 font-medium text-label text-on-ink tabular-nums",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

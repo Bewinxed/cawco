@@ -51,8 +51,6 @@ const HEAD: Record<Extract<View, "desk" | "phone">, number> = {
   desk: 20,
   phone: 24,
 };
-/** The rail's trailing edge at the desk: its hairline's column. */
-const RAIL_X = 229;
 const ROWS = [3, 4];
 /** The top rows read at the desk, css px at 1x. */
 const CLIP = { x: 0, y: 0, width: 1440, height: 16 };
@@ -396,9 +394,18 @@ const inkLeg = async (kit: Kit, page: Page, leg: string) => {
       ?.getBoundingClientRect();
     return r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
   });
+  // The rail's trailing hairline: its border box's last column, as drawn
+  // (the rail's width is the reader's, `--sidebar-width`), never a figure
+  // kept here: a kept 229 read the page past a 228px rail's edge.
+  const railX = await page.evaluate(() => {
+    const r = document
+      .querySelector('[data-slot="rail"]')
+      ?.getBoundingClientRect();
+    return r && r.width > 0 ? Math.floor(r.right) - 1 : null;
+  });
   const [shelf] = await colours(page, [(await strip(page))?.background ?? ""]);
-  if (!(glass && shelf)) {
-    kit.check(`${leg}: the glass group is on the page`, false);
+  if (!(glass && shelf && railX !== null)) {
+    kit.check(`${leg}: the glass group and the rail are on the page`, false);
     return;
   }
   // `ring`: a pixel of the glass's top ring or the rail's edge, which the
@@ -420,7 +427,7 @@ const inkLeg = async (kit: Kit, page: Page, leg: string) => {
       y,
       ring: false,
     },
-    { name: `rail (${RAIL_X}, ${y})`, x: RAIL_X, y, ring: true },
+    { name: `rail (${railX}, ${y})`, x: railX, y, ring: true },
   ]);
   await unmask(page, true);
   const before = await capture(page, CLIP);

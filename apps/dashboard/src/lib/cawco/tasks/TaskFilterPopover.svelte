@@ -14,6 +14,7 @@
    */
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -115,12 +116,12 @@
             <span class="in-form-compact:hidden">Filter</span>
           {/if}
           {#if active > 0}
-            <span
+            <Badge
               data-box
               data-num
               data-slot="count"
-              class="num inline-grid h-space-5 min-w-space-5 place-items-center rounded-xs bg-brand-wash px-space-1 type-meta text-brand-ink"
-              >{active}</span
+              size="tally"
+              variant="brand"><span>{active}</span></Badge
             >
           {/if}
           {#if !compact}

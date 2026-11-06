@@ -77,7 +77,7 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import { COUNT_BADGE } from "#lib/components/ui/bar-glass/count.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -4302,18 +4302,18 @@
     title={commentsTitle}
     variant="ghost"
   >
-    <!-- The open count is the bar's count badge on the bubble's top
-         trailing corner (bar-glass/count.ts): it takes no room, so the
+    <!-- The open count is the kit Badge's corner form on the bubble's
+         top trailing corner (ui/badge `corner`): it takes no room, so the
          bubble stays centred in its glyph form. -->
     <!-- mark-line: the count is a badge on the bubble's corner, never words beside it -->
     <span
       class="relative inline-grid flex-none"
       data-box
       data-slot="comments-glyph"
-      ><IconChat />{#if openCount > 0 && !listOpen}<span
-          class={COUNT_BADGE}
+      style:--count-glyph="var(--icon-md)"
+      ><IconChat />{#if openCount > 0 && !listOpen}<Badge
           data-slot="count"
-          style:--count-glyph="var(--icon-md)">{openCount}</span
+          size="corner"><span>{openCount}</span></Badge
         >{/if}</span
     ><span class="in-form-compact:hidden" data-slot="comments-label"
       >Comments</span

@@ -11,9 +11,10 @@
    * pointer rests on it (the hover only where a fine pointer can rest),
    * pressed in the kit's press tint, selected in the selected wash. Its
    * symbol (`data-slot="bar-symbol"`) is the bar's symbol size in the muted
-   * ink, centred. A count takes no room in it: it is the bar's count
-   * badge on the item's top trailing corner (./count.ts), so a counted
-   * item is its neighbours' size and shape.
+   * ink, centred. A count takes no room in it: it is the kit Badge's
+   * corner form (ui/badge, `corner`) centred on the item's top edge over
+   * the symbol's trailing edge, straddling the glass's top as a toolbar
+   * item's badge does, so a counted item is its neighbours' size and shape.
    */
   const barItemVariants = tv({
     base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:bg-surface-hover data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
@@ -74,8 +75,8 @@
    */
   import { mergeProps } from "bits-ui";
   import type { Component, Snippet } from "svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { COUNT_BADGE } from "./count.js";
 
   let {
     label,
@@ -131,8 +132,6 @@
     onblur?: (event: FocusEvent) => void;
   } = $props();
 
-  /** The symbol's inset in the item: where its top line stands under the item's top, the count's foot. */
-  const COUNT_FOOT = "calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2)";
   /** Caw's head on the phone's glass: its finger's area centred on the glass's height. */
   const CAW_HIT_TOP =
     "calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)";
@@ -161,7 +160,7 @@
     <Icon data-slot="bar-symbol" aria-hidden="true" />
   {/if}
   {#if counted}
-    <span data-slot="num" class={COUNT_BADGE}>{count}</span>
+    <Badge data-slot="num" size="corner"><span>{count}</span></Badge>
   {/if}
 {/snippet}
 
@@ -174,7 +173,6 @@
     aria-label={label}
     class={look}
     {href}
-    style:--count-foot={COUNT_FOOT}
     style:--count-glyph="var(--c-bar-symbol)"
     style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
     type={href ? undefined : "button"}

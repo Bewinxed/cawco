@@ -12,6 +12,7 @@
     motionOk,
     popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { badgeOf, countOf } from "./counts.svelte";
@@ -122,18 +123,20 @@
                 >
               {/if}
               {#if faults > 0}
-                <span
-                  data-slot="num"
-                  class="flex items-center justify-center flex-none min-w-space-5 h-space-5 px-space-1 rounded-xs bg-status-attn-bg type-meta text-status-attn-ink num"
-                  title={waiting
-                    ? words.badgeWaiting(faults)
-                    : words.badgeFailing(faults)}
-                  transition:badge
-                  ><MorphText text={String(faults)} />
-                  <span class="sr-only">
-                    {waiting
-                      ? words.badgeWaitingSaid
-                      : words.badgeFailingSaid}</span
+                <span class="flex flex-none" transition:badge
+                  ><Badge
+                    data-slot="num"
+                    size="tally"
+                    title={waiting
+                      ? words.badgeWaiting(faults)
+                      : words.badgeFailing(faults)}
+                    variant="attn-count"
+                    ><MorphText text={String(faults)} />
+                    <span class="sr-only">
+                      {waiting
+                        ? words.badgeWaitingSaid
+                        : words.badgeFailingSaid}</span
+                    ></Badge
                   ></span
                 >
               {/if}
