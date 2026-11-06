@@ -1,6 +1,7 @@
 import type { DelegateType } from "@cawco/core/delegate-types";
 import type { Deleted } from "@cawco/core/fleet";
-import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
+import { hubRequest } from "@cawco/core/hub-request";
+import { hubCall } from "#lib/cawco/hub-read.js";
 
 /**
  * The dashboard's side of delegate types: fetch wrappers in the shape
@@ -57,10 +58,9 @@ export interface ProjectTypes {
  */
 export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
   hubCall<DelegateType>(
-    `/api/delegate-types/${encodeURIComponent(draft.name)}`,
-    {
-      method: "PUT",
-      ...jsonBody({
+    hubRequest("PUT /api/delegate-types/:name", {
+      path: { name: draft.name },
+      body: {
         description: draft.description,
         harness: draft.harness,
         model: draft.model,
@@ -70,16 +70,15 @@ export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
         mayStart: draft.mayStart,
         account: draft.account,
         connections: draft.connections,
-      }),
-    },
+      },
+    }),
     `save ${draft.name || "the delegate type"}`
   );
 
 /** Deletes a type, into the hub's trash for its Undo (config/undo.ts). */
 export const removeDelegateType = (name: string): Promise<Deleted> =>
   hubCall<Deleted>(
-    `/api/delegate-types/${encodeURIComponent(name)}`,
-    { method: "DELETE" },
+    hubRequest("DELETE /api/delegate-types/:name", { path: { name } }),
     `delete ${name}`
   );
 

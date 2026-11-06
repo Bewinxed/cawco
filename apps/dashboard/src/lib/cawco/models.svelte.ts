@@ -9,10 +9,11 @@
 
 import type { ModelInfo } from "@cawco/core/harness";
 import { isEffortLevel } from "@cawco/core/harness";
+import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import { LONG_CONTEXT, modelNameIn } from "@cawco/core/model-names";
 import { z } from "zod";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { cawco } from "./client.svelte";
 import { type HarnessModel, modelsForHarness } from "./model-catalog";
 import { readJson, writeJson } from "./storage";
@@ -171,7 +172,7 @@ function claudeUnread(machineIds: string[]): string[] | null {
 
 /** Reads the claude windows the hub has observed, for pickers that size models. */
 export async function loadModelWindows(): Promise<void> {
-  const response = await fetch("/api/model-windows");
+  const response = await hubFetch(hubRequest("GET /api/model-windows"));
   if (!response.ok) {
     throw await hubRefusal(response);
   }

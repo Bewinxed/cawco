@@ -8,11 +8,9 @@ import type {
   DecisionSent,
   DecisionsList,
 } from "@cawco/core/decisions";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubRequest } from "@cawco/core/hub-request";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { openPageWrites } from "#lib/cawco/preview/open-pages.js";
-
-const base = (projectId: string) =>
-  `/api/projects/${encodeURIComponent(projectId)}/decisions`;
 
 async function answered<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -23,7 +21,11 @@ async function answered<T>(response: Response): Promise<T> {
 
 /** The project's pages, newest first, each with the pages it links to. */
 export async function listDecisions(projectId: string): Promise<DecisionsList> {
-  return answered(await fetch(base(projectId)));
+  return answered(
+    await hubFetch(
+      hubRequest("GET /api/projects/:id/decisions", { path: { id: projectId } })
+    )
+  );
 }
 
 /** One page: its progress, its state, its writer and, once decided, its record. */
@@ -32,7 +34,11 @@ export async function readDecision(
   name: string
 ): Promise<DecisionPageRead> {
   return answered(
-    await fetch(`${base(projectId)}/${encodeURIComponent(name)}`)
+    await hubFetch(
+      hubRequest("GET /api/projects/:id/decisions/:name", {
+        path: { id: projectId, name },
+      })
+    )
   );
 }
 
@@ -52,14 +58,15 @@ export async function sendDecision(
   const writes =
     text || !artifactId ? undefined : await openPageWrites(artifactId);
   return answered(
-    await fetch(`${base(projectId)}/${encodeURIComponent(name)}/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...(text ? { text } : {}),
-        ...(writes ? { writes } : {}),
-      }),
-    })
+    await hubFetch(
+      hubRequest("POST /api/projects/:id/decisions/:name/send", {
+        path: { id: projectId, name },
+        body: {
+          ...(text ? { text } : {}),
+          ...(writes ? { writes } : {}),
+        },
+      })
+    )
   );
 }
 
@@ -69,8 +76,10 @@ export async function makeDecisionTasks(
   name: string
 ): Promise<DecisionPageRead> {
   return answered(
-    await fetch(`${base(projectId)}/${encodeURIComponent(name)}/tasks`, {
-      method: "POST",
-    })
+    await hubFetch(
+      hubRequest("POST /api/projects/:id/decisions/:name/tasks", {
+        path: { id: projectId, name },
+      })
+    )
   );
 }

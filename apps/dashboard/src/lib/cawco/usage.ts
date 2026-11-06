@@ -3,6 +3,7 @@
  * (`UsageSummary`, `UsageLimitsResponse`); this module reads them.
  */
 
+import { type HubSent, hubRequest } from "@cawco/core/hub-request";
 import type { ProjectCap } from "@cawco/core/project-conversation";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type {
@@ -13,7 +14,7 @@ import type {
   UsageSummary,
 } from "@cawco/core/usage/types";
 import { windowLabel, windowSpan } from "@cawco/core/usage/windows";
-import { hubRefusal } from "./hub-read";
+import { hubFetch, hubRefusal } from "./hub-read";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start
@@ -48,9 +49,13 @@ export function hubMidnight(
  * surface: each summary is read once, by harness, grouping and start, and
  * kept for as long as the surface stands.
  */
+/** What a summary is grouped by, as the hub's route takes it. */
+export type SummaryGroup =
+  HubSent<"GET /api/usage/summary">["query"]["groupBy"];
+
 export function summaryReader(): (
   harness: string,
-  groupBy: string,
+  groupBy: SummaryGroup,
   since: number
 ) => Promise<UsageSummary> {
   const cache = new Map<string, UsageSummary>();
@@ -60,8 +65,10 @@ export function summaryReader(): (
     if (known) {
       return known;
     }
-    const response = await fetch(
-      `/api/usage/summary?harness=${harness}&groupBy=${groupBy}&since=${since}`
+    const response = await hubFetch(
+      hubRequest("GET /api/usage/summary", {
+        query: { harness, groupBy, since },
+      })
     );
     if (!response.ok) {
       throw await hubRefusal(response);

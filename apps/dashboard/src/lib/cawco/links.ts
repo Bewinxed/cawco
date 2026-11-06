@@ -1,4 +1,5 @@
 import type { HarnessKind, NeutralSessionInfo } from "@cawco/core/harness";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 
@@ -37,13 +38,14 @@ interface SessionLocation {
 export const transcriptUrl = (
   viewId: string,
   page: { cursor?: string; limit?: number } = {}
-): string => {
-  const query = new URLSearchParams({
-    ...(page.cursor ? { before: page.cursor } : {}),
-    ...(page.limit ? { limit: String(page.limit) } : {}),
-  }).toString();
-  return `/api/instances/${encodeURIComponent(viewId)}/transcript${query ? `?${query}` : ""}`;
-};
+): string =>
+  hubRequest("GET /api/instances/:id/transcript", {
+    path: { id: viewId },
+    query: {
+      ...(page.cursor ? { before: page.cursor } : {}),
+      ...(page.limit ? { limit: String(page.limit) } : {}),
+    },
+  }).path;
 
 /**
  * Every instance row, looked up by id and by session. Built once per change to

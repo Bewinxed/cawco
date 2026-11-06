@@ -1,6 +1,7 @@
 /**
  * The hub's error log, from a page: every error the page reports goes to the
- * hub, which writes it to its journal (hub dashboard-errors.ts). One reporter
+ * hub, which writes it to its journal (hub dashboard-errors.ts), in the body
+ * its route takes (core `hubRequest`). One reporter
  * per page, started once ({@link reportErrorsTo}): the dashboard's from its
  * client hook (hooks.client.ts), to `/api/dashboard-errors` on its own
  * origin; a decision page's from its host (decisions/host/host.ts), to core
@@ -9,6 +10,9 @@
  * reports through {@link reportError} (the dashboard's `handleError`, the
  * OpenUI renderer's throws).
  */
+
+import { PREVIEW_ERRORS_PATH } from "@cawco/core/frames";
+import { hubRequest } from "@cawco/core/hub-request";
 
 const WINDOW_MS = 60_000;
 const FIRST_FRAME = /^\s*at\s|@/u;
@@ -20,8 +24,15 @@ const FIRST_FRAME = /^\s*at\s|@/u;
  */
 const SESSION_PATH = /^\/session\/([^/]+)/u;
 
+/**
+ * Where a page's errors go: the dashboard's, to the hub's route through its
+ * own origin's `/api`; a decision page's, to core `PREVIEW_ERRORS_PATH` on
+ * its preview origin, which hands the same body to that route.
+ */
+type ErrorSink = "dashboard" | "preview";
+
 /** Where this page's errors go and the build it runs; null until {@link reportErrorsTo}. */
-let sink: { endpoint: string; version: string } | null = null;
+let sink: { to: ErrorSink; version: string } | null = null;
 const seen = new Map<string, number>();
 let windowStart = 0;
 let windowCount = 0;
@@ -136,20 +147,22 @@ export function reportError(
     seen.set(key, now);
     windowCount += 1;
     total += 1;
-    const body = JSON.stringify({
-      message,
-      stack,
-      path: path.slice(0, 1000),
-      sessionId:
-        SESSION_PATH.exec(location.pathname)?.[1]?.slice(0, 256) ?? null,
-      version: sink.version.slice(0, 128),
-      userAgent: navigator.userAgent.slice(0, 512),
+    const request = hubRequest("POST /api/dashboard-errors", {
+      body: {
+        message,
+        stack,
+        path: path.slice(0, 1000),
+        sessionId:
+          SESSION_PATH.exec(location.pathname)?.[1]?.slice(0, 256) ?? null,
+        version: sink.version.slice(0, 128),
+        userAgent: navigator.userAgent.slice(0, 512),
+      },
     });
     // keepalive also delivers while navigating away.
-    fetch(sink.endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
+    fetch(sink.to === "preview" ? PREVIEW_ERRORS_PATH : request.path, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
       keepalive: true,
     }).catch(() => undefined);
   } catch {
@@ -158,14 +171,14 @@ export function reportError(
 }
 
 /**
- * Starts the page's reporter: its errors go to `endpoint` on the page's own
+ * Starts the page's reporter: its errors go to `to` (an {@link ErrorSink}) on the page's own
  * origin, as build `version`, and the window's uncaught errors and
  * rejections with them. The window is listened to once; a second call
  * only moves where the errors go.
  */
-export function reportErrorsTo(endpoint: string, version: string): void {
+export function reportErrorsTo(to: ErrorSink, version: string): void {
   const listening = sink !== null;
-  sink = { endpoint, version };
+  sink = { to, version };
   if (listening) {
     return;
   }

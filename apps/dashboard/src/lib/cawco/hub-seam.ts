@@ -8,6 +8,8 @@
  * a reader of the live store takes where nothing above provides one; this
  * module imports no store, so a stand-in loads none.
  */
+
+import type { HubRequest } from "@cawco/core/hub-request";
 import { getContext, setContext } from "svelte";
 import type { HubState } from "./client.svelte";
 
@@ -18,8 +20,8 @@ export interface HubSeam {
    * session's own row (`isStale`).
    */
   readonly machineOffline?: boolean;
-  /** A read of the hub's REST (`GET <path>`), its JSON answer or its refusal. */
-  read: <T>(path: string) => Promise<T>;
+  /** A read of the hub's REST (core `hubRequest`), its JSON answer or its refusal. */
+  read: <T>(request: HubRequest) => Promise<T>;
   /** The connection to the hub. */
   readonly state: HubState;
 }

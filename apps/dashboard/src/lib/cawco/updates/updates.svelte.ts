@@ -9,6 +9,7 @@ import type {
   BinaryUpdateChannels,
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
+import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import { updatesWords } from "@cawco/core/words/updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
@@ -16,6 +17,7 @@ import {
   failureClause,
   failureSentence,
   hubFailure,
+  hubFetch,
   hubRefusal,
   hubSaid,
 } from "#lib/cawco/hub-read.js";
@@ -51,8 +53,6 @@ export interface KeptUpdates {
   refused: [string, Refusal][];
   settings?: [UpdateSetting, SettingRefusal][];
 }
-
-const JSON_HEADERS = { "Content-Type": "application/json" };
 
 class Updates {
   policy = $state<BinaryUpdatePolicy | null>(null);
@@ -138,7 +138,9 @@ class Updates {
 
   async loadPolicy(): Promise<void> {
     try {
-      const response = await fetch("/api/binary-updates/settings");
+      const response = await hubFetch(
+        hubRequest("GET /api/binary-updates/settings")
+      );
       // Its record damaged: the hub's own words, and Reset offered.
       if (response.status === 409) {
         this.policy = null;
@@ -162,9 +164,9 @@ class Updates {
    * with) and updates come back on. The hub's refusal is the error.
    */
   async resetPolicy(): Promise<void> {
-    const response = await fetch("/api/binary-updates/settings/reset", {
-      method: "POST",
-    });
+    const response = await hubFetch(
+      hubRequest("POST /api/binary-updates/settings/reset")
+    );
     if (!response.ok) {
       throw await hubRefusal(response, updatesWords.policyNotResetThen);
     }
@@ -185,14 +187,14 @@ class Updates {
   ): Promise<boolean> {
     this.settingRefused.delete(setting);
     this.keep();
-    const response = await fetch("/api/binary-updates/settings", {
-      method: "PUT",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({
-        channel: next.channel,
-        autoUpdate: next.autoUpdate,
-      }),
-    }).catch(() => null);
+    const response = await hubFetch(
+      hubRequest("PUT /api/binary-updates/settings", {
+        body: {
+          channel: next.channel,
+          autoUpdate: next.autoUpdate,
+        },
+      })
+    ).catch(() => null);
     if (!response?.ok) {
       const why = response ? await hubSaid(response) : "the hub did not answer";
       this.settingRefused.set(setting, {
@@ -211,9 +213,9 @@ class Updates {
   }
 
   async loadChannels(): Promise<void> {
-    const response = await fetch("/api/binary-updates/channels").catch(
-      () => null
-    );
+    const response = await hubFetch(
+      hubRequest("GET /api/binary-updates/channels")
+    ).catch(() => null);
     if (response?.ok) {
       this.channels = (await response.json()) as BinaryUpdateChannels;
     }
@@ -223,9 +225,9 @@ class Updates {
   async refreshChannels(): Promise<boolean> {
     this.settingRefused.delete("check");
     this.keep();
-    const response = await fetch("/api/binary-updates/channels", {
-      method: "POST",
-    }).catch(() => null);
+    const response = await hubFetch(
+      hubRequest("POST /api/binary-updates/channels")
+    ).catch(() => null);
     if (!response?.ok) {
       const why = response ? await hubSaid(response) : "the hub did not answer";
       this.settingRefused.set("check", {
@@ -253,16 +255,15 @@ class Updates {
     this.keep();
     let response: Response;
     try {
-      response = await fetch(`/api/agents/${machineId}/update`, {
-        method: "POST",
-        headers: JSON_HEADERS,
-        // A press is one command, acted on once even if the request is sent
-        // again, and for the build this row showed.
-        body: JSON.stringify({
-          commandId: newId(),
-          version: machine.binaryUpdate?.availableVersion,
-        }),
-      });
+      response = await hubFetch(
+        hubRequest("POST /api/agents/:machineId/update", {
+          path: { machineId },
+          body: {
+            commandId: newId(),
+            version: machine.binaryUpdate?.availableVersion,
+          },
+        })
+      );
     } catch {
       return;
     }
@@ -302,9 +303,10 @@ class Updates {
     const { machineId } = machine;
     this.refused.delete(machineId);
     this.keep();
-    const response = await fetch(
-      `/api/binary-updates/machines/${machineId}/cancel`,
-      { method: "POST" }
+    const response = await hubFetch(
+      hubRequest("POST /api/binary-updates/machines/:machineId/cancel", {
+        path: { machineId },
+      })
     ).catch(() => null);
     if (!response?.ok) {
       // The install it meant to call off goes on: still this tab's to follow.

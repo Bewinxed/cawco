@@ -21,6 +21,8 @@
  *   phone the onboarding row asks for notifications alone ({@link rowAsks});
  *   the presence menu still offers this browser's report there.
  */
+
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type {
   DeskAck,
   DeskAckHow,
@@ -32,7 +34,7 @@ import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
 import { type DeskState, presenceWords } from "@cawco/core/words/presence";
 import { MediaQuery } from "svelte/reactivity";
 import { goto } from "$app/navigation";
-import { failureWords } from "./hub-read";
+import { failureWords, hubFetch } from "./hub-read";
 import { conversationHref, type InstanceIndex } from "./links";
 import {
   allowDesk,
@@ -46,7 +48,7 @@ import {
   setDeskReport,
   setDeskThreshold,
 } from "./presence";
-import { send as askHub, json } from "./project-tasks";
+import { send as askHub } from "./project-tasks";
 import { store, stored } from "./storage";
 
 /** Per browser: the onboarding row put away with Skip (core presence-onboarding.ts). */
@@ -122,10 +124,12 @@ export async function readPerson(): Promise<void> {
   // already reads it.
   const [permissions, read] = await Promise.all([
     deskPermissions(),
-    askHub<PersonRead>("/api/person").catch((error: unknown) => {
-      console.error("[cawco] /api/person failed:", error);
-      return null;
-    }),
+    askHub<PersonRead>(hubRequest("GET /api/person")).catch(
+      (error: unknown) => {
+        console.error("[cawco] /api/person failed:", error);
+        return null;
+      }
+    ),
   ]);
   if (read) {
     const { thisMachine, ...view } = read;
@@ -136,15 +140,11 @@ export async function readPerson(): Promise<void> {
 }
 
 /** Runs one press against the hub: its answer is the view, its refusal said in words. */
-async function press(
-  key: string,
-  url: string,
-  body: Record<string, boolean | number>
-): Promise<void> {
+async function press(key: string, request: HubRequest): Promise<void> {
   state.pending = key;
   state.refusal = null;
   try {
-    takePerson(await askHub<PersonView>(url, json("POST", body)));
+    takePerson(await askHub<PersonView>(request));
   } catch (error) {
     state.refusal = {
       blocked: false,
@@ -158,20 +158,27 @@ async function press(
 
 /** Appear away on or off: agents go quiet and the phone gets pushes while it is on. */
 export const setAppearAway = (on: boolean): Promise<void> =>
-  press("away", "/api/person/away", { on });
+  press("away", hubRequest("POST /api/person/away", { body: { on } }));
 
 /** The away clock, ms: how long without input on any device before the person is away. */
 export const setAwayAfter = (awayAfterMs: number): Promise<void> =>
-  press("clock", "/api/person/away-clock", { awayAfterMs });
+  press(
+    "clock",
+    hubRequest("POST /api/person/away-clock", { body: { awayAfterMs } })
+  );
 
 /** Whether a machine's desktop counts toward whether the person is here. */
 export const setMachineCounts = (
   machineId: string,
   counts: boolean
 ): Promise<void> =>
-  press(machineId, `/api/person/devices/${encodeURIComponent(machineId)}`, {
-    counts,
-  });
+  press(
+    machineId,
+    hubRequest("POST /api/person/devices/:machineId", {
+      path: { machineId },
+      body: { counts },
+    })
+  );
 
 /** How long the row's tick stands before it leaves. */
 const TICK_MS = 2400;
@@ -337,8 +344,10 @@ export async function allowHere(from: "row" | "menu"): Promise<void> {
     if (agent) {
       takePerson(
         await askHub<PersonView>(
-          `/api/person/devices/${encodeURIComponent(agent)}`,
-          json("POST", { counts: true })
+          hubRequest("POST /api/person/devices/:machineId", {
+            path: { machineId: agent },
+            body: { counts: true },
+          })
         )
       );
     }
@@ -404,10 +413,7 @@ export const onPhone = (): boolean => phoneQuery.current;
 /** This tab's answer to a desk alert it was named for: the hub sends the item on when none comes. */
 const answerDesk = (collapseId: string, how: DeskAckHow): void => {
   const ack: DeskAck = { clientId: presenceClientId(), collapseId, how };
-  fetch("/api/presence/desk-ack", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(ack),
+  hubFetch(hubRequest("POST /api/presence/desk-ack", { body: ack }), {
     keepalive: true,
   }).catch((error: unknown) => {
     // Unanswered, the hub sends it to the next place itself.

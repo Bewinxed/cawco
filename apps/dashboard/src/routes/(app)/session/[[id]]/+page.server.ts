@@ -1,6 +1,7 @@
+import { hubRequest } from "@cawco/core/hub-request";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import type { ServerTail } from "#lib/cawco/client.svelte.js";
-import { hubFailure, machineAway } from "#lib/cawco/hub-read.js";
+import { hubFailure, hubFetch, machineAway } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";
 import type { PageServerLoad } from "./$types";
@@ -10,7 +11,7 @@ const askHeldFor = async (
   fetch: typeof globalThis.fetch,
   viewId: string
 ): Promise<boolean> => {
-  const response = await fetch("/api/pending");
+  const response = await hubFetch(hubRequest("GET /api/pending"), {}, fetch);
   if (!response.ok) {
     return false;
   }

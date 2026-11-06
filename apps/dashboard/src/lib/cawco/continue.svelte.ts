@@ -15,8 +15,9 @@ import type {
   HarnessKind,
   PermissionMode,
 } from "@cawco/core/harness";
+import { type HubSent, hubRequest } from "@cawco/core/hub-request";
 import type { ContinuationJob } from "@cawco/core/protocol";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
 import { cawco, type SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
@@ -90,15 +91,13 @@ export function continueInNewSession(source: ContinueSource | null): void {
  */
 export async function startContinuation(
   source: ContinueSource,
-  body: unknown
+  body: HubSent<"POST /api/instances/:id/continue">["body"]
 ): Promise<string> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(source.instanceId)}/continue`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }
+  const response = await hubFetch(
+    hubRequest("POST /api/instances/:id/continue", {
+      path: { id: source.instanceId },
+      body,
+    })
   );
   if (!response.ok) {
     throw await hubRefusal(response);
@@ -128,9 +127,9 @@ export const continuationRunning = (
 
 /** Cancel, in any stage before the new session has started: nothing starts. Throws the hub's refusal. */
 export async function cancelContinuation(id: string): Promise<void> {
-  const response = await fetch(`/api/continuations/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  const response = await hubFetch(
+    hubRequest("DELETE /api/continuations/:id", { path: { id } })
+  );
   if (!response.ok) {
     throw await hubRefusal(response);
   }

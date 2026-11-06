@@ -35,6 +35,7 @@
 
 <script lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { commonWords } from "@cawco/core/words/common";
   /**
    * A session's plan (PRD §5.2, "Every session's plan, in a panel"): its
@@ -106,9 +107,9 @@
     if (!untrack(() => plan?.awayUnseen)) {
       return;
     }
-    send(`/api/instances/${encodeURIComponent(id)}/plan/seen`, {
-      method: "POST",
-    }).catch((error: unknown) => {
+    send(
+      hubRequest("POST /api/instances/:id/plan/seen", { path: { id } })
+    ).catch((error: unknown) => {
       console.warn("[cawco] marking the away notes seen failed:", error);
     });
   });

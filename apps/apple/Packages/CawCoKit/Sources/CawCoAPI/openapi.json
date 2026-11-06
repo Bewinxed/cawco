@@ -216,6 +216,48 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "again": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "control": {
+                    "type": "string",
+                    "enum": [
+                      "page-send",
+                      "page-key",
+                      "panel-head",
+                      "panel-more",
+                      "needs-you",
+                      "decisions-done",
+                      "answered"
+                    ]
+                  },
+                  "pins": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "writes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "operationId": "postApiInstancesByIdArtifactsByArtifactSend",
         "responses": {
           "200": {
@@ -225,6 +267,16 @@
                 "schema": {
                   "type": "string",
                   "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -9191,6 +9243,14 @@
                 "light",
                 "dark"
               ]
+            }
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],

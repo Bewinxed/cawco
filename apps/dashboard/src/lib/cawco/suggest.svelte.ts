@@ -4,8 +4,9 @@
  * chooses to add to a prompt; the harness's tool set is never touched.
  */
 
+import { hubRequest } from "@cawco/core/hub-request";
 import type { SuggestCandidate } from "@cawco/core/suggest";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import type { HubSeam } from "./hub-seam";
 import { send } from "./project-tasks";
 
@@ -48,7 +49,7 @@ export function loadSuggestSetting(hub: HubSeam): void {
   loaded = true;
   // A hub away or restarting answers no setting: suggestions stay off, and
   // the read says why as every failed read does.
-  hub.read<JevState>("/api/jev").then(
+  hub.read<JevState>(hubRequest("GET /api/jev")).then(
     (state) => {
       suggestions.enabled = state.route !== null && state.suggestWhileTyping;
     },
@@ -60,11 +61,9 @@ export function loadSuggestSetting(hub: HubSeam): void {
 
 /** Turns suggestions on or off for every composer. */
 export async function saveSuggestSetting(enabled: boolean): Promise<void> {
-  const response = await fetch("/api/jev/suggest", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
-  });
+  const response = await hubFetch(
+    hubRequest("PUT /api/jev/suggest", { body: { enabled } })
+  );
   if (!response.ok) {
     throw await hubRefusal(response);
   }
@@ -78,12 +77,7 @@ export async function askSuggestions(
 ): Promise<{ id: string; noul: number }[]> {
   const { suggestions: ranked } = await send<{
     suggestions: { id: string; noul: number }[];
-  }>("/api/suggest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal,
-  });
+  }>(hubRequest("POST /api/suggest", { body }), { signal });
   return ranked;
 }
 

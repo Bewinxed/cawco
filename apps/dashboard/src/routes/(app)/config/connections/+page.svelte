@@ -92,6 +92,7 @@
   import type { ConnectionView } from "@cawco/core/connections";
   import { detach } from "@cawco/core/detach";
   import type { Deleted } from "@cawco/core/fleet";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { configureWords } from "@cawco/core/words/configure";
   import { connectionsWords as words } from "@cawco/core/words/connections";
   import { onMount } from "svelte";
@@ -108,7 +109,7 @@
   import { offerUndo } from "#lib/cawco/config/undo.js";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { json, send } from "#lib/cawco/project-tasks.js";
+  import { send } from "#lib/cawco/project-tasks.js";
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -152,12 +153,10 @@
   );
   const problems = kept.value.byName;
 
-  const path = (name: string) => `/api/connections/${encodeURIComponent(name)}`;
-
   async function read() {
     try {
       ({ connections: rows } = await send<{ connections: ConnectionView[] }>(
-        "/api/connections"
+        hubRequest("GET /api/connections")
       ));
       loaded = true;
       readError = null;
@@ -170,7 +169,7 @@
   let callbackUrl = $state("");
 
   onMount(() => {
-    callbackUrl = `${window.location.origin}/api/connections/oauth/callback`;
+    callbackUrl = `${window.location.origin}${hubRequest("GET /api/connections/oauth/callback").path}`;
     detach(read(), "read");
     // A GitHub sign-in kept through a reload asks the machines again.
     if (typed.service === "github") {
@@ -325,10 +324,12 @@
     delete problems[name];
     try {
       const { authorizationUrl } = await send<{ authorizationUrl: string }>(
-        `${path(name)}/sign-in`,
-        json("POST", {
-          origin: window.location.origin,
-          ...(organization ? { organization } : {}),
+        hubRequest("POST /api/connections/:name/sign-in", {
+          path: { name },
+          body: {
+            origin: window.location.origin,
+            ...(organization ? { organization } : {}),
+          },
         })
       );
       tab?.location.assign(authorizationUrl);
@@ -379,7 +380,12 @@
     keyPending = true;
     delete problems[row.name];
     try {
-      await send<ConnectionView>(`${path(row.name)}/key`, json("PUT", { key }));
+      await send<ConnectionView>(
+        hubRequest("PUT /api/connections/:name/key", {
+          path: { name: row.name },
+          body: { key },
+        })
+      );
       key = "";
       keying = null;
     } catch (error) {
@@ -420,7 +426,12 @@
     appPending = true;
     delete problems[row.name];
     try {
-      await send<ConnectionView>(`${path(row.name)}/app`, json("PUT", rowApp));
+      await send<ConnectionView>(
+        hubRequest("PUT /api/connections/:name/app", {
+          path: { name: row.name },
+          body: rowApp,
+        })
+      );
       rowApp = emptyApp();
       appFor = null;
     } catch (error) {
@@ -530,7 +541,7 @@
     const offered = typed.way;
     try {
       gh = await send<{ signIns: GhRow[]; unread: string[] }>(
-        "/api/github-sign-in/gh"
+        hubRequest("GET /api/github-sign-in/gh")
       );
     } catch (error) {
       ghProblem = words.ghUnread(failureClause(error));
@@ -554,11 +565,12 @@
     ghProblem = null;
     try {
       await send<ConnectionView>(
-        "/api/github-sign-in/gh",
-        json("POST", {
-          machineId: one.machineId,
-          host: one.host,
-          login: one.login,
+        hubRequest("POST /api/github-sign-in/gh", {
+          body: {
+            machineId: one.machineId,
+            host: one.host,
+            login: one.login,
+          },
         })
       );
       stopAdding();
@@ -598,8 +610,15 @@
     }
     try {
       await send<ConnectionView>(
-        way.auth === "app" ? `${path(name)}/app` : `${path(name)}/key`,
-        json("PUT", way.auth === "app" ? typedApp : { key: typedKey })
+        way.auth === "app"
+          ? hubRequest("PUT /api/connections/:name/app", {
+              path: { name },
+              body: typedApp,
+            })
+          : hubRequest("PUT /api/connections/:name/key", {
+              path: { name },
+              body: { key: typedKey },
+            })
       );
       return true;
     } catch (error) {
@@ -632,14 +651,15 @@
     typed.problem = null;
     try {
       await send<ConnectionView>(
-        "/api/connections",
-        json("POST", {
-          name,
-          service: service.service,
-          account: typed.account.trim(),
-          transport: "http",
-          url,
-          auth: way.auth,
+        hubRequest("POST /api/connections", {
+          body: {
+            name,
+            service: service.service,
+            account: typed.account.trim(),
+            transport: "http",
+            url,
+            auth: way.auth,
+          },
         })
       );
     } catch (error) {
@@ -673,7 +693,11 @@
     removing = row.name;
     delete problems[row.name];
     try {
-      const deleted = await send<Deleted>(path(row.name), { method: "DELETE" });
+      const deleted = await send<Deleted>(
+        hubRequest("DELETE /api/connections/:name", {
+          path: { name: row.name },
+        })
+      );
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
       offerUndo(
@@ -714,8 +738,10 @@
     delete problems[row.name];
     try {
       const next = await send<ConnectionView>(
-        path(row.name),
-        json("PATCH", { projects })
+        hubRequest("PATCH /api/connections/:name", {
+          path: { name: row.name },
+          body: { projects },
+        })
       );
       rows = rows.map((each) => (each.name === next.name ? next : each));
       choosing = next;

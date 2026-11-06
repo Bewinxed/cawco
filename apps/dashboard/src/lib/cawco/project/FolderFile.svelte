@@ -13,8 +13,9 @@
    * hub's words; only the hub reads the folder.
    */
   import { deliverableKind } from "@cawco/core/deliverables";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { filesWords } from "@cawco/core/words/files";
-  import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { failureWords, hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -58,8 +59,11 @@
     if (media) {
       return;
     }
-    fetch(
-      `/api/projects/${encodeURIComponent(pid)}/folder/file?${new URLSearchParams({ path: at })}`
+    hubFetch(
+      hubRequest("GET /api/projects/:id/folder/file", {
+        path: { id: pid },
+        query: { path: at },
+      })
     )
       .then(async (response) => {
         if (!response.ok) {

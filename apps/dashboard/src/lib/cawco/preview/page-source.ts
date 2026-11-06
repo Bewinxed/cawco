@@ -15,19 +15,14 @@ import {
   type PreviewAddress,
   previewRoute,
 } from "@cawco/core/frames";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { previewWords } from "@cawco/core/words/preview";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { enterPreviews } from "./pass";
 
 /** The origin that serves a page: its project's, or (a page outside any project) its session's. */
 export type PageOrigin = { project: string } | { instance: string };
-
-/** The hub's routes for that origin's address. */
-const routesOf = (origin: PageOrigin): string =>
-  "project" in origin
-    ? `/api/projects/${encodeURIComponent(origin.project)}`
-    : `/api/instances/${encodeURIComponent(origin.instance)}`;
 
 /** The hub's sentence for a refused request, or the fallback words. */
 const said = async (answer: Response | null, otherwise: string) =>
@@ -81,9 +76,9 @@ export async function pageSource(
  * preview.ts `everyPortTaken`), wherever a frame of it stands.
  */
 async function addressAt(
-  route: string
+  request: HubRequest
 ): Promise<{ address: PreviewAddress } | { problem: string }> {
-  const answer = await fetch(route, { method: "POST" }).catch(() => null);
+  const answer = await hubFetch(request).catch(() => null);
   if (!answer?.ok) {
     return {
       problem: await said(answer, previewWords.notOpenedLine),
@@ -96,7 +91,15 @@ async function addressAt(
 export const originAddress = (
   origin: PageOrigin
 ): Promise<{ address: PreviewAddress } | { problem: string }> =>
-  addressAt(`${routesOf(origin)}/preview-address`);
+  addressAt(
+    "project" in origin
+      ? hubRequest("POST /api/projects/:id/preview-address", {
+          path: { id: origin.project },
+        })
+      : hubRequest("POST /api/instances/:id/preview-address", {
+          path: { id: origin.instance },
+        })
+  );
 
 /**
  * Where artifact `id` is served now (hub preview-routes.ts
@@ -107,4 +110,8 @@ export const originAddress = (
 export const artifactAddress = (
   id: string
 ): Promise<{ address: PreviewAddress } | { problem: string }> =>
-  addressAt(`/api/artifacts/${encodeURIComponent(id)}/preview-address`);
+  addressAt(
+    hubRequest("POST /api/artifacts/:artifact/preview-address", {
+      path: { artifact: id },
+    })
+  );

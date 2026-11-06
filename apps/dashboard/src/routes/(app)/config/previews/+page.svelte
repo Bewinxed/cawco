@@ -8,11 +8,12 @@
    * keeps it, and says why when it doesn't.
    */
   import type { PreviewSettings } from "@cawco/core/frames";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { onMount } from "svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { hubRefusal } from "#lib/cawco/hub-read.js";
+  import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import {
@@ -36,7 +37,7 @@
   };
 
   onMount(() => {
-    fetch("/api/preview-settings")
+    hubFetch(hubRequest("GET /api/preview-settings"))
       .then(async (answer) => {
         if (!answer.ok) {
           throw await hubRefusal(answer);
@@ -66,13 +67,11 @@
     saving = true;
     refused = undefined;
     try {
-      const answer = await fetch("/api/preview-settings", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(
-          mode === "host" ? { mode, pattern: pattern.trim() } : { mode }
-        ),
-      });
+      const answer = await hubFetch(
+        hubRequest("PUT /api/preview-settings", {
+          body: mode === "host" ? { mode, pattern: pattern.trim() } : { mode },
+        })
+      );
       if (!answer.ok) {
         refused = (await hubRefusal(answer)).message;
         return;

@@ -21,8 +21,10 @@ import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Pin } from "@cawco/core/comments";
+import { hubRequest } from "@cawco/core/hub-request";
 import { pinReference } from "@cawco/core/references";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { hubFetch } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
 import { ArtifactRefused, findArtifact } from "./artifact-api";
 
@@ -91,8 +93,11 @@ function askPins(id: string, instanceId: string): void {
     return;
   }
   asking.add(key);
-  fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/artifacts/comments?artifact=${encodeURIComponent(id)}&filter=all`
+  hubFetch(
+    hubRequest("GET /api/instances/:id/artifacts/comments", {
+      path: { id: instanceId },
+      query: { artifact: id, filter: "all" },
+    })
   )
     .then(async (response) => {
       if (!response.ok) {

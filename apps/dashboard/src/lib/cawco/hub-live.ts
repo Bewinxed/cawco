@@ -11,7 +11,7 @@ const live: HubSeam = {
   get state() {
     return cawco.hub;
   },
-  read: (path) => send(path),
+  read: (request) => send(request),
 };
 
 /** The hub as this component reads it: a stand-in provided above it, else the live client. */

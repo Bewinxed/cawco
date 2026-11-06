@@ -5,6 +5,7 @@
  * because only it says how far an upload has gone.
  */
 import type { FileAttachment } from "@cawco/core/attachments";
+import { hubRequest } from "@cawco/core/hub-request";
 import { z } from "zod";
 import {
   HUB_UNREACHABLE,
@@ -20,8 +21,11 @@ export function uploadFile(
   onprogress: (fraction: number) => void
 ): Promise<FileAttachment> {
   return new Promise((resolve, reject) => {
+    // Its bytes as they are, which no JSON body holds: the route reads the
+    // request whole (hub server.ts `POST /api/files`).
+    const route = hubRequest("POST /api/files");
     const request = new XMLHttpRequest();
-    request.open("POST", "/api/files");
+    request.open(route.method, route.path);
     request.setRequestHeader(
       "Content-Type",
       blob.type || "application/octet-stream"

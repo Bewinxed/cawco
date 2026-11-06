@@ -78,6 +78,7 @@ import type {
   WorkspaceHolding,
 } from "@cawco/core/harness";
 import { CONTROL_SUPPORTED_COMMANDS } from "@cawco/core/harness";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import type { LawBroken } from "@cawco/core/invariant";
 import { machineFaultWords, machineLabel } from "@cawco/core/machine-names";
@@ -156,6 +157,7 @@ import type {
   UsageLimitsResponse,
   UsageSpend,
 } from "@cawco/core/usage/types";
+import type { StagesTemplate } from "@cawco/core/views";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { askWords } from "@cawco/core/words/asks";
@@ -193,6 +195,7 @@ import {
   deadlineIn,
   type HubFailure,
   hubFailure,
+  hubFetch,
   hubRefusal,
   machineAway,
   failureWords as messageOf,
@@ -211,7 +214,7 @@ import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { presenceAgain, presenceClientId } from "./presence";
-import { send as askHub, json } from "./project-tasks";
+import { send as askHub } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
 import { noteChange } from "./repeated-keys";
@@ -2385,11 +2388,12 @@ async function persistSettings(
   }
 
   try {
-    const response = await fetch(`/api/instances/${instanceId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
+    const response = await hubFetch(
+      hubRequest("PATCH /api/instances/:id", {
+        path: { id: instanceId },
+        body: patch,
+      })
+    );
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
@@ -2481,11 +2485,11 @@ async function loadDelegates(
 ): Promise<void> {
   let summaries: DelegateSummary[];
   try {
-    const response = await fetch("/api/delegate-summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ parent, instances: delegates }),
-    });
+    const response = await hubFetch(
+      hubRequest("POST /api/delegate-summaries", {
+        body: { parent, instances: delegates },
+      })
+    );
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
@@ -2538,7 +2542,7 @@ async function loadWorkItems(instanceId: string): Promise<void> {
   trayRead.add(instanceId);
   const mark = readLeaves();
   const items = await load<WorkItemSummary[]>(
-    `/api/work-items?parent=${instanceId}`
+    hubRequest("GET /api/work-items", { query: { parent: instanceId } })
   );
   if (!items) {
     trayRead.delete(instanceId);
@@ -2564,7 +2568,10 @@ export function dismissWorkItem(
   id: string,
   why: { reason: string } | { replacedBy: string }
 ): Promise<void> {
-  return workItemAct(id, "dismiss", why, workWords.notDismissedThen);
+  return workItemAct(
+    hubRequest("POST /api/work-items/:id/dismiss", { path: { id }, body: why }),
+    workWords.notDismissedThen
+  );
 }
 
 /**
@@ -2572,43 +2579,33 @@ export function dismissWorkItem(
  * reopens the same item there; answered once the session has read it.
  */
 export function retryWorkItem(id: string): Promise<void> {
-  return workItemAct(id, "retry", undefined, workWords.notRetriedThen);
+  return workItemAct(
+    hubRequest("POST /api/work-items/:id/retry", { path: { id } }),
+    workWords.notRetriedThen
+  );
 }
 
 async function workItemAct(
-  id: string,
-  act: "dismiss" | "retry",
-  body: object | undefined,
+  request: HubRequest,
   outcome: string
 ): Promise<void> {
   const mark = readLeaves();
-  const response = await fetch(
-    `/api/work-items/${encodeURIComponent(id)}/${act}`,
-    {
-      method: "POST",
-      ...(body
-        ? {
-            body: JSON.stringify(body),
-            headers: { "content-type": "application/json" },
-          }
-        : {}),
-    }
-  );
+  const response = await hubFetch(request);
   if (!response.ok) {
     throw await hubRefusal(response, outcome);
   }
   keepWorkItem((await response.json()) as WorkItemSummary, mark);
 }
 
-async function load<T>(path: string): Promise<T | null> {
+async function load<T>(request: HubRequest): Promise<T | null> {
   try {
-    const response = await fetch(path);
+    const response = await hubFetch(request);
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
     return (await response.json()) as T;
   } catch (error) {
-    console.error(`[cawco] ${path} failed:`, error);
+    console.error(`[cawco] ${request.path} failed:`, error);
     return null;
   }
 }
@@ -2741,7 +2738,7 @@ function adoptSpend(spend: UsageSpend): void {
  */
 export async function readSpend(): Promise<void> {
   const mark = readLeaves();
-  const spend = await load<UsageSpend>("/api/usage/spend");
+  const spend = await load<UsageSpend>(hubRequest("GET /api/usage/spend"));
   // A `usage` frame since the read left carries a spend at least as new.
   if (heardSince("usage", mark)) {
     return;
@@ -2810,8 +2807,8 @@ async function readAccounts(): Promise<void> {
   accountsReads += 1;
   const ticket = accountsReads;
   const [view, providers] = await Promise.all([
-    load<AccountsView>("/api/accounts"),
-    load<ProviderChoice[]>("/api/accounts/providers"),
+    load<AccountsView>(hubRequest("GET /api/accounts")),
+    load<ProviderChoice[]>(hubRequest("GET /api/accounts/providers")),
   ]);
   // Reads overlap (every `usage` frame and every write asks again): only the
   // newest one's answer is kept, so an older one landing last never stands.
@@ -2832,20 +2829,8 @@ async function readAccounts(): Promise<void> {
  * sentence, which is written for people; the accounts are read again after
  * every write that landed, since only a sign-in makes the hub say so.
  */
-async function accountsWrite<T>(
-  url: string,
-  method: "POST" | "PATCH" | "PUT" | "DELETE",
-  body?: unknown
-): Promise<T> {
-  const response = await fetch(url, {
-    method,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-  });
+async function accountsWrite<T>(request: HubRequest): Promise<T> {
+  const response = await hubFetch(request);
   if (!response.ok) {
     throw await hubRefusal(response);
   }
@@ -2862,7 +2847,8 @@ export const createAccount = (body: {
   label?: string;
   /** Made by the setup: the step it stands at, until it is done. */
   setupStep?: AccountSetupStep;
-}): Promise<Account> => accountsWrite("/api/accounts", "POST", body);
+}): Promise<Account> =>
+  accountsWrite(hubRequest("POST /api/accounts", { body }));
 
 /** Changes an account's nickname (null: its email), colour, order or limits. */
 export const patchAccount = (
@@ -2877,7 +2863,9 @@ export const patchAccount = (
     setupStep?: AccountSetupStep | null;
   }
 ): Promise<Account> =>
-  accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "PATCH", patch);
+  accountsWrite(
+    hubRequest("PATCH /api/accounts/:id", { path: { id }, body: patch })
+  );
 
 /**
  * What removing an account does with the sessions on it, for its confirm:
@@ -2887,14 +2875,14 @@ export const patchAccount = (
 export const accountRemoval = (
   id: string
 ): Promise<{ moving: number; staying: number } | null> =>
-  load(`/api/accounts/${encodeURIComponent(id)}/removal`);
+  load(hubRequest("GET /api/accounts/:id/removal", { path: { id } }));
 
 /**
  * Removes an account, signing it out on every machine signed in to it; its
  * sessions move to the accounts placement carries them to.
  */
 export const deleteAccount = (id: string): Promise<{ ok: true }> =>
-  accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "DELETE");
+  accountsWrite(hubRequest("DELETE /api/accounts/:id", { path: { id } }));
 
 /** Sets how a provider's new sessions choose among its accounts: the fields the hub's route takes. */
 export const putRouting = (
@@ -2902,23 +2890,26 @@ export const putRouting = (
   routing: Omit<ProviderRouting, "provider">
 ): Promise<ProviderRouting> =>
   accountsWrite(
-    `/api/accounts/routing/${encodeURIComponent(provider)}`,
-    "PUT",
-    {
-      yours: routing.yours,
-      delegates: routing.delegates,
-      atLimit: routing.atLimit,
-    }
+    hubRequest("PUT /api/accounts/routing/:provider", {
+      path: { provider },
+      body: {
+        yours: routing.yours,
+        delegates: routing.delegates,
+        atLimit: routing.atLimit,
+      },
+    })
   );
-
-const signinUrl = (id: string, machineId: string) =>
-  `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}/signin`;
 
 /** Starts Claude Code's own login for the account on a machine: the link to open. */
 export const beginSignin = (
   id: string,
   machineId: string
-): Promise<{ url: string }> => accountsWrite(signinUrl(id, machineId), "POST");
+): Promise<{ url: string }> =>
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
+      path: { id, machineId },
+    })
+  );
 
 /** Types the pasted code into that login: signed in, or someone else's account. */
 export const completeSignin = (
@@ -2926,7 +2917,12 @@ export const completeSignin = (
   machineId: string,
   code: string
 ): Promise<AccountSigninResult> =>
-  accountsWrite(`${signinUrl(id, machineId)}/complete`, "POST", { code });
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
+      path: { id, machineId },
+      body: { code },
+    })
+  );
 
 /**
  * Starts a provider's own OAuth sign-in for the account on a machine: a
@@ -2936,7 +2932,11 @@ export const beginDeviceSignin = (
   id: string,
   machineId: string
 ): Promise<ProviderSigninChallenge> =>
-  accountsWrite(signinUrl(id, machineId), "POST");
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
+      path: { id, machineId },
+    })
+  );
 
 /**
  * Waits up to a minute for the device code to be entered: signed in, as
@@ -2946,7 +2946,12 @@ export const awaitDeviceSignin = (
   id: string,
   machineId: string
 ): Promise<ProviderSigninResult> =>
-  accountsWrite(`${signinUrl(id, machineId)}/complete`, "POST", {});
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
+      path: { id, machineId },
+      body: {},
+    })
+  );
 
 /**
  * Checks now whether Claude Code still refuses an account it refused
@@ -2955,8 +2960,7 @@ export const awaitDeviceSignin = (
  */
 export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
   accountsWrite(
-    `/api/accounts/${encodeURIComponent(id)}/refusal-check`,
-    "POST"
+    hubRequest("POST /api/accounts/:id/refusal-check", { path: { id } })
   );
 
 /**
@@ -2965,8 +2969,9 @@ export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
  */
 export const signOutOn = (id: string, machineId: string): Promise<unknown> =>
   accountsWrite(
-    `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}`,
-    "DELETE"
+    hubRequest("DELETE /api/accounts/:id/machines/:machineId", {
+      path: { id, machineId },
+    })
   );
 
 /** What sending a key came to on one machine: its result, or why it didn't arrive. */
@@ -2980,10 +2985,15 @@ export const sendAccountKey = (
   key: string,
   machineIds: string[]
 ): Promise<{ machines: KeyDelivery[] }> =>
-  accountsWrite(`/api/accounts/${encodeURIComponent(id)}/key`, "POST", {
-    key,
-    machineIds,
-  });
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/key", {
+      path: { id },
+      body: {
+        key,
+        machineIds,
+      },
+    })
+  );
 
 /**
  * Which account a session would start on, why, and the model it was read for
@@ -2999,12 +3009,9 @@ export async function placementFor(query: {
   model?: string;
   projectId?: string;
 }): Promise<PlacementPreview | undefined> {
-  const params = new URLSearchParams(
-    Object.entries(query).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined
-    )
+  const response = await hubFetch(
+    hubRequest("GET /api/accounts/placement", { query })
   );
-  const response = await fetch(`/api/accounts/placement?${params}`);
   if (response.status === 400 || response.status === 503) {
     throw await hubRefusal(response);
   }
@@ -3154,11 +3161,11 @@ async function refresh(): Promise<boolean> {
   const asked = projectsLeave();
   const { mark } = asked;
   const [projects, pending, usage] = await Promise.all([
-    load<ProjectRow[]>("/api/projects"),
-    load<Envelope<FramePayload>[]>("/api/pending"),
+    load<ProjectRow[]>(hubRequest("GET /api/projects")),
+    load<Envelope<FramePayload>[]>(hubRequest("GET /api/pending")),
     // Read on connect, not only broadcast on change: a dashboard opened
     // between reports has missed the frames.
-    load<UsageLimitsResponse>("/api/usage/limits"),
+    load<UsageLimitsResponse>(hubRequest("GET /api/usage/limits")),
   ]);
 
   if (projects) {
@@ -6641,13 +6648,11 @@ export async function moveInstanceAccount(
   instanceId: string,
   accountId: string
 ): Promise<void> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/account`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId }),
-    }
+  const response = await hubFetch(
+    hubRequest("POST /api/instances/:id/account", {
+      path: { id: instanceId },
+      body: { accountId },
+    })
   );
   if (!response.ok) {
     throw await hubRefusal(response, accountsWords.notMovedThen);
@@ -6663,11 +6668,12 @@ export async function renameInstance(
   instanceId: string,
   title: string
 ): Promise<void> {
-  const response = await fetch(`/api/instances/${instanceId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
-  });
+  const response = await hubFetch(
+    hubRequest("PATCH /api/instances/:id", {
+      path: { id: instanceId },
+      body: { title },
+    })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, sidebarWords.notRenamedThen);
   }
@@ -6695,11 +6701,12 @@ export async function editProject(
   }
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
-  const response = await fetch(`/api/projects/${projectId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(change),
-  });
+  const response = await hubFetch(
+    hubRequest("PATCH /api/projects/:id", {
+      path: { id: projectId },
+      body: change,
+    })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.notChangedThen);
   }
@@ -6727,13 +6734,11 @@ export async function addProjectPlace(
   path: string
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
-  const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/places`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, path }),
-    }
+  const response = await hubFetch(
+    hubRequest("POST /api/projects/:id/places", {
+      path: { id: projectId },
+      body: { machineId, path },
+    })
   );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.placeNotAddedThen);
@@ -6752,9 +6757,10 @@ export async function removeProjectPlace(
   projectId: string,
   placeId: string
 ): Promise<void> {
-  const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/places/${encodeURIComponent(placeId)}`,
-    { method: "DELETE" }
+  const response = await hubFetch(
+    hubRequest("DELETE /api/projects/:id/places/:placeId", {
+      path: { id: projectId, placeId },
+    })
   );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.placeNotRemovedThen);
@@ -6770,11 +6776,12 @@ export async function removeProjectPlace(
  */
 export async function keepSession(instanceId: string): Promise<Bounded<void>> {
   const target = session(instanceId);
-  const response = await fetch(`/api/instances/${instanceId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind: "mainline" }),
-  });
+  const response = await hubFetch(
+    hubRequest("PATCH /api/instances/:id", {
+      path: { id: instanceId },
+      body: { kind: "mainline" },
+    })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, sidebarWords.notKeptThen);
   }
@@ -6894,15 +6901,13 @@ export async function machineFs<T>(
  * (CawLead `starting`, `problem`). The hub's refusal is its own words.
  */
 export async function createProject(project: {
-  template?: string;
+  template?: StagesTemplate;
   prompt: string;
   promptId: string;
 }): Promise<ProjectRow & { place: ProjectPlace }> {
-  const response = await fetch("/api/projects", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...project, caw: true }),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/projects", { body: { ...project, caw: true } })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.notMadeThen);
   }
@@ -6923,11 +6928,9 @@ export async function projectAtFolder(project: {
   cwd: string;
   machineId: string;
 }): Promise<ProjectRow & { place: ProjectPlace; placeAdded: boolean }> {
-  const response = await fetch("/api/projects", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(project),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/projects", { body: project })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.notSavedThen);
   }
@@ -6945,7 +6948,9 @@ export async function projectAtFolder(project: {
  */
 async function readProjectOffers(): Promise<void> {
   const mark = readLeaves();
-  const offers = await load<ProjectOfferSummary[]>("/api/project-offers");
+  const offers = await load<ProjectOfferSummary[]>(
+    hubRequest("GET /api/project-offers")
+  );
   if (!offers) {
     return;
   }
@@ -6967,7 +6972,7 @@ const TAILNET_TICK_MS = 12_000;
 /** HTTPS on the hub machine's tailnet name, as the hub has it now. */
 async function readTailnetHttps(): Promise<void> {
   const mark = readLeaves();
-  const read = await load<TailnetHttps>("/api/tailnet-https");
+  const read = await load<TailnetHttps>(hubRequest("GET /api/tailnet-https"));
   if (read && !heardSince("tailnet.https", mark)) {
     state.tailnetHttps = read;
   }
@@ -6987,7 +6992,7 @@ function keepRelayJourney(journey: RelayJourneyView): void {
 
 /** The stream relay's journey as the hub has it now, with this page's domain; a failed read throws its words. */
 export async function readRelayJourney(): Promise<void> {
-  const read = await askHub<RelayAnswer>("/api/stream-relay");
+  const read = await askHub<RelayAnswer>(hubRequest("GET /api/stream-relay"));
   state.relayDomain = read.domain;
   keepRelayJourney(read.journey);
 }
@@ -6995,8 +7000,7 @@ export async function readRelayJourney(): Promise<void> {
 /** One act on the stream relay's journey: the hub's answer kept, its refusal thrown in its words. */
 export async function actOnRelay(act: RelayAct): Promise<void> {
   const answered = await askHub<RelayAnswer>(
-    "/api/stream-relay/act",
-    json("POST", act)
+    hubRequest("POST /api/stream-relay/act", { body: act })
   );
   state.relayDomain = answered.domain;
   keepRelayJourney(answered.journey);
@@ -7007,22 +7011,21 @@ export async function reportRelayProof(
   report: RelayProofReport
 ): Promise<void> {
   const answered = await askHub<RelayAnswer>(
-    "/api/stream-relay/proof",
-    json("POST", report)
+    hubRequest("POST /api/stream-relay/proof", { body: report })
   );
   keepRelayJourney(answered.journey);
 }
 
 /** A 60 s credential for this screen's proof of the relay. */
 export function relayTry(): Promise<RelayTry> {
-  return askHub<RelayTry>("/api/stream-relay/try");
+  return askHub<RelayTry>(hubRequest("GET /api/stream-relay/try"));
 }
 
 /** Fleet watch's needs-you notices, as the hub holds them now. */
 async function readWatchNotices(): Promise<void> {
   const mark = readLeaves();
   const read = await load<{ notices: FleetWatchNotice[] }>(
-    "/api/fleet-watch/notices"
+    hubRequest("GET /api/fleet-watch/notices")
   );
   if (read && !heardSince("fleet_watch.notices", mark)) {
     state.watchNotices = read.notices;
@@ -7033,7 +7036,7 @@ async function readWatchNotices(): Promise<void> {
 async function readWaitingActions(): Promise<void> {
   const mark = readLeaves();
   const read = await load<{ actions: ApprovedActionView[] }>(
-    "/api/actions/waiting"
+    hubRequest("GET /api/actions/waiting")
   );
   if (read && !heardSince("actions", mark)) {
     state.actions = read.actions;
@@ -7051,17 +7054,19 @@ export async function decideAction(
   action: Pick<ApprovedActionView, "argsHash" | "id">,
   decision: "approve" | "deny" | "checked"
 ): Promise<void> {
-  const response = await fetch(
-    `/api/actions/${encodeURIComponent(action.id)}/${decision}`,
-    {
-      method: "POST",
-      ...(decision === "approve"
-        ? {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ argsHash: action.argsHash }),
-          }
-        : {}),
-    }
+  const path = { id: action.id };
+  const response = await hubFetch(
+    decision === "approve"
+      ? hubRequest("POST /api/actions/:id/approve", {
+          path,
+          body: { argsHash: action.argsHash },
+        })
+      : hubRequest(
+          decision === "deny"
+            ? "POST /api/actions/:id/deny"
+            : "POST /api/actions/:id/checked",
+          { path }
+        )
   );
   if (!response.ok) {
     throw await hubRefusal(response);
@@ -7078,9 +7083,13 @@ export async function answerProjectOffer(
   answer: "accept" | "dismiss"
 ): Promise<ProjectOfferAccepted | null> {
   const mark = readLeaves();
-  const response = await fetch(
-    `/api/project-offers/${encodeURIComponent(instanceId)}/${answer}`,
-    { method: "POST" }
+  const response = await hubFetch(
+    hubRequest(
+      answer === "accept"
+        ? "POST /api/project-offers/:instanceId/accept"
+        : "POST /api/project-offers/:instanceId/dismiss",
+      { path: { instanceId } }
+    )
   );
   if (!response.ok) {
     throw await hubRefusal(response, offerWords.nothingChangedThen);
@@ -7111,12 +7120,9 @@ export function dismissProjectJoin(instanceId: string): void {
 
 // --- a project's conversation and views -------------------------------------
 
-const projectPath = (projectId: string) =>
-  `/api/projects/${encodeURIComponent(projectId)}`;
-
 /** A project's conversation: on or off, its harness, its session, why it cannot start, its spend. */
 export const cawOf = (projectId: string): Promise<ProjectConversationView> =>
-  askHub(`${projectPath(projectId)}/caw`);
+  askHub(hubRequest("GET /api/projects/:id/caw", { path: { id: projectId } }));
 
 /** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
 export const configureCaw = async (
@@ -7130,8 +7136,10 @@ export const configureCaw = async (
   }
 ): Promise<ProjectConversationView> => {
   const view = await askHub<ProjectConversationView>(
-    `${projectPath(projectId)}/caw`,
-    json("PATCH", change)
+    hubRequest("PATCH /api/projects/:id/caw", {
+      path: { id: projectId },
+      body: change,
+    })
   );
   // The hub's answer is where he stands: the project's row says so now,
   // before the `projects.changed` it sent brings the row read again.
@@ -7155,8 +7163,10 @@ export const nameConversation = async (
   instanceId: string
 ): Promise<ProjectConversationView> => {
   const view = await askHub<ProjectConversationView>(
-    `${projectPath(projectId)}/caw/conversation`,
-    json("POST", { instanceId })
+    hubRequest("POST /api/projects/:id/caw/conversation", {
+      path: { id: projectId },
+      body: { instanceId },
+    })
   );
   const row = state.projects.find((project) => project.id === projectId);
   if (row) {
@@ -7177,63 +7187,87 @@ export interface RoutineState {
   projectId: string | null;
 }
 
-const routinePath = (routineId: string): string =>
-  `/api/routines/${encodeURIComponent(routineId)}`;
-
 /** A routine as it stands now. */
 export const readRoutine = (routineId: string): Promise<RoutineState> =>
-  askHub(routinePath(routineId));
-
-const designOfferPath = (projectId: string): string =>
-  `${projectPath(projectId)}/design-offer`;
+  askHub(hubRequest("GET /api/routines/:id", { path: { id: routineId } }));
 
 /** Where a project's design-system offer stands (hub design-offers.ts). */
 export const readDesignOffer = (projectId: string): Promise<DesignOfferState> =>
-  askHub(designOfferPath(projectId));
+  askHub(
+    hubRequest("GET /api/projects/:id/design-offer", {
+      path: { id: projectId },
+    })
+  );
 
 /** Answers it: Build files the task, Not now records it; the offer as it stands after. */
 export const answerDesignOffer = (
   projectId: string,
   answer: "build" | "dismiss"
 ): Promise<DesignOfferState> =>
-  askHub(`${designOfferPath(projectId)}/${answer}`, json("POST", {}));
-
-const lfsOfferPath = (id: string): string =>
-  `/api/lfs-offers/${encodeURIComponent(id)}`;
+  askHub(
+    hubRequest(
+      answer === "build"
+        ? "POST /api/projects/:id/design-offer/build"
+        : "POST /api/projects/:id/design-offer/dismiss",
+      { path: { id: projectId } }
+    )
+  );
 
 /** Where an offer of Git LFS for a place's left-out large files stands (hub lfs-offers.ts). */
 export const readLfsOffer = (id: string): Promise<LfsOfferState> =>
-  askHub(lfsOfferPath(id));
+  askHub(hubRequest("GET /api/lfs-offers/:id", { path: { id } }));
 
 /** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
 export const answerLfsOffer = (
   id: string,
   answer: "track" | "dismiss"
 ): Promise<LfsOfferState> =>
-  askHub(`${lfsOfferPath(id)}/${answer}`, json("POST", {}));
+  askHub(
+    hubRequest(
+      answer === "track"
+        ? "POST /api/lfs-offers/:id/track"
+        : "POST /api/lfs-offers/:id/dismiss",
+      { path: { id } }
+    )
+  );
 
 /** The fleet's connections, never their keys (`GET /api/connections`). */
 export const readConnections = async (): Promise<ConnectionView[]> =>
-  (await askHub<{ connections: ConnectionView[] }>("/api/connections"))
-    .connections;
+  (
+    await askHub<{ connections: ConnectionView[] }>(
+      hubRequest("GET /api/connections")
+    )
+  ).connections;
 
 /** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
 export const changeRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
 ): Promise<RoutineState> =>
-  askHub(routinePath(routineId), json("PATCH", change));
+  askHub(
+    hubRequest("PATCH /api/routines/:id", {
+      path: { id: routineId },
+      body: change,
+    })
+  );
 
 /** "Ask Caw for a view": your words to the project's conversation, which drafts it; the session they went to. */
 export const requestView = (
   projectId: string,
   text: string
 ): Promise<{ instanceId: string }> =>
-  askHub(`${projectPath(projectId)}/view-requests`, json("POST", { text }));
+  askHub(
+    hubRequest("POST /api/projects/:id/view-requests", {
+      path: { id: projectId },
+      body: { text },
+    })
+  );
 
 /** What a project has spent: today, this month, its conversations' share, each attempt. */
 export const projectSpend = (projectId: string): Promise<ProjectSpend> =>
-  askHub(`${projectPath(projectId)}/spend`);
+  askHub(
+    hubRequest("GET /api/projects/:id/spend", { path: { id: projectId } })
+  );
 
 /** Sets what an attempt at the project's tasks may spend; null clears it. */
 /**
@@ -7248,20 +7282,30 @@ export const setProjectCap = (
     usd: number | null;
   }
 ): Promise<{ cap: ProjectCap | null }> =>
-  askHub(`${projectPath(projectId)}/cap`, json("PUT", change));
+  askHub(
+    hubRequest("PUT /api/projects/:id/cap", {
+      path: { id: projectId },
+      body: change,
+    })
+  );
 
 /** What reaching a project's cap does where the project sets nothing. */
 export const spendSettings = (): Promise<{ onCap: OnCap }> =>
-  askHub("/api/spend-settings");
+  askHub(hubRequest("GET /api/spend-settings"));
 
 export const setSpendSettings = (onCap: OnCap): Promise<{ onCap: OnCap }> =>
-  askHub("/api/spend-settings", json("PUT", { onCap }));
+  askHub(hubRequest("PUT /api/spend-settings", { body: { onCap } }));
 
 export const setProjectBudget = (
   projectId: string,
   budget: ProjectSpend["budget"]
 ): Promise<unknown> =>
-  askHub(`${projectPath(projectId)}/dispatch`, json("PATCH", { budget }));
+  askHub(
+    hubRequest("PATCH /api/projects/:id/dispatch", {
+      path: { id: projectId },
+      body: { budget },
+    })
+  );
 
 /**
  * Forgets a project: it waits in the hub's trash to be brought back
@@ -7273,10 +7317,10 @@ export const setProjectBudget = (
  */
 export async function forgetProject(id: string): Promise<void> {
   // Its tab's presence, which the hub's journal names the forget by.
-  const response = await fetch(`/api/projects/${id}`, {
-    method: "DELETE",
-    headers: { [PRESENCE_HEADER]: presenceClientId() },
-  });
+  const response = await hubFetch(
+    hubRequest("DELETE /api/projects/:id", { path: { id } }),
+    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.notForgottenThen);
   }
@@ -7292,14 +7336,13 @@ export async function deleteProjectForGood(
   id: string,
   fromDisk: boolean
 ): Promise<void> {
-  const response = await fetch(`/api/projects/${id}/delete`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      [PRESENCE_HEADER]: presenceClientId(),
-    },
-    body: JSON.stringify({ fromDisk }),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/projects/:id/delete", {
+      path: { id },
+      body: { fromDisk },
+    }),
+    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectEndWords.notDeletedThen);
   }
@@ -7310,7 +7353,7 @@ export class StandingRefusal extends Error {}
 
 /** Every forgotten project the hub can bring back, newest first. */
 export async function readForgottenProjects(): Promise<ForgottenProject[]> {
-  const response = await fetch("/api/projects/forgotten");
+  const response = await hubFetch(hubRequest("GET /api/projects/forgotten"));
   if (!response.ok) {
     throw await hubRefusal(response, projectEndWords.unreadThen);
   }
@@ -7326,14 +7369,10 @@ export async function restoreProject(
   id: string,
   asked: { forgottenAt?: number; name?: string }
 ): Promise<ProjectRestored> {
-  const response = await fetch(`/api/projects/${id}/restore`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      [PRESENCE_HEADER]: presenceClientId(),
-    },
-    body: JSON.stringify(asked),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/projects/:id/restore", { path: { id }, body: asked }),
+    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+  );
   if (!response.ok) {
     const refused = await hubRefusal(
       response,
@@ -7353,7 +7392,7 @@ export async function restoreProject(
 /** Reads the projects again, as the hub has them now. */
 export async function readProjects(): Promise<void> {
   const asked = projectsLeave();
-  const projects = await load<ProjectRow[]>("/api/projects");
+  const projects = await load<ProjectRow[]>(hubRequest("GET /api/projects"));
   if (projects) {
     keepProjects(projects, asked);
   }
@@ -7433,7 +7472,9 @@ export interface RunningSession {
 
 /** A project's running sessions as the hub lists them: what a forget stops first. */
 export async function projectRunning(id: string): Promise<RunningSession[]> {
-  const response = await fetch(`/api/projects/${id}/running`);
+  const response = await hubFetch(
+    hubRequest("GET /api/projects/:id/running", { path: { id } })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.sessionsNotListedThen);
   }
@@ -7479,11 +7520,12 @@ export async function stopProjectSessions(
   id: string,
   instanceIds: string[]
 ): Promise<void> {
-  const response = await fetch(`/api/projects/${id}/stop`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ instanceIds }),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/projects/:id/stop", {
+      path: { id },
+      body: { instanceIds },
+    })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.sessionsNotStoppedThen);
   }
@@ -7495,9 +7537,9 @@ export async function stopProjectSessions(
  * as it is, for the confirm dialog to show under its question.
  */
 export async function removeMachine(machineId: string): Promise<void> {
-  const response = await fetch(`/api/agents/${encodeURIComponent(machineId)}`, {
-    method: "DELETE",
-  });
+  const response = await hubFetch(
+    hubRequest("DELETE /api/agents/:machineId", { path: { machineId } })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, machineWords.notRemovedThen);
   }
@@ -7513,14 +7555,14 @@ export async function pauseMachine(
   machineId: string,
   until: Date | null
 ): Promise<void> {
-  const id = encodeURIComponent(machineId);
-  const response = await fetch(
-    `/api/machines/${id}/${until ? "pause" : "resume"}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(until ? { until: until.toISOString() } : {}),
-    }
+  const path = { machineId };
+  const response = await hubFetch(
+    until
+      ? hubRequest("POST /api/machines/:machineId/pause", {
+          path,
+          body: { until: until.toISOString() },
+        })
+      : hubRequest("POST /api/machines/:machineId/resume", { path })
   );
   if (!response.ok) {
     throw await hubRefusal(response, machineWords.pauseNotChangedThen);
@@ -7570,8 +7612,8 @@ export interface WorkspaceHeld extends WorkspaceHolding {
 export async function workspaceHeld(
   workspaceId: string
 ): Promise<WorkspaceHeld> {
-  const response = await fetch(
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/held`
+  const response = await hubFetch(
+    hubRequest("GET /api/workspaces/:id/held", { path: { id: workspaceId } })
   );
   if (!response.ok) {
     throw await hubRefusal(response, sidebarWords.heldUnreadThen);
@@ -7588,8 +7630,8 @@ export async function workspaceHeld(
 export async function workspaceWaiting(
   workspaceId: string
 ): Promise<{ id: string; title: string }[]> {
-  const response = await fetch(
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/waiting`
+  const response = await hubFetch(
+    hubRequest("GET /api/workspaces/:id/waiting", { path: { id: workspaceId } })
   ).catch(() => null);
   if (!response?.ok) {
     return [];
@@ -7616,13 +7658,11 @@ export async function archiveWorkspace(
     anyway = false,
   }: { discard?: boolean; anyway?: boolean } = {}
 ): Promise<void> {
-  const response = await fetch(
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/archive`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ discard, anyway }),
-    }
+  const response = await hubFetch(
+    hubRequest("POST /api/workspaces/:id/archive", {
+      path: { id: workspaceId },
+      body: { discard, anyway },
+    })
   );
   if (!response.ok) {
     throw await hubRefusal(response, sidebarWords.notArchivedThen);
@@ -7631,9 +7671,8 @@ export async function archiveWorkspace(
 }
 
 export async function removeSession(instanceId: string): Promise<void> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}`,
-    { method: "DELETE" }
+  const response = await hubFetch(
+    hubRequest("DELETE /api/instances/:id", { path: { id: instanceId } })
   );
   if (!response.ok) {
     throw await hubRefusal(response, sidebarWords.sessionNotRemovedThen);
@@ -9198,9 +9237,11 @@ export async function takeOverBrowser(
   browserAsk: BrowserAskFrame
 ): Promise<string | null> {
   try {
-    const response = await fetch(
-      `/api/browsers/${encodeURIComponent(browserAsk.key)}/takeover`,
-      json("POST", { requestId, machineId: browserAsk.machineId })
+    const response = await hubFetch(
+      hubRequest("POST /api/browsers/:key/takeover", {
+        path: { key: browserAsk.key },
+        body: { requestId, machineId: browserAsk.machineId },
+      })
     );
     if (!response.ok) {
       throw await hubRefusal(response);

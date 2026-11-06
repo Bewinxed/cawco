@@ -12,6 +12,7 @@
 
 import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
 import type { ExternalComment, ExternalRef } from "@cawco/core/external-items";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import type { ProjectGate } from "@cawco/core/project-gate";
 import type {
@@ -44,6 +45,7 @@ import type { WorkItemState } from "@cawco/core/work-items";
 import {
   HUB_UNREACHABLE,
   HubUnreachable,
+  hubFetch,
   hubSaid,
   noAnswer,
   unreachedAnswer,
@@ -253,8 +255,11 @@ export interface TaskLinks {
  * wording. A body is parsed only when it says it is JSON: a proxy's or a
  * restarting hub's text answer is never read as data.
  */
-export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, init);
+export async function send<T>(
+  request: HubRequest,
+  init: RequestInit = {}
+): Promise<T> {
+  const response = await hubFetch(request, init);
   if (unreachedAnswer(response)) {
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
@@ -267,23 +272,14 @@ export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-export const json = (method: string, body: unknown): RequestInit => ({
-  method,
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
-
-const base = (projectId: string) =>
-  `/api/projects/${encodeURIComponent(projectId)}`;
-const one = (projectId: string, taskId: string) =>
-  `${base(projectId)}/tasks/${encodeURIComponent(taskId)}`;
-
 export const listTasks = (projectId: string): Promise<TaskList> =>
-  send(`${base(projectId)}/tasks`);
+  send(hubRequest("GET /api/projects/:id/tasks", { path: { id: projectId } }));
 
 /** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's tracker.ts). */
 export const readTracker = (projectId: string): Promise<TrackerView> =>
-  send(`${base(projectId)}/tracker`);
+  send(
+    hubRequest("GET /api/projects/:id/tracker", { path: { id: projectId } })
+  );
 
 /** Binds the project to a connection's repository or team, or `cawco` lets the binding go. */
 export const setTracker = (
@@ -301,11 +297,20 @@ export const setTracker = (
         tracker: IssueTracker;
       }
 ): Promise<TrackerView> =>
-  send(`${base(projectId)}/tracker`, json("PUT", binding));
+  send(
+    hubRequest("PUT /api/projects/:id/tracker", {
+      path: { id: projectId },
+      body: binding,
+    })
+  );
 
 /** The project's tasks and their issues synced now; answers where the binding stands after. */
 export const syncTracker = (projectId: string): Promise<TrackerView> =>
-  send(`${base(projectId)}/tracker/sync`, { method: "POST" });
+  send(
+    hubRequest("POST /api/projects/:id/tracker/sync", {
+      path: { id: projectId },
+    })
+  );
 
 /**
  * The project's GitHub poll run now (the hub's ingress.ts `pollGitHubNow`):
@@ -313,14 +318,22 @@ export const syncTracker = (projectId: string): Promise<TrackerView> =>
  * read failed among them.
  */
 export const pollGitHub = async (projectId: string): Promise<void> => {
-  await send(`${base(projectId)}/ingress/github/poll`, { method: "POST" });
+  await send(
+    hubRequest("POST /api/projects/:id/ingress/github/poll", {
+      path: { id: projectId },
+    })
+  );
 };
 
 /** The repositories or teams a connection reaches, for a project to be bound to one. */
 export const trackerTargets = (
   connection: string
 ): Promise<{ targets: TrackerTarget[] }> =>
-  send(`/api/connections/${encodeURIComponent(connection)}/targets`);
+  send(
+    hubRequest("GET /api/connections/:name/targets", {
+      path: { name: connection },
+    })
+  );
 
 /** The GitHub Projects a connection reaches for a repository, or GitHub's words when it may not read them. */
 export const githubProjects = (
@@ -328,12 +341,20 @@ export const githubProjects = (
   repo: string
 ): Promise<GithubProjectsView> =>
   send(
-    `/api/connections/${encodeURIComponent(connection)}/github-projects?repo=${encodeURIComponent(repo)}`
+    hubRequest("GET /api/connections/:name/github-projects", {
+      path: { name: connection },
+      query: { repo },
+    })
   );
 
 /** The project's archived tasks, instead of the board's. */
 export const listArchived = (projectId: string): Promise<TaskList> =>
-  send(`${base(projectId)}/tasks?archived=1`);
+  send(
+    hubRequest("GET /api/projects/:id/tasks", {
+      path: { id: projectId },
+      query: { archived: "1" },
+    })
+  );
 
 /**
  * The tasks whose id, title or description hold `words`, as the hub's list
@@ -345,49 +366,81 @@ export const findTasks = (
   archived = false
 ): Promise<TaskList> =>
   send(
-    `${base(projectId)}/tasks?${new URLSearchParams({
-      q: words,
-      ...(archived ? { archived: "1" } : {}),
-    })}`
+    hubRequest("GET /api/projects/:id/tasks", {
+      path: { id: projectId },
+      query: {
+        q: words,
+        ...(archived ? { archived: "1" } : {}),
+      },
+    })
   );
 
 /** The project's tasks the hub says wait on you (`needsYou`): Caw's Needs you lists them. */
 export const listTasksWaiting = async (
   projectId: string
 ): Promise<TaskSummary[]> =>
-  (await send<TaskList>(`${base(projectId)}/tasks?needsYou=1`)).tasks;
+  (
+    await send<TaskList>(
+      hubRequest("GET /api/projects/:id/tasks", {
+        path: { id: projectId },
+        query: { needsYou: "1" },
+      })
+    )
+  ).tasks;
 
 export const readStages = (projectId: string): Promise<StagesView> =>
-  send(`${base(projectId)}/stages`);
+  send(hubRequest("GET /api/projects/:id/stages", { path: { id: projectId } }));
 
 /** The project's merge checks as the hub reads its gate.md now (hub gate-file.ts `gateRoutes`). */
 export const readGate = (
   projectId: string
 ): Promise<{ file: string; gate: ProjectGate }> =>
-  send(`${base(projectId)}/gate`);
+  send(hubRequest("GET /api/projects/:id/gate", { path: { id: projectId } }));
 
 /** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
 export const tellStarterOutcome = (
   projectId: string,
   pressed: { outcome: "picked" | "edited"; place: StarterPlace; text: string }
 ): Promise<{ ok: true }> =>
-  send(`${base(projectId)}/starters/outcome`, json("POST", pressed));
+  send(
+    hubRequest("POST /api/projects/:id/starters/outcome", {
+      path: { id: projectId },
+      body: pressed,
+    })
+  );
 
 export const readTask = (
   projectId: string,
   taskId: string
-): Promise<TaskView> => send(one(projectId, taskId));
+): Promise<TaskView> =>
+  send(
+    hubRequest("GET /api/projects/:id/tasks/:taskId", {
+      path: { id: projectId, taskId },
+    })
+  );
 
 export const createTask = (
   projectId: string,
   draft: { title: string; stage?: string }
-): Promise<TaskView> => send(`${base(projectId)}/tasks`, json("POST", draft));
+): Promise<TaskView> =>
+  send(
+    hubRequest("POST /api/projects/:id/tasks", {
+      path: { id: projectId },
+      body: draft,
+    })
+  );
 
 export const updateTask = (
   projectId: string,
   taskId: string,
   patch: TaskPatch
-): Promise<TaskView> => send(one(projectId, taskId), json("PATCH", patch));
+): Promise<TaskView> =>
+  send(
+    hubRequest("PATCH /api/projects/:id/tasks/:taskId", {
+      path: { id: projectId, taskId },
+      body: patch,
+    })
+  );
 
 /** Moves a task; `reason`, a close reason, is kept in the move's commit and its history. */
 export const moveTask = (
@@ -397,8 +450,10 @@ export const moveTask = (
   reason?: string
 ): Promise<TaskView> =>
   send(
-    `${one(projectId, taskId)}/stage`,
-    json("POST", reason ? { stage, reason } : { stage })
+    hubRequest("POST /api/projects/:id/tasks/:taskId/stage", {
+      path: { id: projectId, taskId },
+      body: reason ? { stage, reason } : { stage },
+    })
   );
 
 /** Moves a task's file into tasks/archive/ in one commit; the hub refuses while an attempt at it is live. */
@@ -406,20 +461,35 @@ export const archiveTask = (
   projectId: string,
   taskId: string
 ): Promise<TaskView> =>
-  send(`${one(projectId, taskId)}/archive`, json("POST", {}));
+  send(
+    hubRequest("POST /api/projects/:id/tasks/:taskId/archive", {
+      path: { id: projectId, taskId },
+      body: {},
+    })
+  );
 
 export const linkTask = (
   projectId: string,
   taskId: string,
   link: TaskLinks
 ): Promise<TaskView> =>
-  send(`${one(projectId, taskId)}/links`, json("POST", link));
+  send(
+    hubRequest("POST /api/projects/:id/tasks/:taskId/links", {
+      path: { id: projectId, taskId },
+      body: link,
+    })
+  );
 
 /** Every commit to the task's file, oldest first. */
 export const readHistory = (
   projectId: string,
   taskId: string
-): Promise<TaskHistory> => send(`${one(projectId, taskId)}/history`);
+): Promise<TaskHistory> =>
+  send(
+    hubRequest("GET /api/projects/:id/tasks/:taskId/history", {
+      path: { id: projectId, taskId },
+    })
+  );
 
 /**
  * A comment, written by the hub into the task's `## Comments` as yours.
@@ -432,14 +502,24 @@ export const addComment = (
   text: string,
   id: string
 ): Promise<TaskView> =>
-  send(`${one(projectId, taskId)}/comments`, json("POST", { text, id }));
+  send(
+    hubRequest("POST /api/projects/:id/tasks/:taskId/comments", {
+      path: { id: projectId, taskId },
+      body: { text, id },
+    })
+  );
 
 export const addTodo = (
   projectId: string,
   taskId: string,
   todo: { text: string; under?: string }
 ): Promise<TaskView> =>
-  send(`${one(projectId, taskId)}/todos`, json("POST", todo));
+  send(
+    hubRequest("POST /api/projects/:id/tasks/:taskId/todos", {
+      path: { id: projectId, taskId },
+      body: todo,
+    })
+  );
 
 /** Ticks, unticks or rewords one to-do, named by id (`td-3`) or position (`2.1`). */
 export const changeTodo = (
@@ -449,8 +529,10 @@ export const changeTodo = (
   change: { done?: boolean; text?: string }
 ): Promise<TaskView> =>
   send(
-    `${one(projectId, taskId)}/todos/${encodeURIComponent(todo)}`,
-    json("PATCH", change)
+    hubRequest("PATCH /api/projects/:id/tasks/:taskId/todos/:todo", {
+      path: { id: projectId, taskId, todo },
+      body: change,
+    })
   );
 
 /**
@@ -464,13 +546,18 @@ export const retryTask = (
   parentInstanceId?: string
 ): Promise<AttemptStart> =>
   send(
-    `${one(projectId, taskId)}/retry`,
-    json("POST", parentInstanceId ? { parentInstanceId } : {})
+    hubRequest("POST /api/projects/:id/tasks/:taskId/retry", {
+      path: { id: projectId, taskId },
+      body: parentInstanceId ? { parentInstanceId } : {},
+    })
   );
 
 /** A file of the project's folder as its bytes, for an image, video or audio output. */
 export const folderRawHref = (projectId: string, path: string): string =>
-  `${base(projectId)}/folder/raw?${new URLSearchParams({ path })}`;
+  hubRequest("GET /api/projects/:id/folder/raw", {
+    path: { id: projectId },
+    query: { path },
+  }).path;
 
 /**
  * A file of the project's folder as the project page shows it (`?file=`,
@@ -572,7 +659,10 @@ export const outputUrl = (
   taskId: string,
   name: string
 ): string =>
-  `${one(projectId, taskId)}/outputs/file?name=${encodeURIComponent(name)}`;
+  hubRequest("GET /api/projects/:id/tasks/:taskId/outputs/file", {
+    path: { id: projectId, taskId },
+    query: { name },
+  }).path;
 
 /**
  * An output's words, whole, as the hub served them from `src` (a task's

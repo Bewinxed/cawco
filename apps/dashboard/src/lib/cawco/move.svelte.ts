@@ -6,9 +6,11 @@
  * it, and asks the hub to stop or retry it. What a job is doing reaches
  * every screen on the `moves` frame (`cawco.moves`).
  */
+
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core/move";
 import { cawco, heardMove } from "./client.svelte";
-import { hubRefusal } from "./hub-read";
+import { hubFetch, hubRefusal } from "./hub-read";
 
 /** The hub's refusal, in its one sentence (hub-read `hubRefusal`). */
 const refusal = (response: Response): Promise<Error> => hubRefusal(response);
@@ -24,13 +26,15 @@ export async function moveEstimate(
   asked: { from: string; path?: string | undefined },
   signal?: AbortSignal
 ): Promise<MoveEstimate> {
-  const query = new URLSearchParams({
-    machine: machineId,
-    from: asked.from,
-    ...(asked.path ? { path: asked.path } : {}),
-  });
-  const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/move-estimate?${query}`,
+  const response = await hubFetch(
+    hubRequest("GET /api/projects/:id/move-estimate", {
+      path: { id: projectId },
+      query: {
+        machine: machineId,
+        from: asked.from,
+        ...(asked.path ? { path: asked.path } : {}),
+      },
+    }),
     { signal }
   );
   if (!response.ok) {
@@ -44,13 +48,11 @@ export async function startMove(
   projectId: string,
   request: MoveRequest
 ): Promise<MoveJob> {
-  const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/moves`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(request),
-    }
+  const response = await hubFetch(
+    hubRequest("POST /api/projects/:id/moves", {
+      path: { id: projectId },
+      body: request,
+    })
   );
   if (!response.ok) {
     throw await refusal(response);
@@ -63,23 +65,16 @@ export async function startMove(
  * (`kept`). From any stage, failed included, every screen reads it stopped
  * from the hub's answer on, not from its next frame.
  */
-export async function cancelMove(id: string): Promise<MoveJob> {
-  const response = await fetch(`/api/moves/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw await refusal(response);
-  }
-  const job = (await response.json()) as MoveJob;
-  heardMove(job);
-  return job;
-}
+export const cancelMove = (id: string): Promise<MoveJob> =>
+  moveAct(hubRequest("DELETE /api/moves/:id", { path: { id } }));
 
 /** Retry: a failed job runs the step it failed at again, and on from there. */
-export async function retryMove(id: string): Promise<MoveJob> {
-  const response = await fetch(`/api/moves/${encodeURIComponent(id)}/retry`, {
-    method: "POST",
-  });
+export const retryMove = (id: string): Promise<MoveJob> =>
+  moveAct(hubRequest("POST /api/moves/:id/retry", { path: { id } }));
+
+/** One act on a job: the job as the hub answers it, heard at once. */
+async function moveAct(request: HubRequest): Promise<MoveJob> {
+  const response = await hubFetch(request);
   if (!response.ok) {
     throw await refusal(response);
   }

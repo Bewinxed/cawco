@@ -9,7 +9,7 @@ import { version } from "$app/env";
 
 export const init: ClientInit = () => {
   holdReadsWhileLeaving();
-  reportErrorsTo("/api/dashboard-errors", version);
+  reportErrorsTo("dashboard", version);
 };
 
 /**

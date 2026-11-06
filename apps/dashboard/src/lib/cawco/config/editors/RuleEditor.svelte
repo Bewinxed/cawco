@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HarnessKind } from "@cawco/core/harness";
   import { HARNESSES } from "@cawco/core/harness";
+  import { hubRequest } from "@cawco/core/hub-request";
   import type {
     RuleDraft,
     RuleMatchKind,
@@ -12,6 +13,7 @@
   import { commonWords } from "@cawco/core/words/common";
   import { rulesWords } from "@cawco/core/words/rules";
   import { onMount, untrack } from "svelte";
+  import { hubFetch } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
     crossOut,
@@ -77,7 +79,7 @@
   let jevOn = $state(true);
 
   onMount(() => {
-    fetch("/api/jev")
+    hubFetch(hubRequest("GET /api/jev"))
       .then(async (response) => {
         jevOn = response.ok
           ? ((await response.json()) as JevState).route !== null

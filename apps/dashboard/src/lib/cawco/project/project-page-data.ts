@@ -1,3 +1,4 @@
+import { hubRequest } from "@cawco/core/hub-request";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import {
   failureSentence,
@@ -69,21 +70,30 @@ export async function readProjectPage(
   projectId: string,
   search: URLSearchParams
 ): Promise<ProjectPageData | ProjectPageRefusal> {
-  const base = `/api/projects/${encodeURIComponent(projectId)}`;
+  const path = { id: projectId };
   // The filter's words are the hub's to match (task-find.svelte.ts): a link
   // that carries them opens on what the hub found, live and archived.
   const words = wordsOf(search.get("q") ?? "");
   const finding = (archived: boolean) =>
     readHub<TaskList>(
       fetch,
-      `${base}/tasks?${new URLSearchParams({ q: words, ...(archived ? { archived: "1" } : {}) })}`
+      hubRequest("GET /api/projects/:id/tasks", {
+        path,
+        query: { q: words, ...(archived ? { archived: "1" } : {}) },
+      })
     );
   const [projects, machines, tasks, stages, found, foundArchived] =
     await Promise.all([
-      readHub<ProjectRow[]>(fetch, "/api/projects"),
-      readHub<Machine[]>(fetch, "/api/agents"),
-      readHub<TaskList>(fetch, `${base}/tasks`),
-      readHub<StagesView>(fetch, `${base}/stages`),
+      readHub<ProjectRow[]>(fetch, hubRequest("GET /api/projects")),
+      readHub<Machine[]>(fetch, hubRequest("GET /api/agents")),
+      readHub<TaskList>(
+        fetch,
+        hubRequest("GET /api/projects/:id/tasks", { path })
+      ),
+      readHub<StagesView>(
+        fetch,
+        hubRequest("GET /api/projects/:id/stages", { path })
+      ),
       words ? finding(false) : null,
       words ? finding(true) : null,
     ]);

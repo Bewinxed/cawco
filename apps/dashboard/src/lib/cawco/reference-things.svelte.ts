@@ -10,11 +10,14 @@
  * says its project's tasks moved. A thing the hub holds no longer is null,
  * and its chip is its label alone (the registry's rule).
  */
+
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { SessionPlan } from "@cawco/core/plan";
 import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
+import { hubFetch } from "#lib/cawco/hub-read.js";
 import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
@@ -77,7 +80,9 @@ const taskOf = (project: string, task: string): TaskView | null | undefined => {
 const planOf = (session: string): SessionPlan | null | undefined =>
   cawco.planOf(session) ??
   askOnce(`plan:${session}`, () =>
-    readJson<SessionPlan>(`/api/instances/${encodeURIComponent(session)}/plan`)
+    readJson<SessionPlan>(
+      hubRequest("GET /api/instances/:id/plan", { path: { id: session } })
+    )
   );
 
 const STEP_WORDS: Record<string, string> = {
@@ -101,13 +106,16 @@ const planName = (plan: SessionPlan): string => {
 /** A markdown heading's marks. */
 const HEADING = /^#+\s*/u;
 
-/** A hub read of `path` as JSON; its status on a refusal, so a 4xx keeps "none". */
-async function readJson<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+/** A hub read as JSON; its status on a refusal, so a 4xx keeps "none". */
+async function readJson<T>(request: HubRequest): Promise<T> {
+  const response = await hubFetch(request);
   if (!response.ok) {
-    throw Object.assign(new Error(`${path} answered ${response.status}`), {
-      status: response.status,
-    });
+    throw Object.assign(
+      new Error(`${request.path} answered ${response.status}`),
+      {
+        status: response.status,
+      }
+    );
   }
   return (await response.json()) as T;
 }
@@ -221,7 +229,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
   },
   routine: (id) => {
     const routine = askOnce(`routine:${id}`, () =>
-      readJson<Routine>(`/api/routines/${encodeURIComponent(id)}`)
+      readJson<Routine>(hubRequest("GET /api/routines/:id", { path: { id } }))
     );
     if (!routine) {
       return routine;

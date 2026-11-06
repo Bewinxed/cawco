@@ -13,6 +13,7 @@ import type {
   SlashCommand,
   SupportedCommands,
 } from "@cawco/core/harness";
+import { hubRequest } from "@cawco/core/hub-request";
 import { hubCall } from "#lib/cawco/hub-read.js";
 
 /**
@@ -143,16 +144,16 @@ export const folderCommands = async (ask: {
   machineId: string;
   model: string;
 }): Promise<AvailableCommand[]> => {
-  const query = new URLSearchParams({ harness: ask.harness, cwd: ask.cwd });
-  if (ask.account) {
-    query.set("account", ask.account);
-  }
-  if (ask.model) {
-    query.set("model", ask.model);
-  }
   const answer = await hubCall<SupportedCommands>(
-    `/api/agents/${encodeURIComponent(ask.machineId)}/commands?${query}`,
-    {},
+    hubRequest("GET /api/agents/:machineId/commands", {
+      path: { machineId: ask.machineId },
+      query: {
+        harness: ask.harness,
+        cwd: ask.cwd,
+        ...(ask.account ? { account: ask.account } : {}),
+        ...(ask.model ? { model: ask.model } : {}),
+      },
+    }),
     `list the commands of ${ask.cwd}`
   );
   return availableCommands({ at: 0, skills: [], ...answeredCommands(answer) });

@@ -1,5 +1,6 @@
 import type { Deleted } from "@cawco/core/fleet";
-import { failureClause, hubRefusal } from "../hub-read";
+import { hubRequest } from "@cawco/core/hub-request";
+import { failureClause, hubFetch, hubRefusal } from "../hub-read";
 import { refusals } from "../refusals.svelte";
 
 /**
@@ -31,9 +32,9 @@ const landings = new Map<string, (row: unknown) => void>();
 
 /** Asks the hub's trash to put the item back, answering its row. */
 async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
-  const response = await fetch(`/api/trash/${deleted.restore}/restore`, {
-    method: "POST",
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/trash/:id/restore", { path: { id: deleted.restore } })
+  );
   if (!response.ok) {
     // The hub says why in a sentence: its window ran out, or its name is taken.
     throw await hubRefusal(response);

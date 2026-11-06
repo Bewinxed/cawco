@@ -4,7 +4,8 @@ import type {
   HookDraft,
   HookVersion as KeptHookVersion,
 } from "@cawco/core/hooks";
-import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
+import { hubRequest } from "@cawco/core/hub-request";
+import { hubCall } from "#lib/cawco/hub-read.js";
 import type { Machine } from "./client.svelte";
 
 /**
@@ -42,10 +43,9 @@ export const hooksOf = (machine: Machine): HookFleetReport | undefined =>
  *  the stored value. */
 export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
   hubCall<FleetHook>(
-    `/api/fleet/hooks/${encodeURIComponent(id)}`,
-    {
-      method: "PUT",
-      ...jsonBody({
+    hubRequest("PUT /api/fleet/hooks/:id", {
+      path: { id },
+      body: {
         name: draft.name,
         enabled: draft.enabled,
         event: draft.event,
@@ -54,16 +54,15 @@ export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
         script: draft.script ?? null,
         scope: draft.scope ?? null,
         projectId: draft.projectId ?? null,
-      }),
-    },
+      },
+    }),
     `save ${draft.name || "the hook"}`
   );
 
 /** Deletes a hook everywhere, into the hub's trash for its Undo (config/undo.ts). */
 export const removeHook = (id: string, name: string): Promise<Deleted> =>
   hubCall<Deleted>(
-    `/api/fleet/hooks/${encodeURIComponent(id)}`,
-    { method: "DELETE" },
+    hubRequest("DELETE /api/fleet/hooks/:id", { path: { id } }),
     `delete ${name}`
   );
 
@@ -71,8 +70,7 @@ export const removeHook = (id: string, name: string): Promise<Deleted> =>
  *  save or delete over one that already existed. */
 export const loadHookVersions = (hookId: string): Promise<HookVersion[]> =>
   hubCall<HookVersion[]>(
-    `/api/fleet/hooks/history?hookId=${encodeURIComponent(hookId)}`,
-    {},
+    hubRequest("GET /api/fleet/hooks/history", { query: { hookId } }),
     "load this hook’s history"
   );
 
@@ -80,8 +78,7 @@ export const loadHookVersions = (hookId: string): Promise<HookVersion[]> =>
  *  so restoring keeps what it replaces, same as any other edit. */
 export const restoreHookVersion = (versionId: number): Promise<FleetHook> =>
   hubCall<FleetHook>(
-    "/api/fleet/hooks/restore",
-    { method: "POST", ...jsonBody({ id: versionId }) },
+    hubRequest("POST /api/fleet/hooks/restore", { body: { id: versionId } }),
     "restore that version"
   );
 

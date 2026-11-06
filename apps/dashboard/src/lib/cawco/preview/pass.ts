@@ -23,8 +23,9 @@ import {
   type PreviewTicket,
   previewEnterUrl,
 } from "@cawco/core/frames";
+import { hubRequest } from "@cawco/core/hub-request";
 import { previewWords } from "@cawco/core/words/preview";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 
 /**
  * Whether `origin` is an origin's own port: the dashboard's own host (core
@@ -64,7 +65,7 @@ const entries = new Map<string, Entry>();
 
 /** A ticket from the hub, spent on `origin`: null once spent, else why not. */
 async function enter(origin: string): Promise<string | null> {
-  const answer = await fetch("/api/preview-ticket", { method: "POST" }).catch(
+  const answer = await hubFetch(hubRequest("POST /api/preview-ticket")).catch(
     () => null
   );
   if (!answer?.ok) {

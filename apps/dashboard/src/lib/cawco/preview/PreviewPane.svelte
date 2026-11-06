@@ -20,6 +20,7 @@
     previewRoute,
     projectPagePlace,
   } from "@cawco/core/frames";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { machineLabel } from "@cawco/core/machine-names";
   import { pinName } from "@cawco/core/pin-name";
   import {
@@ -67,7 +68,11 @@
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { z } from "zod";
-  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    failureClause,
+    failureWords,
+    hubFetch,
+  } from "#lib/cawco/hub-read.js";
   import {
     ComposeTargetSchema,
     ThreadEntrySchema,
@@ -637,7 +642,7 @@
     if (byHost) {
       return previewsNeedWords({ byHost: true, host: new URL(origin).host });
     }
-    portsRead ??= fetch("/api/preview-settings")
+    portsRead ??= hubFetch(hubRequest("GET /api/preview-settings"))
       .then((answer) =>
         answer.ok ? (answer.json() as Promise<PreviewSettings>) : null
       )

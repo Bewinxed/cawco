@@ -22,9 +22,10 @@ import type {
   PairingStart,
   WaitingMachine,
 } from "@cawco/core/hub-auth";
+import { hubRequest } from "@cawco/core/hub-request";
 import { KeptPairingSchema } from "#lib/cawco/stored-shapes.js";
 import { heardFrame, heardSince, readLeaves } from "./heard";
-import { failureWords, hubRefusal } from "./hub-read";
+import { failureWords, hubFetch, hubRefusal } from "./hub-read";
 import { leaveThePage } from "./leaving";
 import { readJson, unstore, writeJson } from "./storage";
 
@@ -93,7 +94,7 @@ export function readAuth(): Promise<void> {
   reading ??= (async () => {
     try {
       const mark = readLeaves();
-      const response = await fetch("/api/auth");
+      const response = await hubFetch(hubRequest("GET /api/auth"));
       if (response.ok) {
         takeAuth((await response.json()) as HubAuthState, mark);
       }
@@ -168,11 +169,9 @@ export async function startPairing(): Promise<void> {
   stageTo({ kind: "asking" });
   let started: PairingStart;
   try {
-    const response = await fetch("/api/pair", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "browser" }),
-    });
+    const response = await hubFetch(
+      hubRequest("POST /api/pair", { body: { kind: "browser" } })
+    );
     if (!response.ok) {
       throw await hubRefusal(response);
     }
@@ -200,11 +199,9 @@ function pollFor(deviceCode: string, every: number): void {
   const poll = async () => {
     let answer: PairingPoll;
     try {
-      const response = await fetch("/api/pair/poll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceCode }),
-      });
+      const response = await hubFetch(
+        hubRequest("POST /api/pair/poll", { body: { deviceCode } })
+      );
       answer = (await response.json()) as PairingPoll;
     } catch {
       // A poll that did not reach the hub: the next one asks again.
@@ -245,18 +242,30 @@ async function said(response: Promise<Response>): Promise<void> {
   }
 }
 
-const post = (path: string) => said(fetch(path, { method: "POST" }));
-
 /** The person's answer to another device's pairing, by the code it shows. */
 export const answerPairing = (userCode: string, approve: boolean) =>
-  post(
-    `/api/pair/requests/${encodeURIComponent(userCode)}/${approve ? "approve" : "deny"}`
+  said(
+    hubFetch(
+      hubRequest(
+        approve
+          ? "POST /api/pair/requests/:userCode/approve"
+          : "POST /api/pair/requests/:userCode/deny",
+        { path: { userCode } }
+      )
+    )
   );
 
 /** The person's answer to a machine waiting to be admitted. */
 export const answerMachine = (machineId: string, admit: boolean) =>
-  post(
-    `/api/machines/waiting/${encodeURIComponent(machineId)}/${admit ? "admit" : "refuse"}`
+  said(
+    hubFetch(
+      hubRequest(
+        admit
+          ? "POST /api/machines/waiting/:machineId/admit"
+          : "POST /api/machines/waiting/:machineId/refuse",
+        { path: { machineId } }
+      )
+    )
   );
 
 /**
@@ -266,11 +275,11 @@ export const answerMachine = (machineId: string, admit: boolean) =>
  */
 export async function setPairingRequired(required: boolean): Promise<void> {
   await said(
-    fetch("/api/auth/pairing", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ required, kind: "browser" }),
-    })
+    hubFetch(
+      hubRequest("PUT /api/auth/pairing", {
+        body: { required, kind: "browser" },
+      })
+    )
   );
   await readAuth();
 }

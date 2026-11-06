@@ -946,6 +946,10 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           artifact: t.String(),
           scheme: t.Union([t.Literal("light"), t.Literal("dark")]),
         }),
+        // When the picture was drawn, which names the address so a browser
+        // reads a new one afresh (dashboard artifact-api.ts `thumbnailUrl`);
+        // the file served is the latest either way.
+        query: t.Object({ at: t.Optional(t.String()) }),
       },
       ({ params }) => {
         try {

@@ -30,6 +30,7 @@ import {
   tendDeviceDocs,
   watchSilence,
 } from "@cawco/core/doc-link";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { StageState, StageUnreached } from "@cawco/core/stage";
 import {
   keepTuned,
@@ -42,7 +43,7 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { openPageWrites } from "./open-pages";
 
 /**
@@ -215,13 +216,11 @@ async function postSend(
   body: Pick<SendBody, "again" | "control" | "pins" | "writes">,
   again: string
 ): Promise<void> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/artifacts/${encodeURIComponent(artifactId)}/send`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }
+  const response = await hubFetch(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/send", {
+      path: { id: instanceId, artifact: artifactId },
+      body,
+    })
   );
   if (!response.ok) {
     throw await hubRefusal(response, again);

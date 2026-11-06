@@ -11,6 +11,8 @@
  * place, with nothing animated for it.
  */
 import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
+import { hubRequest } from "@cawco/core/hub-request";
+import { hubFetch } from "#lib/cawco/hub-read.js";
 import { cawco, followAccounts } from "../client.svelte";
 import { devDebug } from "../dev-debug";
 import { speakingReading } from "../usage";
@@ -31,7 +33,11 @@ const state = $state({
 
 async function readForecast(): Promise<void> {
   try {
-    const response = await fetch("/api/accounts/forecast?provider=anthropic");
+    const response = await hubFetch(
+      hubRequest("GET /api/accounts/forecast", {
+        query: { provider: "anthropic" },
+      })
+    );
     if (!response.ok) {
       return;
     }

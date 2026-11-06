@@ -32,12 +32,15 @@
  * (person.svelte.ts shows them). The tab beats every {@link PRESENCE_BEAT_MS}
  * while it is open, and at once on a change.
  */
+
+import { hubRequest } from "@cawco/core/hub-request";
 import {
   AWAY_AFTER_DEFAULT_MS,
   type MachineState,
   PRESENCE_BEAT_MS,
   type PresenceBeat,
 } from "@cawco/core/notifications";
+import { hubFetch } from "#lib/cawco/hub-read.js";
 import { newId } from "#lib/cawco/id.js";
 import { store, stored } from "#lib/cawco/storage.js";
 import { lastInputAt, onInput } from "./reload.svelte";
@@ -161,21 +164,16 @@ const handheld = (): boolean =>
   matchMedia("(pointer: coarse) and (hover: none)").matches;
 
 const post = (beat: PresenceBeat, leaving: boolean): void => {
-  const body = JSON.stringify(beat);
+  const request = hubRequest("POST /api/presence", { body: beat });
   if (leaving) {
     // The page is going: only a beacon is sure to leave with it.
     navigator.sendBeacon(
-      "/api/presence",
-      new Blob([body], { type: "application/json" })
+      request.path,
+      new Blob([request.body ?? ""], { type: "application/json" })
     );
     return;
   }
-  fetch("/api/presence", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    keepalive: true,
-  }).catch((error: unknown) => {
+  hubFetch(request, { keepalive: true }).catch((error: unknown) => {
     // The next change or beat says it again.
     console.warn("[cawco] presence not sent:", error);
   });

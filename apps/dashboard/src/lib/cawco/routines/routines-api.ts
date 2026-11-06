@@ -8,10 +8,11 @@
  */
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type { ConnectionView } from "@cawco/core/connections";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
-import { json, send } from "#lib/cawco/project-tasks.js";
+import { send } from "#lib/cawco/project-tasks.js";
 
 /** One run, as the hub answers it (times in ms). */
 export type RoutineRun = RoutineRunView;
@@ -101,22 +102,25 @@ interface IngressRead {
   routes: Omit<EventRoute, "service">[];
 }
 
-const project = (projectId: string) =>
-  `/api/projects/${encodeURIComponent(projectId)}`;
-const routinePath = (routineId: string) =>
-  `/api/routines/${encodeURIComponent(routineId)}`;
-
 /** The project's routines page, each part read at once. */
 export async function readRoutinesPage(
   projectId: string
 ): Promise<RoutinesPage> {
   const id = encodeURIComponent(projectId);
   const [routines, ingress, relays, actions, connections] = await Promise.all([
-    send<Routine[]>(`/api/routines?projectId=${id}`),
-    send<IngressRead>(`${project(projectId)}/ingress`),
-    send<RelayView[]>(`${project(projectId)}/relays`),
-    send<{ actions: ApprovedActionView[] }>(`/api/actions?projectId=${id}`),
-    send<{ connections: ConnectionView[] }>("/api/connections"),
+    send<Routine[]>(
+      hubRequest("GET /api/routines", { query: { projectId: id } })
+    ),
+    send<IngressRead>(
+      hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } })
+    ),
+    send<RelayView[]>(
+      hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } })
+    ),
+    send<{ actions: ApprovedActionView[] }>(
+      hubRequest("GET /api/actions", { query: { projectId: id } })
+    ),
+    send<{ connections: ConnectionView[] }>(hubRequest("GET /api/connections")),
   ]);
   /** Each connection by its name: what polls and `conn:` sources name it by. */
   const connectionOf = new Map(
@@ -205,24 +209,29 @@ export interface RoutineFormHub {
 export const routineFormHub: RoutineFormHub = {
   create: (projectId, draft) =>
     send(
-      "/api/routines",
-      json("POST", {
-        projectId,
-        target: draft.target,
-        name: draft.name.trim(),
-        prompt: draft.prompt.trim(),
-        cron: draft.cron.trim(),
-        timeZone: draft.timeZone,
-        delegateType: draft.delegateType,
+      hubRequest("POST /api/routines", {
+        body: {
+          projectId,
+          target: draft.target,
+          name: draft.name.trim(),
+          prompt: draft.prompt.trim(),
+          cron: draft.cron.trim(),
+          timeZone: draft.timeZone,
+          delegateType: draft.delegateType,
+        },
       })
     ),
   preview: (cron, timeZone) =>
     send(
-      `/api/routines/schedule?${new URLSearchParams({ cron: cron.trim(), timeZone })}`
+      hubRequest("GET /api/routines/schedule", {
+        query: { cron: cron.trim(), timeZone },
+      })
     ),
   types: async (projectId) => {
     const catalog = await send<{ types: TypeChoice[] }>(
-      `${project(projectId)}/delegate-types`
+      hubRequest("GET /api/projects/:id/delegate-types", {
+        path: { id: projectId },
+      })
     );
     return catalog.types.map(({ name, description }) => ({
       name,
@@ -235,14 +244,20 @@ export const routineFormHub: RoutineFormHub = {
 export const updateRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
-): Promise<Routine> => send(routinePath(routineId), json("PATCH", change));
+): Promise<Routine> =>
+  send(
+    hubRequest("PATCH /api/routines/:id", {
+      path: { id: routineId },
+      body: change,
+    })
+  );
 
 /** Runs a routine now, beside its schedule: the run the hub started. */
 export const runRoutineNow = (routineId: string): Promise<RoutineRun> =>
-  send(`${routinePath(routineId)}/run`, { method: "POST" });
+  send(hubRequest("POST /api/routines/:id/run", { path: { id: routineId } }));
 
 /** Deletes a routine; its past runs stay in the project's history. */
 export const deleteRoutine = (
   routineId: string
 ): Promise<{ deleted: boolean }> =>
-  send(routinePath(routineId), { method: "DELETE" });
+  send(hubRequest("DELETE /api/routines/:id", { path: { id: routineId } }));

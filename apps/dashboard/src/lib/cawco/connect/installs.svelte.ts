@@ -22,6 +22,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
+import { hubRequest } from "@cawco/core/hub-request";
 import type {
   DraftStamp,
   Install,
@@ -39,7 +40,7 @@ import { MediaQuery } from "svelte/reactivity";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
-import { failureWords, hubRefusal } from "../hub-read";
+import { failureWords, hubFetch, hubRefusal } from "../hub-read";
 
 /** The URL's word for the window: an install's id, or the draft's. */
 export const INSTALL_PARAM = "install";
@@ -224,7 +225,7 @@ class Connect {
   async load(delay = 1000): Promise<void> {
     clearTimeout(this.#readRetry);
     try {
-      const response = await fetch("/api/installs");
+      const response = await hubFetch(hubRequest("GET /api/installs"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -241,7 +242,7 @@ class Connect {
 
   async loadJoin(): Promise<void> {
     try {
-      const response = await fetch("/api/join");
+      const response = await hubFetch(hubRequest("GET /api/join"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -450,10 +451,7 @@ class Connect {
    */
   #send(draft: Partial<DraftFields>): Promise<Response> {
     const edit: InstallDraftEdit = { stamp: this.#stamp(), draft };
-    return fetch("/api/installs/draft", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(edit),
+    return hubFetch(hubRequest("PATCH /api/installs/draft", { body: edit }), {
       keepalive: true,
     });
   }
@@ -488,11 +486,11 @@ class Connect {
   async start(body: InstallStart, hold = 0): Promise<InstallStarted> {
     this.#startingValue = true;
     try {
-      const response = await fetch("/api/installs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...body, stamp: this.#stamp() }),
-      });
+      const response = await hubFetch(
+        hubRequest("POST /api/installs", {
+          body: { ...body, stamp: this.#stamp() },
+        })
+      );
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -529,9 +527,9 @@ class Connect {
   }
 
   async stop(id: string): Promise<void> {
-    const response = await fetch(`/api/installs/${id}/stop`, {
-      method: "POST",
-    });
+    const response = await hubFetch(
+      hubRequest("POST /api/installs/:id/stop", { path: { id } })
+    );
     if (!response.ok) {
       throw await hubRefusal(response);
     }
@@ -540,13 +538,12 @@ class Connect {
 
   async retry(id: string): Promise<void> {
     const install = this.installs.find((one) => one.id === id);
-    const response = await fetch(`/api/installs/${id}/retry`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(
-        install?.signIn === "password" ? { password: this.password } : {}
-      ),
-    });
+    const response = await hubFetch(
+      hubRequest("POST /api/installs/:id/retry", {
+        path: { id },
+        body: install?.signIn === "password" ? { password: this.password } : {},
+      })
+    );
     if (!response.ok) {
       throw await hubRefusal(response);
     }
@@ -561,7 +558,9 @@ class Connect {
 
   /** Remove install, or a joined one's notice dismissed: it leaves the band. */
   async remove(id: string): Promise<void> {
-    const response = await fetch(`/api/installs/${id}`, { method: "DELETE" });
+    const response = await hubFetch(
+      hubRequest("DELETE /api/installs/:id", { path: { id } })
+    );
     if (!response.ok) {
       throw await hubRefusal(response);
     }
@@ -570,7 +569,9 @@ class Connect {
 
   /** The install's whole output, for the output sheet. */
   async outputOf(id: string): Promise<string[]> {
-    const response = await fetch(`/api/installs/${id}/output`);
+    const response = await hubFetch(
+      hubRequest("GET /api/installs/:id/output", { path: { id } })
+    );
     if (!response.ok) {
       throw await hubRefusal(response);
     }

@@ -15,7 +15,8 @@ import type {
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness";
-import { json, send } from "#lib/cawco/project-tasks.js";
+import { hubRequest } from "@cawco/core/hub-request";
+import { send } from "#lib/cawco/project-tasks.js";
 
 /** A harness on an online machine, with its models (hub `HarnessOffer`). */
 interface HarnessOffer {
@@ -38,23 +39,21 @@ export interface ProjectDecides {
   file: string;
 }
 
-const project = (id: string) =>
-  `/api/projects/${encodeURIComponent(id)}/decides`;
-
-export const readFleet = (): Promise<FleetOffer> => send("/api/decides");
+export const readFleet = (): Promise<FleetOffer> =>
+  send(hubRequest("GET /api/decides"));
 
 export const readProject = (id: string): Promise<ProjectDecides> =>
-  send(project(id));
+  send(hubRequest("GET /api/projects/:id/decides", { path: { id } }));
 
 /** The fleet's delegate types: what an agent member runs on. */
 export const readTypes = (): Promise<{ types: DelegateType[] }> =>
-  send("/api/delegate-types");
+  send(hubRequest("GET /api/delegate-types"));
 
 /** The fleet's routes, whole; answers the fleet as the hub then holds it. */
 export const writeFleetRoutes = (
   routes: Record<string, string>
 ): Promise<FleetDecides> =>
-  send("/api/decides/routes", json("PUT", { routes }));
+  send(hubRequest("PUT /api/decides/routes", { body: { routes } }));
 
 /** Sets `routes` over the project's own (null: back to the fleet's), as one commit saying `message`. */
 export const writeProjectRoutes = (
@@ -62,7 +61,12 @@ export const writeProjectRoutes = (
   routes: Record<string, string | null>,
   message: string
 ): Promise<ProjectDecides> =>
-  send(project(id), json("PUT", { routes, message }));
+  send(
+    hubRequest("PUT /api/projects/:id/decides", {
+      path: { id },
+      body: { routes, message },
+    })
+  );
 
 /** An agent member's Runs on and Knows: its fleet delegate type. */
 export interface AgentBody {
@@ -74,8 +78,6 @@ export interface AgentBody {
   skills: string[];
 }
 
-const member = (id: string) => `/api/decides/members/${encodeURIComponent(id)}`;
-
 /** Adds an agent member and its delegate type; answers the member as the hub holds it. */
 export const addMember = (body: {
   agent: AgentBody;
@@ -83,53 +85,64 @@ export const addMember = (body: {
   hue: number;
   job: string;
   name: string;
-}): Promise<Member> => send("/api/decides/members", json("POST", body));
+}): Promise<Member> => send(hubRequest("POST /api/decides/members", { body }));
 
 /** Saves an agent member's settings (the built-ins' too: their type and how he hears). */
 export const saveMember = (
   id: string,
   body: { agent: AgentBody; hear: Hear; hue?: number; job?: string }
-): Promise<Member> => send(member(id), json("PUT", body));
+): Promise<Member> =>
+  send(hubRequest("PUT /api/decides/members/:id", { path: { id }, body }));
 
 /** A flock member's pose, or an added member's identity hue. */
 export const setPicture = (
   id: string,
   picture: { pose: CawPoseId } | { hue: number }
-): Promise<Member> => send(`${member(id)}/picture`, json("PUT", picture));
+): Promise<Member> =>
+  send(
+    hubRequest("PUT /api/decides/members/:id/picture", {
+      path: { id },
+      body: picture,
+    })
+  );
 
 /** Removes a member he added: its kinds come back to him, in the fleet and every project file naming it. */
 export const removeMember = (
   id: string
 ): Promise<{ kindsReturned: string[]; projectsRewritten: string[] }> =>
-  send(member(id), { method: "DELETE" });
-
-const kind = (id: string) => `/api/decides/kinds/${encodeURIComponent(id)}`;
+  send(hubRequest("DELETE /api/decides/members/:id", { path: { id } }));
 
 /** Adds a kind of choice, decided by `to` across the fleet; answers the kind as the hub holds it. */
 export const addKind = (body: {
   example: string;
   name: string;
   to: string;
-}): Promise<Kind> => send("/api/decides/kinds", json("POST", body));
+}): Promise<Kind> => send(hubRequest("POST /api/decides/kinds", { body }));
 
 /** Renames a kind in place, a built-in's too. */
 export const renameKind = (
   id: string,
   body: { example: string; name: string }
-): Promise<Kind> => send(kind(id), json("PUT", body));
+): Promise<Kind> =>
+  send(hubRequest("PUT /api/decides/kinds/:id", { path: { id }, body }));
 
 /** Removes a kind he added; its open cards, on every page, move to `moveTo`. */
 export const removeKind = (
   id: string,
   moveTo: string
 ): Promise<{ moved: number; projects: string[] }> =>
-  send(kind(id), json("DELETE", { moveTo }));
+  send(
+    hubRequest("DELETE /api/decides/kinds/:id", {
+      path: { id },
+      body: { moveTo },
+    })
+  );
 
 /** The open decision cards filed under a kind, and the projects they wait in, by id. */
 export const readWaiting = (
   id: string
 ): Promise<{ count: number; projects: string[] }> =>
-  send(`${kind(id)}/waiting`);
+  send(hubRequest("GET /api/decides/kinds/:id/waiting", { path: { id } }));
 
 /** A member's record (hub `GET /api/decides/members/:id/record`): what it decided, and what waits on it now. */
 export interface MemberRecord {
@@ -152,5 +165,8 @@ export const readRecord = (
   projectId: string | null = null
 ): Promise<MemberRecord> =>
   send(
-    `${member(id)}/record${projectId === null ? "" : `?project=${encodeURIComponent(projectId)}`}`
+    hubRequest("GET /api/decides/members/:id/record", {
+      path: { id },
+      ...(projectId === null ? {} : { query: { project: projectId } }),
+    })
   );

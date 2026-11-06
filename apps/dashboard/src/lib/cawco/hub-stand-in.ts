@@ -8,6 +8,7 @@
  * answered from `answers` by path, and refused for any other path in words
  * that say so.
  */
+import type { HubRequest } from "@cawco/core/hub-request";
 import type { HubState } from "./client.svelte";
 import HubStandIn from "./HubStandIn.svelte";
 import type { HubSeam } from "./hub-seam";
@@ -22,7 +23,7 @@ export const hubAs =
     const seam: HubSeam = {
       state,
       machineOffline: machine.offline,
-      read: <T>(path: string): Promise<T> =>
+      read: <T>({ path }: HubRequest): Promise<T> =>
         path in answers
           ? Promise.resolve(answers[path] as T)
           : Promise.reject(

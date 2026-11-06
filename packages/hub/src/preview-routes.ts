@@ -9,6 +9,7 @@
  */
 import type { PreviewAddress } from "@cawco/core";
 import { PREVIEW_NAMES_PATH, type PreviewNames } from "@cawco/core/browser";
+import { SEND_CONTROLS } from "@cawco/core/comments";
 import { PREVIEW_REACH_API } from "@cawco/core/preview-reach";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
@@ -164,13 +165,37 @@ export const previewRoutes = (deps: {
       })
       // The dashboard's Send of a page's picks (the panel head's, a Needs you
       // row's: `control` names it) from any panel that holds it, sent as the
-      // page's own send would: to the session that holds the page.
+      // page's own send would: to the session that holds the page. Its body
+      // is core `SendBody`'s fields, so one it doesn't take is refused (422)
+      // as on every route; the page's own send's checks then read it as
+      // they read a page's (artifacts/sync.ts `artifactSend`).
       .post(
         "/api/instances/:id/artifacts/:artifact/send",
-        ({ params, request }) => {
+        {
+          body: t.Object({
+            again: t.Optional(t.Array(t.String())),
+            control: t.Optional(
+              t.Union(
+                Object.keys(SEND_CONTROLS).map((control) => t.Literal(control))
+              )
+            ),
+            pins: t.Optional(t.Array(t.String())),
+            text: t.Optional(t.String()),
+            writes: t.Optional(t.String()),
+          }),
+        },
+        ({ params, body, request }) => {
           const owner = deps.listener.ownerOf(params.artifact);
           return owner && deps.panelSees(params.id, params.artifact)
-            ? deps.listener.send(request, owner, params.artifact)
+            ? deps.listener.send(
+                new Request(request.url, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify(body),
+                }),
+                owner,
+                params.artifact
+              )
             : new Response(NO_SUCH_ARTIFACT, { status: 404 });
         }
       )

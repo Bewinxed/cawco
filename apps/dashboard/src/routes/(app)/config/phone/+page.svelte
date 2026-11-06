@@ -1,10 +1,11 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { failureClause, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { failureClause, hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -44,7 +45,7 @@
 
   async function read() {
     try {
-      const response = await fetch("/api/push");
+      const response = await hubFetch(hubRequest("GET /api/push"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -59,7 +60,7 @@
     testing = true;
     deviceError = null;
     outcomes = [];
-    const response = await fetch("/api/push/test", { method: "POST" });
+    const response = await hubFetch(hubRequest("POST /api/push/test"));
     if (response.ok) {
       ({ outcomes } = (await response.json()) as { outcomes: Outcome[] });
       await read();
@@ -71,13 +72,11 @@
 
   async function setQuiet(device: Device, quiet: boolean) {
     deviceError = null;
-    const response = await fetch(
-      `/api/push/devices/${encodeURIComponent(device.id)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quiet }),
-      }
+    const response = await hubFetch(
+      hubRequest("PUT /api/push/devices/:id", {
+        path: { id: device.id },
+        body: { quiet },
+      })
     );
     if (response.ok) {
       device.quiet = quiet;
@@ -88,9 +87,8 @@
 
   async function forget(device: Device) {
     deviceError = null;
-    const response = await fetch(
-      `/api/push/devices/${encodeURIComponent(device.id)}`,
-      { method: "DELETE" }
+    const response = await hubFetch(
+      hubRequest("DELETE /api/push/devices/:id", { path: { id: device.id } })
     );
     if (response.ok) {
       devices = devices.filter((each) => each.id !== device.id);

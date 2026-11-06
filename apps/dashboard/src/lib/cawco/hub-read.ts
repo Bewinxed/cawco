@@ -1,3 +1,4 @@
+import type { HubRequest } from "@cawco/core/hub-request";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { z } from "zod";
 /**
@@ -157,11 +158,11 @@ export async function hubSaid(response: Response): Promise<string> {
  * the hub says the machine it asked is away ({@link awayOf}).
  */
 export async function hubCall<T>(
-  url: string,
-  init: RequestInit,
-  attempt: string
+  request: HubRequest,
+  attempt: string,
+  init?: RequestInit
 ): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await hubFetch(request, init);
   if (!response.ok) {
     throw (await awayOf(response)) ?? (await couldNot(attempt, response));
   }
@@ -183,11 +184,32 @@ export async function couldNot(
   );
 }
 
-/** A request's JSON body and its type, spread into a {@link hubCall}'s init. */
-export const jsonBody = (body: unknown): RequestInit => ({
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
+/**
+ * A hub request sent from this page: `request` as core's door built it
+ * (`hubRequest`, held to what its route takes), with `init`'s own signal,
+ * keepalive or other headers beside it, through `through`: the page's
+ * `fetch`, or a load's own. The one way the dashboard's code sends the hub a
+ * request.
+ */
+export const hubFetch = (
+  request: HubRequest,
+  init: RequestInit = {},
+  through: typeof globalThis.fetch = fetch
+): Promise<Response> => through(request.path, initOf(request, init));
+
+/** `request` as `fetch`'s init, `init`'s own fields beside it. */
+const initOf = (request: HubRequest, init: RequestInit): RequestInit => {
+  const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(request.headers ?? {})) {
+    headers.set(name, value);
+  }
+  return {
+    ...init,
+    method: request.method,
+    headers,
+    ...(request.body === undefined ? {} : { body: request.body }),
+  };
+};
 
 /**
  * A refused read as a clause without its stop: the hub's words with their
@@ -357,13 +379,13 @@ export function failureClause(error: unknown): string {
   return failureWords(error).replace(FINAL_STOP, "");
 }
 
-/** Reads `path` through the given fetch and parses its JSON, or says why not. */
+/** Reads `request` through the given fetch (a load's own) and parses its JSON, or says why not. */
 export async function readHub<T>(
   fetch: typeof globalThis.fetch,
-  path: string,
-  init?: RequestInit
+  request: HubRequest,
+  init: RequestInit = {}
 ): Promise<HubRead<T>> {
-  const response = await fetch(path, init);
+  const response = await fetch(request.path, initOf(request, init));
   if (!response.ok) {
     return { ok: false, ...(await hubFailure(response)) };
   }

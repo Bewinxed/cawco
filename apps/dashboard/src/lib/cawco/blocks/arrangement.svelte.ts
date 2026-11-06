@@ -19,11 +19,9 @@ import {
   type ShownBlockPage,
   viewBlock,
 } from "@cawco/core/blocks";
+import { hubRequest } from "@cawco/core/hub-request";
 import { failureWords } from "../hub-read";
-import { json, send } from "../project-tasks";
-
-const blocksPath = (projectId: string) =>
-  `/api/projects/${encodeURIComponent(projectId)}/blocks`;
+import { send } from "../project-tasks";
 
 export const isBlockPage = (value: string): value is ShownBlockPage =>
   (SHOWN_BLOCK_PAGES as readonly string[]).includes(value);
@@ -49,7 +47,9 @@ export class ProjectBlocks {
     this.#reads += 1;
     const ticket = this.#reads;
     try {
-      const next = await send<BlockArrangement>(blocksPath(id));
+      const next = await send<BlockArrangement>(
+        hubRequest("GET /api/projects/:id/blocks", { path: { id } })
+      );
       if (id === this.#projectId() && ticket === this.#reads) {
         this.arrangement = next;
       }
@@ -89,8 +89,10 @@ export class ProjectBlocks {
     const id = this.#projectId();
     try {
       const next = await send<BlockArrangement>(
-        `${blocksPath(id)}/${page}`,
-        json("PUT", { blocks: places })
+        hubRequest("PUT /api/projects/:id/blocks/:page", {
+          path: { id, page },
+          body: { blocks: places },
+        })
       );
       if (id === this.#projectId()) {
         this.arrangement = next;

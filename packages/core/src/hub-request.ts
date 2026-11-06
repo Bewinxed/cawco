@@ -29,7 +29,7 @@ type HubRoutes = {
     K in keyof Generated as K extends `tool ${string}` ? never : K
   ]: Generated[K];
 };
-type HubRoute = keyof HubRoutes;
+export type HubRoute = keyof HubRoutes;
 
 /** Every CawCo tool a session is listed, by name, and the arguments it takes. */
 export type ToolInputs = {
@@ -38,8 +38,25 @@ export type ToolInputs = {
   ]: Generated[K];
 };
 
+/**
+ * `T` as a caller may send it: every array and field read-only (what is sent
+ * is never written, so a read-only array a caller holds goes as it is), and
+ * a record of anything (`t.Record(t.String(), t.Unknown())`) as any object,
+ * which an interface is too (an interface has no index signature, so it is
+ * no `Record<string, unknown>`).
+ */
+type ReadonlyDeep<T> = T extends readonly (infer I)[]
+  ? readonly ReadonlyDeep<I>[]
+  : T extends object
+    ? string extends keyof T
+      ? unknown extends T[string]
+        ? object
+        : { readonly [K in keyof T]: ReadonlyDeep<T[K]> }
+      : { readonly [K in keyof T]: ReadonlyDeep<T[K]> }
+    : T;
+
 /** What `route` takes. */
-type HubSent<R extends HubRoute> = HubRoutes[R];
+export type HubSent<R extends HubRoute> = ReadonlyDeep<HubRoutes[R]>;
 
 /** The routes that take nothing they need, called with no `sent`. */
 type BareRoute = {
@@ -52,14 +69,16 @@ interface NotTaken {
   readonly [notTaken]: "a field this hub route doesn't take";
 }
 
-/** Whether schema type `S` takes keys it doesn't list: `unknown`, or a record. */
+/** Whether schema type `S` takes keys it doesn't list: `unknown`, any object, or a record. */
 type Open<S> = unknown extends S
   ? true
-  : S extends object
-    ? string extends keyof S
-      ? true
-      : false
-    : false;
+  : [keyof NonNullable<S>, object] extends [never, NonNullable<S>]
+    ? true
+    : S extends object
+      ? string extends keyof S
+        ? true
+        : false
+      : false;
 /** Every key any branch of `S` declares. */
 type KeysOf<S> = S extends unknown ? keyof S : never;
 /** `K`'s type in each branch of `S` that declares it. */

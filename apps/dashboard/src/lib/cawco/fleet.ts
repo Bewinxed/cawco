@@ -35,11 +35,12 @@ import type {
   McpSSEServerConfig,
 } from "@cawco/core/harness";
 import type { FleetHook } from "@cawco/core/hooks";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { FsEntry } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
-import { awayOf, couldNot, hubCall } from "#lib/cawco/hub-read.js";
+import { awayOf, couldNot, hubCall, hubFetch } from "#lib/cawco/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -302,16 +303,8 @@ export function formatBytes(bytes: number): string {
 /** A machine's own words' closing stops, dropped so they sit inside a sentence of ours. */
 const TRAILING_STOPS = /\.+$/u;
 
-const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
-  hubCall<T>(
-    url,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    attempt
-  );
+const put = <T>(request: HubRequest, attempt: string): Promise<T> =>
+  hubCall<T>(request, attempt);
 
 /**
  * A config delete: the hub moves the row into its trash and answers the
@@ -320,24 +313,8 @@ const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
  * `models/claude-opus-5.md`, and a slash in a route parameter is a route
  * somewhere else.
  */
-const erase = (
-  url: string,
-  attempt: string,
-  body?: unknown
-): Promise<Deleted> =>
-  hubCall<Deleted>(
-    url,
-    {
-      method: "DELETE",
-      ...(body === undefined
-        ? {}
-        : {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-    },
-    attempt
-  );
+const erase = (request: HubRequest, attempt: string): Promise<Deleted> =>
+  hubCall<Deleted>(request, attempt);
 
 /**
  * Saves an MCP server. `projectId` binds it to one project, placed at each of
@@ -350,13 +327,18 @@ export const saveMcpServer = (
   projectId: string | null
 ): Promise<FleetMcpServer> =>
   put(
-    `/api/fleet/mcp/${encodeURIComponent(name)}`,
-    { config, enabled, projectId },
+    hubRequest("PUT /api/fleet/mcp/:name", {
+      path: { name },
+      body: { config, enabled, projectId },
+    }),
     `save ${name}`
   );
 
 export const removeMcpServer = (name: string): Promise<Deleted> =>
-  erase(`/api/fleet/mcp/${encodeURIComponent(name)}`, `remove ${name}`);
+  erase(
+    hubRequest("DELETE /api/fleet/mcp/:name", { path: { name } }),
+    `remove ${name}`
+  );
 
 /**
  * Signs this browser in to a fleet MCP server, in a tab of its own: the
@@ -393,14 +375,10 @@ export const signInToMcp = async (
       authorizationUrl: string;
       expiresAt: number;
     }>(
-      `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
-      access
-        ? {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ access }),
-          }
-        : { method: "POST" },
+      hubRequest("POST /api/fleet/mcp/:name/sign-in", {
+        path: { name },
+        ...(access ? { body: { access } } : {}),
+      }),
       `start sign-in to ${name}`
     ));
   } catch (error) {
@@ -426,12 +404,9 @@ export const completeMcpSignIn = (
   iss: string | null
 ): Promise<{ name: string }> =>
   hubCall(
-    "/api/fleet/mcp/oauth/complete",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, state, ...(iss ? { iss } : {}) }),
-    },
+    hubRequest("POST /api/fleet/mcp/oauth/complete", {
+      body: { code, state, ...(iss ? { iss } : {}) },
+    }),
     "finish the sign-in"
   );
 
@@ -509,8 +484,7 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
       frame.marketplace?.source === source ? frame.marketplace : undefined,
     () =>
       hubCall<MarketplaceRead>(
-        `/api/fleet/marketplace-read?${new URLSearchParams({ source })}`,
-        {},
+        hubRequest("GET /api/fleet/marketplace-read", { query: { source } }),
         `read ${source}`
       )
   );
@@ -534,12 +508,7 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
 export const linkMarketplace = (wanted: string): Promise<MarketplaceLink> => {
   const source = wanted.trim();
   return hubCall<MarketplaceLink>(
-    "/api/fleet/marketplace-links",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source }),
-    },
+    hubRequest("POST /api/fleet/marketplace-links", { body: { source } }),
     `link ${source}`
   );
 };
@@ -547,14 +516,13 @@ export const linkMarketplace = (wanted: string): Promise<MarketplaceLink> => {
 /** Lets a refused link go: it leaves the marketplace list. */
 export const dropMarketplaceLink = (source: string): Promise<unknown> =>
   hubCall(
-    `/api/fleet/marketplace-links?${new URLSearchParams({ source })}`,
-    { method: "DELETE" },
+    hubRequest("DELETE /api/fleet/marketplace-links", { query: { source } }),
     `let go of ${source}`
   );
 
 export const removeMarketplace = (name: string): Promise<Deleted> =>
   erase(
-    `/api/fleet/marketplaces/${encodeURIComponent(name)}`,
+    hubRequest("DELETE /api/fleet/marketplaces/:name", { path: { name } }),
     `unlink ${name}`
   );
 
@@ -618,21 +586,15 @@ const untilFetched = <T extends { fetching?: boolean }>(
  */
 export const installPlugin = (id: string): Promise<FleetPlugin> =>
   put(
-    `/api/fleet/plugins/${encodeURIComponent(id)}`,
-    { enabled: true },
+    hubRequest("PUT /api/fleet/plugins/:id", {
+      path: { id },
+      body: { enabled: true },
+    }),
     `install ${id}`
   );
 
-const switchRow = <T>(path: string, enabled: boolean, what: string) =>
-  hubCall<T>(
-    path,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    },
-    `${enabled ? "turn on" : "turn off"} ${what}`
-  );
+const switchRow = <T>(request: HubRequest, enabled: boolean, what: string) =>
+  hubCall<T>(request, `${enabled ? "turn on" : "turn off"} ${what}`);
 
 /**
  * Switches an installed plugin on or off: the stored row's flag, nothing
@@ -642,7 +604,14 @@ export const switchPlugin = (
   id: string,
   enabled: boolean
 ): Promise<FleetPlugin> =>
-  switchRow(`/api/fleet/plugins/${encodeURIComponent(id)}`, enabled, id);
+  switchRow(
+    hubRequest("PATCH /api/fleet/plugins/:id", {
+      path: { id },
+      body: { enabled },
+    }),
+    enabled,
+    id
+  );
 
 /**
  * Switches a fleet skill on or off: the stored row's flag, its files as
@@ -652,10 +621,20 @@ export const switchSkill = (
   name: string,
   enabled: boolean
 ): Promise<FleetSkillMeta> =>
-  switchRow(`/api/fleet/skills/${encodeURIComponent(name)}`, enabled, name);
+  switchRow(
+    hubRequest("PATCH /api/fleet/skills/:name", {
+      path: { name },
+      body: { enabled },
+    }),
+    enabled,
+    name
+  );
 
 export const removePlugin = (id: string): Promise<Deleted> =>
-  erase(`/api/fleet/plugins/${encodeURIComponent(id)}`, `remove ${id}`);
+  erase(
+    hubRequest("DELETE /api/fleet/plugins/:id", { path: { id } }),
+    `remove ${id}`
+  );
 
 /**
  * Resolves a plugin's bytes at the hub again — the answer to a plugin the hub
@@ -669,8 +648,7 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
     (frame) => (frame.plugin?.id === id ? frame.plugin : undefined),
     () =>
       hubCall(
-        `/api/fleet/plugins/${encodeURIComponent(id)}/refresh`,
-        { method: "POST" },
+        hubRequest("POST /api/fleet/plugins/:id/refresh", { path: { id } }),
         `refresh ${id}`
       )
   );
@@ -685,7 +663,10 @@ export const saveSkill = (
   name: string,
   body: { source: string; enabled?: boolean; projectId?: string | null }
 ): Promise<FleetSkillMeta> =>
-  put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`);
+  put(
+    hubRequest("PUT /api/fleet/skills/:name", { path: { name }, body }),
+    `save ${name}`
+  );
 
 /**
  * What a machine really has, fleet or not (NEW.md §11), and what a session in
@@ -697,12 +678,10 @@ export const inspectMachine = (
   cwd?: string
 ): Promise<ConfigInspection> =>
   hubCall(
-    `/api/agents/${encodeURIComponent(machineId)}/inspect`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cwd ? { cwd } : {}),
-    },
+    hubRequest("POST /api/agents/:machineId/inspect", {
+      path: { machineId },
+      body: cwd ? { cwd } : {},
+    }),
     "read what this machine has"
   );
 
@@ -716,8 +695,10 @@ export const adoptSkill = (
   cwd?: string
 ): Promise<FleetSkillMeta> =>
   put(
-    `/api/fleet/skills/${encodeURIComponent(name)}`,
-    { fromMachine: machineId, ...(cwd ? { cwd } : {}) },
+    hubRequest("PUT /api/fleet/skills/:name", {
+      path: { name },
+      body: { fromMachine: machineId, ...(cwd ? { cwd } : {}) },
+    }),
     `adopt ${name}`
   );
 
@@ -727,12 +708,10 @@ export const adoptSkill = (
  */
 export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
   hubCall(
-    `/api/fleet/skills/${encodeURIComponent(name)}/push`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId }),
-    },
+    hubRequest("POST /api/fleet/skills/:name/push", {
+      path: { name },
+      body: { machineId },
+    }),
     "overwrite this machine"
   );
 
@@ -743,20 +722,14 @@ export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
  */
 export const skillHistory = (name: string): Promise<ListedVersion[]> =>
   hubCall(
-    `/api/fleet/skills/history?name=${encodeURIComponent(name)}`,
-    {},
+    hubRequest("GET /api/fleet/skills/history", { query: { name } }),
     "load this skill’s history"
   );
 
 /** Writes a past version back as the fleet's copy, keeping what it replaces. */
 export const restoreSkillVersion = (id: number): Promise<FleetSkillMeta> =>
   hubCall(
-    "/api/fleet/skills/restore",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    },
+    hubRequest("POST /api/fleet/skills/restore", { body: { id } }),
     "restore that version"
   );
 
@@ -771,8 +744,7 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
     (frame) => (frame.skill?.name === name ? frame.skill : undefined),
     () =>
       hubCall(
-        `/api/fleet/skills/${encodeURIComponent(name)}/refresh`,
-        { method: "POST" },
+        hubRequest("POST /api/fleet/skills/:name/refresh", { path: { name } }),
         `refresh ${name}`
       )
   );
@@ -787,11 +759,7 @@ export const checkForUpdates = (): Promise<{ fetching: boolean }> =>
     "check for updates",
     (frame) => frame.check,
     () =>
-      hubCall(
-        "/api/fleet/updates/check",
-        { method: "POST" },
-        "check for updates"
-      )
+      hubCall(hubRequest("POST /api/fleet/updates/check"), "check for updates")
   );
 
 /**
@@ -817,7 +785,10 @@ export const versionPair = (
     : [versionLabel(undefined, from.hash), versionLabel(undefined, to.hash)];
 
 export const removeSkill = (name: string): Promise<Deleted> =>
-  erase(`/api/fleet/skills/${encodeURIComponent(name)}`, `remove ${name}`);
+  erase(
+    hubRequest("DELETE /api/fleet/skills/:name", { path: { name } }),
+    `remove ${name}`
+  );
 
 /** What a subagent write came to: what the hub did, or the file it has instead. */
 export type AgentWrite<T> =
@@ -829,15 +800,10 @@ export type AgentWrite<T> =
  * with what is really there, unwritten, as a memory save does.
  */
 async function agentWrite<T>(
-  name: string,
-  init: RequestInit,
-  query: string,
+  request: HubRequest,
   attempt: string
 ): Promise<AgentWrite<T>> {
-  const response = await fetch(
-    `/api/fleet/agents/${encodeURIComponent(name)}${query}`,
-    init
-  );
+  const response = await hubFetch(request);
   if (response.status === 409) {
     return { ok: false, latest: (await response.json()) as FleetAgent };
   }
@@ -858,13 +824,10 @@ export const saveAgent = (
   expectedHash: string
 ): Promise<AgentWrite<FleetAgent>> =>
   agentWrite(
-    name,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, expectedHash }),
-    },
-    "",
+    hubRequest("PUT /api/fleet/agents/:name", {
+      path: { name },
+      body: { content, expectedHash },
+    }),
     `save ${name}`
   );
 
@@ -878,17 +841,17 @@ export const removeAgent = (
   expectedHash: string
 ): Promise<AgentWrite<Deleted>> =>
   agentWrite(
-    name,
-    { method: "DELETE" },
-    `?expectedHash=${encodeURIComponent(expectedHash)}`,
+    hubRequest("DELETE /api/fleet/agents/:name", {
+      path: { name },
+      query: { expectedHash },
+    }),
     `remove ${name}`
   );
 
 /** Writes the subagents again, at every machine that is online. */
 export const pushAgents = (): Promise<{ unpushable: Record<string, string> }> =>
   hubCall(
-    "/api/fleet/agents/push",
-    { method: "POST" },
+    hubRequest("POST /api/fleet/agents/push"),
     "push the subagents to the machines"
   );
 
@@ -1034,11 +997,9 @@ export async function saveMemory(
   content: string,
   expectedHash?: string
 ): Promise<MemorySave> {
-  const response = await fetch("/api/fleet/memory", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, expectedHash }),
-  });
+  const response = await hubFetch(
+    hubRequest("PUT /api/fleet/memory", { body: { content, expectedHash } })
+  );
   if (response.status === 409) {
     return { ok: false, latest: (await response.json()) as FleetMemoryRow };
   }
@@ -1057,11 +1018,9 @@ export async function saveMemory(
 export async function peekMemory(
   machineId: string
 ): Promise<MachineMemorySet | null> {
-  const response = await fetch("/api/fleet/memory/peek", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ machineId }),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/fleet/memory/peek", { body: { machineId } })
+  );
   if (!response.ok) {
     throw (
       (await awayOf(response)) ??
@@ -1080,38 +1039,39 @@ export async function peekMemory(
  */
 export const memoryHistory = (path?: string): Promise<FleetMemoryVersion[]> =>
   hubCall(
-    path === undefined
-      ? "/api/fleet/memory/history"
-      : `/api/fleet/memory/history?path=${encodeURIComponent(path)}`,
-    {},
+    hubRequest("GET /api/fleet/memory/history", {
+      ...(path === undefined ? {} : { query: { path } }),
+    }),
     "read the memory history"
   );
 
 export const memoryVersion = (
   id: number
 ): Promise<FleetMemoryVersion & { content: string }> =>
-  hubCall(`/api/fleet/memory/history/${id}`, {}, "read that version");
+  hubCall(
+    hubRequest("GET /api/fleet/memory/history/:id", { path: { id } }),
+    "read that version"
+  );
 
 /** The memory's documents as they stand now, files and all (`GET /api/fleet`'s `memoryDocs`). */
 export const memoryDocsNow = async (): Promise<FleetMemoryDocRow[]> =>
-  (await hubCall<FleetSnapshot>("/api/fleet", {}, "read the memory documents"))
-    .memoryDocs;
+  (
+    await hubCall<FleetSnapshot>(
+      hubRequest("GET /api/fleet"),
+      "read the memory documents"
+    )
+  ).memoryDocs;
 
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
 export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
   hubCall(
-    "/api/fleet/memory/restore",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    },
+    hubRequest("POST /api/fleet/memory/restore", { body: { id } }),
     "restore that version"
   );
 
 /** Drops it, and with it the copy on every machine that still has cawco's. */
 export const removeMemory = (): Promise<Deleted> =>
-  erase("/api/fleet/memory", "remove the memory");
+  erase(hubRequest("DELETE /api/fleet/memory"), "remove the memory");
 
 /**
  * Stores one document, keyed by its path: a linked one lands on every
@@ -1128,11 +1088,11 @@ export async function saveMemoryDoc(
   | { ok: true; doc: FleetMemoryDocRow }
   | { ok: false; latest: FleetMemoryDocRow }
 > {
-  const response = await fetch("/api/fleet/memory/docs", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, content, expectedHash, scope }),
-  });
+  const response = await hubFetch(
+    hubRequest("PUT /api/fleet/memory/docs", {
+      body: { path, content, expectedHash, scope },
+    })
+  );
   if (response.status === 409) {
     return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };
   }
@@ -1144,7 +1104,10 @@ export async function saveMemoryDoc(
 
 /** Drops one document, and with it the copy on every machine that has cawco's. */
 export const removeMemoryDoc = (path: string): Promise<Deleted> =>
-  erase("/api/fleet/memory/docs", `remove ${path}`, { path });
+  erase(
+    hubRequest("DELETE /api/fleet/memory/docs", { body: { path } }),
+    `remove ${path}`
+  );
 
 /**
  * Takes one machine's whole memory as the fleet's — the main file and every
@@ -1153,12 +1116,7 @@ export const removeMemoryDoc = (path: string): Promise<Deleted> =>
  */
 export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
   hubCall(
-    "/api/fleet/memory/adopt",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId }),
-    },
+    hubRequest("POST /api/fleet/memory/adopt", { body: { machineId } }),
     "adopt this machine's memory"
   );
 
@@ -1168,12 +1126,7 @@ export const adoptMemoryDoc = (
   path: string
 ): Promise<FleetMemoryDocRow> =>
   hubCall(
-    "/api/fleet/memory/adopt",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, path }),
-    },
+    hubRequest("POST /api/fleet/memory/adopt", { body: { machineId, path } }),
     `adopt this machine's ${path}`
   );
 
@@ -1187,12 +1140,7 @@ export const pushMemory = (
   path?: string
 ): Promise<unknown> =>
   hubCall(
-    "/api/fleet/memory/push",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, path }),
-    },
+    hubRequest("POST /api/fleet/memory/push", { body: { machineId, path } }),
     "overwrite this machine"
   );
 
@@ -1204,11 +1152,9 @@ export async function peekHook(
   machineId: string,
   id: string
 ): Promise<MachineHookScript | null> {
-  const response = await fetch("/api/fleet/hooks/peek", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ machineId, id }),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/fleet/hooks/peek", { body: { machineId, id } })
+  );
   if (!response.ok) {
     throw (
       (await awayOf(response)) ??
@@ -1224,24 +1170,14 @@ export async function peekHook(
 /** Takes one machine's edited script for a hook as the fleet's. */
 export const adoptHook = (machineId: string, id: string): Promise<FleetHook> =>
   hubCall(
-    "/api/fleet/hooks/adopt",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, id }),
-    },
+    hubRequest("POST /api/fleet/hooks/adopt", { body: { machineId, id } }),
     "adopt this machine's script"
   );
 
 /** The other direction: the fleet's script over a machine's edited one. */
 export const pushHook = (machineId: string, id: string): Promise<unknown> =>
   hubCall(
-    "/api/fleet/hooks/push",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, id }),
-    },
+    hubRequest("POST /api/fleet/hooks/push", { body: { machineId, id } }),
     "overwrite this machine"
   );
 
@@ -1251,12 +1187,7 @@ export const retryFleetItems = (
   ids: readonly string[]
 ): Promise<unknown> =>
   hubCall(
-    "/api/fleet/items/retry",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, ids }),
-    },
+    hubRequest("POST /api/fleet/items/retry", { body: { machineId, ids } }),
     "set these up again"
   );
 
@@ -1267,12 +1198,9 @@ export const retryFleetItems = (
  */
 export const syncFleet = (machineId?: string): Promise<unknown> =>
   hubCall(
-    "/api/fleet/sync",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(machineId ? { machineId } : {}),
-    },
+    hubRequest("POST /api/fleet/sync", {
+      body: machineId ? { machineId } : {},
+    }),
     "sync the fleet"
   );
 
@@ -1291,8 +1219,9 @@ export const marketplaceCatalog = async (
       frame.marketplace?.source === row.source ? frame.marketplace : undefined,
     () =>
       hubCall<MarketplaceRead>(
-        `/api/fleet/marketplace-read?${new URLSearchParams({ source: row.source })}`,
-        {},
+        hubRequest("GET /api/fleet/marketplace-read", {
+          query: { source: row.source },
+        }),
         `read ${row.name}`
       )
   );

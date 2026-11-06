@@ -4,15 +4,16 @@
  * them alike. Its own module, apart from the fleet store, so that route
  * loads only what the view needs.
  */
-import type { ProjectView, ViewToolName } from "@cawco/core/views";
-import { send as askHub, json } from "./project-tasks";
 
-const projectPath = (projectId: string) =>
-  `/api/projects/${encodeURIComponent(projectId)}`;
+import { hubRequest, hubRequestAsGiven } from "@cawco/core/hub-request";
+import type { ProjectView, ViewToolName } from "@cawco/core/views";
+import { send as askHub } from "./project-tasks";
 
 /** A project's views: kept ones, then Caw's drafts. */
 export const viewsOf = (projectId: string): Promise<ProjectView[]> =>
-  askHub(`${projectPath(projectId)}/views`);
+  askHub(
+    hubRequest("GET /api/projects/:id/views", { path: { id: projectId } })
+  );
 
 /** Keeps a draft view: it becomes `views/<name>.oui`, one commit. */
 export const keepView = (
@@ -20,8 +21,9 @@ export const keepView = (
   name: string
 ): Promise<ProjectView> =>
   askHub(
-    `${projectPath(projectId)}/views/${encodeURIComponent(name)}/keep`,
-    json("POST", {})
+    hubRequest("POST /api/projects/:id/views/:name/keep", {
+      path: { id: projectId, name },
+    })
   );
 
 /** Discards a draft view. */
@@ -29,17 +31,28 @@ export const discardView = (
   projectId: string,
   name: string
 ): Promise<{ ok: true }> =>
-  askHub(`${projectPath(projectId)}/views/drafts/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-  });
+  askHub(
+    hubRequest("DELETE /api/projects/:id/views/drafts/:name", {
+      path: { id: projectId, name },
+    })
+  );
 
 /**
  * One view tool's answer: what a view's `Query("<tool>", args)` reads, the
- * hub's route for it (views.ts). A view reaches nothing else.
+ * hub's route for it (views.ts). A view reaches nothing else. Its arguments
+ * are the view's own, as its program wrote them: data no type holds here,
+ * held to the tool's schema by the hub's draft check and, as they are sent,
+ * by the route's 422 naming any field it doesn't take, whose words the view
+ * shows. So they go as given (core `hubRequestAsGiven`).
  */
 export const viewTool = (
   projectId: string,
   tool: ViewToolName,
   args: Record<string, unknown>
 ): Promise<unknown> =>
-  askHub(`${projectPath(projectId)}/view-tools/${tool}`, json("POST", args));
+  askHub(
+    hubRequestAsGiven(`POST /api/projects/:id/view-tools/${tool}`, {
+      path: { id: projectId },
+      body: args,
+    })
+  );

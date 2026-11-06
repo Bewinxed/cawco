@@ -15,6 +15,7 @@
    */
   import type { FindSettings } from "@cawco/core/find";
   import type { OwnerDevice } from "@cawco/core/hub-auth";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -30,6 +31,7 @@
   import {
     failureClause,
     failureWords,
+    hubFetch,
     hubRefusal,
   } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -57,7 +59,7 @@
   async function read() {
     try {
       await readAuth();
-      const response = await fetch("/api/devices");
+      const response = await hubFetch(hubRequest("GET /api/devices"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -78,7 +80,7 @@
 
   async function readFind() {
     try {
-      const response = await fetch("/api/find/settings");
+      const response = await hubFetch(hubRequest("GET /api/find/settings"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -92,11 +94,11 @@
     findSaving = true;
     findProblem = null;
     try {
-      const response = await fetch("/api/find/settings", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ hideSecrets: next } satisfies FindSettings),
-      });
+      const response = await hubFetch(
+        hubRequest("PUT /api/find/settings", {
+          body: { hideSecrets: next } satisfies FindSettings,
+        })
+      );
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -140,9 +142,8 @@
 
   async function remove(device: OwnerDevice) {
     await act(`device:${device.id}`, async () => {
-      const response = await fetch(
-        `/api/devices/${encodeURIComponent(device.id)}`,
-        { method: "DELETE" }
+      const response = await hubFetch(
+        hubRequest("DELETE /api/devices/:id", { path: { id: device.id } })
       );
       if (!response.ok) {
         throw await hubRefusal(response);

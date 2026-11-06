@@ -10,28 +10,28 @@ export interface components {
   schemas: {
     "DELETE /api/accounts/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/accounts/:id/machines/:machineId": {
       path: {
-        id: string;
-        machineId: string;
+        id: string | number;
+        machineId: string | number;
       };
     };
     "DELETE /api/agents/:machineId": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "DELETE /api/areas/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/areas/:id/folder/file": {
       path: {
-        id: string;
+        id: string | number;
       };
       query: {
         message?: string;
@@ -40,17 +40,17 @@ export interface components {
     };
     "DELETE /api/connections/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/connector-polls/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/continuations/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/decides/kinds/:id": {
@@ -58,32 +58,32 @@ export interface components {
         moveTo: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/decides/members/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/delegate-types/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/devices/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/event-routes/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/fleet/agents/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
       query?: {
         expectedHash?: string;
@@ -91,12 +91,12 @@ export interface components {
     };
     "DELETE /api/fleet/claude-settings/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/fleet/hooks/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/fleet/marketplace-links": {
@@ -106,12 +106,12 @@ export interface components {
     };
     "DELETE /api/fleet/marketplaces/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/fleet/mcp/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/fleet/memory": Record<string, never>;
@@ -122,38 +122,38 @@ export interface components {
     };
     "DELETE /api/fleet/opencode-plugins/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/fleet/pi-extensions/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/fleet/plugins/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/fleet/skills/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "DELETE /api/installs/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/instances/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/instances/:id/artifacts/:artifact": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
       query?: {
         /** @constant */
@@ -162,25 +162,25 @@ export interface components {
     };
     "DELETE /api/instances/:id/preview": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/jev/typesafe-key": Record<string, never>;
     "DELETE /api/moves/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/openrouter": Record<string, never>;
     "DELETE /api/preview-pass": Record<string, never>;
     "DELETE /api/projects/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/projects/:id/folder/file": {
       path: {
-        id: string;
+        id: string | number;
       };
       query: {
         message?: string;
@@ -189,14 +189,14 @@ export interface components {
     };
     "DELETE /api/projects/:id/places/:placeId": {
       path: {
-        id: string;
-        placeId: string;
+        id: string | number;
+        placeId: string | number;
       };
     };
     "DELETE /api/projects/:id/tasks/:taskId": {
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "DELETE /api/projects/:id/views/:name": {
@@ -213,22 +213,22 @@ export interface components {
     };
     "DELETE /api/push/devices/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/relays/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/routines/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "DELETE /api/rules/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/accounts": {
@@ -238,7 +238,7 @@ export interface components {
     };
     "GET /api/accounts/:id/removal": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/accounts/forecast": {
@@ -283,24 +283,24 @@ export interface components {
     };
     "GET /api/actions/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/actions/waiting": Record<string, never>;
     "GET /api/agents": Record<string, never>;
     "GET /api/agents/:machineId": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "GET /api/agents/:machineId/busy": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "GET /api/agents/:machineId/commands": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
       query: {
         account?: string;
@@ -311,7 +311,7 @@ export interface components {
     };
     "GET /api/agents/:machineId/media": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
       query: {
         path: string;
@@ -320,12 +320,12 @@ export interface components {
     "GET /api/areas": Record<string, never>;
     "GET /api/areas/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/areas/:id/folder": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         path?: string;
@@ -333,7 +333,7 @@ export interface components {
     };
     "GET /api/areas/:id/folder/file": {
       path: {
-        id: string;
+        id: string | number;
       };
       query: {
         path: string;
@@ -342,12 +342,12 @@ export interface components {
     "GET /api/artifact-needs": Record<string, never>;
     "GET /api/artifacts/:artifact": {
       path: {
-        artifact: string;
+        artifact: string | number;
       };
     };
     "GET /api/artifacts/:artifact/export": {
       path: {
-        artifact: string;
+        artifact: string | number;
       };
     };
     "GET /api/artifacts/:artifact/thumbnail/:scheme": {
@@ -355,12 +355,15 @@ export interface components {
         artifact: string;
         scheme: "light" | "dark";
       };
+      query?: {
+        at?: string;
+      };
     };
     "GET /api/auth": Record<string, never>;
     "GET /api/binary-updates/artifacts/:version/:archive": {
       path: {
-        archive: string;
-        version: string;
+        archive: string | number;
+        version: string | number;
       };
     };
     "GET /api/binary-updates/channels": Record<string, never>;
@@ -373,7 +376,7 @@ export interface components {
     "GET /api/connections": Record<string, never>;
     "GET /api/connections/:name/github-projects": {
       path: {
-        name: string;
+        name: string | number;
       };
       query: {
         repo: string;
@@ -381,12 +384,12 @@ export interface components {
     };
     "GET /api/connections/:name/targets": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "GET /api/connections/:name/tools": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "GET /api/connections/oauth/callback": {
@@ -400,18 +403,18 @@ export interface components {
     "GET /api/continuations": Record<string, never>;
     "GET /api/continuations/:id/outcome": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/decides": Record<string, never>;
     "GET /api/decides/kinds/:id/waiting": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/decides/members/:id/record": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         project?: string;
@@ -419,7 +422,7 @@ export interface components {
     };
     "GET /api/decides/pages/:artifactId": {
       path: {
-        artifactId: string;
+        artifactId: string | number;
       };
     };
     "GET /api/delegate-events": {
@@ -445,7 +448,7 @@ export interface components {
     };
     "GET /api/diagnostics/apple/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         /** @constant */
@@ -459,7 +462,7 @@ export interface components {
     };
     "GET /api/files/:hash": {
       path: {
-        hash: string;
+        hash: string | number;
       };
     };
     "GET /api/find": {
@@ -487,7 +490,7 @@ export interface components {
     };
     "GET /api/fleet/hooks/history/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/fleet/marketplace-read": {
@@ -502,7 +505,7 @@ export interface components {
     };
     "GET /api/fleet/memory/history/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/fleet/opencode-plugins": Record<string, never>;
@@ -537,19 +540,19 @@ export interface components {
     "GET /api/installs": Record<string, never>;
     "GET /api/installs/:id/output": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/instances": Record<string, never>;
     "GET /api/instances/:id/artifacts": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/instances/:id/artifacts/:artifact": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
       query?: {
         detail?: "summary" | "story";
@@ -565,8 +568,8 @@ export interface components {
     };
     "GET /api/instances/:id/artifacts/:artifact/map": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
       query?: {
         component?: string;
@@ -574,13 +577,13 @@ export interface components {
     };
     "GET /api/instances/:id/artifacts/:artifact/view": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "GET /api/instances/:id/artifacts/comments": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         artifact?: string;
@@ -592,7 +595,7 @@ export interface components {
     };
     "GET /api/instances/:id/artifacts/design-map": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         component?: string;
@@ -605,12 +608,12 @@ export interface components {
     };
     "GET /api/instances/:id/artifacts/files": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/instances/:id/artifacts/list": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         cursor?: string;
@@ -619,7 +622,7 @@ export interface components {
     };
     "GET /api/instances/:id/artifacts/search": {
       path: {
-        id: string;
+        id: string | number;
       };
       query: {
         q: string;
@@ -627,12 +630,12 @@ export interface components {
     };
     "GET /api/instances/:id/attachments": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/instances/:id/continue": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         asks?: boolean;
@@ -641,17 +644,17 @@ export interface components {
     };
     "GET /api/instances/:id/open-items": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/instances/:id/plan": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/instances/:id/transcript": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         before?: string;
@@ -667,7 +670,7 @@ export interface components {
     };
     "GET /api/lfs-offers/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/lfs/projects/:id": {
@@ -678,13 +681,13 @@ export interface components {
     "GET /api/local-name": Record<string, never>;
     "GET /api/machines/ssh/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/machines/waiting": Record<string, never>;
     "GET /api/media/:name": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "GET /api/model-windows": Record<string, never>;
@@ -709,48 +712,48 @@ export interface components {
     "GET /api/projects": Record<string, never>;
     "GET /api/projects/:id/blocks": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/caw": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/decides": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/decisions": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/decisions/:name": {
       path: {
-        id: string;
-        name: string;
+        id: string | number;
+        name: string | number;
       };
     };
     "GET /api/projects/:id/delegate-types": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/design-offer": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/dispatch": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/folder": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         path?: string;
@@ -759,7 +762,7 @@ export interface components {
     };
     "GET /api/projects/:id/folder/file": {
       path: {
-        id: string;
+        id: string | number;
       };
       query: {
         path: string;
@@ -767,7 +770,7 @@ export interface components {
     };
     "GET /api/projects/:id/folder/history": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         limit?: number;
@@ -776,7 +779,7 @@ export interface components {
     };
     "GET /api/projects/:id/folder/raw": {
       path: {
-        id: string;
+        id: string | number;
       };
       query: {
         path: string;
@@ -784,17 +787,17 @@ export interface components {
     };
     "GET /api/projects/:id/gate": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/ingress": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/move-estimate": {
       path: {
-        id: string;
+        id: string | number;
       };
       query: {
         from?: string;
@@ -804,27 +807,27 @@ export interface components {
     };
     "GET /api/projects/:id/relays": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/running": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/spend": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/stages": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/tasks": {
       path: {
-        id: string;
+        id: string | number;
       };
       query?: {
         archived?: "1" | "0";
@@ -841,20 +844,20 @@ export interface components {
     };
     "GET /api/projects/:id/tasks/:taskId": {
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "GET /api/projects/:id/tasks/:taskId/history": {
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "GET /api/projects/:id/tasks/:taskId/outputs/file": {
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
       query: {
         name: string;
@@ -862,12 +865,12 @@ export interface components {
     };
     "GET /api/projects/:id/tracker": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/views": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/projects/:id/views/:name/removal": {
@@ -886,7 +889,7 @@ export interface components {
     };
     "GET /api/routines/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/routines/schedule": {
@@ -898,7 +901,7 @@ export interface components {
     "GET /api/rules": Record<string, never>;
     "GET /api/rules/:id/activity": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/session-identities": {
@@ -939,34 +942,34 @@ export interface components {
     };
     "GET /api/work-items/:id": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/work-items/:id/unlanded": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/workspaces/:id/held": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/workspaces/:id/waiting": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "GET /api/workspaces/held": Record<string, never>;
     "GET /git/:repo/info/lfs/objects/:oid": {
       path: {
-        oid: string;
-        repo: string;
+        oid: string | number;
+        repo: string | number;
       };
     };
     "GET /git/:repo/info/refs": {
       path: {
-        repo: string;
+        repo: string | number;
       };
     };
     "GET /health": Record<string, never>;
@@ -992,7 +995,7 @@ export interface components {
           | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/areas/:id": {
@@ -1021,7 +1024,7 @@ export interface components {
         onCap?: (("pause" | "quiet" | "both") | null) | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/connections/:name": {
@@ -1038,7 +1041,7 @@ export interface components {
         url?: string;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PATCH /api/connector-polls/:id": {
@@ -1053,7 +1056,7 @@ export interface components {
         versionPath?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/event-routes/:id": {
@@ -1080,7 +1083,7 @@ export interface components {
         source?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/fleet/plugins/:id": {
@@ -1088,7 +1091,7 @@ export interface components {
         enabled: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/fleet/skills/:name": {
@@ -1096,7 +1099,7 @@ export interface components {
         enabled: boolean;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PATCH /api/installs/draft": {
@@ -1123,7 +1126,7 @@ export interface components {
         title?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/instances/:id/artifacts/:artifact": {
@@ -1152,8 +1155,8 @@ export interface components {
         }[];
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "PATCH /api/instances/:id/artifacts/:artifact/component": {
@@ -1211,8 +1214,8 @@ export interface components {
             };
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "PATCH /api/projects/:id": {
@@ -1228,7 +1231,7 @@ export interface components {
         review?: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/projects/:id/caw": {
@@ -1255,7 +1258,7 @@ export interface components {
         on?: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/projects/:id/dispatch": {
@@ -1273,7 +1276,7 @@ export interface components {
         runsOn?: (string | null) | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PATCH /api/projects/:id/tasks/:taskId": {
@@ -1304,8 +1307,8 @@ export interface components {
         type?: (string | null) | null;
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "PATCH /api/projects/:id/tasks/:taskId/todos/:todo": {
@@ -1314,9 +1317,9 @@ export interface components {
         text?: string;
       };
       path: {
-        id: string;
-        taskId: string;
-        todo: string;
+        id: string | number;
+        taskId: string | number;
+        todo: string | number;
       };
     };
     "PATCH /api/routines/:id": {
@@ -1352,7 +1355,7 @@ export interface components {
         timeZone?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/accounts": {
@@ -1377,13 +1380,13 @@ export interface components {
         machineIds: string[];
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/accounts/:id/machines/:machineId/signin": {
       path: {
-        id: string;
-        machineId: string;
+        id: string | number;
+        machineId: string | number;
       };
     };
     "POST /api/accounts/:id/machines/:machineId/signin/complete": {
@@ -1391,13 +1394,13 @@ export interface components {
         code?: string;
       };
       path: {
-        id: string;
-        machineId: string;
+        id: string | number;
+        machineId: string | number;
       };
     };
     "POST /api/accounts/:id/refusal-check": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/accounts/move-login": {
@@ -1412,22 +1415,22 @@ export interface components {
         argsHash: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/actions/:id/cancel": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/actions/:id/checked": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/actions/:id/deny": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/agents/:machineId/inspect": {
@@ -1435,7 +1438,7 @@ export interface components {
         cwd?: string;
       };
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "POST /api/agents/:machineId/update": {
@@ -1446,7 +1449,7 @@ export interface components {
         version?: string;
       };
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "POST /api/areas": {
@@ -1456,7 +1459,7 @@ export interface components {
     };
     "POST /api/artifacts/:artifact/preview-address": {
       path: {
-        artifact: string;
+        artifact: string | number;
       };
     };
     "POST /api/binary-updates/channels": Record<string, never>;
@@ -1468,7 +1471,7 @@ export interface components {
     };
     "POST /api/binary-updates/machines/:machineId/cancel": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "POST /api/binary-updates/settings/reset": Record<string, never>;
@@ -1477,7 +1480,7 @@ export interface components {
         machineId?: string;
       };
       path: {
-        key: string;
+        key: string | number;
       };
     };
     "POST /api/browsers/:key/remove": {
@@ -1485,7 +1488,7 @@ export interface components {
         machineId?: string;
       };
       path: {
-        key: string;
+        key: string | number;
       };
     };
     "POST /api/browsers/:key/start": {
@@ -1493,7 +1496,7 @@ export interface components {
         machineId?: string;
       };
       path: {
-        key: string;
+        key: string | number;
       };
     };
     "POST /api/browsers/:key/stop": {
@@ -1501,7 +1504,7 @@ export interface components {
         machineId?: string;
       };
       path: {
-        key: string;
+        key: string | number;
       };
     };
     "POST /api/browsers/:key/takeover": {
@@ -1512,7 +1515,7 @@ export interface components {
         viewer?: string;
       };
       path: {
-        key: string;
+        key: string | number;
       };
     };
     "POST /api/connections": {
@@ -1536,7 +1539,7 @@ export interface components {
         origin?: string;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "POST /api/connector-polls": {
@@ -1556,7 +1559,7 @@ export interface components {
     };
     "POST /api/connector-polls/:id/poll": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/dashboard-errors": {
@@ -1601,7 +1604,7 @@ export interface components {
     "POST /api/delegation/call/:instanceId": {
       body: unknown;
       path: {
-        instanceId: string;
+        instanceId: string | number;
       };
     };
     "POST /api/diagnostics/apple": {
@@ -1681,7 +1684,7 @@ export interface components {
         access?: "read" | "write";
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "POST /api/fleet/mcp/oauth/complete": {
@@ -1715,7 +1718,7 @@ export interface components {
     };
     "POST /api/fleet/plugins/:id/refresh": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/fleet/skills/:name/push": {
@@ -1723,12 +1726,12 @@ export interface components {
         machineId: string;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "POST /api/fleet/skills/:name/refresh": {
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "POST /api/fleet/skills/restore": {
@@ -1786,12 +1789,12 @@ export interface components {
         password?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/installs/:id/stop": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/installs/code/:code/ended": {
@@ -1801,7 +1804,7 @@ export interface components {
         status: number | string;
       };
       path: {
-        code: string;
+        code: string | number;
       };
     };
     "POST /api/instances/:id/account": {
@@ -1809,7 +1812,7 @@ export interface components {
         accountId: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts": {
@@ -1876,7 +1879,7 @@ export interface components {
         workspace?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/ask": {
@@ -1884,32 +1887,46 @@ export interface components {
         ask: string;
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/browse": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/promote": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/send": {
+      body: {
+        again?: string[];
+        control?:
+          | "page-send"
+          | "page-key"
+          | "panel-head"
+          | "panel-more"
+          | "needs-you"
+          | "decisions-done"
+          | "answered";
+        pins?: string[];
+        text?: string;
+        writes?: string;
+      };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/sent": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/settle": {
@@ -1920,8 +1937,8 @@ export interface components {
         why: string;
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/sheet": {
@@ -1953,8 +1970,8 @@ export interface components {
             };
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/show": {
@@ -1971,8 +1988,8 @@ export interface components {
             };
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
       query?: {
         /** @constant */
@@ -1994,8 +2011,8 @@ export interface components {
         revision: string;
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/statements": {
@@ -2003,8 +2020,8 @@ export interface components {
         statements: string;
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/title": {
@@ -2012,14 +2029,14 @@ export interface components {
         title: string;
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/:artifact/verify": {
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/comments/:pin/reply": {
@@ -2029,8 +2046,8 @@ export interface components {
         text: string;
       };
       path: {
-        id: string;
-        pin: string;
+        id: string | number;
+        pin: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/comments/:pin/resolve": {
@@ -2038,8 +2055,8 @@ export interface components {
         text?: string;
       };
       path: {
-        id: string;
-        pin: string;
+        id: string | number;
+        pin: string | number;
       };
     };
     "POST /api/instances/:id/artifacts/questions/close": {
@@ -2049,12 +2066,12 @@ export interface components {
         why: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/context-size": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/continue": {
@@ -2113,7 +2130,7 @@ export interface components {
         };
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/forge-post": {
@@ -2122,7 +2139,7 @@ export interface components {
         write: unknown;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/generate-image": {
@@ -2136,7 +2153,7 @@ export interface components {
         size?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/plan/edits": {
@@ -2182,12 +2199,12 @@ export interface components {
     };
     "POST /api/instances/:id/plan/seen": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/preview-address": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/:id/title": {
@@ -2195,7 +2212,7 @@ export interface components {
         title: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/instances/named": {
@@ -2221,12 +2238,12 @@ export interface components {
     };
     "POST /api/lfs-offers/:id/dismiss": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/lfs-offers/:id/track": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/lfs/projects/:id/refused": {
@@ -2245,18 +2262,18 @@ export interface components {
         until: string;
       };
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "POST /api/machines/:machineId/resume": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "POST /api/machines/:machineId/tools/:toolId/signin": {
       path: {
-        machineId: string;
-        toolId: string;
+        machineId: string | number;
+        toolId: string | number;
       };
     };
     "POST /api/machines/:machineId/tools/:toolId/signin/complete": {
@@ -2264,8 +2281,8 @@ export interface components {
         code: string;
       };
       path: {
-        machineId: string;
-        toolId: string;
+        machineId: string | number;
+        toolId: string | number;
       };
     };
     "POST /api/machines/ssh": {
@@ -2278,22 +2295,22 @@ export interface components {
     };
     "POST /api/machines/ssh/:id/stop": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/machines/waiting/:machineId/admit": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "POST /api/machines/waiting/:machineId/refuse": {
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "POST /api/moves/:id/retry": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/notices/reset": Record<string, never>;
@@ -2334,12 +2351,12 @@ export interface components {
     };
     "POST /api/pair/requests/:userCode/approve": {
       path: {
-        userCode: string;
+        userCode: string | number;
       };
     };
     "POST /api/pair/requests/:userCode/deny": {
       path: {
-        userCode: string;
+        userCode: string | number;
       };
     };
     "POST /api/person/away": {
@@ -2385,12 +2402,12 @@ export interface components {
     "POST /api/preview-ticket": Record<string, never>;
     "POST /api/project-offers/:instanceId/accept": {
       path: {
-        instanceId: string;
+        instanceId: string | number;
       };
     };
     "POST /api/project-offers/:instanceId/dismiss": {
       path: {
-        instanceId: string;
+        instanceId: string | number;
       };
     };
     "POST /api/projects": {
@@ -2416,7 +2433,7 @@ export interface components {
         instanceId: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/decisions/:name/send": {
@@ -2426,14 +2443,14 @@ export interface components {
         writes?: string;
       };
       path: {
-        id: string;
-        name: string;
+        id: string | number;
+        name: string | number;
       };
     };
     "POST /api/projects/:id/decisions/:name/tasks": {
       path: {
-        id: string;
-        name: string;
+        id: string | number;
+        name: string | number;
       };
     };
     "POST /api/projects/:id/delete": {
@@ -2441,22 +2458,22 @@ export interface components {
         fromDisk?: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/design-offer/build": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/design-offer/dismiss": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/ingress/github/poll": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/memory/notes": {
@@ -2464,13 +2481,13 @@ export interface components {
         text: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/memory/notes/:note/withdraw": {
       path: {
-        id: string;
-        note: string;
+        id: string | number;
+        note: string | number;
       };
     };
     "POST /api/projects/:id/moves": {
@@ -2517,7 +2534,7 @@ export interface components {
         };
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/places": {
@@ -2526,12 +2543,12 @@ export interface components {
         path: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/preview-address": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/relays": {
@@ -2544,7 +2561,7 @@ export interface components {
         timestampHeader?: (string | null) | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/relays/preview": {
@@ -2557,7 +2574,7 @@ export interface components {
         timestampHeader?: (string | null) | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/requests": {
@@ -2566,7 +2583,7 @@ export interface components {
         text: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/restore": {
@@ -2575,7 +2592,7 @@ export interface components {
         name?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/stages/template": {
@@ -2590,7 +2607,7 @@ export interface components {
           | "outreach";
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/starters/outcome": {
@@ -2608,7 +2625,7 @@ export interface components {
         instanceIds: string[];
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/tasks": {
@@ -2641,7 +2658,7 @@ export interface components {
         waitsOn?: string[];
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/tasks/:taskId/archive": {
@@ -2649,8 +2666,8 @@ export interface components {
         archived?: boolean;
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "POST /api/projects/:id/tasks/:taskId/attempts": {
@@ -2658,8 +2675,8 @@ export interface components {
         parentInstanceId?: string;
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "POST /api/projects/:id/tasks/:taskId/comments": {
@@ -2668,8 +2685,8 @@ export interface components {
         text: string;
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "POST /api/projects/:id/tasks/:taskId/links": {
@@ -2680,8 +2697,8 @@ export interface components {
         waitsOn?: string[];
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "POST /api/projects/:id/tasks/:taskId/retry": {
@@ -2689,8 +2706,8 @@ export interface components {
         parentInstanceId?: string;
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "POST /api/projects/:id/tasks/:taskId/stage": {
@@ -2699,8 +2716,8 @@ export interface components {
         stage: string;
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "POST /api/projects/:id/tasks/:taskId/todos": {
@@ -2709,13 +2726,13 @@ export interface components {
         under?: string;
       };
       path: {
-        id: string;
-        taskId: string;
+        id: string | number;
+        taskId: string | number;
       };
     };
     "POST /api/projects/:id/tracker/sync": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/view-requests": {
@@ -2725,7 +2742,7 @@ export interface components {
         text: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/view-tools/events": {
@@ -2734,7 +2751,7 @@ export interface components {
         limit?: number;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/view-tools/routines": {
@@ -2743,7 +2760,7 @@ export interface components {
         runs?: number;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/view-tools/spend": {
@@ -2752,13 +2769,13 @@ export interface components {
         days?: number;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/view-tools/stages": {
       body: Record<string, never>;
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/view-tools/tasks": {
@@ -2774,7 +2791,7 @@ export interface components {
         stage?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/projects/:id/views/:name/asks": {
@@ -2847,7 +2864,7 @@ export interface components {
     };
     "POST /api/routines/:id/run": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/rules": {
@@ -2986,12 +3003,12 @@ export interface components {
             replacedBy: string;
           };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/work-items/:id/retry": {
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/work-items/finish": {
@@ -3037,7 +3054,7 @@ export interface components {
         discard?: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/workspaces/:id/discard": {
@@ -3047,23 +3064,23 @@ export interface components {
         reason?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "POST /api/workspaces/retire": Record<string, never>;
     "POST /git/:repo/git-receive-pack": {
       path: {
-        repo: string;
+        repo: string | number;
       };
     };
     "POST /git/:repo/git-upload-pack": {
       path: {
-        repo: string;
+        repo: string | number;
       };
     };
     "POST /git/:repo/info/lfs/objects/batch": {
       path: {
-        repo: string;
+        repo: string | number;
       };
     };
     "PUT /api/accounts/routing/:provider": {
@@ -3104,7 +3121,7 @@ export interface components {
         path: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/areas/order": {
@@ -3122,7 +3139,7 @@ export interface components {
     "PUT /api/binary-updates/machines/:machineId/state": {
       body: unknown;
       path: {
-        machineId: string;
+        machineId: string | number;
       };
     };
     "PUT /api/binary-updates/settings": {
@@ -3143,7 +3160,7 @@ export interface components {
             clientSecret: string;
           };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/connections/:name/key": {
@@ -3151,7 +3168,7 @@ export interface components {
         key: string;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/decides/kinds/:id": {
@@ -3160,7 +3177,7 @@ export interface components {
         name: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/decides/members/:id": {
@@ -3178,7 +3195,7 @@ export interface components {
         job?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/decides/members/:id/picture": {
@@ -3204,7 +3221,7 @@ export interface components {
             hue: number;
           };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/decides/routes": {
@@ -3227,7 +3244,7 @@ export interface components {
         skills?: string[];
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/find/settings": {
@@ -3246,7 +3263,7 @@ export interface components {
         expectedHash?: string;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/fleet/caw-mode": {
@@ -3279,7 +3296,7 @@ export interface components {
           | null;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/fleet/hooks/:id": {
@@ -3298,7 +3315,7 @@ export interface components {
         script?: (string | null) | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/fleet/mcp/:name": {
@@ -3313,7 +3330,7 @@ export interface components {
         shared?: boolean;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/fleet/memory": {
@@ -3352,7 +3369,7 @@ export interface components {
           | null;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/fleet/pi-extensions/:name": {
@@ -3369,7 +3386,7 @@ export interface components {
           | null;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/fleet/plugins/:id": {
@@ -3377,7 +3394,7 @@ export interface components {
         enabled?: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/fleet/skills/:name": {
@@ -3391,7 +3408,7 @@ export interface components {
         source?: string;
       };
       path: {
-        name: string;
+        name: string | number;
       };
     };
     "PUT /api/image-settings": {
@@ -3407,8 +3424,8 @@ export interface components {
         single: boolean;
       };
       path: {
-        artifact: string;
-        id: string;
+        artifact: string | number;
+        id: string | number;
       };
     };
     "PUT /api/jev/suggest": {
@@ -3432,7 +3449,7 @@ export interface components {
         accounts: string[] | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/projects/:id/area": {
@@ -3440,7 +3457,7 @@ export interface components {
         areaId: (string | null) | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/projects/:id/blocks/:page": {
@@ -3463,7 +3480,7 @@ export interface components {
         usd: (number | null) | null;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/projects/:id/decides": {
@@ -3474,7 +3491,7 @@ export interface components {
         };
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/projects/:id/folder/file": {
@@ -3485,7 +3502,7 @@ export interface components {
         path: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/projects/:id/stages": {
@@ -3494,7 +3511,7 @@ export interface components {
         message?: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/projects/:id/tracker": {
@@ -3510,7 +3527,7 @@ export interface components {
         tracker: "cawco" | "github" | "linear";
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/push/devices/:id": {
@@ -3518,7 +3535,7 @@ export interface components {
         quiet: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/relays/:id/secret": {
@@ -3526,7 +3543,7 @@ export interface components {
         secret: string;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/rules/:id": {
@@ -3552,7 +3569,7 @@ export interface components {
         wholeWord: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /api/session-limits": {
@@ -3572,13 +3589,13 @@ export interface components {
         required?: boolean;
       };
       path: {
-        id: string;
+        id: string | number;
       };
     };
     "PUT /git/:repo/info/lfs/objects/:oid": {
       path: {
-        oid: string;
-        repo: string;
+        oid: string | number;
+        repo: string | number;
       };
     };
     "tool action_cancel": {

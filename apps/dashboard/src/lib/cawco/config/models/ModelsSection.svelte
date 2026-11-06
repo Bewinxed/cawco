@@ -1,6 +1,7 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import type { FleetWatchSettings } from "@cawco/core/fleet-watch";
+  import { hubRequest } from "@cawco/core/hub-request";
   import {
     DEFAULT_IMAGE_SETTINGS,
     type ImageSettings,
@@ -21,6 +22,7 @@
   import {
     failureClause,
     failureWords,
+    hubFetch,
     hubRefusal,
     hubSaid,
   } from "#lib/cawco/hub-read.js";
@@ -77,7 +79,7 @@
 
   async function readOpenRouter() {
     try {
-      const response = await fetch("/api/openrouter");
+      const response = await hubFetch(hubRequest("GET /api/openrouter"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -104,7 +106,7 @@
 
   async function readJev() {
     try {
-      const response = await fetch("/api/jev");
+      const response = await hubFetch(hubRequest("GET /api/jev"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -123,11 +125,11 @@
     }
     savingKey = true;
     jevError = null;
-    const response = await fetch("/api/jev/typesafe-key", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: typesafeKey.trim() }),
-    });
+    const response = await hubFetch(
+      hubRequest("PUT /api/jev/typesafe-key", {
+        body: { key: typesafeKey.trim() },
+      })
+    );
     if (response.ok) {
       typesafeKey = "";
       takeJev((await response.json()) as JevState);
@@ -140,7 +142,7 @@
   async function removeKey() {
     removingKey = true;
     jevError = null;
-    const response = await fetch("/api/jev/typesafe-key", { method: "DELETE" });
+    const response = await hubFetch(hubRequest("DELETE /api/jev/typesafe-key"));
     if (response.ok) {
       takeJev((await response.json()) as JevState);
     } else {
@@ -186,11 +188,11 @@
       return;
     }
     connecting = true;
-    const response = await fetch("/api/openrouter/connect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ callbackUrl: `${location.origin}/config/models` }),
-    });
+    const response = await hubFetch(
+      hubRequest("POST /api/openrouter/connect", {
+        body: { callbackUrl: `${location.origin}/config/models` },
+      })
+    );
     if (!response.ok) {
       openrouterError = (await hubRefusal(response)).message;
       connecting = false;
@@ -205,11 +207,9 @@
   async function exchange(code: string) {
     exchanging = true;
     openrouterError = null;
-    const response = await fetch("/api/openrouter/exchange", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
+    const response = await hubFetch(
+      hubRequest("POST /api/openrouter/exchange", { body: { code } })
+    );
     if (response.ok) {
       // The status line above says so: "Connected just now".
       await readOpenRouter();
@@ -222,7 +222,7 @@
   async function disconnect() {
     disconnecting = true;
     openrouterError = null;
-    const response = await fetch("/api/openrouter", { method: "DELETE" });
+    const response = await hubFetch(hubRequest("DELETE /api/openrouter"));
     if (response.ok) {
       await readOpenRouter();
     } else {
@@ -253,7 +253,7 @@
 
   async function readWatch() {
     try {
-      const response = await fetch("/api/fleet-watch");
+      const response = await hubFetch(hubRequest("GET /api/fleet-watch"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -266,11 +266,9 @@
   async function setWatch(on: boolean) {
     savingWatch = true;
     watchError = null;
-    const response = await fetch("/api/fleet-watch", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ on }),
-    });
+    const response = await hubFetch(
+      hubRequest("PUT /api/fleet-watch", { body: { on } })
+    );
     if (response.ok) {
       watch = (await response.json()) as FleetWatchSettings;
     } else {
@@ -298,7 +296,7 @@
 
   async function readImage() {
     try {
-      const response = await fetch("/api/image-settings");
+      const response = await hubFetch(hubRequest("GET /api/image-settings"));
       if (!response.ok) {
         throw await hubRefusal(response);
       }
@@ -342,11 +340,9 @@
     imageFault = null;
     let fault: string | null = null;
     try {
-      const response = await fetch("/api/image-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(next),
-      });
+      const response = await hubFetch(
+        hubRequest("PUT /api/image-settings", { body: next })
+      );
       if (response.ok) {
         image = (await response.json()) as ImageSettings;
       } else {

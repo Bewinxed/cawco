@@ -1,5 +1,6 @@
 import { harnessNamed } from "@cawco/core/harness";
 import type { HubAuthState } from "@cawco/core/hub-auth";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
@@ -88,8 +89,8 @@ export const load: LayoutServerLoad = async ({
   // number is in the first paint and the bar does not widen when the
   // socket's list lands; null where the hub would not say.
   const [authRead, machinesRead] = await Promise.all([
-    readHub<HubAuthState>(fetch, "/api/auth"),
-    readHub<AgentRow[]>(fetch, "/api/agents"),
+    readHub<HubAuthState>(fetch, hubRequest("GET /api/auth")),
+    readHub<AgentRow[]>(fetch, hubRequest("GET /api/agents")),
   ]);
   const auth = authRead.ok ? authRead.value : null;
   const machineCount =
@@ -180,7 +181,7 @@ export const load: LayoutServerLoad = async ({
   if (projectTabs.length > 0) {
     const projects = await readHub<{ id: string; name: string }[]>(
       fetch,
-      "/api/projects"
+      hubRequest("GET /api/projects")
     );
     for (const tab of projectTabs) {
       const project = projects.ok
@@ -215,8 +216,8 @@ export const load: LayoutServerLoad = async ({
   // (client.svelte.ts `pulseOf`), so a working tab is drawn working from the
   // first paint. A read that fails leaves the socket to say it, as before.
   const [listing, pulseRead] = await Promise.all([
-    readHub<InstanceRow[]>(fetch, "/api/instances"),
-    readHub<Record<string, SessionPulse>>(fetch, "/api/pulses"),
+    readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
+    readHub<Record<string, SessionPulse>>(fetch, hubRequest("GET /api/pulses")),
   ]);
   if (pulseRead.ok) {
     for (const id of open) {
@@ -256,19 +257,16 @@ export const load: LayoutServerLoad = async ({
     const ctx = workspace.ctx ?? {};
     const titles = await readHub<{ id: string; title: string | null }[]>(
       fetch,
-      "/api/instances/titles",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      hubRequest("POST /api/instances/titles", {
+        body: {
           ids: unnamed.map((id) => ({
             id,
             machine: ctx[id]?.machine ?? undefined,
             cwd: ctx[id]?.cwd,
             harness: ctx[id]?.harness,
           })),
-        }),
-      }
+        },
+      })
     );
     if (titles.ok) {
       for (const { id, title } of titles.value) {

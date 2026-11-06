@@ -24,6 +24,7 @@
 import type { Activity } from "@cawco/core/activity";
 import { detach } from "@cawco/core/detach";
 import type { ProjectStopFrame } from "@cawco/core/frames";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { PlaceProject } from "@cawco/core/place-nesting";
 import type {
   CawRunning,
@@ -49,7 +50,7 @@ import {
   readProjects,
   stopProjectSessions,
 } from "./client.svelte";
-import { failureWords, hubRefusal } from "./hub-read";
+import { failureWords, hubFetch, hubRefusal } from "./hub-read";
 import { dur } from "./motion/curves.svelte";
 import { route } from "./motion/route.svelte";
 import { offerBringBack } from "./project-end.svelte";
@@ -980,7 +981,9 @@ class StopWork {
 
 /** What of the project still runs, as the hub lists it. */
 async function runningSessions(job: StopJob): Promise<RunningSession[]> {
-  const response = await fetch(`/api/projects/${job.projectId}/running`);
+  const response = await hubFetch(
+    hubRequest("GET /api/projects/:id/running", { path: { id: job.projectId } })
+  );
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.sessionsNotListedThen);
   }
@@ -996,7 +999,11 @@ async function stillRunning(
   job: StopJob
 ): Promise<RunningSession[] | "gone" | { refused: string }> {
   try {
-    const response = await fetch(`/api/projects/${job.projectId}/running`);
+    const response = await hubFetch(
+      hubRequest("GET /api/projects/:id/running", {
+        path: { id: job.projectId },
+      })
+    );
     if (response.status === 404) {
       return "gone";
     }

@@ -8,7 +8,6 @@
  * dashboard's do through its own.
  */
 
-import { PREVIEW_ERRORS_PATH } from "@cawco/core/frames";
 import { mount } from "svelte";
 import { reportErrorsTo } from "../../error-report.js";
 import { watchEdgeFades } from "../../motion/fade-runs.svelte";
@@ -20,7 +19,7 @@ import { darkOn } from "./scheme.svelte.js";
 /** The commit the host was built from (core decision-host.ts `define`): its reports name it. */
 declare const CAWCO_HOST_BUILD: string;
 
-reportErrorsTo(PREVIEW_ERRORS_PATH, CAWCO_HOST_BUILD);
+reportErrorsTo("preview", CAWCO_HOST_BUILD);
 takeServed(document);
 bridge()?.on("picks", (next) => {
   picks.now = next;

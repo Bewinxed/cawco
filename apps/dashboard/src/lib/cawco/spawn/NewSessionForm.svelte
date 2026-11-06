@@ -20,6 +20,7 @@
     type HarnessKind,
     type PermissionMode,
   } from "@cawco/core/harness";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
   import { isGitUrl, repoPath } from "@cawco/core/protocol";
@@ -29,7 +30,12 @@
   import { spawnWords } from "@cawco/core/words/spawn";
   import { tick, untrack } from "svelte";
   import { z } from "zod";
-  import { awayOf, failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import {
+    awayOf,
+    failureWords,
+    hubFetch,
+    hubRefusal,
+  } from "#lib/cawco/hub-read.js";
   import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { SessionDraftSchema } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
@@ -1391,8 +1397,11 @@
     try {
       const [sized] = await Promise.all([
         waits.run("estimate", async () => {
-          const response = await fetch(
-            `/api/instances/${encodeURIComponent(instanceId)}/continue${asked === "asks" ? "?asks=true" : ""}`
+          const response = await hubFetch(
+            hubRequest("GET /api/instances/:id/continue", {
+              path: { id: instanceId },
+              ...(asked === "asks" ? { query: { asks: true } } : {}),
+            })
           );
           if (!response.ok) {
             throw (await awayOf(response)) ?? (await hubRefusal(response));

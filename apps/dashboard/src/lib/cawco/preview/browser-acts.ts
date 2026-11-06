@@ -6,22 +6,12 @@
  * sentence.
  */
 import type { BrowserKey } from "@cawco/core/browser";
-import { failureWords, hubRefusal } from "../hub-read";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
+import { failureWords, hubFetch, hubRefusal } from "../hub-read";
 
-const post = async (
-  key: BrowserKey,
-  act: "takeover" | "handback" | "start",
-  body: Record<string, string>
-): Promise<string | null> => {
+const post = async (request: HubRequest): Promise<string | null> => {
   try {
-    const response = await fetch(
-      `/api/browsers/${encodeURIComponent(key)}/${act}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }
-    );
+    const response = await hubFetch(request);
     if (!response.ok) {
       throw await hubRefusal(response);
     }
@@ -37,18 +27,35 @@ export const takeOverFromPanel = (
   key: BrowserKey,
   at: { instanceId: string; machineId: string; viewer?: string | null }
 ): Promise<string | null> =>
-  post(key, "takeover", {
-    instanceId: at.instanceId,
-    machineId: at.machineId,
-    ...(at.viewer ? { viewer: at.viewer } : {}),
-  });
+  post(
+    hubRequest("POST /api/browsers/:key/takeover", {
+      path: { key },
+      body: {
+        instanceId: at.instanceId,
+        machineId: at.machineId,
+        ...(at.viewer ? { viewer: at.viewer } : {}),
+      },
+    })
+  );
 
 export const handBackFromPanel = (
   key: BrowserKey,
   machineId: string
-): Promise<string | null> => post(key, "handback", { machineId });
+): Promise<string | null> =>
+  post(
+    hubRequest("POST /api/browsers/:key/handback", {
+      path: { key },
+      body: { machineId },
+    })
+  );
 
 export const startFromPanel = (
   key: BrowserKey,
   machineId: string
-): Promise<string | null> => post(key, "start", { machineId });
+): Promise<string | null> =>
+  post(
+    hubRequest("POST /api/browsers/:key/start", {
+      path: { key },
+      body: { machineId },
+    })
+  );

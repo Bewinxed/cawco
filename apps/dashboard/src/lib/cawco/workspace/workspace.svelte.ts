@@ -21,8 +21,10 @@
 import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { TabNamed } from "@cawco/core/protocol";
 import { SvelteSet } from "svelte/reactivity";
+import { hubFetch } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
@@ -154,16 +156,16 @@ function askName(id: string): void {
 function sendNames(): void {
   const asked = [...toName];
   toName.clear();
-  fetch("/api/instances/named", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      ids: asked.map((id) => ({
-        id,
-        machine: held.ctx?.[id]?.machine ?? null,
-      })),
-    }),
-  })
+  hubFetch(
+    hubRequest("POST /api/instances/named", {
+      body: {
+        ids: asked.map((id) => ({
+          id,
+          machine: held.ctx?.[id]?.machine ?? null,
+        })),
+      },
+    })
+  )
     .then(async (response) =>
       response.ok ? ((await response.json()) as TabNamed[]) : []
     )

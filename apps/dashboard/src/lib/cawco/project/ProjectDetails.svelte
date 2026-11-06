@@ -55,6 +55,7 @@
     type ProjectAtLimit,
   } from "@cawco/core/accounts";
   import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
   import { machineLabel } from "@cawco/core/machine-names";
   import type { DeclaredStep, ProjectGate } from "@cawco/core/project-gate";
@@ -453,7 +454,7 @@
     usable = null;
     try {
       const { connections } = await send<{ connections: ConnectionView[] }>(
-        "/api/connections"
+        hubRequest("GET /api/connections")
       );
       usable = connections.filter(
         (each) =>

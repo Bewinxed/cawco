@@ -1,4 +1,5 @@
 import type { Deleted } from "@cawco/core/fleet";
+import { hubRequest } from "@cawco/core/hub-request";
 import {
   type RULE_TEMPLATES,
   type Rule,
@@ -7,7 +8,7 @@ import {
   ruleSettings,
 } from "@cawco/core/rules";
 import { routinesWords } from "@cawco/core/words/routines";
-import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
+import { hubCall } from "#lib/cawco/hub-read.js";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -49,32 +50,28 @@ export const loadRuleActivity = (
   id: string
 ): Promise<{ activity: RuleActivity[] }> =>
   hubCall<{ activity: RuleActivity[] }>(
-    `/api/rules/${encodeURIComponent(id)}/activity`,
-    {},
+    hubRequest("GET /api/rules/:id/activity", { path: { id } }),
     "load what this rule has caught"
   );
 
 /** Create: the hub mints the id and answers with the whole rule. */
 export const createRule = (draft: RuleDraft): Promise<Rule> =>
   hubCall<Rule>(
-    "/api/rules",
-    { method: "POST", ...jsonBody(draft) },
+    hubRequest("POST /api/rules", { body: draft }),
     `save ${draft.name || "the rule"}`
   );
 
 /** Edit: strictly an existing id — the hub 404s anything it never minted. */
 export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
   hubCall<Rule>(
-    `/api/rules/${encodeURIComponent(id)}`,
-    { method: "PUT", ...jsonBody(draft) },
+    hubRequest("PUT /api/rules/:id", { path: { id }, body: draft }),
     `save ${draft.name || "the rule"}`
   );
 
 /** Delete: the rule stops at once, into the hub's trash for its Undo (config/undo.ts). */
 export const removeRule = (id: string, name: string): Promise<Deleted> =>
   hubCall<Deleted>(
-    `/api/rules/${encodeURIComponent(id)}`,
-    { method: "DELETE" },
+    hubRequest("DELETE /api/rules/:id", { path: { id } }),
     `delete ${name}`
   );
 

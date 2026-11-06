@@ -18,7 +18,8 @@ import type {
   FindKind,
   WaitingAnswer,
 } from "@cawco/core/find";
-import { hubSaid, unreachable, unreachedAnswer } from "../hub-read";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
+import { hubFetch, hubSaid, unreachable, unreachedAnswer } from "../hub-read";
 
 export type {
   FindAnswer,
@@ -50,9 +51,12 @@ export type Read<T> =
 export type Asked<T> =
   { kind: "answered"; read: Read<T> } | { kind: "superseded" };
 
-async function read<T>(url: string, signal?: AbortSignal): Promise<Asked<T>> {
+async function read<T>(
+  request: HubRequest,
+  signal?: AbortSignal
+): Promise<Asked<T>> {
   try {
-    return { kind: "answered", read: await answer<T>(url, signal) };
+    return { kind: "answered", read: await answer<T>(request, signal) };
   } catch (error) {
     // The abort rejects the fetch, or the body read after it (Firefox: "The
     // operation was aborted."); either way it is the caller letting go.
@@ -63,10 +67,13 @@ async function read<T>(url: string, signal?: AbortSignal): Promise<Asked<T>> {
   }
 }
 
-async function answer<T>(url: string, signal?: AbortSignal): Promise<Read<T>> {
+async function answer<T>(
+  request: HubRequest,
+  signal?: AbortSignal
+): Promise<Read<T>> {
   let response: Response;
   try {
-    response = await fetch(url, { signal });
+    response = await hubFetch(request, { signal });
   } catch (error) {
     if (!signal?.aborted && unreachable(error)) {
       return { ok: false, unreached: true };
@@ -90,22 +97,16 @@ export interface Ask {
   signal?: AbortSignal;
 }
 
-const query = (q: string, { by, kinds, limit }: Ask, transcripts: boolean) => {
-  const params = new URLSearchParams({ q });
-  if (limit) {
-    params.set("limit", String(limit));
-  }
-  if (kinds && kinds.length > 0) {
-    params.set("kinds", kinds.join(","));
-  }
-  if (by) {
-    params.set("by", by);
-  }
-  if (!transcripts) {
-    params.set("transcripts", "0");
-  }
-  return `/api/find?${params}`;
-};
+const query = (q: string, { by, kinds, limit }: Ask, transcripts: boolean) =>
+  hubRequest("GET /api/find", {
+    query: {
+      q,
+      ...(limit ? { limit: String(limit) } : {}),
+      ...(kinds && kinds.length > 0 ? { kinds: kinds.join(",") } : {}),
+      ...(by ? { by } : {}),
+      ...(transcripts ? {} : { transcripts: "0" as const }),
+    },
+  });
 
 /** What the hub knows by name, in milliseconds: asked on every keystroke. */
 export const findNames = (q: string, ask: Ask = {}) =>
@@ -116,4 +117,4 @@ export const findEverywhere = (q: string, ask: Ask = {}) =>
   read<FindAnswer>(query(q, ask, true), ask.signal);
 
 export const findWaiting = (signal?: AbortSignal) =>
-  read<WaitingAnswer>("/api/find/waiting", signal);
+  read<WaitingAnswer>(hubRequest("GET /api/find/waiting"), signal);

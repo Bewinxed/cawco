@@ -5,6 +5,7 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type {
   ToolPolicy,
   ToolSigninChallenge,
@@ -13,7 +14,7 @@ import type {
 } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { machineControl } from "./client.svelte";
-import { couldNot, hubRefusal, jsonBody } from "./hub-read";
+import { couldNot, hubFetch, hubRefusal } from "./hub-read";
 
 /** What `GET /api/tools` answers with. */
 export interface ToolsSnapshot {
@@ -41,11 +42,9 @@ export async function setPolicy(
   id: string,
   patch: { required?: boolean; pinnedVersion?: string | null }
 ): Promise<ToolPolicy> {
-  const response = await fetch(`/api/tools/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
+  const response = await hubFetch(
+    hubRequest("PUT /api/tools/:id", { path: { id }, body: patch })
+  );
   if (!response.ok) {
     throw await couldNot("save that policy", response);
   }
@@ -86,14 +85,8 @@ export class ToolSigninRefusal extends Error {
   }
 }
 
-const signinPath = (machineId: string, toolId: string): string =>
-  `/api/machines/${encodeURIComponent(machineId)}/tools/${encodeURIComponent(toolId)}/signin`;
-
-async function signinCall<T>(url: string, body?: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: "POST",
-    ...(body === undefined ? {} : jsonBody(body)),
-  });
+async function signinCall<T>(request: HubRequest): Promise<T> {
+  const response = await hubFetch(request);
   if (response.status === 422) {
     // The machine's own refusal, whole: its sentence, then the tool's
     // screen lines one per line (core words/tools `screenOf`), which the
@@ -121,7 +114,12 @@ async function signinCall<T>(url: string, body?: unknown): Promise<T> {
 export const beginToolSignin = (
   machineId: string,
   toolId: string
-): Promise<ToolSigninChallenge> => signinCall(signinPath(machineId, toolId));
+): Promise<ToolSigninChallenge> =>
+  signinCall(
+    hubRequest("POST /api/machines/:machineId/tools/:toolId/signin", {
+      path: { machineId, toolId },
+    })
+  );
 
 /** Types the pasted code into the machine's waiting sign-in: the tool's status there, its sign-in read again. */
 export const completeToolSignin = (
@@ -129,4 +127,9 @@ export const completeToolSignin = (
   toolId: string,
   code: string
 ): Promise<ToolStatus> =>
-  signinCall(`${signinPath(machineId, toolId)}/complete`, { code });
+  signinCall(
+    hubRequest("POST /api/machines/:machineId/tools/:toolId/signin/complete", {
+      path: { machineId, toolId },
+      body: { code },
+    })
+  );

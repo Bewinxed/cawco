@@ -9,6 +9,8 @@
  * served by a stage, which serves components and no `/api`: a read of its
  * own origin there was a 502 in every embed's console.
  */
+
+import { hubRequest } from "@cawco/core/hub-request";
 import { browser } from "$app/env";
 import type { FleetSnapshot } from "./fleet";
 import type { HubSeam } from "./hub-seam";
@@ -31,7 +33,7 @@ export function fleetMcpServers(hub: HubSeam): ConfiguredServer[] | null {
     const held = $state<Read>({ servers: null });
     read = held;
     reads.set(hub, held);
-    hub.read<FleetSnapshot>("/api/fleet").then(
+    hub.read<FleetSnapshot>(hubRequest("GET /api/fleet")).then(
       (snapshot) => {
         held.servers = snapshot.config.mcp;
       },

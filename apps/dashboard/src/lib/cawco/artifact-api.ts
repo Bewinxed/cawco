@@ -7,6 +7,7 @@
 
 import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hubRequest } from "@cawco/core/hub-request";
 import type {
   ArtifactHit,
   ArtifactSummary,
@@ -15,12 +16,9 @@ import type {
   ShownFailure,
 } from "@cawco/core/protocol";
 import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
-
-const artifactsPath = (instanceId: string, id?: string) =>
-  `/api/instances/${encodeURIComponent(instanceId)}/artifacts${id ? `/${encodeURIComponent(id)}` : ""}`;
 
 /** The hub's refusal, in its own words. */
 async function ok(response: Response): Promise<Response> {
@@ -34,7 +32,15 @@ async function ok(response: Response): Promise<Response> {
 export async function listArtifacts(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
-  return (await ok(await fetch(artifactsPath(instanceId)))).json();
+  return (
+    await ok(
+      await hubFetch(
+        hubRequest("GET /api/instances/:id/artifacts", {
+          path: { id: instanceId },
+        })
+      )
+    )
+  ).json();
 }
 
 /**
@@ -46,7 +52,15 @@ export async function listArtifacts(
 export async function listFiles(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
-  return (await ok(await fetch(artifactsPath(instanceId, "files")))).json();
+  return (
+    await ok(
+      await hubFetch(
+        hubRequest("GET /api/instances/:id/artifacts/files", {
+          path: { id: instanceId },
+        })
+      )
+    )
+  ).json();
 }
 
 /**
@@ -58,8 +72,10 @@ export async function listAttachments(
 ): Promise<SessionAttachments> {
   return (
     await ok(
-      await fetch(
-        `/api/instances/${encodeURIComponent(instanceId)}/attachments`
+      await hubFetch(
+        hubRequest("GET /api/instances/:id/attachments", {
+          path: { id: instanceId },
+        })
       )
     )
   ).json();
@@ -76,8 +92,11 @@ export async function searchArtifacts(
 ): Promise<ArtifactHit[]> {
   return (
     await ok(
-      await fetch(
-        `${artifactsPath(instanceId)}/search?q=${encodeURIComponent(q)}`,
+      await hubFetch(
+        hubRequest("GET /api/instances/:id/artifacts/search", {
+          path: { id: instanceId },
+          query: { q },
+        }),
         { signal }
       )
     )
@@ -90,7 +109,10 @@ export const thumbnailUrl = (
   thumbnail: ArtifactThumbnail,
   scheme: "light" | "dark"
 ): string =>
-  `/api/artifacts/${encodeURIComponent(id)}/thumbnail/${thumbnail.single ? "light" : scheme}?at=${encodeURIComponent(thumbnail.at)}`;
+  hubRequest("GET /api/artifacts/:artifact/thumbnail/:scheme", {
+    path: { artifact: id, scheme: thumbnail.single ? "light" : scheme },
+    query: { at: thumbnail.at },
+  }).path;
 
 /**
  * The pane's thumbnail of the artifact it shows, kept by the hub as the
@@ -102,11 +124,12 @@ export async function keepThumbnail(
   shot: { light: string | null; dark: string | null; single: boolean }
 ): Promise<void> {
   await ok(
-    await fetch(`${artifactsPath(instanceId, id)}/thumbnail`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(shot),
-    })
+    await hubFetch(
+      hubRequest("PUT /api/instances/:id/artifacts/:artifact/thumbnail", {
+        path: { id: instanceId, artifact: id },
+        body: shot,
+      })
+    )
   );
 }
 
@@ -135,11 +158,12 @@ export async function showArtifact(
   id: string,
   at: ArtifactPlace = { top: true }
 ): Promise<"panel" | "page"> {
-  const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify("top" in at ? {} : { at }),
-  });
+  const response = await hubFetch(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+      path: { id: instanceId, artifact: id },
+      body: "top" in at ? {} : { at },
+    })
+  );
   if (!response.ok) {
     throw new ArtifactRefused(
       response.status,
@@ -164,7 +188,13 @@ export async function removeArtifact(
   instanceId: string,
   id: string
 ): Promise<void> {
-  await ok(await fetch(artifactsPath(instanceId, id), { method: "DELETE" }));
+  await ok(
+    await hubFetch(
+      hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
+        path: { id: instanceId, artifact: id },
+      })
+    )
+  );
 }
 
 /**
@@ -180,11 +210,12 @@ export async function artifactShown(
   )
 ): Promise<void> {
   await ok(
-    await fetch(`${artifactsPath(instanceId, id)}/shown`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client: currentClientId(), ...word }),
-    })
+    await hubFetch(
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/shown", {
+        path: { id: instanceId, artifact: id },
+        body: { client: currentClientId(), ...word },
+      })
+    )
   );
 }
 
@@ -196,11 +227,12 @@ export async function createDraftCanvas(
   instanceId: string
 ): Promise<{ id: string; name: string }> {
   const response = await ok(
-    await fetch(artifactsPath(instanceId), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "canvas", name: "canvas", draft: true }),
-    })
+    await hubFetch(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: instanceId },
+        body: { kind: "canvas", name: "canvas", draft: true },
+      })
+    )
   );
   const made = (await response.json()) as { id: string; name: string };
   return { id: made.id, name: made.name };
@@ -213,12 +245,17 @@ export interface CanvasExport {
   png: string | null;
 }
 
-const exportUrl = (id: string): string =>
-  `/api/artifacts/${encodeURIComponent(id)}/export`;
-
 /** A canvas's export, waited on for as long as the hub takes. */
 export async function exportCanvas(id: string): Promise<CanvasExport> {
-  return (await ok(await fetch(exportUrl(id)))).json();
+  return (
+    await ok(
+      await hubFetch(
+        hubRequest("GET /api/artifacts/:artifact/export", {
+          path: { artifact: id },
+        })
+      )
+    )
+  ).json();
 }
 
 /**
@@ -231,7 +268,16 @@ export function exportCanvasWithin(
   withinMs: number
 ): Promise<Bounded<CanvasExport>> {
   return readWithin(withinMs, async (signal): Promise<CanvasExport> =>
-    (await ok(await fetch(exportUrl(id), { signal }))).json()
+    (
+      await ok(
+        await hubFetch(
+          hubRequest("GET /api/artifacts/:artifact/export", {
+            path: { artifact: id },
+          }),
+          { signal }
+        )
+      )
+    ).json()
   );
 }
 
@@ -261,11 +307,12 @@ export async function writeSheet(
 }> {
   return (
     await ok(
-      await fetch(`${artifactsPath(instanceId, id)}/sheet`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(change),
-      })
+      await hubFetch(
+        hubRequest("POST /api/instances/:id/artifacts/:artifact/sheet", {
+          path: { id: instanceId, artifact: id },
+          body: change,
+        })
+      )
     )
   ).json();
 }
@@ -276,11 +323,15 @@ export async function fetchCanvasMap(
   id: string,
   component: string | null = null
 ): Promise<CanvasMap> {
-  const query = component
-    ? `?${new URLSearchParams({ component }).toString()}`
-    : "";
   return (
-    await ok(await fetch(`${artifactsPath(instanceId, id)}/map${query}`))
+    await ok(
+      await hubFetch(
+        hubRequest("GET /api/instances/:id/artifacts/:artifact/map", {
+          path: { id: instanceId, artifact: id },
+          ...(component ? { query: { component } } : {}),
+        })
+      )
+    )
   ).json();
 }
 
@@ -291,7 +342,11 @@ export async function verifyArtifact(
 ): Promise<string> {
   const answer = (await (
     await ok(
-      await fetch(`${artifactsPath(instanceId, id)}/verify`, { method: "POST" })
+      await hubFetch(
+        hubRequest("POST /api/instances/:id/artifacts/:artifact/verify", {
+          path: { id: instanceId, artifact: id },
+        })
+      )
     )
   ).json()) as { verify: string };
   return answer.verify;
@@ -303,7 +358,11 @@ export async function canvasSent(
   id: string
 ): Promise<void> {
   await ok(
-    await fetch(`${artifactsPath(instanceId, id)}/sent`, { method: "POST" })
+    await hubFetch(
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/sent", {
+        path: { id: instanceId, artifact: id },
+      })
+    )
   );
 }
 
@@ -311,7 +370,9 @@ export async function canvasSent(
 export async function findArtifact(
   id: string
 ): Promise<ArtifactSummary & { instanceId: string; shown: boolean }> {
-  const response = await fetch(`/api/artifacts/${encodeURIComponent(id)}`);
+  const response = await hubFetch(
+    hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } })
+  );
   if (!response.ok) {
     throw new ArtifactRefused(
       response.status,
@@ -324,8 +385,10 @@ export async function findArtifact(
 /** Closes the session's panel; each store marks its own copy closed once the hub took it. */
 export async function deletePreview(instanceId: string): Promise<void> {
   await ok(
-    await fetch(`/api/instances/${encodeURIComponent(instanceId)}/preview`, {
-      method: "DELETE",
-    })
+    await hubFetch(
+      hubRequest("DELETE /api/instances/:id/preview", {
+        path: { id: instanceId },
+      })
+    )
   );
 }
