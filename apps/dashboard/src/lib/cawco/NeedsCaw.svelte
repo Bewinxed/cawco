@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import { cawHeadWords } from "@cawco/core/words/caw-head";
+  import { needs as needCount } from "@cawco/core/words/helpers";
   import { home } from "./home/home-state.svelte";
 
   /**
@@ -175,7 +176,7 @@
   const arcSlots = $derived(slots(arcCount));
   const lapSlots = $derived(slots(lapCount));
   const tipText = $derived(
-    `${count > 0 ? cawHeadWords.needsTip(count) : quiet}${noticeWords}`
+    `${count > 0 ? needCount(count, "you") : quiet}${noticeWords}`
   );
 
   /** A point on the rim, `deg` clockwise from 12 o'clock. */

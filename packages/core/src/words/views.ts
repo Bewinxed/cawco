@@ -7,13 +7,15 @@
  * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
  * chain when that file is stale. So a word is changed here or nowhere.
  */
+import { needs } from "./helpers";
+
 export const viewsWords = {
   /** The strip's ghost action, and the head's ⋯ on a phone, while Caw can start. */
   ask: "Ask Caw for a view",
   /** The strip's ⋯ after its tabs, holding the views with no room to stand as one. */
   more: "More views",
   /** The same ⋯ while the views it holds have pages waiting on picks (Needs you). */
-  moreNeedsYou: (count: number) => `More views, ${count} needs you`,
+  moreNeedsYou: (count: number) => `More views, ${needs(count, "you")}`,
   /** The strip's one menu where no tab has room, named for the view on screen. */
   pick: (view: string) => `View: ${view}`,
   /** The ask's composer, a view in a sentence. */

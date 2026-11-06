@@ -75,6 +75,7 @@
   import {
     holdComposerLayer,
     roomOver,
+    shutOnEscape,
   } from "../transcript/composer-layer.svelte";
   import PlanTree from "./PlanTree.svelte";
 
@@ -167,34 +168,15 @@
     row.setAttribute("data-linked", "");
     setTimeout(() => row.removeAttribute("data-linked"), dur("--dur-fade") * 4);
   });
-  function onkeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape" && !event.defaultPrevented) {
-      event.preventDefault();
-      shut();
-    }
-  }
-  /** Esc with the focus nowhere in particular (a pointer opened it) shuts it too. */
-  function onwindowkey(event: KeyboardEvent): void {
-    const at = document.activeElement;
-    if (
-      event.key === "Escape" &&
-      !event.defaultPrevented &&
-      (!at || at === document.body)
-    ) {
-      event.preventDefault();
-      shut();
-    }
-  }
+  // Esc shuts it: from inside, the focus back on its ring; from the tray row or the composer under it, the focus staying where it was.
+  shutOnEscape(() => section, { inside: shut, under: () => onclose() });
 </script>
-
-<svelte:window onkeydown={onwindowkey} />
 
 <!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
      one transition, --dur-pop on the drawer curve, from the ring's corner)
      and leaves by `popOut` back down into the row (--dur-exit), global: the
      pane's `{#if}` that shuts it is outside this component, a snippet
      render between. -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the plan shuts it, heard as it passes up from the control that has the focus -->
 <section
   data-slot="plan"
   aria-labelledby={titleId}
@@ -204,7 +186,6 @@
   })}
   data-side="top"
   data-state="open"
-  {onkeydown}
   style:--plan-foot="calc(100% + var(--space-2))"
   bind:this={section}
   {@attach room}

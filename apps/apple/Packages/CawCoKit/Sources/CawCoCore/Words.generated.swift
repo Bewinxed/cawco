@@ -7,6 +7,11 @@ public enum Words {
         names.count < 2 ? (names.first ?? "") : names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
     }
 
+    /// "1 needs you", "3 need Claude Code", "6 tasks need you": how many need whom.
+    public static func needs(_ n: Int, _ who: String, _ what: String = "") -> String {
+        "\(n)\(what.isEmpty ? "" : " " + what) \(n == 1 ? "needs" : "need") \(who)"
+    }
+
     /// A whole number in two figures: 5 → "05".
     public static func pad2(_ n: Int) -> String {
         n < 10 && n >= 0 ? "0\(n)" : "\(n)"
@@ -2950,11 +2955,6 @@ public enum Words {
             "Needs you, \(count)"
         }
 
-        /// The same, his tooltip.
-        public static func needsTip(count: Int) -> String {
-            "\(count) need you"
-        }
-
         /// Nothing waits, and the fleet is read over a live hub: the one empty answer.
         public static let caughtUp = "All caught up"
 
@@ -3050,7 +3050,7 @@ public enum Words {
 
         /// The same ⋯ while the views it holds have pages waiting on picks (Needs you).
         public static func moreNeedsYou(count: Int) -> String {
-            "More views, \(count) needs you"
+            "More views, \(Words.needs(count, "you"))"
         }
 
         /// The strip's one menu where no tab has room, named for the view on screen.

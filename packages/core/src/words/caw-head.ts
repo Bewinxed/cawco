@@ -10,8 +10,6 @@
 export const cawHeadWords = {
   /** Something waits on the operator: how many, his label. */
   needs: (count: number) => `Needs you, ${count}`,
-  /** The same, his tooltip. */
-  needsTip: (count: number) => `${count} need you`,
   /** Nothing waits, and the fleet is read over a live hub: the one empty answer. */
   caughtUp: "All caught up",
   /** The hub is live and its fleet not read yet: nothing to count from. */

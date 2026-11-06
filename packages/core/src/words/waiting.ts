@@ -5,10 +5,7 @@
  * sign-in).
  */
 import type { SessionAnswerHow } from "../session-questions";
-
-/** The verb the whole card says: "1 needs you", "3 need Claude Code". */
-const needs = (n: number, who: string) =>
-  n === 1 ? `1 needs ${who}` : `${n} need ${who}`;
+import { needs } from "./helpers";
 
 /**
  * One verb, two subjects: everything on the chip and the card says whom an

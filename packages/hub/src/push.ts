@@ -106,6 +106,7 @@ import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
+import { needs as needCount } from "@cawco/core/words/helpers";
 import { Elysia, t } from "elysia";
 import { isProjectConversation } from "./caw";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
@@ -468,7 +469,7 @@ const burstOf = (id: string, items: readonly Arrival[]): Notification => {
     items.map((item) => NOUNS[item.notification.data.kind])
   );
   const [noun] = nouns.size === 1 ? [...nouns] : [undefined];
-  const title = noun ? `${count} ${noun} need you` : `${count} need you`;
+  const title = needCount(count, "you", noun);
   const projects = new Set(
     items.map((item) => item.notification.shown.subtitle)
   );
@@ -494,7 +495,7 @@ const askAmong = (
   ask: Notification,
   count: number
 ): Notification => {
-  const more = `And ${count - 1} more need you`;
+  const more = `And ${needCount(count - 1, "you", "more")}`;
   return {
     ...ask,
     collapseId: id,

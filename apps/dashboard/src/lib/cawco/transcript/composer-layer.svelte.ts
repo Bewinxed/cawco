@@ -14,6 +14,7 @@
  */
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
+import { on } from "svelte/events";
 
 class ComposerLayer {
   #open = $state<symbol | null>(null);
@@ -73,6 +74,42 @@ export function holdComposerLayer(
       untrack(onclose);
     }
   });
+}
+
+/**
+ * Esc shuts a layer standing over the dock (the plan, the list of what
+ * waits on the person), one way for each: from inside it, `inside` (it
+ * shuts and hands the focus back to its chip); from wherever the person is
+ * working under it, the tray row and the composer it rises from (its
+ * dock), or the page with the focus nowhere in particular (a pointer
+ * opened it), `under` (it shuts and the focus stays where it was, so a
+ * draft goes on). Anything that took Esc first (a menu, the composer's
+ * own) keeps it. Called while the component is made; `layer` reads its
+ * element.
+ */
+export function shutOnEscape(
+  layer: () => HTMLElement | undefined,
+  shut: { inside: () => void; under: () => void }
+): void {
+  $effect(() =>
+    on(window, "keydown", (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
+      const at = document.activeElement;
+      const own = layer();
+      if (own && at && own.contains(at)) {
+        event.preventDefault();
+        untrack(shut.inside);
+        return;
+      }
+      const dock = own?.closest('[data-slot="dock"]');
+      if (!at || at === document.body || (dock?.contains(at) ?? false)) {
+        event.preventDefault();
+        untrack(shut.under);
+      }
+    })
+  );
 }
 
 /**
