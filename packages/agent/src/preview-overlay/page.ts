@@ -1052,8 +1052,9 @@ function takeTheme(said: unknown) {
 
 /**
  * What of the page's edges the host's chrome takes, px (`inset` in its
- * `cawco:hello` and `cawco:place`): `top`, the composer's grab band; `side`,
- * how far in its shape's sides stand; none in the panel. A canvas's rail
+ * `cawco:hello` and `cawco:place`): `top`, the composer's grab band, or in a
+ * side card a floating head's room; `side`, how far in its shape's sides
+ * stand. A canvas's rail
  * stands inside them (canvas.css `--canvas-inset-top`, `--canvas-inset-side`),
  * and stays unseen until a host has said them (`data-canvas-inset`), so its
  * first paint is where it stands. Taken here, in the overlay, which hears the
@@ -1085,6 +1086,33 @@ function takeInset(said: unknown) {
   root.style.setProperty("--canvas-inset-top", top);
   root.style.setProperty("--canvas-inset-side", px(inset.side) ?? "0px");
   root.dataset.canvasInset = "";
+}
+
+/** The most room a host's head may take over the page's top, px: a floating bar's, never a page's. */
+const HEAD_ROOM_MOST = 200;
+
+/**
+ * The room the host's floating head takes over the page's top, px (the
+ * artifact panel's head, its glass over the frame), as iOS insets a scroll
+ * view under a floating top bar. Only a document CawCo draws itself takes
+ * it, one whose root says so (`data-cawco-head-room`: a decision page, a
+ * canvas): its own scroller pads its top by `--page-inset-top`, and the
+ * page's layout is never pushed down. The host hears whether it was taken
+ * (`cawco:head-room`, `taken`), and stands any other page under the room.
+ */
+function takeHeadRoom(said: unknown) {
+  if (typeof said !== "number" || !Number.isFinite(said)) {
+    return;
+  }
+  const root = document.documentElement;
+  const taken = root.hasAttribute("data-cawco-head-room");
+  if (taken) {
+    root.style.setProperty(
+      "--page-inset-top",
+      `${Math.max(0, Math.min(said, HEAD_ROOM_MOST))}px`
+    );
+  }
+  post("cawco:head-room", { taken });
 }
 
 /** The page as the doc has it, before the first paint the page reaches; a morph's new root takes the theme again. */
@@ -3450,6 +3478,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       }
       takeTheme(message.theme);
       takeInset(message.inset);
+      takeHeadRoom(message.headRoom);
       // A sheet's sections ran before the pane said hello: each one's sheet goes now.
       const onPage = (
         window as { __cawcoSheetsOnPage?: Record<string, object> }
@@ -3459,6 +3488,9 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       }
     },
     "cawco:place": (message) => takeInset(message.inset),
+    // The host's floating head over the page's top, px (the artifact
+    // panel's): a document CawCo draws takes it (`takeHeadRoom`).
+    "cawco:head-room": (message) => takeHeadRoom(message.px),
     // A sheet's inspector: a story mounted again with the pane's args (null lets them go), and the story it shows.
     "cawco:story-args": (message) => {
       dispatchEvent(

@@ -289,7 +289,7 @@
 >
   <div
     bind:this={scroller}
-    class="kit-edge-fade-block min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable max-phone:no-scrollbar in-data-cawco-bare-scroll:no-scrollbar"
+    class="kit-edge-fade-block min-h-0 overflow-y-auto overscroll-y-contain pt-(--page-inset-top) scrollbar-gutter-stable max-phone:no-scrollbar in-data-cawco-bare-scroll:no-scrollbar"
     data-slot="page-scroll"
   >
     <div

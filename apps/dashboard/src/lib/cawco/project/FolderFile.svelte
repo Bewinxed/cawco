@@ -20,6 +20,7 @@
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronLeft } from "#lib/icons.js";
   import { folderRawHref } from "../project-tasks";
@@ -88,53 +89,63 @@
   const markdown = $derived(path.endsWith(".md"));
 </script>
 
+<!-- The file runs to its surface's top beneath the head floating over it:
+     its scroller pads its top by the head's room (`--side-room`, the side
+     card's or the page's) and is the timeline its scroll edge effect plays
+     on (HeadFade). -->
 {#snippet body()}
   <div
-    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5 in-data-file-page:border-t in-data-file-page:border-t-border-hairline"
+    class="flex min-h-0 flex-1 flex-col overflow-y-auto pt-(--side-room) scroll-timeline-transcript-head"
     data-folder-file={path}
   >
-    {#if media}
-      <TaskOutput
-        bare
-        {path}
-        {projectId}
-        src={folderRawHref(projectId, path)}
-      />
-    {:else if problem}
-      <!-- Plain, not alarmed (DESIGN.md, Voice: no alarm inflation): the path
+    <div class="flex flex-col gap-space-2 p-space-5">
+      {#if media}
+        <TaskOutput
+          bare
+          {path}
+          {projectId}
+          src={folderRawHref(projectId, path)}
+        />
+      {:else if problem}
+        <!-- Plain, not alarmed (DESIGN.md, Voice: no alarm inflation): the path
            asked for is not there to show, and the hub says why. -->
-      <Alert data-folder-file-refused>
-        <AlertDescription>{problem}</AlertDescription>
-      </Alert>
-    {:else if content === null}
-      <div class="flex flex-col gap-space-2" out:revealOut>
-        <Skeleton class="w-2/3" line="body" />
-        <Skeleton class="w-1/2" line="body" />
-      </div>
-    {:else if markdown}
-      <div in:reveal>
-        <Markdown source={content} />
-      </div>
-    {:else}
-      <pre
-        in:reveal
-        data-slot="text"
-        class="m-0 font-mono text-size-code wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
-    {/if}
+        <Alert data-folder-file-refused>
+          <AlertDescription>{problem}</AlertDescription>
+        </Alert>
+      {:else if content === null}
+        <div class="flex flex-col gap-space-2" out:revealOut>
+          <Skeleton class="w-2/3" line="body" />
+          <Skeleton class="w-1/2" line="body" />
+        </div>
+      {:else if markdown}
+        <div in:reveal>
+          <Markdown source={content} />
+        </div>
+      {:else}
+        <pre
+          in:reveal
+          data-slot="text"
+          class="m-0 font-mono text-size-code wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
+      {/if}
+    </div>
   </div>
 {/snippet}
 
 {#if page}
   <!-- Its own page under 900px, headed as a task's (TaskPane's page): Back,
-       then the path at the row's end, cut short where it runs long. -->
+       then the path at the row's end, cut short where it runs long. The
+       head floats over the file (`--side-room`, the top bar's height), the
+       scroll edge effect under it. -->
   <section
     aria-label={path}
-    class="flex min-h-0 flex-1 flex-col"
+    class="relative flex min-h-0 flex-1 flex-col timeline-scope-transcript-head"
     data-file-page
+    style:--side-room="var(--c-top-bar-h)"
   >
+    <HeadFade band="var(--side-room)" tint="bg-surface-recess" />
     <header
       data-slot="page-head"
-      class="flex flex-none items-center gap-space-2 pt-0 pr-space-5 pb-space-2 pl-space-3"
+      class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-2 pr-space-5 pl-space-3"
     >
       <Button onclick={onclose} size="sm" variant="ghost">
         <IconChevronLeft />

@@ -64,6 +64,7 @@
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
@@ -218,7 +219,7 @@
   aria-labelledby={titleId}
   class={floatingSurface({
     class:
-      "absolute start-0 end-0 bottom-(--plan-foot) z-1 flex flex-col max-h-(--plan-room) p-0 overflow-clip origin-bottom-right rtl:origin-bottom-left pointer-events-auto",
+      "absolute start-0 end-0 bottom-(--plan-foot) z-1 flex flex-col max-h-(--plan-room) p-0 overflow-clip origin-bottom-right rtl:origin-bottom-left pointer-events-auto timeline-scope-transcript-head",
   })}
   data-side="top"
   data-state="open"
@@ -230,10 +231,14 @@
 >
   <!-- One row with no ground (DESIGN.md, The Title Bars Follow Liquid Glass
        Rule): the card's name, then Close, a bare symbol in its glass group.
-       A task attempt's id is a fact in the body, never in the bar. -->
+       A task attempt's id is a fact in the body, never in the bar. It
+       floats over the parts, which run to the card's top beneath it and
+       blur and fade under it as they scroll (HeadFade), clearing it at
+       rest by the body's top padding. -->
+  <HeadFade band="var(--c-top-bar-h)" tint="bg-surface-raised" />
   <header
     data-slot="plan-head"
-    class="flex h-c-top-bar-h flex-none items-center gap-space-2 pe-space-2 ps-space-4"
+    class="absolute inset-x-0 top-0 z-2 flex h-c-top-bar-h items-center gap-space-2 pe-space-2 ps-space-4"
   >
     <h2
       class="flex-auto min-w-0 m-0 truncate text-size-label font-medium text-ink-strong"
@@ -249,7 +254,8 @@
   <div
     data-slot="body"
     bind:this={body}
-    class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-3 pbe-space-4 px-space-4 flex flex-col gap-space-2"
+    class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y scroll-timeline-transcript-head pbs-(--body-top) pbe-space-4 px-space-4 flex flex-col gap-space-2"
+    style:--body-top="calc(var(--c-top-bar-h) + var(--space-3))"
     style:--more-px="0"
   >
     {#if todosOnly && plan?.taskId}

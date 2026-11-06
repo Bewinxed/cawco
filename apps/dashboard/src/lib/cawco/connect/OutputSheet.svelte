@@ -17,7 +17,9 @@
    */
   import { causeLine, type Install } from "@cawco/core/install";
   import { connectWords } from "@cawco/core/words/connect";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose, IconStopLinear } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
@@ -31,6 +33,8 @@
   let lines = $state<string[]>([]);
   let failed = $state("");
   let scroller = $state<HTMLElement | null>(null);
+  /** The floating stack's height over the output, px (the bar, the step, a question asked from it): the output's top padding. */
+  let headHeight = $state(0);
   let open = $state(false);
 
   const step = $derived(
@@ -116,61 +120,76 @@
   {@attach focusing}
   data-state={open ? "open" : "closed"}
   aria-label="Output of {titleOf(install)}"
+  style:--output-head="{headHeight}px"
   class={[
-    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-drawer transition-[translate,opacity] duration-(--dur-panel) ease-drawer",
+    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-drawer timeline-scope-transcript-head transition-[translate,opacity] duration-(--dur-panel) ease-drawer",
     phone.current
       ? "inset-0 data-[state=closed]:translate-y-full"
       : "inset-y-0 end-0 w-c-connect-w border-s border-s-border-hairline data-[state=closed]:translate-x-full",
     "motion-reduce:translate-none motion-reduce:data-[state=closed]:opacity-0",
   ]}
 >
-  <!-- One row with no ground (DESIGN.md, The Title Bars Follow Liquid Glass
+  <!-- The bar, the step it stands at and a question asked from the bar
+     float over the output as one stack: the output runs to the sheet's top
+     beneath it, clearing it at rest by its top padding (`--output-head`,
+     the stack's height) and blurring and fading under it as it scrolls
+     (HeadFade; DESIGN.md, The Title Bars Follow Liquid Glass Rule). -->
+  <HeadFade band="var(--output-head)" tint="bg-code-bg" />
+  <div
+    class="absolute inset-x-0 top-0 z-2 flex flex-col"
+    data-slot="output-head"
+    {@attach frameSize((node: HTMLElement) => {
+      headHeight = node.offsetHeight;
+    })}
+  >
+    <!-- One row with no ground (DESIGN.md, The Title Bars Follow Liquid Glass
        Rule): the install's name, then Stop install and Close, each a bare
        symbol in a glass group of its own. Where it stands is the output's
        first line, in its content. -->
-  <header
-    data-slot="bar"
-    class="flex h-c-top-bar-h flex-none items-center gap-space-2 ps-space-5 pe-space-2"
-  >
-    <h2
-      class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
+    <header
+      data-slot="bar"
+      class="flex h-c-top-bar-h flex-none items-center gap-space-2 ps-space-5 pe-space-2"
     >
-      {titleOf(install)}
-    </h2>
-    {#if install.state === "running"}
+      <h2
+        class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
+      >
+        {titleOf(install)}
+      </h2>
+      {#if install.state === "running"}
+        <BarGlass form="group">
+          <BarItem
+            icon={IconStopLinear}
+            label={connectWords.stopInstall}
+            onclick={askStop}
+          />
+        </BarGlass>
+      {/if}
       <BarGlass form="group">
         <BarItem
-          icon={IconStopLinear}
-          label={connectWords.stopInstall}
-          onclick={askStop}
+          icon={IconClose}
+          label={connectWords.closeOutput}
+          onclick={() => connect.closeOutput()}
         />
       </BarGlass>
-    {/if}
-    <BarGlass form="group">
-      <BarItem
-        icon={IconClose}
-        label={connectWords.closeOutput}
-        onclick={() => connect.closeOutput()}
-      />
-    </BarGlass>
-  </header>
-  <p
-    data-slot="step"
-    class="m-0 flex-none overflow-clip text-ellipsis whitespace-nowrap px-space-5 pb-space-2 type-meta text-ink-muted"
-    aria-live="polite"
-  >
-    {step}
-  </p>
-  <AskHere
-    asker={asks}
-    at="stop-output"
-    class="flex-none border-b border-b-border-hairline py-space-3"
-    end="var(--space-5)"
-    indent="var(--space-5)"
-  />
+    </header>
+    <p
+      data-slot="step"
+      class="m-0 flex-none overflow-clip text-ellipsis whitespace-nowrap px-space-5 pb-space-2 type-meta text-ink-muted"
+      aria-live="polite"
+    >
+      {step}
+    </p>
+    <AskHere
+      asker={asks}
+      at="stop-output"
+      class="flex-none py-space-3"
+      end="var(--space-5)"
+      indent="var(--space-5)"
+    />
+  </div>
   <div
     bind:this={scroller}
-    class="kit-edge-fade-block min-h-0 flex-1 overflow-y-auto bg-code-bg px-space-5 py-space-3"
+    class="kit-edge-fade-block min-h-0 flex-1 overflow-y-auto bg-code-bg px-space-5 pt-(--output-head) pb-space-3 scroll-timeline-transcript-head"
   >
     {#if failed}
       <p class="m-0 type-meta text-status-fail-ink">

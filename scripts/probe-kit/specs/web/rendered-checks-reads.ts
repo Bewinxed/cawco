@@ -22,6 +22,16 @@
  *     (DESIGN.md, Map mode), no finding.
  *  7. coral, a card not chosen: the same card with nothing saying it is
  *     chosen: two corals, named.
+ *  8. bar-room, a bar claiming a row: a side card's head in flow, its
+ *     list's scroller starting at the head's foot: the rule names it.
+ *  9. bar-room, a bar over its content: the same head floating over the
+ *     card, the list's scroller running to the card's top under it, its
+ *     first row clear by the scroller's padding: no finding.
+ * 10. bar-room, a bar over a page: the head floating over a page in a
+ *     frame that runs to the card's top: no finding.
+ * 11. bar-room, a page under a bar's room: the head in flow over a page
+ *     in a frame, another document whose layout is not the host's to
+ *     inset: named, no finding.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
@@ -48,6 +58,30 @@ const CORAL = `<style>
   .chosen { border-color: oklch(64.5% 0.175 33); }
   .act { margin: 16px; padding: 8px 16px; border: 0; border-radius: 8px; background: oklch(64.5% 0.175 33); color: #fff; }
 </style>`;
+
+/** A side card: its head, and a list of rows that scrolls. */
+const CARD = `<style>
+  .card { position: relative; display: flex; flex-direction: column; inline-size: 360px; block-size: 400px; margin: 16px; }
+  .card header { display: flex; align-items: center; block-size: 52px; padding-inline: 12px; flex: none; }
+  .card .float { position: absolute; inset-inline: 0; inset-block-start: 0; z-index: 1; }
+  .list { flex: 1; min-block-size: 0; overflow-y: auto; }
+  .card .under { padding-block-start: 52px; }
+  .list p { margin: 0; padding: 12px; }
+  .card iframe { flex: 1; border: 0; }
+</style>`;
+const ROWS = [
+  "Plum",
+  "Pear",
+  "Quince",
+  "Fig",
+  "Damson",
+  "Medlar",
+  "Sloe",
+  "Rowan",
+  "Loquat",
+]
+  .map((row) => `<p>${row}</p>`)
+  .join("");
 
 interface Case {
   html: string;
@@ -112,6 +146,26 @@ const CASES: Record<string, Case> = {
     rule: "coral",
     want: "none",
     html: `${BASE}${CORAL}<div class="card chosen"><div role="button" tabindex="-1" aria-label="Handle"></div><button type="button" aria-current="true">Hub didn't answer</button><div role="button" tabindex="-1" aria-label="Handle"></div></div><button class="act" type="button">Create routine</button>`,
+  },
+  "a bar claiming a row": {
+    rule: "bar-room",
+    want: "finding",
+    html: `${BASE}${CARD}<section class="card" aria-label="Task"><header data-slot="side-head"><h2>Run budget</h2></header><div class="list">${ROWS}</div></section>`,
+  },
+  "a bar over its content": {
+    rule: "bar-room",
+    want: "none",
+    html: `${BASE}${CARD}<section class="card" aria-label="Task"><header class="float" data-slot="side-head"><h2>Run budget</h2></header><div class="list under">${ROWS}</div></section>`,
+  },
+  "a bar over a page": {
+    rule: "bar-room",
+    want: "none",
+    html: `${BASE}${CARD}<section class="card" aria-label="Preview"><header class="float" data-slot="side-head"><h2>Onboarding</h2></header><iframe title="Onboarding" srcdoc="<p>Step one</p>"></iframe></section>`,
+  },
+  "a page under a bar's room": {
+    rule: "bar-room",
+    want: "none",
+    html: `${BASE}${CARD}<section class="card" aria-label="Preview"><header data-slot="side-head"><h2>Onboarding</h2></header><iframe title="Onboarding" srcdoc="<p>Step one</p>"></iframe></section>`,
   },
   "a card not chosen": {
     rule: "coral",

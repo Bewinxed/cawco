@@ -210,7 +210,7 @@ interface Read {
     clipTop: number;
     f: number;
     opacity: number;
-    /** The top edge of what follows the band: the bar floating over a phone's tabs, else the page (`#main-content`). */
+    /** The top edge of what follows the band: the bar floating over a phone's tabs, else the page's content edge (`#main-content`'s top and its top padding). */
     pageTop: number;
     translate: string;
   }[];
@@ -228,14 +228,21 @@ function sampleBand(selector: string) {
   const floating = window.matchMedia("(max-width: 899px)").matches
     ? document.querySelector('header[data-slot="top"][data-floating]')
     : null;
-  const next = floating ?? document.querySelector("#main-content");
+  const main = document.querySelector<HTMLElement>("#main-content");
+  const next = floating ?? main;
+  // The page's own top: its content edge, under the top bar's room where
+  // the bar floats over the page (Shell `data-under`, its top padding).
+  const room =
+    next && next === main
+      ? Number.parseFloat(getComputedStyle(main).paddingTop) || 0
+      : 0;
   const style = getComputedStyle(band);
   return {
     opacity: Number(style.opacity),
     translate: style.translate,
     bottom: band.getBoundingClientRect().bottom,
     clipTop: (band.parentElement as HTMLElement).getBoundingClientRect().top,
-    pageTop: next?.getBoundingClientRect().top ?? Number.NaN,
+    pageTop: (next?.getBoundingClientRect().top ?? Number.NaN) + room,
   };
 }
 
@@ -1498,9 +1505,15 @@ async function lessMotion(kit: Kit, page: Page, name: string, socket: Socket) {
         run instanceof CSSTransition ? run.transitionProperty : "animation"
       ),
       foot: band.getBoundingClientRect().bottom,
-      pageTop:
-        document.querySelector("#main-content")?.getBoundingClientRect().top ??
-        Number.NaN,
+      // The page's content edge: its box's top and its top padding (the
+      // floating top bar's room, Shell `data-under`).
+      pageTop: (() => {
+        const main = document.querySelector<HTMLElement>("#main-content");
+        return main
+          ? main.getBoundingClientRect().top +
+              (Number.parseFloat(getComputedStyle(main).paddingTop) || 0)
+          : Number.NaN;
+      })(),
       slotHeight: slot?.getBoundingClientRect().height ?? 0,
     };
   }, BAND);

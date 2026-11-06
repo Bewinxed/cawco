@@ -54,6 +54,7 @@
   import { commentWords as said } from "@cawco/core/words/comments";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import {
@@ -70,6 +71,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
@@ -222,6 +224,8 @@
   let searchField = $state<HTMLInputElement | null>(null);
   /** The bar is the search field: Search pressed, or `/`. */
   let searching = $state(false);
+  /** The floating stack's height over the rows, px (its bar, the lists and what opens under them): the rows' top padding. */
+  let headHeight = $state(0);
   let searchButton = $state<HTMLElement | null>(null);
   /** `/` from the pane, or Search: the bar becomes the field, and it takes the keyboard. */
   export function focusSearch() {
@@ -781,305 +785,324 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full data-[layout=beside]:h-full data-[layout=beside]:pb-space-3 data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  class="relative flex flex-col min-h-0 w-c-comments-w max-w-full timeline-scope-transcript-head data-[layout=beside]:h-full data-[layout=beside]:pb-space-3 data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  style:--rail-head="{headHeight}px"
 >
-  <!-- One row: Close leading on the sheet, the centred title, the glass;
+  <!-- The bar and what stands under it (the lists, a composer or note
+       opened from the bar, a lost link) float over the rows as one stack,
+       the rows running to the rail's top beneath it: they clear it at rest
+       by their top padding (`--rail-head`, the stack's height as laid out)
+       and blur and fade under it as they scroll (HeadFade; DESIGN.md, The
+       Title Bars Follow Liquid Glass Rule). -->
+  <HeadFade
+    band="var(--rail-head)"
+    tint={layout === "beside" ? "bg-material-panel" : "bg-surface-raised"}
+  />
+  <div
+    class="absolute inset-x-0 top-0 z-2 flex flex-col"
+    data-slot="rail-head"
+    {@attach frameSize((node: HTMLElement) => {
+      headHeight = node.offsetHeight;
+    })}
+  >
+    <!-- One row: Close leading on the sheet, the centred title, the glass;
        searching, the field and its Cancel. The title names a part of the
        panel, so it stands a step under the panel's own (the head's Row, 16px):
        Label, 13px at 500, as HIG Typography sets macOS's Headline (13) for a
        pane's heading, at every width. -->
-  <header
-    data-slot="head"
-    data-searching={searching || undefined}
-    class="flex flex-none items-center gap-space-1 h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
-  >
-    {#if searching}
-      <InputGroup.Root class="flex-1" look="bar">
-        <InputGroup.Addon><IconSearch /></InputGroup.Addon>
-        <InputGroup.Input
-          aria-keyshortcuts="/"
-          aria-label={said.searchComments}
-          data-slot="search"
-          onkeydown={(event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              if (query) {
-                query = "";
-              } else {
-                closeSearch();
+    <header
+      data-slot="head"
+      data-searching={searching || undefined}
+      class="flex flex-none items-center gap-space-1 h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
+    >
+      {#if searching}
+        <InputGroup.Root class="flex-1" look="bar">
+          <InputGroup.Addon><IconSearch /></InputGroup.Addon>
+          <InputGroup.Input
+            aria-keyshortcuts="/"
+            aria-label={said.searchComments}
+            data-slot="search"
+            onkeydown={(event: KeyboardEvent) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                if (query) {
+                  query = "";
+                } else {
+                  closeSearch();
+                }
               }
-            }
-          }}
-          placeholder={said.searchComments}
-          type="search"
-          bind:ref={searchField}
-          bind:value={query}
-        />
-        {#if query}
-          <InputGroup.Addon align="inline-end">
-            <InputGroup.Button
-              aria-label={said.clearSearch}
-              onclick={() => {
-                query = "";
-                searchField?.focus();
-              }}
-              size="icon-xs"
-              title={said.clearSearch}><IconClose /></InputGroup.Button
-            >
-          </InputGroup.Addon>
-        {/if}
-      </InputGroup.Root>
-      <!-- Cancel puts the search away (HIG, Search fields: a Cancel button
+            }}
+            placeholder={said.searchComments}
+            type="search"
+            bind:ref={searchField}
+            bind:value={query}
+          />
+          {#if query}
+            <InputGroup.Addon align="inline-end">
+              <InputGroup.Button
+                aria-label={said.clearSearch}
+                onclick={() => {
+                  query = "";
+                  searchField?.focus();
+                }}
+                size="icon-xs"
+                title={said.clearSearch}><IconClose /></InputGroup.Button
+              >
+            </InputGroup.Addon>
+          {/if}
+        </InputGroup.Root>
+        <!-- Cancel puts the search away (HIG, Search fields: a Cancel button
            beside the field), in words, so it never reads as the field's own
            Clear (×), which only empties it. -->
-      <BarGlass form="group">
-        <BarItem
-          data-slot="cancel-search"
-          form="words"
-          label={said.cancelSearch}
-          onclick={closeSearch}
-          tip={false}>{said.cancelSearch}</BarItem
-        >
-      </BarGlass>
-    {:else}
-      <!-- Leading: Close, on the phone's sheet (HIG, Sheets: a sheet's
+        <BarGlass form="group">
+          <BarItem
+            data-slot="cancel-search"
+            form="words"
+            label={said.cancelSearch}
+            onclick={closeSearch}
+            tip={false}>{said.cancelSearch}</BarItem
+          >
+        </BarGlass>
+      {:else}
+        <!-- Leading: Close, on the phone's sheet (HIG, Sheets: a sheet's
            Cancel or Close leads its bar); a cell as wide as the trailing
            one, so the title stands in the bar's centre. While Send all
            stands, Search, + and Sort fold into More here: Send beside them
            left no room either side of a centred title (320px on a desk,
            368 on a phone), and the title gave way (HIG, Toolbars: "an
            overflow menu" for what doesn't fit). -->
-      <div
-        class="flex min-w-0 flex-1 basis-0 items-center gap-space-1 coarse:gap-space-5"
-        data-slot="lead"
-      >
-        {#if layout === "sheet"}
-          <BarGlass form="group">
-            <BarItem
-              data-slot="close"
-              icon={IconClose}
-              label={said.closeComments}
-              onclick={onclose}
-            />
-          </BarGlass>
-        {/if}
-        {#if sending}
-          <!-- A leading group: its menu stands out past its trailing side,
+        <div
+          class="flex min-w-0 flex-1 basis-0 items-center gap-space-1 coarse:gap-space-5"
+          data-slot="lead"
+        >
+          {#if layout === "sheet"}
+            <BarGlass form="group">
+              <BarItem
+                data-slot="close"
+                icon={IconClose}
+                label={said.closeComments}
+                onclick={onclose}
+              />
+            </BarGlass>
+          {/if}
+          {#if sending}
+            <!-- A leading group: its menu stands out past its trailing side,
                into the rail, never over the page. -->
-          <BarGlass flare="end" form="group">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <BarItem
-                    data-slot="more"
-                    icon={IconMoreLinear}
-                    label={said.more}
-                    {props}
-                    bind:ref={searchButton}
-                  />
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <BarMenu label={said.more}>
-                <DropdownMenu.Item onSelect={focusSearch}
-                  ><IconSearch /><span>{said.searchComments}</span
-                  ><DropdownMenu.Shortcut>/</DropdownMenu.Shortcut
-                  ></DropdownMenu.Item
-                >
-                <DropdownMenu.Item onSelect={wholePage}
-                  ><IconPlus /><span>{said.onWholePage}</span
-                  ></DropdownMenu.Item
-                >
-                <DropdownMenu.Separator />
-                {@render orders(true)}
-              </BarMenu>
-            </DropdownMenu.Root>
-          </BarGlass>
-        {/if}
-      </div>
-      <!-- The title names the sheet or the rail (HIG, Sheets: the title in
+            <BarGlass flare="end" form="group">
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <BarItem
+                      data-slot="more"
+                      icon={IconMoreLinear}
+                      label={said.more}
+                      {props}
+                      bind:ref={searchButton}
+                    />
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <BarMenu label={said.more}>
+                  <DropdownMenu.Item onSelect={focusSearch}
+                    ><IconSearch /><span>{said.searchComments}</span
+                    ><DropdownMenu.Shortcut>/</DropdownMenu.Shortcut
+                    ></DropdownMenu.Item
+                  >
+                  <DropdownMenu.Item onSelect={wholePage}
+                    ><IconPlus /><span>{said.onWholePage}</span
+                    ></DropdownMenu.Item
+                  >
+                  <DropdownMenu.Separator />
+                  {@render orders(true)}
+                </BarMenu>
+              </DropdownMenu.Root>
+            </BarGlass>
+          {/if}
+        </div>
+        <!-- The title names the sheet or the rail (HIG, Sheets: the title in
            the bar's centre), in the bar's own title role. -->
-      <h2
-        class="m-0 flex-none truncate text-ink-strong type-label"
-        data-slot="title"
-      >
-        {said.comments}
-      </h2>
-      <div
-        class="flex min-w-max flex-1 basis-0 items-center justify-end gap-space-1 coarse:gap-space-5"
-        data-slot="trail"
-      >
-        {#if !sending}
-          <BarGlass form="group">
-            <BarItem
-              aria-keyshortcuts="/"
-              icon={IconSearch}
-              keys="/"
-              label={said.searchComments}
-              onclick={focusSearch}
-              bind:ref={searchButton}
-            />
-            <!-- On a desk, a comment on the whole page: its composer
+        <h2
+          class="m-0 flex-none truncate text-ink-strong type-label"
+          data-slot="title"
+        >
+          {said.comments}
+        </h2>
+        <div
+          class="flex min-w-max flex-1 basis-0 items-center justify-end gap-space-1 coarse:gap-space-5"
+          data-slot="trail"
+        >
+          {#if !sending}
+            <BarGlass form="group">
+              <BarItem
+                aria-keyshortcuts="/"
+                icon={IconSearch}
+                keys="/"
+                label={said.searchComments}
+                onclick={focusSearch}
+                bind:ref={searchButton}
+              />
+              <!-- On a desk, a comment on the whole page: its composer
                  unfolds under the bar, inside the rail, as Send all's note
                  does: every field the bar opens takes the one place, at the
                  rail's width. -->
-            <BarItem
-              expanded={besidePage ? pageOpen : undefined}
-              icon={IconPlus}
-              label={said.onWholePage}
-              onclick={wholePage}
-              open={besidePage ? pageOpen : undefined}
-            />
-            <!-- The order the rows come in, a menu hung from its symbol
+              <BarItem
+                expanded={besidePage ? pageOpen : undefined}
+                icon={IconPlus}
+                label={said.onWholePage}
+                onclick={wholePage}
+                open={besidePage ? pageOpen : undefined}
+              />
+              <!-- The order the rows come in, a menu hung from its symbol
                  (HIG, Toolbars: a menu for related choices). -->
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <BarItem
-                    data-slot="sort"
-                    icon={IconSortLinear}
-                    label={said.sort}
-                    {props}
-                  />
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <BarMenu label={said.order}>
-                {@render orders(false)}
-              </BarMenu>
-            </DropdownMenu.Root>
-          </BarGlass>
-        {/if}
-        {#if sending}
-          <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <BarItem
+                      data-slot="sort"
+                      icon={IconSortLinear}
+                      label={said.sort}
+                      {props}
+                    />
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <BarMenu label={said.order}>
+                  {@render orders(false)}
+                </BarMenu>
+              </DropdownMenu.Root>
+            </BarGlass>
+          {/if}
+          {#if sending}
+            <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
              "Only specify one primary action, and put it on the trailing
              side"), its count what it sends; pressed, its note unfolds
              under the bar, whose own Send is then the one action and this
              one steps down to the outline. -->
-          <Button
-            aria-expanded={noting}
-            aria-label={said.sendHeldLabel(held)}
-            data-slot="send-held"
-            onclick={() => {
-              if (noting) {
-                closeNote();
-                return;
-              }
-              noting = true;
-              noteRefused = null;
-              if (noting && pageOpen) {
-                onpageclose?.();
-              }
-            }}
-            shape="capsule"
-            variant={noting ? "outline" : "default"}
-            ><span>{said.send}</span><span class="num">{held}</span></Button
-          >
-        {/if}
-      </div>
-    {/if}
-  </header>
-  {#if !searching}
-    <!-- The lists, every one in view with its count, as a segmented
+            <Button
+              aria-expanded={noting}
+              aria-label={said.sendHeldLabel(held)}
+              data-slot="send-held"
+              onclick={() => {
+                if (noting) {
+                  closeNote();
+                  return;
+                }
+                noting = true;
+                noteRefused = null;
+                if (noting && pageOpen) {
+                  onpageclose?.();
+                }
+              }}
+              shape="capsule"
+              variant={noting ? "outline" : "default"}
+              ><span>{said.send}</span><span class="num">{held}</span></Button
+            >
+          {/if}
+        </div>
+      {/if}
+    </header>
+    {#if !searching}
+      <!-- The lists, every one in view with its count, as a segmented
          control under the bar, the rail's width (HIG, Segmented controls;
          the owner's pin 5: a dropdown hid the other lists until opened). -->
-    <!-- Under a finger the segments stand clear of the bar's controls
+      <!-- Under a finger the segments stand clear of the bar's controls
          over them, so each keeps 44 tall to the midpoint (The 44 Touch
          Rule). -->
-    <div
-      class="flex flex-none *:min-w-0 *:flex-1 px-space-2 pb-space-2 coarse:pt-space-3"
-      data-slot="lists"
-    >
-      <Tabs
-        onValueChange={(next) => {
-          filter = next as RailList;
-        }}
-        size="compact"
-        value={filter}
-        values={lists.map((one) => one.value)}
+      <div
+        class="flex flex-none *:min-w-0 *:flex-1 px-space-2 pb-space-2 coarse:pt-space-3"
+        data-slot="lists"
       >
-        <TabsList aria-label={said.whichComments} fill>
-          {#each lists as one (one.value)}
-            <TabItem label={segment(one.name, one.count)} value={one.value} />
-          {/each}
-        </TabsList>
-      </Tabs>
-    </div>
-  {/if}
-  {#if layout === "beside" && pageOpen && pageComposer}
-    <!-- The whole page's composer, under the bar where + was pressed;
+        <Tabs
+          onValueChange={(next) => {
+            filter = next as RailList;
+          }}
+          size="compact"
+          value={filter}
+          values={lists.map((one) => one.value)}
+        >
+          <TabsList aria-label={said.whichComments} fill>
+            {#each lists as one (one.value)}
+              <TabItem label={segment(one.name, one.count)} value={one.value} />
+            {/each}
+          </TabsList>
+        </Tabs>
+      </div>
+    {/if}
+    {#if layout === "beside" && pageOpen && pageComposer}
+      <!-- The whole page's composer, under the bar where + was pressed;
          under a finger its field stands clear of the bar's controls, so
          each keeps 44 tall to the midpoint between them (The 44 Touch
          Rule), as the held note's does. -->
-    <div
-      class="flex flex-none flex-col px-space-3 pb-space-3 coarse:pt-space-2"
-      data-slot="page-composer"
-      transition:unfold
-    >
-      {@render pageComposer()}
-    </div>
-  {/if}
-  {#if noting && held > 0 && onsendheld}
-    <!-- Send all's note, under the bar where Send was pressed, as Delete
+      <div
+        class="flex flex-none flex-col px-space-3 pb-space-3 coarse:pt-space-2"
+        data-slot="page-composer"
+        transition:unfold
+      >
+        {@render pageComposer()}
+      </div>
+    {/if}
+    {#if noting && held > 0 && onsendheld}
+      <!-- Send all's note, under the bar where Send was pressed, as Delete
          asks under the card's bar: one note to the agent with everything
          held, then Send. ⌘↩ sends from the note. -->
-    <div
-      class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-3 coarse:pt-space-2"
-      data-slot="held-note"
-      transition:unfold
-    >
-      <Textarea
-        aria-label={said.heldNote}
-        onkeydown={(event: KeyboardEvent) => {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault();
-            sendHeldNow();
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            closeNote();
-          }
-        }}
-        placeholder={said.heldNote}
-        rows={2}
-        bind:value={note}
-      />
-      {#if noteRefused}
-        <p class="m-0 type-meta text-status-fail-ink" role="alert">
-          {noteRefused}
-        </p>
-      {/if}
-      <div class="flex justify-end gap-space-2">
-        <Button onclick={closeNote} size="sm" variant="ghost"
-          >{said.cancelSearch}</Button
-        >
-        <Button
-          aria-keyshortcuts="Control+Enter Meta+Enter"
-          data-slot="send-held-now"
-          onclick={sendHeldNow}
-          size="sm">{said.sendHeldCount(held)}</Button
-        >
+      <div
+        class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-3 coarse:pt-space-2"
+        data-slot="held-note"
+        transition:unfold
+      >
+        <Textarea
+          aria-label={said.heldNote}
+          onkeydown={(event: KeyboardEvent) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              sendHeldNow();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              closeNote();
+            }
+          }}
+          placeholder={said.heldNote}
+          rows={2}
+          bind:value={note}
+        />
+        {#if noteRefused}
+          <p class="m-0 type-meta text-status-fail-ink" role="alert">
+            {noteRefused}
+          </p>
+        {/if}
+        <div class="flex justify-end gap-space-2">
+          <Button onclick={closeNote} size="sm" variant="ghost"
+            >{said.cancelSearch}</Button
+          >
+          <Button
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            data-slot="send-held-now"
+            onclick={sendHeldNow}
+            size="sm">{said.sendHeldCount(held)}</Button
+          >
+        </div>
       </div>
-    </div>
-  {/if}
-  {#if down !== null && failed === null}
-    <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
-    <RowFault
-      data-pin-list-down
-      again={onretry}
-      class="shrink-0 py-space-1 px-space-3"
-      details={down}
-      end="var(--space-2)"
-      indent="var(--space-2)"
-      reason={LINK_DROPPED}
-    />
-  {/if}
+    {/if}
+    {#if down !== null && failed === null}
+      <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
+      <RowFault
+        data-pin-list-down
+        again={onretry}
+        class="shrink-0 py-space-1 px-space-3"
+        details={down}
+        end="var(--space-2)"
+        indent="var(--space-2)"
+        reason={LINK_DROPPED}
+      />
+    {/if}
+  </div>
   <!-- No scrollbar of its own: its edge fades say there is more, and its
        width never changes as the list outgrows the rail (a scrollbar
        there stood beside the page as a stray one, the owner's note on
        Beside the page). -->
   <div
     data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain no-scrollbar kit-edge-fade-block"
+    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain pt-(--rail-head) scroll-timeline-transcript-head no-scrollbar kit-edge-fade-block"
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}

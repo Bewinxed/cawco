@@ -33,6 +33,7 @@
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -898,6 +899,16 @@
   const floating = $derived(
     !railed && onSession && workspace.activeTab !== null
   );
+  /**
+   * The bar floats over the page (DESIGN.md, The Title Bars Follow Liquid
+   * Glass Rule: "content runs to the top edge and the scroll edge effect
+   * blurs it under the controls"): wherever it hosts no conversation's
+   * tabs and floats over none of theirs, the page runs to the content's top
+   * beneath it, its scroller padding its top by the bar's height. Hosting
+   * the tabs on a desk it is their shelf, the chosen tab a sheet of the
+   * conversation under it (DESIGN.md, Shapes, Folder tabs).
+   */
+  const under = $derived(!(full || floating || hosting));
   /* What the bar is, floating or hosting the tabs, said on the root for the
      screen's top edge (ScreenEdges, page-marks). */
   $effect(() => {
@@ -1181,8 +1192,9 @@
          (the peek's surface brief, Peek), never cut under it. -->
     <div
       data-slot="shell-main"
-      class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w"
+      class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w data-under:timeline-scope-transcript-head"
       data-peek-beside={peekBeside() || undefined}
+      data-under={under || undefined}
     >
       <!-- The bar: the comp's height (`--c-top-bar-h`, so what floats under
            it lands under it); hosted folder tabs stand on its floor. The
@@ -1220,7 +1232,8 @@
         data-full={full || undefined}
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
+        data-under={under || undefined}
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden data-under:relative data-under:-mbe-c-top-bar-h data-under:z-(--layer-bar) data-under:pointer-events-none items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--shelf-end={"calc(var(--radius-sm) + env(safe-area-inset-right, 0px))"}
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
@@ -1240,7 +1253,7 @@
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
@@ -1260,7 +1273,7 @@
            control: the bar's gap and the slot's own end inset (7 + 11). -->
         <div
           data-slot="slot"
-          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible"
+          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible group-data-under/top:*:pointer-events-auto"
         >
           {#if barLeaves.length > 0}
             <!-- Nothing inside reaches the strip's own size or what is
@@ -1359,7 +1372,7 @@
              and the glass takes its own back, as the toggle does. -->
         <div
           data-slot="right"
-          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0 max-desk:group-data-floating/top:*:pointer-events-auto"
+          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0 max-desk:group-data-floating/top:*:pointer-events-auto group-data-under/top:*:pointer-events-auto"
         >
           <!-- The glass (kit BarGlass), as one shape with the card hanging
                from it while one does (bar-glass: Caw's panel, the machines,
@@ -1426,6 +1439,12 @@
       <!-- The one place the hub connection is spoken of (HubBand): a row
            under the bar (over it under the drawer's line) that moves the
            page down, never over it. -->
+      {#if under}
+        <!-- The scroll edge effect under the bar floating over the page:
+             what scrolls beneath it blurs and fades into the shell's ground,
+             from the first scroll (HeadFade, as BarFloat draws it). -->
+        <HeadFade band="var(--c-top-bar-h)" tint="bg-surface-recess" />
+      {/if}
       <HubBand />
 
       <!-- The old thumb bar is gone, so this region reclaims its height. On a
@@ -1446,7 +1465,8 @@
       <main
         data-slot="shell-content"
         data-floating={floating || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
+        data-under={under || undefined}
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto data-under:pt-c-top-bar-h data-under:scroll-timeline-transcript-head pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"

@@ -196,7 +196,7 @@
         >
         <Toggle aria-label="Draw" pressed={false} size="sm"><IconPen /></Toggle>
       {/snippet}
-      <p>Well</p>
+      <p class="pt-(--side-room)">Well</p>
     </SideSurface>
   </section>
   <section class="min-w-0" data-probe="toggle">

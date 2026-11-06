@@ -504,7 +504,7 @@
 
 <section
   aria-label={browserWords.view}
-  class="absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) flex flex-col min-h-0 bg-surface-well"
+  class="absolute inset-x-0 top-(--side-room,0px) bottom-(--keyboard-lift,0px) flex flex-col min-h-0 bg-surface-well"
   data-browser-host={host ?? undefined}
   data-browser-mine={mine || undefined}
   data-slot="browser-view"

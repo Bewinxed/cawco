@@ -280,10 +280,13 @@
      height and the air over it, so it starts wholly behind the bar's foot.
      Under the drawer's line (DRAWER_QUERY) a bar floating over a
      conversation's tabs (the Shell's `peer/top`, `data-floating`) has the
-     band over it instead, with its tabs. -->
+     band over it instead, with its tabs. Where the bar floats over the page
+     (`data-under`) the band's row stands at the page's top and is drawn a
+     bar's height down, under the bar's foot, the page's top padding
+     clearing both. -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 peer-data-under/top:translate-y-c-top-bar-h motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
   data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has

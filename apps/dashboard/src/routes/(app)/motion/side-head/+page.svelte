@@ -78,7 +78,7 @@
             >
           {/if}
         {/snippet}
-        <p>Body</p>
+        <p class="pt-(--side-room)">Body</p>
       </SideSurface>
     </div>
   {/each}

@@ -55,5 +55,12 @@
   {title}
   titleCode={what === "task"}
 >
-  {@render children()}
+  <!-- The face runs to the card's top beneath the floating head, its
+       scroller padding its top by the head's room. -->
+  <div
+    class="flex min-h-0 flex-1 flex-col overflow-y-auto pt-(--side-room) scroll-timeline-transcript-head"
+    data-slot="failed-face"
+  >
+    {@render children()}
+  </div>
 </SideSurface>

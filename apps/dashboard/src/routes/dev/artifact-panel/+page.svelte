@@ -730,12 +730,14 @@
       subtitle={shown?.ask}
       subtitleId="bench-line"
       titleControl={title}
-      float
     >
-      <!-- The page under the head's room, its scrollbar undrawn as the
-           overlay leaves a page's (`data-cawco-bare-scroll`). -->
+      <!-- The page as a decision page draws itself in the panel: beneath
+           the head, its scroller padding its top by the head's room
+           (`cawco:head-room`, Decisions' `--page-inset-top`), the timeline
+           the head's scroll edge effect plays on; its scrollbar undrawn as
+           the overlay leaves a page's (`data-cawco-bare-scroll`). -->
       <div
-        class="size-full overflow-y-auto overscroll-contain no-scrollbar"
+        class="size-full overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head no-scrollbar"
         data-slot="bench-page"
         onscroll={readMark}
         bind:this={benchPage}

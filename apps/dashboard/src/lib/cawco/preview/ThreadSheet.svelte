@@ -156,7 +156,7 @@
   }
 
   /*
-   * A panel's floating head (SideSurface `float`) yields to the sheet as the
+   * A panel's floating head (SideSurface's) yields to the sheet as the
    * sheet's top comes within a head's height of its foot, and is gone by the
    * time the top reaches it (`--head-shown` on the card, 1 down to 0), so the
    * sheet never covers a head still drawn; read

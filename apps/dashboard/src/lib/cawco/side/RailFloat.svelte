@@ -44,7 +44,7 @@
 </script>
 
 <div
-  class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+  class="absolute end-space-2 top-(--side-room) bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
   data-rail-float="beside"
   in:enter
   out:leave

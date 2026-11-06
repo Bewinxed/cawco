@@ -314,6 +314,14 @@
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
   let connected = $state(false);
+  /**
+   * The page in the frame takes the head's room itself (overlay
+   * `cawco:head-room`): a document CawCo draws (a decision page, a canvas)
+   * whose own scroller pads its top by it, so the frame runs to the card's
+   * top beneath the head. Any other page stands under the room: its layout
+   * is not ours to push down.
+   */
+  let headRoomTaken = $state(false);
   let loaded = $state(false);
   let reload = $state(0);
   /**
@@ -1941,6 +1949,13 @@
       post({ jsonrpc: "2.0", id: asked.id, result: null });
     }
   }
+  /** The floating head's room over the well's top, px: its own height as laid out; none without a head. */
+  function headRoomPx(): number {
+    return (
+      section?.querySelector<HTMLElement>('[data-slot="side-head"]')
+        ?.offsetHeight ?? 0
+    );
+  }
   /** Tells the page which artifact it is, where its doc is synced, and the dashboard's theme. */
   function announce() {
     connected = false;
@@ -1954,6 +1969,9 @@
         // The panel draws no scrollbar beside the page: the page's own is
         // left undrawn (overlay `data-cawco-bare-scroll`), as its rail's is.
         bareScroll: !inset,
+        // The head's room over the page's top, px: a document CawCo draws
+        // takes it on its own scroller and says so (`cawco:head-room`).
+        headRoom: inset ? 0 : headRoomPx(),
         ...(artifact
           ? {
               artifact: {
@@ -2223,6 +2241,23 @@
     const sized = frameObserver(sayNow);
     sized.observe(tag);
     sized.observe(frame);
+    sized.request();
+    return () => sized.disconnect();
+  });
+  /**
+   * The head's room over the page's top as the head is laid out now
+   * (`cawco:head-room`, px), said again as it changes size (a finger's
+   * taller controls): a document CawCo draws pads its scroller by it.
+   */
+  $effect(() => {
+    const head = section?.querySelector<HTMLElement>('[data-slot="side-head"]');
+    if (!(iframe && connected && head && !inset)) {
+      return;
+    }
+    const sized = frameObserver(() =>
+      post({ type: "cawco:head-room", px: head.offsetHeight })
+    );
+    sized.observe(head);
     sized.request();
     return () => sized.disconnect();
   });
@@ -3388,6 +3423,9 @@
       case "cawco:held":
         pageHeld = message.held === true;
         break;
+      case "cawco:head-room":
+        headRoomTaken = message.taken === true;
+        break;
       case "cawco:captured": {
         // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
         const shot = previewThumbnail(message);
@@ -3930,9 +3968,10 @@
   /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
   const sheetCanvas = $derived(isSheet ? canvasOf(startAt) : null);
   /**
-   * Where the frame stands in the well when the design graph holds it in
-   * its stage: the pins' room takes that box, so a place the page says is a
-   * place on the stage.
+   * Where the frame stands in the well: in the design graph's stage, or
+   * under the floating head's room (`--page-top`) beside a side card's
+   * head. The pins' room takes that box, so a place the page says is a
+   * place on the page.
    */
   let frameBox = $state<{ h: number; w: number; x: number; y: number } | null>(
     null
@@ -3940,7 +3979,7 @@
   $effect(() => {
     const frameNode = iframe;
     const wellNode = well;
-    if (!(isSheet && frameNode && wellNode)) {
+    if (!(frameNode && wellNode)) {
       frameBox = null;
       return;
     }
@@ -4622,7 +4661,6 @@
     {switcherAt}
     titleControl={artifact ? artifactTitle : undefined}
     beside={railBeside}
-    float
     bind:section
     bind:well
   >
@@ -4656,8 +4694,10 @@
         inspecting &&
         inspectorLayout === "panel") ||
         undefined}
-      class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-system-canvas block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+      class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
       style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
+      style:--page-top={headRoomTaken ? "0px" : "var(--side-room, 0px)"}
+      style:--page-h="calc(100% - var(--page-top))"
       allow="clipboard-write"
       inert={!current}
       onerror={() => arrived(key)}
@@ -4705,7 +4745,7 @@
     <div
       data-slot="down"
       data-unopened
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       role="alert"
       transition:appear
     >
@@ -4733,7 +4773,7 @@
          own cause, its fix, and where to switch how previews are reached. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       role="alert"
       transition:appear
     >
@@ -4778,7 +4818,7 @@
           inspectorLayout === "panel" &&
           !inspectorInRoom) ||
           undefined}
-        class="absolute inset-0 data-panel-inspector:w-(--frame-w)"
+        class="absolute inset-x-0 top-(--side-room,0px) bottom-0 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
       >
         <DesignGraph
@@ -4820,7 +4860,7 @@
       data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
       data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
-      class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
+      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
       {@attach (node) => {
         // Ready, the cover and its skeleton go in the skeleton's reveal and
@@ -4905,7 +4945,7 @@
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       role="alert"
       transition:appear
     >
@@ -4937,7 +4977,7 @@
     <!-- On its way past the time its stage is given: never an endless cover. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       data-never-drawn
       role="alert"
       transition:appear
@@ -4974,7 +5014,7 @@
     <div
       data-slot="down"
       data-down={shownDown}
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       role="alert"
       transition:appear
     >
@@ -5036,7 +5076,7 @@
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       data-not-loaded
       role="alert"
       transition:appear
@@ -5144,11 +5184,11 @@
       {/if}
     </ThreadSheet>
   {/if}
-  <!-- What stands over the page beside a pill (the frame fills the well):
+  <!-- What stands over the page beside a pill, in the frame's box:
        the composer while a comment is written, the thread once it is, and
        the peek while the pointer rests on one. -->
   <!-- The size container a card's width reads (`--c-pin-card-reading-w`, two fifths of the well).
-       Over a component artifact's stage it stands where the frame stands, so a place the page says is a place on it. -->
+       It stands where the frame stands (a component artifact's stage, a page under the head's room), so a place the page says is a place on it. -->
   <div
     data-slot="pin-room"
     class={[

@@ -87,6 +87,11 @@
        project's Decisions tab says it, preview-overlay page.ts): none until
        it says. */
     --page-inset-bottom: 0px;
+    /* What a host's floating head covers of the page's top (the artifact
+       panel's, preview-overlay page.ts `takeHeadRoom`, heard because the
+       page's root says `data-cawco-head-room`): the scroller pads its top
+       by it, so the cards scroll beneath the head. None until it says. */
+    --page-inset-top: 0px;
 
     &:not([data-theme]) {
       color-scheme: light dark;

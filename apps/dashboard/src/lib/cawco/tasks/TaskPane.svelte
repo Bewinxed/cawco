@@ -44,6 +44,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -438,9 +439,14 @@
   const { arrive: arriveBody, stood: bodyStood } = afterSkeleton();
 </script>
 
+<!-- The task runs to its surface's top beneath the head floating over it
+     (SideSurface's, or the page's): one scroller, its head and body
+     together, padding its top by the head's room (`--side-room`) and the
+     timeline the head's scroll edge effect plays on. Review fills it
+     whole, its stage band scrolling on its own, its decision at the foot. -->
 {#snippet content()}
   <div
-    class="@container/task-frame flex flex-auto flex-col min-h-0 overflow-hidden"
+    class="@container/task-frame flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head"
     data-task-pane={taskId}
     style:--pane-inline={page ? "var(--space-5)" : "var(--space-3)"}
   >
@@ -621,7 +627,7 @@
       <div
         data-slot="task-body"
         in:arriveBody
-        class="flex flex-auto flex-col gap-space-5 min-h-0 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline overflow-y-auto overscroll-contain"
+        class="flex flex-auto flex-col gap-space-5 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline"
       >
         <TaskNeeds
           ended={false}
@@ -811,10 +817,17 @@
 {/snippet}
 
 {#if page}
-  <section aria-label="Task {taskId}" class="flex flex-1 flex-col min-h-0">
+  <!-- The head floats over the task (`--side-room`, the top bar's
+       height), the scroll edge effect under it. -->
+  <section
+    aria-label="Task {taskId}"
+    class="relative flex flex-1 flex-col min-h-0 timeline-scope-transcript-head"
+    style:--side-room="var(--c-top-bar-h)"
+  >
+    <HeadFade band="var(--side-room)" tint="bg-surface-recess" />
     <header
       data-slot="page-head"
-      class="flex flex-none items-center gap-space-2 pt-space-2 pe-space-5 pb-space-2 ps-space-3"
+      class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-2 pe-space-5 ps-space-3"
     >
       <Button onclick={onclose} size="sm" variant="ghost">
         <IconChevronLeft />

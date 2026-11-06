@@ -29,6 +29,7 @@
  * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, a mark out of the accessibility tree (`data-mark`: a comment's pin), a found word (`<mark>`, a search's hit) and a region's one coral hairline side (the vermillion section rule) are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does, or one under another bar of its surface, heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) and a foot's lone top hairline (DESIGN.md, Borders are graded) are named, not failed |
+ * | bar-room    | own code                    | a head bar (as bar-ground reads one, named or holding a glass group of the bar kit; not a foot, not a group inside a bar, not one standing in its own scroller) floats over its content: of the scrollers in the surface it heads (a box that scrolls, or a page in a frame, another document's scroller) across half its width or more and running past its foot, the topmost starts above that foot, so what scrolls passes under the bar; one that starts at or under the foot means the bar claims a row and pushes its content down; a page in a frame standing at the foot (another document's layout is not the host's to inset) and a folder-tab shelf over the sheet its chosen tab opens (DESIGN.md, Shapes, Folder tabs) are named |
  * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
  * | back-close  | own code                    | no control's words say Back or Close (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Back and Close are symbols) |
  * | hidden-cue  | own code + ink              | a scroller cut at an edge (an element of it past that edge: a pseudo's overflow alone hides nothing) carries a computed mask there that draws (the edge's pixels with and without it), or an item peeking 16px or more, or stands under an edge effect (hit there, or blurring it without taking presses); a box that clips without scrolling hides no words past its edge, but inside a control that opens a layer, whole items dropped, none cut, are named |
@@ -83,6 +84,7 @@ export type CheckName =
   | "coral"
   | "glyph"
   | "bar-ground"
+  | "bar-room"
   | "head"
   | "back-close"
   | "hidden-cue"
@@ -120,6 +122,10 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
   coral: { says: "one coral per view", by: "own code" },
   glyph: { says: "a lone glyph sits on nothing", by: "own code" },
   "bar-ground": { says: "bars have no ground", by: "own code" },
+  "bar-room": {
+    says: "a bar floats over its content: its scroller runs under it, never from its foot (The Title Bars Follow Liquid Glass Rule)",
+    by: "own code",
+  },
   head: {
     says: "a bar's title and controls share one row, one line, not repeated",
     by: "own code",
@@ -1357,6 +1363,95 @@ function readInPage(args: InPageArgs): InPageRead {
         continue;
       }
       say("bar-ground", bar, `paints ${p.join(", ")}`);
+    }
+  }
+  if (!skip.has("bar-room")) {
+    /**
+     * What scrolls under a bar: a box that scrolls, or a page in a frame
+     * (another document, its own scroller).
+     */
+    const scrolls = (el: Element): boolean =>
+      el instanceof HTMLIFrameElement ||
+      (/auto|scroll/u.test(style(el).overflowY) && el.clientHeight >= 48);
+    // A bar the house names, or a `header` holding a glass group of the bar
+    // kit (BarGlass `data-slot="tools"`), wherever it stands: a list's or a
+    // column's heading, a `header` of words alone, heads a group of content
+    // and is read by `head` alone.
+    const kitBars = [...scope.querySelectorAll(BAR)].filter(
+      (one) =>
+        shown(one) &&
+        (one.matches(NAMED_BAR) || one.querySelector('[data-slot="tools"]'))
+    );
+    for (const bar of kitBars) {
+      if (bar.matches(FOOT) || bar.parentElement?.closest(BAR)) {
+        continue;
+      }
+      const surface = surfaceOf(bar);
+      // A bar standing in its own scroller (sticky at its top) floats over
+      // what scrolls there already.
+      let inOwn = false;
+      for (let up = bar.parentElement; up; up = up.parentElement) {
+        if (scrolls(up)) {
+          inOwn = true;
+          break;
+        }
+        if (up === surface) {
+          break;
+        }
+      }
+      if (inOwn) {
+        continue;
+      }
+      const b = bar.getBoundingClientRect();
+      const across = (r: DOMRect) =>
+        Math.min(r.right, b.right) - Math.max(r.left, b.left) >= b.width / 2;
+      const found = [...surface.querySelectorAll("*")].filter(
+        (el) =>
+          !(el.contains(bar) || bar.contains(el)) &&
+          scrolls(el) &&
+          shown(el) &&
+          across(el.getBoundingClientRect()) &&
+          el.getBoundingClientRect().bottom > b.bottom + 1
+      );
+      // The outermost: a scroller inside another (a code block in a page) is the page's.
+      const scrollers = found
+        .filter(
+          (el) => !found.some((other) => other !== el && other.contains(el))
+        )
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .sort((one, two) => one.r.top - two.r.top);
+      const [first] = scrollers;
+      if (!first || first.r.top < b.bottom - 1) {
+        continue;
+      }
+      // Folder tabs on their shelf (the shell's bar hosting a conversation's
+      // tabs on a desk): the chosen tab is a sheet of the surface under it,
+      // which starts at the shelf's foot by design (DESIGN.md, Shapes,
+      // Folder tabs), so the shelf is no bar over it.
+      if (
+        bar.querySelector('[role="tablist"]') &&
+        (fill(style(bar))[3] ?? 0) > 0.02
+      ) {
+        named.push(
+          `a folder-tab shelf over the sheet its chosen tab opens (DESIGN.md, Shapes, Folder tabs): ${describe(bar)}`
+        );
+        continue;
+      }
+      // Another document in a frame (a dev server's page, a site's) stands
+      // under the bar's room: its layout is not the host's to push down
+      // (SideSurface; PreviewPane's `--page-top`). A document CawCo draws
+      // takes the room on its own scroller and its frame runs beneath.
+      if (first.el instanceof HTMLIFrameElement) {
+        named.push(
+          `a page in a frame under a bar's room, its layout not the host's to inset: ${describe(bar)} over ${selectorOf(first.el)}`
+        );
+        continue;
+      }
+      say(
+        "bar-room",
+        bar,
+        `claims a row: its content's scroller ${selectorOf(first.el)} starts at ${px(first.r.top)}, ${px(first.r.top - b.bottom)} under the bar's foot at ${px(b.bottom)}, so nothing scrolls beneath the bar`
+      );
     }
   }
   if (!skip.has("head")) {

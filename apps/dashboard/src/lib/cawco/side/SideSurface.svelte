@@ -7,8 +7,8 @@
    *   not already say, so "Preview" or "Plan" is never said twice; then the
    *   pane's own controls (`actions`), Expand on a desk (expand.ts) and
    *   Close, every one in the same button recipe and press;
-   * - the well is the content's ground, the recess inside a hairline, its
-   *   left edge the header's: a page's (the preview's). Text that reads on
+   * - the well is the content's ground (`surface-well`), the card's whole
+   *   width under the head: a page's (the preview's). Text that reads on
    *   the card itself (the plan's) stands on the card, with no well
    *   (`recessed={false}`).
    * A pane passes its own content and controls; the frame is this one.
@@ -21,10 +21,24 @@
    * forms widen after (the mode's segments, then on a 640px pane the words)
    * where the room left holds them.
    *
-   * Expanded over the whole split, the card meets its edges: no inset,
-   * corner or shadow, and the well's sides go, so a page is drawn at the
-   * split's full width. The head keeps its place, so the control just
-   * pressed is still under the pointer to press back.
+   * The head floats as glass over the card's ground (Adopting Liquid
+   * Glass: "Liquid Glass applies to the topmost layer of the interface";
+   * DESIGN.md, The Title Bars Follow Liquid Glass Rule): no bar behind it,
+   * its groups capsules of glass in the head's room (`--side-room`, the
+   * `c-head-room` token), what the card holds running to the card's top
+   * beneath it. The content's scroller takes the room as its top padding
+   * (`pt-(--side-room)`, never a margin) and names the scroll timeline the
+   * head's scroll edge effect plays on (`scroll-timeline-transcript-head`,
+   * HeadFade under the head), so at rest its first line clears the head and
+   * scrolled it blurs and fades beneath it, as a transcript does under its
+   * pane's bar. A page in a frame that is not CawCo's own document stands
+   * under the room instead (PreviewPane): its layout is not ours to push
+   * down. What stands `beside` floats too (RailFloat), the well stopping
+   * short of it.
+   *
+   * Expanded over the whole split, the card meets its edges: no corner or
+   * shadow. The head keeps its place, so the control just pressed is still
+   * under the pointer to press back.
    */
   import { type Snippet, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
@@ -34,6 +48,7 @@
     BarMenu,
   } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import {
     IconClose,
     IconMaximize,
@@ -74,7 +89,6 @@
     well = $bindable(),
     section = $bindable(),
     beside,
-    float = false,
     children,
   }: {
     /** What the card is, read out. */
@@ -131,17 +145,6 @@
      * its width.
      */
     beside?: Snippet;
-    /**
-     * The head floats as glass over the card's ground (Adopting Liquid
-     * Glass: "Liquid Glass applies to the topmost layer of the interface"):
-     * no bar behind it, its groups capsules of glass in the head's room
-     * (`--c-head-room`), the well filling the card's width under that room
-     * to its foot. The page stands under the room, never under the glass: a
-     * page is another document (an artifact's frame), whose own layout a
-     * head over its top would cover. What stands `beside` floats too
-     * (RailFloat), the well stopping short of it.
-     */
-    float?: boolean;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -575,12 +578,9 @@
   data-slot="side-card"
   data-side-card={of}
   data-side-surface-expanded={expanded || undefined}
-  data-expanded-recessed={(expanded && recessed) || undefined}
-  data-recessed={recessed || undefined}
-  data-float={float || undefined}
   aria-label={label}
-  class="group/card @container data-float:relative data-float:overflow-hidden data-float:not-data-side-surface-expanded:rounded-(--c-float-panel-r) data-float:p-0 flex h-full min-h-0 min-w-0 flex-col rounded-lg concentric-in r-outer-lg r-inset-space-2 bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none not-data-float:data-side-surface-expanded:px-0 not-data-float:data-side-surface-expanded:pt-space-3 not-data-float:data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none not-data-float:data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
-  style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
+  class="group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-(--c-float-panel-r) bg-surface-raised shadow-drawer timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  style:--side-room="var(--c-head-room)"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
 >
@@ -588,22 +588,28 @@
        the well's left edge. -->
   <!-- mark-line: its icons are controls at the head's end, each its own
        button, not marks set beside the title -->
-  <!-- Stacked over what stands under it (`relative z-1`): a control's 44px
-       area under a finger reaches past the head's foot, and the well, placed
-       after it (`relative`), took that strip's presses (The 44 Touch Rule;
-       canvas-design B read Close's reach below as 6 of its 7px). -->
   <!-- One bar, one row (DESIGN.md, The Title Bars Follow Liquid Glass
        Rule; HIG, Toolbars, Item groupings): leading, Close on a sheet, the
        switch, then the title, the view's own name, a menu where it opens
        one; in the centre the mode; trailing, one glass of bare symbols with
        More last, the one prominent action, and Close in a glass of its own
-       beside the page. Stacked over what stands under it (`relative z-1`):
-       a control's 44px area under a finger reaches past the head's foot. -->
+       beside the page. It floats over what the card holds (`absolute z-2`),
+       over the edge effect too, so a control's 44px area under a finger
+       reaches past the head's foot and takes that strip's presses (The 44
+       Touch Rule). -->
+  <!-- The scroll edge effect under the head (HeadFade, as BarFloat draws
+       it): what scrolls beneath the head blurs and fades into the ground
+       it stands on, from the first scroll; clear at rest and over a page
+       in a frame, which names no timeline here. -->
+  <HeadFade
+    band="var(--side-room)"
+    tint={recessed ? "bg-surface-well" : "bg-surface-raised"}
+  />
   <header
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
     data-placement={placement}
-    class="relative z-2 flex h-c-btn-h-lg flex-none items-center gap-space-1 group-data-float/card:absolute group-data-float/card:inset-x-0 group-data-float/card:top-0 group-data-float/card:h-c-head-room group-data-float/card:px-space-2 group-data-float/card:opacity-(--head-shown) hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
+    class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-1 px-space-2 opacity-(--head-shown) hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
     bind:this={head}
   >
     {#if placement === "sheet"}
@@ -710,22 +716,21 @@
     {/if}
   </header>
   {#if recessed}
-    <!-- The content's ground: a well inside its edge (surface-well,
-         border-well: the recess and hairline by day, deeper with a clear
-         edge at night). A page's Comment or Draw mode marks its edge with a
-         1px `seam` inside its box (the artifact panel's surface brief, The mode: it only says the page
-         hears nothing; the cue is the cursor and the pressed segment), the
-         edge easing in and out except while the split slides, and points a
-         crosshair. -->
+    <!-- The content's ground: a well (`surface-well`) the card's width
+         under the head. A page's Comment or Draw mode marks its edge with a
+         1px `seam` inside its box (the artifact panel's surface brief, The
+         mode: it only says the page hears nothing; the cue is the cursor and
+         the pressed segment), the edge easing in and out except while the
+         split slides, and points a crosshair. -->
     <div
-      class="relative flex min-h-0 flex-1 gap-space-2 group-data-float/card:gap-0 group-data-float/card:bg-surface-well has-[>[data-rail-float=beside]]:*:data-side-well:me-c-rail-float-room"
+      class="relative flex min-h-0 flex-1 bg-surface-well has-[>[data-rail-float=beside]]:*:data-side-well:me-c-rail-float-room"
       data-slot="well-row"
     >
       <div
         data-side-well
         data-mode={mode && mode !== "interact" ? mode : undefined}
         data-ringed={mode ? "" : undefined}
-        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden concentric-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-float/card:mt-c-head-room group-data-float/card:rounded-none group-data-float/card:border-0 group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam"
         bind:this={well}
       >
         {@render children()}

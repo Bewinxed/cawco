@@ -952,7 +952,7 @@ export const programHost = (
   files: Record<string, string>
 ): string =>
   `<!doctype html>
-<html lang="en">
+<html lang="en" data-cawco-head-room>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
