@@ -239,6 +239,13 @@ export interface CheckOptions {
    * (printed): the kit's own reads still run.
    */
   noImpeccable?: string;
+  /**
+   * Where the pointer stands for the read. `parked` (the default): moved
+   * off every control first (parkPointer), so a control the spec's last
+   * click or hover left under it is read at rest, not hovered. `kept`: the
+   * spec put it where the read must find it (a hover it reads).
+   */
+  pointer?: "kept" | "parked";
   /** The surface the rules read: the product, not a preview's own chrome. Default `body`. */
   scope?: string;
   /** Each match is one view for the coral count. Default: the scope. A page's `data-specimen` is one too, whatever this says. */
@@ -5704,6 +5711,87 @@ async function fadeCues(
   return out;
 }
 
+/** What a pointer resting on it acts on: a control, or what draws its cursor as one. */
+const POINTED =
+  'a[href], button, input, select, textarea, summary, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"], [tabindex]:not([tabindex="-1"]), [contenteditable]:not([contenteditable="false"])';
+
+/**
+ * The pointer moved off every control before a read: a spec's last click
+ * leaves the pointer on what it clicked (Expand turns into Back to
+ * conversation under it), and a read at rest of a control drawn hovered
+ * finds its forced hover drawing nothing new (state-shape). The point is
+ * the first, scanning from the window's corners in, where nothing a pointer
+ * acts on stands, and no box under it draws a pointer cursor; what the
+ * move starts that ends (a hover fill fading, a highlight easing out) is
+ * let finish, for a second at most. Null when the window holds no such
+ * point: the read is then said unread.
+ */
+async function parkPointer(page: Page): Promise<string | null> {
+  const at = await page.evaluate((pointed) => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const free = (x: number, y: number) => {
+      const el = document.elementFromPoint(x, y);
+      if (!el) {
+        return true;
+      }
+      if (el.closest(pointed)) {
+        return false;
+      }
+      for (let up: Element | null = el; up; up = up.parentElement) {
+        if (getComputedStyle(up).cursor === "pointer") {
+          return false;
+        }
+      }
+      return true;
+    };
+    const STEP = 24;
+    const xs: number[] = [];
+    for (let i = 0; i * STEP < w / 2; i += 1) {
+      xs.push(1 + i * STEP, w - 2 - i * STEP);
+    }
+    const ys: number[] = [];
+    for (let i = 0; i * STEP < h / 2; i += 1) {
+      ys.push(h - 2 - i * STEP, 1 + i * STEP);
+    }
+    for (const y of ys) {
+      for (const x of xs) {
+        if (free(x, y)) {
+          return { x, y };
+        }
+      }
+    }
+    return null;
+  }, POINTED);
+  if (!at) {
+    return "pointer: no point in the window stands off every control, so the read is taken where the spec left the pointer";
+  }
+  await page.mouse.move(at.x, at.y);
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            Promise.all(
+              document
+                .getAnimations()
+                .filter(
+                  (one) =>
+                    one.effect?.getComputedTiming().iterations !==
+                    Number.POSITIVE_INFINITY
+                )
+                .map((one) => one.finished.catch(() => undefined))
+            ).then(() => done());
+            // A transition started again and again never finishes: the
+            // read waits for none past a second.
+            setTimeout(done, 1000);
+          })
+        );
+      })
+  );
+  return null;
+}
+
 /**
  * Every rendered check read at the state the spec put `page` in. The spec
  * settles first (`settle`, or its own); a page still moving is the
@@ -5733,10 +5821,11 @@ async function renderedChecks(
     ),
     exempt,
   };
+  const unparked = opts.pointer === "kept" ? null : await parkPointer(page);
   const canvasFailed = await canvasFailure(page);
   const read = await page.evaluate(readInPage, args);
   const findings: (CheckFinding & { at: number })[] = [...read.findings];
-  const unread = [...read.unread];
+  const unread = [...read.unread, ...(unparked ? [unparked] : [])];
   const stateNamed: string[] = [];
   if (!exempt.includes("state-shape")) {
     const states = await forcedStates(page, args);

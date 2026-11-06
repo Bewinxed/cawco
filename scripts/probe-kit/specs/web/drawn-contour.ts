@@ -210,7 +210,12 @@ const spec: Spec = {
     for (const [label, fixture] of Object.entries(FIXTURES)) {
       await page.setContent(fixture.html);
       await fixture.act?.(page);
-      const read = await checks.at(page, label);
+      // A fixture's hover is what the read finds: the pointer stays on it.
+      const read = await checks.at(
+        page,
+        label,
+        fixture.act ? { pointer: "kept" } : {}
+      );
       const found = read.findings.filter((one) => READ.includes(one.rule));
       const said =
         found.length > 0

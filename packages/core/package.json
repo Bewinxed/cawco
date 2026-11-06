@@ -332,6 +332,7 @@
   },
   "dependencies": {
     "@cawco/jsonl-parser": "workspace:*",
+    "@iconify-json/iconoir": "1.2.12",
     "@iconify-json/solar": "1.2.13",
     "@octokit/rest": "22.0.1",
     "@openuidev/lang-core": "1.0.1",

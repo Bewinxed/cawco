@@ -3,7 +3,8 @@
  * state fills the owner caught on the artifact panel's head, each drawn
  * only while hovered, pressed or chosen, and stays quiet on the drawing done
  * right. The rule forces hover, active and focus-visible on every control
- * itself (CSS.forcePseudoState): no fixture is hovered or pressed here.
+ * itself (CSS.forcePseudoState): no fixture is hovered or pressed here but
+ * the twelfth, whose pointer the read moves off it.
  *
  * Drawn wrong, each names its control:
  *
@@ -42,9 +43,14 @@
  *     whose child fill takes its radius (`border-radius: inherit`).
  * 11. a button alone: a 10px button on the page, and one in the middle of
  *     a 12px card, clear of its corners.
+ * 12. an item left under the pointer: a glass's only item, filled under
+ *     hover, clicked as a spec clicks Expand and left there. The read parks
+ *     the pointer off every control first (parkPointer), so its rest is
+ *     unhovered and its forced hover draws on its box.
  *
  *   bun scripts/probe-kit/run.ts web state-shape
  */
+import type { Page } from "playwright-core";
 import type { Spec } from "../../kit";
 import { type CheckName, RenderedChecks, RULES } from "../../rendered-checks";
 
@@ -62,6 +68,8 @@ const BASE = `<!doctype html>
 </style>`;
 
 interface Fixture {
+  /** What the spec does before it reads, as a person would. */
+  act?: (page: Page) => Promise<void>;
   html: string;
   /** The control the rule must name (its selector holds this); none for a page drawn right. */
   want: string | null;
@@ -192,6 +200,21 @@ const FIXTURES: Record<string, Fixture> = {
 <button class="round inherits" type="button" aria-label="Close"><span class="fill"></span><span class="glyph"></span></button>`,
     want: null,
   },
+  "an item left under the pointer": {
+    act: async (page) => {
+      await page.click('[aria-label="Expand"]');
+      // Its hover fill eased in whole, as a spec's wait after a click lets it.
+      await page.waitForTimeout(400);
+    },
+    html: `${BASE}<style>
+  .glass button { border-radius: 15px; }
+  .glass button:is(:hover, :active) { background: #e6e0d6; }
+</style>
+<div class="glass" role="toolbar" aria-label="Canvas">
+  <button type="button" aria-label="Expand"><span class="glyph"></span></button>
+</div>`,
+    want: null,
+  },
   "a button alone": {
     html: `${BASE}<style>
   .act { block-size: 30px; padding-inline: 11px; border-radius: 10px; background: #fff; }
@@ -219,6 +242,7 @@ const spec: Spec = {
     });
     for (const [label, fixture] of Object.entries(FIXTURES)) {
       await page.setContent(fixture.html);
+      await fixture.act?.(page);
       const read = await checks.at(page, label);
       const found = read.findings.filter((one) => one.rule === READ);
       const said =

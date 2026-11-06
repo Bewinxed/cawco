@@ -16,6 +16,16 @@
  * nowhere else (scripts/icon-imports-check.ts).
  */
 /*
+ * A machine's OS in a bar (OsMark's linear face, the project head's place):
+ * Iconoir's Linux, Apple and Windows marks, Solar has none. Iconoir draws
+ * on Solar Linear's grid and stroke (24px, 1.5, open strokes), where
+ * Tabler's brand marks stroke at 2 and hold no Tux, and Phosphor's regular
+ * logos are outlines cut as fills.
+ */
+export { default as IconOsAppleLinear } from "~icons/iconoir/apple-mac";
+export { default as IconOsLinuxLinear } from "~icons/iconoir/linux";
+export { default as IconOsWindowsLinear } from "~icons/iconoir/windows";
+/*
  * Add, bare (the owner, 10-24: "u need to draw similar style icons that are
  * without their containers"): Solar's add in its bold-duotone cut.
  */

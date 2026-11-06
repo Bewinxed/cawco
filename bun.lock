@@ -100,6 +100,7 @@
         "zod": "4.6.5",
       },
       "devDependencies": {
+        "@iconify-json/iconoir": "^1.2.12",
         "@iconify-json/logos": "^1.2.15",
         "@iconify-json/solar": "^1.2.13",
         "@iconify-json/thesvg-color": "^1.2.15",
@@ -211,6 +212,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cawco/jsonl-parser": "workspace:*",
+        "@iconify-json/iconoir": "1.2.12",
         "@iconify-json/solar": "1.2.13",
         "@octokit/rest": "22.0.1",
         "@openuidev/lang-core": "1.0.1",
@@ -760,6 +762,8 @@
     "@hono/node-server": ["@hono/node-server@1.19.17", "", { "peerDependencies": { "hono": "^4" } }, "sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ=="],
 
     "@humanwhocodes/momoa": ["@humanwhocodes/momoa@3.3.13", "", {}, "sha512-AbKq3EW41+HY6pNMJgAOrz68iyiTTf0Nr1JRHHfuG5zwniJ9Dw8J3U7oa1I2ptpqYwmEf1sXKOGK6lbdZ9eqmg=="],
+
+    "@iconify-json/iconoir": ["@iconify-json/iconoir@1.2.12", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-9l6OtKntemFvgCbQ14AheNiUpm9eicNCwPuCmAVjmYORqhGFMEf33Yfo1S1pRFh9XIA3s7tiVmly6hm+dYNgEw=="],
 
     "@iconify-json/logos": ["@iconify-json/logos@1.2.15", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-87zwqEFatvpcK7lIIp0RnCbDAPWcG8bTK5hZI5SuD71za+opSuqtGvFUiSNt6wiyuY+nolrW/JW1K4/mBczWhQ=="],
 

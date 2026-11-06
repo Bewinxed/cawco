@@ -57,6 +57,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@iconify-json/iconoir": "^1.2.12",
     "@iconify-json/logos": "^1.2.15",
     "@iconify-json/solar": "^1.2.13",
     "@iconify-json/thesvg-color": "^1.2.15",
