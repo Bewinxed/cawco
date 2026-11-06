@@ -1033,15 +1033,22 @@ async function start(
           }
         }
       }
-      // A document's load its server answered with an error status: no page
-      // the preview can draw, and with nothing in it the browser draws its
-      // own broken-frame face, with no words. CawCo's own page names it in
-      // its place (core `PreviewDown` `error`); a page's own fetches and
-      // modules keep theirs.
-      if (response.status >= 400 && loadsDocument(request)) {
+      const html =
+        !!headers.get("content-type")?.startsWith("text/html") &&
+        request.method !== "HEAD" &&
+        !!response.body;
+      const page = html ? await response.text() : null;
+      // A document's load its server answered with an error status and
+      // nothing the browser can draw (no body, or one that isn't HTML): the
+      // browser would draw its own broken-frame face, with no words, so
+      // CawCo's own page names it in its place (core `PreviewDown`
+      // `error`). An HTML error page (SvelteKit's 404, a dev server's error
+      // overlay) is the page being built, served as any page with its
+      // overlay; a page's own fetches and modules keep their answers.
+      if (response.status >= 400 && loadsDocument(request) && !page?.trim()) {
         const failed = errorPageResponse(
           response.status,
-          await response.text()
+          page ?? (await response.text())
         );
         if ("port" in source) {
           failed.headers.set(PREVIEW_SERVED_HEADER, "1");
@@ -1049,12 +1056,8 @@ async function start(
         return failed;
       }
       let body: ReadableStream<Uint8Array> | string | null = response.body;
-      if (
-        headers.get("content-type")?.startsWith("text/html") &&
-        request.method !== "HEAD" &&
-        response.body
-      ) {
-        body = injectOverlay(await response.text());
+      if (page !== null) {
+        body = injectOverlay(page);
         if ("dir" in source && versioned === null) {
           // The folder's page: its own files at the folder's key, kept.
           body = versionAssets(

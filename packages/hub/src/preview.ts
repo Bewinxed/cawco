@@ -31,6 +31,7 @@ import {
   decodedHeaders,
   downOf,
   downResponse,
+  errorWhy,
   folderKey,
   heldWhileServed,
   IMMUTABLE,
@@ -679,8 +680,10 @@ async function pingSession(
  * when nothing stands in its way, else what failed and why, as CawCo's own
  * down page names it (`downOf`): a hop that didn't answer, or `error`, a page
  * its server answered with an error status (4xx, 5xx, as a render that
- * throws answers 500), which the machine's listener answers with that page
- * in its place (core `errorPageResponse`). A
+ * throws answers 500), which the machine's listener answers with CawCo's
+ * page when it has nothing to draw (core `errorPageResponse`) and serves
+ * as the page when it is HTML, its why said here the same way (core
+ * `errorWhy`). A
  * page with no answer within `waitMs` is a server still making it (a first
  * compile, a build holding its event loop), and no failure: a served server
  * is up once its port listens, however long its pages take (agent stage.ts
@@ -705,10 +708,18 @@ export async function loadedOnce(
         redirect: "manual",
         signal,
       });
-      return await answer.text();
+      return { status: answer.status, body: await answer.text() };
     });
     if (page.kind === "answered") {
-      return said(page.value);
+      const { status, body } = page.value;
+      // An HTML error page the listener served as the page (a render that
+      // throws answers 500 with its own): no page to hand up all the same.
+      return (
+        said(body) ??
+        (status >= 400
+          ? { failure: "error", why: errorWhy(status, body) }
+          : null)
+      );
     }
     const pinged = await readWithin(PING_RELAY_MS, async (signal) => {
       const answer = await fetch(

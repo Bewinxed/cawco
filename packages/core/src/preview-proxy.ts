@@ -394,23 +394,24 @@ export const loadsDocument = (request: Request): boolean =>
   request.method === "GET";
 
 /**
- * A document's load its server answered with error status `status`, `body`
- * what it sent (core `PreviewDown` `error`): CawCo's own down page in its
- * place, at the same status, its why the status and the first line of the
+ * A document's load its server answered with error status `status` and
+ * nothing the browser can draw (`body`, what it sent: empty, or not HTML;
+ * an HTML error page is the page being built, and is served as one), core
+ * `PreviewDown` `error`: CawCo's own down page in its place, at the same status, its why the status and the first line of the
  * error the page showed ({@link errorLineOf}), else the status's own words.
  * A route that isn't there any more answers 404 with nothing to draw, and
  * Chromium drew its grey broken-frame face in the frame, with no words
  * (owner, 2026-11-06).
  */
-export function errorPageResponse(status: number, body: string): Response {
+export const errorPageResponse = (status: number, body: string): Response =>
+  downResponse("error", status, errorWhy(status, body));
+
+/** A page answered error status `status` with `body`, in one line: the status and the error's first line ({@link errorLineOf}), else the status's own words. */
+export function errorWhy(status: number, body: string): string {
   const line = errorLineOf(body);
-  return downResponse(
-    "error",
-    status,
-    line
-      ? `${status}: ${line}`
-      : `${status} ${STATUS_CODES[status] ?? ""}`.trim()
-  );
+  return line
+    ? `${status}: ${line}`
+    : `${status} ${STATUS_CODES[status] ?? ""}`.trim();
 }
 
 /** How long one hop's line for one preview and cause stands for every repeat of it. Our call: a dev server's client retries each second. */

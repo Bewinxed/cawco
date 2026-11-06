@@ -1715,8 +1715,9 @@ export const PREVIEW_DOWNS = [
  * served it is not on its machine any more (archived, discarded), so this
  * version of it can't be shown again; only its session making it again
  * brings it back. `error`: every hop answered, and the page's server
- * answered its load with an error status (a route that isn't there any more
- * answers 404, a render that throws answers 500): the machine's listener
+ * answered its load with an error status and nothing the browser can draw
+ * (a route that isn't there any more answering an empty 404, a plain-text
+ * 500); an HTML error page is the page, served as one: the machine's listener
  * answers the load with its own page in place of the server's (agent
  * preview.ts), the status and the error's first line as its why
  * (`errorLineOf`), never the browser's own error face. `crashed`: the page
