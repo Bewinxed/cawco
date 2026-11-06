@@ -1280,6 +1280,19 @@ const metaOf = (doc: Doc) => {
 };
 
 /** When the person's newest entry in `state` came (a pick, a note, a value); null before any. */
+/** His answer as a session's list shows it: what he picked, joined, or his words (core session-questions.ts). */
+const answerShown = (answer: Question["answer"]): SessionQuestion["answer"] =>
+  answer
+    ? {
+        at: answer.at,
+        by: answer.by,
+        said:
+          answer.by === "pick"
+            ? (answer.options ?? []).join(", ")
+            : answer.said,
+      }
+    : null;
+
 const answeredAtOf = (state: Record<string, ChoiceEntry>): string | null =>
   Object.values(state).reduce<string | null>(
     (latest, entry) =>
@@ -9724,9 +9737,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
                   kind: question.kind,
                   words: question.words,
                   state: question.state,
-                  answeredAt:
+                  answer:
                     question.state === "answered"
-                      ? (question.answer?.at ?? null)
+                      ? answerShown(question.answer)
                       : null,
                   stop: question.stop,
                   artifact: {

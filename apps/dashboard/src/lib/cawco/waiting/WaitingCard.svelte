@@ -29,6 +29,7 @@
   import WaitingList from "./WaitingList.svelte";
 
   let {
+    agent,
     paneId,
     rows,
     failure = null,
@@ -37,6 +38,8 @@
     onopen,
     onclose,
   }: {
+    /** The session's agent, by the name the conversation gives it. */
+    agent: string;
     /** The conversation its pane shows: whose composer layer it holds. */
     paneId: string;
     rows: WaitingRow[];
@@ -103,7 +106,7 @@
       class="m-0 min-w-0 flex-auto truncate text-size-label font-medium text-ink-strong"
       id={titleId}
     >
-      {waitingWords.title(waitingCounts(rows).open)}
+      {waitingWords.title(waitingCounts(rows).open, agent)}
     </h2>
     <BarGlass form="group">
       <BarItem icon={IconClose} label={commonWords.close} onclick={shut} />
@@ -112,7 +115,7 @@
   <div
     class="kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain touch-pan-y px-space-1 pbe-space-2"
   >
-    <WaitingList {faultOf} {onopen} {rows} />
+    <WaitingList {agent} {faultOf} {onopen} {rows} />
     {#if failure}
       <RowFault {again} reason={waitingWords.readFailed(failure)} />
     {/if}

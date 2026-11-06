@@ -13,9 +13,19 @@ import type { ArtifactKind } from "./index";
 /** What a question is: a decision card, a canvas or preview to judge, a pin the agent's reply asked on. */
 export type SessionQuestionKind = "card" | "judge" | "pin";
 
+/** How he answered: a pick, a note, a value set, a pin or a reply written, a pin resolved. */
+export type SessionAnswerHow =
+  "pick" | "note" | "value" | "pin" | "reply" | "resolve";
+
 export interface SessionQuestion {
-  /** When it was answered, ISO; null while open. */
-  answeredAt: string | null;
+  /** His answer, as the list shows it under the question; null while open. */
+  answer: {
+    /** When, ISO. */
+    at: string;
+    by: SessionAnswerHow;
+    /** What he said: the options he picked, joined; his words; empty for a resolve. */
+    said: string;
+  } | null;
   /** The artifact that asks it. */
   artifact: { id: string; kind: ArtifactKind; title: string };
   /** Its key on that artifact: `card:<id>`, `judge`, `pin:<id>`. */

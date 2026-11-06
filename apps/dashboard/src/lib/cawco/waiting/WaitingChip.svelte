@@ -9,7 +9,11 @@
    * While anything waits on him it wears the needs-you hand and says how
    * many ("3 need you"); once all are answered and some not yet taken up,
    * the tick and how many ("2 answered"), in muted ink. At none it is gone
-   * (DESIGN.md, The Earned Count Rule).
+   * (DESIGN.md, The Earned Count Rule). Where the tray row is narrower than
+   * a phone's (its `tray` container: a phone, Caw's panel) the words fold
+   * away and the glyph and the figure stand, so a folded question's bar
+   * beside it keeps the room to say what it asks; the aria-label says it
+   * whole.
    */
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconNeedsYou, IconTick } from "#lib/icons.js";
@@ -47,11 +51,17 @@
   >
     {#if waiting > 0}
       <IconNeedsYou aria-hidden="true" class="text-status-attn-glyph" />
-      <span class="num whitespace-nowrap">{waitingWords.needYou(waiting)}</span>
+      <span aria-hidden="true" class="num whitespace-nowrap"
+        >{waiting}<span class="@max-phone/tray:hidden">
+          {waitingWords.needYouWord(waiting)}</span
+        ></span
+      >
     {:else}
       <IconTick aria-hidden="true" />
-      <span class="num whitespace-nowrap"
-        >{waitingWords.answered(answered)}</span
+      <span aria-hidden="true" class="num whitespace-nowrap"
+        >{answered}<span class="@max-phone/tray:hidden">
+          {waitingWords.answeredWord}</span
+        ></span
       >
     {/if}
   </button>

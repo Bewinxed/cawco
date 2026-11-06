@@ -35,6 +35,8 @@ export type WaitingRow =
       kind: SessionQuestionKind;
       state: "open" | "answered";
       artifact: SessionQuestion["artifact"];
+      /** His answer, once he gave it; null while it waits on him. */
+      answer: SessionQuestion["answer"];
       stop: ArtifactStop;
     })
   | (RowBase & {
@@ -69,6 +71,7 @@ export const waitingRows = (
     words: question.words,
     from: question.session,
     artifact: question.artifact,
+    answer: question.answer,
     stop: question.stop,
   });
   return [

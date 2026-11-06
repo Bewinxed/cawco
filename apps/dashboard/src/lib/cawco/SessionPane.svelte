@@ -1395,6 +1395,7 @@
   />
   {#if waitList.shown}
     <WaitingCard
+      agent={agentName}
       again={waitList.again}
       failure={waitList.failure}
       faultOf={waitList.faultOf}
