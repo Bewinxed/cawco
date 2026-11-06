@@ -15,7 +15,9 @@
  */
 import {
   type ClipRead,
+  type ClipRepeat,
   type ClipValue,
+  clipEnd,
   STAGE_LET_GO,
   STAGE_PAUSE,
   STAGE_PLAY,
@@ -244,11 +246,38 @@ function framesOf(held: Held, tuning: Tuning | undefined): Keyframe[] {
   });
 }
 
+/**
+ * How clip `read` runs on as `repeat` says: once is as the page wrote it,
+ * its own count of runs each its own way (a run there and one back, for a
+ * play's `direction: "alternate"`); round again or back and forth run on to
+ * the move's end, the first run its own way round.
+ */
+function runsOf(
+  read: ClipRead,
+  repeat: ClipRepeat
+): { direction: PlaybackDirection; iterations: number } {
+  if (repeat === "once") {
+    return {
+      direction: read.direction,
+      iterations: Math.max(1, read.iterations || Number.POSITIVE_INFINITY),
+    };
+  }
+  const back = read.direction.endsWith("reverse");
+  if (repeat === "mirror") {
+    return {
+      direction: back ? "alternate-reverse" : "alternate",
+      iterations: Number.POSITIVE_INFINITY,
+    };
+  }
+  return {
+    direction: back ? "reverse" : "normal",
+    iterations: Number.POSITIVE_INFINITY,
+  };
+}
+
 /** A clip's timing as he tuned it, or as read. */
 const timingOf = (held: Held, tuning: Tuning | undefined) => {
   const { read } = held;
-  const repeat = tuning?.repeat ?? "once";
-  const once = repeat === "once";
   return {
     delay: tuning?.delay ?? read.delay,
     duration: Math.max(1, tuning?.duration ?? read.duration),
@@ -257,17 +286,12 @@ const timingOf = (held: Held, tuning: Tuning | undefined) => {
       read.framed && !tuning?.shaped
         ? "linear"
         : (tuning?.easing ?? read.easing),
-    iterations: once
-      ? Math.max(1, read.iterations || Number.POSITIVE_INFINITY)
-      : Number.POSITIVE_INFINITY,
-    direction: (repeat === "mirror"
-      ? "alternate"
-      : "normal") as PlaybackDirection,
+    ...runsOf(read, tuning?.repeat ?? "once"),
     fill: "both" as FillMode,
   };
 };
 
-/** The move's length as `tuning` times it: its last clip's end, each run once. */
+/** The move's length as `tuning` times it: its last clip's end, each of its runs as written, one of a clip that runs on (core `clipEnd`). */
 function playedLength(
   clips: Iterable<Held>,
   tuning: ReadonlyMap<string, Tuning>
@@ -275,7 +299,7 @@ function playedLength(
   let length = 0;
   for (const held of clips) {
     const timing = timingOf(held, tuning.get(held.read.id));
-    length = Math.max(length, held.read.start + timing.delay + timing.duration);
+    length = Math.max(length, clipEnd({ ...timing, start: held.read.start }));
   }
   return length;
 }

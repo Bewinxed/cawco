@@ -118,6 +118,8 @@ export interface ClipValue {
 /** One animation a reach set off, as the page read it: the element and its frames stay on the page. */
 export interface ClipRead {
   delay: number;
+  /** Which way each of its runs goes, as the page wrote it: `alternate` turns back on each run after the first. */
+  direction: ClipDirection;
   duration: number;
   easing: string;
   /** What moves, in words (the page's `nameOf`). */
@@ -207,6 +209,25 @@ export const STAGE_DIALS_WRITTEN = "cawco:stage-dials-written";
 export interface StageDialsWritten {
   values: Record<string, DialSet>;
 }
+
+/**
+ * Where a clip ends in its move, ms: its start, its delay and each of its
+ * runs, `iterations` of them (a play's two runs there and back end at
+ * twice its duration); one that runs on (`iterations` 0) counts its first,
+ * the move's other clips ending it.
+ */
+export const clipEnd = (
+  clip: Pick<ClipRead, "delay" | "duration" | "iterations" | "start">
+): number =>
+  clip.start +
+  clip.delay +
+  clip.duration *
+    (clip.iterations > 0 && Number.isFinite(clip.iterations)
+      ? clip.iterations
+      : 1);
+
+/** Which way a clip's runs go: the Web Animations API's `PlaybackDirection`. */
+type ClipDirection = "normal" | "reverse" | "alternate" | "alternate-reverse";
 
 /** How a clip runs after its first time through: once, round again, or back and forth. */
 export type ClipRepeat = "once" | "repeat" | "mirror";
@@ -550,6 +571,9 @@ function clipReadOf(value: unknown): ClipRead | null {
     id,
     start,
     delay,
+    direction: DIRECTIONS.has(said.direction as ClipDirection)
+      ? (said.direction as ClipDirection)
+      : "normal",
     duration,
     easing,
     element,
@@ -726,6 +750,12 @@ const msOf = (value: unknown): number | null => {
   return ms === null ? null : Math.min(MOVE_MS_MAX, Math.max(0, ms));
 };
 const REPEATS = new Set<ClipRepeat>(["once", "repeat", "mirror"]);
+const DIRECTIONS = new Set<ClipDirection>([
+  "normal",
+  "reverse",
+  "alternate",
+  "alternate-reverse",
+]);
 
 /** A {@link Tuning} as it crossed the frame; null when it is none. */
 function tuningOneOf(value: unknown): Tuning | null {

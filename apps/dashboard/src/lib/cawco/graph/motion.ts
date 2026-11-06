@@ -11,6 +11,7 @@ import {
   type ClipRead,
   type ClipRepeat,
   type ClipValue,
+  clipEnd,
   clipKindOf,
   type Tuning as StageTuning,
 } from "@cawco/core/stage-graph";
@@ -188,9 +189,17 @@ export function clipOf(read: ClipRead): Clip {
   };
 }
 
-/** The move's length: its last clip's end. */
+/** The move's length: its last clip's end, each of its runs as the page wrote them while it runs once, one of a clip he set running on (core `clipEnd`), as the page's replays time it. */
 export const lengthOf = (clips: readonly Clip[]): number =>
-  Math.max(0, ...clips.map((clip) => clip.start + clip.delay + clip.duration));
+  Math.max(
+    0,
+    ...clips.map((clip) =>
+      clipEnd({
+        ...clip,
+        iterations: clip.repeat === "once" ? clip.iterations : 0,
+      })
+    )
+  );
 
 /** Whether `clip` stands as `was` in every value he may change. */
 const untouched = (clip: Clip, was: Clip): boolean =>

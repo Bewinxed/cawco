@@ -69,6 +69,7 @@ import {
 } from "@cawco/core/stage";
 import {
   type ClipRead,
+  clipEnd,
   clipKindOf,
   cutRecords,
   type DialSet,
@@ -197,6 +198,8 @@ interface Against extends Live {
 /** An animation a reach set off, as first seen: its element, its frames and its timing. */
 interface Taken {
   animation: Animation;
+  /** Which way each of its runs goes. */
+  direction: PlaybackDirection;
   /** Ms after the press it was first seen at. */
   first: number;
   /** How many times it runs; 0 for a loop. */
@@ -232,9 +235,11 @@ function takenOf(
   if (!((Number(effect?.getComputedTiming().duration) || 0) > 0)) {
     return null;
   }
-  const iterations = Number(effect?.getComputedTiming().iterations ?? 1);
+  const timing = effect?.getComputedTiming();
+  const iterations = Number(timing?.iterations ?? 1);
   return {
     animation,
+    direction: timing?.direction ?? "normal",
     first,
     target: effect?.target ?? null,
     keyframes: effect?.getKeyframes() ?? [],
@@ -964,6 +969,7 @@ export function bootStage(page: Page): Mode {
         property,
         start: Math.round((starts.get(one.animation) ?? one.first) - origin),
         delay: Math.round(one.read.delay),
+        direction: one.direction,
         duration: Math.round(one.read.duration),
         easing,
         framed: inFrames,
@@ -1152,10 +1158,7 @@ export function bootStage(page: Page): Mode {
           from: from?.story ?? "",
           to: target.ref.story,
           clips: read.clips,
-          length: Math.max(
-            0,
-            ...read.clips.map((clip) => clip.start + clip.delay + clip.duration)
-          ),
+          length: Math.max(0, ...read.clips.map(clipEnd)),
         },
       };
     } catch (error) {
