@@ -7,8 +7,9 @@
  * (agent gate.ts `keyOfWorkspace`).
  *
  * - `POST /api/browsers/:key/takeover`: the person takes the browser over
- *   privately (agent shield.ts): every agent connection cut, the asking
- *   workspace's page in front, control the person's; a browser ask it
+ *   privately (agent shield.ts): every agent connection cut, the page the
+ *   browser ask was pinned to in front (browser-tools.ts), else the
+ *   session's own newest, control the person's; a browser ask it
  *   answers is taken off every screen and its call waits on; the session's
  *   panel opens on its browser artifact; every other live session of the
  *   project on that machine is told in one line.
@@ -445,7 +446,13 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       const row = await shield(machineId, {
         key,
         ...(workspaceId ? { workspaceId } : {}),
-        ...(ask ? { origin: ask.origin, requestId: asked.requestId } : {}),
+        ...(ask
+          ? {
+              origin: ask.origin,
+              requestId: asked.requestId,
+              targetId: ask.targetId,
+            }
+          : {}),
         ...(asked.viewer ? { viewer: asked.viewer } : {}),
       });
       if (asked.requestId) {

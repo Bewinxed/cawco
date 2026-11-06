@@ -96,6 +96,7 @@ import {
   BROWSER_CLOSE_PAGES,
   BROWSER_HANDBACK,
   BROWSER_LISTEN,
+  BROWSER_PAGE,
   BROWSER_REMOVE,
   BROWSER_ROWS,
   BROWSER_SHIELD,
@@ -105,6 +106,7 @@ import {
   BROWSER_VIEWERS,
   type BrowserClosePagesArgs,
   type BrowserKey,
+  type BrowserPageArgs,
   type BrowserShieldArgs,
   type BrowserStartArgs,
   type BrowserViewersArgs,
@@ -221,6 +223,7 @@ import {
 } from "./browser/relay";
 import { proveRelay } from "./browser/relay-reach";
 import {
+  askedPage,
   browserViewers,
   handBackBrowser,
   restoreShields,
@@ -3686,6 +3689,17 @@ const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(BROWSER_HANDBACK, async (args) =>
       handBackBrowser(browserKeyOf(args))
     );
+    // A browser ask as it parks: the asking door's page on the asked origin,
+    // which a take-over brings to the front (browser/shield.ts).
+    supervisor.registerDaemonFunction(BROWSER_PAGE, (args) => {
+      const { origin, workspaceId } = (args ?? {}) as Partial<BrowserPageArgs>;
+      if (!(typeof origin === "string" && typeof workspaceId === "string")) {
+        return Promise.reject(
+          new Error("browser.page takes a door's id and an origin")
+        );
+      }
+      return askedPage({ key: browserKeyOf(args), origin, workspaceId });
+    });
     // The person's view of a browser, through the hub (hub
     // browser-routes.ts): the machine's one browser listener, and a neko
     // session of its own for each viewer.

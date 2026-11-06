@@ -42,6 +42,7 @@
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import { browser } from "$app/env";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
     cawco,
@@ -986,13 +987,21 @@
   }
 
   /**
-   * The asks this conversation made: its own (a delegate's belongs to its
-   * parent, never the reader's queue), then those parked elsewhere that it
-   * made (a memory curator run's proposal, on machine "hub"), each answered
-   * on the machine it is parked on.
+   * The asks this conversation made: its own (one routed to its parent is
+   * the parent's to answer, never the reader's queue), then those parked
+   * elsewhere that it made (a memory curator run's proposal, on machine
+   * "hub"), then the ones its delegates at any depth put to the person (a
+   * browser ask two deep reaches the session the person talks to as it is
+   * asked, named by the delegate that asked), each answered on the machine
+   * it is parked on.
    */
   const parked = $derived<
-    { machine: string | undefined; request: PendingPermission }[]
+    {
+      /** A delegate's ask: who asked, and the session it is parked on. */
+      under?: { asker: string; instanceId: string };
+      machine: string | undefined;
+      request: PendingPermission;
+    }[]
   >([
     ...parkedAsks(session?.pending ?? [])
       .filter((request) => !asksElsewhere?.(request))
@@ -1003,14 +1012,37 @@
     ...cawco.blocked
       .filter((row) => row.request.originInstanceId === viewId)
       .map((row) => ({ request: row.request, machine: row.machineId })),
+    ...cawco
+      .asksUnder(viewId)
+      .filter((row) => parkedAsks([row.request]).length > 0)
+      .map((row) => {
+        const asker = cawco.instanceIndex.byId.get(row.instanceId);
+        return {
+          request: row.request,
+          machine: row.machineId,
+          under: {
+            asker: asker
+              ? instanceTitle(asker)
+              : row.request.presentation.asker || row.hostname,
+            instanceId: row.instanceId,
+          },
+        };
+      }),
   ]);
   /** The first of them, which the composer grows into: one ask at a time. */
   const firstAsk = $derived.by((): ComposerAsk | null => {
     const [first] = parked;
+    const askedIn = first?.under?.instanceId ?? "";
     return first
       ? {
           request: first.request,
-          asker: agentName,
+          asker: first.under?.asker ?? agentName,
+          // Taken over from here, the browser opens in the panel of the
+          // delegate that asked (hub browsers.ts `openPanel`): the person
+          // goes there to see it.
+          ...(first.under
+            ? { ontaken: () => detach(goto(rowHref(askedIn)), "goto asker") }
+            : {}),
           more: parked.length - 1,
           onanswer: (result) => onanswer(first.request, first.machine, result),
         }

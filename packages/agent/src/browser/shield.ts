@@ -35,15 +35,18 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import {
+  type BrowserAskedPage,
   type BrowserHandback,
   type BrowserHandedBackFrame,
   type BrowserKey,
+  type BrowserPageArgs,
   type BrowserRow,
   type BrowserShieldArgs,
   isBrowserKey,
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { browserAskWords } from "@cawco/core/words/browser";
 import { z } from "zod";
 import { browserRows, browsersChanged, startBrowser } from "./browsers";
 import {
@@ -54,7 +57,7 @@ import {
 } from "./cdp-takeover";
 import { endWatch, watchView } from "./cdp-watch";
 import { nekoLogin } from "./container-host";
-import { setFront } from "./front-origin";
+import { frontTarget, setFront } from "./front-origin";
 import { gateOf } from "./gate";
 import {
   allBrowsers,
@@ -159,28 +162,79 @@ const pagesOf = async (link: CdpLink): Promise<Page[]> => {
 };
 
 /**
- * The page a take-over brings to the front: the asking workspace's page on
- * the asked origin, else its newest page, else the browser's first page.
+ * The page a take-over brings to the front. A browser ask's is the page it
+ * was pinned to as it parked ({@link askedPage}), and a take-over of it is
+ * refused once that page is closed. A take-over from a session's panel
+ * (no ask) brings the session's newest page, else keeps the page the view
+ * shows now (front-origin.ts). Never the browser's first page as it lists
+ * them: that is any tab at all (an extension's, another session's).
  */
 const frontPage = async (
   key: BrowserKey,
   link: CdpLink,
-  workspaceId: string | undefined,
-  origin: string | undefined
-): Promise<Page | undefined> => {
-  const pages = await pagesOf(link);
-  if (workspaceId) {
+  args: Pick<BrowserShieldArgs, "targetId" | "workspaceId">
+): Promise<string | undefined> => {
+  const open = new Set((await pagesOf(link)).map((page) => page.targetId));
+  if (args.targetId) {
+    if (!open.has(args.targetId)) {
+      throw new Error(browserAskWords.pageClosed);
+    }
+    return args.targetId;
+  }
+  if (args.workspaceId) {
     const owners = await pageOwners(key);
-    const own = pages.filter((page) => owners[page.targetId] === workspaceId);
-    const asked = origin
-      ? own.find((page) => originOf(page.url) === origin)
-      : undefined;
-    const chosen = asked ?? own.at(-1);
-    if (chosen) {
-      return chosen;
+    const own = Object.keys(owners).filter(
+      (target) => owners[target] === args.workspaceId && open.has(target)
+    );
+    const newest = own.at(-1);
+    if (newest) {
+      return newest;
     }
   }
-  return pages[0];
+  const shown = frontTarget(key);
+  return shown && open.has(shown) ? shown : undefined;
+};
+
+/**
+ * A browser ask as it parks (core `BROWSER_PAGE`): the page of `key` that
+ * door `workspaceId` has open on `origin`, the one it drove last when it
+ * has several there (gate.ts `drivenBy`), else the newest it opened. The
+ * ask is pinned to it, so a take-over shows the page the agent asked about
+ * whatever tab opens after (a site's pop-up, an extension's page, another
+ * session's). Refused in the agent's words when it has none open there.
+ */
+export const askedPage = async ({
+  key,
+  origin,
+  workspaceId,
+}: BrowserPageArgs): Promise<BrowserAskedPage> => {
+  const record = await readBrowser(key);
+  if (record?.state !== "live") {
+    throw new Error(browserAskWords.noBrowser(origin));
+  }
+  const link = await CdpLink.open(
+    `http://127.0.0.1:${portsOf(record).devtools}`
+  ).catch((error: unknown) => {
+    throw new Error(browserAskWords.noBrowser(origin), { cause: error });
+  });
+  try {
+    const at = new Map(
+      (await pagesOf(link)).map((page) => [page.targetId, originOf(page.url)])
+    );
+    const owners = await pageOwners(key);
+    const own = Object.keys(owners).filter(
+      (target) => owners[target] === workspaceId && at.get(target) === origin
+    );
+    const driven = gateOf(key)?.drivenBy(workspaceId);
+    const targetId =
+      driven && own.includes(driven) ? driven : (own.at(-1) ?? null);
+    if (!targetId) {
+      throw new Error(browserAskWords.noPage(origin));
+    }
+    return { targetId };
+  } finally {
+    link.close();
+  }
 };
 
 /**
@@ -324,6 +378,28 @@ export const shieldBrowser = async (
   if (!record) {
     throw new Error(`${key} has no record on this machine.`);
   }
+  // The page to bring forward, found before anything is held: an ask's page
+  // closed since it parked refuses the take-over, and the agents have the
+  // browser back as they had it.
+  const front = before
+    ? undefined
+    : await (async () => {
+        const link = await CdpLink.open(
+          `http://127.0.0.1:${portsOf(record).devtools}`
+        );
+        try {
+          const targetId = await frontPage(key, link, args);
+          if (targetId) {
+            await link.call("Target.activateTarget", { targetId });
+          }
+          return targetId;
+        } finally {
+          link.close();
+        }
+      })().catch((error: unknown) => {
+        gate.open();
+        throw error;
+      });
   const take: Held = before ?? {
     since: Date.now(),
     hubViewers: 0,
@@ -331,25 +407,11 @@ export const shieldBrowser = async (
     ...(args.workspaceId ? { workspaceId: args.workspaceId } : {}),
     ...(args.origin ? { origin: args.origin } : {}),
     ...(args.requestId ? { requestId: args.requestId } : {}),
+    ...(front ? { targetId: front } : {}),
   };
   held.set(key, take);
-  // Kept before the slow steps: a daemon that restarts in them still holds
-  // the gate closed, and the count of views never reads a half-made one.
   await keep(key, take);
   await recordTakeover(key, take);
-  if (!take.targetId) {
-    const devtools = `http://127.0.0.1:${portsOf(record).devtools}`;
-    const link = await CdpLink.open(devtools);
-    try {
-      const page = await frontPage(key, link, take.workspaceId, take.origin);
-      if (page) {
-        await link.call("Target.activateTarget", { targetId: page.targetId });
-        take.targetId = page.targetId;
-      }
-    } finally {
-      link.close();
-    }
-  }
   // The band names the page in front, the one the person sees.
   if (take.targetId) {
     setFront(key, take.targetId);

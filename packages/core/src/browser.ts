@@ -199,21 +199,45 @@ export interface BrowserClosePagesArgs {
 }
 
 /**
+ * Hub → daemon, as a `browser_ask` parks: the page of the browser of `key`
+ * that the door `workspaceId` (its workspace's, else its session's own:
+ * agent door.ts) has open on `origin`, the one it drove last when it has
+ * several. The ask is pinned to that page, so a take-over shows it and no
+ * other, whatever tab opens after. Refused, in the agent's words, when the
+ * door has no page open on that origin there (its pages closed with its
+ * work item, the browser stopped, or it never opened one). Answers
+ * {@link BrowserAskedPage}.
+ */
+export const BROWSER_PAGE = "browser.page";
+export interface BrowserPageArgs {
+  key: BrowserKey;
+  origin: string;
+  workspaceId: string;
+}
+export interface BrowserAskedPage {
+  targetId: string;
+}
+
+/**
  * Hub → daemon: the person takes over the browser of `key`, privately (the
  * shield, agent `browser/shield.ts`): every agent connection cut and new
- * ones refused, the asking workspace's page brought to the front, control
- * given to the person. `workspaceId` is the asking session's workspace and
- * `origin` the page it asked about, when a browser ask is taken; `viewer`
- * is the person's neko session on the container host, once their view has
- * one. Sent again (with the viewer, or after the daemon restarted) it keeps
- * the take-over it holds and gives control to that viewer. Answers the
- * {@link BrowserRow}.
+ * ones refused, a page brought to the front, control given to the person.
+ * A browser ask taken names `targetId`, the page it was pinned to as it
+ * parked ({@link BROWSER_PAGE}): that page comes to the front, and the
+ * take-over is refused when it is closed. With none (a take-over from a
+ * session's panel), the newest page of `workspaceId` (the session's door),
+ * else the page the view shows now. `origin` is the page the ask named;
+ * `viewer` is the person's neko session on the container host, once their
+ * view has one. Sent again (with the viewer, or after the daemon
+ * restarted) it keeps the take-over it holds and gives control to that
+ * viewer. Answers the {@link BrowserRow}.
  */
 export const BROWSER_SHIELD = "browser.shield";
 export interface BrowserShieldArgs {
   key: BrowserKey;
   origin?: string;
   requestId?: string;
+  targetId?: string;
   viewer?: string;
   workspaceId?: string;
 }

@@ -6,6 +6,12 @@
  * ({@link BrowserAskFrame}), so it lands in Needs you, the transcript and
  * the phone as every ask does, and the call waits.
  *
+ * Before it parks, the ask is pinned to the page the agent has open on the
+ * origin it named, the one it drove last (agent shield.ts `askedPage`):
+ * a take-over brings that page to the front and no other. An agent with no
+ * page open there is refused, in words naming what to do, and the person
+ * never hears of it.
+ *
  * Take over (browsers.ts `/takeover`, or an Approve from an app with no Take
  * over yet) takes the ask off every screen as answered and the call waits
  * on, through the private period, until the person hands back: it answers
@@ -79,6 +85,17 @@ export interface BrowserAsksDeps {
     ask: BrowserAskFrame,
     origin: string | null
   ) => void;
+  /**
+   * The page of browser `key` on `machineId` that `actor` has open on
+   * `origin` (core `BROWSER_PAGE`, agent shield.ts `askedPage`): the ask is
+   * pinned to it. Throws the sentence the agent reads when it has none.
+   */
+  readonly pageOf: (
+    actor: InstanceRow,
+    key: BrowserKey,
+    machineId: string,
+    origin: string
+  ) => Promise<string>;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
   readonly park: (envelope: Envelope) => void;
   /** Takes an answered ask off the pending ledger. */
@@ -92,6 +109,8 @@ interface Waiter {
   resolve: (answer: BrowserAskAnswer) => void;
   /** The person took it: it is off every screen, and waits for the hand-back. */
   taken: boolean;
+  /** The page the ask is pinned to: the one a take-over brings to the front. */
+  targetId: string;
 }
 
 export const createBrowserAsks = (deps: BrowserAsksDeps) => {
@@ -107,6 +126,10 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
     ): Promise<BrowserAskAnswer> {
       refuseSecondAsk(waiting, actor.id, "browser");
       const { key, machineId, artifactId } = deps.browserFor(actor);
+      // Pinned before the person hears of it: an ask about a page the agent
+      // has not open would hand them some other tab.
+      const targetId = await deps.pageOf(actor, key, machineId, input.origin);
+      refuseSecondAsk(waiting, actor.id, "browser");
       const requestId = crypto.randomUUID();
       const ask: BrowserAskFrame = {
         artifactId,
@@ -119,6 +142,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
         waiting.set(requestId, {
           ask,
           instanceId: actor.id,
+          targetId,
           resolve,
           reject,
           taken: false,
@@ -136,12 +160,19 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
       return await answered;
     },
 
-    /** The open ask `requestId`, while its call waits (taken or not). */
+    /** The open ask `requestId` and the page it is pinned to, while its call waits (taken or not). */
     get(
       requestId: string
-    ): (BrowserAskFrame & { instanceId: string }) | undefined {
+    ):
+      (BrowserAskFrame & { instanceId: string; targetId: string }) | undefined {
       const waiter = waiting.get(requestId);
-      return waiter && { ...waiter.ask, instanceId: waiter.instanceId };
+      return (
+        waiter && {
+          ...waiter.ask,
+          instanceId: waiter.instanceId,
+          targetId: waiter.targetId,
+        }
+      );
     },
 
     /** Whether `requestId` is a browser ask the person has not taken yet: {@link answer}'s to settle. */

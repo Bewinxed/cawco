@@ -454,10 +454,13 @@ import { workspaceReach } from "@cawco/core/boundary-reach";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_CLOSE_PAGES,
+  BROWSER_PAGE,
+  type BrowserAskedPage,
   type BrowserClosePagesArgs,
   type BrowserFrame,
   type BrowserHandedBackFrame,
   type BrowserKey,
+  type BrowserPageArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
 import {
@@ -1268,6 +1271,8 @@ const UPDATE_CHECK_MS = 6 * HOUR_MS;
 
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
+/** How long a machine has to name the page a browser ask is about: a DevTools link opened and its pages listed (agent shield.ts `askedPage`). */
+const BROWSER_PAGE_MS = 30_000;
 
 /** A `Range: bytes=a-b` header (one range, either end open). */
 const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/u;
@@ -4075,6 +4080,20 @@ export const createServer = (
   });
   const browserAsks = createBrowserAsks({
     browserFor: (actor) => browsers.browserFor(actor),
+    // The asking door's page on the asked origin, on the browser's machine
+    // (agent shield.ts `askedPage`); its refusal is the agent's sentence.
+    pageOf: async (actor, key, machineId, origin) => {
+      const page: BrowserPageArgs = {
+        key,
+        origin,
+        workspaceId: sessionWorkspace(actor)?.id ?? actor.id,
+      };
+      return browserAnswered<BrowserAskedPage>(
+        await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_PAGE_MS),
+        machineName(machineId),
+        `say which page of yours is open on ${origin}`
+      ).targetId;
+    },
     // Not kept across a restart: the call that waits on it ends with the hub.
     park: (envelope) => parkForPerson(envelope),
     settle: (requestId) => {

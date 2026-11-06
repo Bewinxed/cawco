@@ -357,6 +357,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         browserFor: () => {
           throw new Error("measuring");
         },
+        pageOf: () => Promise.reject(new Error("measuring")),
         park: () => undefined,
         settle: () => undefined,
         handedBack: () => undefined,

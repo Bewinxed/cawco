@@ -95,6 +95,7 @@
     place = null,
     shown = false,
     onminimize,
+    ontaken,
   }: {
     /**
      * Folds a question down to its bar over the composer, answering nothing
@@ -116,6 +117,8 @@
      * the socket already say.
      */
     onanswer: (result: PermissionResult) => string | null;
+    /** A browser ask taken over: where the person goes to see the browser, when it is not here (Composer `ontaken`). */
+    ontaken?: () => void;
   } = $props();
 
   /**
@@ -140,7 +143,9 @@
     // Refused: the button is free again.
     if (takeRefused !== null) {
       pressed = null;
+      return;
     }
+    ontaken?.();
   }
 
   /** Deny, with the words the person wrote on the "Other" line, if any. */

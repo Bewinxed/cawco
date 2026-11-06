@@ -28,6 +28,12 @@
     more: number;
     /** Submits its answer; the id of the command it went out as (Prompt). */
     onanswer: (result: PermissionResult) => string | null;
+    /**
+     * A browser ask taken over from here that a delegate asked: the hub
+     * opened the browser in that delegate's panel, and this takes the
+     * person there (Prompt).
+     */
+    ontaken?: () => void;
     request: PendingPermission;
   }
 
@@ -3624,6 +3630,7 @@
               asker={drawnAsk.asker}
               onanswer={drawnAsk.onanswer}
               onminimize={askParks ? minimizeAsk : undefined}
+              ontaken={drawnAsk.ontaken}
               place={askPlace}
               request={drawnAsk.request}
               shown={askShown}

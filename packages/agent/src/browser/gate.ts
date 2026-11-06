@@ -127,6 +127,18 @@ const TARGET_METHODS = new Set([
   "Target.getDevToolsTarget",
   "Browser.getWindowForTarget",
 ]);
+/**
+ * The calls that drive a page, as an agent works on the one in front of it:
+ * a load, a key or a pointer, a picture or a read of it, bringing it
+ * forward. The calls a CDP client makes of every page it attaches to (its
+ * domains enabled, its scripts added) are not among them, so a tab that
+ * opens and is attached moves nothing. The page a session drove last is
+ * the one its browser ask is pinned to ({@link Gate.drivenBy}, shield.ts
+ * `askedPage`).
+ */
+const DRIVES =
+  /^(?:Page\.(?:navigate|navigateToHistoryEntry|reload|bringToFront|captureScreenshot)|Input\.\w+|Accessibility\.getFullAXTree|DOM\.setFileInputFiles)$/u;
+
 /** URL schemes of the browser's own pages and the machine's files. */
 const OWN_PAGE =
   /^\s*(?:view-source:)?(?:chrome|chrome-untrusted|devtools|file):/iu;
@@ -382,6 +394,8 @@ export class Gate {
   >();
   /** What waits for a page's mark that is not under way yet. */
   readonly #markWaits = new Map<string, Set<() => void>>();
+  /** The page each workspace drove last ({@link DRIVES}), by its id: the one a browser ask is pinned to. */
+  readonly #driven = new Map<string, string>();
   #watch: Watch | undefined;
 
   constructor(deps: GateDeps) {
@@ -429,6 +443,16 @@ export class Gate {
     return this.#closedWhy;
   }
 
+  /** Workspace `id` drove page `targetId`: told by its connection ({@link DRIVES}). */
+  drove(id: string, targetId: string): void {
+    this.#driven.set(id, targetId);
+  }
+
+  /** The page workspace `id` drove last, while this daemon has heard it drive one. */
+  drivenBy(id: string): string | undefined {
+    return this.#driven.get(id);
+  }
+
   /**
    * Workspace `id`'s boundary ended for good: its connections are cut, its
    * pages closed and its contexts disposed where the browser runs, and it
@@ -436,6 +460,7 @@ export class Gate {
    */
   async forget(id: string): Promise<void> {
     await this.#load();
+    this.#driven.delete(id);
     for (const link of this.#links) {
       if (link.workspace === id) {
         link.close(ENDED_CLOSE, GATE_WORDS.ended);
@@ -1129,6 +1154,23 @@ class Link {
       await this.#gate.marked(target);
     }
     this.#up?.send(JSON.stringify(message));
+    const driven = this.#drives(message);
+    if (driven) {
+      this.#gate.drove(this.workspace, driven);
+    }
+  }
+
+  /** The page `message` drives ({@link DRIVES}), when it drives one. */
+  #drives(message: Cdp): string | undefined {
+    const method = message.method ?? "";
+    if (!message.sessionId) {
+      return method === "Target.activateTarget"
+        ? text(message.params?.targetId)
+        : undefined;
+    }
+    return DRIVES.test(method)
+      ? this.#sessionTargets.get(message.sessionId)
+      : undefined;
   }
 
   /**

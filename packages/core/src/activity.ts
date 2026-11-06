@@ -19,7 +19,10 @@ export type Activity = (typeof ACTIVITIES)[number];
  * - an ask is parked under it for the person: a permission, a question
  *   `ask` put, a post held for them. One routed to the session's parent
  *   (`routedTo: "parent"`) waits on that agent, not on the person, until
- *   the parent hands it up (the hub's `unroute` takes the routing off);
+ *   the parent hands it up (the hub's `unroute` takes the routing off).
+ *   Given `parentOf`, an ask a delegate parks for the person is under every
+ *   session above it too, up to the one the person talks to: its card is
+ *   drawn there (the dashboard's SessionPane), however deep it was asked;
  * - an artifact it holds is in Needs you (artifact-needs.ts): a decision
  *   page with a card not picked, a canvas to judge never opened, picks
  *   written and not sent, a pin whose reply asks. One put away with Not now
@@ -30,11 +33,15 @@ export type Activity = (typeof ACTIVITIES)[number];
 export const waitingOnYou = (sources: {
   artifacts: Iterable<Pick<ArtifactNeed, "instanceId" | "parked">>;
   asks: Iterable<{ instanceId?: string | null; routedTo?: unknown }>;
+  /** The session that started a session, when one did: an ask's chain up its tree. */
+  parentOf?: (instanceId: string) => string | null | undefined;
 }): Set<string> => {
   const waiting = new Set<string>();
   for (const ask of sources.asks) {
     if (ask.instanceId && ask.routedTo !== "parent") {
-      waiting.add(ask.instanceId);
+      for (const id of sessionChain(ask.instanceId, sources.parentOf)) {
+        waiting.add(id);
+      }
     }
   }
   for (const need of sources.artifacts) {
@@ -43,4 +50,22 @@ export const waitingOnYou = (sources: {
     }
   }
   return waiting;
+};
+
+/**
+ * `instanceId` and every session above it, nearest first, by `parentOf`;
+ * `instanceId` alone without one. A chain that comes back on itself (a
+ * row that names a descendant as its parent) ends where it would repeat.
+ */
+export const sessionChain = (
+  instanceId: string,
+  parentOf?: (instanceId: string) => string | null | undefined
+): string[] => {
+  const chain = [instanceId];
+  let parent = parentOf?.(instanceId);
+  while (parent && !chain.includes(parent)) {
+    chain.push(parent);
+    parent = parentOf?.(parent);
+  }
+  return chain;
 };

@@ -77,6 +77,7 @@ import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { askCollapseId } from "../../../packages/hub/src/notifications";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { doorOf, liveBrowser, servedSite } from "../gated-pages";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { type Phone, standInPhone } from "../phone";
 
@@ -114,7 +115,14 @@ const respond = (request: Seen): Reply => {
   return { everyMs: 5, words: ["ok"] };
 };
 
-const ORIGIN = "https://example.com";
+/** The asked page's origin: a site on loopback the run serves (gated-pages.ts `servedSite`). */
+let ORIGIN = "";
+/**
+ * The waiting delegate's page on {@link ORIGIN} opened through its door and
+ * driven, as its browser tool would: a `browser_ask` is refused while it
+ * has none (agent shield.ts `askedPage`). Set as the run makes the delegate.
+ */
+let openAsked: () => Promise<void> = () => Promise.resolve();
 const REASON = `Clear the probe's CAPTCHA ${crypto.randomUUID().slice(0, 8)}`;
 /** The tag every delegate-wait notice opens with (core injected.ts `delegateWaitNotice`). */
 const WAIT_TAG = "[cawco:delegate-wait";
@@ -217,6 +225,8 @@ const run = async (kit: Kit) => {
    * the hub so its board reads the row these writes made (the hub hears
    * its own connection's writes alone, db `instance_changes`).
    */
+  /** Each seeded delegate's workspace, by its instance id: its door's id. */
+  const workspaces = new Map<string, string>();
   const seeded = async (
     title: string,
     cwd: string,
@@ -269,9 +279,30 @@ const run = async (kit: Kit) => {
         `${title}'s rename: ${renamed.status} ${await renamed.text()}`
       );
     }
+    workspaces.set(child, workspace);
     return child;
   };
   const delegate = await seeded("Waits delegate", src);
+  const site = servedSite("Waits sign-in");
+  ORIGIN = site.origin;
+  const browser = await liveBrowser(fleet, `project:${project.id}`, MACHINE);
+  openAsked = async () => {
+    const door = await doorOf(
+      fleet,
+      workspaces.get(delegate) ?? "",
+      project.id
+    );
+    try {
+      await door.open(`${ORIGIN}/sign-in`);
+    } finally {
+      door.close();
+    }
+  };
+  check(
+    "the project's browser is live on the local host, for the delegate's page",
+    browser?.state === "live",
+    JSON.stringify(browser)
+  );
 
   // (a) The parent's turn ends quietly; then its delegate asks the person.
   await fleet.send(parent, HELLO);
@@ -287,6 +318,7 @@ const run = async (kit: Kit) => {
   const before = heard.length;
   const waitsSent = (): number =>
     sendsOf(fleet, parent, delegateWaitWords.waitsLine("Waits delegate"));
+  await openAsked();
   const call = callAs(
     fleet,
     delegate,
@@ -839,6 +871,7 @@ const legsLast = async ({
     (now) => now === "running",
     120_000
   );
+  await openAsked();
   const asking = callAs(
     fleet,
     delegate,
@@ -1171,6 +1204,7 @@ const legsHub = async ({
     (now) => now === "running",
     120_000
   );
+  await openAsked();
   const asking = callAs(
     fleet,
     delegate,

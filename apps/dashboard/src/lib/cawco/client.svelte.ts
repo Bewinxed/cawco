@@ -27,7 +27,11 @@ import type {
   RefusalVerdict,
 } from "@cawco/core/accounts";
 import type { ApprovedActionView } from "@cawco/core/actions";
-import { type Activity, waitingOnYou } from "@cawco/core/activity";
+import {
+  type Activity,
+  sessionChain,
+  waitingOnYou,
+} from "@cawco/core/activity";
 import type {
   ArtifactNeed,
   ArtifactNeedNotice,
@@ -9264,11 +9268,34 @@ const artifactNeedsOpen = $derived(
 );
 
 /**
+ * Who started each delegate, by its instance id, from its work item: a
+ * delegate's row may not be on the board (asleep, its item over and taken
+ * up again) while its ask stands, and its work item still names its parent.
+ */
+const itemParents = $derived(
+  new Map(
+    Object.values(state.workItems).map((item) => [
+      item.instanceId,
+      item.parentInstanceId,
+    ])
+  )
+);
+
+/** The session that started `instanceId`, by its row, else by its work item; null for none. */
+function parentOf(instanceId: string): string | null {
+  return (
+    rowsById.get(instanceId)?.parentInstanceId ??
+    itemParents.get(instanceId) ??
+    null
+  );
+}
+
+/**
  * The sessions waiting on the person (core `waitingOnYou`): an ask parked
- * under it for the person (not one routed to its parent), or an artifact
- * of it in Needs you. The set it gave before while
- * it holds the same sessions, so a frame that moved an ask's words wakes no
- * row's activity.
+ * under it for the person (not one routed to its parent), its delegates'
+ * at any depth included, or an artifact of it in Needs you. The set it gave
+ * before while it holds the same sessions, so a frame that moved an ask's
+ * words wakes no row's activity.
  */
 const waiting = $derived.by((): ReadonlySet<string> => {
   const now = waitingOnYou({
@@ -9279,6 +9306,7 @@ const waiting = $derived.by((): ReadonlySet<string> => {
       }))
     ),
     artifacts: artifactNeedsOpen,
+    parentOf,
   });
   if (
     now.size === waitingWas.size &&
@@ -9822,6 +9850,19 @@ export const cawco = {
   },
   get blocked(): BlockedRequest[] {
     return blocked;
+  },
+  /**
+   * The asks for the person that delegates of `instanceId` parked, at any
+   * depth under it: its pane draws each as its own (core `waitingOnYou`'s
+   * `parentOf`), so an ask asked two deep reaches the session the person
+   * talks to as it is asked.
+   */
+  asksUnder(instanceId: string): BlockedRequest[] {
+    return blocked.filter(
+      (row) =>
+        row.instanceId !== instanceId &&
+        sessionChain(row.instanceId, parentOf).includes(instanceId)
+    );
   },
   /** How many sessions wait on the person (core `waitingOnYou`): asks for them, cards and canvases in Needs you. */
   get waitingCount(): number {

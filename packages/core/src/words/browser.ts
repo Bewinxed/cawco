@@ -65,9 +65,20 @@ export const browserWords = {
   tryingAgain: "Trying again…",
 };
 
-/** What a `browser_ask` call answers its agent (hub browser-tools.ts): the person's decline, or their hand-back. */
+/**
+ * What a `browser_ask` call answers its agent (hub browser-tools.ts): the
+ * person's decline, their hand-back, or its refusal when the agent has no
+ * page open on the origin it named (agent shield.ts `askedPage`); and the
+ * person's refusal of a take-over whose page closed after the ask.
+ */
 export const browserAskWords = {
   declined: (words: string) => `They declined: ${words}`,
   handedBack: (origin: string | null) =>
     `They handed the browser back${origin ? `, on ${origin}` : "; it did not say which origin it was on"}. Go on in your browser tool.`,
+  noPage: (origin: string) =>
+    `You have no page open on ${origin} in your browser, so there is nothing to hand over. Open it with your browser tool (chrome-devtools), then call browser_ask again with that page in front.`,
+  noBrowser: (origin: string) =>
+    `Your project's browser isn't running on this machine, so you have no page open on ${origin}. Open it with your browser tool (chrome-devtools), then call browser_ask again with that page in front.`,
+  pageClosed:
+    "The page the agent asked about was closed before you took over. Decline it, so the agent knows to open the page again and ask again.",
 };

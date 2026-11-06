@@ -34,13 +34,5 @@
     "chrome-untrusted://*",
     "devtools://*"
   ],
-  "ExtensionInstallForcelist": [
-    "ddkjiahejlhfcafbddmgiahcphecmpfh;https://clients2.google.com/service/update2/crx",
-    "mnjggcdmjocbbbhaepdhchncahnbgone;https://clients2.google.com/service/update2/crx"
-  ],
-  "ExtensionInstallAllowlist": [
-    "ddkjiahejlhfcafbddmgiahcphecmpfh",
-    "mnjggcdmjocbbbhaepdhchncahnbgone"
-  ],
   "ExtensionInstallBlocklist": ["*"]
 }
