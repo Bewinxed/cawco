@@ -253,25 +253,26 @@
   /** The page as it scrolls in the well. */
   let benchPage = $state<HTMLElement>();
   /**
-   * Where each comment's pill stands on the picture, as shares of its width
-   * and height: its tail's corner on the element it is about, as the
-   * page's overlay draws a pin. The picture is the decision page each pin
-   * was left on (title-bars-close), so each stands on its own element.
+   * The element each comment stands on in the picture, as shares of its
+   * width and height (x, y, w, h): the decision page each pin was left on
+   * (title-bars-close). Its pill stands at the element's top trailing corner,
+   * its tail on it, as the page's overlay draws a pin.
    */
-  const SPOTS: Record<"desk" | "phone", Record<number, [number, number]>> = {
+  type Spot = [number, number, number, number];
+  const SPOTS: Record<"desk" | "phone", Record<number, Spot>> = {
     desk: {
-      1: [0.06, 0.885],
-      2: [0.16, 0.395],
-      3: [0.47, 0.735],
-      4: [0.33, 0.035],
-      5: [0.375, 0.19],
+      1: [0.036, 0.882, 0.062, 0.018],
+      2: [0.049, 0.378, 0.347, 0.143],
+      3: [0.436, 0.716, 0.342, 0.147],
+      4: [0.033, 0.027, 0.29, 0.03],
+      5: [0.049, 0.168, 0.347, 0.141],
     },
     phone: {
-      1: [0.1, 0.71],
-      2: [0.1, 0.36],
-      3: [0.56, 0.64],
-      4: [0.8, 0.06],
-      5: [0.46, 0.15],
+      1: [0, 0.69, 1, 0.23],
+      2: [0, 0.336, 1, 0.28],
+      3: [0.07, 0.627, 0.5, 0.022],
+      4: [0.07, 0.044, 0.73, 0.03],
+      5: [0.07, 0.094, 0.88, 0.2],
     },
   };
   const spots = $derived(SPOTS[phone.current ? "phone" : "desk"]);
@@ -279,6 +280,39 @@
   const onPage = $derived(
     pins.filter((one) => !one.resolvedAt && spots[one.number] !== undefined)
   );
+  /** The spots Changed since you looked steps through, top to bottom, by the pin whose element each is. */
+  const CHANGE_SPOTS = [4, 5, 2, 3, 1];
+  /** A comment's row the pointer or the keyboard rests on: its element is chosen on the page. */
+  let hovered = $state<string | null>(null);
+  /**
+   * The element chosen on the page (The One Target Rule): a row rested on,
+   * else the change stepped to, else the open comment's; its 1px line.
+   */
+  const chosen = $derived.by((): number | null => {
+    const rested = pins.find((one) => one.id === hovered);
+    if (rested) {
+      return rested.number;
+    }
+    if (tourAt !== null) {
+      return CHANGE_SPOTS[tourAt] ?? null;
+    }
+    return pins.find((one) => one.id === openPin)?.number ?? null;
+  });
+  // A change stepped to is brought into the well's view.
+  $effect(() => {
+    const at = tourAt === null ? null : CHANGE_SPOTS[tourAt];
+    const scroller = benchPage;
+    if (at === undefined || at === null || !scroller) {
+      return;
+    }
+    const box = scroller.querySelector<HTMLElement>(`[data-spot-box="${at}"]`);
+    if (box) {
+      scroller.scrollTop = Math.max(
+        0,
+        box.offsetTop - scroller.clientHeight / 3
+      );
+    }
+  });
   /** The opened comment's pill in the well, px, as drawn now: the card's mark; null while it has none. */
   let cardMark = $state<Box | null>(null);
   function readMark() {
@@ -548,7 +582,9 @@
     onclose={() => {
       listOpen = false;
     }}
-    onhover={() => undefined}
+    onhover={(id) => {
+      hovered = id;
+    }}
     onopen={(id) => {
       openPin = id;
       cardOpen = true;
@@ -750,14 +786,33 @@
               return () => img.removeEventListener("load", loaded);
             }}
           />
+          {#each Object.entries(spots) as [key, [x, y, w, h]] (key)}
+            <!-- The element's chosen line, drawn while it is chosen. -->
+            <span
+              aria-hidden="true"
+              class="pointer-events-none absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-(length:--c-target-stroke) outline-offset-(--c-target-stroke) outline-transparent outline-solid data-chosen:outline-brand-solid"
+              data-chosen={chosen === Number(key) || undefined}
+              data-spot-box={key}
+              style:--box-h="{h * 100}%"
+              style:--box-w="{w * 100}%"
+              style:--box-x="{x * 100}%"
+              style:--box-y="{y * 100}%"
+            ></span>
+          {/each}
           {#each onPage as one (one.id)}
-            {@const [x, y] = spots[one.number] ?? [0, 0]}
+            {@const [x, y, w] = spots[one.number] ?? [0, 0, 0, 0]}
             <button
               aria-label={commentWords.openThread(one.number)}
               class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
               data-pin-spot={one.number}
               onclick={() => openFromPage(one)}
-              style:--spot-x="{x * 100}%"
+              onpointerenter={() => {
+                hovered = one.id;
+              }}
+              onpointerleave={() => {
+                hovered = null;
+              }}
+              style:--spot-x="{(x + w) * 100}%"
               style:--spot-y="{y * 100}%"
               type="button"
             >
