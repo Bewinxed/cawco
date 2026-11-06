@@ -25,6 +25,12 @@ const screenOf = (said: string, code?: number): string =>
     ? ` ${SIGNIN_SCREEN}\n${said}${code === undefined ? "" : `\n(exit ${code})`}`
     : "";
 
+/** Names in a sentence: "a", "a and b", "a, b and c". */
+const listed = (names: string[]): string =>
+  names.length > 1
+    ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+    : (names[0] ?? "");
+
 export const toolWords = {
   /**
    * An update that left the copy older than the release it was after: the
@@ -133,6 +139,18 @@ export const toolWords = {
    */
   needBroken: (path: string, said: string) =>
     `${path} does not run here${said ? `: ${said}` : ""}`,
+  /**
+   * A pinned version no method here can install: the pin, the methods that
+   * can't install a chosen version, and why each that could take the pin
+   * doesn't run here, when one could. Nothing was run.
+   */
+  noPinInstaller: (
+    name: string,
+    version: string,
+    unpinnable: string[],
+    unmet: string[]
+  ) =>
+    `CawCo can't install ${name} ${version} here, the version the fleet pins: ${listed(unpinnable)} can't install a chosen version${unmet.length ? `, and ${unmet.join("; ")}` : ""}. Remove the pin, or install ${name} ${version} on the machine yourself.`,
   /** No install method runs here: why each method's need can't serve, in catalog order. */
   noInstaller: (why: string[]) => `no installer runs here: ${why.join("; ")}`,
   /**

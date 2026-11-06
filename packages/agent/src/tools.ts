@@ -552,7 +552,7 @@ export const installAdvice = async (
   }
   return "method" in choice
     ? { command: commandOf(choice.method, want) }
-    : { refusal: `${spec.name}: ${noMethod(spec, choice.unmet).detail}` };
+    : { refusal: `${spec.name}: ${noMethod(spec, choice).detail}` };
 };
 
 /** Whether `version` is a policy pin: asked, and not the one version CawCo's build runs. */
@@ -565,7 +565,17 @@ const isPin = (
 type MethodChoice =
   | { method: ToolInstallMethod }
   | { method?: ToolInstallMethod; refused: string }
-  | { unmet: string[] };
+  | Unmet;
+
+/**
+ * Why no method runs an install here: each weighed method that can't run
+ * and why (`unmet`, `<label>: <why>`), and for a pin, the version and the
+ * methods of this platform that install no chosen version (`unpinnable`).
+ */
+interface Unmet {
+  pin?: { unpinnable: string[]; version: string };
+  unmet: string[];
+}
 
 /**
  * THE ONE CHOICE of what an install of `spec` at `version` runs here, for
@@ -600,11 +610,15 @@ const methodFor = async (
     }
   }
   const unheld = spec.install.filter((one) => !holdsCopies(one));
-  const here = (unheld.length > 0 ? unheld : spec.install).filter(
-    (one) =>
-      one.platforms.includes(platform() as ToolPlatform) &&
-      !(pinned && one.pinnedCommand === undefined)
+  const onPlatform = (unheld.length > 0 ? unheld : spec.install).filter((one) =>
+    one.platforms.includes(platform() as ToolPlatform)
   );
+  const here = onPlatform.filter(
+    (one) => !(pinned && one.pinnedCommand === undefined)
+  );
+  const unpinnable = onPlatform
+    .filter((one) => !here.includes(one))
+    .map((one) => one.label);
   // In catalog order, each asked only once the ones before it can't run.
   const unmet: string[] = [];
   for (const one of here) {
@@ -614,7 +628,9 @@ const methodFor = async (
     }
     unmet.push(`${one.label}: ${why}`);
   }
-  return { unmet };
+  return pinned && unpinnable.length > 0
+    ? { unmet, pin: { version, unpinnable } }
+    : { unmet };
 };
 
 /** How long one read of a tool's settings is given, its own process's start included. */
@@ -1208,16 +1224,23 @@ const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
 
 /**
  * Why nothing can be run here, named exactly enough for the user to fix it:
- * each method {@link methodFor} weighed and why it can't run (`unmet`).
+ * each method {@link methodFor} weighed and why it can't run, and for a pin
+ * the methods that install no chosen version ({@link Unmet}).
  */
-const noMethod = (spec: ToolSpec, unmet: string[]): ToolStatus => ({
-  id: spec.id,
-  state: "unsupported",
-  detail: unmet.length
-    ? toolWords.noInstaller(unmet)
-    : `${spec.name} has no installer for ${platform()}`,
-  at: Date.now(),
-});
+const noMethod = (spec: ToolSpec, { unmet, pin }: Unmet): ToolStatus => {
+  let detail = `${spec.name} has no installer for ${platform()}`;
+  if (pin) {
+    detail = toolWords.noPinInstaller(
+      spec.name,
+      pin.version,
+      pin.unpinnable,
+      unmet
+    );
+  } else if (unmet.length > 0) {
+    detail = toolWords.noInstaller(unmet);
+  }
+  return { id: spec.id, state: "unsupported", detail, at: Date.now() };
+};
 
 /**
  * Runs a method: whether it exited 0, and the tail of what it said (its
@@ -1312,7 +1335,7 @@ const install = async (
     );
   }
   if (!("method" in choice)) {
-    return remember(noMethod(spec, choice.unmet));
+    return remember(noMethod(spec, choice));
   }
   const { method } = choice;
   // A copy's owner may have turned its updates off: CawCo's own (automatic)

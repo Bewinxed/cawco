@@ -6,7 +6,7 @@
  * failed with "/usr/bin/env: 'node': No such file or directory", on every
  * Retry.
  *
- * Each leg runs `installTool("opencode")` in a child with a scratch HOME and
+ * Each leg runs `installTool` in a child with a scratch HOME and
  * a PATH holding only the stand-ins it names, so an install lands in that
  * HOME. The `npm` stand-in is npm's own launcher line, `#!/usr/bin/env
  * node`, with no `node` anywhere on the PATH; the `curl` stand-in answers
@@ -19,6 +19,10 @@
  *   status names that method.
  * - (none) npm on the PATH that can't run, and nothing else: nothing is
  *   installed, and the status says npm does not run here, in npm's words.
+ * - (pin) pi pinned at a version, curl that runs: none of pi's methods
+ *   (`pi update`, its curl script) installs a chosen version, so nothing
+ *   runs, and the status names the pin and those methods
+ *   (`toolWords.noPinInstaller`), never "no installer for linux".
  *
  *   bun scripts/probe-kit/run.ts install-method-runs
  */
@@ -28,6 +32,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { OPENCODE_VERSION, toolSpec } from "../../../packages/core/src/tools";
+import { toolWords } from "../../../packages/core/src/words/tools";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import type { Kit, Spec } from "../kit";
 
@@ -83,7 +88,9 @@ const writeExecutable = async (path: string, text: string): Promise<void> => {
 /** Runs OpenCode's install in a child whose PATH is `bin` alone, HOME under `root`. */
 const installIn = async (
   root: string,
-  bin: string
+  bin: string,
+  tool = "opencode",
+  pin?: string
 ): Promise<{ said: Said; home: string; log: string }> => {
   const home = join(root, "home");
   const scratch = join(root, "tmp");
@@ -92,7 +99,7 @@ const installIn = async (
   );
   const script = `
     import { installTool } from ${JSON.stringify(join(ROOT, "packages/agent/src/tools.ts"))};
-    console.log(JSON.stringify({ status: await installTool("opencode") }));
+    console.log(JSON.stringify({ status: await installTool(${JSON.stringify(tool)}${pin ? `, ${JSON.stringify(pin)}` : ""}) }));
   `;
   const ran = await readWithin(LEG_MS, async (signal) => {
     const child = Bun.spawn([process.execPath, "-e", script], {
@@ -175,6 +182,26 @@ const noneLeg = async (kit: Kit, root: string): Promise<void> => {
   );
 };
 
+/** A version of pi no release has, pinned. */
+const PI_PIN = "9.9.9";
+
+const pinLeg = async (kit: Kit, root: string): Promise<void> => {
+  const bin = await binWith(root, { curl: true });
+  const { said, home, log } = await installIn(root, bin, "pi", PI_PIN);
+  kit.note(`(pin) ${log}`);
+  const labels = (toolSpec("pi")?.install ?? [])
+    .filter((method) => method.platforms.includes("linux"))
+    .map((method) => method.label);
+  kit.check(
+    "(pin) pi pinned where none of its methods installs a chosen version: nothing runs, and the status names the pin and each of those methods",
+    said.status?.state === "unsupported" &&
+      said.status.detail ===
+        toolWords.noPinInstaller("pi", PI_PIN, labels, []) &&
+      !existsSync(join(home, ".local", "bin", "pi")),
+    JSON.stringify(said.status)
+  );
+};
+
 const spec: Spec = {
   group: "The hub and machines",
   name: "install-method-runs",
@@ -185,6 +212,7 @@ const spec: Spec = {
     try {
       await fallbackLeg(kit, join(root, "fallback"));
       await noneLeg(kit, join(root, "none"));
+      await pinLeg(kit, join(root, "pin"));
     } finally {
       await rm(root, { recursive: true, force: true });
     }
