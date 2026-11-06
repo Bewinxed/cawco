@@ -2070,6 +2070,18 @@
     --swap-away: 1;
     pointer-events: none;
   }
+  /* Its baseline is a line of words at its centre, zero wide and zero tall:
+     its glyphs have none, so a box made of them took its bottom edge for
+     one, and a button whose first item it is (a kit Button's slot) stood
+     about 6px high in a row aligned on baselines (PinCard's notice). A
+     line's baseline stands the same distance from its centre at any
+     line-height, so it meets the words beside it, centred as it is. */
+  :where(&)::before {
+    content: "\200b";
+    grid-area: 1 / 1;
+    inline-size: 0;
+    line-height: 0;
+  }
 }
 
 /* Instant press feedback (DESIGN.md: "a compact control scale to 0.97 on

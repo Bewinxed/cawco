@@ -25,10 +25,11 @@
  *  6. joined items: a group of three, the leading item round on its
  *     leading corners and 5px toward its neighbour, the middle 5px all
  *     round, the trailing (counted) round on its trailing corners; hovered,
- *     pressed and chosen alike.
+ *     pressed and chosen alike, a chosen one hovered or pressed a step
+ *     darker over its wash (as BarItem `open` shows hover and press).
  *  7. the only item: one capsule alone in its glass, round at both ends.
  *  8. a face that darkens: a glass's only item holding a face (Caw's
- *     head), a 20px disc drawn at rest that darkens under the press; the
+ *     head), a 20px disc drawn at rest that darkens under hover and press; the
  *     disc is the drawing, no state's fill, and its own fill is concentric.
  *  9. a counted item on: its badge, a child standing on its corner
  *     past its box, is drawn over it, no fill of it.
@@ -118,6 +119,7 @@ const FIXTURES: Record<string, Fixture> = {
   .glass button:first-child { border-start-start-radius: 15px; border-end-start-radius: 15px; }
   .glass button:last-child { border-start-end-radius: 15px; border-end-end-radius: 15px; }
   .glass button:is(:hover, :active, :focus-visible, [aria-pressed="true"]) { background: #e6e0d6; }
+  .glass button[aria-pressed="true"]:is(:hover, :active) { background: #d9d1c4; }
   .glass .counted { gap: 4px; display: inline-flex; align-items: center; padding-inline: 7px; }
 </style>
 <div class="glass" role="toolbar" aria-label="Canvas">
@@ -131,6 +133,7 @@ const FIXTURES: Record<string, Fixture> = {
     html: `${BASE}<style>
   .glass button { border-radius: 15px; }
   .glass button:is(:hover, :active, [aria-pressed="true"]) { background: #e6e0d6; }
+  .glass button[aria-pressed="true"]:is(:hover, :active) { background: #d9d1c4; }
 </style>
 <div class="glass" role="toolbar" aria-label="Canvas">
   <button type="button" aria-pressed="true" aria-label="Comments"><span class="glyph"></span></button>
@@ -142,7 +145,7 @@ const FIXTURES: Record<string, Fixture> = {
   .glass button { border-radius: 15px; }
   .glass button:active { background: #e6e0d6; }
   .face { inline-size: 20px; block-size: 20px; border-radius: 999px; background: #8a8178; }
-  .glass button:active .face { background: #2b2622; }
+  .glass button:is(:hover, :active) .face { background: #2b2622; }
 </style>
 <div class="glass" role="toolbar" aria-label="Bar">
   <button type="button" aria-label="Caw"><span class="face"></span></button>
@@ -153,6 +156,7 @@ const FIXTURES: Record<string, Fixture> = {
     html: `${BASE}<style>
   .glass button { position: relative; border-radius: 15px; }
   .glass button[aria-pressed="true"] { background: #e6e0d6; }
+  .glass button[aria-pressed="true"]:is(:hover, :active) { background: #d9d1c4; }
   .badge { position: absolute; top: -8px; inset-inline-start: 15px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
 </style>
 <div class="glass" role="toolbar" aria-label="Bar">

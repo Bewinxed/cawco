@@ -27,9 +27,10 @@
    * Pin it somewhere else pressed: on a phone the sheet at its low stop),
    * `found` (Resolved in front, searching "HIG": the hits in every list),
    * `scrolled` (the page scrolled to its foot, its top under the head's glass),
-   * `held` (three comments held to send together: Send 3 in the rail's bar,
-   * each row Unsent, the head's bubble ringed), `note` (Send all pressed: its
-   * note under the bar), `hold` (a comment being written: Hold beside send),
+   * `held` (three comments held to send together: Send 3 trailing the rail's
+   * bar, Search, + and Sort folded into More leading, each row Unsent, the
+   * head's bubble ringed), `fold` (held, the rail's More open), `note` (Send
+   * all pressed: its note under the bar), `hold` (a comment being written: Hold beside send),
    * and on a desk the card's pour: `pour` (it pours out of comment 4's pill
    * once the panel stands), `drain` (it drains back), `turn` (it opens and
    * is closed half way, turning back from where it is drawn); `?slow=n`
@@ -123,7 +124,7 @@
   };
   /** Send all pressed: what was held stands sent. */
   let heldSent = $state(false);
-  const holding = asked === "held" || asked === "note";
+  const holding = asked === "held" || asked === "note" || asked === "fold";
   /** The pins as the state has them: none, or resolved three, or as they stand. */
   /** Comment 4's element is gone from the page (`gone`), and being placed again (`place`). */
   const gone = asked === "gone" || asked === "place";
@@ -378,6 +379,7 @@
   const PRESSES: Record<string, string> = {
     sort: '[data-slot="sort"]',
     more: '[data-slot="more"]',
+    fold: '[data-slot="comment-rail"] [data-slot="more"]',
     view: '[aria-label="Canvas view"]',
     mode: '[aria-label^="Mode:"]',
     artifacts: "[data-artifact-trigger]",
