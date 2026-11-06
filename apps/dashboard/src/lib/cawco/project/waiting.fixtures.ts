@@ -8,6 +8,7 @@
 import type { DecisionPageSummary } from "@cawco/core/decisions";
 import type { StagesView, TaskSummary } from "#lib/cawco/project-tasks.js";
 
+export const PO_ID = "ffb5d15a-a509-43ce-b94e-cd8bf20b48e9";
 export const PO_NAME = "Private office";
 
 export const PO_STAGES = {
