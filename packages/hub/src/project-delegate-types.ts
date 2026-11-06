@@ -20,9 +20,9 @@
  * Draft posts in the brand voice.
  * ```
  *
- * The file's name is the type's name; the body is its brief, and also its
- * description (what a calling model routes by) unless the front matter gives
- * one. A type is a preset: there is no persona text. `deny` (Claude's tool
+ * The file's name is the type's name; the body is its description (what a
+ * calling model routes by), unless the front matter gives one. A type is a
+ * preset: there is no persona text. `deny` (Claude's tool
  * names) and `may_start` (`[browser]`, or `any`) mean what a fleet type's
  * `denyTools` and `mayStart` mean, and `account:` names the account its sessions prefer
  * (an account id).
@@ -48,13 +48,17 @@ import {
   SESSION_ROLES,
   type SessionRole,
 } from "@cawco/core";
+import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia } from "elysia";
 import type { DelegateTypesShape } from "./delegate-types";
 import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
 import { listOf, scalarOf } from "./task-file";
 
-/** The toolsets a type may run in (§5.3's roles). */
-const TYPE_ROLES = SESSION_ROLES;
+/**
+ * The toolsets a type may run in (§5.3's roles): every role but `curator`,
+ * which is the memory curator run's alone (the hub starts it, never a type).
+ */
+const TYPE_ROLES = SESSION_ROLES.filter((role) => role !== "curator");
 
 const BUDGET_PERIODS = ["attempt", "task", "day", "week", "month"] as const;
 
@@ -69,8 +73,6 @@ interface DelegateBudget {
 /** One entry of a catalog, saying where it comes from. */
 type CatalogType = DelegateType & {
   budget?: DelegateBudget;
-  /** The type's brief: the file's body. */
-  brief?: string;
   lands?: LandsMode;
   /** The file it was read from, inside its folder (the project's, or its area's). */
   path?: string;
@@ -185,6 +187,9 @@ const projectFieldsOf = (
       "budget" | "lands" | "connections" | "role" | "mayStart"
     > => {
   const role = fields.scalar("role");
+  if (role === "curator") {
+    return delegateTypesWords.problemCuratorRole;
+  }
   if (!oneOf(role, TYPE_ROLES)) {
     return `role is one of ${TYPE_ROLES.join(", ")}, not “${role}”`;
   }
@@ -247,14 +252,14 @@ const parseTypeFile = (
   if (typeof extra === "string") {
     return { problem: extra, ignored };
   }
-  const brief = block.body.trim();
+  const body = block.body.trim();
   const effort = fields.scalar("effort");
   const skills = fields.list("skills");
   const deny = fields.list("deny");
   const account = fields.scalar("account");
   const draft: Partial<DelegateType> = {
     name,
-    description: fields.scalar("description") ?? brief,
+    description: fields.scalar("description") ?? body,
     harness: harness as DelegateType["harness"],
     model: fields.scalar("model") ?? "",
     ...(effort ? { effort: effort as DelegateType["effort"] } : {}),
@@ -274,7 +279,6 @@ const parseTypeFile = (
       ...extra,
       source: "project",
       path,
-      ...(brief ? { brief } : {}),
     },
     ignored,
   };

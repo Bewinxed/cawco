@@ -39000,10 +39000,6 @@
                 "$ref": "#/components/schemas/DelegateBudget",
                 "description": "A type's spending limit: any of cost, turns and time, per a period."
               },
-              "brief": {
-                "description": "The type's brief: the file's body.",
-                "type": "string"
-              },
               "lands": {
                 "$ref": "#/components/schemas/LandsMode",
                 "description": "Where a work item's work goes once it finishes (hub/src/landing.ts):\n`main` onto the repository's default branch, `branch` to a branch of its\nown on origin, `pr` to that branch with a pull request, `none` nowhere (the\nwork is not commits; its outputs are the deliverable)."

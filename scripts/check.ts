@@ -747,6 +747,11 @@ const gated: Gated[] = [
   bun("scripts/compress-answer-check.ts", [
     "packages/core/src/compress-answer.ts",
   ]),
+  bun("scripts/type-roles-check.ts", [
+    "packages/hub/src/project-delegate-types.ts",
+    "packages/core/src/delegate-types.ts",
+    "packages/core/src/words/delegate-types.ts",
+  ]),
   bun("scripts/open-at-check.ts", [
     "apps/dashboard/src/lib/cawco/transcript/open-at.svelte.ts",
     "apps/dashboard/src/lib/cawco/transcript/rows.ts",
