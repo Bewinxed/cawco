@@ -58,6 +58,11 @@
  *     clone and starts a boundary): the pages it had open again, its
  *     browser_ask waits on the person, and Take over brings the page it had
  *     to the front.
+ * (l) Its item ends, the project's browser is put to sleep (the stop the
+ *     idle sweep makes), and its item is reopened as in (k): its ask wakes
+ *     the browser as its browser tool would, the page it had opens again,
+ *     its browser_ask waits on the person, and Take over brings that page
+ *     to the front.
  *
  *   bun scripts/probe-kit/run.ts browser-ask-tree
  */
@@ -65,7 +70,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
-import type { BrowserKey } from "../../../packages/core/src/browser";
+import type {
+  BrowserKey,
+  ListedBrowser,
+} from "../../../packages/core/src/browser";
 import {
   hubRequest,
   type Sending,
@@ -672,6 +680,56 @@ const legBack = async ({ check }: Kit, at: Reopening): Promise<void> => {
   );
 };
 
+/**
+ * (l) Its item ended, the project's browser put to sleep (the idle sweep's
+ * stop, as the person's Stop is), and its item reopened: the browser wakes
+ * for its ask, the page it had opens again, and its ask is pinned to it.
+ */
+const legSlept = async ({ check }: Kit, at: Reopening): Promise<void> => {
+  const { fleet } = at;
+  const url = `${at.site}/slept`;
+  const door = await doorOf(fleet, at.deep.workspace, at.projectId);
+  const before = await door.open(url);
+  door.close();
+  // Its boundary stands: what goes with it here is the browser's run alone.
+  fleet.write(
+    "UPDATE workspaces SET state = 'held' WHERE id = ?",
+    at.deep.workspace
+  );
+  const ended = await quietEnd(at, "(l)");
+  await fleet
+    .api(
+      hubRequest("POST /api/browsers/:key/stop", {
+        path: { key: at.key },
+        body: { machineId: MACHINE },
+      })
+    )
+    .catch(() => undefined);
+  const asleep = await until(
+    "(l) the project's browser asleep",
+    async () =>
+      (await fleet.api<ListedBrowser[]>(hubRequest("GET /api/browsers"))).find(
+        (one) => one.key === at.key
+      )?.state ?? "none",
+    (state) => state === "asleep",
+    60_000
+  ).catch(() => "not asleep");
+  const back = await reopenItem(at, "(l)");
+  const asked = await askedAgain(at, "(l)", () => pageOn(at, url));
+  check(
+    "(l) its item ended, the project's browser put to sleep, and its item reopened: the delegate two deep's ask wakes the browser, the page it had opens again, its browser_ask waits on the person, and Take over brings that page to the front",
+    !LIVE_ITEM.has(ended.state) &&
+      asleep === "asleep" &&
+      LIVE_ITEM.has(back.item) &&
+      asked.settled.startsWith("parked") &&
+      !!asked.expected &&
+      asked.expected !== before &&
+      asked.front === asked.expected &&
+      asked.answered.includes(browserAskWords.handedBack(at.site)),
+    JSON.stringify({ before, ended, asleep, back, ...asked })
+  );
+};
+
 const run = async (kit: Kit) => {
   const { check } = kit;
   const site = servedSite("Probe sign-in");
@@ -1025,6 +1083,7 @@ const run = async (kit: Kit) => {
     };
     await legKept(kit, reopening);
     await legBack(kit, reopening);
+    await legSlept(kit, reopening);
   } finally {
     site.stop();
     other.stop();

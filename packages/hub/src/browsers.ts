@@ -83,8 +83,8 @@ const BROWSER_ARTIFACT_NAME = "browser";
 /** The states in which a browser runs nothing: a forget has nothing of it to stop. */
 const RESTING: ReadonlySet<BrowserState> = new Set(["asleep", "failed"]);
 
-/** How long a take-over, a start or a stop has on its machine: a start may build the image first. */
-const CALL_MS = 15 * 60_000;
+/** How long a take-over, a start or a stop has on its machine: a start may build the image first. A browser ask's page waits as long, as it may wake its browser (server.ts `pageOf`). */
+export const BROWSER_CALL_MS = 15 * 60_000;
 
 /** How long a browser's own stream relay credential lasts (Projects spec item 4). */
 const RELAY_TTL_MS = 7 * DAY_MS;
@@ -262,7 +262,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     args: BrowserShieldArgs
   ): Promise<BrowserRow> => {
     const row = answered<BrowserRow>(
-      await deps.call(machineId, BROWSER_SHIELD, [args], CALL_MS),
+      await deps.call(machineId, BROWSER_SHIELD, [args], BROWSER_CALL_MS),
       deps.machineName(machineId),
       "be taken over"
     );
@@ -414,7 +414,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
      */
     async connected(machineId: string): Promise<void> {
       const frame = answered<BrowserFrame>(
-        await deps.call(machineId, BROWSER_ROWS, [], CALL_MS),
+        await deps.call(machineId, BROWSER_ROWS, [], BROWSER_CALL_MS),
         deps.machineName(machineId),
         "say what it runs"
       );
@@ -475,7 +475,12 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     ): Promise<BrowserHandback> {
       const machineId = machineOf(key, named);
       const back = answered<BrowserHandback>(
-        await deps.call(machineId, BROWSER_HANDBACK, [{ key }], CALL_MS),
+        await deps.call(
+          machineId,
+          BROWSER_HANDBACK,
+          [{ key }],
+          BROWSER_CALL_MS
+        ),
         deps.machineName(machineId),
         "be handed back"
       );
@@ -494,7 +499,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           machineId,
           BROWSER_START,
           [{ key, ...(relay ? { relay } : {}) }],
-          CALL_MS
+          BROWSER_CALL_MS
         ),
         deps.machineName(machineId),
         "start"
@@ -513,7 +518,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         await browsers.handback(key, machineId);
       }
       const row = answered<BrowserRow | null>(
-        await deps.call(machineId, BROWSER_STOP, [{ key }], CALL_MS),
+        await deps.call(machineId, BROWSER_STOP, [{ key }], BROWSER_CALL_MS),
         deps.machineName(machineId),
         "stop"
       );
@@ -536,7 +541,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         );
       }
       answered<unknown>(
-        await deps.call(machineId, BROWSER_REMOVE, [{ key }], CALL_MS),
+        await deps.call(machineId, BROWSER_REMOVE, [{ key }], BROWSER_CALL_MS),
         deps.machineName(machineId),
         "be removed"
       );

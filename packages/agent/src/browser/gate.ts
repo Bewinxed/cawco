@@ -374,6 +374,12 @@ const OwnersSchema = z.object({
       z.object({ at: z.number(), pages: z.array(z.string()) })
     )
     .default({}),
+  /**
+   * The address each owned page was last seen on, by its target id: what it
+   * opens again on once it is gone with its door's end or with its
+   * browser's run (a sleep, a container made again, a crash).
+   */
+  addresses: z.record(z.string(), z.string()).default({}),
   contexts: z.record(z.string(), z.string()),
   targets: z.record(z.string(), z.string()),
 });
@@ -397,7 +403,7 @@ export class Gate {
   readonly #deps: GateDeps;
   readonly #links = new Set<Link>();
   #closedWhy: string | undefined;
-  #owners: Owners = { closed: {}, contexts: {}, targets: {} };
+  #owners: Owners = { addresses: {}, closed: {}, contexts: {}, targets: {} };
   #loaded: Promise<void> | undefined;
   #saving: Promise<void> = Promise.resolve();
   readonly #infos = new Map<string, TargetInfo>();
@@ -482,7 +488,9 @@ export class Gate {
    * connections are cut, its pages closed and its contexts disposed where
    * the browser runs, and it owns nothing here any more. With `keep`, the
    * address of each page it had is kept, so its pages open again as it
-   * comes back ({@link restore}); without, they are gone for good.
+   * comes back ({@link restore}); without, they are gone for good. A
+   * browser that does not run now closes nothing, and the addresses its
+   * pages were last seen on are kept.
    */
   async forget(id: string, keep: boolean): Promise<void> {
     await this.#load();
@@ -506,63 +514,79 @@ export class Gate {
       this.#save();
       return;
     }
-    for (const target of targets) {
-      delete this.#owners.targets[target];
-    }
-    for (const context of contexts) {
-      delete this.#owners.contexts[context];
-    }
     const url = await this.#browserUrl(false).catch(() => undefined);
-    if (!url) {
-      this.#save();
-      return;
-    }
-    const { calls: wire, socket } = await dialCalls(url);
+    const wired = url ? await dialCalls(url) : undefined;
     try {
+      const at = wired ? await this.#listed(wired.calls) : new Map();
       if (keep) {
-        const listed = await wire
-          .call("Target.getTargets", {})
-          .catch((): Json => ({}));
-        const at = new Map(
-          (Array.isArray(listed.targetInfos) ? listed.targetInfos : [])
-            .filter(isInfo)
-            .map((info) => [info.targetId, info.url ?? ""])
-        );
-        // In the order it opened them, the one it drove last last: the one
-        // a browser ask of its is pinned to as they open again.
-        const pages = [
-          ...targets.filter((target) => target !== driven),
-          ...targets.filter((target) => target === driven),
-        ]
-          .map((target) => at.get(target) ?? "")
-          .filter((page) => REOPENS.test(page));
-        this.#keepClosed(id, pages);
+        this.#keepClosed(id, this.#pagesOf(targets, driven, at));
+      }
+      for (const target of targets) {
+        delete this.#owners.targets[target];
+        delete this.#owners.addresses[target];
+      }
+      for (const context of contexts) {
+        delete this.#owners.contexts[context];
       }
       this.#save();
       // A tab's page closes with it: the pages alone are named.
       await Promise.allSettled([
         ...targets.map((targetId) =>
-          wire.call("Target.closeTarget", { targetId })
+          wired?.calls.call("Target.closeTarget", { targetId })
         ),
         ...contexts.map((browserContextId) =>
-          wire.call("Target.disposeBrowserContext", { browserContextId })
+          wired?.calls.call("Target.disposeBrowserContext", {
+            browserContextId,
+          })
         ),
       ]);
     } finally {
-      socket.close();
+      wired?.socket.close();
     }
     console.info(
       `[browser] ${this.key}: ${id} ended: ${targets.length} page(s) and ${contexts.length} context(s) of its closed${keep ? `, ${this.#owners.closed[id]?.pages.length ?? 0} kept to open again` : ""}`
     );
   }
 
-  /** Door `id`'s closed pages kept ({@link forget}), the newest {@link CLOSED_KEPT} doors' alone. */
+  /** Every target the browser has now, by its id, with the address it is on. */
+  async #listed(wire: CdpCalls): Promise<Map<string, string>> {
+    const listed = await wire
+      .call("Target.getTargets", {})
+      .catch((): Json => ({}));
+    return new Map(
+      (Array.isArray(listed.targetInfos) ? listed.targetInfos : [])
+        .filter(isInfo)
+        .map((info) => [info.targetId, info.url ?? ""])
+    );
+  }
+
+  /**
+   * The addresses `targets` open again on: each as the browser has it now
+   * (`at`), else as it was last seen; a site's alone, in the order they
+   * were opened and the one driven last last, the one a browser ask of
+   * their door's is pinned to as they open again.
+   */
+  #pagesOf(
+    targets: readonly string[],
+    driven: string | undefined,
+    at: ReadonlyMap<string, string>
+  ): string[] {
+    return [
+      ...targets.filter((target) => target !== driven),
+      ...targets.filter((target) => target === driven),
+    ]
+      .map((target) => at.get(target) || this.#owners.addresses[target] || "")
+      .filter((page) => REOPENS.test(page));
+  }
+
+  /** Door `id`'s closed pages kept after any it still had kept, the newest {@link CLOSED_KEPT} doors' alone. */
   #keepClosed(id: string, pages: string[]): void {
+    const before = this.#owners.closed[id]?.pages ?? [];
     delete this.#owners.closed[id];
-    if (pages.length === 0) {
+    if (before.length + pages.length === 0) {
       return;
     }
-    this.#owners.closed[id] = { at: Date.now(), pages };
+    this.#owners.closed[id] = { at: Date.now(), pages: [...before, ...pages] };
     const kept = Object.entries(this.#owners.closed).sort(
       ([, a], [, b]) => b.at - a.at
     );
@@ -572,12 +596,70 @@ export class Gate {
   }
 
   /**
+   * Owned pages the browser no longer has (`present` is what it has now)
+   * are gone with an earlier run of it (a sleep, a container made again, a
+   * crash): each door's are kept to open again as its own closed pages
+   * are ({@link restore}), and it owns them no longer.
+   */
+  #goneWithRun(present: ReadonlySet<string>): void {
+    const gone = new Map<string, string[]>();
+    for (const [target, owner] of Object.entries(this.#owners.targets)) {
+      if (!present.has(target)) {
+        gone.set(owner, [...(gone.get(owner) ?? []), target]);
+      }
+    }
+    if (gone.size === 0) {
+      return;
+    }
+    for (const [owner, targets] of gone) {
+      this.#keepClosed(
+        owner,
+        this.#pagesOf(targets, this.#driven.get(owner), new Map())
+      );
+      this.#driven.delete(owner);
+      for (const target of targets) {
+        delete this.#owners.targets[target];
+        delete this.#owners.addresses[target];
+      }
+    }
+    this.#save();
+  }
+
+  /** Owned page `targetId` is on `url` now: the address it opens again on. */
+  #seenOn(targetId: string, url: string | undefined): void {
+    if (
+      url &&
+      REOPENS.test(url) &&
+      this.#owners.targets[targetId] &&
+      this.#owners.addresses[targetId] !== url
+    ) {
+      this.#owners.addresses[targetId] = url;
+      this.#save();
+    }
+  }
+
+  /** Whether no door but `id` holds a connection: a wake for it may make its container again (browsers.ts `RulesAt`). */
+  #alone(id: string): boolean {
+    return ![...this.#links].some((link) => link.workspace !== id);
+  }
+
+  /**
+   * The browser woken for door `id`, as its browser tool's connection
+   * wakes it ({@link attachLink}): started, or woken from its sleep, and
+   * answered once it runs. Throws why it does not.
+   */
+  async wake(id: string): Promise<void> {
+    await this.#browserUrl(true, this.#alone(id));
+  }
+
+  /**
    * Door `id` came back (its browser tool connects, or its session asks the
    * person about a page, shield.ts `askedPage`): the pages it had as it
-   * ended ({@link forget}) open again as its own, each a window of its own
-   * on the address it was on, and the one it drove last is the one it
-   * drives. Kept while the browser does not run, for its next coming back.
-   * Resolves once they are open and kept as its.
+   * ended ({@link forget}), or as its browser's last run ended, open again
+   * as its own, each a window of its own on the address it was on, and the
+   * one it drove last is the one it drives. Kept while the browser does not
+   * run, for its next coming back. Resolves once they are open and kept as
+   * its.
    */
   restore(id: string): Promise<void> {
     const running = this.#restoring.get(id);
@@ -593,19 +675,21 @@ export class Gate {
 
   async #reopen(id: string): Promise<void> {
     await this.#load();
-    const kept = this.#owners.closed[id];
-    if (!kept) {
-      return;
-    }
     const url = await this.#browserUrl(false).catch(() => undefined);
     if (!url) {
       return;
     }
-    delete this.#owners.closed[id];
-    this.#save();
     const opened: { page: string; targetId: string }[] = [];
     const { calls: wire, socket } = await dialCalls(url);
+    let kept: { at: number; pages: string[] } | undefined;
     try {
+      this.#goneWithRun(new Set((await this.#listed(wire)).keys()));
+      kept = this.#owners.closed[id];
+      if (!kept) {
+        return;
+      }
+      delete this.#owners.closed[id];
+      this.#save();
       for (const page of kept.pages) {
         const made = await wire
           .call("Target.createTarget", { url: BLANK, newWindow: true })
@@ -668,10 +752,7 @@ export class Gate {
       this.#deps.used(true);
     }
     this.#arrived(link.workspace);
-    const alone = ![...this.#links].some(
-      (other) => other !== link && other.workspace !== link.workspace
-    );
-    const url = await this.#browserUrl(true, alone);
+    const url = await this.#browserUrl(true, this.#alone(link.workspace));
     await this.#watching(url);
     // Its pages from before it last ended, open again before it lists any.
     await this.restore(link.workspace).catch((error: unknown) =>
@@ -865,6 +946,7 @@ export class Gate {
    * marked, so the dashboard it may load names its owner on its socket.
    */
   async load(page: string, url: string): Promise<void> {
+    this.#seenOn(page, url);
     await this.marked(page);
     const session = this.#pageSessions.get(page);
     const wire = this.#watch?.wire;
@@ -925,6 +1007,7 @@ export class Gate {
   /** What a connection or the watch read of a target: a page opened by an owned page is its opener's owner's. */
   learn(info: TargetInfo): void {
     this.#infos.set(info.targetId, info);
+    this.#seenOn(info.targetId, info.url);
     if (
       info.type === "page" &&
       info.openerId &&
@@ -948,6 +1031,7 @@ export class Gate {
     this.#markWaits.delete(targetId);
     if (this.#owners.targets[targetId]) {
       delete this.#owners.targets[targetId];
+      delete this.#owners.addresses[targetId];
       this.#save();
     }
   }
@@ -1035,16 +1119,9 @@ export class Gate {
         filter: [{ type: "tab" }],
       });
       await Promise.allSettled(tabsAttached);
-      // Pages of an earlier run of the browser are gone with it.
-      const stale = Object.keys(this.#owners.targets).filter(
-        (target) => !this.#infos.has(target)
-      );
-      for (const target of stale) {
-        delete this.#owners.targets[target];
-      }
-      if (stale.length > 0) {
-        this.#save();
-      }
+      // Pages of an earlier run of the browser are gone with it, kept to
+      // open again as their doors come back.
+      this.#goneWithRun(new Set(this.#infos.keys()));
     })();
     watch.ready.catch(() => {
       if (this.#watch === watch) {

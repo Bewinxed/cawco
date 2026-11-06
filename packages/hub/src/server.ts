@@ -673,6 +673,7 @@ import { briefingsObserve } from "./briefings";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import {
+  BROWSER_CALL_MS,
   BrowserRefusal,
   answered as browserAnswered,
   browserRoutes,
@@ -1276,8 +1277,6 @@ const UPDATE_CHECK_MS = 6 * HOUR_MS;
 
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
-/** How long a machine has to name the page a browser ask is about: a DevTools link opened and its pages listed (agent shield.ts `askedPage`). */
-const BROWSER_PAGE_MS = 30_000;
 
 /** A `Range: bytes=a-b` header (one range, either end open). */
 const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/u;
@@ -4087,7 +4086,9 @@ export const createServer = (
   const browserAsks = createBrowserAsks({
     browserFor: (actor) => browsers.browserFor(actor),
     // The asking door's page on the asked origin, on the browser's machine
-    // (agent shield.ts `askedPage`); its refusal is the agent's sentence.
+    // (agent shield.ts `askedPage`), its browser woken first if it sleeps,
+    // so it waits as long as a start does; its refusal is the agent's
+    // sentence.
     pageOf: async (actor, key, machineId, origin) => {
       const page: BrowserPageArgs = {
         key,
@@ -4095,7 +4096,7 @@ export const createServer = (
         workspaceId: sessionWorkspace(actor)?.id ?? actor.id,
       };
       return browserAnswered<BrowserAskedPage>(
-        await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_PAGE_MS),
+        await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_CALL_MS),
         machineName(machineId),
         `say which page of yours is open on ${origin}`
       ).targetId;

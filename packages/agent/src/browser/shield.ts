@@ -201,22 +201,38 @@ const frontPage = async (
  * has several there (gate.ts `drivenBy`), else the newest it opened. The
  * ask is pinned to it, so a take-over shows the page the agent asked about
  * whatever tab opens after (a site's pop-up, an extension's page, another
- * session's). The pages it had as it last ended open again first (gate.ts
- * `restore`). Refused in the agent's words when it has none open there.
+ * session's). A browser asleep is woken first, as the door's browser tool
+ * wakes it (gate.ts `wake`), and the pages it had as it last ended, or as
+ * the browser's last run ended, open again (gate.ts `restore`). Refused in
+ * the agent's words when it has none open there, and in a failed start's
+ * own words when the browser does not start.
  */
 export const askedPage = async ({
   key,
   origin,
   workspaceId,
 }: BrowserPageArgs): Promise<BrowserAskedPage> => {
-  const record = await readBrowser(key);
-  if (record?.state !== "live") {
+  const gate = gateOf(key);
+  if (!gate) {
     throw new Error(browserAskWords.noBrowser(origin));
   }
-  const gate = gateOf(key);
-  // A door that ended and came back (a delegate's item reopened in a clone
-  // cut again) asks about the pages it had: they open again first.
-  await gate?.restore(workspaceId);
+  // Asleep, it is woken as the door's browser tool wakes it as it connects
+  // (gate.ts `wake`): a delegate reopened after its browser slept asks
+  // about the pages it had all the same.
+  const failed = await gate.wake(workspaceId).then(
+    () => undefined,
+    (error: unknown) => error
+  );
+  const record = await readBrowser(key);
+  if (failed !== undefined || record?.state !== "live") {
+    throw new Error(record?.why ?? browserAskWords.noBrowser(origin), {
+      cause: failed,
+    });
+  }
+  // A door that ended, or whose browser slept, and came back (a delegate's
+  // item reopened, in a clone cut again or not) asks about the pages it
+  // had: they open again first.
+  await gate.restore(workspaceId);
   const link = await CdpLink.open(
     `http://127.0.0.1:${portsOf(record).devtools}`
   ).catch((error: unknown) => {
