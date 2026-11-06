@@ -39,6 +39,7 @@ const hashOf = (value: string): string =>
 const ackStatus = async (fleet: KitFleet, credential: string) =>
   (
     await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/session-identities/ack", { body: {} }),
       { headers: { authorization: `Bearer ${credential}` } }

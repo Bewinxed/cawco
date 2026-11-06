@@ -252,6 +252,7 @@ const report = async (
   state: Record<string, unknown>
 ): Promise<void> => {
   const response = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PUT /api/binary-updates/machines/:machineId/state", {
       path: { machineId: MACHINE },

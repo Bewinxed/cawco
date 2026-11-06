@@ -695,6 +695,7 @@ const readers = (kit: Kit, fleet: KitFleet, box: Box) => {
     },
     status: () =>
       fetchHub(
+        fetch,
         fleet.base,
         hubRequest("GET /api/agents/:machineId", { path: { machineId: BOX } })
       )
@@ -702,7 +703,7 @@ const readers = (kit: Kit, fleet: KitFleet, box: Box) => {
         .then((row: { status?: string } | null) => row?.status ?? "absent"),
     /** The machines held for the person, as the dashboard's Admit rows read them. */
     waiting: () =>
-      fetchHub(fleet.base, hubRequest("GET /api/machines/waiting")).then(
+      fetchHub(fetch, fleet.base, hubRequest("GET /api/machines/waiting")).then(
         (r) =>
           r.json() as Promise<{ address: string | null; machineId: string }[]>
       ),
@@ -743,9 +744,11 @@ async function joins(
     join(box.dir, "reach-github.txt"),
     "utf8"
   ).trim();
-  const here = await fetchHub(fleet.base, hubRequest("GET /health")).then(
-    (r) => r.ok
-  );
+  const here = await fetchHub(
+    fetch,
+    fleet.base,
+    hubRequest("GET /health")
+  ).then((r) => r.ok);
   await check(
     `a: from the box nothing answers on the hub's address (127.0.0.1:${box.hubPort}) nor on GitHub; here the hub answers there`,
     here && !fromBox.endsWith(" exit 0") && !outward.endsWith(" exit 0"),
@@ -827,7 +830,7 @@ async function sessionStarts(
   { check }: Readers,
   port: number
 ): Promise<void> {
-  const hubId = await fetchHub(fleet.base, hubRequest("GET /health"))
+  const hubId = await fetchHub(fetch, fleet.base, hubRequest("GET /health"))
     .then((r) => r.json() as Promise<{ hubId?: string }>)
     .then((body) => body.hubId ?? "");
   const configFile = join(box.home, ".config", "cawco", "config.json");
@@ -1032,6 +1035,7 @@ async function refusalEnds(
     30_000
   ).catch(() => false);
   const refused = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/machines/waiting/:machineId/refuse", {
       path: { machineId: BOX },
@@ -1136,7 +1140,7 @@ async function refusedReAdd(
 const relayChoice = (
   fleet: KitFleet
 ): Promise<{ candidates: number; machine: unknown } | undefined> =>
-  fetchHub(fleet.base, hubRequest("GET /api/stream-relay"))
+  fetchHub(fetch, fleet.base, hubRequest("GET /api/stream-relay"))
     .then((r) => r.json() as Promise<Partial<RelayAnswer>>)
     .then((answer) =>
       answer.journey
@@ -1208,6 +1212,7 @@ async function strangerHeld(
   const row = held.find((one) => one.machineId === STRANGER);
   const refused = row
     ? await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/machines/waiting/:machineId/refuse", {
           path: { machineId: STRANGER },
@@ -1531,13 +1536,18 @@ async function credentials(
   const sha = createHash("sha256").update(bytes).digest("hex");
   // Its bytes as they are, which no JSON body holds: the route reads the
   // request whole.
-  const stored = await fetchHub(fleet.base, hubRequest("POST /api/files"), {
-    headers: {
-      "content-type": "application/octet-stream",
-      "x-file-name": "ssh-reach.txt",
-    },
-    body: bytes,
-  }).then((r) => r.json() as Promise<{ ref?: string }>);
+  const stored = await fetchHub(
+    fetch,
+    fleet.base,
+    hubRequest("POST /api/files"),
+    {
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-file-name": "ssh-reach.txt",
+      },
+      body: bytes,
+    }
+  ).then((r) => r.json() as Promise<{ ref?: string }>);
   const via = `http://127.0.0.1:${port}`;
   const code = (path: string) =>
     box.enter(OPEN, `curl -s -o /dev/null -w "%{http_code}" ${via}${path}`);
@@ -1666,6 +1676,7 @@ async function removeUnlisted(
 ): Promise<void> {
   const remove = () =>
     fetchHub(
+      fetch,
       fleet.base,
       hubRequest("DELETE /api/agents/:machineId", {
         path: { machineId: STRANGER },

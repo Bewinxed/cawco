@@ -914,6 +914,7 @@ async function realJoin(kit: Kit): Promise<void> {
   const id = ANSWERED_ID.exec(created)?.[1] ?? "";
   const { port } = (await (
     await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/artifacts/:artifact/preview-address", {
         path: { artifact: id },

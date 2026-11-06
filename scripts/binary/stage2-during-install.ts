@@ -29,6 +29,7 @@ const DEADLINE = Date.now() + 900_000;
 function phase(): Promise<Bounded<string | undefined>> {
   return readWithin(1000, async (signal) => {
     const body = (await fetchHub(
+      fetch,
       hub,
       hubRequest("GET /api/binary-updates/machines"),
       { signal }

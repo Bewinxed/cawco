@@ -82,7 +82,7 @@ const overTailnet = async (kit: Kit) => {
     "the hub serving HTTPS on the stub's tailnet address",
     async () =>
       (await (
-        await fetchHub(fleet.base, hubRequest("GET /api/tailnet-https"))
+        await fetchHub(fetch, fleet.base, hubRequest("GET /api/tailnet-https"))
       ).json()) as {
         state: string;
       },

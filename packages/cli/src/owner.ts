@@ -44,6 +44,7 @@ const PAIR_ANSWER_MS = 15_000;
 const approve = async (origin: string, command: string): Promise<string> => {
   const started = await readWithin(PAIR_ANSWER_MS, async (signal) => {
     const response = await fetchHub(
+      fetch,
       origin,
       hubRequest("POST /api/pair", { body: { kind: "cli", name: command } }),
       { signal }
@@ -82,6 +83,7 @@ const approve = async (origin: string, command: string): Promise<string> => {
     await Bun.sleep(interval);
     const polled = await readWithin(PAIR_ANSWER_MS, async (signal) => {
       const response = await fetchHub(
+        fetch,
         origin,
         hubRequest("POST /api/pair/poll", {
           body: { deviceCode: pairing.deviceCode },

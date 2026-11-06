@@ -597,7 +597,7 @@ const pageProgram = (page: SeedPage, pictures: string): string => {
 const hub = async <T>(fleet: Fleet, request: HubRequest): Promise<T> => {
   const { method, path } = request;
   const read = await readWithin(60_000, async (signal) => {
-    const response = await fetchHub(fleet.base, request, { signal });
+    const response = await fetchHub(fetch, fleet.base, request, { signal });
     const text = await response.text();
     if (!response.ok) {
       throw new Error(`${method} ${path}: ${response.status} ${text}`);

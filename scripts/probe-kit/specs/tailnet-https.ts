@@ -530,10 +530,12 @@ const run = async (kit: Kit) => {
   const { bin, env, pairAt, set } = await tailnetStub(fleet);
   const read = async (): Promise<Read> =>
     (
-      await fetchHub(fleet.base, hubRequest("GET /api/tailnet-https"))
+      await fetchHub(fetch, fleet.base, hubRequest("GET /api/tailnet-https"))
     ).json() as Promise<Read>;
   const health = async () =>
-    (await fetchHub(fleet.base, hubRequest("GET /health"))).json() as Promise<{
+    (
+      await fetchHub(fetch, fleet.base, hubRequest("GET /health"))
+    ).json() as Promise<{
       dashboard: string;
       secureDashboard: string | null;
     }>;

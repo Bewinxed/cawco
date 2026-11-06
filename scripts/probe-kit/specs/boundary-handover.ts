@@ -821,6 +821,7 @@ const deletedStops = async (
   const running = await boundariesOf(fleet, h.id);
   const asked = Date.now();
   const deleted = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("DELETE /api/projects/:id", { path: { id: h.project } })
   );

@@ -427,9 +427,11 @@ const localNameRead = async (
   dashboardPort: string
 ): Promise<string> => {
   const url = `http://${name}:${dashboardPort}`;
-  const read = (await fetchHub(base, hubRequest("GET /api/local-name")).then(
-    (r) => r.json()
-  )) as Record<string, unknown>;
+  const read = (await fetchHub(
+    fetch,
+    base,
+    hubRequest("GET /api/local-name")
+  ).then((r) => r.json())) as Record<string, unknown>;
   kit.check(
     `6: /api/local-name on ${base} says ${name} is held, the dashboard at ${url}, and carries no command`,
     read.state === "held" &&
@@ -609,7 +611,7 @@ const heldBy = (base: string) =>
     `${base} holding its .local name`,
     async () =>
       (
-        (await fetchHub(base, hubRequest("GET /health")).then((r) =>
+        (await fetchHub(fetch, base, hubRequest("GET /health")).then((r) =>
           r.json()
         )) as Health
       ).localName ?? undefined,
@@ -658,7 +660,7 @@ const nameChecks = async (
     const port = Number(new URL(base).port);
     const answered = await asker.ask<string>({ name, type: "A" }, "A");
     const listed = (
-      (await fetchHub(base, hubRequest("GET /api/join")).then((r) =>
+      (await fetchHub(fetch, base, hubRequest("GET /api/join")).then((r) =>
         r.json()
       )) as {
         addresses: { label: string; url: string }[];

@@ -333,6 +333,7 @@ const run = async (kit: Kit) => {
     // Brought to the front of the writer's panel, as Files opens it.
     await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
           path: { id: writer, artifact: page.id },
@@ -474,6 +475,7 @@ const run = async (kit: Kit) => {
     "the stopped writing session deleted",
     async () => {
       const deleted = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("DELETE /api/instances/:id", { path: { id: writer } })
       );

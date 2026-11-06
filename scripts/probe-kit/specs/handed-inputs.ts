@@ -1482,6 +1482,7 @@ const spec: Spec = {
       "the canvas's picture",
       () =>
         fetchHub(
+          fetch,
           fleet.base,
           hubRequest("GET /api/artifacts/:artifact/thumbnail/:scheme", {
             path: { artifact: canvasId, scheme: "light" },

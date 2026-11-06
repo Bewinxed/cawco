@@ -49,6 +49,7 @@ export const declareGate = async (
   content: string
 ): Promise<void> => {
   const put = await fetchHub(
+    fetch,
     base,
     hubRequest("PUT /api/projects/:id/folder/file", {
       path: { id: projectId },

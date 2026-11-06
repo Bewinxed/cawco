@@ -520,6 +520,7 @@ const spec: Spec = {
     const put = async (name: string, extra: object = {}) => {
       const read = await readWithin(120_000, async (signal) => {
         const response = await fetchHub(
+          fetch,
           fleet.base,
           hubRequest("PUT /api/fleet/skills/:name", {
             path: { name },

@@ -77,6 +77,7 @@ const storedFor = (fleet: KitFleet, hash: string): string | undefined =>
 const ackStatus = async (fleet: KitFleet, credential: string) =>
   (
     await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/session-identities/ack", { body: {} }),
       { headers: { authorization: `Bearer ${credential}` } }

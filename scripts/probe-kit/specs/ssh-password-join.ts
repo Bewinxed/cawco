@@ -365,6 +365,7 @@ async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
   const page = await kit.page("desk");
   // Add machine's window on Reach, over SSH, signing in with a password once.
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PATCH /api/installs/draft", {
       body: {
@@ -683,6 +684,7 @@ async function run(kit: Kit): Promise<void> {
     const reads = await Promise.all(
       jobs.map((job) =>
         fetchHub(
+          fetch,
           fleet.base,
           hubRequest("GET /api/machines/ssh/:id", { path: { id: job.id } })
         ).then((r) => r.text())

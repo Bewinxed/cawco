@@ -80,3 +80,5 @@ scripts/lint/fixtures/hub-path.ts:11:13 house/hub-path-door
 scripts/lint/fixtures/hub-path.ts:12:20 house/hub-path-door
 scripts/lint/fixtures/hub-path.ts:13:16 house/hub-path-door
 scripts/lint/fixtures/hub-path.ts:14:1 house/hub-path-door
+scripts/lint/fixtures/fetch-alias-const.ts:5:9 house/no-fetch-alias
+scripts/lint/fixtures/fetch-alias.ts:2:22 house/no-fetch-alias

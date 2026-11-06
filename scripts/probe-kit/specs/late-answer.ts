@@ -72,6 +72,7 @@ export default {
     signal(pid, "SIGSTOP");
     const asked = Date.now();
     const answer = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/agents/:machineId/inspect", {
         path: { machineId: OTHER },
@@ -112,6 +113,7 @@ export default {
     signal(pid, "SIGSTOP");
     const from = Date.now();
     const read = fetchHub(
+      fetch,
       fleet.base,
       hubRequest("GET /api/agents/:machineId/media", {
         path: { machineId: OTHER },

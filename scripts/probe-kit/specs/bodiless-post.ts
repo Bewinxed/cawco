@@ -166,6 +166,7 @@ const run = async (kit: Kit) => {
     await fleet.hubUp();
     const providerOrigin = `http://127.0.0.1:${provider.port}`;
     const saved = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/fleet/mcp/:name", {
         path: { name: SERVER },

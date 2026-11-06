@@ -372,7 +372,7 @@ try {
     throw new Error("No online proof machine");
   }
   async function post(request: HubRequest) {
-    const response = await fetchHub(HUB, request);
+    const response = await fetchHub(fetch, HUB, request);
     const text = await response.text();
     if (!response.ok) {
       throw new Error(`Hub API ${request.path}: ${response.status} ${text}`);

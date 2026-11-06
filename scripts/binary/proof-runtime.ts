@@ -86,7 +86,7 @@ if (verb === "proof-stack") {
   }
   try {
     const live = await readWithin(1000, (signal) =>
-      fetchHub("http://192.168.3.100:3456", hubRequest("GET /health"), {
+      fetchHub(fetch, "http://192.168.3.100:3456", hubRequest("GET /health"), {
         signal,
       })
     );

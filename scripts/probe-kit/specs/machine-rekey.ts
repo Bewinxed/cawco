@@ -212,6 +212,7 @@ async function run(kit: Kit): Promise<void> {
       async () => {
         const read = await readWithin(30_000, async (signal) => {
           const response = await fetchHub(
+            fetch,
             fleet.base,
             hubRequest("DELETE /api/agents/:machineId", {
               path: { machineId: RENAMED },

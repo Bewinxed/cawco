@@ -177,6 +177,7 @@ const sleepOf = async (fleet: KitFleet, id: string): Promise<string> => {
 
 const moveTo = (fleet: KitFleet, id: string, accountId: string) =>
   fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/instances/:id/account", {
       path: { id },
@@ -202,6 +203,7 @@ const onTheFleet = async (kit: Kit): Promise<void> => {
   // Moving at the limit off: a cut session is held where it is, until a
   // person moves it.
   const routed = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PUT /api/accounts/routing/:provider", {
       path: { provider: "anthropic" },

@@ -96,7 +96,9 @@ const pairingOff = async (env: Record<string, string | undefined>) => {
 
 /** What an anonymous call to an owner route answers: 200 trusted, refused while paired devices are required. */
 const anonymous = (base: string): Promise<number> =>
-  fetchHub(base, hubRequest("GET /api/delegate-types")).then((r) => r.status);
+  fetchHub(fetch, base, hubRequest("GET /api/delegate-types")).then(
+    (r) => r.status
+  );
 
 /** Pairing-off requests or answers left beside the database. */
 const leftOver = (db: string): string[] =>
@@ -113,6 +115,7 @@ const spec: Spec = {
     const hub = fleet.launch("hub");
     await fleet.hubUp();
     const saved = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/delegate-types/:name", {
         path: { name: TYPE },
@@ -124,6 +127,7 @@ const spec: Spec = {
       })
     );
     const listed = (await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("GET /api/delegate-types")
     ).then((r) => r.json())) as { types: { name: string }[] };
@@ -191,6 +195,7 @@ const spec: Spec = {
 
     // 4. cawco pairing off beside the running hub goes through the hub.
     const on = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/auth/pairing", {
         body: { required: true, kind: "app", name: "Probe" },

@@ -686,6 +686,7 @@ const run = async (kit: Kit) => {
   // Every session's browser tool, as a person adds it: the door it is
   // launched through is the session's way into the gate.
   const put = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PUT /api/fleet/mcp/:name", {
       path: { name: "chrome-devtools" },

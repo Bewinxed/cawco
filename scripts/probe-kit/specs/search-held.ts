@@ -233,6 +233,7 @@ export default {
     const typedOn = new AbortController();
     at = performance.now();
     const dropped = fetchHub(
+      fetch,
       fleet.base,
       hubRequest("GET /api/find", {
         query: { q: "fix%20the%20bug", limit: "20" },

@@ -523,6 +523,7 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
   const pausedAt = Date.now();
   const until_ = pausedAt + PAUSE_MS;
   const answer = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/machines/:machineId/pause", {
       path: { machineId: B },
@@ -774,6 +775,7 @@ const runningBuild = async (
   const pausedAt = Date.now();
   const until_ = pausedAt + P7_PAUSE_MS;
   const answer = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/machines/:machineId/pause", {
       path: { machineId: B },

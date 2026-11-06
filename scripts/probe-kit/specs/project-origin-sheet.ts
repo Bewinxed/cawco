@@ -277,6 +277,7 @@ const run = async (kit: Kit) => {
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
     await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
           path: { id: writer, artifact: page.id },

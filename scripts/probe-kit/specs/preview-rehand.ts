@@ -318,6 +318,7 @@ const spec: Spec = {
     /** His own archive of workspace `id` (no credential: the person, on a hub that trusts its network), its unlanded work let go, confirmed or not. */
     const ownerArchive = async (id: string, anyway: boolean) => {
       const response = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/workspaces/:id/archive", {
           path: { id },

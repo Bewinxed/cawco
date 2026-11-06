@@ -209,6 +209,7 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
   if (options.role === "hub") {
     await awaitFirstMachineReady(options.hubUrl, note);
     const saved = await fetchHub(
+      fetch,
       options.hubUrl,
       hubRequest("PUT /api/binary-updates/settings", { body: options.policy })
     );

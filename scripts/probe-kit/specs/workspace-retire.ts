@@ -134,7 +134,7 @@ const requestWithin = async (
   const { method, path } = request;
   const url = `${base}${path}`;
   const read = await readWithin(ms, async (signal) => {
-    const response = await fetchHub(base, request, { signal });
+    const response = await fetchHub(fetch, base, request, { signal });
     return {
       ok: response.ok,
       status: response.status,

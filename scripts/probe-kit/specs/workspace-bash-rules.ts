@@ -525,6 +525,7 @@ const standUp = async (kit: Kit) => {
 
   // The fleet's chrome-devtools, as a person adds it.
   const put = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PUT /api/fleet/mcp/:name", {
       path: { name: "chrome-devtools" },

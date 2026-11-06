@@ -249,13 +249,24 @@ export const hubAt = (
 ];
 
 /**
- * `request` sent to the hub at `base` (its origin, or `""` on a page the hub
- * serves through its own origin), `init`'s own fields beside it, through
- * `through`: `fetch`, or a caller's own (a SvelteKit load's).
+ * A sender of a hub request: `fetch` itself, or one that carries the caller's
+ * credential (the agent's `provenFetch`, a machine's `machineFetch`, a
+ * SvelteKit load's own `fetch`).
+ */
+export type HubSender = (url: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * `request` sent through `sender` to the hub at `base` (its origin, or `""`
+ * on a page the hub serves through its own origin), `init`'s own fields
+ * beside it. The sender is named at every call, never defaulted: it is what
+ * carries the caller's credential (a machine's proof, a session's bearer, the
+ * owner's token), and a default would send without one in silence, as the
+ * agent's update loop did when this took `fetch` by default (the nightly from
+ * 886030601, refused as anonymous).
  */
 export const fetchHub = (
+  sender: HubSender,
   base: string,
   request: HubRequest,
-  init: RequestInit = {},
-  through: typeof fetch = fetch
-): Promise<Response> => through(...hubAt(base, request, init));
+  init: RequestInit = {}
+): Promise<Response> => sender(...hubAt(base, request, init));

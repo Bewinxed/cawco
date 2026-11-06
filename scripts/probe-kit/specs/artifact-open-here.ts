@@ -130,6 +130,7 @@ const run = async (kit: Kit) => {
   /** The person's Close of `id`'s panel, as its head's Close sends it. */
   const close = async (id: string) => {
     await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("DELETE /api/instances/:id/preview", { path: { id } })
     );

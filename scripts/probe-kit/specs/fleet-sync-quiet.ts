@@ -121,7 +121,7 @@ type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 const hubCall = async (fleet: Fleet, request: HubRequest): Promise<unknown> => {
   const { method, path } = request;
   const read = await readWithin(30_000, async (signal) => {
-    const response = await fetchHub(fleet.base, request, { signal });
+    const response = await fetchHub(fetch, fleet.base, request, { signal });
     return { status: response.status, text: await response.text() };
   });
   if (read.kind === "unanswered") {

@@ -607,6 +607,7 @@ const run = async (kit: Kit): Promise<void> => {
   );
   await canvasTab.close();
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("DELETE /api/instances/:id/preview", { path: { id: other } })
   );
@@ -764,6 +765,7 @@ const run = async (kit: Kit): Promise<void> => {
   // 10. The iPhone in a chat.
   const phoneBeat = (saidAt: number) =>
     fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/presence", {
         body: {
@@ -802,6 +804,7 @@ const run = async (kit: Kit): Promise<void> => {
     ELSEWHERE
   );
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/presence", {
       body: {

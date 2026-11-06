@@ -94,11 +94,11 @@ async function run(kit: Kit): Promise<void> {
     proxy.hold(true);
     const asks = Array.from({ length: ASKS }, async (): Promise<Asked> => {
       // The hub answers at once: 503 while it fetches, as a machine hears it.
-      let response = await fetchHub(fleet.base, archived);
+      let response = await fetchHub(fetch, fleet.base, archived);
       while (response.status === 503) {
         await response.arrayBuffer();
         await delay(1000);
-        response = await fetchHub(fleet.base, archived);
+        response = await fetchHub(fetch, fleet.base, archived);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
       return {

@@ -569,6 +569,7 @@ const legE = async (legs: Legs) => {
   const { check, fleet } = legs;
   const put = (method: "PUT" | "DELETE") =>
     fetchHub(
+      fetch,
       fleet.base,
       method === "PUT"
         ? hubRequest("PUT /api/delegate-types/:name", {

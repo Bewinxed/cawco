@@ -2449,7 +2449,7 @@ async function standUp(
   const api = async <T>(request: HubRequest): Promise<T> => {
     const { path } = request;
     const read = await readWithin(30_000, async (signal) => {
-      const response = await fetchHub(base, request, {
+      const response = await fetchHub(fetch, base, request, {
         headers: ownerHeaders(),
         signal,
       });
@@ -2779,7 +2779,7 @@ async function standUp(
       "hub",
       "the hub answering",
       () =>
-        fetchHub(base, hubRequest("GET /health")).then(
+        fetchHub(fetch, base, hubRequest("GET /health")).then(
           async (r) =>
             (r.ok ? await r.json() : undefined) as
               { hubId?: unknown } | undefined

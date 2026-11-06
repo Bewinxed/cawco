@@ -467,6 +467,7 @@ export async function typeIntoTakeover(
   // container host's first start waits on its image's build.
   const start = await readWithin(LIVE_WITHIN_MS, async (signal) => {
     const response = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/browsers/:key/start", {
         path: { key },

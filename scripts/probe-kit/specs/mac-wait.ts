@@ -220,6 +220,7 @@ const run = async (kit: Kit) => {
     MAC
   );
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/projects/:id/places", {
       path: { id: project.id },

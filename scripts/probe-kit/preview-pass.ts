@@ -27,6 +27,7 @@ const held = new Map<string, string>();
 /** A new pass for `origin`: `name=value`, or the entry's answer said as an error. */
 const enterOrigin = async (hub: Hub, origin: string): Promise<string> => {
   const asked = await fetchHub(
+    fetch,
     hub.base,
     hubRequest("POST /api/preview-ticket")
   );

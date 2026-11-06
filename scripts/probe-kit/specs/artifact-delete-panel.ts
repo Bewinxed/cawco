@@ -117,6 +117,7 @@ const run = async (kit: Kit) => {
   /** The person's press as the dashboard sends it (artifact-api.ts `showArtifact`). */
   const personShows = async (id: string) => {
     const response = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
         path: { id: session, artifact: id },
@@ -127,6 +128,7 @@ const run = async (kit: Kit) => {
   /** The person's Remove in the panel's menu (artifact-api.ts `removeArtifact`). */
   const personRemoves = async (id: string) => {
     const response = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
         path: { id: session, artifact: id },
@@ -138,6 +140,7 @@ const run = async (kit: Kit) => {
   const personCloses = async () => {
     await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("DELETE /api/instances/:id/preview", {
           path: { id: session },

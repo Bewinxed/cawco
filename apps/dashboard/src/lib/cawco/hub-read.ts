@@ -195,7 +195,7 @@ export const hubFetch = (
   request: HubRequest,
   init: RequestInit = {},
   through: typeof globalThis.fetch = fetch
-): Promise<Response> => fetchHub("", request, init, through);
+): Promise<Response> => fetchHub(through, "", request, init);
 
 /**
  * A refused read as a clause without its stop: the hub's words with their
@@ -371,7 +371,7 @@ export async function readHub<T>(
   request: HubRequest,
   init: RequestInit = {}
 ): Promise<HubRead<T>> {
-  const response = await fetchHub("", request, init, fetch);
+  const response = await fetchHub(fetch, "", request, init);
   if (!response.ok) {
     return { ok: false, ...(await hubFailure(response)) };
   }

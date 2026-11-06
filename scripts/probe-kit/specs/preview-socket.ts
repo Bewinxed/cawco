@@ -314,6 +314,7 @@ const probe = async (kit: Kit) => {
   const address = async () =>
     (await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/artifacts/:artifact/preview-address", {
           path: { artifact: id },
@@ -408,7 +409,7 @@ const probe = async (kit: Kit) => {
   // 6. Host mode behind Cloudflare over https, entered with a ticket. Its
   // names stand under localtest.me, which the browser is told is 127.0.0.1.
   const range = (await (
-    await fetchHub(fleet.base, hubRequest("GET /api/preview-settings"))
+    await fetchHub(fetch, fleet.base, hubRequest("GET /api/preview-settings"))
   ).json()) as { ports: string };
   const first = Number(range.ports.split("–")[0]);
   const hostFront = cloudflareTo(
@@ -424,7 +425,7 @@ const probe = async (kit: Kit) => {
   );
   const origin = (await address()).origin ?? "none";
   const { ticket } = (await (
-    await fetchHub(fleet.base, hubRequest("POST /api/preview-ticket"))
+    await fetchHub(fetch, fleet.base, hubRequest("POST /api/preview-ticket"))
   ).json()) as PreviewTicket;
   const named = await kit.page("desk", {
     ignoreHTTPSErrors: true,
@@ -450,6 +451,7 @@ const probe = async (kit: Kit) => {
   // in port mode again: host mode's listener took the range's first port,
   // so the preview's own port is read once it is made.
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PUT /api/preview-settings", { body: { mode: "port" } })
   );

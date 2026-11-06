@@ -232,6 +232,7 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
     permissionMode: "acceptEdits",
   });
   const paused = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/machines/:machineId/pause", {
       path: { machineId: MACHINE },

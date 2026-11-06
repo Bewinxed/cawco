@@ -661,7 +661,7 @@ const sweep = async (
   retired: { workspaceId: string }[];
 }> =>
   (await (
-    await fetchHub(base, hubRequest("POST /api/workspaces/retire"))
+    await fetchHub(fetch, base, hubRequest("POST /api/workspaces/retire"))
   ).json()) as Awaited<ReturnType<typeof sweep>>;
 
 /**
@@ -2193,6 +2193,7 @@ const run = async (kit: Kit) => {
     // 5c. The canvas open on its own origin (hub server.ts `frameAddress`), its section failed; the file written, it draws there by itself.
     const { port } = (await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/artifacts/:artifact/preview-address", {
           path: { artifact: String(laterId) },
@@ -2313,6 +2314,7 @@ const run = async (kit: Kit) => {
     // 5. The sheet on its own origin (hub server.ts `frameAddress`), and the session's edit reaching it.
     const { port } = (await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/artifacts/:artifact/preview-address", {
           path: { artifact: sheet },

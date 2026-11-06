@@ -153,7 +153,7 @@ const posted = async (
   base: string,
   request: HubRequest
 ): Promise<{ status: number; text: string }> => {
-  const response = await fetchHub(base, request);
+  const response = await fetchHub(fetch, base, request);
   return { status: response.status, text: await response.text() };
 };
 

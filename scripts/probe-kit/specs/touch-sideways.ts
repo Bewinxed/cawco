@@ -77,6 +77,7 @@ const legs = async (
   // The decision page in the session's panel: the last leg's own tab of
   // the other artifact showed that one there.
   await fetchHub(
+    fetch,
     base,
     hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
       path: { id: ids.session, artifact: ids.decision },

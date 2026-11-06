@@ -113,9 +113,11 @@ const run = async (kit: Kit) => {
     () => "",
     (error: Error) => error.message
   );
-  const health = (await fetchHub(fleet.base, hubRequest("GET /health")).then(
-    (r) => r.json()
-  )) as { hubId?: string };
+  const health = (await fetchHub(
+    fetch,
+    fleet.base,
+    hubRequest("GET /health")
+  ).then((r) => r.json())) as { hubId?: string };
   kit.check(
     "3: with the port its own again, the fleet's hub answers there with the id the fleet wrote beside its database, and hubUp passes",
     passed === "" && health.hubId === own,

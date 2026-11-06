@@ -279,7 +279,7 @@ async function restore(
   since: number,
   hubMachine?: string
 ): Promise<void> {
-  const up = await fetchHub(fleet.base, hubRequest("GET /health"))
+  const up = await fetchHub(fetch, fleet.base, hubRequest("GET /health"))
     .then((r) => r.ok)
     .catch(() => false);
   if (!up) {

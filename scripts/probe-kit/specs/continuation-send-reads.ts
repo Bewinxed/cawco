@@ -60,6 +60,7 @@ const readOf = (fleet: KitFleet, id: string, send: string) =>
 const continueFromAsks = (fleet: KitFleet, source: string) =>
   readWithin(30_000, async (signal) => {
     const response = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/instances/:id/continue", {
         path: { id: source },

@@ -257,6 +257,7 @@ const run = async (kit: Kit) => {
       child
     );
     const renamed = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PATCH /api/instances/:id", {
         path: { id: child },
@@ -441,6 +442,7 @@ const run = async (kit: Kit) => {
     ["design/DESIGN.md", "# Waits\n"],
   ] as const) {
     const put = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/projects/:id/folder/file", {
         path: { id: project.id },

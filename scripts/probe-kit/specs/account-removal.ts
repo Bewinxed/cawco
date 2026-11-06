@@ -158,6 +158,7 @@ const asleep = async (fleet: KitFleet, id: string) => {
 
 const removeAccount = async (fleet: KitFleet, id: string, machine = "") => {
   const response = await fetchHub(
+    fetch,
     fleet.base,
     machine
       ? hubRequest("DELETE /api/accounts/:id/machines/:machineId", {
@@ -193,6 +194,7 @@ const spec: Spec = {
     );
     // New sessions fill A first: B is where they move.
     const routed = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/accounts/routing/:provider", {
         path: { provider: "anthropic" },

@@ -105,11 +105,6 @@ import { runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions } from "./sessiond-client";
 
-// Every call this module makes goes to this machine's hub, carrying the
-// machine's proof (hub-proof.ts): a hub that requires paired devices answers
-// what machines read and report to an admitted machine alone.
-const fetch = provenFetch;
-
 const POLL_MS = 60_000;
 /**
  * The update state's fields earlier builds wrote that nothing reads now
@@ -375,8 +370,10 @@ const HUB_GONE: ReadonlySet<string> = new Set([
 ] satisfies readonly CutCode[]);
 
 /**
- * `url` on the hub, its response read by `take`, all of it given `ms` to
- * answer. A hub that did not answer in time, or refused or dropped the
+ * `request` to the hub at `hub`, sent as this machine (hub-proof.ts
+ * `provenFetch`: a hub that requires paired devices answers what machines
+ * read and report to an admitted machine alone), its response read by
+ * `take`, all of it given `ms` to answer. A hub that did not answer in time, or refused or dropped the
  * connection before its answer was whole ({@link CUT_CODES}), is
  * {@link HubUnreachable} ("the hub did not answer <what> within N s"), never
  * an answer that refused.
@@ -389,7 +386,7 @@ const askHub = async <T>(
   take: (response: Response) => Promise<T>
 ): Promise<T> => {
   const read = await readWithin(ms, async (signal) =>
-    take(await fetchHub(hub, request, { signal }))
+    take(await fetchHub(provenFetch, hub, request, { signal }))
   ).catch((error: unknown) => {
     const code = cutCode(error);
     if (code === undefined) {
@@ -410,6 +407,25 @@ const askHub = async <T>(
       unhandled("read", read);
   }
 };
+
+/**
+ * The hub's update settings, as the update loop reads them each check: the
+ * policy, or the status the hub refused with. Sent as this machine
+ * ({@link askHub}): door-callers proves it arrives as one.
+ */
+export const readUpdateSettings = (
+  hub: string
+): Promise<{ policy: BinaryUpdatePolicy } | { status: number }> =>
+  askHub(
+    "with its update settings",
+    10_000,
+    hub,
+    hubRequest("GET /api/binary-updates/settings"),
+    async (response) =>
+      response.ok
+        ? { policy: (await response.json()) as BinaryUpdatePolicy }
+        : { status: response.status }
+  );
 
 /**
  * An attempt at an offered build failed (its download, its verification, the
@@ -1286,25 +1302,16 @@ export class BinaryUpdater {
     if (!installation) {
       return;
     }
-    const settings = await askHub<
-      { policy: BinaryUpdatePolicy } | { status: number }
-    >(
-      "with its update settings",
-      10_000,
-      installation.hubUrl,
-      hubRequest("GET /api/binary-updates/settings"),
-      async (response) =>
-        response.ok
-          ? { policy: (await response.json()) as BinaryUpdatePolicy }
-          : { status: response.status }
-    ).catch((error: unknown) => {
-      if (error instanceof HubUnreachable) {
-        throw error;
+    const settings = await readUpdateSettings(installation.hubUrl).catch(
+      (error: unknown) => {
+        if (error instanceof HubUnreachable) {
+          throw error;
+        }
+        throw new HubUnreachable(
+          `the hub at ${installation.hubUrl} did not answer: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
-      throw new HubUnreachable(
-        `the hub at ${installation.hubUrl} did not answer: ${error instanceof Error ? error.message : String(error)}`
-      );
-    });
+    );
     if (!("policy" in settings)) {
       throw new Error(`The hub's update settings answered ${settings.status}`);
     }
@@ -1631,7 +1638,8 @@ export class BinaryUpdater {
         partial,
         size: artifact.size,
         what,
-        fetch,
+        // The archive is the hub's, read as this machine (hub-proof.ts).
+        fetch: provenFetch,
         log: (line) => console.info(`[update] ${line}`),
         onProgress: (download) => say({ download, hubFetch: undefined }),
         ends: (error) => HUB_GONE.has(cutCode(error) ?? ""),

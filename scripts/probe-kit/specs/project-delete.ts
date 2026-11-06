@@ -635,7 +635,7 @@ export default {
       // Listening once it answers.
       for (let tries = 0; tries < 50; tries += 1) {
         if (
-          await fetchHub(base, hubRequest("GET /health")).then(
+          await fetchHub(fetch, base, hubRequest("GET /health")).then(
             (r) => r.ok,
             () => false
           )

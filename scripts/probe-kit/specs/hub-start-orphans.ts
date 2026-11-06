@@ -160,6 +160,7 @@ const run = async (kit: Kit) => {
   ] as const) {
     await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
           path: { id: session, artifact: id },

@@ -114,7 +114,7 @@ const watched = async <T>(
   const sampling = (async () => {
     while (!sampler.signal.aborted) {
       const asked = performance.now();
-      await fetchHub(fleet.base, hubRequest("GET /health")).catch(
+      await fetchHub(fetch, fleet.base, hubRequest("GET /health")).catch(
         () => undefined
       );
       health = Math.max(health, performance.now() - asked);

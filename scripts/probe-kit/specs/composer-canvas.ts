@@ -2724,6 +2724,7 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   // The session's panel shows what an earlier run docked: closed, so its
   // drawer stands over nothing this run presses.
   await fetchHub(
+    fetch,
     on.fleet.base,
     hubRequest("DELETE /api/instances/:id/preview", {
       path: { id: on.session },

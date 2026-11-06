@@ -82,6 +82,7 @@ const spec: Spec = {
     const deadPort = gone.port;
     await gone.stop(true);
     const put = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/fleet/mcp/:name", {
         path: { name: HELD_ROW },

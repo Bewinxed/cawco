@@ -154,7 +154,7 @@ const ask = async (
   const { method, path } = request;
   const url = `${base}${path}`;
   const read = await readWithin(60_000, async (signal) => {
-    const response = await fetchHub(base, request, { ...init, signal });
+    const response = await fetchHub(fetch, base, request, { ...init, signal });
     return {
       status: response.status,
       text: await response.text(),

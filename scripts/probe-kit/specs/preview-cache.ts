@@ -188,6 +188,7 @@ const probe = async (kit: Kit) => {
   const address = async () =>
     (await (
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/artifacts/:artifact/preview-address", {
           path: { artifact: id },
@@ -285,7 +286,7 @@ const probe = async (kit: Kit) => {
 
   // 2. Host mode, its names on the range's first port, behind the lock.
   const range = (await (
-    await fetchHub(fleet.base, hubRequest("GET /api/preview-settings"))
+    await fetchHub(fetch, fleet.base, hubRequest("GET /api/preview-settings"))
   ).json()) as { ports: string };
   const first = Number(range.ports.split("–")[0]);
   await storeHostMode(fleet, {
@@ -298,7 +299,7 @@ const probe = async (kit: Kit) => {
   const origin = (await address()).origin ?? "";
   const host = origin ? new URL(origin).host : "";
   const { ticket } = (await (
-    await fetchHub(fleet.base, hubRequest("POST /api/preview-ticket"))
+    await fetchHub(fetch, fleet.base, hubRequest("POST /api/preview-ticket"))
   ).json()) as PreviewTicket;
   const byHost = `http://127.0.0.1:${first}`;
   const entered = await read(previewEnterUrl(byHost, ticket, "/src/main.js"), {

@@ -104,9 +104,11 @@ const spec: Spec = {
         said.includes("CAWCO_DB_PATH"),
       said.trim().split("\n").at(-1) ?? ""
     );
-    const answers = await fetchHub(fleet.base, hubRequest("GET /health")).then(
-      (r) => r.ok
-    );
+    const answers = await fetchHub(
+      fetch,
+      fleet.base,
+      hubRequest("GET /health")
+    ).then((r) => r.ok);
     kit.check(
       "the first hub still answers and still holds the lock",
       answers && (await holderOf(lock))?.pid === first.pid,

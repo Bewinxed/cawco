@@ -212,6 +212,7 @@ const spec: Spec = {
         Date.now()
       );
       const routed = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("PUT /api/accounts/routing/:provider", {
           path: { provider: "anthropic" },

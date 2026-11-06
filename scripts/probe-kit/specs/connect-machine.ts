@@ -241,6 +241,7 @@ const editDraft = (
 ) => {
   probeSeq += 1;
   return fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PATCH /api/installs/draft", {
       body: {
@@ -274,11 +275,13 @@ async function clearInstalls(fleet: KitFleet): Promise<void> {
   for (const one of (await installs(fleet)).installs) {
     if (one.state === "running") {
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/installs/:id/stop", { path: { id: one.id } })
       );
     }
     await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("DELETE /api/installs/:id", { path: { id: one.id } })
     );
@@ -1387,10 +1390,12 @@ async function walk(
   // added again with no hold, from the window, so the installer runs to its
   // first failing check (no `tar` on the machine).
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/installs/:id/stop", { path: { id } })
   );
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("DELETE /api/installs/:id", { path: { id } })
   );
@@ -1718,6 +1723,7 @@ async function walk(
   );
   const machineId = machines[0]?.machineId ?? "";
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("GET /api/agents/:machineId", { path: { machineId } }),
     { headers: { "x-cawco-install-code": code } }
@@ -1756,6 +1762,7 @@ async function walk(
   );
   // What the installer's end says when its check for tar fails (core install-script.ts).
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/installs/code/:code/ended", {
       path: { code: checkCode },
@@ -1789,6 +1796,7 @@ async function walk(
     `step ${checkInstall?.problemStep}; row ${checkRow}; window ${checkFailed.text.slice(0, 120)}`
   );
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("DELETE /api/installs/:id", { path: { id: checkId } })
   );
@@ -1889,6 +1897,7 @@ async function refusedForward(
     JSON.stringify(alerts)
   );
   await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("DELETE /api/installs/:id", { path: { id } })
   );

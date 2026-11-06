@@ -23,6 +23,7 @@ import { getEnvironmentData, isMainThread } from "node:worker_threads";
 import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
 import { hubPathDoor } from "./scripts/lint/hub-path-door.ts";
+import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
 /** The planted mistakes, read by their own globs below and never as product code. */
@@ -33,6 +34,8 @@ const SWITCH_FIXTURES = `${LINT_FIXTURES}*.ts`;
 const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
 /** The hub paths the door's rule must refuse, and those it must let stand. */
 const HUB_PATH_FIXTURES = `${LINT_FIXTURES}hub-path.ts`;
+/** The bindings of `fetch` to another sender the alias rule must refuse. */
+const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -120,6 +123,10 @@ export default defineConfig({
       {
         files: [...hubCallers.map(literal), HUB_PATH_FIXTURES],
         rules: [hubPathDoor],
+      },
+      {
+        files: [...hubCallers.map(literal), FETCH_ALIAS_FIXTURES],
+        rules: [noFetchAlias],
       },
     ],
   },

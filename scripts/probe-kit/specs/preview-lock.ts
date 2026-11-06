@@ -222,6 +222,7 @@ const probe = async (kit: Kit, servedPort: number) => {
     (window as unknown as { __stayed: boolean }).__stayed = true;
   });
   const put = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PUT /api/preview-settings", {
       body: {

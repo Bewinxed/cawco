@@ -66,7 +66,7 @@ interface Answered {
 /** `path` asked of the hub (POST with `body`), answered or refused, with when. */
 const ask = async (fleet: KitFleet, request: HubRequest): Promise<Answered> => {
   const asked = Date.now();
-  const response = await fetchHub(fleet.base, request);
+  const response = await fetchHub(fetch, fleet.base, request);
   return {
     ms: Date.now() - asked,
     status: response.status,

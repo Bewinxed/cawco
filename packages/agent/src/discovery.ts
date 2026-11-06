@@ -67,6 +67,7 @@ export const hubIdAt = (
 ): Promise<Bounded<string | undefined>> =>
   readWithin(PROBE_TIMEOUT_MS, async (signal) => {
     const body: { hubId?: unknown } = await fetchHub(
+      fetch,
       httpUrl,
       hubRequest("GET /health"),
       { signal }

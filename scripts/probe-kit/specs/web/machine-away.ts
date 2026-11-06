@@ -197,7 +197,7 @@ async function machineFile(path: string, holding: string): Promise<string> {
 
 /** `request` asked of the hub, refused loudly. */
 async function hubSend(fleet: KitFleet, request: HubRequest) {
-  const response = await fetchHub(fleet.base, request);
+  const response = await fetchHub(fetch, fleet.base, request);
   if (!response.ok) {
     throw new Error(
       `${request.method} ${request.path}: ${response.status} ${await response.text()}`

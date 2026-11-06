@@ -79,6 +79,7 @@ const turnTaken = async (fleet: KitFleet, title: string): Promise<string> => {
 const continueFromAsks = (fleet: KitFleet, source: string) =>
   readWithin(30_000, async (signal) => {
     const response = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/instances/:id/continue", {
         path: { id: source },
@@ -146,7 +147,7 @@ const healthLook = async (
 ): Promise<{ ms: number; ok: boolean }> => {
   const from = performance.now();
   const read = await readWithin(HEALTH_MS, (signal) =>
-    fetchHub(base, hubRequest("GET /health"), { signal }).then(
+    fetchHub(fetch, base, hubRequest("GET /health"), { signal }).then(
       (response) => response.ok
     )
   );
@@ -174,6 +175,7 @@ export default {
     const source = await turnTaken(fleet, "held-start source");
 
     const paused = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("POST /api/machines/:machineId/pause", {
         path: { machineId: MACHINE },

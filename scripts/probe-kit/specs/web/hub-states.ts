@@ -1284,6 +1284,7 @@ async function runLeg(
     // The hub's own word: its machine says it is installing.
     const put = (state: object) =>
       fetchHub(
+        fetch,
         hub,
         hubRequest("PUT /api/binary-updates/machines/:machineId/state", {
           path: { machineId: "scratch-fleet" },

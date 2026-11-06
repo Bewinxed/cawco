@@ -152,6 +152,7 @@ const run = async (kit: Kit) => {
   // again when the hub changes it (server.ts `refreshBoard`), so the
   // delegate is renamed through the hub, as the person renames one.
   const renamed = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PATCH /api/instances/:id", {
       path: { id: delegate },

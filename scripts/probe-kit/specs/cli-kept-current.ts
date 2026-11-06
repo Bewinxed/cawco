@@ -860,6 +860,7 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
 
     // (i) The fleet pins a version, and a press carrying none installs it.
     const pinned = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/tools/:id", {
         path: { id: "claude" },

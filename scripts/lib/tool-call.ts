@@ -78,6 +78,7 @@ const request = (
 ): Promise<Response> =>
   via === "door"
     ? fetchHub(
+        fetch,
         session.base,
         hubRequest("POST /api/delegation/call/:instanceId", {
           path: { instanceId: session.id },

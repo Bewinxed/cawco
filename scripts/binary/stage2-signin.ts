@@ -33,7 +33,7 @@ interface Accounts {
 const ask = async (): Promise<string> => {
   try {
     const read = await readWithin(ANSWER_MS, async (signal) => {
-      const res = await fetchHub(hub, hubRequest("GET /api/accounts"), {
+      const res = await fetchHub(fetch, hub, hubRequest("GET /api/accounts"), {
         signal,
       });
       return res.ok ? ((await res.json()) as Accounts) : undefined;

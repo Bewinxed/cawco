@@ -1568,6 +1568,7 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
     const name = `${(title ?? "untitled").replace(/[^\w-]+/gu, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
     try {
       const response = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("GET /api/instances/:id/transcript", { path: { id } })
       );

@@ -69,7 +69,7 @@ const probe = async (
 ): Promise<number | null> => {
   const from = performance.now();
   const read = await readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-    const response = await fetchHub(base, request, { signal });
+    const response = await fetchHub(fetch, base, request, { signal });
     await response.arrayBuffer();
   }).catch(() => undefined);
   return read?.kind === "answered"

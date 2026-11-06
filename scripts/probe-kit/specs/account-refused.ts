@@ -677,6 +677,7 @@ const throughTheAgent = async (kit: Kit): Promise<void> => {
       );
     }
     const routed = await fetchHub(
+      fetch,
       fleet.base,
       hubRequest("PUT /api/accounts/routing/:provider", {
         path: { provider: "anthropic" },

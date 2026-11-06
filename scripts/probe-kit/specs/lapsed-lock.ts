@@ -53,7 +53,7 @@ interface Person {
 const person = async (fleet: KitFleet): Promise<string> =>
   (
     (await (
-      await fetchHub(fleet.base, hubRequest("GET /api/person"))
+      await fetchHub(fetch, fleet.base, hubRequest("GET /api/person"))
     ).json()) as Person
   ).state;
 
@@ -65,6 +65,7 @@ const beat = (
   clientId = TAB
 ) =>
   fetchHub(
+    fetch,
     fleet.base,
     hubRequest("POST /api/presence", {
       body: {

@@ -733,6 +733,7 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
 
   // 10. Its session's panel closed while the artifact lives: the tab stays on it.
   const closed = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("DELETE /api/instances/:id/preview", { path: { id: session } })
   );
@@ -781,6 +782,7 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   }
   const deletedTab = await tabOn(doomed);
   const removed = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
       path: { id: session, artifact: doomed },
@@ -801,6 +803,7 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   }
   const trustedTab = await tabOn(kept);
   const turned = await fetchHub(
+    fetch,
     fleet.base,
     hubRequest("PUT /api/auth/pairing", {
       body: { required: true, kind: "app", name: "Probe app" },

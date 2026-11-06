@@ -279,6 +279,7 @@ const serving = async (
     try {
       // The session's preview, on its own origin (hub server.ts `frameAddress`).
       const listed = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("GET /api/instances/:id/artifacts", {
           path: { id: instanceId },
@@ -288,6 +289,7 @@ const serving = async (
         (await listed.json()) as { id: string; kind: string }[]
       ).find((one) => one.kind === "preview");
       const address = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/artifacts/:artifact/preview-address", {
           path: { artifact: String(preview?.id) },
@@ -587,6 +589,7 @@ const spec: Spec = {
         )
       );
       const deleted = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
           path: { id: parent, artifact },

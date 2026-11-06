@@ -111,10 +111,12 @@ const run = async (kit: Kit) => {
     for (const view of ["desk", "phone"] as const) {
       // Each view starts signed out: the server is saved again, as new.
       await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("DELETE /api/fleet/mcp/:name", { path: { name: SERVER } })
       );
       const saved = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("PUT /api/fleet/mcp/:name", {
           path: { name: SERVER },
@@ -247,6 +249,7 @@ const run = async (kit: Kit) => {
       });
       const freshState = stateOf(fresh.url());
       const first = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("POST /api/fleet/mcp/oauth/complete", {
           body: { code: "probe-code", state },
@@ -320,6 +323,7 @@ const run = async (kit: Kit) => {
         10_000
       ).catch(() => checked(pressing));
       const back = await fetchHub(
+        fetch,
         fleet.base,
         hubRequest("PUT /api/fleet/mcp/:name", {
           path: { name: SERVER },
