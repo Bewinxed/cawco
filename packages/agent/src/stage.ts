@@ -477,11 +477,8 @@ const stageWords = (stage: Stage): string =>
     ? `The stage for ${stage.dir}`
     : `\`${stage.runs.command}\` (port ${stage.port})`;
 
-/** Tells the hub where the stage is now, and logs it. */
-const tell = (stage: Stage) => {
-  console.info(
-    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.runs.kind === "sheet" ? stage.dir : `port ${stage.port}`}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
-  );
+/** Sends the hub where the stage is now. */
+const sendState = (stage: Stage) => {
   sink({
     kind: "stage",
     workspace: stage.workspace.id,
@@ -490,14 +487,24 @@ const tell = (stage: Stage) => {
   });
 };
 
+/** A change of the stage: logged, one line each, and told to the hub. */
+const tell = (stage: Stage) => {
+  console.info(
+    `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.runs.kind === "sheet" ? stage.dir : `port ${stage.port}`}: ${stage.status}${stage.message ? ` (${stage.message})` : ""}${stage.errors.length ? `, ${stage.errors.length} error(s)` : ""}`
+  );
+  sendState(stage);
+};
+
 /**
  * Every stage told again where it is now, as the daemon registers with the
  * hub: a frame sent while no connection was open was dropped (daemon.ts
- * `supervisor.emit`), and the docs it was owed to are set right here.
+ * `supervisor.emit`), and the docs it was owed to are set right here. Sent,
+ * not logged: no stage changed, and a line each would read as a second
+ * start of a stage the agent's restart was starting as it registered.
  */
 export const tellStages = (): void => {
   for (const stage of stages.values()) {
-    tell(stage);
+    sendState(stage);
   }
 };
 
