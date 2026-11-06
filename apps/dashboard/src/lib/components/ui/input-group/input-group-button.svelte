@@ -3,7 +3,9 @@
   import { tv } from "#lib/utils.js";
 
   const inputGroupButtonVariants = tv({
-    base: "flex items-center gap-space-2 rounded-sm text-label shadow-none",
+    /* In a bar's search field (InputGroup `look="bar"`, a capsule), a capsule
+       itself, concentric with it. */
+    base: "flex items-center gap-space-2 not-in-data-[look=bar]:rounded-sm in-data-[look=bar]:rounded-pill text-label shadow-none",
     variants: {
       size: {
         xs: "h-c-btn-h-xs gap-space-1 px-space-2 [&>svg:not([class*='size-'])]:size-icon-sm",
