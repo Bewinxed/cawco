@@ -61,7 +61,11 @@ export interface MemberRecord {
   /** The sessions that settled for it, for their spend (`spend`). */
   instances: string[];
   lastAt: Date | null;
-  /** The cards it still holds ({@link holds}), as rows (the caller asks which runs are live). */
+  /**
+   * The cards it still holds ({@link holds}) on pages that still stand, as
+   * rows (the caller asks which runs are live). A card on a deleted page
+   * waits on no one; what it settled there stays in `decided`.
+   */
   open: CardSettlingRow[];
   /** The cards it settled that he picked otherwise. */
   takenBack: number;
@@ -386,11 +390,16 @@ export const decidesDb = (
         .run();
     },
     record: (memberId) => {
-      const rows = db
-        .select()
+      // Each row with whether its page still stands: nothing cascades from
+      // `artifacts` here, and a page can come back (a project restored from
+      // the trash puts its rows back by id, db forget.ts).
+      const read = db
+        .select({ row: cardSettlings, page: artifacts.id })
         .from(cardSettlings)
+        .leftJoin(artifacts, eq(artifacts.id, cardSettlings.artifactId))
         .where(eq(cardSettlings.route, memberId))
         .all();
+      const rows = read.map(({ row }) => row);
       const settled = rows.filter((row) => row.settledAt !== null);
       const last = settled.reduce<Date | null>(
         (at, row) =>
@@ -401,7 +410,9 @@ export const decidesDb = (
         decided: settled.length,
         lastAt: last,
         takenBack: settled.filter((row) => row.takenBackAt !== null).length,
-        open: rows.filter(holds),
+        open: read.flatMap(({ row, page }) =>
+          page !== null && holds(row) ? [row] : []
+        ),
         instances: [
           ...new Set(
             rows.flatMap((row) => (row.instanceId ? [row.instanceId] : []))

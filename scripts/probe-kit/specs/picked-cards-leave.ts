@@ -33,6 +33,12 @@
  *     Caw, its row still open) are taken back once as the hub starts
  *     (settling.ts `takeBackPickedOnce`), at his pick's time; a second
  *     start leaves them be.
+ * (h) A second page `later` with a card open on Caw and a card Caw settled
+ *     is deleted (`artifact_delete`, the route every delete of a page takes
+ *     down to db artifacts.ts `dropArtifactRows`): its open card no longer
+ *     waits on Caw, and what Caw settled there still counts as decided. On
+ *     main the open card counted for good: nothing cascades from a page's
+ *     row to the ledger.
  *
  *   bun scripts/probe-kit/run.ts picked-cards-leave
  */
@@ -332,9 +338,73 @@ const run = async (kit: Kit): Promise<void> => {
 
     // (g) A row stuck before this change, taken back once as the hub starts.
     await stuckOnce(kit, db, pageId, writer);
+
+    // (h) A page deleted with a card still open on Caw.
+    await deletedPage(kit, { call, recordOf, shown, db, writer, sent });
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
+};
+
+/**
+ * (h) Page `later`, made by the writer, its `look` open on Caw and its
+ * `words` settled by Caw, then deleted as `artifact_delete` deletes it.
+ */
+const deletedPage = async (
+  { check }: Kit,
+  on: {
+    call: (request: HubRequest) => Promise<Answer>;
+    db: HubDb;
+    recordOf: (member: string) => Promise<Record>;
+    sent: (card: string, route: string, instanceId: string) => CardSettlingRow;
+    shown: (record: Record) => string;
+    writer: string;
+  }
+): Promise<void> => {
+  const { call, db, recordOf, sent, shown, writer } = on;
+  const made = await call(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: writer },
+      body: {
+        kind: "page",
+        does: "pick",
+        name: "later",
+        title: "Plan the office's later board",
+        ask: "Pick how the later board looks",
+        program: PROGRAM,
+      },
+    })
+  );
+  const laterId = (made.json as { id?: string } | undefined)?.id;
+  if (!laterId) {
+    throw new Error(`later was not made (${made.status}): ${made.text}`);
+  }
+  const before = await recordOf("caw");
+  db.decides.putSettlings([
+    { ...sent("look", "caw", CAW), artifactId: laterId },
+    {
+      ...sent("words", "caw", CAW),
+      artifactId: laterId,
+      settledAt: new Date(),
+    },
+  ]);
+  const seeded = await recordOf("caw");
+  const removed = await call(
+    hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
+      path: { id: writer, artifact: laterId },
+      query: { by: "agent" },
+    })
+  );
+  const after = await recordOf("caw");
+  check(
+    "h: later deleted: its open card no longer waits on Caw, and what Caw settled there stays decided",
+    removed.status < 400 &&
+      seeded.waiting === before.waiting + 1 &&
+      seeded.decided === before.decided + 1 &&
+      after.waiting === before.waiting &&
+      after.decided === before.decided + 1,
+    `before ${shown(before)}; with later ${shown(seeded)}; delete ${removed.status}${removed.status < 400 ? "" : `: ${removed.text}`}; after ${shown(after)}`
+  );
 };
 
 /**
@@ -430,6 +500,7 @@ const stuckOnce = async (
       migrated.add(name);
     },
   };
+  const { decided } = db.decides.record("caw");
   const first = settling.takeBackPickedOnce?.(once);
   const second = settling.takeBackPickedOnce?.(once);
   const old = db.decides.settling(STUCK, "old-pick");
@@ -442,7 +513,7 @@ const stuckOnce = async (
       old?.settledAt === null &&
       old?.takenBackAt?.toISOString() === pickedAt &&
       open?.takenBackAt === null &&
-      caw.decided === 0,
+      caw.decided === decided,
     `first ${String(first)}, second ${String(second)}; old-pick taken back ${old?.takenBackAt?.toISOString() ?? "never"}, still-open taken back ${open?.takenBackAt?.toISOString() ?? "never"}; page ${pageId} aside`
   );
 };
