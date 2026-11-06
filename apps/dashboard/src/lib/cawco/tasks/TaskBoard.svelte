@@ -39,8 +39,11 @@
   import { byRank } from "@cawco/core/task-views";
   import type { StageKind } from "@cawco/core/views";
   import { tick } from "svelte";
+  import { crossed } from "#lib/cawco/drag/crossing.js";
   import DragProvider, {
     type DragData,
+    type DragMove,
+    type DragOver,
   } from "#lib/cawco/drag/DragProvider.svelte";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import {
@@ -239,6 +242,35 @@
   );
   /** While a card is in the air: the stages it may go to from where it was. */
   const open = $derived(carried === null ? null : allowedFrom(carried.from));
+  /**
+   * Where the card in the air stands, as it moves or comes over something:
+   * into another column it may go to, where the hub's order puts it there;
+   * over another card of its own column, that card's place, once the hand
+   * has crossed its middle (drag/crossing), so the card that made room is
+   * not taken back while it is still in flight.
+   */
+  function place(event: DragOver | DragMove) {
+    const { target } = event.operation;
+    const to = stageOf(target);
+    if (!carried || to === null || !(to === carried.from || open?.has(to))) {
+      return;
+    }
+    if (columnOf(to) !== columnOf(carried.to)) {
+      carried = { ...carried, to, at: null };
+      return;
+    }
+    const ids = (byStage.get(columnOf(to)) ?? []).map((task) => task.id);
+    const at = target ? ids.indexOf(String(target.id)) : -1;
+    const from = ids.indexOf(carried.id);
+    if (
+      at >= 0 &&
+      at !== from &&
+      String(target?.id) !== carried.id &&
+      crossed(event, from, at)
+    ) {
+      carried = { ...carried, to, at };
+    }
+  }
   /** The stage a column or card the card is over stands in. */
   const stageOf = (thing: { data: unknown } | null): string | null => {
     const stage = (thing?.data as DragData | undefined)?.stage;
@@ -328,28 +360,8 @@
           onrank?.(was.id, ranks);
         }
       }}
-      onDragOver={(event) => {
-        const { target } = event.operation;
-        const to = stageOf(target);
-        if (
-          !carried ||
-          to === null ||
-          !(to === carried.from || open?.has(to))
-        ) {
-          return;
-        }
-        if (columnOf(to) !== columnOf(carried.to)) {
-          // Into another column: where the hub's order puts it there.
-          carried = { ...carried, to, at: null };
-          return;
-        }
-        // Over another card of its column: it takes that card's place.
-        const ids = (byStage.get(columnOf(to)) ?? []).map((task) => task.id);
-        const at = target ? ids.indexOf(String(target.id)) : -1;
-        if (at >= 0 && String(target?.id) !== carried.id) {
-          carried = { ...carried, to, at };
-        }
-      }}
+      onDragMove={place}
+      onDragOver={place}
       onDragStart={(event) => {
         const id = String(event.operation.source?.id ?? "");
         const from = tasks.find((task) => task.id === id)?.stage;

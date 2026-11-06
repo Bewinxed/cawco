@@ -49,8 +49,10 @@
     /** What the pointer takes it by: the thing itself, or its `data-drag-grab` part (DragData). */
     takenBy?: "thing" | "grab";
     /**
-     * Its place moves on the house's slide; off where its list slides its
-     * own (a pane's tab strip).
+     * Its place moves on the house's slide; off where its list moves its
+     * rows itself (a pane's tab strip, a list with `reflow()`): two clocks
+     * on one row start a second flight from where the first had got to,
+     * and the row jumps.
      */
     slides?: boolean;
     /** More for whoever hears the drag (its stage, its page). */

@@ -236,7 +236,10 @@
     modifiers,
   });
   // Handed in, the provider leaves it standing as it goes: it goes with this.
-  $effect(() => () => manager.destroy());
+  $effect(() => () => {
+    manager.destroy();
+    handing?.close();
+  });
 
   /** The thing in the hand, while there is one. */
   let held: Lifted | null = null;
@@ -258,14 +261,14 @@
   /** The page's one line for what a drag says, under everything. */
   let line: HTMLElement | null = null;
   $effect(() => {
-    const said = document.createElement("p");
-    said.className = "sr-only";
-    said.setAttribute("aria-live", "assertive");
-    said.setAttribute("aria-atomic", "true");
-    document.body.append(said);
-    line = said;
+    const region = document.createElement("p");
+    region.className = "sr-only";
+    region.setAttribute("aria-live", "assertive");
+    region.setAttribute("aria-atomic", "true");
+    document.body.append(region);
+    line = region;
     return () => {
-      said.remove();
+      region.remove();
       line = null;
     };
   });
@@ -386,9 +389,44 @@
     }
   }
 
+  /**
+   * What the page does as the thing moves runs between frames, never inside
+   * one. dnd kit hears the pointer in a frame's callbacks (its scheduler);
+   * a list changed there was laid out and painted in its new order that
+   * same frame, before the list's own motion (`reflow`, which reads in a
+   * frame's callbacks) could hold each row where it stood: the card making
+   * room was drawn one frame where it was going, then flew there from where
+   * it had been, a jump on every crossing. Changed between frames, the next
+   * frame's callbacks hold every row where it stood before anything is
+   * painted. What it hands on reads the moment it happened (the event's
+   * own snapshot), and a page whose drag has ended by then does nothing.
+   */
+  const hand = new Set<() => void>();
+  let handing: MessagePort | null = null;
+  const betweenFrames = (run: () => void) => {
+    if (!handing) {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        const runs = [...hand];
+        hand.clear();
+        for (const one of runs) {
+          one();
+        }
+      };
+      handing = channel.port2;
+    }
+    hand.add(run);
+    handing.postMessage(null);
+  };
+
   function over(event: DragOver) {
-    onDragOver?.(event);
-    // Said once the move it makes is drawn.
+    betweenFrames(() => {
+      onDragOver?.(event);
+      said();
+    });
+  }
+  /** Said once the move it makes is drawn. */
+  function said() {
     tick().then(() => {
       standOnPlace();
       const now = whereNow();
@@ -408,7 +446,12 @@
       }
     }
     held?.move(event.operation.position.current.x);
-    onDragMove?.(event);
+    // The keys step from one thing to the next (each step a dragover);
+    // their moves (the step's travel, settling on its place) cross nothing.
+    const keys = event.operation.activatorEvent instanceof KeyboardEvent;
+    if (onDragMove && !keys) {
+      betweenFrames(() => onDragMove?.(event));
+    }
   }
   function end(event: DragEnd) {
     redrawn?.disconnect();

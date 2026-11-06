@@ -277,14 +277,10 @@
      and a short stage stands beside a tall one without the grid moving; on
      a phone each card is as tall as its words. -->
 <DragProvider
-  onDragEnd={(event) => {
-    const move = order.end(keys, event);
-    if (move) {
-      reorder(move.from, move.to);
-    }
-  }}
-  onDragOver={(event) => order.over(event)}
-  onDragStart={() => order.start(keys)}
+  {...order.handlers(
+    () => keys,
+    (move) => reorder(move.from, move.to)
+  )}
 >
   <div
     bind:this={grid}

@@ -270,6 +270,7 @@
     {index}
     label={item.title}
     of={shown.length}
+    slides={false}
     takenBy="grab"
   >
     {#snippet children(thing)}
@@ -338,14 +339,10 @@
     data-page={page}
   >
     <DragProvider
-      onDragEnd={(event) => {
-        const move = order.end(shownIds, event);
-        if (move) {
-          dropped(move.from, move.to);
-        }
-      }}
-      onDragOver={(event) => order.over(event)}
-      onDragStart={() => order.start(shownIds)}
+      {...order.handlers(
+        () => shownIds,
+        (move) => dropped(move.from, move.to)
+      )}
     >
       <div
         data-slot="blocks"

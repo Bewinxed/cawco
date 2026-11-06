@@ -1,18 +1,17 @@
 /**
  * A list's order while one of its things is in the air (DragProvider): the
  * others make room as it passes, so the list on screen is a held copy that
- * each pass moves (dnd kit's `move`), and the list itself is written once,
+ * each crossing moves (the hand past the middle of the one it is over,
+ * drag/crossing), and the list itself is written once,
  * at the drop, where the copy last stood. Escape lets the copy go: the
  * list stands as it was, and the thing flies back to its place.
  *
  *   const order = new LiveOrder();
  *   const shown = $derived(order.shown(ids));
- *   <DragProvider onDragStart={() => order.start(ids)}
- *     onDragOver={(e) => order.over(e)}
- *     onDragEnd={(e) => { const m = order.end(ids, e); if (m) write(m.from, m.to); }}>
+ *   <DragProvider {...order.handlers(() => ids, (m) => write(m.from, m.to))}>
  */
-import { move } from "@dnd-kit/helpers";
-import type { DragEnd, DragOver } from "./DragProvider.svelte";
+import { crossed } from "./crossing";
+import type { DragEnd, DragMove, DragOver } from "./DragProvider.svelte";
 
 /** A thing's move, from its place in the list to its new one. */
 export interface Moved {
@@ -34,11 +33,40 @@ export class LiveOrder {
     this.held = [...order];
   }
 
-  /** It passed over another of the list: the others make room. */
-  over(event: DragOver): void {
-    if (this.held) {
-      this.held = move(this.held, event);
+  /**
+   * It moved, or came over another of the list: once the hand has crossed
+   * that one's middle it takes its place, and the others make room.
+   */
+  over(event: DragOver | DragMove): void {
+    const { held } = this;
+    const { source, target } = event.operation;
+    if (!(held && source && target)) {
+      return;
     }
+    const from = held.indexOf(String(source.id));
+    const to = held.indexOf(String(target.id));
+    if (from < 0 || to < 0 || from === to || !crossed(event, from, to)) {
+      return;
+    }
+    this.held = held.toSpliced(from, 1).toSpliced(to, 0, String(source.id));
+  }
+
+  /**
+   * A DragProvider's handlers for a list whose order is `order()`: `write`
+   * hears the thing's move once, at the drop.
+   */
+  handlers(order: () => readonly string[], write: (move: Moved) => void) {
+    return {
+      onDragStart: () => this.start(order()),
+      onDragMove: (event: DragMove) => this.over(event),
+      onDragOver: (event: DragOver) => this.over(event),
+      onDragEnd: (event: DragEnd) => {
+        const move = this.end(order(), event);
+        if (move) {
+          write(move);
+        }
+      },
+    };
   }
 
   /**

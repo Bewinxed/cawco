@@ -71,19 +71,15 @@
     {words.order}
   </p>
   <DragProvider
-    onDragEnd={(event) => {
-      const move = held.end(order, event);
-      if (move) {
-        const ids = [...order];
-        const [id] = ids.splice(move.from, 1);
-        if (id !== undefined) {
-          ids.splice(move.to, 0, id);
-          onchange(ids);
-        }
-      }
-    }}
-    onDragOver={(event) => held.over(event)}
-    onDragStart={() => held.start(order)}
+    {...held.handlers(
+      () => order,
+      (move) =>
+        onchange(
+          order
+            .toSpliced(move.from, 1)
+            .toSpliced(move.to, 0, order[move.from] ?? "")
+        )
+    )}
   >
     <ol
       data-slot="list"

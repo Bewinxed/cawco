@@ -25,6 +25,7 @@
  * than one of them not existing, the menu carrying the same commands.
  */
 import { move as moveAmong } from "@dnd-kit/helpers";
+import { crossed } from "../drag/crossing";
 import type {
   DragData,
   DragEnd,
@@ -235,10 +236,24 @@ export const workspaceDrag = {
   },
 
   /** A tab over another tab: the strips make room for it, its own or another's. */
-  over(event: DragOver) {
-    if (carry.strips && carry.data?.kind === "tab") {
-      carry.strips = moveAmong(carry.strips, event);
+  over(event: DragOver | DragMove) {
+    const { strips, data } = carry;
+    const { source, target } = event.operation;
+    if (!(strips && data?.kind === "tab" && source && target)) {
+      return;
     }
+    // Along its own strip it takes a tab's place once the hand has
+    // crossed that tab's middle (drag/crossing): the strip slides its tabs
+    // on its own clock, and a tab still in flight is not taken back.
+    const own = Object.values(strips).find((ids) =>
+      ids.includes(data.sessionId)
+    );
+    const from = own?.indexOf(data.sessionId) ?? -1;
+    const to = own?.indexOf(String(target.id)) ?? -1;
+    if (to >= 0 && from >= 0 && !crossed(event, from, to)) {
+      return;
+    }
+    carry.strips = moveAmong(strips, event as DragOver);
   },
 
   /** Over a group's pane, the box the drop would fill; over a strip, a row joins that group. */
@@ -247,6 +262,7 @@ export const workspaceDrag = {
     if (!data) {
       return;
     }
+    workspaceDrag.over(event);
     const under = underHand(pointOf(event), data.leafId ?? null);
     if (under.kind === "pane") {
       showPaneHint(under.leafId, under.edge);

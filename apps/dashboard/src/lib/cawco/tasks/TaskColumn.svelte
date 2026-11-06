@@ -248,6 +248,11 @@
       bind:this={list}
       {@attach reflow()}
     >
+      <!-- One clock moves the cards: the list's own (`reflow`, each row's
+           `data-flip`, the slot held open for a card in the air with them).
+           dnd kit's slide on top of it started a second flight from where
+           the first had got to, and a card making room jumped back and ran
+           again (`slides={false}`). -->
       {#each drawn as task, index (task.id)}
         {#if stage !== undefined}
           <Sortable
@@ -258,6 +263,7 @@
             {index}
             label={task.title}
             of={count}
+            slides={false}
             type="task"
           >
             {#snippet children(thing)}
