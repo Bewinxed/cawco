@@ -626,6 +626,15 @@ export const sessionTakenDir = (): string =>
 export const claudeVersionPath = (): string =>
   join(cawcoDataDir(), "claude-version.json");
 
+/**
+ * The stages that answered as the agent last ended (agent stage.ts
+ * `carryStages`), which the next agent starts again at their ports
+ * (`resumeStages`): an agent's restart, which every update is, leaves each
+ * stage serving as it was.
+ */
+export const stagesCarriedPath = (): string =>
+  join(cawcoDataDir(), "stages-carried.json");
+
 /** Where an installed hub keeps its database (`cawco.db`) and the backups beside it. */
 const hubDataDir = (): string =>
   process.platform === "darwin"

@@ -274,7 +274,7 @@ import {
   sessionsOwedEnding,
 } from "./session-containers";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
-import { stopStages } from "./stage";
+import { carryStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
 import { beginToolSignin, completeToolSignin } from "./tool-signin";
@@ -2817,8 +2817,9 @@ export class SessionSupervisor {
   detach(): void {
     stopPreviews();
     closeCanvasScreens();
-    // A stage speaks to this daemon alone (its stdout): the next one starts it again on its next open.
-    stopStages();
+    // A stage speaks to this daemon alone (its stdout): each that answers is
+    // written down and ended, and the next daemon starts it again at its port.
+    carryStages();
     for (const instanceId of [...this.#sessions.keys()]) {
       this.#sessions.delete(instanceId);
       this.#forgetPulse(instanceId);

@@ -852,6 +852,9 @@ export const STAGE_SERVE = "stageServe";
 /** The daemon's control method that stops a workspace preview's server: its last artifact went. */
 export const STAGE_UNSERVE = "stageUnserve";
 
+/** The agent's log line, after a stage's name, once a stage it carried across its restart answers again (agent stage.ts `resumeStages`). */
+export const STAGE_RESUMED_SAID = "started again after the agent's restart";
+
 /** How long a stage has to answer once started. The spec's number. */
 export const STAGE_READY_MS = 60_000;
 

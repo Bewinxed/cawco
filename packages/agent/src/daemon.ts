@@ -321,6 +321,7 @@ import {
   ensureServed,
   ensureStage,
   renderStage,
+  resumeStages,
   StageRefusal,
   setStageSink,
   stageComponents,
@@ -3788,6 +3789,12 @@ const startDaemon = (rediscover = false) =>
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
     setStageSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    // Each stage that answered as the last agent ended, started again at its port (stage.ts `carryStages`).
+    resumeStages().catch((error: unknown) =>
+      console.warn(
+        `[stage] the stages the last agent carried were not started again: ${error instanceof Error ? error.message : String(error)}`
+      )
     );
     setStageCloneSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })

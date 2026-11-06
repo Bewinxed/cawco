@@ -34,7 +34,9 @@
  *   through a preview of it) and no use (a request, an agent's read, a
  *   decision page's warm-up); the next use wakes it;
  * - stops when its workspace is archived ({@link stopStages}), and with the
- *   daemon.
+ *   daemon, which writes down each stage that answers for the next daemon
+ *   to start again at its port ({@link carryStages}, {@link resumeStages}):
+ *   an agent's restart, an update's included, leaves it serving.
  *
  * Each change goes to the hub as a {@link StageFrame} ({@link setStageSink}),
  * which the hub keeps in the doc of each sheet the stage serves.
@@ -51,7 +53,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   mcpGatewayPort,
@@ -61,6 +63,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
+import { stagesCarriedPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
@@ -83,6 +86,7 @@ import {
   STAGE_IDLE_MS,
   STAGE_READY_MS,
   STAGE_RESTARTS,
+  STAGE_RESUMED_SAID,
   STORIES_PATH,
   STORY_FILE,
   type StageError,
@@ -96,6 +100,7 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
+import { readRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { StageErrorSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
@@ -1379,6 +1384,13 @@ async function stageAtRoot(found: StagePlace, by: string): Promise<Stage> {
   return stage;
 }
 
+/** The stage of toolchain root `root` (absolute, in `tree`), its project installed first; started or woken by `by`, and waited on. */
+async function rootStage(tree: Tree, root: string, by: string): Promise<Stage> {
+  await installedFor(tree, root);
+  // The stage is found from a file of the root: a file in it stands in for a story.
+  return stageAtRoot(stageFor(tree, join(root, "package.json"), true), by);
+}
+
 /** The stage story file `story` (absolute, in `tree`) runs on, its place's project installed first; started or woken by `by`, and waited on. */
 async function storyStage(
   tree: Tree,
@@ -1634,12 +1646,7 @@ export async function stageComponents(
         : `${workspace.path} has no vite.config, astro.config or nuxt.config, so it has no components a sheet shows. ${AS_PAGE}`
     );
   }
-  await installedFor(tree, root);
-  // The stage is found from a file of the root: a file in it stands in for a story.
-  const stage = await stageAtRoot(
-    stageFor(tree, join(root, "package.json"), true),
-    "a components list"
-  );
+  const stage = await rootStage(tree, root, "a components list");
   // The map's folder from the toolchain root; the clone's root itself is the root's source folder.
   const inRoot = ask.dir ? relative(root, abs) : "";
   const query = new URLSearchParams();
@@ -1789,7 +1796,8 @@ async function wake(stage: Stage, by: string, restart = true): Promise<void> {
  */
 export async function ensureServed(
   workspace: WorkspaceRef,
-  serve: ServeSpec
+  serve: ServeSpec,
+  by = "artifact_create's serve"
 ): Promise<StageState> {
   const found = servedFor(workspace, serve);
   let stage = stages.get(found.key);
@@ -1804,7 +1812,7 @@ export async function ensureServed(
   const fresh = !stage;
   stage ??= newStage(found);
   try {
-    await wake(stage, "artifact_create's serve");
+    await wake(stage, by);
   } catch (error) {
     if (fresh) {
       stopOne(stage);
@@ -1928,12 +1936,165 @@ function stopOne(stage: Stage): void {
 }
 
 /** Stops every stage of workspace `id` (its archive), or every stage (the daemon's end). */
-export function stopStages(id?: string): void {
+function stopStages(id?: string): void {
   for (const stage of [...stages.values()]) {
     if (id === undefined || stage.workspace.id === id) {
       stopOne(stage);
     }
   }
+}
+
+/**
+ * What a stage that answered as the daemon ended carries to the next daemon
+ * ({@link carryStages}, {@link resumeStages}): its workspace, what it runs
+ * (a sheet's toolchain root; a server's command, folder and port) and its
+ * last use, so its idle time goes on counting from there.
+ */
+const CarriedStageSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("sheet"),
+    workspace: z.string(),
+    dir: z.string(),
+    lastUse: z.number(),
+  }),
+  z.object({
+    kind: z.literal("serve"),
+    workspace: z.string(),
+    command: z.string(),
+    cwd: z.string(),
+    port: z.number(),
+    lastUse: z.number(),
+  }),
+]);
+const CarriedStagesSchema = z.array(CarriedStageSchema);
+type CarriedStage = z.infer<typeof CarriedStageSchema>;
+
+/** Whether a stage answers or is on its way to: what an agent's restart carries. One asleep or in `error` waits for its next use, as before. */
+const answering = (stage: Stage): boolean =>
+  stage.status === "live" ||
+  stage.status === "starting" ||
+  stage.status === "waking";
+
+const carriedOf = (stage: Stage): CarriedStage => {
+  // A viewer's socket ends with this daemon; it was a use until now.
+  const lastUse = stage.viewers > 0 ? Date.now() : stage.lastUse;
+  return stage.runs.kind === "sheet"
+    ? { kind: "sheet", workspace: stage.workspace.id, dir: stage.dir, lastUse }
+    : {
+        kind: "serve",
+        workspace: stage.workspace.id,
+        command: stage.runs.command,
+        cwd: stage.dir,
+        port: stage.port,
+        lastUse,
+      };
+};
+
+/**
+ * The daemon's end: each stage that answers is written down for the next
+ * daemon to start again ({@link resumeStages}), then every stage is ended.
+ * A stage speaks to this daemon alone (its stdout), so none is left running;
+ * without the record, one with no viewer stayed down after every restart,
+ * an update's included, until a new artifact or a preview's request woke it.
+ */
+export function carryStages(): void {
+  const carried = [...stages.values()].filter(answering).map(carriedOf);
+  try {
+    writeStateFileSync(stagesCarriedPath(), `${JSON.stringify(carried)}\n`);
+  } catch (error) {
+    console.warn(
+      `[stage] the ${carried.length} stage(s) that answer were not written down for the next agent: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  stopStages();
+}
+
+/** The stages the last daemon carried ({@link carryStages}), the record taken as read; none when it left none or the record is damaged. */
+async function carriedStages(): Promise<CarriedStage[]> {
+  const file = stagesCarriedPath();
+  try {
+    return (await readRecord(file, CarriedStagesSchema)) ?? [];
+  } catch (error) {
+    console.warn(
+      `[stage] what the last agent carried was not read: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return [];
+  } finally {
+    await rm(file, { force: true });
+  }
+}
+
+/** What started a carried stage again, as its use says it. */
+const RESUMED_BY = "the agent's restart";
+
+/** One carried stage started again at its port, its last use kept; nothing when its workspace is gone, or it started since. */
+async function resumeOne(
+  carried: CarriedStage,
+  refs: WorkspaceRef[]
+): Promise<void> {
+  const ref = refs.find((one) => one.id === carried.workspace);
+  if (!ref) {
+    console.info(
+      `[stage] ${carried.workspace.slice(0, 8)} ${carried.kind === "sheet" ? carried.dir : `port ${carried.port}`}: not started again, its workspace is no longer on this machine`
+    );
+    return;
+  }
+  let stage: Stage;
+  if (carried.kind === "sheet") {
+    if (stages.has(sheetKey(ref.id, carried.dir))) {
+      return;
+    }
+    const tree = await treeOf(ref);
+    stage = await rootStage(tree, join(tree.folder, carried.dir), RESUMED_BY);
+  } else {
+    if (stages.has(serveKey(ref.id, carried.port))) {
+      return;
+    }
+    await ensureServed(
+      ref,
+      { command: carried.command, cwd: carried.cwd, port: carried.port },
+      RESUMED_BY
+    );
+    const served = stages.get(serveKey(ref.id, carried.port));
+    if (!served) {
+      return;
+    }
+    stage = served;
+  }
+  // Its idle time goes on from its last use before the restart, never anew.
+  if (stage.viewers === 0) {
+    stage.lastUse = Math.min(stage.lastUse, carried.lastUse);
+  }
+  console.info(
+    `[stage] ${ref.id.slice(0, 8)} ${carried.kind === "sheet" ? carried.dir : `port ${carried.port}`}: ${STAGE_RESUMED_SAID}`
+  );
+}
+
+/**
+ * The daemon's start: each stage the last daemon carried ({@link
+ * carryStages}) started again at the same port (a sheet's is its key's, a
+ * server's its own), as it would be on its next use, with no viewer or
+ * artifact asked of it. One whose idle time ran out while no daemon ran
+ * stays asleep: its next use wakes it. One that cannot start is in `error`
+ * as any start's failure is, and said.
+ */
+export async function resumeStages(): Promise<void> {
+  const carried = (await carriedStages()).filter(
+    (one) => Date.now() - one.lastUse <= IDLE_MS
+  );
+  if (carried.length === 0) {
+    return;
+  }
+  const refs = await workspaceRefs();
+  await Promise.all(
+    carried.map((one) =>
+      resumeOne(one, refs).catch((error: unknown) =>
+        console.warn(
+          `[stage] ${one.workspace.slice(0, 8)} ${one.kind === "sheet" ? one.dir : `port ${one.port}`}: not started again after the agent's restart: ${error instanceof Error ? error.message : String(error)}`
+        )
+      )
+    )
+  );
 }
 
 /** Stops the server on `port` of workspace `workspace`: its last artifact went. Whether one ran. */
