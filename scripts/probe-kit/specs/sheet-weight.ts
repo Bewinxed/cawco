@@ -304,8 +304,9 @@ const stageChecks = async (kit: Kit) => {
     // states file, each two-word label's gap between its words' text boxes
     // (a Range over each word), at the canvas's scale undone, against the
     // others', and what the label is in the DOM.
+    // Every story at once, as a decision page's Preview draws them (`by=embed`): the canvas's own page stands at one state.
     await page.goto(
-      `${base}/@cawco/canvas?file=${encodeURIComponent(EMPTY_STARTS)}`,
+      `${base}/@cawco/canvas?file=${encodeURIComponent(EMPTY_STARTS)}&by=embed`,
       { waitUntil: "load" }
     );
     await page.waitForFunction(

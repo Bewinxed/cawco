@@ -549,6 +549,67 @@ function faultCard(
   return card;
 }
 
+/**
+ * A story drawn in `body`, in `column`, read for the render report at
+ * `box`: drawn, empty, or failed with why (its mount threw, its own width
+ * is one the stage can't read, it drew at its body's floor); its first
+ * words and the parts it is made of.
+ */
+function drawingRender(
+  page: Page,
+  story: Story,
+  body: HTMLElement,
+  column: Column,
+  error: PageError | undefined,
+  box: FrameRender["box"]
+): FrameRender {
+  let drawnAs: FrameRender["state"] = "empty";
+  let said = error;
+  if (said) {
+    drawnAs = "failed";
+  } else if (story.formUnread && page.view.widths === null) {
+    // Its own width is one the stage can't read: drawn at none, it would pass for drawn at a width it never asked for.
+    said = {
+      message: story.formUnread,
+      file: null,
+      line: null,
+      column: null,
+    };
+    drawnAs = "failed";
+  } else if (drew(body)) {
+    said = page.atFloor(story, column.width, body) ?? undefined;
+    drawnAs = said ? "failed" : "drawn";
+  }
+  return {
+    story: story.name,
+    label: story.label,
+    form: page.formWords(story, column.width),
+    interaction: column.interaction,
+    scheme: page.schemeOf(column),
+    width: box.w,
+    state: drawnAs,
+    box,
+    text: firstWords(body),
+    parts: partsOf(body, page.root),
+    ...(said ? { error: said } : {}),
+  };
+}
+
+/**
+ * A story's own outermost element in its drawing's body: past every box-less
+ * wrapper a decorator mounts it in (the Svelte adapter mounts a decorated
+ * story in a `display: contents` child, host.ts `mountSvelte`, and the
+ * project's preview file decorates every story). Read as the wrapper, the
+ * drawing measured 0 wide and the design graph's stage stood a sliver.
+ */
+function ownRoot(body: HTMLElement): HTMLElement | null {
+  let el = body.firstElementChild as HTMLElement | null;
+  while (el?.firstElementChild && getComputedStyle(el).display === "contents") {
+    el = el.firstElementChild as HTMLElement;
+  }
+  return el;
+}
+
 /** What stands for the drawings until the first mounts, seen only past the wait's grace (DESIGN.md's Real Wait Rule). */
 function waitingFor(name: string): HTMLElement {
   const waiting = document.createElement("div");
@@ -678,7 +739,7 @@ export function bootStage(page: Page): Mode {
   if (page.by === "embed" || page.by === "map") {
     return bootColumn(page);
   }
-  const { rig, root, sections, state, view } = page;
+  const { rig, sections, state, view } = page;
   /**
    * A panel frames the page and says what it stands at; a page on its own
    * (the stage's render, the canvas opened in its own tab) stands at its
@@ -750,8 +811,7 @@ export function bootStage(page: Page): Mode {
   const reads: Reads = new Map();
 
   /** Whether `el` is the drawing's root: its body, or the story's own outermost element. */
-  const rootOf = (el: Element) =>
-    el === drawing || el === drawing.firstElementChild;
+  const rootOf = (el: Element) => el === drawing || el === ownRoot(drawing);
 
   /** Tells the panel, through the overlay (preview-overlay page.ts relays each to the pane). */
   const tell = <Message extends object>(type: string, message: Message) =>
@@ -1409,7 +1469,7 @@ export function bootStage(page: Page): Mode {
    * null where it fills the width.
    */
   function fitAt(key: string, width: number): number | null {
-    const own = drawing.firstElementChild as HTMLElement | null;
+    const own = ownRoot(drawing);
     // Read at 1:1: a box on screen stands at the frame's zoom.
     const zoomed = Number(frame.style.zoom) || 1;
     if (own) {
@@ -2043,45 +2103,19 @@ export function bootStage(page: Page): Mode {
   };
 
   /** A story read as the rig drew it, in `column`, its box at `y` in the section's column of reads. */
-  function rigRender(
+  const rigRender = (
     story: Story,
     body: HTMLElement,
     column: Column,
     error: PageError | undefined,
     y: number
-  ): FrameRender {
-    const box = { x: 0, y, w: body.offsetWidth, h: body.offsetHeight };
-    let drawnAs: FrameRender["state"] = "empty";
-    let said = error;
-    if (said) {
-      drawnAs = "failed";
-    } else if (story.formUnread && view.widths === null) {
-      // Its own width is one the stage can't read: drawn at none, it would pass for drawn at a width it never asked for.
-      said = {
-        message: story.formUnread,
-        file: null,
-        line: null,
-        column: null,
-      };
-      drawnAs = "failed";
-    } else if (drew(body)) {
-      said = page.atFloor(story, column.width, body) ?? undefined;
-      drawnAs = said ? "failed" : "drawn";
-    }
-    return {
-      story: story.name,
-      label: story.label,
-      form: page.formWords(story, column.width),
-      interaction: column.interaction,
-      scheme: page.schemeOf(column),
-      width: box.w,
-      state: drawnAs,
-      box,
-      text: firstWords(body),
-      parts: partsOf(body, root),
-      ...(said ? { error: said } : {}),
-    };
-  }
+  ): FrameRender =>
+    drawingRender(page, story, body, column, error, {
+      x: 0,
+      y,
+      w: body.offsetWidth,
+      h: body.offsetHeight,
+    });
 
   /** The column a section's stories are read in: the view's scheme, its width picked or each story's own. */
   const rigColumn = (): Column => ({
@@ -2637,6 +2671,8 @@ function bootColumn(page: Page): Mode {
     one.body.dataset.cawcoState = drew(one.body) ? "drawn" : "empty";
     one.laid = true;
     changed();
+    // What the page's own report reads of it, read again once it has been quiet a moment.
+    page.later();
   }
 
   /**
@@ -2705,11 +2741,13 @@ function bootColumn(page: Page): Mode {
     : null;
   const changed = () => (teller ? teller.changed() : fit());
 
+  /** How much a map card's column is scaled to fit the card; 1 for a Preview. */
+  let zoom = 1;
   /** A map card's column zoomed to the card's width, never past 1. */
   function fit(): void {
     const box = canvas.getBoundingClientRect();
     const width = column.scrollWidth || box.width;
-    const zoom = Math.max(
+    zoom = Math.max(
       CARD_ZOOM_MIN,
       Math.min(1, (box.width - 2 * CARD_INSET.x) / width)
     );
@@ -2863,9 +2901,28 @@ function bootColumn(page: Page): Mode {
             ]
           : []
       ),
-    // A column posts no report.
+    // A column posts no report: what it reads of its drawings is the page's own (`__cawcoCanvas.report`).
     drawing: () => [],
-    framesOf: () => null,
+    framesOf: (section) =>
+      section.loaded
+        ? [...partOf(section).drawings.values()].map((one) => {
+            const at = column.getBoundingClientRect();
+            const box = one.body.getBoundingClientRect();
+            return drawingRender(
+              page,
+              one.target.story,
+              one.body,
+              columnOf(),
+              one.live?.into.error,
+              {
+                x: Math.round((box.left - at.left) / zoom),
+                y: Math.round((box.top - at.top) / zoom),
+                w: one.body.offsetWidth,
+                h: one.body.offsetHeight,
+              }
+            );
+          })
+        : null,
     mediaWidth: () => {
       // Asked between mounts: at the one width every drawing has.
       const widths = new Set(drawn().map(widthOf));
