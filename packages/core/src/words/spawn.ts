@@ -40,6 +40,21 @@ export const spawnWords = {
       provider: string
     ) =>
       `${harness} on ${machine} has no sign-in or key for ${provider}, so it cannot run ${model}.`,
+    /** The harness there has read its models and lists none. */
+    noneListed: (harness: string, machine: string, model: string) =>
+      `${harness} on ${machine} lists no models, so it cannot run ${model}.`,
+    /**
+     * The harness there has not listed its models yet (a fresh install, a
+     * read that failed: `why`, the machine's words), so a model can't be
+     * judged and nothing starts on one.
+     */
+    unread: (
+      harness: string,
+      machine: string,
+      model: string,
+      why: string | undefined
+    ) =>
+      `${harness} on ${machine} hasn't listed its models yet, so nothing starts on ${model} there.${why ? ` ${why}` : ""} Start on its default model, or once its models are listed.`,
     /** Added when the model asked for is a harness's name. */
     harnessNamed: (model: string) =>
       `${model} is a harness, not a model. Choose it as the harness.`,

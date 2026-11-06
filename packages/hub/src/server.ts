@@ -513,6 +513,7 @@ import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import {
+  type ModelListing,
   modelNameIn,
   namedModels,
   unlistedModelRefusal,
@@ -5110,18 +5111,63 @@ export const createServer = (
     }
   };
   /**
+   * What `harness` lists on `machineId` (core `ModelListing`): Claude Code's
+   * rows read once an account signed in there has its catalog read (the
+   * hub's account catalogs), else unread with the hub's last fault reading
+   * one; OpenCode's and pi's read once the machine's report carries its
+   * `models` (empty when it read none), else unread with the machine's
+   * `modelsUnread`. Unread is what a machine that just installed the
+   * harness, or whose read failed, reports: never taken as a list to admit
+   * any model by.
+   */
+  const modelListing = (
+    machineId: string,
+    harness: HarnessKind
+  ): ModelListing => {
+    if (harness === "claude") {
+      const signedIn = db.accounts
+        .signins()
+        .filter(
+          (signin) =>
+            signin.state === "signed-in" && signin.machineId === machineId
+        )
+        .map((signin) => signin.accountId);
+      const read = db.accounts
+        .catalogs()
+        .filter((catalog) => signedIn.includes(catalog.accountId));
+      if (read.length > 0) {
+        return { read: true, rows: read.flatMap((catalog) => catalog.models) };
+      }
+      const why = signedIn
+        .map((account) => catalogFaults.get(account))
+        .find((fault) => fault !== undefined);
+      return { read: false, ...(why ? { why } : {}) };
+    }
+    const report = db
+      .listAgents()
+      .find((machine) => machine.machineId === machineId)
+      ?.harnesses?.find((one) => one.harness === harness);
+    if (report?.models) {
+      return { read: true, rows: report.models };
+    }
+    return {
+      read: false,
+      ...(report?.modelsUnread ? { why: report.modelsUnread } : {}),
+    };
+  };
+  /**
    * Why a `harness` session on `machineId` may not start on `model`: one the
-   * harness does not take there, judged by core `modelListed` against the
-   * rows it lists ({@link harnessModels}: Claude Code's account catalogs,
-   * OpenCode's and pi's machine reports) and Claude Code's aliases and full
-   * model names, so a model the harness never offers (a harness's name
-   * asked as a model, Claude Code started on "pi" 2026-11-02; a model
-   * OpenCode's catalog dropped, `opencode-go/deepseek-v4-flash` 2026-10-14)
-   * is refused before its session is made rather than at its first turn. It
+   * harness does not take there, judged by core `unlistedModelRefusal`
+   * against what it lists ({@link modelListing}) and Claude Code's aliases
+   * and full model names, so a model the harness never offers (a harness's
+   * name asked as a model, Claude Code started on "pi" 2026-11-02; a model
+   * OpenCode's catalog dropped, `opencode-go/deepseek-v4-flash` 2026-10-14;
+   * a model asked of a machine whose OpenCode had not listed its models
+   * yet, `opencode/deepseek-v4.1-flash` on niftybot.art 2026-11-06) is
+   * refused before its session is made rather than at its first turn. It
    * names the ids the harness lists, those from the asked id's provider and
-   * sharing its first word first (core `unlistedModelRefusal`). Undefined
-   * when it lists it, for no model named, and when the harness has listed no
-   * models there to judge by.
+   * sharing its first word first. Undefined when it lists it, and for no
+   * model named.
    */
   const modelRefusal = (
     machineId: string,
@@ -5133,7 +5179,7 @@ export const createServer = (
           harness,
           machineName(machineId),
           model,
-          harnessModels(harness, new Set([machineId]))
+          modelListing(machineId, harness)
         )
       : undefined;
   /** A new pi session that names no model, so pi's pick in its directory is asked first. */

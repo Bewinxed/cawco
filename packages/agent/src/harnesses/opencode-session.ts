@@ -3012,12 +3012,10 @@ export class OpencodeSession implements HarnessSession {
         (rows) =>
           this.#ctx.rejected(
             uuid,
-            unlistedModelRefusal(
-              "opencode",
-              machineLabel(hostname()),
-              model,
-              rows
-            ) ?? error
+            unlistedModelRefusal("opencode", machineLabel(hostname()), model, {
+              read: true,
+              rows,
+            }) ?? error
           ),
         () => this.#ctx.rejected(uuid, error)
       ),

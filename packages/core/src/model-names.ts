@@ -263,30 +263,53 @@ const MODEL_ID_WORD = /[-.]/u;
 const MODELS_NAMED = 12;
 
 /**
+ * What a harness lists on a machine: its rows once it has read them (none
+ * when it read and lists none), or unread, with the machine's words on why
+ * when it said them (`HarnessReport.modelsUnread`). A machine whose list is
+ * unread (OpenCode just installed, its read failed) is not one that lists
+ * nothing: neither admits a model it cannot judge.
+ */
+export type ModelListing =
+  | { readonly read: true; readonly rows: readonly ModelInfo[] }
+  | { readonly read: false; readonly why?: string };
+
+/**
  * Why a `harness` session on `machine` cannot run `model`, judged against
- * `rows`, the models the harness lists there ({@link modelListed}): undefined
- * when it lists it, and when it lists nothing to judge by. A model from a
- * provider it lists nothing from says that provider has no sign-in or key
- * there; any other names what it does list, those from the asked id's
- * provider and sharing its first word first. The hub's refusal of a start
- * (server.ts `modelRefusal`) and OpenCode's of a send (agent
- * opencode-session.ts, `provider.no-route`) say it in these words.
+ * `listing`, the models the harness lists there ({@link modelListed}):
+ * undefined when it lists it, and for what the harness takes with no list
+ * (its default, Claude Code's aliases and full model names). Any other
+ * model on a list not read yet is refused as unread, and one read empty
+ * as listing none: a model no list admits never starts to fail at its
+ * first send (niftybot.art's fresh OpenCode, `opencode/deepseek-v4.1-flash`,
+ * 2026-11-06). A model from a provider it lists nothing from says that
+ * provider has no sign-in or key there; any other names what it does list,
+ * those from the asked id's provider and sharing its first word first. The
+ * hub's refusal of a start (server.ts `modelRefusal`) and OpenCode's of a
+ * send (agent opencode-session.ts, `provider.no-route`) say it in these
+ * words.
  */
 export const unlistedModelRefusal = (
   harness: HarnessKind,
   machine: string,
   model: string,
-  rows: readonly ModelInfo[]
+  listing: ModelListing
 ): string | undefined => {
-  if (rows.length === 0 || modelListed(harness, rows, model)) {
+  const rows = listing.read ? listing.rows : [];
+  if (modelListed(harness, rows, model)) {
     return;
   }
   const name = accountsWords.harnesses[harness];
+  if (!listing.read) {
+    return spawnWords.unlistedModel.unread(name, machine, model, listing.why);
+  }
   const offered = [
     ...new Set(
       rows.map((one) => one.value).filter((value) => value !== "default")
     ),
   ];
+  if (offered.length === 0) {
+    return spawnWords.unlistedModel.noneListed(name, machine, model);
+  }
   const provider = providerOf(model);
   if (
     provider !== undefined &&

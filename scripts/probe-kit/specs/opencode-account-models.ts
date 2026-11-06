@@ -17,16 +17,32 @@
  *     dashboard writes it (`POST /api/accounts/:id/key`), and the machine's
  *     OpenCode report offers `mockgo/mock-go`, no session started;
  * (c) a session started on `mockgo/mock-go` runs on that account, its
- *     first send reaches the provider with the account's key, and is read.
+ *     first send reaches the provider with the account's key, and is read;
+ * (d) with the machine's OpenCode list unread (as a machine that just
+ *     installed OpenCode reports it: no `models`, its `modelsUnread`), a
+ *     start on a model it does not list is refused at once, saying the
+ *     list is unread, and makes no session. On 2026-11-06 niftybot.art's
+ *     fresh OpenCode took `opencode/deepseek-v4.1-flash` so, and the
+ *     session failed at its first send (`provider.no-route`): the hub
+ *     admitted any model on a machine whose rows were empty (core
+ *     `unlistedModelRefusal`);
+ * (e) with its list read and empty, the same start is refused, saying it
+ *     lists none;
+ * (f) none of it left OpenCode's shared background service (`opencode
+ *     serve --service`, which OpenCode 2.0's CLI starts for any command
+ *     that talks to a server without `--standalone`) running under the
+ *     fleet's HOME.
  *
- * Main fails (b), and (c) is refused as unlisted.
+ * Before 3aeb09a8e main failed (b), and (c) was refused as unlisted; before
+ * this leg's fix it failed (d) and (e).
  *
  *   bun scripts/probe-kit/run.ts opencode-account-models
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import { MACHINE, until } from "../../scratch-fleet";
+import { spawnWords } from "../../../packages/core/src/words/spawn";
+import { envOf, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The provider only the account's key opens, as models.dev names a provider. */
@@ -100,6 +116,93 @@ const catalogFor = async (fleet: KitFleet): Promise<string> => {
   return file;
 };
 
+/** A model no machine of the fleet lists: the one niftybot.art's fresh OpenCode took. */
+const UNLISTED = "opencode/deepseek-v4.1-flash";
+
+/** The machine's OpenCode report as the hub keeps it, its stored text. */
+const keptReport = (fleet: KitFleet): string => {
+  const [row] = fleet.query<{ report: string }>(
+    "SELECT report FROM agent_harnesses WHERE machine_id = ? AND harness = 'opencode'",
+    MACHINE
+  );
+  if (!row) {
+    throw new Error("the hub keeps no OpenCode report of the machine");
+  }
+  return row.report;
+};
+
+/**
+ * A dashboard start of OpenCode on {@link UNLISTED} while the hub keeps the
+ * machine's OpenCode report as `edit` makes it: the hub's refusal, in its
+ * log's words, or "started" when it made the session. The report is put
+ * back as it was after.
+ */
+const startUnder = async (
+  fleet: KitFleet,
+  edit: (report: Record<string, unknown>) => Record<string, unknown>
+): Promise<string> => {
+  const kept = keptReport(fleet);
+  const write = (report: string) =>
+    fleet.write(
+      "UPDATE agent_harnesses SET report = ? WHERE machine_id = ? AND harness = 'opencode'",
+      report,
+      MACHINE
+    );
+  write(JSON.stringify(edit(JSON.parse(kept) as Record<string, unknown>)));
+  try {
+    const mark = await fleet.logMark("hub");
+    const instanceId = crypto.randomUUID();
+    await fleet.post({
+      verb: "spawn",
+      machineId: MACHINE,
+      instanceId,
+      requestId: crypto.randomUUID(),
+      payload: {
+        instanceId,
+        cwd: fleet.workdir,
+        harness: "opencode",
+        model: UNLISTED,
+        title: "Unlisted model",
+        permissionMode: "bypassPermissions",
+      },
+    });
+    return await until(
+      "the hub's word on the start",
+      async () =>
+        (await mark.since())
+          .split("\n")
+          .find((line) => line.includes(spawnWords.refused)) ??
+        (fleet.instance(instanceId) ? "started" : undefined),
+      (said) => said.length > 0,
+      60_000
+    ).catch(() => "neither refused nor started");
+  } finally {
+    write(kept);
+  }
+};
+
+/** What splits a `ps` line into its fields. */
+const WHITESPACE = /\s+/u;
+
+/** Each `opencode serve --service` running under the fleet's HOME, by pid and command. */
+const sharedServices = async (fleet: KitFleet): Promise<string[]> => {
+  const listed = await Bun.$`ps -eo pid=,args=`.quiet().nothrow().text();
+  const found: string[] = [];
+  for (const line of listed.split("\n")) {
+    const [pid, ...args] = line.trim().split(WHITESPACE);
+    const command = args.join(" ");
+    if (
+      pid &&
+      command.includes("serve") &&
+      command.includes("--service") &&
+      (await envOf(Number(pid), "HOME")) === fleet.home
+    ) {
+      found.push(`${pid} ${command}`);
+    }
+  }
+  return found;
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   fleet.env.OPENCODE_MODELS_PATH = await catalogFor(fleet);
@@ -120,6 +223,32 @@ const run = async (kit: Kit) => {
     `(a) with no account, the machine's OpenCode offers no ${PROVIDER} model`,
     !before.some((value) => value.startsWith(`${PROVIDER}/`)),
     before.join(", ")
+  );
+
+  // (d) and (e): the hub's word on a start on a model the machine's
+  // OpenCode list does not hold, with that list unread and with it read
+  // empty.
+  const unread = await startUnder(fleet, (report) => {
+    const { models: _models, ...rest } = report;
+    return {
+      ...rest,
+      modelsUnread: "OpenCode's server here didn't list its models (probe).",
+    };
+  });
+  kit.check(
+    `(d) with the machine's OpenCode list unread, a start on ${UNLISTED} is refused at once, saying so`,
+    unread.includes(spawnWords.refused) &&
+      unread.includes("hasn't listed its models yet"),
+    unread
+  );
+  const none = await startUnder(fleet, (report) => ({
+    ...report,
+    models: [],
+  }));
+  kit.check(
+    `(e) with the machine's OpenCode list read and empty, a start on ${UNLISTED} is refused at once, saying it lists none`,
+    none.includes(spawnWords.refused) && none.includes("lists no models"),
+    none
   );
 
   const account = await fleet.api<{ id: string }>(
@@ -173,6 +302,13 @@ const run = async (kit: Kit) => {
       read?.state === "read" &&
       asked?.auth === `Bearer ${KEY}`,
     `account ${row?.account_id ?? "none"} (wanted ${account.id}); send ${read?.state ?? "none"}${read?.reason ? ` (${read.reason})` : ""}; provider asked ${asked ? `with ${asked.auth === `Bearer ${KEY}` ? "the account's key" : "another credential"}` : "never"}`
+  );
+
+  const services = await sharedServices(fleet);
+  kit.check(
+    "(f) no OpenCode shared background service (`serve --service`) runs under the fleet's HOME",
+    services.length === 0,
+    services.join("; ") || "none"
   );
 };
 
