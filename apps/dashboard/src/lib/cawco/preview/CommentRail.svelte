@@ -899,7 +899,9 @@
           onclick={() => {
             noting = !noting;
             noteRefused = null;
-          }}><span>{said.send}</span><span class="num">{held}</span></Button
+          }}
+          shape="capsule"
+          ><span>{said.send}</span><span class="num">{held}</span></Button
         >
       {/if}
     {/if}

@@ -471,7 +471,7 @@
             {#if artifact.createdAt}
               <span
                 data-slot="row-age"
-                class="text-ink-muted text-size-meta num"
+                class="text-ink-muted text-size-meta num group-aria-[current=true]/artifact:text-ink-strong"
                 id={part(artifact.id, "age")}
                 >{formatAgeShort(Date.parse(artifact.createdAt))}</span
               >

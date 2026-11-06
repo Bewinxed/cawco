@@ -112,9 +112,15 @@
         "square-24": "h-6 w-6",
       },
       /** A control inset in a composer shell takes its concentric corner:
-          the shell's radius less its inset and its edge. */
+          the shell's radius less its inset and its edge; the prominent
+          action beside a bar's glass, a capsule. */
       shape: {
         inset: "concentric-xs",
+        /* The one prominent action standing beside a bar's glass (HIG,
+           Toolbars: the `.prominent` style, trailing): a capsule at the
+           glass's height, so it is concentric with the corner it stands in,
+           as the glass beside it is. */
+        capsule: "rounded-pill",
       },
       /** In a view's bar (ViewBar, `data-bar`): the composer field's height,
           at least as wide, as wide as its glyph and count make it, never
