@@ -336,11 +336,12 @@
   ],
   "patchedDependencies": {
     "bits-ui@2.20.5": "patches/bits-ui@2.20.5.patch",
-    "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",
     "virtua@0.54.1": "patches/virtua@0.54.1.patch",
     "postcss-selector-parser@7.1.6": "patches/postcss-selector-parser@7.1.6.patch",
-    "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch",
     "openai@7.19.0": "patches/openai@7.19.0.patch",
+    "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",
+    "@excalidraw/excalidraw@0.18.1": "patches/@excalidraw%2Fexcalidraw@0.18.1.patch",
+    "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch",
   },
   "overrides": {
     "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-darwin-arm64-0.1.11-cawco.6.tgz",

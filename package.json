@@ -98,7 +98,8 @@
     "openai@7.19.0": "patches/openai@7.19.0.patch",
     "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch",
     "postcss-selector-parser@7.1.6": "patches/postcss-selector-parser@7.1.6.patch",
-    "virtua@0.54.1": "patches/virtua@0.54.1.patch"
+    "virtua@0.54.1": "patches/virtua@0.54.1.patch",
+    "@excalidraw/excalidraw@0.18.1": "patches/@excalidraw%2Fexcalidraw@0.18.1.patch"
   },
   "trustedDependencies": [
     "socket-activation"
