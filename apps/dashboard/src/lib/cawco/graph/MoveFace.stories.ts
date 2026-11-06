@@ -200,7 +200,6 @@ export default {
     playhead: 886,
     playing: false,
     repeat: false,
-    version: "yours",
     choices: [
       {
         key: "filled->hub",
@@ -221,12 +220,10 @@ export default {
     onreplay: noop,
     onrepeat: noop,
     onloopfrom: noop,
-    onkeep: noop,
     onseek: noop,
     onseekend: noop,
     onretime: noop,
     onreset: noop,
-    onversion: noop,
     onchoose: noop,
     onfocusthing: noop,
     onlight: noop,
@@ -274,11 +271,6 @@ export const Edited = { args: { move: ready(edited()), selected: "5" } };
 /** The failure line's curve changed to Ease-out: its Curve chip carrying the restore glyph, its row's length figure carrying its own. */
 export const CurveChanged = {
   args: { move: ready(curved()), selected: "5" },
-};
-
-/** The agent's timing, As written, beside his: the same edits, the face showing the agent's version read-only. */
-export const AsWritten = {
-  args: { move: ready(edited()), version: "written" },
 };
 
 /** A spring: its length a figure with `~`, where it settles. */
@@ -335,9 +327,4 @@ export const Authored = {
 /** Repeat on, going round again from 300 ms: its mark on the ruler. */
 export const RepeatFrom = {
   args: { playing: true, playhead: 500, repeat: true, loopFrom: 300 },
-};
-
-/** A version he kept, Version 2, shown and played as it was kept, beside his own. */
-export const KeptVersion = {
-  args: { move: ready(edited()), kept: [edited()], version: 0 },
 };

@@ -108,7 +108,6 @@
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
-  import type { Version } from "./VersionSwitch.svelte";
   import WholeSet from "./WholeSet.svelte";
 
   let {
@@ -631,11 +630,6 @@
   /** Play goes round again each time the move ends, from `loopFrom`. */
   let repeat = $state(false);
   let loopFrom = $state(0);
-  /** Which timing the face shows and Play plays: his, the agent's as written (two whole versions, the owner's pick), or one he kept. */
-  let version = $state<Version>("yours");
-  /** The versions of each move he kept, by the move's states (`from->to`): each its clips as he kept them. */
-  let keptMoves = $state<Record<string, Clip[][]>>({});
-  const keptNow = $derived(movePair ? (keptMoves[movePair] ?? []) : []);
   /**
    * What he tuned on every move, by the move's states (`from->to`): put
    * back on each new read of that move, and every one of them sent to the
@@ -705,26 +699,10 @@
     playhead = lengthOf(clips);
   }
 
-  /** The animation as Play plays it: his timing, the agent's as written, or a version he kept. */
-  const clipsNow = (): Clip[] => {
-    if (move.kind !== "ready") {
-      return [];
-    }
-    if (typeof version === "number") {
-      return keptNow[version] ?? move.clips;
-    }
-    return version === "written" ? move.clips.map(untune) : move.clips;
-  };
-  /** The timing as the page plays it: every clip tuned in the version shown. */
+  /** The animation as Play plays it: his timing. */
+  const clipsNow = (): Clip[] => (move.kind === "ready" ? move.clips : []);
+  /** The timing as the page plays it: every clip as he tuned it. */
   const tuningNow = () => tuningsOf(clipsNow());
-  /** The version the page plays: the agent's as written, else the tuning it is given. */
-  const playedVersion = () => (version === "written" ? "written" : "yours");
-  /** Yours kept as a version of its own, after those kept of this move. */
-  const keepVersion = () => {
-    if (move.kind === "ready" && movePair) {
-      keptMoves = { ...keptMoves, [movePair]: [...keptNow, move.clips] };
-    }
-  };
 
   // The playhead runs from each word of the page's clock: the page runs the
   // animations and says the time as a play starts, wraps, ends or pauses;
@@ -770,7 +748,6 @@
       loopFrom: Math.min(loopFrom, length),
       still,
       tuning: tuningNow(),
-      version: playedVersion(),
     });
   };
   /** Pause: the move held on the frame it stands at, the stage with it. */
@@ -780,7 +757,7 @@
     cancelAnimationFrame(clock);
     playing = false;
     playhead = t;
-    link.seek(t, tuningNow(), playedVersion());
+    link.seek(t, tuningNow());
   };
   /** A scrub let go: on the move's end the drawing is let go, the kept state as it stands. */
   const scrubbed = (t: number) => link.letGo(t);
@@ -828,7 +805,6 @@
       ...move,
       clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
     };
-    version = "yours";
     if (movePair) {
       tunings.set(movePair, {
         name: words.move(move.from, move.to),
@@ -855,11 +831,6 @@
     if (before) {
       retime(before);
     }
-  };
-  /** A version on the face: Play plays it, from its start. */
-  const showVersion = (next: Version) => {
-    version = next;
-    play(0);
   };
   /** Every move the states file names, for the Animation face's title menu. */
   const moveChoices = $derived(
@@ -1323,12 +1294,10 @@
   <MoveFace
     choices={moveChoices}
     chosen={movePair}
-    kept={keptNow}
     {lang}
     {loopFrom}
     {move}
     onchoose={chooseMove}
-    onkeep={keepVersion}
     onfocusthing={(thing) => {
       if (thing) {
         link.reveal({ thing });
@@ -1367,14 +1336,12 @@
     onseek={scrub}
     onseekend={scrubbed}
     onundo={undoReset}
-    onversion={showVersion}
     {peek}
     {playhead}
     {playing}
     {repeat}
     {still}
     undoable={beforeReset !== null}
-    {version}
   />
 {/snippet}
 

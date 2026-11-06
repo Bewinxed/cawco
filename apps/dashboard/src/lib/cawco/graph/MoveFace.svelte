@@ -37,11 +37,12 @@
    *   settings opened under it (ClipSettings, his pick: a clip is adjusted
    *   in place). A bar's body drags its delay and its ends its length
    *   (ClipBar).
-   * - **Two whole versions** once he changed anything (the owner's pick):
-   *   a switch in the head, "As written | Yours", Yours counting the
-   *   animations he changed; each plays as itself, As written read-only.
-   *   Reset all beside it. A changed row's length carries the restore glyph
-   *   (every value of that row back), as a changed setting does.
+   * - **A change** is marked as the Controls face marks one (the owner's
+   *   pick, graph-dials-questions `changed-mark`, and his pin on the words
+   *   that said a state): a changed row keeps its own ink, and the undo
+   *   glyph in the edit's ink stands at its name's end (every value of that
+   *   row back), as one does after a changed setting. Reset all stands in
+   *   the head once anything changed, Undo reset in its place after it.
    *
    * One scale for all of it: the lane runs from the move's start (the
    * moment it first set anything off) to the ruler's next mark a quarter
@@ -117,16 +118,12 @@
     tracksOf,
     untune,
   } from "./motion";
-  import VersionSwitch, { type Version } from "./VersionSwitch.svelte";
 
   let {
     move,
     playhead,
     playing,
     repeat,
-    version,
-    kept: keptVersions = [],
-    onkeep,
     onplay,
     onpause,
     onreplay,
@@ -137,7 +134,6 @@
     onseekend,
     onretime,
     onreset,
-    onversion,
     onlight,
     choices,
     chosen,
@@ -157,12 +153,6 @@
     playing: boolean;
     /** Play goes round again each time the move ends. */
     repeat: boolean;
-    /** The timing on the face and in Play: his, the agent's as written, or one he kept. */
-    version: Version;
-    /** The versions of this move he kept, each its clips as he kept them. */
-    kept?: readonly Clip[][];
-    /** Yours kept as a version of its own. */
-    onkeep: () => void;
     onplay: () => void;
     onpause: () => void;
     /** Play from the move's start, wherever the playhead stands. */
@@ -180,8 +170,6 @@
     onretime: (clips: Clip[], replay?: boolean) => void;
     /** Clips put back as the engine ran them, by id. */
     onreset: (ids: string[]) => void;
-    /** One version or another: it plays. */
-    onversion: (version: Version) => void;
     /** The thing a row names, rested on, by the page's id for it (null: none). */
     onlight: (thing: string | null) => void;
     /** Every move the states file names, by its states' ids. */
@@ -212,21 +200,8 @@
   const changedCount = $derived(
     tracksOf(clips).filter((track) => editsOf(track).size > 0).length
   );
-  /** A version not his own is on the face (As written, or one he kept): drawn and played as it is, read only. */
-  const written = $derived(
-    version !== "yours" && (changedCount > 0 || keptVersions.length > 0)
-  );
-  /** The clips the face draws: his, the agent's as written, or a version he kept. */
-  const shown = $derived.by(() => {
-    if (!written) {
-      return clips;
-    }
-    return typeof version === "number"
-      ? (keptVersions[version] ?? clips)
-      : clips.map(untune);
-  });
-  const tracks = $derived(tracksOf(shown));
-  const length = $derived(Math.max(1, lengthOf(shown)));
+  const tracks = $derived(tracksOf(clips));
+  const length = $derived(Math.max(1, lengthOf(clips)));
 
   /** The ruler's finest mark, ms. */
   const FINEST = 100;
@@ -244,8 +219,8 @@
   );
   /**
    * The lane's end as it last stood for this move: the lane only grows
-   * while one move is on the face, so a drag, a key or a switch between
-   * As written and Yours never rescales it under him (a bar dragged 60px
+   * while one move is on the face, so a drag, a key or a reset never
+   * rescales it under him (a bar dragged 60px
    * moved 270 ms as the ruler rescaled mid-drag).
    */
   let kept = $derived<{ move: string | null; scale: number }>({
@@ -334,8 +309,6 @@
   );
   /** Where `t` ms stands across the lanes, as a share of their width: the part shown, zoomed or whole. */
   const pct = (t: number) => `${((t - viewFrom) / viewSpan) * 100}%`;
-  /** How wide `ms` stands across the lanes. */
-  const len = (ms: number) => `${(ms / viewSpan) * 100}%`;
   /** A pointer's moment on a lane, ms, from where it stands across `box`. */
   const momentAt = (event: PointerEvent, box: DOMRect) => {
     const across = (event.clientX - box.left) / Math.max(1, box.width);
@@ -709,9 +682,7 @@
     KINDS.filter((kind) => lines.some((line) => line.track.kind === kind))
   );
   /** The selected line, while it still stands. */
-  const picked = $derived(
-    written ? null : (lines.find((line) => line.key === selected) ?? null)
-  );
+  const picked = $derived(lines.find((line) => line.key === selected) ?? null);
   /** Every bar's edges but `run`'s own: where a dragged edge settles. */
   const edgesBesides = (run: Run) =>
     tracks.flatMap((track) =>
@@ -725,7 +696,7 @@
       ? words.clipName(line.track.name, propertyName(line.part.property))
       : nameOf(line.track);
 
-  /** Each kind's bar in As written: its wash and its edge. */
+  /** Each kind's swatch in the key: its bar's wash and edge. */
   const BAR: Record<ClipKind, string> = {
     size: "bg-c-clip-size-wash border-c-clip-size",
     move: "bg-c-clip-move-wash border-c-clip-move",
@@ -927,13 +898,12 @@
   ></span>
 {/snippet}
 
-{#snippet rowWords(line: Line, tone: "open" | "rest" | "read")}
+{#snippet rowWords(line: Line, tone: "open" | "rest")}
   <!-- A row's words: what moves in the row ink, how in muted; an
        animation's row says what it changes in words, its run and its
-       parts; open, all in selected ink; read only (As written), all muted. -->
+       parts; open, all in selected ink. -->
   {@const name = {
     open: "text-selected-ink",
-    read: "text-ink-muted",
     rest: "text-ink-row",
   }[tone]}
   {@const rest = tone === "open" ? "text-selected-ink" : "text-ink-muted"}
@@ -951,23 +921,6 @@
       <span class={rest}>{line.track.how}</span>
     {/if}
   </span>
-{/snippet}
-
-{#snippet writtenLane(track: Track)}
-  <!-- As written: the agent's timing, drawn and played, never moved. -->
-  <div class="relative h-c-badge-h w-full" data-slot="run-lane">
-    {#each track.runs as run (run.id)}
-      <span
-        class={[
-          "absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border",
-          BAR[track.kind],
-        ]}
-        data-slot="run-bar"
-        style:--from={pct(run.from)}
-        style:--wide={len(run.to - run.from)}
-      ></span>
-    {/each}
-  </div>
 {/snippet}
 
 {#snippet overviewStrip()}
@@ -1026,12 +979,11 @@
       {/if}
     {:else}
       <!-- The head: the move as the face's title, and once he changed any
-         timing, the two versions and Reset all. -->
+         timing, Reset all. -->
       <!-- One line of one height, whatever it holds (the title alone, Undo
-           reset, or the versions and Reset all), never wrapping: the rows
-           under it stood 6px lower once the versions came, and on a phone
-           the versions fell under the transport where no finger reached
-           them. The title gives way first, its whole name in its menu. -->
+           reset, or Reset all), never wrapping, so the rows under it never
+           move as it comes and goes. The title gives way first, its whole
+           name in its menu. -->
       <header
         class="flex h-c-btn-h min-w-0 flex-none items-center gap-x-space-3"
         data-slot="move-head"
@@ -1049,44 +1001,33 @@
             variant="ghost">{words.undoReset}</Button
           >
         {/if}
-        {#if move.kind === "ready" && (changedCount > 0 || keptVersions.length > 0)}
+        {#if move.kind === "ready" && changedCount > 0}
           <div class="flex flex-none items-center gap-space-2">
-            <VersionSwitch
-              changed={changedCount}
-              kept={keptVersions.length}
-              label={words.versions}
-              {lang}
-              {onkeep}
-              {onversion}
-              {version}
-            />
             <!-- Reset all: its words on a desk; on a narrow face its glyph,
                  its words in its tooltip and its name. -->
-            {#if changedCount > 0}
-              <Tip label={words.resetAllSaid}>
-                {#snippet children(tip)}
-                  <Button
-                    {...tip}
-                    aria-label={words.resetAllSaid}
-                    data-slot="reset-all"
-                    onclick={() =>
-                      onreset(
-                        clips.filter((clip) => clip.was).map((clip) => clip.id)
-                      )}
-                    size="sm"
-                    variant="ghost"
+            <Tip label={words.resetAllSaid}>
+              {#snippet children(tip)}
+                <Button
+                  {...tip}
+                  aria-label={words.resetAllSaid}
+                  data-slot="reset-all"
+                  onclick={() =>
+                    onreset(
+                      clips.filter((clip) => clip.was).map((clip) => clip.id)
+                    )}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <IconReset
+                    aria-hidden="true"
+                    class="hidden size-icon-md @max-timeline/move:block"
+                  />
+                  <span class="@max-timeline/move:sr-only"
+                    >{words.resetAll}</span
                   >
-                    <IconReset
-                      aria-hidden="true"
-                      class="hidden size-icon-md @max-timeline/move:block"
-                    />
-                    <span class="@max-timeline/move:sr-only"
-                      >{words.resetAll}</span
-                    >
-                  </Button>
-                {/snippet}
-              </Tip>
-            {/if}
+                </Button>
+              {/snippet}
+            </Tip>
           </div>
         {/if}
       </header>
@@ -1268,9 +1209,9 @@
                 {@const line = entry.line}
                 {@const track = line.track}
                 {@const name = lineName(line)}
-                {@const open = !written && isOpen(line)}
+                {@const open = isOpen(line)}
                 {@const chosen = picked?.key === line.key}
-                {@const edited = !written && editsOf(track).size > 0}
+                {@const edited = editsOf(track).size > 0}
                 <!-- A row: one thing that moves, or under it one animation; one
                  comment target named by its words, as a person says it. -->
                 <div
@@ -1287,43 +1228,32 @@
                       line.part && "ps-c-btn-h-xs",
                     ]}
                   >
-                    {#if written}
-                      <!-- As written: the agent's timing, read only. The row
-                         stands as words alone, no chevron and no press. -->
-                      <span
-                        class="flex h-c-btn-h-sm min-w-0 flex-1 cursor-default items-center ps-c-btn-h-xs pe-space-1 type-label"
-                        title={name}
-                      >
-                        {@render rowWords(line, "read")}
-                      </span>
-                    {:else}
-                      <!-- The row's one press: it opens or closes the row, its
+                    <!-- The row's one press: it opens or closes the row, its
                          chevron turning; what opens is under it. -->
-                      <button
-                        type="button"
-                        aria-expanded={open}
-                        aria-label={name}
-                        class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
-                        data-chosen={chosen || undefined}
-                        onclick={() => press(line)}
-                        title={name}
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-label={name}
+                      class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
+                      data-chosen={chosen || undefined}
+                      onclick={() => press(line)}
+                      title={name}
+                    >
+                      <span
+                        class="grid w-c-btn-h-xs flex-none place-items-center"
+                        data-box
                       >
-                        <span
-                          class="grid w-c-btn-h-xs flex-none place-items-center"
-                          data-box
-                        >
-                          <IconChevronRight
-                            aria-hidden="true"
-                            class={[
-                              "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
-                              open && "rotate-90 rtl:-rotate-90",
-                              chosen ? "text-selected-ink" : "text-ink-muted",
-                            ]}
-                          />
-                        </span>
-                        {@render rowWords(line, chosen ? "open" : "rest")}
-                      </button>
-                    {/if}
+                        <IconChevronRight
+                          aria-hidden="true"
+                          class={[
+                            "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                            open && "rotate-90 rtl:-rotate-90",
+                            chosen ? "text-selected-ink" : "text-ink-muted",
+                          ]}
+                        />
+                      </span>
+                      {@render rowWords(line, chosen ? "open" : "rest")}
+                    </button>
                     {#if edited}
                       <!-- A changed row: its restore glyph at the name's end,
                          inside the name's own column, so the lanes never
@@ -1344,6 +1274,7 @@
                               )}
                             press="pressable"
                             size="icon-xs"
+                            tone="edited"
                             variant="ghost"
                           />
                         {/snippet}
@@ -1365,28 +1296,24 @@
                       title={words.laneScrub}
                     >
                       {@render back()}
-                      {#if written}
-                        {@render writtenLane(track)}
-                      {:else}
-                        <ClipBar
-                          edges={edgesBesides}
-                          {lang}
-                          {name}
-                          onlegs={(clip, legs, replay) =>
-                            onretime([releg(clip, legs)], replay)}
-                          onretime={(run, from, to, replay) =>
-                            onretime(retimeRun(run, from, to), replay)}
-                          view={{ from: viewFrom, to: viewTo }}
-                          onselect={() => {
-                            if (!open) {
-                              press(line);
-                            }
-                          }}
-                          {scale}
-                          selected={chosen}
-                          {track}
-                        />
-                      {/if}
+                      <ClipBar
+                        edges={edgesBesides}
+                        {lang}
+                        {name}
+                        onlegs={(clip, legs, replay) =>
+                          onretime([releg(clip, legs)], replay)}
+                        onretime={(run, from, to, replay) =>
+                          onretime(retimeRun(run, from, to), replay)}
+                        view={{ from: viewFrom, to: viewTo }}
+                        onselect={() => {
+                          if (!open) {
+                            press(line);
+                          }
+                        }}
+                        {scale}
+                        selected={chosen}
+                        {track}
+                      />
                       {@render playheadLine()}
                     </div>
                   </div>
@@ -1428,12 +1355,6 @@
               </li>
             {/each}
           </ul>
-          {#if written}
-            <!-- Why the rows take no press in a version not his own. -->
-            <p class="m-0 pt-space-2 type-meta text-ink-muted text-pretty">
-              {words.readOnly}
-            </p>
-          {/if}
         </div>
       {/if}
     {/if}

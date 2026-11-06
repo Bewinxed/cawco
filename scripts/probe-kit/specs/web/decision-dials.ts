@@ -406,7 +406,6 @@ async function alternateLeg(kit: Kit, stagePort: number): Promise<void> {
           repeat: false,
           still: false,
           tuning: [],
-          version: "written",
         },
       })
     );

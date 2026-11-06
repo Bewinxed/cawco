@@ -7,6 +7,7 @@
     ref = $bindable(null),
     class: className,
     share,
+    mark = null,
     look = "field",
     children,
     ...props
@@ -19,6 +20,12 @@
      * the caller marks it `data-dragging`.
      */
     share?: number;
+    /**
+     * A second place in the same range, 0 to 1, drawn as a tick across the
+     * frame over the fill (the design graph's number: where the agent's
+     * value stands while his differs).
+     */
+    mark?: number | null;
     /**
      * A form's field (`field`), or a search field standing in a bar's row
      * (`bar`, HIG Search fields: in a toolbar it is the bar's own capsule):
@@ -73,8 +80,12 @@
     "has-[>[data-align=inline-end]]:[&>input]:pr-1.5",
     "has-[>[data-align=block-start]]:[&>input]:pb-3",
     "has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
+    // A value's frame is dragged across: every part of it says so to the
+    // pointer until its field holds the caret, a horizontal drag is the
+    // frame's under a finger (a vertical one still scrolls), and its edge
+    // steps up under the pointer and through a drag.
     share !== undefined &&
-      "isolate cursor-ew-resize overflow-clip data-dragging:not-has-[[data-slot][aria-invalid=true]]:border-border-control-strong",
+      "isolate cursor-ew-resize touch-pan-y overflow-clip not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:border-border-control-strong data-dragging:not-has-[[data-slot][aria-invalid=true]]:border-border-control-strong",
     look === "bar" &&
       "h-c-btn-h rounded-pill border-border-hairline bg-material-panel shadow-tile glass-backdrop contrast-more:border-border-contrast contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-contrast reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
@@ -95,6 +106,14 @@
       data-slot="input-group-share"
       style:--share="{Math.min(1, Math.max(0, share)) * 100}%"
     ></span>
+    {#if mark !== null}
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-y-space-1 start-(--mark) -z-1 w-px -translate-x-1/2 bg-ink-muted"
+        data-slot="input-group-mark"
+        style:--mark="{Math.min(1, Math.max(0, mark)) * 100}%"
+      ></span>
+    {/if}
   {/if}
   {@render children?.()}
 </div>

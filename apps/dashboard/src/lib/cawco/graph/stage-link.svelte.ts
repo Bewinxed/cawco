@@ -159,9 +159,9 @@ export class StageLink {
   }
 
   /** The move stood at `t` ms and held there, as `tuning` times it: a scrub's frame. */
-  seek(t: number, tuning: Tuning[], version: "yours" | "written"): void {
+  seek(t: number, tuning: Tuning[]): void {
     this.#ask += 1;
-    this.#post({ type: STAGE_SEEK, ask: this.#ask, t, tuning, version });
+    this.#post({ type: STAGE_SEEK, ask: this.#ask, t, tuning });
   }
 
   /** A scrub let go at `t`: on the move's end the drawing is let go, the kept state as it stands. */

@@ -320,6 +320,7 @@
           onclick={() => onretime(restore(track, key))}
           press="pressable"
           size="icon-xs"
+          tone="edited"
           variant="ghost"
         />
       {/snippet}
