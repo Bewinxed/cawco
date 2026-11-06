@@ -190,15 +190,20 @@ export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
  * (the owner, 2026-11-05: no Send once he has answered; artifacts/service.ts
  * `sendAnswered`): a page to pick on with every question answered, taken or
  * withdrawn, or a canvas to judge with its answer set, its picks, notes or
- * values not sent yet. A project's setup page never does: its Send sets
- * the project up. Nor does one not the person's (a draft, handed up or
- * held, an option's media).
+ * values not sent yet. A project's setup page does once its project is set
+ * up (`setUp`), as any page: before, its Send is the one that sets the
+ * project up (the board's Set up), so it waits for that. Asked again after
+ * (Change how it runs, a card its Who decides settled), every card
+ * answered, it was left waiting on a Send with nothing left to pick
+ * (Private office's, 8 of 8 picked). Nor does one not the person's (a
+ * draft, handed up or held, an option's media).
  */
 export const answeredWhole = (
   row: ArtifactRow,
-  facts: ArtifactFacts
+  facts: ArtifactFacts,
+  setUp = false
 ): boolean => {
-  if (!asks(row, facts) || isSetupPage(row) || facts.unsent === 0) {
+  if (!asks(row, facts) || (isSetupPage(row) && !setUp) || facts.unsent === 0) {
     return false;
   }
   return facts.answers

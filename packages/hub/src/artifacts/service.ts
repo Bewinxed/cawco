@@ -7208,9 +7208,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     deps.needsMoved();
   };
 
-  /** Whether what the person wrote on `row` goes to its session by itself (needs.ts `sendsItself`). */
+  /** Whether what the person wrote on `row` goes to its session by itself (needs.ts `answeredWhole`): a setup page once its project is set up. */
   const sendsItself = (row: ArtifactRow): boolean =>
-    answeredWhole(row, withMedia(row, factsOf(row)));
+    answeredWhole(
+      row,
+      withMedia(row, factsOf(row)),
+      row.projectId !== null && deps.setUp(row.projectId)
+    );
 
   /**
    * The hub's own Send of `row` once the person's changes stand quiet

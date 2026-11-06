@@ -23,7 +23,8 @@
  *     (`needOf`), nothing waits on him (`pendingOf`: its writer's
  *     plan, read from Needs you, waits on it no more), and
  *     his answers go to the session by themselves once quiet
- *     (`answeredWhole`). The note taken away, `head-name` is open: the
+ *     (`answeredWhole`); a setup page so answered goes by itself once its
+ *     project is set up, never before. The note taken away, `head-name` is open: the
  *     page is in Needs you at `head-name`, "2 of 3 answered", and still
  *     waits on him.
  * (b) A pin on `head-name` the agent replied to and resolved answers it;
@@ -303,6 +304,19 @@ const run = async ({ check }: Kit) => {
       pendingOf(page, facts, SESSIONS) === null &&
       answeredWhole(page, facts),
     `${states(answered)}; need ${JSON.stringify(needOf(page, facts, SESSIONS)?.pending)}`
+  );
+  // A project's setup page with the same answers: its Send sets the project
+  // up while it is not, so it waits for that Send; once the project is set
+  // up it goes by itself as any page does.
+  const setupPage = { ...page, name: "setup" };
+  check(
+    "a: a setup page answered whole waits for its Send while its project is not set up, and goes by itself once it is",
+    [
+      answeredWhole(setupPage, facts),
+      answeredWhole(setupPage, facts, false),
+      answeredWhole(setupPage, facts, true),
+    ].join() === "false,false,true",
+    `not set up ${answeredWhole(setupPage, facts, false)}; set up ${answeredWhole(setupPage, facts, true)}`
   );
   const { "head-name": _note, ...twoPicks } = ANSWERED;
   const open = factsFrom(questionsOfPage(twoPicks));
