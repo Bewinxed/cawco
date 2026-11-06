@@ -62,7 +62,12 @@
     onmoved?: () => void;
     /** The sheet as drawn: what covers the page, for its holder to tell. */
     surface?: HTMLElement;
-    /** What it holds is a line or two (an empty list): its lower stop is low enough to hold that, never half its room standing empty. */
+    /**
+     * What it holds is a line or two (an empty list), or the page above it
+     * is to be tapped (a thread being placed again, its bar and Cancel at
+     * the top): its lower stop is low enough to hold that, never half its
+     * room standing empty or covering the page.
+     */
     short?: boolean;
     /**
      * What it holds reads from its top and wants the room (a thread): it

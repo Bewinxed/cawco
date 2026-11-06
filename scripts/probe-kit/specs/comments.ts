@@ -347,8 +347,9 @@ const STILL_MS = 14_000;
 const IMAGE_BLOCK = /"type":"image"/gu;
 /** An attachment's reference: the hub's file by its hash (core `FILE_REF`). */
 const FILE_REF_PATH = /^\/api\/files\/[0-9a-f]{64}$/u;
-const RESOLVED_TAB = /^Resolved/u;
-const OPEN_TAB = /^Open/u;
+/** The rail's lists, by their names in its list menu. */
+const RESOLVED_LIST = /^Resolved/u;
+const OPEN_LIST = /^Open/u;
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
 const MOVED_TEXT = "The paragraph, moved down and reworded.";
@@ -545,6 +546,17 @@ const shutList = async (on: On) => {
 };
 
 /**
+ * The list `name` brought to the front of the rail: its title's menu
+ * (CommentRail's list menu, Which comments) opened and the list picked.
+ */
+const showListNamed = async (on: On, name: RegExp) => {
+  const rail = await rowsOf(on);
+  await rail.locator('[data-slot="list"]').click({ timeout: 5000 });
+  await on.page.getByRole("menuitemradio", { name }).click({ timeout: 5000 });
+  await settle(on.page, 300);
+};
+
+/**
  * A press at the screen's `x`, `y` in Comment mode (the artifact panel's surface brief, Placing a
  * comment): its composer opens beside a hollow pill, writing nothing; with
  * `words`, they are typed in its field and Enter comments, the pin and its
@@ -592,14 +604,19 @@ const commentAt = async (
   return { shown, focused, gone };
 };
 
-/** Pin `number`'s pill pressed on the page: its thread opens beside it. */
-/** Pin `number`'s thread on `screen`: its card, or on a phone and under a finger the well's bottom sheet (ThreadSheet). */
+/**
+ * Pin `number`'s thread on `screen`: its card, or the well's bottom sheet
+ * (ThreadSheet) while it holds a thread (on a phone, and in a pane too
+ * narrow for the rail beside the page, where a row's thread opens in the
+ * Comments sheet), never that sheet holding the list.
+ */
 const threadOn = (screen: Page, number: number) =>
   screen
     .locator(
-      `:is([data-slot="pin-card"][data-pin-card="${number}"], [data-slot="thread-sheet"])`
+      `:is([data-slot="pin-card"][data-pin-card="${number}"], [data-slot="thread-sheet"]:has([data-slot="pin-top"]))`
     )
     .first();
+/** Pin `number`'s pill pressed on the page: its thread opens beside it. */
 const openThread = async (on: On, frame: Frame, number: number) => {
   const face = frame
     .locator(
@@ -1077,20 +1094,11 @@ const commentChecks = async (on: On, frame: Frame) => {
     pressed === "true" && seamEdge(edge),
     `aria-selected ${pressed}; ${JSON.stringify(edge)}`
   );
-  // The mode's segments draw their glyphs alone (TabItem `glyphOnly`): the
-  // name is sr-only, still the tab's accessible name.
-  const label = await comment.evaluate((tab) => {
-    const words = tab.querySelector<HTMLElement>(
-      '[data-slot="tab-item-label"]'
-    );
-    const style = words ? getComputedStyle(words) : null;
-    return {
-      position: style?.position ?? null,
-      width: words?.getBoundingClientRect().width ?? null,
-      clip: style?.clipPath ?? null,
-      text: words?.textContent?.trim() ?? null,
-    };
-  });
+  // The mode's segments draw their glyphs alone (BarSegments: each a bar
+  // item named by its label): no words drawn, still the tab's name.
+  const words = await comment.evaluate((tab) =>
+    (tab as HTMLElement).innerText.trim()
+  );
   const named = await on.page
     .locator(
       ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="modes"]'
@@ -1098,13 +1106,9 @@ const commentChecks = async (on: On, frame: Frame) => {
     .getByRole("tab", { name: "Comment", exact: true })
     .count();
   on.kit.check(
-    "1: the mode's segments draw their glyphs alone: the name sr-only, still the tab's name",
-    label.position === "absolute" &&
-      label.width === 1 &&
-      label.clip === "inset(50%)" &&
-      label.text === "Comment" &&
-      named === 1,
-    JSON.stringify({ label, named })
+    "1: the mode's segments draw their glyphs alone: no words drawn, still the tab's name",
+    words === "" && named === 1,
+    JSON.stringify({ words, named })
   );
 
   const b = await screenBox(on, frame, "#para");
@@ -1378,11 +1382,13 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   )
     .locator('[data-slot="pin-row"][data-pin-row="1"]')
     .click();
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  const card = threadOn(on.page, 1);
   await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   const before = heard.length;
   const rows = await on.page
-    .locator('[data-slot="turn"][data-you]:not([data-slot="pin-card"] *)')
+    .locator(
+      '[data-slot="turn"][data-you]:not(:is([data-slot="pin-card"], [data-slot="thread-sheet"]) *)'
+    )
     .count();
   await card.getByRole("combobox").fill("Make it bolder.");
   await card.getByRole("button", { name: "Reply" }).click();
@@ -1425,7 +1431,9 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     .catch(() => undefined);
   await settle(on.page, 500);
   const ownRows = await on.page
-    .locator('[data-slot="turn"][data-you]:not([data-slot="pin-card"] *)')
+    .locator(
+      '[data-slot="turn"][data-you]:not(:is([data-slot="pin-card"], [data-slot="thread-sheet"]) *)'
+    )
     .count();
   const stamped = await until(
     "sentAt on every pin and entry",
@@ -1693,7 +1701,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     read.slice(read.indexOf("{"), read.indexOf("{") + 600)
   );
 
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  const card = threadOn(on.page, 1);
   // The live dot stands on the row of the pin the last delivery carried. The
   // rows are read with the panel in view: stacked, the open card stands over
   // it, and rowsOf brings it back with the card's Close.
@@ -1750,7 +1758,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     () =>
       on.page
         .locator(
-          ':is([data-slot="comment-rail"], [data-slot="pin-card"]) :is([data-dot="live"], [data-slot="working"])'
+          ':is([data-slot="comment-rail"], [data-slot="pin-card"], [data-slot="thread-sheet"]) :is([data-dot="live"], [data-slot="working"])'
         )
         .count(),
     (count) => count === 0,
@@ -1863,7 +1871,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   )
     .locator('[data-slot="pin-row"]')
     .count();
-  await on.page.getByRole("tab", { name: RESOLVED_TAB }).click();
+  await showListNamed(on, RESOLVED_LIST);
   const resolved = await on.page
     .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="1"]`)
     .count();
@@ -1918,11 +1926,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   await card
     .waitFor({ state: "detached", timeout: 3000 })
     .catch(() => undefined);
-  const tabbed = await (
-    await rowsOf(on)
-  )
-    .getByRole("tab", { name: OPEN_TAB })
-    .click({ timeout: 5000 })
+  const tabbed = await showListNamed(on, OPEN_LIST)
     .then(() => "pressed")
     .catch(
       async (error: Error) =>
@@ -1934,7 +1938,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   on.kit.check(
     "4: Reopen brings pin 1 back to Open",
     !!reopened && !reopened.resolvedAt && back === 1,
-    `resolvedAt ${String(reopened?.resolvedAt)}; open tab ${tabbed}; open row ${back}`
+    `resolvedAt ${String(reopened?.resolvedAt)}; open list ${tabbed}; open row ${back}`
   );
 };
 
@@ -2120,7 +2124,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   const modeBefore = await commentButton.getAttribute("aria-selected");
   // Its row opens its card like any other; the card says the loss and offers Pin it somewhere else.
   await goneRow.click();
-  const card = on.page.locator('[data-pin-card="1"]');
+  const card = threadOn(on.page, 1);
   await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   const notice = card.locator('[data-slot="gone"]');
   const said = (await notice.textContent().catch(() => null))?.trim() ?? null;
@@ -4009,7 +4013,7 @@ const roomChecks = async (on: On) => {
   )
     .locator('[data-slot="pin-row"][data-pin-row="1"]')
     .click();
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  const card = threadOn(on.page, 1);
   await until(
     "the seeded replies in pin 1's card",
     () => card.locator('[data-slot="entry"]').count(),
@@ -10879,7 +10883,7 @@ const refusedChecks = async (on: On) => {
   )
     .locator('[data-slot="pin-row"][data-pin-row="1"]')
     .click();
-  const card = on.page.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  const card = threadOn(on.page, 1);
   await card.locator('[data-slot="delete"]').click();
   await card
     .locator('[data-ask="delete"]')

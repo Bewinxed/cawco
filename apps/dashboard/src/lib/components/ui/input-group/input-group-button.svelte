@@ -29,6 +29,7 @@
   import type { ComponentProps } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { cn } from "#lib/utils.js";
+  import { groupLook } from "./look.js";
 
   let {
     ref = $bindable(null),
@@ -37,6 +38,9 @@
     type = "button",
     variant = "ghost",
     size = "xs",
+    // In a bar's search capsule it presses as the glass's controls do, with
+    // the tint on its own box (a kit Button in glass), never the scale.
+    press = groupLook() === "bar" ? "tint" : "scale",
     ...restProps
   }: Omit<ComponentProps<typeof Button>, "href" | "size"> & {
     size?: InputGroupButtonSize;
@@ -46,6 +50,7 @@
 <Button
   class={cn(inputGroupButtonVariants({ size }), className)}
   data-size={size}
+  {press}
   {type}
   {variant}
   bind:ref
