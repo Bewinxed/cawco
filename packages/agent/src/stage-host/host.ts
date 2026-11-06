@@ -674,6 +674,32 @@ function holdSection(page: object, file: string): void {
   heldSections.set(file, (heldSections.get(file) ?? 0) + 1);
 }
 
+/**
+ * A states file edited while no page holds its section (every page that
+ * loaded it has closed): its section module's transform is kept with the
+ * sheet read then, and the next page to load it drew that old list of
+ * stories ("This canvas has no story named …" for one added since, while
+ * the stories' own args, the file's own module, were new). Invalidated
+ * here, its sheet is read anew on that next load. A held one is updated by
+ * the plugin's `hotUpdate`, which the page hears.
+ */
+function forgetUnheldSheet(
+  graph: {
+    getModuleById: (id: string) => ModuleNode | undefined;
+    invalidateModule: (mod: ModuleNode, ...rest: unknown[]) => void;
+  },
+  file: string,
+  timestamp: number
+): void {
+  const edited = relative(root, file);
+  const unheld = heldSections.has(edited)
+    ? undefined
+    : graph.getModuleById(sectionIdOf(edited));
+  if (unheld) {
+    graph.invalidateModule(unheld, new Set(), timestamp, true);
+  }
+}
+
 /** Page `page` closed: each section no other page holds is let go. */
 function releasePage(page: object): void {
   for (const file of pageSections.get(page) ?? []) {
@@ -3338,6 +3364,7 @@ function cawcoStage() {
         }
         return importers.length > 0 ? [...modules, ...importers] : undefined;
       }
+      forgetUnheldSheet(graph, file, timestamp);
       const reached = await Promise.all(
         [...heldSections.keys()].map(async (sheet) => {
           const mod = graph.getModuleById(sectionIdOf(sheet));

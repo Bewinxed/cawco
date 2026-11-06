@@ -11,7 +11,9 @@
  * From the command line, on any page, once per width (under 640 a phone's
  * touch screen), in the kit's Chromium, once the page has drawn
  * (`untilDrawn`); exits 1 on any finding, and fails every rule on a scope
- * that drew nothing:
+ * that drew nothing, or on a component canvas that says it could not draw
+ * what it was asked (no story by that name, a states file that did not
+ * load), naming what it said:
  *
  *   bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]
  *
@@ -238,6 +240,13 @@ interface CheckFinding {
 }
 
 export interface CheckRead {
+  /**
+   * The component canvas said it could not draw what it was asked (no story
+   * by that name, a states file that did not load): its line, else null. No
+   * rule passes on such a page: its failure line alone is drawn, and every
+   * rule passed on it, a wrong story name exiting 0.
+   */
+  canvasFailed: string | null;
   /** The scope drew nothing to read: no rule passes on it. */
   drewNothing: boolean;
   /** Findings excused by `except`, each with its reason. */
@@ -4707,6 +4716,27 @@ function readInPage(args: InPageArgs): InPageRead {
   return { drewNothing, findings, edges: edgesOut, lowest, named, unread };
 }
 
+/**
+ * What the component canvas (the stage's page, stage-host canvas) says it
+ * could not draw, in its own words: the line of a states file that did not
+ * load (runtime.ts `failedCard`) or of the stories a Preview names that no
+ * states file holds (stage.ts `unnamed`), each `.cawco-section-failed-line`
+ * as drawn; null on any other page, or a canvas that drew what it was asked.
+ */
+function canvasFailure(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const said = [
+      ...document.querySelectorAll(
+        ".cawco-section-failed-line, .cawco-stage-failed-head"
+      ),
+    ]
+      .filter((el) => el.getClientRects().length > 0)
+      .map((el) => (el.textContent ?? "").replace(/\s+/gu, " ").trim())
+      .filter(Boolean);
+    return said.length > 0 ? said.join(" | ").slice(0, 400) : null;
+  });
+}
+
 /** Whether each finding's element (by its kept index) or words match an exemption; the reason if so. */
 function excuseIn(args: {
   except: { rule: string; selector?: string; text?: string; reason: string }[];
@@ -4896,12 +4926,20 @@ let scans = 0;
  *
  * The read leaves the page as it found it, for whatever a spec does next:
  * no key is pressed (a Shift press for the keyboard's modality had the
- * next Escape land where the read left things), focus goes back where it
- * stood, as visibly as it stood, and a tooltip a focus opened shuts with
- * the blur. With focus inside a layer (a popover, a menu, a dialog, a hang)
- * nothing is focused: moving focus out of it would dismiss it or have its
- * trap pull focus back (graph-stage r523, r525: a chip's list stood open
- * over the next row after its Escape), so the rings there stand unread.
+ * next Escape land where the read left things), and focus goes back where
+ * it stood, as visibly as it stood, its `focus` event held from the
+ * element: its handlers ran when it took focus the first time, and run
+ * again they acted anew (a kit Tip opens on any focus, bits-ui
+ * `ignoreNonKeyboardFocus` off: restored to the Compare button a press
+ * had focused, its tooltip stood open over it for the reads after,
+ * graph-stage r529). A tooltip a tab stop's focus opened shuts with its
+ * blur. Nothing is focused with focus inside a layer (a popover, a menu, a
+ * dialog, a hang) or such a floating layer open (moving focus out of it
+ * would dismiss it or have its trap pull focus back: graph-stage r523,
+ * r525, a chip's list stood open over the next row after its Escape), nor
+ * with focus in a field (its blur commits what it holds): the rings there
+ * stand unread. It checks itself: what stands open and the tooltips shown
+ * are counted before and after, and a change is said.
  */
 async function focusRings(
   page: Page,
@@ -4913,6 +4951,7 @@ async function focusRings(
       __stateShape?: { rings?: Element[] };
       __ringWas?: { el: Element | null; visible: boolean };
       __ringOpen?: number;
+      __ringTips?: number;
     };
     const was = document.activeElement;
     const shownBox = (el: Element) => {
@@ -4938,22 +4977,37 @@ async function focusRings(
         '[data-state="open"], [aria-expanded="true"]'
       ),
     ].length;
+    kept.__ringTips = [
+      ...document.querySelectorAll(
+        '[data-slot="tooltip-content"]:not([data-state="closed"]), [data-tooltip-content]:not([data-state="closed"])'
+      ),
+    ].filter(shownBox).length;
+    // A field's blur commits what it holds: focus there is left alone.
+    const field = was?.matches(
+      'input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"]), textarea, select, [contenteditable]:not([contenteditable="false"])'
+    );
     kept.__ringWas = {
       el: was,
       visible: Boolean(was?.matches(":focus-visible")),
     };
+    const what = (el: Element) =>
+      `${el.tagName.toLowerCase()}${el.getAttribute("role") ? `[role=${el.getAttribute("role")}]` : ""}${el.getAttribute("data-slot") ? `[data-slot=${el.getAttribute("data-slot")}]` : ""}`;
+    const heldBy = (): string | null => {
+      if (layer) {
+        return `a layer stands open (${what(layer)})`;
+      }
+      return field && was ? `focus stands in a field (${what(was)})` : null;
+    };
     return {
       count: kept.__stateShape?.rings?.length ?? 0,
-      layer: layer
-        ? `${layer.tagName.toLowerCase()}${layer.getAttribute("role") ? `[role=${layer.getAttribute("role")}]` : ""}${layer.getAttribute("data-slot") ? `[data-slot=${layer.getAttribute("data-slot")}]` : ""}`
-        : null,
+      held: heldBy(),
     };
   });
-  if (start.layer) {
+  if (start.held) {
     return {
       read: 0,
       unread: [
-        `state-shape: a layer stands open (${start.layer}): no tab stop is focused, which would move focus out of it or dismiss it; ${start.count} ring(s) unread`,
+        `state-shape: ${start.held}: no tab stop is focused, which would move focus out of it; ${start.count} ring(s) unread`,
       ],
     };
   }
@@ -5018,15 +5072,23 @@ async function focusRings(
       const kept = window as unknown as {
         __ringWas?: { el: Element | null; visible: boolean };
         __ringOpen?: number;
+        __ringTips?: number;
       };
       const was = kept.__ringWas;
       (document.activeElement as HTMLElement | null)?.blur?.();
       const el = was?.el as HTMLElement | null | undefined;
       if (el && el !== document.body && el.isConnected) {
-        el.focus({
-          preventScroll: true,
-          focusVisible: was?.visible,
-        } as FocusOptions);
+        // Its `focus` event held at the window, before it reaches the element.
+        const hold = (event: Event) => event.stopImmediatePropagation();
+        addEventListener("focus", hold, { capture: true });
+        try {
+          el.focus({
+            preventScroll: true,
+            focusVisible: was?.visible,
+          } as FocusOptions);
+        } finally {
+          removeEventListener("focus", hold, { capture: true });
+        }
       }
       await new Promise((done) =>
         requestAnimationFrame(() => requestAnimationFrame(done))
@@ -5034,9 +5096,25 @@ async function focusRings(
       const open = document.querySelectorAll(
         '[data-state="open"], [aria-expanded="true"]'
       ).length;
-      return open === kept.__ringOpen
-        ? ""
-        : `state-shape: the focus read left ${open} thing(s) open where ${kept.__ringOpen} stood open before it`;
+      const tips = [
+        ...document.querySelectorAll(
+          '[data-slot="tooltip-content"]:not([data-state="closed"]), [data-tooltip-content]:not([data-state="closed"])'
+        ),
+      ].filter((one) => {
+        const r = one.getBoundingClientRect();
+        return r.width > 1 && r.height > 1;
+      }).length;
+      const said = [
+        open === kept.__ringOpen
+          ? ""
+          : `${open} thing(s) open where ${kept.__ringOpen} stood open before it`,
+        tips === kept.__ringTips
+          ? ""
+          : `${tips} tooltip(s) shown where ${kept.__ringTips} stood before it`,
+      ].filter(Boolean);
+      return said.length > 0
+        ? `state-shape: the focus read left ${said.join(", and ")}`
+        : "";
     });
   }
   return {
@@ -5347,6 +5425,7 @@ async function renderedChecks(
     ),
     exempt,
   };
+  const canvasFailed = await canvasFailure(page);
   const read = await page.evaluate(readInPage, args);
   const findings: (CheckFinding & { at: number })[] = [...read.findings];
   const unread = [...read.unread];
@@ -5446,7 +5525,8 @@ async function renderedChecks(
     }
   });
   return {
-    drewNothing: read.drewNothing,
+    drewNothing: read.drewNothing || canvasFailed !== null,
+    canvasFailed,
     findings: kept,
     excused,
     impeccable: { ran: imp.ran, said: imp.said },
@@ -5506,7 +5586,7 @@ export class RenderedChecks {
     });
     this.states += 1;
     if (read.drewNothing) {
-      this.blank.push(where);
+      this.blank.push(blankOf(where, read));
     }
     for (const f of read.findings) {
       const byKey = this.found.get(f.rule) ?? new Map();
@@ -5623,6 +5703,12 @@ export class RenderedChecks {
     }
   }
 }
+
+/** A state that drew nothing to read, named: with the canvas's own words where it said it could not draw. */
+const blankOf = (where: string, read: CheckRead): string =>
+  read.canvasFailed
+    ? `${where}: the canvas said “${read.canvasFailed}”`
+    : where;
 
 /** How long a page's elements stand still before it counts as drawn. */
 const DRAWN_QUIET_MS = 1000;
@@ -5767,10 +5853,15 @@ const askedOf = (
 /** One width's read, said: each rule's PASS or FAIL and what it found, then the rest. The findings' count. */
 const sayRead = (read: CheckRead): number => {
   let found = 0;
+  if (read.canvasFailed) {
+    console.log(
+      `FAIL canvas, the canvas drew what it was asked: it said “${read.canvasFailed}”`
+    );
+  }
   if (read.drewNothing) {
     for (const rule of RULES) {
       console.log(
-        `UNREAD ${rule}, ${CHECKS[rule].says}: the page drew nothing in its scope to read`
+        `UNREAD ${rule}, ${CHECKS[rule].says}: ${read.canvasFailed ? "the canvas drew its failure, not what it was asked" : "the page drew nothing in its scope to read"}`
       );
     }
     return RULES.length;
