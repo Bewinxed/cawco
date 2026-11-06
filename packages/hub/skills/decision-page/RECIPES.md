@@ -9,12 +9,12 @@ An HTML card carries no kind, so it is always the person's to pick; a choice wit
 ```html
 <article class="dp-card" id="lead">
   <header><h2>Who owns the project?</h2><span class="dp-state" data-dp-state="lead">Not picked</span></header>
-  <p class="dp-why">Recommended: Caw, woken by events. Caw keeps the board moving while you are away.</p>
   <div class="dp-opts" data-cawco-choice="lead" role="group" aria-label="Who owns the project">
     <button class="dp-opt" type="button" data-option="you"><b>You</b><span>Every brief is in your words.</span><span class="dp-cost">Nothing moves while you are away.</span><span class="dp-builds">Nothing new to build.</span></button>
     <button class="dp-opt" type="button" data-option="caw"><span class="dp-tag">Recommended</span><b>Caw, woken by events</b><span>The board moves while you are away.</span><span class="dp-cost">You review its briefs after the fact.</span><span class="dp-builds">Event wake-ups for Caw, with board tools only.</span></button>
   </div>
   <label class="dp-note">Note<textarea id="decision-lead-note" data-dp-note="lead" data-cawco-unkept rows="1" placeholder="Anything to add"></textarea></label>
+  <p class="dp-why">Recommended: Caw, woken by events. Caw keeps the board moving while you are away.</p>
 </article>
 ```
 
@@ -26,7 +26,7 @@ Add `data-cawco-multiple` to the `[data-cawco-choice]` element; each click toggl
 
 ## How it would look
 
-Put a figure between the why and the options; two side by side for "look" and "how it works", or `dp-show solo` for one. Each figure is a mockup, the flow drawn as one too:
+Put a figure last in the card, after the options, the note and the why, so every choice stands in the first screen however tall the figure; two side by side for "look" and "how it works", or `dp-show solo` for one. Each figure is a mockup, the flow drawn as one too:
 
 ```html
 <div class="dp-show">

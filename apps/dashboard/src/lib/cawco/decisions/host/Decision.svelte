@@ -5,9 +5,14 @@
   twice: `data-cawco-choice`, which the overlay's bridge picks on (a click
   on an option's `data-option` stores it, pick.ts), and `id="decision-<id>"`,
   which a pin's selector holds on to across revisions. Its head is its
-  question; under it the writer's advice, its why after the option it
-  recommends by name ("Recommended: Per machine. A machine is…"; the owner:
-  "i don't know what the advisor's opinion are on these picks").
+  question; right under it its options, then who decided it and its note,
+  so every choice and the note stand in the first screen however tall the
+  card's media (the owner: "if i have to scroll down to realize something is
+  there, it's a design failure"). Then the writer's advice, its why after
+  the option it recommends by name ("Recommended: Per machine. A machine
+  is…"; the owner: "i don't know what the advisor's opinion are on these
+  picks"), and last the media the options share. An option's own media
+  stays inside its option.
 
   A press picks, and the card stays open (the owner: "The done and continue
   are useless buttons that break the flow of how this form should work",
@@ -450,30 +455,6 @@
     class="@container flex min-w-0 flex-col gap-space-5"
     data-slot="decision-body"
   >
-    {#if advice}
-      <p
-        class="type-body max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
-        data-slot="why"
-      >
-        {advice}
-      </p>
-    {/if}
-    {#if Array.isArray(props.media) && props.media.length > 0}
-      <!-- A picture pressed to its full size spans the media's columns (`has-data-full`, Image.svelte). Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
-      <div
-        class={[
-          "grid min-w-0 gap-space-3 has-data-fills:grid-cols-1 *:has-data-full:col-span-full",
-          mediaColumns,
-        ]}
-        data-bleeds={pictures ? undefined : ""}
-        data-slot="decision-media"
-        style:--story-w={pictures && mediaWidth > 0
-          ? `${mediaWidth}px`
-          : undefined}
-      >
-        {@render renderNode(props.media)}
-      </div>
-    {/if}
     <OptionGroup
       aria-label={question}
       bind:value={() => chosen, () => undefined}
@@ -536,5 +517,29 @@
         </div>
       </div>
     </div>
+    {#if advice}
+      <p
+        class="type-body max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
+        data-slot="why"
+      >
+        {advice}
+      </p>
+    {/if}
+    {#if Array.isArray(props.media) && props.media.length > 0}
+      <!-- A picture pressed to its full size spans the media's columns (`has-data-full`, Image.svelte). Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
+      <div
+        class={[
+          "grid min-w-0 gap-space-3 has-data-fills:grid-cols-1 *:has-data-full:col-span-full",
+          mediaColumns,
+        ]}
+        data-bleeds={pictures ? undefined : ""}
+        data-slot="decision-media"
+        style:--story-w={pictures && mediaWidth > 0
+          ? `${mediaWidth}px`
+          : undefined}
+      >
+        {@render renderNode(props.media)}
+      </div>
+    {/if}
   </div>
 </article>

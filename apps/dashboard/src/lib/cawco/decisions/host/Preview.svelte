@@ -25,7 +25,9 @@
   (one dashboard's load at a time, the one in view first, embed-turns.ts),
   once its card is close to the view (`DRAW_MARGIN`), holding that turn
   until its app has mounted (core `EMBED_DRAWN`), and shown once its frame
-  has loaded. A
+  has loaded and its app shows something (that same word: a dev server's
+  app mounts seconds after its frame's load), its wait saying so until then,
+  or, past `DRAW_MS`, that it showed nothing. A
   component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
@@ -267,6 +269,7 @@
       }
       // A whole screen's app has mounted (its overlay saw it show something of its own): the page's turn is the next screen's.
       if (said?.type === EMBED_DRAWN) {
+        appDrawn = true;
         turnState = "fetched";
         turn?.done();
         return;
@@ -352,15 +355,23 @@
   let ready = $state<string | null>(null);
   /** The ready frame finished loading: until then the wait stands over it, so no empty box shows. */
   let drawn = $state(false);
+  /**
+   * A whole screen's app shows something of its own (core `EMBED_DRAWN`,
+   * its overlay's word). Its frame's load is not that: a dev server's app
+   * (a dashboard) shows nothing at its load and mounts once its modules
+   * compile and run, which on a cold dev server takes seconds; shown at its
+   * load, it stood as an empty box in the page's colour all that while.
+   */
+  let appDrawn = $state(false);
   /** The frame stood unseen under its wait (its skeleton), so its showing is the skeleton's reveal. */
   let underWait = false;
   /**
-   * It stands at its own shape: a screen once its frame has loaded; a
-   * component canvas once it has said its height (every Preview of a canvas
+   * It stands at its own shape: a screen once its frame has loaded and its
+   * app shows something ({@link appDrawn}); a component canvas once it has said its height (every Preview of a canvas
    * by that one rule, the first as the rest), never at a screen's 16:10
    * while it hasn't. Until then its wait stands.
    */
-  const shaped = $derived(screen ? drawn : tall !== null);
+  const shaped = $derived(screen ? drawn && appDrawn : tall !== null);
   /** What its frame's shape is now, for a reader: a screen's 16:10, drawn at the height its canvas said, or waiting for that. */
   const shape = $derived.by(() => {
     if (!shaped) {
@@ -536,15 +547,22 @@
    * once it is scrolled to, so the clock runs from {@link seen}. Our call:
    * past any page's evaluation, short of a wait nobody reads as loading. A
    * frame that says neither (a page that isn't the canvas, an import that
-   * never settles) is otherwise an empty box for good.
+   * never settles) is otherwise an empty box for good. A whole screen has
+   * as long from its frame's load to show something ({@link appDrawn}).
    */
   const DRAW_MS = 30_000;
+  /** Its draw's clock runs: a canvas told to draw, or a screen whose frame loaded, its box in the view ({@link seen}). */
+  const awaited = $derived(seen && (screen ? drawn : told));
   $effect(() => {
-    if (!(told && seen) || shaped || failed) {
+    if (!awaited || shaped || failed) {
       return;
     }
     const late = setTimeout(() => {
-      fail(decisionsWords.previewLate(DRAW_MS / 1000));
+      fail(
+        screen
+          ? decisionsWords.previewBlank(DRAW_MS / 1000)
+          : decisionsWords.previewLate(DRAW_MS / 1000)
+      );
     }, DRAW_MS);
     return () => clearTimeout(late);
   });
@@ -555,6 +573,7 @@
     rest = null;
     told = false;
     drawn = false;
+    appDrawn = false;
     failed = null;
     if (!embed) {
       return;

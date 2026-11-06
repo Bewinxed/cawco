@@ -107,6 +107,9 @@ export const decisionsWords = {
   /** A canvas told to draw that said neither its shape nor why within `seconds`. */
   previewLate: (seconds: number) =>
     `its stage didn't draw it within ${seconds} s. Try again; if it stays empty, open the canvas in its session to see why.`,
+  /** A whole screen whose page loaded and showed nothing of its own within `seconds`. */
+  previewBlank: (seconds: number) =>
+    `its page loaded but showed nothing within ${seconds} s. Try again; if it stays empty, open it in its session to see why.`,
   /**
    * A Preview not yet drawn, its wait's line (dashboard Preview.svelte):
    * waiting for its turn among the page's previews, or opening on its turn.

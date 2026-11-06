@@ -2316,6 +2316,11 @@ public enum Words {
             "its stage didn't draw it within \(seconds) s. Try again; if it stays empty, open the canvas in its session to see why."
         }
 
+        /// A whole screen whose page loaded and showed nothing of its own within `seconds`.
+        public static func previewBlank(seconds: Int) -> String {
+            "its page loaded but showed nothing within \(seconds) s. Try again; if it stays empty, open it in its session to see why."
+        }
+
         /// A Preview not yet drawn, its wait's line (dashboard Preview.svelte): waiting for its turn among the page's previews, or opening on its turn. `piece` is what the page calls it (dashboard page.svelte.ts `pieceName`), never its artifact's name.
         public static func previewQueued(piece: String) -> String {
             "Waiting to open “\(piece)”…"
