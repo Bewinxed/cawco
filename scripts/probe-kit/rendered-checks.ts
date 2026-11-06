@@ -3974,7 +3974,11 @@ function readInPage(args: InPageArgs): InPageRead {
     };
     /** Whether `el` stands in a capsule of glass: the nearest box over it that draws is one. */
     const inGlass = (el: Element) => {
-      for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+      for (
+        let up = el.parentElement;
+        up && up !== document.body;
+        up = up.parentElement
+      ) {
         if (paints(up).length > 0) {
           return capsule(contourOf(up));
         }
