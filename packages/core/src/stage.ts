@@ -96,6 +96,16 @@ export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 export const EMBED_DRAWN = "cawco:embed-drawn";
 
 /**
+ * A framed page's overlay is there: the message it posts to the page holding
+ * it, `{ type }`, carrying nothing, as each document of the frame starts and
+ * before anything else it says ({@link EMBED_DRAWN} among them). A Preview
+ * hears it as a new document in its frame (a dev server's reload after an
+ * edit or a restart, the app's own reload), which shows nothing of its own
+ * until its overlay says {@link EMBED_DRAWN} again.
+ */
+export const EMBEDDED = "cawco:embedded";
+
+/**
  * A canvas embed that can't draw what its Preview names, in place of its
  * shape: `{ type, why }`, why in plain words (a story that threw as it
  * mounted, a states file that didn't load). The Preview says it in its own

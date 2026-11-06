@@ -78,6 +78,7 @@
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
     EMBED_DRAWN,
+    EMBEDDED,
     type EmbedShape,
     screenHeight,
     storiesKey,
@@ -239,6 +240,26 @@
     }).catch(() => undefined);
   };
 
+  /** What a whole screen's overlay says of the document its frame holds, heard: true for its words, false for any other. */
+  const heardScreen = (type: unknown): boolean => {
+    // A new document in its frame (its overlay's first word, each load): a
+    // dev server's reload after an edit or a restart shows nothing of its
+    // own until it mounts again, so its wait stands over it until then,
+    // never the frame's empty page.
+    if (type === EMBEDDED) {
+      appDrawn = false;
+      return true;
+    }
+    // A whole screen's app has mounted (its overlay saw it show something of its own): the page's turn is the next screen's.
+    if (type === EMBED_DRAWN) {
+      appDrawn = true;
+      turnState = "fetched";
+      turn?.done();
+      return true;
+    }
+    return false;
+  };
+
   /** A component canvas's own height and widest story, as it says them (agent canvas runtime `by=embed`): its frame is as tall and as wide. */
   $effect(() => {
     const heard = (event: MessageEvent) => {
@@ -267,11 +288,7 @@
         turn?.graph(said.urls.map(String));
         return;
       }
-      // A whole screen's app has mounted (its overlay saw it show something of its own): the page's turn is the next screen's.
-      if (said?.type === EMBED_DRAWN) {
-        appDrawn = true;
-        turnState = "fetched";
-        turn?.done();
+      if (heardScreen(said?.type)) {
         return;
       }
       // Its share arrived: those modules are the page's, and the budget they held is free.
@@ -357,10 +374,12 @@
   let drawn = $state(false);
   /**
    * A whole screen's app shows something of its own (core `EMBED_DRAWN`,
-   * its overlay's word). Its frame's load is not that: a dev server's app
-   * (a dashboard) shows nothing at its load and mounts once its modules
-   * compile and run, which on a cold dev server takes seconds; shown at its
-   * load, it stood as an empty box in the page's colour all that while.
+   * its overlay's word), in the document its frame holds now: each new one
+   * (core `EMBEDDED`) starts without. Its frame's load is not that: a dev
+   * server's app (a dashboard) shows nothing at its load and mounts once its
+   * modules compile and run, which on a cold dev server takes seconds; shown
+   * at its load, it stood as an empty box in the page's colour all that
+   * while, and so did every reload of it once its first document had drawn.
    */
   let appDrawn = $state(false);
   /** The frame stood unseen under its wait (its skeleton), so its showing is the skeleton's reveal. */
@@ -945,7 +964,7 @@
             style:block-size={framedHeight}
             title={named()}
             {@attach (node) => {
-              if (!drawn) {
+              if (!(drawn && shaped)) {
                 underWait = true;
               } else if (underWait) {
                 underWait = false;

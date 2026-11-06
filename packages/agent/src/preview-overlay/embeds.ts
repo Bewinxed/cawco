@@ -34,7 +34,7 @@ import type {
   PinnedElement,
 } from "@cawco/core/comments";
 import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/frames";
-import { EMBED_DRAWN } from "@cawco/core/stage";
+import { EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
 import {
   contentBox,
   type FrameElement,
@@ -45,8 +45,6 @@ import {
   rectOf,
 } from "./frames";
 
-/** An embed's overlay is there: said to its parent, whatever its origin, and carrying nothing. */
-const EMBEDDED = "cawco:embedded";
 /** The page asks the element at a point of the embed's viewport; answered as {@link TARGET}. */
 const AT = "cawco:embed-at";
 const TARGET = "cawco:embed-target";
