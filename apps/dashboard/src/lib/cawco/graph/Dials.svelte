@@ -25,7 +25,10 @@
    * Narrower than `--container-timeline` (the phone's drawer, a room at its
    * least) the name's column shares the row with its control, two to three.
    */
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords } from "@cawco/core/words/graph";
+  import { MediaQuery } from "svelte/reactivity";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
@@ -34,6 +37,7 @@
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconReset } from "#lib/icons.js";
+  import ColourPicker from "./ColourPicker.svelte";
   import DialColour from "./DialColour.svelte";
   import DialNumber from "./DialNumber.svelte";
   import {
@@ -56,6 +60,7 @@
     undoable = false,
     open = $bindable(null),
     held = null,
+    coral = "each",
     lang,
     onchange,
     onreset,
@@ -75,6 +80,12 @@
       | { name: string; as: "dragging" }
       | { name: string; as: "typing"; text: string }
       | null;
+    /**
+     * Where the edit's ink stands, while the owner picks (the coral
+     * question): on each changed row's undo glyph (`each`, today's), or on
+     * Reset all alone, the rows' glyphs in ink (`once`).
+     */
+    coral?: "each" | "once";
     lang: string | undefined;
     onchange: (name: string, value: DialValue) => void;
     /** These controls back to as written; `all`: Reset all, which Undo reset takes back. */
@@ -94,7 +105,7 @@
       ? { figure: match[1] ?? option, unit: match[2] ?? "" }
       : { figure: option, unit: "" };
   };
-  /** A value said in words, for its undo glyph: a figure with its unit, a toggle on or off. */
+  /** A value said in words, one form everywhere: a figure, a space and its unit ("10 px", a select's "36px" too), a toggle on or off, words as they are. */
   const said = (dial: GraphDial, value: DialValue | undefined): string => {
     if (typeof value === "number") {
       return `${figureOf(value, lang)}${dial.unit ? ` ${dial.unit}` : ""}`;
@@ -102,8 +113,16 @@
     if (typeof value === "boolean") {
       return value ? words.dials.on : words.dials.off;
     }
-    return String(value ?? "");
+    const { figure, unit } = splitUnit(String(value ?? ""));
+    return unit ? `${figure} ${unit}` : figure;
   };
+  /** A figure's control writes its value at its end (a number, a select of figures); the agent's stands under it there. */
+  const atEnd = (dial: GraphDial): boolean =>
+    dial.kind === "number" ||
+    (dial.kind === "select" &&
+      (dial.options ?? []).some((one) => splitUnit(one).unit !== ""));
+  /** Under the phone line a colour's picker unfolds under its row, across the face. */
+  const phone = new MediaQuery("(width < 640px)");
   /** The controls in their headings' order: those under none first, then each heading's. */
   const sections = $derived.by(() => {
     const heads: (string | null)[] = [];
@@ -229,7 +248,6 @@
                           {lang}
                           onchange={(next) => onchange(dial.name, next)}
                           range={rangeOf(dial, start)}
-                          was={edited ? start : null}
                           typing={hand?.as === "typing" ? hand.text : null}
                           value={Number(value ?? start)}
                         />
@@ -237,6 +255,7 @@
                     {:else if dial.kind === "color"}
                       <div class="min-w-0 flex-1" {id}>
                         <DialColour
+                          inline={phone.current}
                           label={nameOf(dial)}
                           onchange={(next) => onchange(dial.name, next)}
                           {...layer(dial.name)}
@@ -279,12 +298,6 @@
                                  glyph that takes it back. -->
                             <Select.Item label={option} value={option}>
                               {#snippet children()}
-                                <span class="num"
-                                  >{shownOption.figure}{#if shownOption.unit}<span
-                                      class="ms-space-1 text-ink-muted"
-                                      >{shownOption.unit}</span
-                                    >{/if}</span
-                                >
                                 {#if edited && option === written[dial.name]}
                                   <IconReset
                                     aria-hidden="true"
@@ -294,6 +307,17 @@
                                     >{words.dials.agentsValue}</span
                                   >
                                 {/if}
+                                <!-- At the edge the trigger writes it at. -->
+                                <span
+                                  class={[
+                                    "num",
+                                    shownOption.unit && "flex-1 text-end",
+                                  ]}
+                                  >{shownOption.figure}{#if shownOption.unit}<span
+                                      class="ms-space-1 text-ink-muted"
+                                      >{shownOption.unit}</span
+                                    >{/if}</span
+                                >
                               {/snippet}
                             </Select.Item>
                           {/each}
@@ -338,15 +362,66 @@
                             onclick={() => onreset([dial.name], false)}
                             press="pressable"
                             size="icon-xs"
-                            tone="edited"
+                            tone={coral === "each" ? "edited" : undefined}
                             variant="ghost"
                           />
                         {/snippet}
                       </Tip>
                     {/if}
                   </span>
+                  {#if edited}
+                    <!-- The agent's value, written under his where his
+                         stands (a figure under a figure, at the field's end),
+                         led by the glyph that puts it back. Its words are the
+                         undo glyph's name, so a reader hears them once. -->
+                    {@const was = written[dial.name]}
+                    <p
+                      aria-hidden="true"
+                      class={[
+                        "mark-line col-start-2 m-0 flex min-w-0 items-center gap-space-1 pt-space-1 type-meta text-ink-muted",
+                        atEnd(dial) && "justify-end",
+                      ]}
+                      data-slot="dial-was"
+                    >
+                      <IconReset class="size-icon-sm flex-none" data-box />
+                      {#if dial.kind === "color"}
+                        <span
+                          data-box
+                          class="checker block size-space-3 flex-none overflow-clip rounded-hair border border-border-control"
+                          ><span
+                            class="block size-full bg-(--was)"
+                            style:--was={String(was ?? "")}
+                          ></span></span
+                        >
+                      {/if}
+                      <span
+                        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"
+                        >{said(dial, was)}</span
+                      >
+                    </p>
+                  {/if}
                 {/if}
               </div>
+              {#if phone.current && dial.kind === "color" && open === dial.name}
+                <!-- On a phone the picker unfolds under its row across the
+                     face, and is brought into view once it stands. -->
+                <div
+                  class="col-span-full min-w-0 scroll-mb-space-5"
+                  data-vaul-no-drag
+                  onintroend={(event) =>
+                    bringIntoView(event.currentTarget as HTMLElement)}
+                  transition:unfold
+                >
+                  <ColourPicker
+                    onchange={(next) => onchange(dial.name, next)}
+                    onclose={() => {
+                      open = null;
+                    }}
+                    value={String(value ?? "")}
+                    wide
+                  />
+                </div>
+              {/if}
             {/each}
           </section>
         {/each}
@@ -365,6 +440,7 @@
                 label={words.resetAll}
                 onclick={() => onreset(changed, true)}
                 size="sm"
+                tone={coral === "once" ? "edited" : undefined}
                 variant="ghost"
               />
             {:else}

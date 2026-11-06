@@ -308,24 +308,29 @@
 {/snippet}
 
 {#snippet restoreOf(key: Timing)}
-  {#if resets[key]}
-    {@const said = resets[key]}
-    <Tip label={said}>
-      {#snippet children(tip)}
-        <Button
-          {...tip}
-          aria-label={said}
-          data-edited={key}
-          icon={IconReset}
-          onclick={() => onretime(restore(track, key))}
-          press="pressable"
-          size="icon-xs"
-          tone="edited"
-          variant="ghost"
-        />
-      {/snippet}
-    </Tip>
-  {/if}
+  <!-- The undo glyph's slot after its chip, held whether or not the value
+       changed (as the Controls face holds its column), so no chip moves or
+       wraps to another line as the glyph comes and goes. -->
+  <span class="flex w-c-btn-h-xs flex-none items-center justify-center">
+    {#if resets[key]}
+      {@const said = resets[key]}
+      <Tip label={said}>
+        {#snippet children(tip)}
+          <Button
+            {...tip}
+            aria-label={said}
+            data-edited={key}
+            icon={IconReset}
+            onclick={() => onretime(restore(track, key))}
+            press="pressable"
+            size="icon-xs"
+            tone="edited"
+            variant="ghost"
+          />
+        {/snippet}
+      </Tip>
+    {/if}
+  </span>
 {/snippet}
 
 {#snippet chip(label: string, value: string, key: Timing, path: string | null)}
@@ -608,5 +613,7 @@
     </Popover.Root>
     {@render restoreOf("repeat")}
   </span>
-  {@render restoreOf("legs")}
+  {#if resets.legs}
+    {@render restoreOf("legs")}
+  {/if}
 </section>

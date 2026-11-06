@@ -22,6 +22,8 @@ const thing = (): string => {
 
 /** The house ease-out, as the engine reports it on the stage. */
 const EASE_OUT = browser ? ease("--ease-out") : "";
+/** The house's drawer curve: the failure line's curve changed to it is a change from the ease-out it was written with. */
+const EASE_DRAWER = browser ? ease("--ease-drawer") : "";
 let ids = 0;
 /** A clip as `clipOf` reads one off the stage. */
 const clip = (
@@ -133,13 +135,15 @@ const edited = (): Clip[] => {
   return formMove.map((one) => by.get(one.id) ?? one);
 };
 
-/** The failure line given the house ease-out in place of the curve its frames drew. */
+/** The failure line given the house drawer curve in place of the ease-out it was written with. */
 const curved = (): Clip[] => {
   const line = tracksOf(formMove).find((row) => row.thing === failure);
   if (!line) {
     return formMove;
   }
-  const by = new Map(reshape(line, EASE_OUT, null).map((one) => [one.id, one]));
+  const by = new Map(
+    reshape(line, EASE_DRAWER, null).map((one) => [one.id, one])
+  );
   return formMove.map((one) => by.get(one.id) ?? one);
 };
 
@@ -268,7 +272,7 @@ export const AtTheEnd = { args: { playhead: 886 } };
 /** The failure line made 400 ms long and set 74 ms later by hand: each edited value marked on its chip, the original outlined, Reset in the head. */
 export const Edited = { args: { move: ready(edited()), selected: "5" } };
 
-/** The failure line's curve changed to Ease-out: its Curve chip carrying the restore glyph, its row's length figure carrying its own. */
+/** The failure line's curve changed from Ease-out to the drawer curve: its Curve chip followed by the undo glyph, its row's too. */
 export const CurveChanged = {
   args: { move: ready(curved()), selected: "5" },
 };

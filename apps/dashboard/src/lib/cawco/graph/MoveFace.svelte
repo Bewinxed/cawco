@@ -309,6 +309,13 @@
   );
   /** Where `t` ms stands across the lanes, as a share of their width: the part shown, zoomed or whole. */
   const pct = (t: number) => `${((t - viewFrom) / viewSpan) * 100}%`;
+  /** How far a ruler figure stands back from its mark: centred, or from the lane's end it stands at. */
+  const shiftOf = (mark: number): string => {
+    if (mark <= viewFrom) {
+      return "0%";
+    }
+    return mark >= viewTo ? "100%" : "50%";
+  };
   /** A pointer's moment on a lane, ms, from where it stands across `box`. */
   const momentAt = (event: PointerEvent, box: DOMRect) => {
     const across = (event.clientX - box.left) / Math.max(1, box.width);
@@ -1003,31 +1010,20 @@
         {/if}
         {#if move.kind === "ready" && changedCount > 0}
           <div class="flex flex-none items-center gap-space-2">
-            <!-- Reset all: its words on a desk; on a narrow face its glyph,
-                 its words in its tooltip and its name. -->
-            <Tip label={words.resetAllSaid}>
-              {#snippet children(tip)}
-                <Button
-                  {...tip}
-                  aria-label={words.resetAllSaid}
-                  data-slot="reset-all"
-                  onclick={() =>
-                    onreset(
-                      clips.filter((clip) => clip.was).map((clip) => clip.id)
-                    )}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <IconReset
-                    aria-hidden="true"
-                    class="hidden size-icon-md @max-timeline/move:block"
-                  />
-                  <span class="@max-timeline/move:sr-only"
-                    >{words.resetAll}</span
-                  >
-                </Button>
-              {/snippet}
-            </Tip>
+            <!-- Reset all, as the Controls face writes it: the undo glyph
+                 and its words, at every width. -->
+            <Button
+              aria-label={words.resetAllSaid}
+              data-slot="reset-all"
+              icon={IconReset}
+              label={words.resetAll}
+              onclick={() =>
+                onreset(
+                  clips.filter((clip) => clip.was).map((clip) => clip.id)
+                )}
+              size="sm"
+              variant="ghost"
+            />
           </div>
         {/if}
       </header>
@@ -1124,9 +1120,13 @@
                         style:--at={pct(mark)}
                       ></span>
                       {#if figured.has(mark)}
+                        <!-- Centred on its mark; a figure at either end of the
+                             lane stands from that end, so the lane's clip never
+                             cuts it (its "0" stood half outside). -->
                         <span
-                          class="absolute start-(--at) top-0 -translate-x-1/2 text-ink-muted rtl:translate-x-1/2 coarse:top-space-2"
-                          style:--at={pct(mark)}>{figure(mark)}</span
+                          class="absolute start-(--at) top-0 -translate-x-(--shift) text-ink-muted rtl:translate-x-(--shift) coarse:top-space-2"
+                          style:--at={pct(mark)}
+                          style:--shift={shiftOf(mark)}>{figure(mark)}</span
                         >
                       {/if}
                     {/each}
@@ -1254,32 +1254,37 @@
                       </span>
                       {@render rowWords(line, chosen ? "open" : "rest")}
                     </button>
-                    {#if edited}
-                      <!-- A changed row: its restore glyph at the name's end,
-                         inside the name's own column, so the lanes never
-                         move as it comes and goes. -->
-                      {@const said = words.resetRow(name)}
-                      <Tip label={said}>
-                        {#snippet children(tip)}
-                          <Button
-                            {...tip}
-                            aria-label={said}
-                            data-edited
-                            icon={IconReset}
-                            onclick={() =>
-                              onreset(
-                                track.clips
-                                  .filter((clip) => clip.was)
-                                  .map((clip) => clip.id)
-                              )}
-                            press="pressable"
-                            size="icon-xs"
-                            tone="edited"
-                            variant="ghost"
-                          />
-                        {/snippet}
-                      </Tip>
-                    {/if}
+                    <!-- The undo glyph's slot, held in every row (as the Controls
+                         face holds its column), so the row's press and its wash
+                         keep one width as the glyph comes and goes, and the
+                         lanes never move. -->
+                    <span
+                      class="flex h-c-btn-h-sm w-c-btn-h-xs flex-none items-center justify-center"
+                    >
+                      {#if edited}
+                        {@const said = words.resetRow(name)}
+                        <Tip label={said}>
+                          {#snippet children(tip)}
+                            <Button
+                              {...tip}
+                              aria-label={said}
+                              data-edited
+                              icon={IconReset}
+                              onclick={() =>
+                                onreset(
+                                  track.clips
+                                    .filter((clip) => clip.was)
+                                    .map((clip) => clip.id)
+                                )}
+                              press="pressable"
+                              size="icon-xs"
+                              tone="edited"
+                              variant="ghost"
+                            />
+                          {/snippet}
+                        </Tip>
+                      {/if}
+                    </span>
                   </div>
                   <div
                     class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:min-h-c-btn-h"

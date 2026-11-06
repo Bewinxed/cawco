@@ -7,7 +7,6 @@
     ref = $bindable(null),
     class: className,
     share,
-    mark = null,
     look = "field",
     children,
     ...props
@@ -20,12 +19,6 @@
      * the caller marks it `data-dragging`.
      */
     share?: number;
-    /**
-     * A second place in the same range, 0 to 1, drawn as a tick across the
-     * frame over the fill (the design graph's number: where the agent's
-     * value stands while his differs).
-     */
-    mark?: number | null;
     /**
      * A form's field (`field`), or a search field standing in a bar's row
      * (`bar`, HIG Search fields: in a toolbar it is the bar's own capsule):
@@ -102,18 +95,10 @@
   {#if share !== undefined}
     <span
       aria-hidden="true"
-      class="pointer-events-none absolute inset-y-0 start-0 -z-1 w-(--share) border-e border-border-control bg-surface-fill transition-control"
+      class="pointer-events-none absolute inset-y-0 start-0 -z-1 w-(--share) bg-surface-fill transition-control"
       data-slot="input-group-share"
       style:--share="{Math.min(1, Math.max(0, share)) * 100}%"
     ></span>
-    {#if mark !== null}
-      <span
-        aria-hidden="true"
-        class="pointer-events-none absolute inset-y-space-1 start-(--mark) -z-1 w-px -translate-x-1/2 bg-ink-muted"
-        data-slot="input-group-mark"
-        style:--mark="{Math.min(1, Math.max(0, mark)) * 100}%"
-      ></span>
-    {/if}
   {/if}
   {@render children?.()}
 </div>

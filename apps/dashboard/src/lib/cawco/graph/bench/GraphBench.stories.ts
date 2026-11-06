@@ -15,17 +15,20 @@ export default {
 };
 
 /** The Controls face beside the stage, the corner radius turned to 4 px. */
-export const DialsFace = {
+export const ControlsFace = {
   args: { face: "dials" },
   parameters: { viewport: 1440 },
 };
 
 /** In the phone's drawer, opened at half height under the drawing. */
-export const DialsFacePhone = {
+export const ControlsFacePhone = {
   name: "Controls face, phone",
   args: { face: "dials" },
   parameters: { viewport: 390 },
 };
 
 /** No controls: the room holds its states, its map and its animation. */
-export const NoDials = { args: { dials: [] }, parameters: { viewport: 1440 } };
+export const NoControls = {
+  args: { dials: [] },
+  parameters: { viewport: 1440 },
+};
