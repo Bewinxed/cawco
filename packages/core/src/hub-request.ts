@@ -1,0 +1,149 @@
+/**
+ * THE DOOR every TypeScript caller of the hub builds its request through:
+ * the route, named as the hub declares it (`"PUT /api/accounts/routing/:provider"`),
+ * and what it sends, held exactly to what that route takes
+ * (hub-routes.gen.ts, written from the hub's own route table). It returns the
+ * method, path and JSON body each caller's own transport sends, with its
+ * own credentials, deadline and refusal words.
+ *
+ * Exact: the hub refuses a field its route doesn't take with a 422 (hub
+ * server.ts `normalize: false`, unknown-fields.ts), and TypeScript refuses an
+ * extra property only on a fresh object literal ("Since assigning
+ * `squareOptions` won't undergo excess property checks, the compiler won't
+ * give you an error", typescriptlang.org/docs/handbook/2/objects.html). Two
+ * dashboard saves drifted so, each passing a typed variable whole: routing's
+ * `atLimit.delegateWork` and a delegate type's `name`, `cawcoTodos` and
+ * `role`. So `sent` is checked field by field, at every depth, for a typed
+ * variable as much as for a literal (`Exact`): a field no branch of the
+ * route's schema declares is a type error, as unknown-fields.ts reads a
+ * union; a record or `unknown` the route takes stays open; `any` is refused.
+ * hub-request.fixtures.ts holds both drifts as type errors.
+ */
+import type { components } from "./hub-routes.gen";
+
+/** Every hub route by `METHOD /path`, and what it takes: `path`, `query`, `body`. */
+type HubRoutes = components["schemas"];
+type HubRoute = keyof HubRoutes;
+
+/** What `route` takes. */
+type HubSent<R extends HubRoute> = HubRoutes[R];
+
+/** The routes that take nothing they need, called with no `sent`. */
+type BareRoute = {
+  [R in HubRoute]: object extends HubRoutes[R] ? R : never;
+}[HubRoute];
+
+declare const notTaken: unique symbol;
+/** A field the route doesn't take: what `Exact` puts in its place, so the type error names it. */
+interface NotTaken {
+  readonly [notTaken]: "a field this hub route doesn't take";
+}
+
+/** Whether schema type `S` takes keys it doesn't list: `unknown`, or a record. */
+type Open<S> = unknown extends S
+  ? true
+  : S extends object
+    ? string extends keyof S
+      ? true
+      : false
+    : false;
+/** Every key any branch of `S` declares. */
+type KeysOf<S> = S extends unknown ? keyof S : never;
+/** `K`'s type in each branch of `S` that declares it. */
+type At<S, K> = S extends unknown ? (K extends keyof S ? S[K] : never) : never;
+type ItemOf<S> = S extends readonly (infer I)[] ? I : never;
+
+/**
+ * `T` with each field schema `S` doesn't take as {@link NotTaken}, at every
+ * depth: `T` is assignable to it only when it sends nothing more. `any`
+ * is never: it is assignable to anything else.
+ */
+type Exact<T, S> = 0 extends 1 & T
+  ? never
+  : true extends Open<S>
+    ? T
+    : T extends readonly unknown[]
+      ? { [I in keyof T]: Exact<T[I], ItemOf<Extract<S, readonly unknown[]>>> }
+      : T extends object
+        ? {
+            [K in keyof T]: K extends KeysOf<Extract<S, object>>
+              ? Exact<T[K], At<Extract<S, object>, K>>
+              : NotTaken;
+          }
+        : T;
+
+/** A request as each transport sends it: spread it into `fetch`'s init. */
+export interface HubRequest {
+  body?: string;
+  headers?: { "Content-Type": "application/json" };
+  method: string;
+  /** From `/`, its parameters encoded and its query after it. */
+  path: string;
+}
+
+/** What a request may carry, read loosely, for {@link requestOf}. */
+interface Parts {
+  body?: unknown;
+  path?: Record<string, string | number>;
+  query?: Record<string, unknown>;
+}
+
+const PARAMETER = /^:(.+)$/u;
+
+/** The query's fields as the hub's query parser reads them: an array as its key repeated, nothing for `undefined`. */
+const queryOf = (query: Record<string, unknown> | undefined): string => {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query ?? {})) {
+    for (const one of Array.isArray(value) ? value : [value]) {
+      if (one !== undefined && one !== null) {
+        search.append(key, String(one));
+      }
+    }
+  }
+  const text = search.toString();
+  return text ? `?${text}` : "";
+};
+
+/** `route` with `parts` filled in, read as given. */
+const requestOf = (route: string, parts: Parts): HubRequest => {
+  const space = route.indexOf(" ");
+  const method = route.slice(0, space);
+  const path = route
+    .slice(space + 1)
+    .split("/")
+    .map((segment) => {
+      const name = PARAMETER.exec(segment)?.[1];
+      if (name === undefined) {
+        return segment;
+      }
+      const value = parts.path?.[name];
+      if (value === undefined) {
+        throw new Error(`${route}: no value for its path parameter ${name}`);
+      }
+      return encodeURIComponent(String(value));
+    })
+    .join("/");
+  return {
+    method,
+    path: `${path}${queryOf(parts.query)}`,
+    ...(parts.body === undefined
+      ? {}
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parts.body),
+        }),
+  };
+};
+
+/**
+ * The request for `route`, with what it sends: its path parameters, query
+ * and body, each held exactly to what the route takes ({@link Exact}).
+ */
+export function hubRequest<R extends BareRoute>(route: R): HubRequest;
+export function hubRequest<R extends HubRoute, const S extends HubSent<R>>(
+  route: R,
+  sent: S & Exact<S, HubSent<R>>
+): HubRequest;
+export function hubRequest(route: string, sent: Parts = {}): HubRequest {
+  return requestOf(route, sent);
+}

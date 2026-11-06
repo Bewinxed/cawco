@@ -398,8 +398,12 @@ export default {
     "packages/core": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
-      // A Worker started from its path: src/loop-watch.ts `WATCHDOG_URL`.
-      entry: ["src/loop-watch-worker.ts"],
+      entry: [
+        // A Worker started from its path: src/loop-watch.ts `WATCHDOG_URL`.
+        "src/loop-watch-worker.ts",
+        // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the request door's proof (src/hub-request.ts).
+        "src/hub-request.fixtures.ts",
+      ],
     },
     "packages/cli": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
