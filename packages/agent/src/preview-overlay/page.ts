@@ -1524,13 +1524,13 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
             state: {
               interaction: interactionOf(interaction) ?? "rest",
               scheme: scheme === "light" || scheme === "dark" ? scheme : "page",
-              // A frame at its story's own form is as wide as its body laid out (unscaled by the canvas's zoom).
+              // A drawing of no width of its own is as wide as its body laid out (unscaled by a card's zoom): the marked element itself, or the body inside it.
               width: Number.isFinite(width)
                 ? width
-                : (frame.querySelector<HTMLElement>(".cawco-frame-body")
-                    ?.offsetWidth ??
-                    0) ||
-                  null,
+                : (
+                    frame.querySelector<HTMLElement>(".cawco-frame-body") ??
+                    frame
+                  ).offsetWidth || null,
             },
           }
         : {}),

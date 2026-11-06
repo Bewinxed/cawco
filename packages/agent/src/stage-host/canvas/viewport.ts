@@ -1,13 +1,13 @@
 /**
- * A frame (the stage's drawing, a grid's frame) is a viewport to the
+ * A frame (a drawing, stage.ts) is a viewport to the
  * story's floating layers too (width.ts makes it one to its CSS and
  * matchMedia). A menu, a popover or a tooltip placed
  * by floating-ui (bits-ui's floating layer, its `collisionBoundary` empty
  * by default) collides with the viewport alone: what `getViewportRect`
  * reads, `visualViewport` (its width, height and offsets) and else the
  * root's `clientWidth`, and what script reads as `innerWidth`. Those answer
- * at the frame a floating layer opens from (the mode says which: the
- * stage's one drawing, a grid's frame by its triggers), its left and right
+ * at the frame a floating layer opens from (stage.ts `drawingsAsViewport`
+ * says which: the drawing it stands in, or its trigger's), its left and right
  * as the frame stands, never cut by the window: a layer placed in a 1440
  * drawing collides where the app's 1440 window has it collide, wherever
  * the drawing stands on the screen; what the window cuts off the page

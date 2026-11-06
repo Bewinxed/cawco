@@ -8,17 +8,18 @@
  * render report posted to the stage (the one source every tool answers
  * from) and the sheet told to the pane's inspector.
  *
- * What a page draws is its mode's. A person's panel and the stage's own
- * render (`by=panel`, the default, and `by=stage`) draw the stage (stage.ts):
- * the one live instance of the state the panel keeps, the design graph's
- * stage. A decision page's Preview and the panel map's live card
- * (`by=embed`, `by=map`) draw the frames grid (frames.ts).
+ * What a page draws, the stage draws (stage.ts), every story as a
+ * drawing: for a person's panel and the stage's own render (`by=panel`,
+ * the default, and `by=stage`) the one live instance of the state the
+ * panel keeps, the design graph's stage; for a decision page's Preview and
+ * the panel map's live card (`by=embed`, `by=map`) each story it names, a
+ * drawing in a column.
  *
  * The stage's entry module hands {@link boot} the framework's adapter
  * (`mountStory`, answering `unmount` and `update`) and how to load each
  * section; everything else is read from the page's URL: `file` per
  * section, `spec` (core `CanvasSpec`), and `scheme`, `width`, `motion`,
- * `all` and `by`; and from the plan the stage writes into the page (core
+ * `fit` and `by`; and from the plan the stage writes into the page (core
  * `SectionPlan`): each section's name and its stories, so a section names
  * itself before its module loads.
  */
@@ -71,7 +72,6 @@ import {
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { shellWords } from "@cawco/core/words/shell";
-import { bootFrames } from "./frames";
 import {
   deltaOf,
   firedBetween,
@@ -188,6 +188,13 @@ export interface BootOptions {
   faces: string;
   /** A section's module; `fresh`, past whatever the browser kept of an import of it that failed. */
   load: (file: string, fresh?: boolean) => Promise<SectionModule>;
+  /**
+   * The project's preview file (Storybook's `.storybook/preview.*`, host.ts
+   * `previewFile`): its `decorators` wrap every story outside the meta's,
+   * as the app's root wraps its whole tree, and its `parameters` stand
+   * under each story's. None where the project has none.
+   */
+  preview: { decorators?: unknown; parameters?: unknown };
   /** The toolchain root, absolute: dev paths are made relative to it. */
   root: string;
   /** CawCo's tokens (DESIGN.md), `:root` scoped by the page's style to its own (page-style.ts). */
@@ -221,8 +228,6 @@ const REPORT_QUIET_MS = 200;
 export type WidthSlot = number | "own";
 
 export interface View {
-  /** Every scheme and every preset width, as more columns (the frames grid's). */
-  all: boolean;
   /** The stage: a width picked wider than the page's room is scaled to fit it; off, it is drawn 1:1 and the page scrolls across it. */
   fit: boolean;
   motion: "on" | "reduce";
@@ -274,7 +279,7 @@ export interface Section {
   settling?: Promise<void>;
 }
 
-/** Which page this is: a person's panel or the stage's render (the stage), a decision page's Preview or the map's live card (the frames grid). */
+/** Which page this is: a person's panel or the stage's render (the stage's one drawing), a decision page's Preview or the map's live card (its column of drawings). */
 export type PageBy = "panel" | "stage" | "embed" | "map";
 
 /** A section module's address as an HMR update names it: `/@id/__x00__cawco:sheet/<the states file, encoded>.js`. */
@@ -338,7 +343,6 @@ function viewOf(params: URLSearchParams): View {
         : "page",
     widths: widths.length > 0 ? widths : null,
     motion: params.get("motion") === "reduce" ? "reduce" : "on",
-    all: params.get("all") === "1",
     fit: params.get("fit") !== "0",
   };
 }
@@ -375,28 +379,28 @@ export interface CanvasState {
   /**
    * The stage's room the window lacks to hold state `key`'s drawing whole
    * at 1:1, {0, 0} when it does; null when the stage doesn't stand at it.
-   * None on a frames page.
+   * None on a column's page.
    */
   lacks?: (key: string) => { h: number; w: number } | null;
   loaded: () => string[];
-  /** State `key`'s drawing as it stands, for its picture; null when the stage doesn't stand at it. None on a frames page. */
+  /** State `key`'s drawing as it stands, for its picture; null when the stage doesn't stand at it. None on a column's page. */
   picture?: (key: string) => FramePictureRead | null;
   /**
    * The stage brought to state `key` for its picture: mounted afresh at
    * rest, its interaction forced on the drawing; answers the room the
-   * window still lacks for it (`lacks`). None on a frames page.
+   * window still lacks for it (`lacks`). None on a column's page.
    */
   pose?: (key: string) => Promise<{ h: number; w: number } | null>;
   report: PageReport | null;
   reports: number;
-  /** Whether state `key`'s drawing is settled: fonts loaded, no finite animation running in it. None on a frames page. */
+  /** Whether state `key`'s drawing is settled: fonts loaded, no finite animation running in it. None on a column's page. */
   settled?: (key: string) => boolean;
   setView: (next: Partial<View>) => void;
   /**
    * The state of story `name` (`Story`, or `file:Story` where two states
    * files name one story alike) in interaction `interaction`, for its
    * picture: its key once its section has drawn; or why there is none, in
-   * words. None on a frames page.
+   * words. None on a column's page.
    */
   stateNamed?: (
     name: string,
@@ -511,9 +515,10 @@ function holdWhileAway(): void {
 }
 
 /**
- * What a mode (the stage, or the frames grid) answers the page's shared
- * work with: the frames its report says, what it does as a section is
- * shown, fails, is restyled or overridden, and what it holds mounted.
+ * What a mode (the stage's one drawing, or its column of drawings)
+ * answers the page's shared work with: the frames its report says, what it
+ * does as a section is shown, fails, is restyled or overridden, and what it
+ * holds mounted.
  */
 export interface Mode {
   /** The bodies mounted where the person sees them, each with its story: the dials reach every one. */
@@ -1084,6 +1089,7 @@ export function boot(options: BootOptions): void {
         name: (csf.name ?? name) as string,
         title: (meta.title ?? section.file) as string,
         parameters: {
+          ...((options.preview.parameters ?? {}) as object),
           ...((meta.parameters ?? {}) as object),
           ...((csf.parameters ?? {}) as object),
         },
@@ -1093,9 +1099,13 @@ export function boot(options: BootOptions): void {
       },
       component: csf.component ?? meta.component,
       render: csf.render ?? meta.render,
+      // The story's innermost, then the meta's, then the preview file's, as Storybook nests them.
       decorators: [
         ...((csf.decorators ?? []) as unknown[]),
         ...((meta.decorators ?? []) as unknown[]),
+        ...(Array.isArray(options.preview.decorators)
+          ? options.preview.decorators
+          : []),
       ],
     };
   }
@@ -1818,7 +1828,6 @@ export function boot(options: BootOptions): void {
       ...(next.scheme ? { scheme: next.scheme } : {}),
       ...("widths" in next ? { widths: next.widths ?? null } : {}),
       ...(next.motion ? { motion: next.motion } : {}),
-      ...(typeof next.all === "boolean" ? { all: next.all } : {}),
       ...(typeof next.fit === "boolean" ? { fit: next.fit } : {}),
     });
     if (view.motion !== motionWas) {
@@ -1965,7 +1974,7 @@ export function boot(options: BootOptions): void {
     widthOf,
   };
   window.__cawcoCanvas = state;
-  mode = embed || by === "map" ? bootFrames(page) : bootStage(page);
+  mode = bootStage(page);
 }
 
 const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/u;

@@ -46,13 +46,13 @@ const spec: Spec = {
           (stories) => {
             const statuses = [
               ...document.querySelectorAll(
-                '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status'
+                "[data-stage-drawing][data-cawco-story]"
               ),
             ];
             return (
               statuses.length === stories &&
               statuses.every(
-                (one) => one.getAttribute("data-state") === "drawn"
+                (one) => one.getAttribute("data-cawco-state") === "drawn"
               )
             );
           },
@@ -60,7 +60,7 @@ const spec: Spec = {
           { timeout: STAGE_START_MS, polling: 250 }
         );
         const frames = await page
-          .locator('.cawco-frame[data-cawco-interaction="rest"]')
+          .locator("[data-stage-drawing][data-cawco-story]")
           .count();
         const read = await checks.at(page, `${form}, the Animation face`);
         const uneven = read.findings.filter(

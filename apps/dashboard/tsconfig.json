@@ -14,7 +14,8 @@
     "incremental": true,
     "tsBuildInfoFile": "../../.tsbuild/apps/dashboard/svelte.tsbuildinfo"
   },
-  "include": ["src"],
+  // The preview file the component canvas's stage reads beside src (stage-host host.ts `previewFile`).
+  "include": ["src", ".storybook"],
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/icons" }

@@ -934,9 +934,28 @@ async function svelteProps(): Promise<string> {
   }).js.code;
 }
 
+/** Storybook's preview file's names, under the project's root: its decorators and parameters apply to every story (storybook.js.org/docs/writing-stories/decorators, "Defining the decorator in the preview file applies it to all stories"). */
+const PREVIEW_FILES = ["ts", "tsx", "mts", "js", "jsx", "mjs"].map(
+  (ext) => `.storybook/preview.${ext}`
+);
+
 /**
- * The canvas's entry: the app's global styles, the framework's adapter and
- * the canvas runtime (canvas/runtime.ts, bundled into this host), which
+ * The project's preview file (Storybook's `.storybook/preview.*`), where
+ * what the app's root gives its whole tree is given every story: a
+ * provider its components read (the dashboard's tooltip provider), set as
+ * a decorator. None where the project has none.
+ */
+function previewFile(): string | null {
+  const found = PREVIEW_FILES.map((one) => resolve(root, one)).find((one) =>
+    existsSync(one)
+  );
+  return found ?? null;
+}
+
+/**
+ * The canvas's entry: the app's global styles, the project's preview file
+ * ({@link previewFile}: its decorators every story's outermost), the
+ * framework's adapter and the canvas runtime (canvas/runtime.ts, bundled into this host), which
  * loads each section's module as it comes into view. Vite's HMR words
  * reach the runtime as window events: `cawco:updates` with the modules an
  * update names, before it applies (a section that failed to load, among
@@ -952,12 +971,15 @@ function entryModule(): string {
   const styles = globalStyles()
     .map((style) => `import ${JSON.stringify(style)};`)
     .join("\n");
+  const preview = previewFile();
   return `${styles}
+${preview ? `import * as preview from ${JSON.stringify(preview)};` : "const preview = {};"}
 import { mountStory } from "${VIRTUAL_STAGE}adapter.js";
 import { boot } from "${VIRTUAL_STAGE}runtime.js";
 const BASE = new URL(import.meta.url).pathname.replace(/\\/@id\\/.*$/, "");
 boot({
   adapter: { mountStory },
+  preview: preview.default ?? preview,
   root: ${JSON.stringify(root)},
   tokens: ${JSON.stringify(CANVAS_TOKENS)},
   faces: ${JSON.stringify(CANVAS_FACES)},

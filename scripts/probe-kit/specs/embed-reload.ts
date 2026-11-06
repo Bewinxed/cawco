@@ -92,7 +92,7 @@ const drawnSince = async (page: Page): Promise<string[]> => {
         () =>
           !(window as unknown as { __kitBefore?: true }).__kitBefore &&
           document.querySelector(
-            '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status[data-state="drawn"]'
+            '[data-stage-drawing][data-cawco-state="drawn"]'
           ) !== null
       )
       .catch(() => false);

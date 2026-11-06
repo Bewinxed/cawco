@@ -735,7 +735,8 @@ function timeline() {
     failed: [...document.querySelectorAll(".cawco-section-failed")].map(
       (one) => one.textContent?.slice(0, 600) ?? ""
     ),
-    frames: document.querySelectorAll(".cawco-frame").length,
+    frames: document.querySelectorAll("[data-stage-drawing][data-cawco-story]")
+      .length,
     styleSheets: document.styleSheets.length,
     elements: document.getElementsByTagName("*").length,
   };
@@ -2336,7 +2337,7 @@ async function buildCanvases(stage: Stage, files: string[]): Promise<Built> {
     );
     writeFileSync(
       join(src, `entry-${at}.js`),
-      `import "/src/app.css";\nimport { mountStory } from "./adapter.js";\nimport { boot } from ${JSON.stringify(runtime)};\nboot({ adapter: { mountStory }, root: ${JSON.stringify(APP)}, tokens: ${JSON.stringify(tokens)}, faces: ${JSON.stringify(faces.css)}, load: () => import("./section-${at}.js") });\n`
+      `import "/src/app.css";\nimport { mountStory } from "./adapter.js";\nimport { boot } from ${JSON.stringify(runtime)};\nboot({ adapter: { mountStory }, preview: {}, root: ${JSON.stringify(APP)}, tokens: ${JSON.stringify(tokens)}, faces: ${JSON.stringify(faces.css)}, load: () => import("./section-${at}.js") });\n`
     );
     writeFileSync(
       join(src, `canvas-${at}.html`),
@@ -2736,13 +2737,15 @@ function installBootClock(): void {
         }
       }
     }
-    if (document.querySelector(".cawco-frame")) {
+    if (document.querySelector("[data-stage-drawing]")) {
       mark("frame made");
     }
     if (document.querySelector(".cawco-frame-body *")) {
       mark("story mounted");
     }
-    if (document.querySelector('.cawco-frame-status[data-state="drawn"]')) {
+    if (
+      document.querySelector('[data-stage-drawing][data-cawco-state="drawn"]')
+    ) {
       mark("drawn");
     }
   }).observe(document, { childList: true, subtree: true, attributes: true });

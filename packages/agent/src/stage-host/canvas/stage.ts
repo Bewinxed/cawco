@@ -47,6 +47,13 @@
  * (`cawco:stage-dials-written`) and sets every value the panel turns
  * (`cawco:stage-dials`) on it.
  *
+ * Every story the canvas page draws, it draws here, as a drawing (a body
+ * of its own in a frame its width, marked with its story): the stage's one
+ * live instance, and each story a decision page's Preview (`by=embed`) or
+ * a map's card (`by=map`) names, one under another in a column at its own
+ * width ({@link bootColumn}). A Preview tells the page holding it its
+ * column's shape (embed.ts).
+ *
  * Every states file's report is read in the rig, a section at a time: each
  * story mounted off screen as the person's drawing would be, read, then
  * taken down, a few at a time; then its probes and its moves. The page
@@ -58,6 +65,7 @@ import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
   type CanvasDial,
+  type CanvasGraph,
   FORMS,
   type FramePictureRead,
   type FrameRender,
@@ -105,6 +113,7 @@ import {
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { differences } from "./diff";
+import { tellHolder } from "./embed";
 import { drew, firstWords, partsOf, readAnimation } from "./measure";
 import { nameOf, thingOf } from "./names";
 import { allClass } from "./pseudo";
@@ -121,6 +130,7 @@ import {
 import {
   type Column,
   detailsOf,
+  FAILED_LINE,
   FORCED,
   frameTick,
   type Mode,
@@ -136,6 +146,8 @@ import {
   windowWidth,
 } from "./viewport";
 
+/** The most of a story's error a Preview's failure carries (`CANVAS_EMBED_FAILED`): its Preview says it on one line. Our call. */
+const EMBED_WHY_MAX = 200;
 /** How long a reach's play may run, then its motion (component-canvas moves.md). */
 const PLAY_MS = 6000;
 const MOTION_MS = 3000;
@@ -394,7 +406,278 @@ function writtenOf(
   return values;
 }
 
+/* --- A drawing: what every page of the stage draws a story as ----------- */
+
+/**
+ * A drawing: one story mounted live in a body of its own (its scheme, its
+ * width, the container its rules answer: runtime `dressBody`), in a frame
+ * its width, marked with its story for the overlay's pins
+ * (`data-cawco-story`, page.ts `sheetChain`) and the probe kit. The stage
+ * draws the one state the panel keeps as a drawing; a Preview and a map's
+ * card draw each story they name as one, in a column ({@link bootColumn}).
+ */
+interface Drawing {
+  /** The story's body: the element it mounts into. */
+  body: HTMLElement;
+  /** What stands round it: its width, its rings. */
+  frame: HTMLElement;
+}
+
+/** A frame and the body a story mounts into. */
+function newDrawing(): Drawing {
+  const frame = document.createElement("div");
+  frame.className = "cawco-stage-frame";
+  frame.hidden = true;
+  const body = document.createElement("div");
+  body.className = "cawco-frame-body cawco-stage-drawing";
+  body.toggleAttribute("data-stage-drawing", true);
+  frame.append(body);
+  return { frame, body };
+}
+
+/** A state named by the panel or the page's address, resolved to its section, the story drawn and its args; or why it can't be, in words. */
+function resolveState(page: Page, ref: StateRef): Target | { refused: string } {
+  const section = page.sectionOf(ref.file);
+  const sheet = section?.mod?.SHEET;
+  if (!(section && sheet)) {
+    return { refused: `${ref.file} is no states file of this canvas.` };
+  }
+  const drawn = storyOf(ref);
+  const story = sheet.stories.find((one) => one.name === drawn);
+  if (!story) {
+    return { refused: `${ref.file} has no story ${drawn}.` };
+  }
+  let args = page.argsOf(section, drawn);
+  if (ref.variant && "records" in ref.variant) {
+    const arg = sheet.stories.find((one) => one.name === ref.story)?.records;
+    const list = arg ? args[arg] : undefined;
+    if (arg && Array.isArray(list)) {
+      args = { ...args, [arg]: cutRecords(list, ref.variant.records) };
+    }
+  }
+  return { section, story, args, ref };
+}
+
+/** A drawing's marks, read by the overlay's pins (page.ts `sheetChain`) and the probe kit: its story, its file and place, its state; its width where it has one. */
+function markDrawing(
+  body: HTMLElement,
+  target: Target,
+  scheme: Column["scheme"],
+  width: number | null
+): void {
+  const { section, story } = target;
+  body.dataset.cawcoStory = story.name;
+  body.dataset.cawcoFile = section.file;
+  body.dataset.cawcoSource = `${section.file}:${story.line}:${story.column}`;
+  body.dataset.cawcoInteraction = "rest";
+  body.dataset.cawcoScheme = scheme;
+  if (width === null) {
+    delete body.dataset.cawcoWidth;
+  } else {
+    body.dataset.cawcoWidth = String(width);
+  }
+  if (target.ref.variant) {
+    body.dataset.cawcoVariant = JSON.stringify(target.ref.variant);
+  } else {
+    delete body.dataset.cawcoVariant;
+  }
+}
+
+/**
+ * `target` mounted afresh in `drawing`'s body, whatever stood there taken
+ * down first and the body then dressed for it (`dress`: its scheme, its
+ * width, its marks); what its mount said of itself is on its `into`.
+ */
+function mountDrawing(
+  page: Page,
+  drawing: Drawing,
+  target: Target,
+  was: Live | null,
+  dress: () => void
+): Live {
+  was?.mounted?.unmount();
+  drawing.body.replaceChildren();
+  dress();
+  drawing.frame.hidden = false;
+  const into: { error?: PageError } = {};
+  const mounted = page.mountInto(
+    drawing.body,
+    target.section,
+    target.story.name,
+    target.args,
+    into
+  );
+  return { ...target, mounted, into };
+}
+
+/** The component threw as it mounted: the error formula's card, its own Try again (`again`), the error and where it threw under Show details. */
+function faultCard(
+  target: Target,
+  error: PageError,
+  again: () => void
+): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "cawco-stage-failed cawco-ui";
+  card.setAttribute("role", "alert");
+  const head = document.createElement("p");
+  head.className = "cawco-stage-failed-head";
+  const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  glyph.setAttribute("viewBox", "0 0 24 24");
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.innerHTML = ERROR_GLYPH;
+  const line = document.createElement("span");
+  line.textContent = words.mountFailed(
+    target.section.name,
+    shownName(target.story, target.section.mod?.SHEET.stories ?? [])
+  );
+  head.append(glyph, line);
+  const message = document.createElement("p");
+  message.className = "cawco-stage-failed-message";
+  message.textContent = error.message.split("\n")[0] ?? error.message;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = words.tryAgain;
+  button.addEventListener("click", again);
+  const details = detailsOf(
+    error.file
+      ? `${error.message}\n${error.file}:${error.line ?? 1}:${error.column ?? 1}`
+      : error.message
+  );
+  const actions = document.createElement("div");
+  actions.append(button);
+  card.append(head, message, actions, details);
+  return card;
+}
+
+/** What stands for the drawings until the first mounts, seen only past the wait's grace (DESIGN.md's Real Wait Rule). */
+function waitingFor(name: string): HTMLElement {
+  const waiting = document.createElement("div");
+  waiting.className = "cawco-stage-waiting cawco-waiting";
+  waiting.setAttribute("role", "status");
+  waiting.setAttribute("aria-busy", "true");
+  const said = document.createElement("span");
+  said.className = "cawco-sr";
+  said.textContent = words.mounting(name);
+  const block = document.createElement("div");
+  block.className = "cawco-stand-in-body";
+  waiting.append(said, block);
+  return waiting;
+}
+
+/** The ids a floating layer holds: its own and its parts' (a menu's content inside its positioned wrapper). */
+const idsIn = (layer: Element): string[] =>
+  [layer, ...layer.querySelectorAll("[id]")]
+    .map((one) => one.id)
+    .filter(Boolean);
+
+/**
+ * Each drawing a viewport to the floating layers its story opens
+ * (viewport.ts), as the app's window at its width is: a layer answers at
+ * the drawing it stands in, else at the one holding the trigger that names
+ * it (`aria-controls`, a menu's or a popover's; `aria-describedby`, a
+ * tooltip's), as a layer portalled out of its drawing (bits-ui's Portal,
+ * to the body) is named; else at the one drawing with a trigger open
+ * (`aria-expanded`), else the one last pressed or focused in, else the
+ * only one. A drawing of no width of its own answers the window's, as
+ * does a layer of none of `drawings` (a hidden drawing read against the
+ * stage's, the rig's probes).
+ */
+function drawingsAsViewport(drawings: () => HTMLElement[]): void {
+  /** The drawings that answer as a viewport: drawn, with a width of their own. */
+  const widthy = () =>
+    drawings().filter((body) => body.isConnected && body.style.width !== "");
+  /** The drawing last pressed or focused in, where a menu or a popover opens from. */
+  let touched: HTMLElement | null = null;
+  /** The person has pressed, typed or scrolled here: a focus from then on is theirs. */
+  let acted = false;
+  const touchedIn = (event: Event) => {
+    touched =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-stage-drawing]")
+        : null;
+  };
+  document.addEventListener("pointerdown", touchedIn, true);
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      if (acted) {
+        touchedIn(event);
+      }
+    },
+    true
+  );
+  for (const input of ["pointerdown", "keydown", "wheel"] as const) {
+    document.addEventListener(
+      input,
+      () => {
+        acted = true;
+      },
+      { capture: true, passive: true }
+    );
+  }
+  /** Each portalled layer's drawing, by its trigger, as first found: a layer's trigger stays in its drawing while it stands. */
+  const named = new WeakMap<Element, HTMLElement>();
+  /** The drawing whose trigger names one of `layer`'s ids; null for none. */
+  const triggerOf = (layer: Element, among: HTMLElement[]) => {
+    const known = named.get(layer);
+    if (known && among.includes(known)) {
+      return known;
+    }
+    for (const id of idsIn(layer)) {
+      const name = CSS.escape(id);
+      const found = among.find((body) =>
+        body.querySelector(
+          `[aria-controls~="${name}"],[aria-describedby~="${name}"]`
+        )
+      );
+      if (found) {
+        named.set(layer, found);
+        return found;
+      }
+    }
+    return null;
+  };
+  /** The drawing a layer belongs to; null for one of none of them. */
+  const layerDrawing = (layer: Element | null): HTMLElement | null => {
+    if (!layer?.isConnected) {
+      return null;
+    }
+    const among = widthy();
+    const own = layer.closest<HTMLElement>("[data-stage-drawing]");
+    if (own) {
+      return among.includes(own) ? own : null;
+    }
+    return among.some((body) => layer.contains(body))
+      ? null
+      : triggerOf(layer, among);
+  };
+  /** The drawing script asks the viewport of when no layer of one asks. */
+  const asked = (): HTMLElement | null => {
+    const among = widthy();
+    const open = among.filter((body) =>
+      body.querySelector('[aria-expanded="true"]')
+    );
+    if (open.length === 1) {
+      return open[0] ?? null;
+    }
+    if (
+      touched &&
+      among.includes(touched) &&
+      (open.length === 0 || open.includes(touched))
+    ) {
+      return touched;
+    }
+    return open.length === 0 && among.length === 1 ? (among[0] ?? null) : null;
+  };
+  frameAsViewport(
+    (layer) => (layerDrawing(layer) ?? asked())?.getBoundingClientRect() ?? null
+  );
+}
+
 export function bootStage(page: Page): Mode {
+  if (page.by === "embed" || page.by === "map") {
+    return bootColumn(page);
+  }
   const { rig, root, sections, state, view } = page;
   /**
    * A panel frames the page and says what it stands at; a page on its own
@@ -405,12 +688,9 @@ export function bootStage(page: Page): Mode {
   document.documentElement.classList.add("cawco-stage-page");
   const canvas = document.getElementById("cawco-canvas") as HTMLElement;
   canvas.classList.add("cawco-stage");
-  const frame = document.createElement("div");
-  frame.className = "cawco-stage-frame";
-  frame.hidden = true;
-  const drawing = document.createElement("div");
-  drawing.className = "cawco-frame-body cawco-stage-drawing";
-  drawing.toggleAttribute("data-stage-drawing", true);
+  /** The one drawing: the live instance of the state the panel keeps. */
+  const stage = newDrawing();
+  const { frame, body: drawing } = stage;
   /** Compare's rings: outside each element's box on its own shape, in a layer of the stage's own over both drawings, taking no press. */
   const rings = document.createElement("div");
   rings.className = "cawco-stage-rings";
@@ -419,7 +699,7 @@ export function bootStage(page: Page): Mode {
   const litRing = document.createElement("span");
   litRing.className = "cawco-lit-ring";
   litRing.hidden = true;
-  frame.append(drawing, rings, litRing);
+  frame.append(rings, litRing);
   /** Compare side by side: each drawing named over its own column. */
   const names = document.createElement("div");
   names.className = "cawco-stage-names";
@@ -428,15 +708,7 @@ export function bootStage(page: Page): Mode {
   const againstName = document.createElement("span");
   names.append(keptName, againstName);
   /** What stands for the drawing until it first mounts, seen only past the wait's grace. */
-  const waiting = document.createElement("div");
-  waiting.className = "cawco-stage-waiting cawco-waiting";
-  waiting.setAttribute("role", "status");
-  waiting.setAttribute("aria-busy", "true");
-  const waitingWords = document.createElement("span");
-  waitingWords.className = "cawco-sr";
-  const block = document.createElement("div");
-  block.className = "cawco-stand-in-body";
-  waiting.append(waitingWords, block);
+  const waiting = waitingFor(sections[0]?.name ?? "the component");
   canvas.append(waiting, names, frame);
 
   let live: Live | null = null;
@@ -499,28 +771,8 @@ export function bootStage(page: Page): Mode {
     width: roomWidth(story),
   });
 
-  /** A state named by the panel, resolved to its section, the story drawn and its args; or why it can't be, in words. */
-  function resolved(ref: StateRef): Target | { refused: string } {
-    const section = page.sectionOf(ref.file);
-    const sheet = section?.mod?.SHEET;
-    if (!(section && sheet)) {
-      return { refused: `${ref.file} is no states file of this canvas.` };
-    }
-    const drawn = storyOf(ref);
-    const story = sheet.stories.find((one) => one.name === drawn);
-    if (!story) {
-      return { refused: `${ref.file} has no story ${drawn}.` };
-    }
-    let args = page.argsOf(section, drawn);
-    if (ref.variant && "records" in ref.variant) {
-      const arg = sheet.stories.find((one) => one.name === ref.story)?.records;
-      const list = arg ? args[arg] : undefined;
-      if (arg && Array.isArray(list)) {
-        args = { ...args, [arg]: cutRecords(list, ref.variant.records) };
-      }
-    }
-    return { section, story, args, ref };
-  }
+  /** A state named by the panel, resolved; or why it can't be, in words. */
+  const resolved = (ref: StateRef) => resolveState(page, ref);
 
   /** A body dressed and sized for `target` as the drawing stands: its scheme, its width. */
   const dress = (body: HTMLElement, target: Target) =>
@@ -538,21 +790,9 @@ export function bootStage(page: Page): Mode {
     rootStyle.colorScheme = drawing.style.colorScheme;
   };
 
-  /** The drawing's own marks, read by the overlay's pins (page.ts `sheetChain`) and the probe kit. */
-  function mark(target: Target): void {
-    const { section, story } = target;
-    drawing.dataset.cawcoStory = story.name;
-    drawing.dataset.cawcoFile = section.file;
-    drawing.dataset.cawcoSource = `${section.file}:${story.line}:${story.column}`;
-    drawing.dataset.cawcoInteraction = "rest";
-    drawing.dataset.cawcoScheme = scheme();
-    drawing.dataset.cawcoWidth = String(roomWidth(story));
-    if (target.ref.variant) {
-      drawing.dataset.cawcoVariant = JSON.stringify(target.ref.variant);
-    } else {
-      delete drawing.dataset.cawcoVariant;
-    }
-  }
+  /** The drawing's own marks, at the width it is laid out at. */
+  const mark = (target: Target) =>
+    markDrawing(drawing, target, scheme(), roomWidth(target.story));
 
   /* --- Coming to rest --------------------------------------------------- */
 
@@ -608,38 +848,9 @@ export function bootStage(page: Page): Mode {
   function faulted(target: Target, error: PageError): void {
     clearFault();
     frame.hidden = true;
-    const card = document.createElement("div");
-    card.className = "cawco-stage-failed cawco-ui";
-    card.setAttribute("role", "alert");
-    const head = document.createElement("p");
-    head.className = "cawco-stage-failed-head";
-    const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    glyph.setAttribute("viewBox", "0 0 24 24");
-    glyph.setAttribute("aria-hidden", "true");
-    glyph.innerHTML = ERROR_GLYPH;
-    const line = document.createElement("span");
-    line.textContent = words.mountFailed(
-      target.section.name,
-      shownName(target.story, target.section.mod?.SHEET.stories ?? [])
-    );
-    head.append(glyph, line);
-    const message = document.createElement("p");
-    message.className = "cawco-stage-failed-message";
-    message.textContent = error.message.split("\n")[0] ?? error.message;
-    const again = document.createElement("button");
-    again.type = "button";
-    again.textContent = words.tryAgain;
-    again.addEventListener("click", () => {
+    const card = faultCard(target, error, () => {
       queue(() => open(target));
     });
-    const details = detailsOf(
-      error.file
-        ? `${error.message}\n${error.file}:${error.line ?? 1}:${error.column ?? 1}`
-        : error.message
-    );
-    const actions = document.createElement("div");
-    actions.append(again);
-    card.append(head, message, actions, details);
     canvas.append(card);
     fault = card;
     tell<StageFault>(STAGE_FAULT, { on: target.ref, message: error.message });
@@ -700,26 +911,17 @@ export function bootStage(page: Page): Mode {
   async function mount(target: Target): Promise<void> {
     replays.load([]);
     holdHeight(true);
-    live?.mounted?.unmount();
-    drawing.replaceChildren();
-    clearFault();
     posed = null;
     moved = new Map();
-    dress(drawing, target);
-    ground();
-    mark(target);
-    frame.style.setProperty("--frame-w", `${roomWidth(target.story)}px`);
-    frame.hidden = false;
-    waiting.remove();
-    const into: { error?: PageError } = {};
-    const mounted = page.mountInto(
-      drawing,
-      target.section,
-      target.story.name,
-      target.args,
-      into
-    );
-    live = { ...target, mounted, into };
+    live = mountDrawing(page, stage, target, live, () => {
+      clearFault();
+      dress(drawing, target);
+      ground();
+      mark(target);
+      frame.style.setProperty("--frame-w", `${roomWidth(target.story)}px`);
+      waiting.remove();
+    });
+    const { into } = live;
     await frameTick();
     if (into.error) {
       holdHeight(false);
@@ -1812,9 +2014,7 @@ export function bootStage(page: Page): Mode {
   new ResizeObserver(() => laid()).observe(drawing);
   addEventListener("resize", () => relay());
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
-  frameAsViewport(() =>
-    live && !frame.hidden ? drawing.getBoundingClientRect() : null
-  );
+  drawingsAsViewport(() => (live && !frame.hidden ? [drawing] : []));
 
   addEventListener(STAGE_REACH, (event) => {
     const asking = stageReachOf((event as CustomEvent<unknown>).detail);
@@ -2185,9 +2385,6 @@ export function bootStage(page: Page): Mode {
     }
   }
 
-  waitingWords.textContent = words.mounting(
-    sections[0]?.name ?? "the component"
-  );
   page.quietly(sweep());
 
   return {
@@ -2278,6 +2475,423 @@ export function bootStage(page: Page): Mode {
     redressed: () => {
       relay();
       readAgain();
+    },
+    selected: () => undefined,
+  };
+}
+
+/* --- A Preview's column, and a map card's ------------------------------- */
+
+/** A drawing in a column: the state it stands at, its live instance, why it threw, and the observer that hears it lay out. */
+interface InColumn extends Drawing {
+  fault: HTMLElement | null;
+  heard: ResizeObserver | null;
+  /** Its observer has heard it lay out since it last mounted: a frame has laid it out, its own observers' first answers in. */
+  laid: boolean;
+  live: Live | null;
+  target: Target;
+}
+
+/** A states file as a column draws it: its place among the column's, its drawings by story, or the card saying why it didn't load. */
+interface ColumnPart {
+  drawings: Map<string, InColumn>;
+  el: HTMLElement;
+  failedCard: HTMLElement | null;
+  section: Section;
+}
+
+/** Where a map card's column stands from the card's corner. */
+const CARD_INSET = { x: 24, y: 16 };
+/** A map card's least zoom. */
+const CARD_ZOOM_MIN = 0.1;
+
+/** A finite animation that runs: one a story's arrival set off (a Svelte `in:`, a fold), never a loop or a scroller's. */
+const arriving = (run: Animation): boolean =>
+  run.playState === "running" &&
+  !statesOwn(run) &&
+  Number.isFinite(Number(run.effect?.getComputedTiming().endTime));
+
+/**
+ * A decision page's Preview (`by=embed`) and a map's card (`by=map`): each
+ * story the page names (a Preview's `story`s, in the order it names them;
+ * a card's every one) drawn as the stage draws its one state, a drawing,
+ * one under another in a column, each at its own width (or the one the
+ * view names), at rest, 1 CSS px per px. A Preview's column stands in the
+ * page's own flow and tells the page holding it its shape (embed.ts); a
+ * card's is fitted to the card by one transform. Neither posts a report,
+ * nor reads anything in the rig: the report stays the panel's own page's.
+ */
+function bootColumn(page: Page): Mode {
+  const { sections, view } = page;
+  const embed = page.by === "embed";
+  const named = new Set(new URLSearchParams(location.search).getAll("story"));
+  document.documentElement.classList.add(
+    "cawco-column-page",
+    embed ? "cawco-embed" : "cawco-map"
+  );
+  const canvas = document.getElementById("cawco-canvas") as HTMLElement;
+  const column = document.createElement("div");
+  column.className = "cawco-column";
+  const waiting = waitingFor(sections[0]?.name ?? "the component");
+  column.append(waiting);
+  canvas.append(column);
+  const parts: ColumnPart[] = sections.map((section) => {
+    const el = document.createElement("div");
+    el.className = "cawco-column-part";
+    el.dataset.cawcoFile = section.file;
+    column.append(el);
+    return { section, el, drawings: new Map(), failedCard: null };
+  });
+  const partOf = (section: Section) =>
+    parts.find((one) => one.section === section) as ColumnPart;
+  const drawn = () => parts.flatMap((one) => [...one.drawings.values()]);
+
+  /** The stories of `all` the page draws: a Preview's the ones it names, in its order; a card's every one, in its file's. */
+  const toDraw = (all: readonly Story[]): Story[] =>
+    named.size === 0
+      ? [...all]
+      : [...named].flatMap((name) => all.filter((one) => one.name === name));
+
+  const scheme = (): Column["scheme"] =>
+    view.scheme === "both" ? "light" : view.scheme;
+  const columnOf = (): Column => ({
+    interaction: "rest",
+    scheme: scheme(),
+    width: view.widths?.[0] ?? "own",
+  });
+  const widthOf = (one: InColumn) =>
+    page.widthOf(one.target.story, columnOf().width);
+
+  /** A drawing dressed as it stands: its scheme, its width, its marks. */
+  function dress(one: InColumn): void {
+    const width = widthOf(one);
+    page.dressBody(
+      one.body,
+      columnOf(),
+      one.target.story,
+      page.fills(one.target.section, one.target.story.name)
+    );
+    markDrawing(one.body, one.target, scheme(), width);
+    one.frame.style.setProperty(
+      "--frame-w",
+      width === null ? "auto" : `${width}px`
+    );
+  }
+
+  /** A drawing's story mounted afresh, heard as it lays out once its own effects have run. */
+  function draw(one: InColumn): void {
+    one.heard?.disconnect();
+    one.heard = null;
+    one.laid = false;
+    one.fault?.remove();
+    one.fault = null;
+    one.live = mountDrawing(page, one, one.target, one.live, () => dress(one));
+    const { live } = one;
+    if (live.into.error) {
+      faulted(one, live.into.error);
+      return;
+    }
+    // The component's own observers are made in its effects, which its framework runs in a microtask after the mount: this one is made after them, so it hears what their answers lay out.
+    queueMicrotask(() => {
+      if (one.live === live && !one.fault) {
+        one.heard = new ResizeObserver(() => laidOut(one));
+        one.heard.observe(one.body);
+      }
+    });
+  }
+
+  /** A drawing taken down. */
+  function undraw(one: InColumn): void {
+    one.heard?.disconnect();
+    one.live?.mounted?.unmount();
+    one.fault?.remove();
+    one.frame.remove();
+  }
+
+  /** The story threw as it mounted: the error formula in its drawing's place, its own Try again. */
+  function faulted(one: InColumn, error: PageError): void {
+    one.heard?.disconnect();
+    one.heard = null;
+    one.frame.hidden = true;
+    one.body.dataset.cawcoState = "failed";
+    const card = faultCard(one.target, error, () => {
+      const target = resolveState(page, one.target.ref);
+      if (!("refused" in target)) {
+        one.target = target;
+        draw(one);
+        changed();
+      }
+    });
+    one.frame.after(card);
+    one.fault = card;
+    changed();
+  }
+
+  /** A drawing laid out anew: whether it drew, its error if its framework said one since, and the column's shape read again. */
+  function laidOut(one: InColumn): void {
+    const error = one.live?.into.error;
+    if (error) {
+      faulted(one, error);
+      return;
+    }
+    one.body.dataset.cawcoState = drew(one.body) ? "drawn" : "empty";
+    one.laid = true;
+    changed();
+  }
+
+  /**
+   * Each picture's address as its load or error was heard: a picture has
+   * arrived once its event has run, never when it says it is `complete` (a
+   * broken one is complete before its error's handler runs, and what that
+   * handler draws, ReportOutputs' failed thumbnail, laid out a frame after
+   * the shape was said).
+   */
+  const pictured = new WeakMap<HTMLImageElement, string>();
+  for (const type of ["load", "error"] as const) {
+    column.addEventListener(
+      type,
+      (event) => {
+        if (event.target instanceof HTMLImageElement) {
+          pictured.set(event.target, event.target.src);
+        }
+      },
+      true
+    );
+  }
+
+  /** A Preview's shape, told the page holding it; a card's column, fitted. */
+  const teller = embed
+    ? tellHolder({
+        el: column,
+        ready: () =>
+          sections.every((one) => one.loaded || one.failure) &&
+          drawn().every((one) => one.laid || one.fault),
+        failure: embedFailure,
+        arriving: () => [
+          ...document
+            .getAnimations()
+            .filter(
+              (run) =>
+                arriving(run) &&
+                run.effect instanceof KeyframeEffect &&
+                !!run.effect.target &&
+                column.contains(run.effect.target)
+            )
+            .map((run) => run.finished),
+          // A lazy picture loads only once its frame is laid out at its height, which waits on this: never waited for.
+          ...[...column.querySelectorAll("img")]
+            .filter(
+              (img) =>
+                img.loading !== "lazy" &&
+                !!img.getAttribute("src") &&
+                pictured.get(img) !== img.src
+            )
+            .map(
+              (img) =>
+                new Promise((done) => {
+                  img.addEventListener("load", done, { once: true });
+                  img.addEventListener("error", done, { once: true });
+                })
+            ),
+        ],
+        stories: () => [
+          ...new Set(drawn().map((one) => one.target.story.name)),
+        ],
+        width: () => {
+          const widths = drawn().flatMap((one) => widthOf(one) ?? []);
+          return widths.length > 0 ? Math.max(...widths) : null;
+        },
+      })
+    : null;
+  const changed = () => (teller ? teller.changed() : fit());
+
+  /** A map card's column zoomed to the card's width, never past 1. */
+  function fit(): void {
+    const box = canvas.getBoundingClientRect();
+    const width = column.scrollWidth || box.width;
+    const zoom = Math.max(
+      CARD_ZOOM_MIN,
+      Math.min(1, (box.width - 2 * CARD_INSET.x) / width)
+    );
+    column.style.transform = `translate(${CARD_INSET.x}px, ${CARD_INSET.y}px) scale(${zoom})`;
+  }
+
+  /**
+   * Why a Preview can't draw what it names, in plain words; null while it
+   * draws: a story of it that threw as it mounted, or, with no story of it
+   * drawn, a states file that didn't load (its card's line).
+   */
+  function embedFailure(): string | null {
+    const all = drawn();
+    const threw = all.find((one) => one.live?.into.error);
+    const error = threw?.live?.into.error;
+    if (threw && error) {
+      const first = error.message.split("\n")[0]?.trim() ?? "";
+      const said =
+        first.length > EMBED_WHY_MAX
+          ? `${first.slice(0, EMBED_WHY_MAX - 1)}…`
+          : first;
+      return `its story ${threw.target.story.name} threw as it mounted${said ? `: ${said}` : "."}`;
+    }
+    const failedOne = sections.find((one) => one.failure);
+    if (all.length === 0 && failedOne?.failure) {
+      return FAILED_LINE[failedOne.failure.kind](failedOne.name);
+    }
+    return null;
+  }
+
+  /** The line saying which stories a Preview names that no states file of its canvas has; none while every one is held. */
+  let unnamedLine: HTMLElement | null = null;
+
+  /**
+   * A Preview's named stories that no states file holds, said once in the
+   * column's own place, after every one has loaded: a story is the
+   * canvas's, from whichever states file holds it. While one is still on
+   * its way, or failed (it says why in its own place), nothing is said.
+   */
+  function unnamed(): void {
+    unnamedLine?.remove();
+    unnamedLine = null;
+    if (sections.some((one) => !one.loaded || one.failure)) {
+      return;
+    }
+    const have = new Set(
+      sections.flatMap(
+        (one) => one.mod?.SHEET.stories.map((story) => story.name) ?? []
+      )
+    );
+    const missing = [...named].filter((name) => !have.has(name));
+    if (missing.length === 0) {
+      return;
+    }
+    unnamedLine = document.createElement("p");
+    unnamedLine.className = "cawco-section-failed-line cawco-ui";
+    unnamedLine.setAttribute("role", "alert");
+    unnamedLine.textContent = `${page.spec.name ?? "This canvas"} has no ${missing.length === 1 ? "story" : "stories"} named ${missing.join(", ")}.`;
+    column.prepend(unnamedLine);
+  }
+
+  /** A states file's place cleared: its drawings taken down, the card saying why it didn't load gone, the wait over. */
+  function cleared(section: Section): ColumnPart {
+    const part = partOf(section);
+    for (const one of part.drawings.values()) {
+      undraw(one);
+    }
+    part.drawings.clear();
+    part.failedCard?.remove();
+    part.failedCard = null;
+    waiting.remove();
+    return part;
+  }
+
+  /** A states file's stories drawn from its module, whatever stood of the last one taken down. */
+  function shown(section: Section): void {
+    const part = cleared(section);
+    teller?.mounted();
+    for (const story of toDraw(section.mod?.SHEET.stories ?? [])) {
+      const target = resolveState(page, {
+        file: section.file,
+        story: story.name,
+      });
+      if ("refused" in target) {
+        continue;
+      }
+      const one: InColumn = {
+        ...newDrawing(),
+        target,
+        live: null,
+        fault: null,
+        heard: null,
+        laid: false,
+      };
+      part.el.append(one.frame);
+      part.drawings.set(story.name, one);
+      draw(one);
+    }
+    // A story with a width and no height of its own drawn as tall as its screen, as it fills a window.
+    for (const one of part.drawings.values()) {
+      if (!one.fault && page.fillsScreen(section, one.target.story, one.body)) {
+        dress(one);
+      }
+    }
+    if (embed) {
+      unnamed();
+    }
+    changed();
+  }
+
+  /** A states file whose module didn't load says so in its own place, its error and where it threw under Show details. */
+  function failed(section: Section, failure: SectionFailure): void {
+    const part = cleared(section);
+    part.failedCard = page.failedCard(section, failure);
+    part.el.append(part.failedCard);
+    changed();
+  }
+
+  // Each layer a drawing opens collides with that drawing, as with the app's window at its width.
+  drawingsAsViewport(() =>
+    drawn().flatMap((one) => (one.live && !one.fault ? [one.body] : []))
+  );
+  if (!embed) {
+    new ResizeObserver(() => fit()).observe(canvas);
+  }
+
+  // Every states file in order, once the page may load its stories: a Preview's once the page holding it says its whole graph is in the renderer (host.ts `graphPreloads`, core `CANVAS_EMBED_READY`), any other page's at once.
+  page.quietly(
+    (async () => {
+      await (window as unknown as { __cawcoGraph?: CanvasGraph }).__cawcoGraph
+        ?.go;
+      for (const section of sections) {
+        await page.loadSection(section);
+      }
+    })()
+  );
+
+  return {
+    bodies: () =>
+      drawn().flatMap((one) =>
+        one.live
+          ? [
+              {
+                body: one.body,
+                mounted: one.live.mounted,
+                written: page.ownArgsOf(
+                  one.target.section,
+                  one.target.story.name
+                ),
+              },
+            ]
+          : []
+      ),
+    // A column posts no report.
+    drawing: () => [],
+    framesOf: () => null,
+    mediaWidth: () => {
+      // Asked between mounts: at the one width every drawing has.
+      const widths = new Set(drawn().map(widthOf));
+      const [only] = widths;
+      return (
+        (widths.size === 1 && only !== undefined ? only : null) ??
+        canvas.clientWidth
+      );
+    },
+    overridden: (section, story) => {
+      const one = partOf(section).drawings.get(story);
+      const target = one ? resolveState(page, one.target.ref) : null;
+      if (one && target && !("refused" in target)) {
+        one.target = target;
+        draw(one);
+      }
+    },
+    shown,
+    failed,
+    reported: () => undefined,
+    restyled: () => undefined,
+    updated: () => undefined,
+    redressed: () => {
+      for (const one of drawn()) {
+        dress(one);
+      }
     },
     selected: () => undefined,
   };

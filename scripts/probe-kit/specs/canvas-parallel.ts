@@ -159,7 +159,7 @@ function frameFaults(): string[] {
     ?.textContent?.trim();
   const rest = [
     ...document.querySelectorAll<HTMLElement>(
-      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-body'
+      "[data-stage-drawing][data-cawco-story]"
     ),
   ].map((body) => body.getBoundingClientRect());
   return [
@@ -332,7 +332,7 @@ async function warm(kit: Kit, stagePort: number): Promise<void> {
       .waitForFunction(
         () =>
           document.querySelector(
-            '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-status[data-state="drawn"]'
+            '[data-stage-drawing][data-cawco-state="drawn"]'
           ) !== null,
         undefined,
         { timeout: STAGE_START_MS, polling: 250 }

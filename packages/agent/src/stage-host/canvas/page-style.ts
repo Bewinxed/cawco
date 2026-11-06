@@ -2,9 +2,9 @@
  * The canvas page's own style (component canvas §2): the page drawn on
  * CawCo's tokens (DESIGN.md), scoped to its own root so the project's CSS
  * never reaches it, its rules on classes no project writes: the stage
- * (stage.ts) and its rings, the frames grid of a Preview and a map's card
- * (frames.ts), a section that didn't load, the skeleton while one is on its
- * way, the rig. The design graph's controls (the Animation face, the
+ * (stage.ts) and its rings, the column of drawings a Preview and a map's
+ * card draw (stage.ts `bootColumn`), a section that didn't load, the
+ * skeleton while one is on its way, the rig. The design graph's controls (the Animation face, the
  * agent's dials) are the panel's, never this page's.
  */
 
@@ -100,6 +100,22 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
   inline-size: calc(var(--ring-w) + 2 * var(--ring-out)); block-size: calc(var(--ring-h) + 2 * var(--ring-out));
   border: var(--c-change-ring-width) solid var(--c-change-ring); border-radius: var(--radius-sm); }
 .cawco-lit-ring[hidden] { display: none; }
+/* A decision page's Preview (by=embed) and a map's card (by=map), drawn by the stage (stage.ts bootColumn): each story it
+   names a drawing, one under another, each at its own width, 1 CSS px per px. A drawing of no width of its own answers
+   its story's width conditions at the canvas's width (canvas width.ts). */
+html.cawco-column-page, html.cawco-column-page body { margin: 0; }
+html.cawco-column-page .cawco-canvas { container: cawco-width / inline-size; }
+.cawco-column { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.cawco-column-part { display: contents; }
+/* A Preview stands in the page's own flow on the surface the decision page draws its Preview on; the page holding it makes
+   its frame as tall as the column and as wide as its widest story (CANVAS_EMBED_SIZE) and scrolls it sideways where its
+   room is narrower, and a wheel or a finger on it scrolls that page. */
+html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; background: var(--surface-page); }
+/* A map's card: the column on the well, fitted to the card by one transform (stage.ts fit). */
+html.cawco-map, html.cawco-map body { block-size: 100%; overflow: hidden; background: var(--surface-well); }
+html.cawco-map .cawco-canvas { position: fixed; inset: 0; overflow: hidden; }
+html.cawco-map .cawco-column { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: max-content;
+  transform-origin: 0 0; }
 .cawco-stage-waiting { display: grid; gap: var(--space-2); }
 .cawco-stage-waiting > .cawco-stand-in-body { inline-size: min(var(--frame-w), 100%); }
 .cawco-stage-failed { justify-items: start; }

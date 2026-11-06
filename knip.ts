@@ -309,6 +309,8 @@ export default {
       entry: [
         // Every states file under src/, found by its name by the component canvas's stage host: packages/agent/src/stage-host/host.ts:2358 (core stage.ts:568 STORY_FILE).
         "src/**/*.stories.{ts,js,tsx,jsx}",
+        // The states files' preview file, read by the stage host by its name: packages/agent/src/stage-host/host.ts `previewFile`.
+        ".storybook/preview.ts",
         // The decision host page's Bun.build entrypoints, the host and an HTML page's dials: packages/core/src/decision-host.ts:281.
         "src/lib/cawco/decisions/host/host.ts",
         "src/lib/cawco/decisions/host/dials.ts",
