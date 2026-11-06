@@ -24,6 +24,7 @@
    * hub's page, served from the hub, and has no stand-in here.
    */
   import type { DecisionPageSummary } from "@cawco/core/decisions";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { needsYouOf } from "@cawco/core/task-views";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -107,7 +108,17 @@
   const pages = [setupPage];
 
   // --- the bench's hub ----------------------------------------------------------
-  const base = `/api/projects/${PO_ID}`;
+  const ofProject = { path: { id: PO_ID } };
+  /** The path the hub serves `route` of this project at. */
+  const pathOf = (
+    route:
+      | "GET /api/projects/:id/decisions"
+      | "GET /api/projects/:id/tasks"
+      | "GET /api/projects/:id/stages"
+      | "GET /api/projects/:id/decides"
+      | "GET /api/projects/:id/gate"
+      | "GET /api/projects/:id/tracker"
+  ) => hubRequest(route, ofProject).path;
   const restore = browser
     ? standBench(PO_ROW, (path, method, query) => {
         if (method === "POST" && path.endsWith(`/artifacts/${PO_SETUP}/show`)) {
@@ -118,8 +129,12 @@
           return;
         }
         const answers: Record<string, unknown> = {
-          [`${base}/decisions`]: { graph: false, pages, problems: [] },
-          [`${base}/tasks`]: {
+          [pathOf("GET /api/projects/:id/decisions")]: {
+            graph: false,
+            pages,
+            problems: [],
+          },
+          [pathOf("GET /api/projects/:id/tasks")]: {
             // Caw's Needs you reads the tasks the hub says wait on you.
             tasks: query.has("needsYou")
               ? tasks.filter((task) => task.needsYou)
@@ -128,15 +143,22 @@
             stagesProblems: [],
             tracker: "cawco",
           },
-          [`${base}/stages`]: PO_STAGES,
-          [`${base}/decides`]: PO_DETAILS.decides,
-          [`${base}/gate`]: PO_DETAILS.gate,
-          [`${base}/tracker`]: PO_DETAILS.tracker,
+          [pathOf("GET /api/projects/:id/stages")]: PO_STAGES,
+          [pathOf("GET /api/projects/:id/decides")]: PO_DETAILS.decides,
+          [pathOf("GET /api/projects/:id/gate")]: PO_DETAILS.gate,
+          [pathOf("GET /api/projects/:id/tracker")]: PO_DETAILS.tracker,
           ...Object.fromEntries(
             views.flatMap((view) => [
-              [`${base}/tasks/${view.id}`, view],
               [
-                `${base}/tasks/${view.id}/history`,
+                hubRequest("GET /api/projects/:id/tasks/:taskId", {
+                  path: { id: PO_ID, taskId: view.id },
+                }).path,
+                view,
+              ],
+              [
+                hubRequest("GET /api/projects/:id/tasks/:taskId/history", {
+                  path: { id: PO_ID, taskId: view.id },
+                }).path,
                 { id: view.id, path: view.path, state: "live", events: [] },
               ],
             ])

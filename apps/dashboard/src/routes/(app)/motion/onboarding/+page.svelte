@@ -13,6 +13,7 @@
     type UserAnswers,
     type UserQuestion,
   } from "@cawco/core/harness";
+  import { hubRequest } from "@cawco/core/hub-request";
   import type { InstanceRow } from "@cawco/core/protocol";
   import type { Stage as BoardStage } from "@cawco/core/task-views";
   import { askAnsweredTitle } from "@cawco/core/transcript-rules";
@@ -459,15 +460,17 @@
   // tasks kept in CawCo, none yet.
   const restoreApi = browser
     ? standApi((path, method) => {
-        const base = `/api/projects/${PROJECT}`;
         if (method !== "GET") {
           return;
         }
+        const id = { path: { id: PROJECT } };
         const answers: Record<string, unknown> = {
-          [`${base}/decides`]: PO_DETAILS.decides,
-          [`${base}/gate`]: PO_DETAILS.gate,
-          [`${base}/tracker`]: PO_DETAILS.tracker,
-          [`${base}/tasks`]: {
+          [hubRequest("GET /api/projects/:id/decides", id).path]:
+            PO_DETAILS.decides,
+          [hubRequest("GET /api/projects/:id/gate", id).path]: PO_DETAILS.gate,
+          [hubRequest("GET /api/projects/:id/tracker", id).path]:
+            PO_DETAILS.tracker,
+          [hubRequest("GET /api/projects/:id/tasks", id).path]: {
             tasks: [],
             problems: [],
             stagesProblems: [],

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T16:00:00.000Z",
+  "generatedAt": "2026-11-06T18:00:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -2849,6 +2849,26 @@
         "name": "pop-scale",
         "value": "0.92",
         "purpose": "The scale a floating surface, chip or pop grows from and shrinks to."
+      },
+      {
+        "name": "dur-drag-follow",
+        "value": "80ms",
+        "purpose": "A thing in the air following the hand: the perceptual duration of the house spring it trails the pointer on (drag/follow.ts), critically damped. It trails a brisk hand (0.5px/ms) by about 13px and comes to rest under it as the hand stops."
+      },
+      {
+        "name": "drag-lift-scale",
+        "value": "1.03",
+        "purpose": "How much bigger a thing picked up by a drag (a stage, a card, a block, a row, a tab) stands as it lifts off its place, over --dur-pick-up with shadow-overlay under it; it settles back to 1 as it lands (drag/lift.ts)."
+      },
+      {
+        "name": "drag-tilt-max",
+        "value": "3",
+        "purpose": "The most a thing in the air leans, in degrees, as the hand carries it sideways: it leans into the travel and springs upright when the hand slows (drag/lift.ts)."
+      },
+      {
+        "name": "drag-tilt-gain",
+        "value": "2.5",
+        "purpose": "Degrees of lean per px/ms the hand carries a thing sideways, up to --drag-tilt-max (drag/lift.ts)."
       },
       {
         "name": "deck-step",
