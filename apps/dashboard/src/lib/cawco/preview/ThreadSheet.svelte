@@ -48,6 +48,7 @@
     onmoved,
     surface = $bindable(),
     short = false,
+    tall = false,
     children,
   }: {
     open: boolean;
@@ -63,6 +64,14 @@
     surface?: HTMLElement;
     /** What it holds is a line or two (an empty list): its lower stop is low enough to hold that, never half its room standing empty. */
     short?: boolean;
+    /**
+     * What it holds reads from its top and wants the room (a thread): it
+     * opens at its whole room, and goes there when a thread is pushed into
+     * it, so its question and first message stand in view with the reply
+     * under them (HIG, Sheets: leave out the medium detent "if a sheet's
+     * content is more useful when it displays at full height").
+     */
+    tall?: boolean;
     children: Snippet;
   } = $props();
 
@@ -85,11 +94,13 @@
   );
   /** The stop it stands at, by its place in `SHARES`. */
   let stop = $state(0);
-  // Each opening starts at half its room.
+  // Each opening starts at half its room, or at the whole room for what
+  // wants it; a thread pushed into the standing sheet takes the whole room.
   $effect(() => {
     if (open) {
+      const whole = tall;
       untrack(() => {
-        stop = 0;
+        stop = whole ? 1 : 0;
       });
     }
   });

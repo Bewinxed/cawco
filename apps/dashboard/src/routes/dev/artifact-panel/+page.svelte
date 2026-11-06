@@ -31,7 +31,8 @@
    * and on a desk the card's pour: `pour` (it pours out of comment 4's pill
    * once the panel stands), `drain` (it drains back), `turn` (it opens and
    * is closed half way, turning back from where it is drawn); `?slow=n`
-   * runs the pour n times as long.
+   * runs the pour n times as long; `?count=n` sets the head's Comments
+   * badge to n (5, 12, 150, 1500).
    * The picture stands for a decision page as the panel shows it: its own
    * title left out under the head, which names it (overlay
    * `data-cawco-headed`), its top starting the head's room down
@@ -60,6 +61,7 @@
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
   import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
+  import type { Box } from "#lib/cawco/preview/pin-place.svelte.js";
   import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
   import { setSideExpand } from "#lib/cawco/side/expand.js";
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
@@ -199,6 +201,11 @@
   const replyDraft = new ComposerDraft();
   const nextDraft = new ComposerDraft();
   const openCount = $derived(pins.filter((one) => !one.resolvedAt).length);
+  /** `?count=n`: the head's Comments badge says n open (5, 12, 150, 1500), the rail as it stands. */
+  const countAsked = Number(page.url.searchParams.get("count") ?? Number.NaN);
+  const badgeCount = $derived(
+    Number.isFinite(countAsked) ? countAsked : openCount
+  );
   const heldCount = $derived(pins.filter(pinHeld).length);
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
   let mode = $state<"interact" | "comment" | "draw">("interact");
@@ -243,19 +250,79 @@
     return () => removeEventListener("keydown", away);
   });
   let well = $state({ w: 0, h: 0 });
-  /** Comment 4's pill on the page, in the well, px: the card's mark. */
-  const cardMark = $derived({
-    x: Math.max(0, well.w - 360),
-    y: 96,
-    w: 28,
-    h: 28,
+  /** The page as it scrolls in the well. */
+  let benchPage = $state<HTMLElement>();
+  /**
+   * Where each comment's pill stands on the picture, as shares of its width
+   * and height: its tail's corner on the element it is about, as the
+   * page's overlay draws a pin. The picture is the decision page each pin
+   * was left on (title-bars-close), so each stands on its own element.
+   */
+  const SPOTS: Record<"desk" | "phone", Record<number, [number, number]>> = {
+    desk: {
+      1: [0.06, 0.885],
+      2: [0.16, 0.395],
+      3: [0.47, 0.735],
+      4: [0.33, 0.035],
+      5: [0.375, 0.19],
+    },
+    phone: {
+      1: [0.1, 0.71],
+      2: [0.1, 0.36],
+      3: [0.56, 0.64],
+      4: [0.8, 0.06],
+      5: [0.46, 0.15],
+    },
+  };
+  const spots = $derived(SPOTS[phone.current ? "phone" : "desk"]);
+  /** The open comments' pills on the page: each that has its spot. */
+  const onPage = $derived(
+    pins.filter((one) => !one.resolvedAt && spots[one.number] !== undefined)
+  );
+  /** The opened comment's pill in the well, px, as drawn now: the card's mark; null while it has none. */
+  let cardMark = $state<Box | null>(null);
+  function readMark() {
+    const at = benchPage;
+    const one = pins.find((each) => each.id === openPin);
+    const spot =
+      one && at?.querySelector<HTMLElement>(`[data-pin-spot="${one.number}"]`);
+    if (!(at && spot)) {
+      cardMark = null;
+      return;
+    }
+    const room = at.getBoundingClientRect();
+    const pill = spot.getBoundingClientRect();
+    cardMark = {
+      x: pill.left - room.left,
+      y: pill.top - room.top,
+      w: pill.width,
+      h: pill.height,
+    };
+  }
+  // The mark follows the opened pin, the well's size and the picture.
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read to follow them
+    void [openPin, well.w, well.h, spots];
+    const frame = requestAnimationFrame(readMark);
+    return () => cancelAnimationFrame(frame);
   });
   const measureWell = frameSize<HTMLElement>((node) => {
     well = { w: node.clientWidth, h: node.clientHeight };
   });
+  /** A pill on the page pressed: its thread opens, beside it on a desk, in the Comments sheet on a phone. */
+  function openFromPage(one: Pin) {
+    openPin = one.id;
+    cardOpen = true;
+    if (phone.current) {
+      listOpen = true;
+    }
+  }
 
   setSideExpand({
-    available: true,
+    // A sheet has no Expand: only the desk's split offers it.
+    get available() {
+      return !phone.current;
+    },
     backLabel: "Back to conversation",
     collapse: () => false,
     expanded: false,
@@ -385,7 +452,7 @@
       <Popover.Trigger>
         {#snippet child({ props })}
           <CommentsButton
-            count={openCount}
+            count={badgeCount}
             held={heldCount}
             label="Comments (⇧C hides the pins)"
             open={listOpen}
@@ -410,13 +477,13 @@
     </Popover.Root>
   {:else}
     <CommentsButton
-      count={openCount}
+      count={badgeCount}
       label="Comments (⇧C hides the pins)"
       onclick={() => {
         listOpen = !listOpen;
       }}
       held={heldCount}
-      open={listOpen}
+      open={listOpen && !(phone.current && composing)}
       toCheck={checked.length}
     />
   {/if}
@@ -549,6 +616,7 @@
       : undefined}
     draft={replyDraft}
     link={`#comment-${one.number}`}
+    marked={!phone.current && cardMark !== null}
     name={one.title ?? ""}
     onclose={() => {
       if (phone.current) {
@@ -642,26 +710,60 @@
       <div
         class="size-full overflow-y-auto overscroll-contain pt-c-head-room"
         data-slot="bench-page"
+        onscroll={readMark}
+        bind:this={benchPage}
         {@attach measureWell}
-        {@attach (node) => {
-          if (scrolled) {
-            requestAnimationFrame(() => {
-              node.scrollTop = node.scrollHeight;
-            });
-          }
-        }}
       >
-        <img
-          alt={shown?.title}
+        <!-- The picture and the open comments' pills on it, as the page's
+             overlay draws them: each a press that opens its thread. -->
+        <div
           class={[
-            "block h-auto max-w-full",
-            // The page lays itself out to the well's whole width where the
-            // rail floats over it (the picture drawn to it), so what the
-            // glass covers is page, as it would be.
+            "relative w-fit max-w-full",
             !phone.current && railAt !== "beside" && "w-full",
           ]}
-          src={phone.current ? pagePhone : pageDesk}
-        />
+          data-slot="bench-picture"
+        >
+          <img
+            alt={shown?.title}
+            class={[
+              "block h-auto max-w-full",
+              // The page lays itself out to the well's whole width where the
+              // rail floats over it (the picture drawn to it), so what the
+              // glass covers is page, as it would be.
+              !phone.current && railAt !== "beside" && "w-full",
+            ]}
+            src={phone.current ? pagePhone : pageDesk}
+            {@attach (img) => {
+              // Scrolled to its foot once the picture has its height, and
+              // the opened pill read where it stands.
+              const loaded = () => {
+                if (scrolled && benchPage) {
+                  benchPage.scrollTop = benchPage.scrollHeight;
+                }
+                readMark();
+              };
+              if (img.complete) {
+                loaded();
+              }
+              img.addEventListener("load", loaded);
+              return () => img.removeEventListener("load", loaded);
+            }}
+          />
+          {#each onPage as one (one.id)}
+            {@const [x, y] = spots[one.number] ?? [0, 0]}
+            <button
+              aria-label={commentWords.openThread(one.number)}
+              class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+              data-pin-spot={one.number}
+              onclick={() => openFromPage(one)}
+              style:--spot-x="{x * 100}%"
+              style:--spot-y="{y * 100}%"
+              type="button"
+            >
+              <PinMark number={one.number} state={markState(one)} />
+            </button>
+          {/each}
+        </div>
       </div>
       {#if asked === "changes"}
         <!-- The page's own foot bar (its Send) stands at the picture's foot,
@@ -707,6 +809,7 @@
           }}
           open={listOpen && !composing}
           short={pins.length === 0 && !thread}
+          tall={thread !== null}
         >
           {#if thread}
             {#key thread.id}
@@ -723,23 +826,14 @@
               openPin = null;
             }}
             open
+            tall
           >
             {@render card(thread)}
           </ThreadSheet>
         {/if}
       {:else if thread}
         <!-- The card beside its pin in the pane's own shell (PinFloat),
-             poured out of comment 4's pill, drawn here as the page's
-             overlay draws it (PinMark), standing over the picture. -->
-        <div
-          aria-hidden="true"
-          class="pointer-events-none absolute start-(--mark-x) top-(--mark-y) z-1"
-          data-slot="bench-pill"
-          style:--mark-x="{cardMark.x}px"
-          style:--mark-y="{cardMark.y}px"
-        >
-          <PinMark number={thread.number} state={markState(thread)} />
-        </div>
+             poured out of its pill on the page. -->
         <div class="contents">
           <PinFloat
             label={`Comment ${thread.number}`}

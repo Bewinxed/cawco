@@ -6,6 +6,7 @@
     ref = $bindable(null),
     class: className,
     share,
+    look = "field",
     children,
     ...props
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
@@ -16,6 +17,13 @@
      * control, a drag across it the caller's.
      */
     share?: number;
+    /**
+     * A form's field (`field`), or a search field standing in a bar's row
+     * (`bar`, HIG Search fields: in a toolbar it is the bar's own capsule):
+     * a capsule as tall as the glass beside it, on the glass's material
+     * and hairline, so it reads as one of the bar's capsules.
+     */
+    look?: "field" | "bar";
   } = $props();
 
   /**
@@ -63,6 +71,8 @@
     "has-[>[data-align=block-start]]:[&>input]:pb-3",
     "has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
     share !== undefined && "isolate cursor-ew-resize overflow-clip",
+    look === "bar" &&
+      "h-c-btn-h rounded-pill border-border-hairline bg-material-panel shadow-tile glass-backdrop contrast-more:border-border-contrast contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-contrast reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
     "[&>input::-webkit-search-cancel-button]:appearance-none",
     className

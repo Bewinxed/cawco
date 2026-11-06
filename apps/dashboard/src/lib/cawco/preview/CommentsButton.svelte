@@ -4,16 +4,15 @@
    * panel's surface brief, The head): the bar's own item (BarItem), its
    * bubble, on the pressed surface while the rail stands (BarItem `open`). It is its
    * neighbours' size and shape, its bubble at their symbol size and centred,
-   * with an even inset round it: the open comments' count is the bar's
-   * count badge on its top trailing corner (the kit Badge `corner`; SwiftUI
-   * badge: "Badges appear in list rows, tab bars, toolbar items, and
-   * menus"), taking no room, only above 0 (The Earned Count Rule). While
-   * comments wait on him (To check) the badge takes the needs-you pair and
-   * its name says how many; while he holds comments to send together it is
-   * hollow, a held pill's own look, and counts them. Comments not reaching
-   * the agent draw the bubble in the fail ink; ⇧C's hidden pins put a
-   * closed eye on the bubble's foot corner, opposite the badge. Each is
-   * said in its name.
+   * with an even inset round it. Its badge is the kit Badge's `corner`
+   * form on the top trailing corner (SwiftUI badge: "Badges appear in list
+   * rows, tab bars, toolbar items, and menus"), taking no room, only above 0
+   * (The Earned Count Rule), and it says one count in that count's own
+   * look: what waits on him (To check) in the needs-you pair, else what he
+   * holds to send hollow, as a held pill is, else the open comments in
+   * plain ink. Comments not reaching the agent draw the bubble in the fail
+   * ink; ⇧C's hidden pins put a closed eye on the bubble's foot corner,
+   * opposite the badge. Its name says every count.
    */
   import { commentWords } from "@cawco/core/words/comments";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
@@ -49,13 +48,23 @@
     props?: Record<string, unknown>;
   } = $props();
 
-  /** How the badge is dressed: what waits on him, what he holds, or the count alone. */
-  const look = $derived.by(() => {
-    if (toCheck > 0) {
-      return "attn" as const;
+  /**
+   * The badge: one count in the look that says what it counts, never a
+   * look over another's number. What waits on him first (To check, the
+   * needs-you pair), then what he holds to send (hollow), else the open
+   * comments (plain ink).
+   */
+  const badge = $derived.by(
+    (): { n: number; look: "attn" | "held" | undefined } => {
+      if (toCheck > 0) {
+        return { n: toCheck, look: "attn" };
+      }
+      if (held > 0) {
+        return { n: held, look: "held" };
+      }
+      return { n: count, look: undefined };
     }
-    return held > 0 && count === 0 ? ("held" as const) : undefined;
-  });
+  );
 
   const name = $derived(
     [
@@ -72,8 +81,8 @@
 </script>
 
 <BarItem
-  count={count > 0 ? count : held}
-  countLook={look}
+  count={badge.n}
+  countLook={badge.look}
   data-link-down={down ? "" : undefined}
   data-slot="comments"
   expanded={open}

@@ -507,6 +507,7 @@
             }
           }}
           {open}
+          tall
         >
           {@render thread(pin)}
         </ThreadSheet>

@@ -503,11 +503,15 @@
           {/if}
           {#if !fromChip}
             <!-- One press asks, under the bar where it was pressed (AskHere). -->
+            <!-- Its question standing under the bar, it stands pressed, as a
+                 control whose card is open does. -->
             <BarItem
               data-slot="delete"
+              expanded={asks.pending?.at === "delete"}
               icon={IconTrash}
               label={said.deleteComment}
               onclick={askDelete}
+              open={asks.pending?.at === "delete"}
             />
             {#if moreActions.length === 1 && moreActions[0]}
               {@const only = moreActions[0]}

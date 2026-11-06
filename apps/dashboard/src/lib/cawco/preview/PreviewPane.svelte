@@ -4372,7 +4372,7 @@
     down={linkDown ? NOT_REACHING : null}
     label={commentsTitle}
     onclick={() => showList(!listOpen)}
-    open={listOpen}
+    open={railSheet ? railSheetOpen : listOpen}
     held={heldCount}
     {pinsShown}
     toCheck={checkCount}
@@ -5060,6 +5060,7 @@
       onmoved={() => sayCovered?.()}
       open={railSheetOpen}
       short={railEmpty && !threadPushed}
+      tall={threadPushed}
       bind:surface={railSurface}
     >
       {#if threadPushed && cardPin && kit && replyDraft}
@@ -5122,6 +5123,7 @@
             }}
             onmoved={() => sayCovered?.()}
             open={openPin !== null}
+            tall
             bind:surface={cardFloat}
           >
             {@render thread(cardPin, replyDraft, false)}

@@ -11,7 +11,8 @@
    * It stands inside a `Popover.Root` whose trigger is an item of the glass,
    * in that Content's place, flush with the glass on the side the glass
    * flares away from, and never narrower than the glass. What it holds sets
-   * its width (a composer, a form).
+   * its width (a composer, a form, the Comments rail), never the kit
+   * popover's own 288px, up to the room on its side of the glass.
    */
   import type { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
@@ -44,7 +45,10 @@
   align={glass.flare === "start" ? "end" : "start"}
   anchor={glass.node}
   aria-label={label}
-  class={cn("min-w-(--bits-popover-anchor-width)", className)}
+  class={cn(
+    "w-max min-w-(--bits-popover-anchor-width) max-w-(--bits-popover-content-available-width)",
+    className
+  )}
   customAnchor={glass.node}
   side="bottom"
   sideOffset={0}

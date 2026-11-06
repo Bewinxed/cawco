@@ -405,88 +405,91 @@
         end="calc(var(--spacing) * 2.5)"
         reason={refusals.reason(listKey)}
       />
-      <div {@attach reflow()} {@attach keepFocus}>
-        {#each rows as artifact (artifact.id)}
-          {@const Glyph = GLYPHS[artifact.kind]}
-          <DropdownMenu.Item
-            data-artifact-row
-            aria-busy={removing.has(artifact.id) || undefined}
-            aria-current={artifact.id === shown.id || undefined}
-            aria-keyshortcuts="Delete Backspace"
-            aria-labelledby={[
-              part(artifact.id, "name"),
-              artifact.promoted ? part(artifact.id, "promoted") : "",
-              artifact.waiting ? part(artifact.id, "waiting") : "",
-              artifact.createdAt ? part(artifact.id, "age") : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            class="group/artifact"
-            data-artifact={artifact.id}
-            data-flip
-            marks="current-busy"
-            row="artifact"
-            onkeydown={(event: KeyboardEvent) => {
-              if (event.key === "Delete" || event.key === "Backspace") {
-                event.preventDefault();
-                askRemove(artifact);
-              }
-            }}
-            onSelect={() => choose(artifact)}
-          >
-            <Glyph />
-            <!-- The name and its promoted tag: the name whole while it fits
+      <!-- The one on show is the group's chosen one, marked by the kit's
+           own radio dot, as every menu in the panel marks what is current. -->
+      <DropdownMenu.RadioGroup value={shown.id}>
+        <div {@attach reflow()} {@attach keepFocus}>
+          {#each rows as artifact (artifact.id)}
+            {@const Glyph = GLYPHS[artifact.kind]}
+            <DropdownMenu.RadioItem
+              data-artifact-row
+              aria-busy={removing.has(artifact.id) || undefined}
+              aria-keyshortcuts="Delete Backspace"
+              aria-labelledby={[
+                part(artifact.id, "name"),
+                artifact.promoted ? part(artifact.id, "promoted") : "",
+                artifact.waiting ? part(artifact.id, "waiting") : "",
+                artifact.createdAt ? part(artifact.id, "age") : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              class="group/artifact"
+              data-artifact={artifact.id}
+              data-flip
+              row="artifact"
+              value={artifact.id}
+              onkeydown={(event: KeyboardEvent) => {
+                if (event.key === "Delete" || event.key === "Backspace") {
+                  event.preventDefault();
+                  askRemove(artifact);
+                }
+              }}
+              onSelect={() => choose(artifact)}
+            >
+              <Glyph />
+              <!-- The name and its promoted tag: the name whole while it fits
                in two lines (an agent's title runs to 80 characters), the tag
                giving way first. -->
-            <span class="flex min-w-0 flex-auto gap-inherit" data-box>
-              <span
-                data-slot="row-name"
-                class="max-w-full flex-none line-clamp-2 text-pretty type-label"
-                id={part(artifact.id, "name")}>{artifact.title}</span
-              >
-              {#if artifact.promoted}
+              <span class="flex min-w-0 flex-auto gap-inherit" data-box>
                 <span
-                  data-slot="row-promoted"
-                  class="min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
-                  id={part(artifact.id, "promoted")}
-                  title={artifactWords.promotedTitle}
-                  >{artifactWords.promoted(
-                    artifact.promoted.commit.slice(0, 7)
-                  )}</span
+                  data-slot="row-name"
+                  class="max-w-full flex-none line-clamp-2 text-pretty type-label"
+                  id={part(artifact.id, "name")}>{artifact.title}</span
+                >
+                {#if artifact.promoted}
+                  <span
+                    data-slot="row-promoted"
+                    class="min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
+                    id={part(artifact.id, "promoted")}
+                    title={artifactWords.promotedTitle}
+                    >{artifactWords.promoted(
+                      artifact.promoted.commit.slice(0, 7)
+                    )}</span
+                  >
+                {/if}
+              </span>
+              {#if artifact.waiting}
+                <!-- The needs-you dot (DESIGN.md, Status dot), its words for the
+                 screen reader. -->
+                <span
+                  data-slot="row-waiting"
+                  aria-label={artifactWords.waitingOnYou}
+                  class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+                  data-box
+                  id={part(artifact.id, "waiting")}
+                  role="img"
+                ></span>
+              {/if}
+              {#if artifact.createdAt}
+                <span
+                  data-slot="row-age"
+                  class="text-ink-muted text-size-meta num"
+                  id={part(artifact.id, "age")}
+                  >{formatAgeShort(Date.parse(artifact.createdAt))}</span
                 >
               {/if}
-            </span>
-            {#if artifact.waiting}
-              <!-- The needs-you dot (DESIGN.md, Status dot), its words for the
-                 screen reader. -->
-              <span
-                data-slot="row-waiting"
-                aria-label={artifactWords.waitingOnYou}
-                class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
-                data-box
-                id={part(artifact.id, "waiting")}
-                role="img"
-              ></span>
-            {/if}
-            {#if artifact.createdAt}
-              <span
-                data-slot="row-age"
-                class="text-ink-muted text-size-meta num group-aria-[current=true]/artifact:text-ink-strong"
-                id={part(artifact.id, "age")}
-                >{formatAgeShort(Date.parse(artifact.createdAt))}</span
-              >
-            {/if}
-          </DropdownMenu.Item>
-          <RowFault
-            again={() => remove(artifact)}
-            data-artifact-remove-refused={artifact.id}
-            data-flip
-            indent="calc(var(--spacing) * 2.5)"
-            end="calc(var(--spacing) * 2.5)"
-            reason={refusals.reason(removeKey(artifact.id))}
-          />
-        {/each}
-      </div>
+            </DropdownMenu.RadioItem>
+            <RowFault
+              again={() => remove(artifact)}
+              data-artifact-remove-refused={artifact.id}
+              data-flip
+              indent="calc(var(--spacing) * 2.5)"
+              end="calc(var(--spacing) * 2.5)"
+              reason={refusals.reason(removeKey(artifact.id))}
+            />
+          {/each}
+        </div>
+      </DropdownMenu.RadioGroup>
       <DropdownMenu.Separator />
       <!-- Remove, for the one on show: the menu's last item, asked under it. -->
       <DropdownMenu.Item

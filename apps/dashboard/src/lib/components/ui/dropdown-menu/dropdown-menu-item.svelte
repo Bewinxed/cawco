@@ -11,7 +11,7 @@
     variants: {
       marks: {
         "current-busy":
-          "aria-busy:opacity-50 aria-current:bg-selected-bg aria-current:text-ink-strong aria-current:data-[variant=destructive]:text-ink-strong aria-current:data-[variant=destructive]:focus:text-ink-strong",
+          "aria-busy:opacity-50 aria-current:text-ink-strong aria-current:data-[variant=destructive]:text-ink-strong aria-current:data-[variant=destructive]:focus:text-ink-strong",
       },
       row: { artifact: "min-h-c-artifact-row-h" },
     },
