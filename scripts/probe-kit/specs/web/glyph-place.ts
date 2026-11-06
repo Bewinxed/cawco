@@ -10,23 +10,20 @@
  *     trailing one, the glyph off its centre (his pin: "the hover highlight
  *     has no padding from the left, and has lots of space on the right").
  *  2. badge on the glyph: the count drawn as a dark oval laid over the
- *     bubble's middle, on more than a fifth of its ink.
+ *     bubble's middle, its leading edge before the glyph's centre.
+ *  3. wide count back across its glyph: 1500 anchored by its trailing end,
+ *     growing toward the leading side over its own bubble (Files' "100"
+ *     the design review caught centred over its folder).
+ *  4. through the glass's top: a badge centred on the item's top edge,
+ *     its top past the capsule's.
  *
  * Drawn right, the rule finds nothing:
  *
- *  3. corner badge: the counted item its neighbours' size, the glyph at
- *     its centre, the count a 16px badge on the item's top edge, its
- *     trailing end fixed half a badge past the glyph's trailing edge,
- *     covering that corner of a bubble and of a folder; at 3, 12 and 150,
- *     beside a plain neighbour.
- *  4. wide count over its own glyph: 1500 grows toward its own bubble, as
- *     an app icon's badge grows over its icon, and leaves Reload's alone.
- *
- * Drawn wrong again:
- *
- *  5. badge over a neighbour: a count that grows toward the trailing side,
- *     standing lower, lies on the next item's folder (a neighbour's ink at
- *     all is a finding).
+ *  5. corner badge: the counted item its neighbours' size, the glyph at
+ *     its centre, the count a 16px badge with its top on the glass's top
+ *     edge and its leading edge fixed half a badge before the glyph's
+ *     trailing edge, growing toward the trailing side; at 4, 42, 100 and
+ *     4812, beside a plain neighbour.
  *  6. words: a control with its name beside its glyph is not read.
  *  7. off a bar: a lone glyph button on the page is not read.
  *  8. bare on the bar: a glyph standing off its 44px box's centre on a
@@ -50,7 +47,7 @@ const BASE = `<!doctype html>
   .glass { display: inline-flex; align-items: center; gap: 4px; block-size: 36px; padding: 4px; border-radius: 999px; background: #fff; }
   .glass button { position: relative; display: inline-flex; align-items: center; justify-content: center; block-size: 28px; min-inline-size: 28px; border-radius: 5px; background: #e6e0d6; }
   .glass svg { inline-size: 20px; block-size: 20px; flex: none; }
-  .badge { position: absolute; top: -8px; inset-inline-end: -4px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; padding-inline: 4px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
+  .badge { position: absolute; top: -4px; inset-inline-start: 16px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; padding-inline: 4px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
 </style>`;
 
 const GLYPH = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/></svg>`;
@@ -78,28 +75,29 @@ const FIXTURES: Record<string, Fixture> = {
 </div></header>`,
     want: "button.comments",
   },
-  "corner badge": {
+  "wide count back across its glyph": {
     html: `${BASE}<header><div class="glass">
-  <button type="button" aria-label="Comments, 3">${GLYPH}<span class="badge">3</span></button>
-  <button type="button" aria-label="Machines, 12">${FOLDER}<span class="badge">12</span></button>
-  <button type="button" aria-label="Reload">${GLYPH}</button>
-  <button type="button" aria-label="Files, 150">${FOLDER}<span class="badge">150</span></button>
-</div></header>`,
-    want: null,
-  },
-  "wide count over its own glyph": {
-    html: `${BASE}<header><div class="glass">
-  <button type="button" aria-label="Comments, 1500">${GLYPH}<span class="badge">1500</span></button>
+  <button class="comments" type="button" aria-label="Comments, 1500">${GLYPH}<span class="badge" style="inset-inline: auto -4px">1500</span></button>
   <button type="button" aria-label="Reload">${GLYPH}</button>
 </div></header>`,
-    want: null,
+    want: "button.comments",
   },
-  "badge over a neighbour": {
+  "through the glass's top": {
     html: `${BASE}<header><div class="glass">
-  <button class="files" type="button" aria-label="Files, 150">${FOLDER}<span class="badge" style="top: -4px; inset-inline: 16px auto">150</span></button>
-  <button type="button" aria-label="Machines">${FOLDER}</button>
+  <button class="files" type="button" aria-label="Files, 4">${FOLDER}<span class="badge" style="top: -8px">4</span></button>
+  <button type="button" aria-label="Reload">${GLYPH}</button>
 </div></header>`,
     want: "button.files",
+  },
+  "corner badge": {
+    html: `${BASE}<header><div class="glass">
+  <button type="button" aria-label="Comments, 4">${GLYPH}<span class="badge">4</span></button>
+  <button type="button" aria-label="Machines, 42">${FOLDER}<span class="badge">42</span></button>
+  <button type="button" aria-label="Files, 100">${FOLDER}<span class="badge">100</span></button>
+  <button type="button" aria-label="Reload">${GLYPH}</button>
+  <button type="button" aria-label="Comments, 4812">${GLYPH}<span class="badge">4812</span></button>
+</div></header>`,
+    want: null,
   },
   words: {
     html: `${BASE}<header><div class="glass">

@@ -14,11 +14,11 @@
    * under the pointer, so each state still shows on it. Its
    * symbol (`data-slot="bar-symbol"`) is the bar's symbol size in the muted
    * ink, centred. A count takes no room in it: it is the kit Badge's
-   * corner form (ui/badge, `corner`) over the symbol's trailing edge,
-   * its centre half the glass's inset above the item's top edge (between
-   * the item's edge and the glass's): high enough that a wide count clears
-   * a thin symbol's top stroke, low enough to stay inside the bar's row,
-   * so a counted item is its neighbours' size and shape.
+   * corner form (ui/badge, `corner`) on the symbol's top trailing corner,
+   * its leading edge fixed there so a wide count grows toward the trailing
+   * side, never back across the symbol, and its top on the glass's top
+   * edge (the glass's inset above the item's), never past it, so a counted
+   * item is its neighbours' size and shape.
    */
   const barItemVariants = tv({
     base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:not-hover:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
@@ -205,7 +205,7 @@
     aria-label={label}
     class={look}
     {href}
-    style:--count-foot="calc(-1 * var(--c-bar-group-pad) / 2)"
+    style:--count-top="calc(-1 * var(--c-bar-group-pad))"
     style:--count-glyph="var(--c-bar-symbol)"
     style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
     type={href ? undefined : "button"}

@@ -62,20 +62,21 @@
          * keeps red for status), its figures in the label role at medium
          * weight and tabular widths, as tall as the medium icon and at least
          * as wide. It takes no room in its control: it stands out of flow,
-         * a one-figure badge centred on the top edge of the box it stands in
-         * (moved by `--count-foot`) over the glyph's trailing edge (the
-         * glyph `--count-glyph` wide, centred in that box), so it covers only
-         * the glyph's top trailing corner. Its trailing end stays there and
-         * a wider count grows toward its own glyph, as an app icon's badge
-         * grows over its icon, never over a neighbour's glyph. A bar item
-         * lifts it by half its glass's inset (`--count-foot`). Its box is
-         * the nearest positioned one round it. Dressed by
+         * a one-figure badge centred over the glyph's trailing edge (the
+         * glyph `--count-glyph` wide, centred in the box it stands in) and
+         * on that box's top edge (or with its top at `--count-top`), so it
+         * covers only the glyph's top trailing corner. Its leading edge
+         * stays there and a wider count grows away from the glyph, toward
+         * the trailing side, as a tab bar's badge does, never back across
+         * the glyph. A bar item stands its top on its glass's top edge
+         * (`--count-top`), inside the glass. Its box is the nearest
+         * positioned one round it. Dressed by
          * what it counts (`data-look`): `attn`, what waits on the person, in
          * the needs-you pair; `held`, what the person holds to send, hollow,
          * as a held row's pill is.
          */
         corner:
-          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--icon-md)_/_2)] end-[calc(50%_-_var(--count-glyph)_/_2_-_var(--icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-solid px-space-1 font-medium text-label text-on-ink tabular-nums data-[look=attn]:bg-status-attn-bg data-[look=attn]:text-status-attn-ink data-[look=held]:border data-[look=held]:border-ink-muted data-[look=held]:bg-surface-raised data-[look=held]:text-ink-strong",
+          "pointer-events-none absolute top-[var(--count-top,calc(var(--icon-md)_/_-2))] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-solid px-space-1 font-medium text-label text-on-ink tabular-nums data-[look=attn]:bg-status-attn-bg data-[look=attn]:text-status-attn-ink data-[look=held]:border data-[look=held]:border-ink-muted data-[look=held]:bg-surface-raised data-[look=held]:text-ink-strong",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },
