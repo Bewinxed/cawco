@@ -78,21 +78,15 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconAlert,
     IconArchive,
@@ -206,6 +200,7 @@
   } from "./comment-rows";
   import { loadedPanes } from "./loaded.svelte";
   import ModeButton from "./ModeButton.svelte";
+  import ModeSwitch from "./ModeSwitch.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
@@ -4285,22 +4280,13 @@
 
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
-  <Tip label={artifactWords.inspectTitle}>
-    {#snippet children(tip)}
-      <button
-        {...tip}
-        aria-label={artifactWords.inspect}
-        aria-pressed={inspectOpen}
-        class="select-none touch-hit press-tint aria-pressed:bg-surface-pressed"
-        data-bar-item
-        data-box
-        onclick={() => showInspector(!inspectOpen)}
-        type="button"
-      >
-        <IconTuning aria-hidden="true" data-slot="bar-symbol" />
-      </button>
-    {/snippet}
-  </Tip>
+  <BarItem
+    icon={IconTuning}
+    label={artifactWords.inspect}
+    onclick={() => showInspector(!inspectOpen)}
+    pressed={inspectOpen}
+    tip={artifactWords.inspectTitle}
+  />
 {/snippet}
 {#snippet inspectMenu()}
   <!-- Its glyph as the bar's, so its words start where More's other entries' do. -->
@@ -4313,45 +4299,7 @@
 {/snippet}
 
 {#snippet modeBar()}
-  <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
-       the kit's segmented control, its indicator on the chosen one. -->
-  <div data-slot="modes">
-    <BarGlass form="group">
-      <Tabs
-        onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
-        size="bar"
-        value={mode}
-        values={["interact", "comment", "draw"]}
-      >
-        <TabsList aria-label={previewWords.previewMode}>
-          <TabItem
-            aria-keyshortcuts="V"
-            glyphOnly
-            icon={IconInteract}
-            label="Interact"
-            title="Interact (V): the page gets every click"
-            value="interact"
-          />
-          <TabItem
-            aria-keyshortcuts="C"
-            glyphOnly
-            icon={IconPin}
-            label="Comment"
-            title="Comment (C): a click pins a comment"
-            value="comment"
-          />
-          <TabItem
-            aria-keyshortcuts="D"
-            glyphOnly
-            icon={IconPen}
-            label="Draw"
-            title="Draw (D): drag to draw on the page"
-            value="draw"
-          />
-        </TabsList>
-      </Tabs>
-    </BarGlass>
-  </div>
+  <ModeSwitch onchange={setMode} {mode} />
 {/snippet}
 {#snippet modeMenu()}
   <DropdownMenu.Group>

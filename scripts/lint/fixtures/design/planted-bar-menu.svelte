@@ -5,7 +5,11 @@
   the rule leaves alone, and a menu on no bar.
 -->
 <script lang="ts">
-  import { BarGlass, BarMenu } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+  } from "#lib/components/ui/bar-glass/index.js";
   // biome-ignore lint/performance/noNamespaceImport: the rule reads the kit's names as product code writes them (DropdownMenu.Content)
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 </script>
@@ -23,7 +27,7 @@
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}
-      <button {...props} data-bar-item type="button">Sort</button>
+      <BarItem label="Sort" {props} />
     {/snippet}
   </DropdownMenu.Trigger>
   <DropdownMenu.Content>Detached</DropdownMenu.Content>

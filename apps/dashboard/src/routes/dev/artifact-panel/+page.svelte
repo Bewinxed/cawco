@@ -36,6 +36,7 @@
    * its description: the structures on the owner's decision page.
    */
   import { type Pin, pinHeld } from "@cawco/core/comments";
+  import { hubRequest } from "@cawco/core/hub-request";
   import { commentWords } from "@cawco/core/words/comments";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -50,6 +51,7 @@
   import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
   import type { RailSort } from "#lib/cawco/preview/comment-rows.js";
   import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
+  import ModeSwitch from "#lib/cawco/preview/ModeSwitch.svelte";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
   import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
@@ -57,17 +59,8 @@
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
-  import {
-    BarGlass,
-    BarItem,
-    BarPopover,
-  } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem, BarPopover } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
@@ -111,7 +104,9 @@
   // The artifacts menu reads the session's artifacts from the hub and asks it
   // to show one: answered here from the records, the one asked for shown.
   const hubFetch = window.fetch.bind(window);
-  const listed = `/api/instances/${INSTANCE}/artifacts`;
+  const listed = hubRequest("GET /api/instances/:id/artifacts", {
+    path: { id: INSTANCE },
+  }).path;
   window.fetch = (input, init) => {
     const path = String(input);
     if (!path.startsWith(listed)) {
@@ -277,27 +272,12 @@
 </script>
 
 {#snippet modeBar()}
-  <BarGlass form="group">
-    <Tabs
-      onValueChange={(next) => {
-        mode = next as typeof mode;
-      }}
-      size="bar"
-      value={mode}
-      values={["interact", "comment", "draw"]}
-    >
-      <TabsList aria-label="Preview mode">
-        <TabItem
-          glyphOnly
-          icon={IconInteract}
-          label="Interact"
-          value="interact"
-        />
-        <TabItem glyphOnly icon={IconPin} label="Comment" value="comment" />
-        <TabItem glyphOnly icon={IconPen} label="Draw" value="draw" />
-      </TabsList>
-    </Tabs>
-  </BarGlass>
+  <ModeSwitch
+    onchange={(next) => {
+      mode = next;
+    }}
+    {mode}
+  />
 {/snippet}
 {#snippet modeMenu()}
   <DropdownMenu.RadioGroup

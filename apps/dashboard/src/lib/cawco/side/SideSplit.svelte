@@ -166,7 +166,7 @@
       onValueChange={(next) => {
         tab = next as Shown;
       }}
-      size="bar"
+      size="compact"
       value={shown}
     >
       <TabsList aria-label={sideWords.label}>

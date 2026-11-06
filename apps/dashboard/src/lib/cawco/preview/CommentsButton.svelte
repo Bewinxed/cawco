@@ -1,22 +1,23 @@
 <script lang="ts">
   /**
    * The Comments rail's toggle in the artifact panel's head (the artifact
-   * panel's surface brief, The head): a bare symbol of the head's glass, its
-   * bubble, pressed while the rail stands. The open comments' count is a
-   * badge at the bubble's top-trailing corner, as Apple badges a toolbar
-   * item (SwiftUI badge: "Badges appear in list rows, tab bars, toolbar
-   * items, and menus"), only above 0 (The Earned Count Rule); the button is
-   * the symbol's own width, so a count growing moves nothing in the head.
-   * While comments wait on him (To check) the badge takes the needs-you
-   * pair and its name says how many; while he holds comments to send
-   * together it is hollow, a held pill's own look, and its name says how
-   * many are unsent; ⇧C's hidden pins and comments not reaching the agent
-   * are said beside the bubble.
+   * panel's surface brief, The head): the bar's own item (BarItem), its
+   * bubble, in the selected wash while the rail stands. It is its
+   * neighbours' size and shape, its bubble at their symbol size and centred,
+   * with an even inset round it: the open comments' count is the bar's
+   * count badge on its top trailing corner (bar-glass/count.ts; SwiftUI
+   * badge: "Badges appear in list rows, tab bars, toolbar items, and
+   * menus"), taking no room, only above 0 (The Earned Count Rule). While
+   * comments wait on him (To check) the badge takes the needs-you pair and
+   * its name says how many; while he holds comments to send together it is
+   * hollow, a held pill's own look, and counts them. Comments not reaching
+   * the agent draw the bubble in the fail ink; ⇧C's hidden pins put a
+   * closed eye on the bubble's foot corner, opposite the badge. Each is
+   * said in its name.
    */
   import { commentWords } from "@cawco/core/words/comments";
-  import { mergeProps } from "bits-ui";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconChat, IconEyeClosed, IconWarningTriangle } from "#lib/icons.js";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { IconChat, IconEyeClosed } from "#lib/icons.js";
 
   let {
     open,
@@ -47,15 +48,13 @@
     /** A primitive's trigger props (a card hung from it), merged in. */
     props?: Record<string, unknown>;
   } = $props();
+
   /** How the badge is dressed: what waits on him, what he holds, or the count alone. */
-  const badge = $derived.by(() => {
+  const look = $derived.by(() => {
     if (toCheck > 0) {
-      return "check";
+      return "attn" as const;
     }
-    if (held > 0) {
-      return "held";
-    }
-    return count > 0 ? "count" : null;
+    return held > 0 && count === 0 ? ("held" as const) : undefined;
   });
 
   const name = $derived(
@@ -72,48 +71,27 @@
   );
 </script>
 
-<Tip {label}>
-  {#snippet children(tip)}
-    <button
-      {...mergeProps(tip, props, { onclick })}
-      aria-expanded={open}
-      aria-label={name}
-      class="select-none touch-hit press-tint mark-line pe-space-6 aria-expanded:bg-surface-pressed"
-      data-bar-item
-      data-box
-      data-link-down={down ? "" : undefined}
-      data-slot="comments"
-      type="button"
-    >
-      <!-- mark-line: the badge is a mark on the symbol's corner, not words set beside it -->
-      <span class="relative grid" data-box>
-        <IconChat aria-hidden="true" data-slot="bar-symbol" />
-        {#if badge}
-          <!-- The badge: a plain capsule, no ring or shadow, its leading
-               half-circle centred on the bubble's top-trailing corner so the
-               bubble reads and a longer count grows outward, into the room
-               the button keeps after the symbol (`pe-space-6`, three
-               figures' worth, so nothing moves as the count grows). -->
-          <span aria-hidden="true" class="absolute end-0 top-0 size-0">
-            <span
-              class="absolute -start-c-count-badge-inset -top-c-count-badge-inset grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill px-space-1 type-meta num leading-none data-[badge=count]:bg-ink-solid data-[badge=count]:text-on-ink data-[badge=check]:bg-status-attn-bg data-[badge=check]:text-status-attn-ink data-[badge=held]:border data-[badge=held]:border-ink-muted data-[badge=held]:bg-surface-raised data-[badge=held]:text-ink-strong"
-              data-badge={badge}
-              data-slot="badge">{count > 0 ? count : held}</span
-            >
-          </span>
-        {/if}
-      </span>
-      {#if !pinsShown}
-        <!-- ⇧C hid the pins: said where the person looks for them. -->
-        <IconEyeClosed aria-hidden="true" class="size-icon-sm" />
-      {/if}
-      {#if down}
-        <!-- The comments aren't reaching the agent: said where the person looks for them, why in the panel. -->
-        <IconWarningTriangle
-          aria-hidden="true"
-          class="size-icon-sm text-data-bad"
-        />
-      {/if}
-    </button>
-  {/snippet}
-</Tip>
+<BarItem
+  count={count > 0 ? count : held}
+  countLook={look}
+  data-link-down={down ? "" : undefined}
+  data-slot="comments"
+  expanded={open}
+  label={name}
+  marked={open}
+  {onclick}
+  {props}
+  tip={label}
+  tone={down ? "fail" : "muted"}
+>
+  <IconChat aria-hidden="true" data-slot="bar-symbol" />
+  {#if !pinsShown}
+    <!-- ⇧C hid the pins: a closed eye on the bubble's foot corner, opposite
+         the count, taking no room. -->
+    <IconEyeClosed
+      aria-hidden="true"
+      class="pointer-events-none absolute end-space-row bottom-space-row size-icon-sm rounded-pill bg-surface-raised text-ink-muted"
+      data-slot="pins-hidden"
+    />
+  {/if}
+</BarItem>

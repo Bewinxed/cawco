@@ -71,18 +71,20 @@
         onclick={(event: MouseEvent) => onstep(-1, via(event))}
         onkeydown={key}
       />
-      <button
-        class="select-none touch-hit press-tint min-w-0 overflow-clip text-ellipsis whitespace-nowrap px-space-1 text-size-label font-medium text-ink-strong num"
-        data-bar-item
+      <BarItem
         data-slot="change-count"
-        onclick={(event) => onstep(at === null ? 1 : 0, via(event))}
+        form="words"
+        label={at === null
+          ? commentWords.changedSince(total)
+          : commentWords.changeOf(at + 1, total)}
+        onclick={(event: MouseEvent) => onstep(at === null ? 1 : 0, via(event))}
         onkeydown={key}
-        type="button"
+        tip={false}
       >
         {at === null
           ? commentWords.changedSince(total)
           : commentWords.changeOf(at + 1, total)}
-      </button>
+      </BarItem>
       <BarItem
         data-slot="change-next"
         icon={IconChevronRight}

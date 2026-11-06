@@ -9,9 +9,8 @@
    * the design graph's view card.
    */
   import { previewWords } from "@cawco/core/words/preview";
-  import { BarMenu } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem, BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconLayers } from "#lib/icons.js";
   import type { CanvasViewState } from "./canvas-view.svelte";
 
@@ -54,21 +53,12 @@
     <!-- An item of the head's glass, as Inspect beside it; its menu hangs from the glass (BarMenu). -->
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <Tip label="Canvas view: map, verify">
-          {#snippet children(tip)}
-            <button
-              {...tip}
-              {...props}
-              aria-label={previewWords.canvasView}
-              class="select-none touch-hit press-tint"
-              data-bar-item
-              data-box
-              type="button"
-            >
-              <IconLayers aria-hidden="true" data-slot="bar-symbol" />
-            </button>
-          {/snippet}
-        </Tip>
+        <BarItem
+          icon={IconLayers}
+          label={previewWords.canvasView}
+          {props}
+          tip="Canvas view: map, verify"
+        />
       {/snippet}
     </DropdownMenu.Trigger>
     <BarMenu label={previewWords.canvasView}>

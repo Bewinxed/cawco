@@ -673,10 +673,6 @@ public enum Size {
     public static let cBarItem: Double = 28
     /// A symbol in a bar's glass group (the top bar's, a head's): sized to the bar's text as SF Symbols are ("relative to the cap height of the San Francisco system font"), so a line glyph at 18px inks about 15px beside the head's 16px title. It was 20px in the bold-duotone cut, which the owner pinned as far too big (artifact panel, 2026-11-05).
     public static let cBarSymbol: Double = 18
-    /// A count worn as a badge on a bar symbol's top-trailing corner (the artifact panel's Comments bubble): a plain capsule this tall at least, its figures in meta, centred on the symbol's corner so the symbol still reads, as Apple badges a toolbar item (SwiftUI badge: "Badges appear in list rows, tab bars, toolbar items, and menus"). It was 16px with a ring of the glass round it, which the owner pinned as too big and glowing (2026-11-05).
-    public static let cCountBadgeH: Double = 14
-    /// How far a count badge reaches back over its symbol's corner, up and in: half its height, so its leading half-circle is centred on the corner and a longer count grows outward.
-    public static let cCountBadgeInset: Double = 7
     /// The room a pane keeps at its content's top while its head floats over it (Liquid Glass: content runs to the top edge and scrolls beneath the controls): the head's glass, its inset above and the same gap below, so the content's first line starts clear of the glass and scrolls under it.
     public static let cHeadRoom: Double = 50
     /// A part floating space-2 inside a c-float-panel-r panel (the Comments rail's glass, the phone's inset half sheet): the panel's corner less that inset, the glass capsules' own radius, so it is concentric with the panel and with the capsules beside it.
@@ -885,8 +881,6 @@ public enum Size {
     public static let cMeasureShort: Double = 480
     /// A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line.
     public static let cMeasureMeta: Double = 256
-    /// A bar button's count holds three figures' room, so the button keeps its width as its count grows and nothing beside it in the bar moves (the artifact panel's Comments).
-    public static let cCountW: Double = 24
     /// A count's box keeps one digit's width, so a lone digit does not collapse it.
     public static let cCountDigit: Double = 8
     /// The Configure rail's count column: three digits, so the dash and the figure hold one box.

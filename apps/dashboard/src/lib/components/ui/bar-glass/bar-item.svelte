@@ -19,17 +19,28 @@
   const barItemVariants = tv({
     base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:bg-surface-hover data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
     variants: {
-      /** What it holds: a symbol, or a title's words and chevron (a bar's title as a control), or Caw's head. */
+      /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
         symbol: "",
         /* Its words at the label's inset, the chevron closer. */
         title: "mark-line max-w-full gap-space-1 ps-space-2 pe-space-1",
+        /* A word action (Cancel, a count said in words): its words at the
+           label's size, an even inset either side, cut at their end. */
+        words:
+          "mark-line min-w-0 max-w-full overflow-clip px-space-2 text-ellipsis whitespace-nowrap text-size-label font-medium text-ink-strong num",
         /* His head in one cell, a circle a symbol's box wide whatever the
            strips' boxes (the beat's reach past it); on the phone's glass his
            ring over his own box, as the sidebar toggle's is, and a finger's
            44px area from the glass's leading edge across the bar's margin to
            the screen's edge, as the toggle's starts at the other. */
         head: "grid w-c-bar-item place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-0 @max-desk/shell:coarse:after:end-auto @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg",
+      },
+      /** A title's lines: one, the bar item's height; two on a phone (`phone-two`, an ordinary title read whole at 390), or two everywhere (`two`, the title over its description), its box growing with them and its corners a card's, never a tall capsule. */
+      lines: {
+        one: "",
+        "phone-two":
+          "max-phone:h-auto max-phone:min-h-c-bar-item max-phone:not-glass-item:rounded-lg",
+        two: "h-auto min-h-c-bar-item py-space-1 not-glass-item:rounded-lg",
       },
       /** Its symbol's ink, said of what it stands for. */
       tone: {
@@ -51,7 +62,12 @@
         class: "data-lit:*:data-[slot=bar-symbol]:text-selected-ink",
       },
     ],
-    defaultVariants: { form: "symbol", tone: "muted", layout: "all" },
+    defaultVariants: {
+      form: "symbol",
+      tone: "muted",
+      layout: "all",
+      lines: "one",
+    },
   });
 
   type BarItemLooks = VariantProps<typeof barItemVariants>;
@@ -92,9 +108,11 @@
     marked = false,
     expanded,
     count,
+    countLook,
     form,
     tone,
     layout,
+    lines,
     props = {},
     ref = $bindable(null),
     ...rest
@@ -122,6 +140,8 @@
     expanded?: boolean;
     /** Its number, beside its symbol above 0 (DESIGN.md, The Earned Count Rule). */
     count?: number | null;
+    /** How its count is dressed: comments waiting on the person (`attn`), or held to send together (`held`); the plain badge otherwise. */
+    countLook?: "attn" | "held";
     /** A primitive's trigger props, merged in. */
     props?: Record<string, unknown>;
     ref?: HTMLElement | null;
@@ -152,7 +172,7 @@
       }).filter(([, value]) => value !== undefined)
     )
   );
-  const look = $derived(barItemVariants({ form, tone, layout }));
+  const look = $derived(barItemVariants({ form, tone, layout, lines }));
 </script>
 
 {#snippet body()}
@@ -162,7 +182,9 @@
     <Icon data-slot="bar-symbol" aria-hidden="true" />
   {/if}
   {#if counted}
-    <Badge data-slot="num" size="corner"><span>{count}</span></Badge>
+    <Badge data-look={countLook} data-slot="num" size="corner"
+      ><span>{count}</span></Badge
+    >
   {/if}
 {/snippet}
 

@@ -12,13 +12,15 @@
 // What the rule reads, in a `.svelte` file's markup: the kit's floating
 // content (`DropdownMenu.Content`, `Popover.Content`, `ContextMenu.Content`)
 // standing inside a `BarGlass` or a bar (a `<header>`), or inside a
-// primitive's Root whose trigger is an item of a glass (`data-bar-item`).
+// primitive's Root whose trigger is an item of a glass (the kit's BarItem,
+// which marks itself `data-bar-item`).
 // Each is a menu opened from a bar control drawn detached; it is reported
 // on the Content.
 import { eachNode, parentOf } from "./model.mjs";
 
 const DETACHED = /^(?:DropdownMenu|Popover|ContextMenu)\.Content$/u;
 const ROOT = /^(?:DropdownMenu|Popover|ContextMenu)\.Root$/u;
+const TRIGGER = /^(?:DropdownMenu|Popover|ContextMenu)\.Trigger$/u;
 
 const MESSAGE =
   "A menu or popover opened from a bar's glass hangs from it, connected, as Caw's card hangs from the top bar's glass: put BarMenu (ui/bar-glass) in this Content's place, or a HangCard anchored on the glass (DesignGraph's view), never a detached Content (scripts/lint/design/bar-menu.mjs).";
@@ -29,15 +31,32 @@ const carries = (node, name) =>
     (attribute) => attribute.type === "Attribute" && attribute.name === name
   );
 
-/** Whether anything under `root` is an item of a glass. */
+/** Whether a node of the markup is an item of a glass: the kit's BarItem, or an element marked `data-bar-item`. */
+const isBarItem = (node) =>
+  (node.type === "Component" && node.name === "BarItem") ||
+  carries(node, "data-bar-item");
+
+/** The nodes a fragment draws at its top, a snippet's (a trigger's `child`) entered. */
+function topNodes(fragment) {
+  return (fragment?.nodes ?? []).flatMap((node) =>
+    node.type === "SnippetBlock" ? topNodes(node.body) : [node]
+  );
+}
+
+/**
+ * Whether `root`'s trigger is an item of a glass: the item is the trigger
+ * itself (drawn in its place, or as its `child`), never only somewhere
+ * inside it, so a context menu on a whole bar (a header holding items) is
+ * no menu opened from one of its items.
+ */
 function holdsBarItem(root) {
   let found = false;
   const visit = (node) => {
     if (found || !node || typeof node !== "object") {
       return;
     }
-    if (carries(node, "data-bar-item")) {
-      found = true;
+    if (node.type === "Component" && TRIGGER.test(node.name)) {
+      found = topNodes(node.fragment).some(isBarItem);
       return;
     }
     for (const value of Object.values(node)) {

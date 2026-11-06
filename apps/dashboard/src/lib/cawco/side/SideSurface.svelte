@@ -34,7 +34,6 @@
     BarMenu,
   } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconClose,
     IconMaximize,
@@ -322,8 +321,10 @@
       return null;
     }
     if (one.dataset.slot === "more") {
-      const counted = one.querySelector('[data-slot="more-count"]');
-      widths.set(counted ? "more:counted" : "more", width);
+      widths.set(
+        one.hasAttribute("data-counted") ? "more:counted" : "more",
+        width
+      );
       return null;
     }
     return width;
@@ -546,28 +547,19 @@
      says so in its ink. -->
 {#snippet closeGlass()}
   <BarGlass form="group">
-    <Tip label="Close">
-      {#snippet children(tip)}
-        <button
-          {...tip}
-          data-slot="close"
-          aria-busy={closing || undefined}
-          aria-label="Close"
-          class="select-none touch-hit press-tint data-failed:text-error-11 aria-busy:cursor-default"
-          data-bar-item
-          data-box
-          data-failed={closeFailed || undefined}
-          onclick={() => {
-            if (!closing) {
-              onclose();
-            }
-          }}
-          type="button"
-        >
-          <IconClose aria-hidden="true" data-slot="bar-symbol" />
-        </button>
-      {/snippet}
-    </Tip>
+    <BarItem
+      aria-busy={closing || undefined}
+      data-failed={closeFailed || undefined}
+      data-slot="close"
+      icon={IconClose}
+      label="Close"
+      onclick={() => {
+        if (!closing) {
+          onclose();
+        }
+      }}
+      tone={closeFailed ? "fail" : "muted"}
+    />
   </BarGlass>
 {/snippet}
 
@@ -671,36 +663,16 @@
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
-                  <Tip label="More">
-                    {#snippet children(tip)}
-                      <button
-                        {...tip}
-                        {...props}
-                        data-slot="more"
-                        aria-label={moreCount
-                          ? `More, ${moreCount.of} ${moreCount.n} open`
-                          : "More"}
-                        class="select-none touch-hit press-tint"
-                        data-bar-item
-                        data-box
-                        data-counted={moreCount ? "" : undefined}
-                        type="button"
-                      >
-                        <IconMore aria-hidden="true" data-slot="bar-symbol" />
-                        {#if moreCount}
-                          <!-- The count says what it counts: its control's own glyph beside it (Comments' bubble), so "⋯ 2" never reads as two things in More. -->
-                          <span
-                            data-box
-                            data-slot="more-count"
-                            class="mark-line inline-flex items-center gap-space-1 text-ink-muted num"
-                            ><moreCount.glyph data-box /><span data-slot="num"
-                              >{moreCount.n}</span
-                            ></span
-                          >
-                        {/if}
-                      </button>
-                    {/snippet}
-                  </Tip>
+                  <BarItem
+                    count={moreCount?.n}
+                    data-slot="more"
+                    icon={IconMore}
+                    label={moreCount
+                      ? `More, ${moreCount.of} ${moreCount.n} open`
+                      : "More"}
+                    {props}
+                    tip="More"
+                  />
                 {/snippet}
               </DropdownMenu.Trigger>
               <BarMenu label="More" width="regular">

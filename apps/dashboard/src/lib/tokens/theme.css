@@ -373,8 +373,6 @@
   --spacing-c-bar-groups-gap: var(--c-bar-groups-gap);
   --spacing-c-bar-item: var(--c-bar-item);
   --spacing-c-bar-symbol: var(--c-bar-symbol);
-  --spacing-c-count-badge-h: var(--c-count-badge-h);
-  --spacing-c-count-badge-inset: var(--c-count-badge-inset);
   --spacing-c-head-room: var(--c-head-room);
   --spacing-c-float-inner-r: var(--c-float-inner-r);
   --spacing-c-scroll-edge-h: var(--c-scroll-edge-h);
@@ -441,7 +439,6 @@
   --spacing-c-measure: var(--c-measure);
   --spacing-c-measure-short: var(--c-measure-short);
   --spacing-c-measure-meta: var(--c-measure-meta);
-  --spacing-c-count-w: var(--c-count-w);
   --spacing-c-count-digit: var(--c-count-digit);
   --spacing-c-rail-count-min: var(--c-rail-count-min);
   --spacing-c-skeleton-x-height: var(--c-skeleton-x-height);

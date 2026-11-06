@@ -466,7 +466,7 @@
         onValueChange={(next) => {
           lead.tab = next === "preview" ? "preview" : "assistant";
         }}
-        size="bar"
+        size="compact"
         value={onPreview ? "preview" : "assistant"}
       >
         <TabsList aria-label={cawPanelWords.tabs}>

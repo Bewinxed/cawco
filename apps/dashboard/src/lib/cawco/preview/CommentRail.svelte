@@ -692,7 +692,7 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised in-data-rail-float:bg-transparent data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  class="flex flex-col min-h-0 w-c-comments-w max-w-full data-[layout=beside]:not-in-data-rail-float:bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
 >
   <!-- One row: Close leading on the sheet, the title menu, the glass;
        searching, the field and its Close. The title names a part of the
@@ -745,15 +745,13 @@
            beside the field), in words, so it never reads as the field's own
            Clear (×), which only empties it. -->
       <BarGlass form="group">
-        <button
-          class="select-none touch-hit press-tint px-space-3 text-ink-strong type-label"
-          data-bar-item
+        <BarItem
           data-slot="cancel-search"
+          form="words"
+          label={said.cancelSearch}
           onclick={closeSearch}
-          type="button"
+          tip={false}>{said.cancelSearch}</BarItem
         >
-          {said.cancelSearch}
-        </button>
       </BarGlass>
     {:else}
       {#if layout === "sheet"}
@@ -771,14 +769,12 @@
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
-                <button
-                  {...props}
-                  aria-label={`${said.whichComments}: ${inFront?.name ?? ""}${waiting ? `, ${said.toCheckWaiting(waiting)}` : ""}`}
-                  class="select-none touch-hit press-tint mark-line min-w-0 gap-space-2 ps-space-2 pe-space-1"
-                  data-bar-item
-                  data-box
+                <BarItem
                   data-slot="list"
-                  type="button"
+                  form="title"
+                  label={`${said.whichComments}: ${inFront?.name ?? ""}${waiting ? `, ${said.toCheckWaiting(waiting)}` : ""}`}
+                  {props}
+                  tip={false}
                 >
                   <span
                     class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-label"
@@ -812,7 +808,7 @@
                     aria-hidden="true"
                     class="size-icon-sm flex-none text-ink-muted"
                   />
-                </button>
+                </BarItem>
               {/snippet}
             </DropdownMenu.Trigger>
             <BarMenu label={said.whichComments}>

@@ -231,21 +231,16 @@
       title={label}
       trapFocus={false}
     >
-      <!-- At half its room it floats as glass, inset from the room's sides
-           and foot with corners concentric with the screen's glass, the page
-           peeking round it; at the whole room it meets the edges and turns
-           opaque (Adopting Liquid Glass: "half sheets are inset from the edge
-           of the display to allow content to peek through from beneath them.
-           When a half sheet expands to full height, it transitions to a more
-           opaque appearance"). -->
+      <!-- The app's bottom sheet, as every drawer on a phone is (the kit's
+           DrawerContent, DESIGN.md Sheet): edge to edge on the room's foot,
+           its top corners rounded and its hairline along the top edge, the
+           raised surface, at both stops; what it holds stands on that one
+           surface and brings none of its own. -->
       <div
         bind:this={surface}
-        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer motion-safe:transition-[margin,border-radius,background-color] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer data-inset:mx-space-2 data-inset:rounded-(--c-float-inner-r) data-inset:border data-inset:bg-material-panel data-inset:glass-backdrop reduced-transparency:data-inset:bg-surface-raised reduced-transparency:data-inset:backdrop-filter-none"
-        data-inset={stop === 0 || undefined}
+        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer"
         data-slot="thread-sheet"
-        style:--sheet-shown="calc(100% - {below}px - {stop === 0
-          ? 'var(--space-2)'
-          : '0px'})"
+        style:--sheet-shown="calc(100% - {below}px)"
         style:--sheet-pb={FOOT}
       >
         <Vaul.Handle

@@ -66,7 +66,11 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
-  import { BarGlass, BarItem, BarMenu } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+  } from "#lib/components/ui/bar-glass/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
