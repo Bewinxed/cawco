@@ -14,15 +14,17 @@
  *  3. wide count back across its glyph: 1500 anchored by its trailing end,
  *     growing toward the leading side over its own bubble (Files' "100"
  *     the design review caught centred over its folder).
- *  4. through the glass's top: a badge centred on the item's top edge,
- *     its top past the capsule's.
+ *  4. wide count onto a neighbour: "100" growing toward the trailing side
+ *     with its top on the glass's top, low enough to lie on the next item's
+ *     glyph, where a one-figure count standing there lies on none of it.
  *
  * Drawn right, the rule finds nothing:
  *
  *  5. corner badge: the counted item its neighbours' size, the glyph at
- *     its centre, the count a 16px badge with its top on the glass's top
- *     edge and its leading edge fixed half a badge before the glyph's
- *     trailing edge, growing toward the trailing side; at 4, 42, 100 and
+ *     its centre, the count a 16px badge lifted half the glass's inset past
+ *     the item's top edge, its leading edge fixed half a badge before the
+ *     glyph's trailing edge, growing toward the trailing side over the
+ *     neighbour's glyph no more than a one-figure count; at 4, 42, 100 and
  *     4812, beside a plain neighbour.
  *  6. words: a control with its name beside its glyph is not read.
  *  7. off a bar: a lone glyph button on the page is not read.
@@ -47,7 +49,7 @@ const BASE = `<!doctype html>
   .glass { display: inline-flex; align-items: center; gap: 4px; block-size: 36px; padding: 4px; border-radius: 999px; background: #fff; }
   .glass button { position: relative; display: inline-flex; align-items: center; justify-content: center; block-size: 28px; min-inline-size: 28px; border-radius: 5px; background: #e6e0d6; }
   .glass svg { inline-size: 20px; block-size: 20px; flex: none; }
-  .badge { position: absolute; top: -4px; inset-inline-start: 16px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; padding-inline: 4px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
+  .badge { position: absolute; top: -10px; inset-inline-start: 16px; display: grid; place-items: center; block-size: 16px; min-inline-size: 16px; padding-inline: 4px; border-radius: 999px; background: #2b2622; color: #fff; font: 500 13px/1 sans-serif; }
 </style>`;
 
 const GLYPH = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/></svg>`;
@@ -82,9 +84,9 @@ const FIXTURES: Record<string, Fixture> = {
 </div></header>`,
     want: "button.comments",
   },
-  "through the glass's top": {
+  "wide count onto a neighbour": {
     html: `${BASE}<header><div class="glass">
-  <button class="files" type="button" aria-label="Files, 4">${FOLDER}<span class="badge" style="top: -8px">4</span></button>
+  <button class="files" type="button" aria-label="Files, 100">${FOLDER}<span class="badge" style="top: -4px">100</span></button>
   <button type="button" aria-label="Reload">${GLYPH}</button>
 </div></header>`,
     want: "button.files",

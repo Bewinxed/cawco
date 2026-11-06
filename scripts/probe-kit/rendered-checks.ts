@@ -50,7 +50,7 @@
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
  * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws on the control's box (at four points 3px in from each side's middle, composed bottom up, glyphs aside; a glyph or face changing at its centre alone draws nothing on the box) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered;  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused as the keyboard focuses it (`focus({ focusVisible: true })`, so `:focus-visible` matches and a ring placed on `focusin` draws; none while focus stands inside an open layer, and focus put back after), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
  * | touch       | own code                    | on a coarse pointer, each control in a bar's capsule of glass and each segment of a groove: its box with its placed pseudos (`touch-hit`), a field in a frame (InputGroup) with the frame's too, each side stopped at the midpoint to the control beside it there that a press at its centre reaches (the page under a sheet stops nothing), 44×44 or more |
- * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's top trailing corner taking no room, its leading edge at or past the glyph's centre and its top at or under the glass's top edge, within half a pixel, at any width of count |
+ * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's top trailing corner taking no room, its leading edge at or past the glyph's centre (within half a pixel), over at most a fifth of its own glyph's ink and no more of a neighbour's than a one-figure count standing there (shapes' fill and stroke sampled every half pixel), at any width of count |
  * | baseline    | own code                    | in a flex row set on first baselines (`items-baseline`), each item that is or holds a control stands its first words' baseline within 1px of the first other item's words on its line (a text run's baseline: its line box's top plus the font's ascent share of its height) |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
@@ -192,7 +192,7 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
     by: "own code + DevTools CSS.forcePseudoState",
   },
   "glyph-place": {
-    says: "a bar's glyph control draws its glyph at its fill's centre, its count a badge on the glyph's top trailing corner that grows toward the trailing side and stays inside the glass (The Earned Count Rule; HIG, Tab bars)",
+    says: "a bar's glyph control draws its glyph at its fill's centre, its count a badge on the glyph's top trailing corner that grows toward the trailing side, over at most a fifth of its glyph's ink and no more of a neighbour's than a one-figure count (The Earned Count Rule; HIG, Tab bars)",
     by: "own code",
   },
   baseline: {
@@ -4487,13 +4487,82 @@ function readInPage(args: InPageArgs): InPageRead {
   // its glyph's centre within 1px of its box's on each axis, and the count's
   // badge on the glyph's top trailing corner at any width of count: its
   // leading edge at or past the glyph's centre (a wide count grows toward
-  // the trailing side, never back across the glyph) and its top at or under
-  // the glass's top edge. A bare glyph on a bar's ground (the
+  // the trailing side, never back across the glyph), on at most a fifth of
+  // its own glyph's ink, and on no more of a neighbour's than a one-figure
+  // count standing there. A bare glyph on a bar's ground (the
   // phone's sidebar toggle, standing on the tabs' line in its touch area)
   // draws no fill to centre in. Read at rest: where they stand is the same
   // in every state, and the fill is the control's own box.
   if (!skip.has("glyph-place")) {
     const COUNT = /^\d{1,4}\+?$/u;
+    /**
+     * The most of its own glyph's ink a count may lie on: a badge on the
+     * item's top edge over the glyph's top trailing corner covers that
+     * corner, where a glyph drawn on its grid keeps little ink (the Comments
+     * bubble 5.1%); one laid over the glyph's middle covers half of it or
+     * more. A wider count grows toward the trailing side, lifted past the
+     * glass's top so it clears its neighbour's glyph: it may lie on no more
+     * of a neighbour's ink than a one-figure count standing where it stands.
+     */
+    const INK_SHARE = 0.2;
+    /** What holds a glyph a count reaches over: a control. */
+    const STATE_GLYPH_CONTROL =
+      'button, a[href], [role="button"], [role="tab"], [role="radio"]';
+    /**
+     * The share of `drawn`'s ink under `badge`: the glyph's box sampled every
+     * half pixel, a point inked where one of its shapes drawn at all
+     * (opacity and fill or stroke opacity over a tenth) holds it in its fill
+     * or on its stroke (`isPointInFill`, `isPointInStroke`, in the shape's
+     * own units through the inverse of its screen matrix).
+     */
+    const inkUnder = (drawn: Element, badge: DOMRect): number => {
+      const shapes = [
+        ...drawn.querySelectorAll<SVGGeometryElement>(
+          "path, circle, rect, ellipse, line, polyline, polygon"
+        ),
+      ].flatMap((shape) => {
+        const st = style(shape);
+        const seen = (v: string) => Number.parseFloat(v || "1") > 0.1;
+        const m = shape.getScreenCTM()?.inverse();
+        if (
+          !m ||
+          st.display === "none" ||
+          st.visibility === "hidden" ||
+          !seen(st.opacity)
+        ) {
+          return [];
+        }
+        const filled = st.fill !== "none" && seen(st.fillOpacity);
+        const stroked = st.stroke !== "none" && seen(st.strokeOpacity);
+        return filled || stroked ? [{ shape, m, filled, stroked }] : [];
+      });
+      const g = drawn.getBoundingClientRect();
+      let inked = 0;
+      let covered = 0;
+      for (let y = g.top + 0.25; y < g.bottom; y += 0.5) {
+        for (let x = g.left + 0.25; x < g.right; x += 0.5) {
+          const hit = shapes.some(({ shape, m, filled, stroked }) => {
+            const p = new DOMPoint(x, y).matrixTransform(m);
+            return (
+              (filled && shape.isPointInFill(p)) ||
+              (stroked && shape.isPointInStroke(p))
+            );
+          });
+          if (hit) {
+            inked += 1;
+            if (
+              x >= badge.left &&
+              x <= badge.right &&
+              y >= badge.top &&
+              y <= badge.bottom
+            ) {
+              covered += 1;
+            }
+          }
+        }
+      }
+      return inked > 0 ? covered / inked : 0;
+    };
     for (const el of controls) {
       const around = el.closest(BAR) ? capsuleAround(el) : null;
       if (!around) {
@@ -4551,7 +4620,6 @@ function readInPage(args: InPageArgs): InPageRead {
         const rtl = style(el).direction === "rtl";
         const centre = g.left + g.width / 2;
         const past = rtl ? centre - c.right : c.left - centre;
-        const under = c.top - around.box.top;
         const badgeSaid = `its count "${count.textContent?.trim()}" (${px(c.left - box.left)}–${px(c.right - box.left)} × ${px(c.top - box.top)}–${px(c.bottom - box.top)} in the control)`;
         if (past < -0.5) {
           say(
@@ -4560,12 +4628,32 @@ function readInPage(args: InPageArgs): InPageRead {
             `${badgeSaid} reaches ${px(-past)} back across its glyph's centre: a corner badge's leading edge stands on the glyph's top trailing corner and a wider count grows toward the trailing side`
           );
         }
-        if (under < -0.5) {
+        // A one-figure count where it stands: as wide as it is tall, from
+        // the same leading edge.
+        const one = rtl
+          ? new DOMRect(c.right - c.height, c.top, c.height, c.height)
+          : new DOMRect(c.left, c.top, c.height, c.height);
+        const ownShare = inkUnder(glyph, c);
+        if (ownShare > INK_SHARE) {
           say(
             "glyph-place",
             el,
-            `${badgeSaid} stands ${px(-under)} past its glass's top edge: a corner badge stays inside the glass`
+            `${badgeSaid} lies on ${Math.round(ownShare * 100)}% of its glyph's ink: a corner badge covers at most ${INK_SHARE * 100}%`
           );
+        }
+        for (const other of glyphs.filter(
+          (drawn) =>
+            drawn !== glyph && around.el.contains(drawn) && shown(drawn)
+        )) {
+          const share = inkUnder(other, c);
+          const allowed = inkUnder(other, one);
+          if (share > allowed + 0.005) {
+            say(
+              "glyph-place",
+              el,
+              `${badgeSaid} lies on ${Math.round(share * 100)}% of its neighbour ${selectorOf(other.closest(STATE_GLYPH_CONTROL) ?? other)}'s glyph's ink, where a one-figure count standing there lies on ${Math.round(allowed * 100)}%`
+            );
+          }
         }
       }
     }
