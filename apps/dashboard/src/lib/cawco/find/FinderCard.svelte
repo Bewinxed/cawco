@@ -16,8 +16,8 @@
    *
    * - A session or a stored session: its conversation. At a moment,
    *   `?at=<docId>` with the engine's own record id (a transcript record's
-   *   uuid, an opencode message id), which
-   *   the transcript scrolls to and marks.
+   *   uuid, an opencode message id), and `&match=` for each word it matched
+   *   on, which the transcript scrolls to, those words in view, and marks.
    * - A task: its project with its sheet open (`?task=`); a routine: open
    *   in its project's Routines tab (a fleet routine has none, and ↵
    *   stays); a project: its page.
@@ -34,8 +34,10 @@
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
   import { conversationHref, routineHref } from "../links";
+  import { MATCH } from "../transcript/open-at.svelte";
   import Finder from "./Finder.svelte";
   import type { FindMoment, FindResult, WaitingItem } from "./find-client";
+  import { momentTerms } from "./find-rows";
   import type { MachineAct, Opening } from "./finder-state.svelte";
 
   let { phone = false, onclose }: { phone?: boolean; onclose: () => void } =
@@ -46,8 +48,16 @@
     return () => finder.close();
   });
 
-  const at = (href: string, moment: FindMoment | null) =>
-    moment ? `${href}?at=${encodeURIComponent(moment.docId)}` : href;
+  const at = (href: string, moment: FindMoment | null) => {
+    if (!moment) {
+      return href;
+    }
+    const query = new URLSearchParams({ at: moment.docId });
+    for (const term of momentTerms(moment)) {
+      query.append(MATCH, term);
+    }
+    return `${href}?${query}`;
+  };
 
   const sessionHref = (id: string, machineId?: string) =>
     conversationHref(

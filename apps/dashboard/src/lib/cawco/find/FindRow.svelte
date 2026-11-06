@@ -16,8 +16,10 @@
    * word first on the meta line; the reason it is here on a third line when
    * a purpose, a report or a moment matched. Fixed heights: 52px for two
    * lines and 70px with the reason on the desk; on a phone 56px, the title
-   * wrapping rather than clipping, and a ⌄ at the trailing end (a 44px
-   * target) that unfolds the peek in place while the row body opens.
+   * wrapping rather than clipping (up to three lines, its row of the grid
+   * growing with them so the meta line stands under its last), and a ⌄ at
+   * the trailing end (a 44px target) that unfolds the peek in place while
+   * the row body opens.
    *
    * It is an option of the finder's listbox: the field keeps the focus and
    * names this row as its active descendant.
@@ -96,7 +98,7 @@
     tabindex="-1"
     type="button"
     style:--row-cols="var(--icon-md) minmax(0, 1fr) auto"
-    style:--row-rows="var(--icon-lg) auto"
+    style:--row-rows="minmax(var(--icon-lg), auto) auto"
   >
     <span
       data-slot="glyph"
@@ -109,9 +111,13 @@
       <row.glyph class="size-icon-md" />
     </span>
     <!-- Its words trimmed to their x-height on the mark line, so the box clips
-         (Gecko does not trim a scroll container). -->
+         (Gecko does not trim a scroll container). On a phone it wraps under
+         a line clamp, a -webkit-box the trim does not reach: it is a box
+         there (`data-box`), its lines whole and unpadded, and its row of the
+         grid grows with them. -->
     <span
       data-slot="title"
+      data-box={phone || undefined}
       class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-ink-row group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
       >{#if row.titleParts.some((part) => part.secret)}<Said
           runs={row.titleParts}

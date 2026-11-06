@@ -21,13 +21,17 @@
    * the row holding it is found again (open-at.svelte.ts `rowHolding`), so
    * the place survives a conversation that grew while it was away. Kept per
    * session in sessionStorage, so a reload returns there too. Or at a record
-   * the conversation was opened at (`?at=`, open-at.svelte.ts), centred:
-   * never kept, it is the address's.
+   * the conversation was opened at (`?at=`, open-at.svelte.ts), the words it
+   * matched on in view (`seekInto`): never kept, it is the address's.
    */
   const LandingSchema = z.union([
     z.object({ tail: z.literal(true) }),
     z.object({ tail: z.literal(false), block: z.string(), into: z.number() }),
-    z.object({ tail: z.literal(false), at: z.string() }),
+    z.object({
+      tail: z.literal(false),
+      at: z.string(),
+      terms: z.array(z.string()).readonly(),
+    }),
   ]);
   type Landing = z.infer<typeof LandingSchema>;
   const LANDING = "cawco:landing:";
@@ -111,7 +115,14 @@
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
   import NoticeRun from "./NoticeRun.svelte";
-  import { blockOf, openAt, rowAt, rowHolding } from "./open-at.svelte";
+  import {
+    blockOf,
+    matchBox,
+    type OpenAsk,
+    openAt,
+    rowAt,
+    rowHolding,
+  } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import {
@@ -2505,6 +2516,8 @@
   let list = $state<VirtualizerHandle | undefined>();
   /** The box around the list; its first child is virtua's container. */
   let listing = $state<HTMLElement>();
+  /** The strip before the list: its top padding is the head's room (`headRoom`). */
+  let headStrip = $state<HTMLElement>();
   /**
    * The part of a pixel that makes the scroll range a whole number of pixels,
    * laid above the list's first row. A scroll offset is whole (at a device
@@ -2761,18 +2774,81 @@
   }
 
   /**
-   * How far into the row at `index` the view's top stands to centre it in
-   * the room the reader sees, above the foot the composer stands over: a
-   * negative distance, the room above the row. A row taller than that room
-   * starts at the view's top, so its first line is read first.
+   * The band of the view the reader sees, px down from the scroller's top:
+   * under the bar floating over its top (`headRoom`, the strip's padding)
+   * and above the foot the composer stands over (`rooms`).
    */
-  function centred(index: number): number {
+  function band(): { top: number; bottom: number } {
+    if (!scroller) {
+      return { top: 0, bottom: 0 };
+    }
+    const top = headStrip
+      ? Number.parseFloat(getComputedStyle(headStrip).paddingTop)
+      : 0;
+    return {
+      top: Number.isFinite(top) ? top : 0,
+      bottom: scroller.clientHeight - rooms.foot,
+    };
+  }
+
+  /**
+   * THE WORDS SOUGHT END UP IN VIEW, NOT JUST THEIR ROW. How far into the
+   * row at `index` the view's top stands for a seek to it (a negative
+   * distance, the room above the row), in the band the reader sees
+   * (`band`). With `terms` and the first of them drawn in the record
+   * (open-at.svelte.ts `matchBox`): those words at the band's middle, so a
+   * tall row (a test run's output) does not leave them under the composer.
+   * Otherwise the record (its part of the row, or the row while it is not
+   * drawn) centred in the band, or, taller than it, its top at the band's
+   * top, so its first line is read first, clear of the head. Read each
+   * frame of the seek (`restore`): the row is drawn, and its words found,
+   * once the first write has brought it into range.
+   */
+  function seekInto(index: number, terms: readonly string[]): number {
     if (!(list && scroller)) {
       return 0;
     }
-    const room = scroller.clientHeight - rooms.foot;
-    const size = list.getItemSize(index);
-    return size < room ? -(room - size) / 2 : 0;
+    const { top, bottom } = band();
+    const room = bottom - top;
+    const drawn = recordDrawn(index);
+    if (!drawn) {
+      const size = list.getItemSize(index);
+      return size < room ? -(top + (room - size) / 2) : -top;
+    }
+    const itemTop = drawn.item.getBoundingClientRect().top;
+    const words = terms.length > 0 ? matchBox(drawn.record, terms) : null;
+    if (words) {
+      return words.top + words.height / 2 - itemTop - (top + bottom) / 2;
+    }
+    const box = drawn.record.getBoundingClientRect();
+    const from = box.top - itemTop;
+    return box.height < room
+      ? from - (top + (room - box.height) / 2)
+      : from - top;
+  }
+
+  /**
+   * The record a seek is after, as the row at `index` draws it: its own
+   * part when the row draws several (a message's, a run's call), else the
+   * whole row; and virtua's item around it, whose top its offsets measure
+   * to. None while the row is not drawn.
+   */
+  function recordDrawn(
+    index: number
+  ): { item: Element; record: Element } | null {
+    const row = renderedRows[index];
+    const drawn = row
+      ? listing?.querySelector(`[data-row="${CSS.escape(row.key)}"]`)
+      : null;
+    if (!(drawn && resume && "at" in resume)) {
+      return null;
+    }
+    return {
+      item: drawn.closest("[data-item]") ?? drawn,
+      record:
+        drawn.querySelector(`[data-message="${CSS.escape(resume.at)}"]`) ??
+        drawn,
+    };
   }
 
   /**
@@ -2790,7 +2866,10 @@
       return false;
     }
     atBottom = false;
-    return scrollToRow(index, "at" in resume ? centred(index) : resume.into);
+    return scrollToRow(
+      index,
+      "at" in resume ? seekInto(index, resume.terms) : resume.into
+    );
   }
 
   /**
@@ -2961,16 +3040,17 @@
 
   // ── Opened at a record ────────────────────────────────────────────────
   /**
-   * THE RECORD ASKED FOR IS READ BACK TO, CENTRED AND MARKED.
+   * THE RECORD ASKED FOR IS READ BACK TO, ITS WORDS IN VIEW, AND MARKED.
    *
    * `?at=` names a record of this conversation, or a time in it: the first
-   * record stored at or after it (open-at.svelte.ts `rowAt`). It is a
-   * landing like a kept place (`resume`), centred rather than at the view's
-   * top: before the list is drawn, the reveal reads the pages before the
-   * rows held, one at a time, until one holds it, and draws the list there;
-   * once drawn, `seeking` does the same in place. Either way the view then
-   * stands off the tail, so nothing that arrives there moves it, until the
-   * reader scrolls. A record the whole conversation does not hold opens at
+   * record stored at or after it (open-at.svelte.ts `rowAt`), and the words
+   * it matched on, if any (`&match=`). It is a landing like a kept place
+   * (`resume`), at those words or the record rather than at the view's top
+   * (`seekInto`): before the list is drawn, the reveal reads the pages
+   * before the rows held, one at a time, until one holds it, and draws the
+   * list there; once drawn, `seeking` does the same in place. Either way the
+   * view then stands off the tail, so nothing that arrives there moves it,
+   * until the reader scrolls. A record the whole conversation does not hold opens at
    * the latest row, and the dock says so.
    */
   /** Bumped by each ask: what re-runs a reveal under way to read back to it. */
@@ -2990,13 +3070,13 @@
   /** The most frames a seek re-centres for while rows around it measure: our own call. */
   const SEEK_FRAMES = 30;
 
-  function seek(docId: string): void {
+  function seek({ at, terms }: OpenAsk): void {
     marked = null;
     unfound = null;
-    resume = { tail: false, at: docId };
+    resume = { tail: false, at, terms };
     standsAtTail = false;
     if (shown) {
-      seeking = docId;
+      seeking = at;
     } else {
       asked += 1;
     }
@@ -3008,18 +3088,18 @@
   // unmounted mid-seek (its pane's state changing under it while the newest
   // page is read) leaves it to the next.
   $effect(() => {
-    const docId = openAt.get(session.instanceId);
-    if (docId === undefined || docId === taking) {
+    const ask = openAt.get(session.instanceId);
+    if (ask === undefined || ask.at === taking) {
       return;
     }
-    taking = docId;
-    untrack(() => seek(docId));
+    taking = ask.at;
+    untrack(() => seek(ask));
   });
 
   /** The seek is over: the record is in view and marked, or it is said not to be. */
   function arrived(docId: string): void {
     taking = null;
-    if (openAt.get(session.instanceId) === docId) {
+    if (openAt.get(session.instanceId)?.at === docId) {
       openAt.delete(session.instanceId);
     }
     // Said once, here, where the seek ends: a landing is a state change and
@@ -3045,8 +3125,8 @@
   }
 
   // In a list already drawn: the pages before are read until one holds the
-  // record, then the view is centred on it over the frames the rows around
-  // it take to measure (`restore`, as the reveal does).
+  // record, then the view is put at it (`seekInto`) over the frames the rows
+  // around it take to measure (`restore`, as the reveal does).
   $effect(() => {
     const docId = seeking;
     if (!(docId && shown && visible)) {
@@ -4967,6 +5047,7 @@
   <div
     class="isolate pt-(--head-room,0px) has-data-retry:pb-space-5"
     style:--head-room={headRoom}
+    bind:this={headStrip}
     {@attach keepPlace}
   >
     {#if renderedRows.length > 0 && session.olderFault}

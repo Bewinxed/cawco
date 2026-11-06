@@ -26,6 +26,8 @@
    */
   import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
   import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
+  import { disclosureAt } from "#lib/cawco/transcript/disclosure.svelte.js";
+  import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import { buildRowsFrom } from "#lib/cawco/transcript/rows.js";
   import Transcript from "#lib/cawco/transcript/Transcript.svelte";
   import type { Message } from "#lib/cawco/types.js";
@@ -37,6 +39,8 @@
 
   let session = $state<SessionState>(blankSession(INSTANCE));
   let landed = $state(false);
+  /** How far a bar floats over the transcript's top (its `headRoom`), a CSS length: none until `head` says. */
+  let headRoom = $state<string | undefined>();
   /** Which mount is on screen. Bumped by `reset` to remount the transcript. */
   let generation = $state(0);
   /** Monotonic for the life of the page — ids must never repeat across
@@ -296,6 +300,15 @@
         session.rev += 1;
       },
       landed: () => landed,
+      /** A bar floating over the transcript's top, `length` into it (a docked pane's); undefined for none. */
+      head: (length: string | undefined) => {
+        headRoom = length;
+      },
+      /** A call's body opened, by its call id, as the reader's press opens it: before a `load`, drawn open. */
+      open: (call: string) => disclosureAt(INSTANCE, call).set(true),
+      /** The transcript opened at a record, `terms` the words it matched on, as `?at=…&match=…` asks. */
+      seek: (at: string, terms: string[] = []) =>
+        askOpenAt(INSTANCE, at, terms),
       /**
        * The rows a transcript mounted now draws for these messages — what a
        * reload draws — by key, with whether each divider has a brief.
@@ -487,6 +500,7 @@
       <Transcript
         agentName="Traffic"
         focused
+        {headRoom}
         onlanded={() => {
           landed = true;
         }}

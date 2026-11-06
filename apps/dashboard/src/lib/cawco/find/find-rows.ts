@@ -208,6 +208,28 @@ export const momentParts = (owner: string, moment: FindMoment): Run[] =>
     secretKey(owner, `m:${moment.docId}`, i)
   );
 
+/**
+ * The words a moment matched on (its excerpt's 「 」 runs), once each, none a
+ * secret holds: what its record is opened at in view (`&match=`,
+ * transcript/open-at.svelte.ts).
+ */
+export function momentTerms(moment: FindMoment): string[] {
+  const terms = new Set<string>();
+  let at = 0;
+  for (const run of markedRuns(moment.excerpt)) {
+    const end = at + run.text.length;
+    const secret = moment.secrets?.some(
+      ([start, stop]) => start < end && stop > at
+    );
+    const term = run.text.trim();
+    if (run.matched && !secret && term.length > 0) {
+      terms.add(term);
+    }
+    at = end;
+  }
+  return [...terms];
+}
+
 const momentReason = (owner: string, moment: FindMoment): Excerpt => ({
   source: AUTHOR[moment.author],
   parts: momentParts(owner, moment),

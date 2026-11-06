@@ -597,7 +597,9 @@
     <!-- The call opens its own line, so a run's rail grows one call at a time. -->
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
-        <div data-slot="row" data-err={failed || undefined}>
+        <!-- By its record's id, as a message's row is (MessageRow): what a
+             seek to it finds it by (Transcript `recordDrawn`). -->
+        <div data-slot="row" data-err={failed || undefined} data-message={m.id}>
           {#if d.expanded === "preview"}
             {@const called = calledArtifact(
               m.metadata?.toolInput ?? undefined,

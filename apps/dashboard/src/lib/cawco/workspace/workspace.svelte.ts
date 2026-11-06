@@ -32,7 +32,7 @@ import { conversationHref, isSessionRow } from "../links";
 import { asPref, keepPrefs } from "../prefs";
 import { openArtifactIn } from "../reference-open.svelte";
 import { store, stored as storedIn } from "../storage";
-import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
+import { askOpenAt, carryOpenAt, MATCH } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
 import {
@@ -761,11 +761,12 @@ export const workspace = {
       return;
     }
     const urlId = tab;
-    // A record to open at (`?at=`), asked of the conversation whether or not
-    // it is already in front: its transcript seeks there either way.
+    // A record to open at (`?at=`) and the words it matched on (`&match=`),
+    // asked of the conversation whether or not it is already in front: its
+    // transcript seeks there either way.
     const at = url.searchParams.get("at");
     if (urlId && at) {
-      askOpenAt(urlId, at);
+      askOpenAt(urlId, at, url.searchParams.getAll(MATCH));
     }
     // An artifact to open in its panel at its first pending stop
     // (`?artifact=`, a Needs-you row's address), asked whether or not the

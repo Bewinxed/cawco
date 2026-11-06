@@ -2,9 +2,12 @@
  * OPENING A CONVERSATION AT ONE OF ITS RECORDS.
  *
  * `?at=<docId>` on a conversation's address (`/session/<id>?at=…`) asks for
- * that conversation scrolled to the record, centred and highlighted, however
- * far back in its history it is: a Claude transcript record's uuid, an
- * OpenCode message id, a pi entry id. The finder's "Where it was said" rows link there.
+ * that conversation scrolled to the record and highlighted, however far
+ * back in its history it is: a Claude transcript record's uuid, an
+ * OpenCode message id, a pi entry id. The finder's "Where it was said" rows link there,
+ * naming the words that matched (`&match=<term>`, once each, {@link MATCH}):
+ * the first of them in the record is brought into the room the reader sees
+ * (Transcript `seekInto`), where a record with none named is.
  * Or a time (an ISO-8601 date and time, {@link isMoment}): the first record
  * stored at or after it. A landed commit's `Agent-Logs-Url` trailer names
  * its author date so (hub landing.ts `stampCommand`), which opens the
@@ -20,22 +23,35 @@ import { browser } from "$app/env";
 import type { Message } from "../types";
 import type { Row } from "./rows";
 
-/** The record each view was asked to open at, until its transcript takes it. */
-export const openAt = new SvelteMap<string, string>();
+/** The address's parameter naming a word the record matched on, once per word. */
+export const MATCH = "match";
 
-/** Ask `viewId` to open at `docId`. Browser only: the server holds no asks. */
-export function askOpenAt(viewId: string, docId: string): void {
+/** A record to open at, and the words to bring into view in it: none, its place alone. */
+export interface OpenAsk {
+  at: string;
+  terms: readonly string[];
+}
+
+/** The record each view was asked to open at, until its transcript takes it. */
+export const openAt = new SvelteMap<string, OpenAsk>();
+
+/** Ask `viewId` to open at `at`, its `terms` in view. Browser only: the server holds no asks. */
+export function askOpenAt(
+  viewId: string,
+  at: string,
+  terms: readonly string[] = []
+): void {
   if (browser) {
-    openAt.set(viewId, docId);
+    openAt.set(viewId, { at, terms });
   }
 }
 
 /** A view re-addressed (`workspace.retarget`) keeps the ask made of it. */
 export function carryOpenAt(from: string, to: string): void {
-  const docId = openAt.get(from);
-  if (docId !== undefined) {
+  const ask = openAt.get(from);
+  if (ask !== undefined) {
     openAt.delete(from);
-    openAt.set(to, docId);
+    openAt.set(to, ask);
   }
 }
 
@@ -126,3 +142,59 @@ export function rowAt(
  * the rows around it were folded since. None for a row of the live tail.
  */
 export const blockOf = (row: Row): string | undefined => recordsOf(row)[0]?.id;
+
+/** `text` matched literally in a pattern. */
+const literal = (text: string): string =>
+  text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+/**
+ * Where the first of `terms` is drawn in `root`, in the order its words are
+ * read, case aside: its words' box on the page, any box between it and
+ * `root` that scrolls on its own (a tool's capped output) scrolled to it
+ * first. Null when none of them is drawn there: a record folded shut, or
+ * words the transcript draws otherwise than they were stored.
+ */
+export function matchBox(
+  root: Element,
+  terms: readonly string[]
+): DOMRect | null {
+  const words = terms.filter((term) => term.trim().length > 0);
+  if (words.length === 0) {
+    return null;
+  }
+  const pattern = new RegExp(words.map(literal).join("|"), "iu");
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const found = pattern.exec(node.nodeValue ?? "");
+    if (!found) {
+      continue;
+    }
+    const range = document.createRange();
+    range.setStart(node, found.index);
+    range.setEnd(node, found.index + found[0].length);
+    if (range.getClientRects().length === 0) {
+      // Not drawn (a hidden copy, a closed fold's): the next one may be.
+      continue;
+    }
+    for (
+      let box = node.parentElement;
+      box && box !== root && root.contains(box);
+      box = box.parentElement
+    ) {
+      if (box.scrollHeight > box.clientHeight + 1 && scrolls(box)) {
+        const drawn = range.getBoundingClientRect();
+        const room = box.getBoundingClientRect();
+        box.scrollTop +=
+          drawn.top + drawn.height / 2 - (room.top + room.height / 2);
+      }
+    }
+    return range.getBoundingClientRect();
+  }
+  return null;
+}
+
+/** Whether `box` scrolls its own content up and down. */
+const scrolls = (box: Element): boolean => {
+  const { overflowY } = getComputedStyle(box);
+  return overflowY === "auto" || overflowY === "scroll";
+};
