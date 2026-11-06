@@ -1,3 +1,16 @@
+<script lang="ts" module>
+  /** A move the hub refused, said in the column that refused it (TaskBoard `noticesIn`). */
+  export interface RefusedNotice {
+    again: () => void;
+    /** The column the card went back to, as the board names it. */
+    back: string;
+    id: string;
+    reason: string;
+    /** Brings the card into the board's view. */
+    show: () => void;
+  }
+</script>
+
 <script lang="ts">
   /**
    * One stage's column: its name and count, a quiet word for its kind under
@@ -17,6 +30,7 @@
    */
   import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
   import { setupPageWords } from "@cawco/core/words/onboarding";
+  import { projectWords } from "@cawco/core/words/project";
   import { type Snippet, tick } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import Droppable, { type DropPlace } from "#lib/cawco/drag/Droppable.svelte";
@@ -31,6 +45,7 @@
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconNeedsYou } from "#lib/icons.js";
@@ -52,6 +67,7 @@
     fresh = null,
     moving,
     refused,
+    notices = [],
     archived = false,
     picked,
     onpick,
@@ -97,8 +113,15 @@
      * a move the person had made.
      */
     moving?: (id: string) => boolean;
-    /** A move the hub refused: the card is back here, the reason under it. */
-    refused?: (id: string) => { again: () => void; reason: string } | null;
+    /**
+     * A move the hub refused. With a stage, it is said in that column
+     * (`notices`); without one (a column's order not kept), under the card.
+     */
+    refused?: (
+      id: string
+    ) => { again: () => void; reason: string; stage?: string } | null;
+    /** The moves this column refused: what came of each, at its head, where the card was let go. */
+    notices?: RefusedNotice[];
   } = $props();
 
   const count = $derived(cards.length);
@@ -139,7 +162,8 @@
 </script>
 
 {#snippet row(task: TaskSummary, thing: SortableThing | null)}
-  {@const fault = refused?.(task.id) ?? null}
+  {@const said = refused?.(task.id) ?? null}
+  {@const fault = said?.stage ? null : said}
   {@const on = picked?.(task.id) ?? false}
   <li
     class="group/card group/task data-pickable:relative data-new:[&>[data-task-card]]:animate-row-flash"
@@ -243,6 +267,30 @@
       bind:this={list}
       {@attach reflow()}
     >
+      <!-- A card the hub would not take here went back to its column: said
+           where it was let go, at the head of the cards, with the hub's
+           sentence and Try again; Show brings the card into view. -->
+      {#each notices as notice (notice.id)}
+        <li class="flex flex-col gap-0" data-flip data-slot="refused-move">
+          <span
+            class="mark-line flex flex-wrap items-center gap-x-space-2 px-space-2 pt-space-1 type-meta text-ink-muted"
+            ><span>{projectWords.movedBack(notice.id, notice.back)}</span
+            ><Button
+              data-box
+              label={projectWords.showTask(notice.id)}
+              onclick={notice.show}
+              size="xs"
+              variant="ghost"
+            /></span
+          >
+          <RowFault
+            again={notice.again}
+            end="var(--space-2)"
+            indent="var(--space-2)"
+            reason={notice.reason}
+          />
+        </li>
+      {/each}
       <!-- One clock moves the cards: the list's own (`reflow`, each row's
            `data-flip`, the slot held open for a card in the air with them).
            dnd kit's slide on top of it started a second flight from where

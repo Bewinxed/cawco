@@ -184,6 +184,14 @@ if (typeof document !== "undefined") {
 }
 
 export interface LandOptions {
+  /**
+   * Fly a copy on the flight layer instead of the destination itself, the
+   * destination hidden until the copy lands on it. A flight is a transform
+   * on the destination, cut by whatever clips it: a board's column scrolls,
+   * so a card flying into it from the column beside it is drawn only once
+   * it is inside, and travels unseen.
+   */
+  above?: boolean;
   /** For `grow`: the part of the destination that the source is (a selector inside it). */
   anchor?: string;
   /**
@@ -323,10 +331,34 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
       ]);
     }
   }
+  const flier = options.above ? copyAbove(node, to) : node;
   const runs = effects.map((frames) =>
-    node.animate(frames, { id: FLIGHT, duration: ms, easing })
+    flier.animate(frames, { id: FLIGHT, duration: ms, easing })
   );
-  Promise.allSettled(runs.map((run) => run.finished)).then(reveal);
+  Promise.allSettled(runs.map((run) => run.finished)).then(() => {
+    if (flier !== node) {
+      flier.remove();
+      node.style.visibility = "";
+    }
+    reveal();
+  });
+}
+
+/**
+ * A copy of `node` drawn where it rests (`to`) on the flight layer, above
+ * every clip, `node` hidden meanwhile: the copy is what flies.
+ */
+function copyAbove(node: HTMLElement, to: DOMRect): HTMLElement {
+  const copy = node.cloneNode(true) as HTMLElement;
+  for (const name of ["data-share", "data-flip", "data-flip-enter", "id"]) {
+    copy.removeAttribute(name);
+  }
+  copy.setAttribute("aria-hidden", "true");
+  copy.inert = true;
+  copy.style.cssText = `position:fixed;left:${to.left}px;top:${to.top}px;inline-size:${to.width}px;block-size:${to.height}px;margin:0;box-sizing:border-box;z-index:var(--layer-flight);pointer-events:none`;
+  document.body.append(copy);
+  node.style.visibility = "hidden";
+  return copy;
 }
 
 /** Land a destination from the departure waiting under its key. */

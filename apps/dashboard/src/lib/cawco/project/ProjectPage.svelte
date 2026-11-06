@@ -1030,11 +1030,23 @@
    * under it, and Try again makes the same move.
    */
   let refusedMoves = $state<
-    Record<string, { reason: string; again: () => void }>
+    Record<string, { reason: string; again: () => void; stage?: string }>
   >({});
-  /** A refusal said under the card `id`, Try again making the same change. */
-  const refuse = (id: string, error: unknown, again: () => void) => {
-    refusedMoves = { ...refusedMoves, [id]: { reason: message(error), again } };
+  /**
+   * A refusal of card `id`'s change, Try again making it again: a move's is
+   * said in the column that refused it (`stage`, TaskBoard), an order's
+   * under the card.
+   */
+  const refuse = (
+    id: string,
+    error: unknown,
+    again: () => void,
+    stage?: string
+  ) => {
+    refusedMoves = {
+      ...refusedMoves,
+      [id]: { reason: message(error), again, stage },
+    };
   };
   const unrefuse = (id: string) => {
     const { [id]: _, ...rest } = refusedMoves;
@@ -1086,7 +1098,7 @@
     move(id, stage)
       .then(() => writeRanks(id, ranks))
       .catch((error: unknown) => {
-        refuse(id, error, () => drop(id, stage, ranks));
+        refuse(id, error, () => drop(id, stage, ranks), stage);
       });
   }
 

@@ -34,6 +34,7 @@
   import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
   import { byRank } from "@cawco/core/task-views";
   import type { StageKind } from "@cawco/core/views";
+  import { projectWords } from "@cawco/core/words/project";
   import { tick } from "svelte";
   import DragProvider, {
     type DragData,
@@ -50,7 +51,7 @@
   import { IconArchive } from "#lib/icons.js";
   import NewTaskForm from "./NewTaskForm.svelte";
   import { type RankWrite, ranksFor } from "./rank";
-  import TaskColumn from "./TaskColumn.svelte";
+  import TaskColumn, { type RefusedNotice } from "./TaskColumn.svelte";
 
   let {
     stages,
@@ -98,8 +99,14 @@
     oncreate: (title: string, stage: string) => Promise<string>;
     /** A card whose move the hub has not answered yet. */
     moving?: (id: string) => boolean;
-    /** A move the hub refused, said under its card. */
-    refused?: (id: string) => { again: () => void; reason: string } | null;
+    /**
+     * A move the hub refused, and the stage it refused (`stage`): said in
+     * that column (`noticesIn`), or, with no stage (a column's order not
+     * kept), under the card.
+     */
+    refused?: (
+      id: string
+    ) => { again: () => void; reason: string; stage?: string } | null;
   } = $props();
 
   const named = $derived(new Set(stages.map((stage) => stage.name)));
@@ -156,22 +163,41 @@
   });
   $effect(() => () => clearTimeout(unmark));
   /**
-   * A move the hub refused puts the card back where it was, its sentence
-   * under it: that column may stand out of the board's view (Other stages,
-   * at its far end), so the card is brought into view with it.
+   * A move the hub refused, said where the person let the card go: in the
+   * column that refused it, at its head, what came of it (it went back to
+   * its column) and the hub's sentence, with Try again. The card flies back
+   * to its own column (the page's flight, motion/share); the board stays
+   * where it is, and Show brings the card into view if its column stands
+   * out of it. The columns stages.md closes to the card never take it: they
+   * step back and refuse it while it is held (`closed`); this is for what
+   * only the hub knows at the drop.
    */
-  let told = new Set<string>();
-  $effect(() => {
-    const now = new Set(
-      tasks.filter((task) => refused?.(task.id)).map((task) => task.id)
-    );
-    for (const id of now) {
-      if (!told.has(id)) {
-        tick().then(() => reveal(id));
-      }
-    }
-    told = now;
-  });
+  const noticesIn = (stage: string): RefusedNotice[] =>
+    stage
+      ? tasks.flatMap((task) => {
+          const said = refused?.(task.id);
+          return said?.stage === stage && task.stage !== stage
+            ? [
+                {
+                  id: task.id,
+                  back: named.has(task.stage)
+                    ? stageLabel(task.stage)
+                    : projectWords.otherStages,
+                  reason: said.reason,
+                  again: said.again,
+                  show: () => {
+                    reveal(task.id);
+                    board
+                      ?.querySelector<HTMLElement>(
+                        `[data-task="${CSS.escape(task.id)}"]`
+                      )
+                      ?.focus({ preventScroll: true });
+                  },
+                },
+              ]
+            : [];
+        })
+      : [];
   /**
    * The card in the air: the stage it left, the stage whose column holds its
    * place now (where it is let go), and its place there: null where the
@@ -214,6 +240,19 @@
     return columns;
   });
   const stray = $derived(byStage.get("") ?? []);
+  /**
+   * Other stages, once it has stood on this board, stands for as long as the
+   * board does, empty or not. Taken away the moment its last card was
+   * carried out, the board lost a column's width under the hand: every
+   * column slid a column's width (the drop went to the one beside the one
+   * meant), and a refusal that brought the card back slid them all again.
+   */
+  let strayStood = $state(false);
+  $effect.pre(() => {
+    if (stray.length > 0) {
+      strayStood = true;
+    }
+  });
   /** The cards in the board's reading order, column by column: a Shift range's span. */
   const order = $derived([
     ...stages.flatMap((stage) =>
@@ -285,6 +324,7 @@
     {onopen}
     {picked}
     {picking}
+    notices={noticesIn(name)}
     {refused}
   />
 {/snippet}
@@ -358,8 +398,8 @@
           stage
         )}
       {/each}
-      {#if stray.length > 0}
-        {@render column("", "Other stages", null, stray)}
+      {#if stray.length > 0 || strayStood}
+        {@render column("", projectWords.otherStages, null, stray)}
       {/if}
     </DragProvider>
   </div>
