@@ -34,27 +34,17 @@
   let {
     dials = [],
     turned = {},
-    dialsAt = "face",
-    numberForm = "pill",
     face,
     also = [],
-    sentAt = null,
-    changedMark = "plain",
   }: {
     /** The agent's dials, as its canvas spec writes them. */
     dials?: GraphDial[];
     /** Dials already turned as the page opens, by name. */
     turned?: DialValues;
-    dialsAt?: "face" | "glass";
-    numberForm?: "pill" | "field" | "slider";
     /** The room's face it opens on. */
     face?: "dials";
     /** More states files under the ask, their sheets on their way: the title is the components' menu. */
     also?: string[];
-    /** The hub sent his values by itself at this time (ISO): the head says so. */
-    sentAt?: string | null;
-    /** How a changed dial is marked (graph-dials-questions `changed-mark`). */
-    changedMark?: "ink" | "glyph" | "plain";
   } = $props();
 
   const FILE = "apps/dashboard/src/lib/cawco/routines/RoutineForm.stories.ts";
@@ -294,16 +284,18 @@
           held = Number.isFinite(most) ? most : null;
         })}
       >
-        {#key standing}
-          <RoutineForm
-            {...meta.args}
-            {...story?.args}
-            {...argsSet}
-            projectId="northwind"
-            oncreated={() => undefined}
-            oncancel={() => undefined}
-          />
-        {/key}
+        <!-- A pick sets the next story's args on the form where it stands,
+             as the stage does for a reach within one states file (agent
+             stage-host canvas stage.ts `actOn`): the form morphs to it, its
+             read-back changing in place, never mounted afresh. -->
+        <RoutineForm
+          {...meta.args}
+          {...story?.args}
+          {...argsSet}
+          projectId="northwind"
+          oncreated={() => undefined}
+          oncancel={() => undefined}
+        />
       </div>
     </div>
   </div>
@@ -312,13 +304,9 @@
 <div class="h-dvh min-h-0 bg-surface-page">
   <DesignGraph
     ask="Judge the routine form's dials"
-    {dialsAt}
     files={[FILE, ...also]}
     {frame}
     {link}
-    {numberForm}
-    {changedMark}
-    dialsSent={sentAt ? { at: sentAt, by: "hub" } : null}
     keptDials={turned}
     {spec}
     startFace={face}

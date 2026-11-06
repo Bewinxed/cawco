@@ -1,33 +1,29 @@
 <script lang="ts">
   /**
-   * The agent's dials (its canvas spec's `dials`): the values it lets the
-   * person tune on the drawing, one row each, every row read down the
-   * graph's one grid, as the Animation face's rows are: the dial's name in
-   * the leading column (`c-graph-move-name-w`, the move's names' column),
-   * its control in the next, one field high, reaching the row's end; a
-   * changed value gives its restore glyph a column at the end. Each dial is
-   * a subgrid row, so a name stands close to its control and apart from the
-   * next dial. A number (DialNumber, in the form the owner picks), a
-   * colour (DialColour), a select (the kit's Select), a toggle (the kit's
-   * Switch, at the controls' trailing edge), a line of words (the kit's
-   * Input), an action (an outline button across the row). Dials the agent
-   * puts under a heading stand under it, as the states stand under their
-   * machine (the section head).
+   * The agent's controls (its canvas spec's `dials`): the values it lets the
+   * person tune on the drawing, read down one inspector grid as a tool's
+   * properties panel is (Storybook's Controls, Framer's and Leva's panels):
+   * each control one row, its name in the leading column
+   * (`c-graph-move-name-w`, the Animation face's names' column, so the two
+   * faces read down one edge), its control in the next from one start edge,
+   * one field high, and the undo glyph's column last, held in every row so
+   * no control changes width as its value changes. Controls the agent puts
+   * under a heading stand under it (the section head). A number is a field
+   * with its fill (DialNumber), a colour a swatch and its words with a
+   * maintained picker (DialColour), a select the kit's Select, a toggle the
+   * kit's Switch at the controls' start edge beside its name, a line of
+   * words the kit's Input, an action an outline button.
    *
-   * The head's line stands at every moment, so no row moves as he turns
-   * the first dial or resets the last: it says what becomes of his values
-   * (the artifact keeps them as its doc's `dials`, which answer a component
-   * he judges, so the hub sends them to the agent by itself once his
-   * changes stand quiet: hub artifacts `sendAnswered`, `artifact_read`'s
-   * `dials`; nothing here asks for Send), and once he turned anything it holds what the move's timing
-   * holds, in the same place: As written | Yours (Yours counting the dials
-   * he changed; As written draws the agent's values on the face, muted and
-   * read only, and on the drawing, the line saying so) and Reset all, which
-   * leaves Undo reset in its place until anything changes again.
+   * A changed value keeps its own ink: the undo glyph after it, in the
+   * edit's ink, stands only while it differs from the agent's (the owner's
+   * pick, graph-dials-questions `changed-mark`), and takes it back. Under
+   * the rows, once anything changed, Reset all takes every value back and
+   * leaves Undo reset in its place until anything changes again: what comes
+   * and goes stands after the rows, so no row moves. His values are the
+   * artifact's answer and go to the agent by themselves.
    *
-   * Narrower than `--container-timeline` (the phone's drawer, a room at
-   * its least), each dial's name stands over its control, the control the
-   * face's full width.
+   * Narrower than `--container-timeline` (the phone's drawer, a room at its
+   * least) the name's column shares the row with its control, two to three.
    */
   import { graphWords } from "@cawco/core/words/graph";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -48,7 +44,6 @@
     rangeOf,
   } from "./dials";
   import { figureOf } from "./figures";
-  import VersionSwitch, { type Version } from "./VersionSwitch.svelte";
 
   const words = graphWords;
   /** A figure and a unit written together ("36px", "1.5rem", "250 ms"). */
@@ -58,84 +53,48 @@
     dials,
     written,
     values,
-    version = "yours",
     undoable = false,
-    numberForm = "pill",
-    changedMark = "plain",
-    sent = null,
-    say = null,
-    kept = [],
-    onkeep,
+    open = $bindable(null),
+    held = null,
     lang,
     onchange,
     onreset,
     onundo,
-    onversion,
   }: {
     dials: readonly GraphDial[];
-    /** Each dial's value as the agent wrote it (read off the drawing), by name. */
+    /** Each control's value as the agent wrote it (read off the drawing), by name. */
     written: DialValues;
-    /** His values, by name: each dial he turned. */
+    /** His values, by name: each control he turned. */
     values: DialValues;
-    /** The values on the face and on the drawing: his, the agent's as written, or a version he kept. */
-    version?: Version;
-    /** The versions of the values he kept, each by name as he kept it. */
-    kept?: readonly DialValues[];
-    /** Yours kept as a version of its own; absent, nothing is kept. */
-    onkeep?: () => void;
     /** Reset all was just pressed, and nothing has changed since: Undo reset stands. */
     undoable?: boolean;
-    /** How a number dial is drawn (the owner's pick, tsk-193 and tsk-198). */
-    numberForm?: "pill" | "field" | "slider";
-    /**
-     * How a changed value is marked (the owner's pick, graph-dials-questions
-     * `changed-mark`, still open): its words in the edit's ink beside the
-     * restore glyph (`ink`), the restore glyph alone in the edit's ink
-     * (`glyph`), or the restore glyph alone in the ghost's ink, its words as
-     * they are (`plain`, the default). Both of the card's options draw the
-     * edit's ink, which is the Selected ink, coral, on every changed dial:
-     * three turned dials stood three corals in one view, where coral marks
-     * the one place he acts and is never a status (DESIGN.md, The Coral Is
-     * Where You Act Rule). `plain` is the Animation face's mark for an
-     * edited value, its restore glyph on it, coral the selected row's alone.
-     */
-    changedMark?: "ink" | "glyph" | "plain";
-    /** The values the face shows went to the agent: when, and whether the hub sent them by itself or he did; null while they haven't gone since his last change. */
-    sent?: { at: string; by: "hub" | "person" } | null;
-    /** What becomes of the values where it is not the graph's word (a decision page's: they go with its Send); null: the graph's. */
-    say?: string | null;
+    /** The control whose layer stands open (a select's list, a colour's picker), by name; null while none is. */
+    open?: string | null;
+    /** A number control held under the hand, by name: dragged across, or typed into with these words in it. */
+    held?:
+      | { name: string; as: "dragging" }
+      | { name: string; as: "typing"; text: string }
+      | null;
     lang: string | undefined;
     onchange: (name: string, value: DialValue) => void;
-    /** These dials back to as written; `all`: Reset all, which Undo reset takes back. */
+    /** These controls back to as written; `all`: Reset all, which Undo reset takes back. */
     onreset: (names: string[], all: boolean) => void;
     onundo?: () => void;
-    onversion: (version: Version) => void;
   } = $props();
 
   const changed = $derived(changedOf(dials, written, values));
-  /** A version not his own on the face (As written, or one he kept): drawn as it is, read only. */
-  const asWritten = $derived(
-    version !== "yours" && (changed.length > 0 || kept.length > 0)
-  );
-  /** The values the face shows: his, a kept version's, or none over as written. */
-  const over = $derived.by((): DialValues => {
-    if (version === "yours") {
-      return values;
-    }
-    return typeof version === "number" ? (kept[version] ?? values) : {};
-  });
-  /** What the face shows of a dial: the version's value, else as written. */
+  /** What the face shows of a control: his value, else as written. */
   const shownOf = (dial: GraphDial): DialValue | undefined =>
-    over[dial.name] ?? written[dial.name];
+    values[dial.name] ?? written[dial.name];
   const nameOf = (dial: GraphDial) => dial.label ?? dial.name;
-  /** A select's option said as a figure and its unit, where it is one ("36px": "36" "px"), so every dial writes a unit one way; else the words as they are. */
+  /** A select's option said as a figure and its unit, where it is one ("36px": "36" "px"), so every control writes a unit one way; else the words as they are. */
   const splitUnit = (option: string): { figure: string; unit: string } => {
     const match = FIGURE_UNIT.exec(option.trim());
     return match
       ? { figure: match[1] ?? option, unit: match[2] ?? "" }
       : { figure: option, unit: "" };
   };
-  /** A value said in words, for its restore glyph: a figure with its unit, a toggle on or off. */
+  /** A value said in words, for its undo glyph: a figure with its unit, a toggle on or off. */
   const said = (dial: GraphDial, value: DialValue | undefined): string => {
     if (typeof value === "number") {
       return `${figureOf(value, lang)}${dial.unit ? ` ${dial.unit}` : ""}`;
@@ -145,7 +104,7 @@
     }
     return String(value ?? "");
   };
-  /** The dials in their headings' order: the first heading's, then the next's; dials under none first. */
+  /** The controls in their headings' order: those under none first, then each heading's. */
   const sections = $derived.by(() => {
     const heads: (string | null)[] = [];
     for (const dial of dials) {
@@ -163,95 +122,34 @@
     }));
   });
 
-  /** The head: its line of words, then its controls. */
-  const HEAD_COLUMNS = "minmax(0, 1fr) auto";
   /**
-   * The graph's one grid: the move's names' column, the control, and the
-   * restore glyph's column held in every row, so no control changes width as
-   * its value changes and every control ends on one edge.
+   * The inspector grid: the Animation face's names' column, the control,
+   * and the undo glyph's column held in every row, so every control starts
+   * on one edge and ends on another.
    */
   const COLUMNS =
-    "minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr) var(--c-btn-h-xs)";
-  /** Narrow: a name over its control (across the first two columns), a toggle's name and switch on one line, the restore glyph's column last. */
-  const NARROW_COLUMNS = "minmax(0, 1fr) auto var(--c-btn-h-xs)";
-  /** The time the values went, in the page's language: "14:32". */
-  const timeOf = (at: string) =>
-    new Intl.DateTimeFormat(lang, {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(at));
-  /** The head's words: read only in As written; else sent, or what will become of them. */
-  const line = $derived.by(() => {
-    if (asWritten) {
-      return words.dials.readOnly;
-    }
-    if (sent) {
-      return words.dials.sent(timeOf(sent.at));
-    }
-    return say ?? words.dials.reachAgent;
-  });
+    "minmax(0, var(--c-graph-move-name-w)) minmax(0, 1fr) var(--c-btn-h-xs)";
+  /** Narrow: the name and its control share the row, two to three. */
+  const NARROW_COLUMNS = "minmax(0, 2fr) minmax(0, 3fr) var(--c-btn-h-xs)";
   /** Presses of each action so far, by name: what its arg is set to. */
   let presses = $state<Record<string, number>>({});
+  const layer = (name: string) => ({
+    open: open === name,
+    onOpenChange: (next: boolean) => {
+      if (next) {
+        open = name;
+      } else if (open === name) {
+        open = null;
+      }
+    },
+  });
 </script>
-
-{#snippet versions()}
-  {#if changed.length > 0 || kept.length > 0}
-    <VersionSwitch
-      changed={changed.length}
-      kept={kept.length}
-      label={words.dials.versions}
-      {lang}
-      {onkeep}
-      {onversion}
-      {version}
-    />
-  {/if}
-  {#if changed.length > 0}
-    <Button
-      aria-label={words.dials.resetAllSaid}
-      data-slot="reset-all"
-      onclick={() => onreset(changed, true)}
-      size="sm"
-      title={words.dials.resetAllSaid}
-      variant="ghost">{words.resetAll}</Button
-    >
-  {:else if undoable}
-    <Button data-slot="undo-reset" onclick={onundo} size="sm" variant="ghost"
-      >{words.undoReset}</Button
-    >
-  {/if}
-{/snippet}
 
 <TooltipProvider>
   <div
-    class="@container/dials flex min-h-0 min-w-0 flex-1 flex-col gap-space-3"
+    class="@container/dials flex min-h-0 min-w-0 flex-1 flex-col"
     data-slot="dials"
   >
-    <!-- The head. On a desk one line held at every moment, so no row moves:
-         what becomes of the values (sent, once they went), then once
-         anything changed the two versions and Reset all, or Undo reset.
-         Narrow, the head is the words alone, and the versions stand at the
-         face's foot once anything changed: nothing in the head is ever
-         empty, and nothing above the rows comes or goes. -->
-    <header
-      class="grid min-h-c-btn-h min-w-0 flex-none grid-cols-(--head) items-center gap-x-space-3 @max-timeline/dials:min-h-0 @max-timeline/dials:grid-cols-1"
-      data-slot="dials-head"
-      style:--head={HEAD_COLUMNS}
-    >
-      <p
-        aria-live="polite"
-        class="m-0 min-w-0 type-meta text-ink-muted text-pretty"
-        data-slot="dials-line"
-      >
-        {line}
-      </p>
-      <div
-        class="flex min-w-0 items-center justify-end gap-space-2 @max-timeline/dials:hidden"
-      >
-        {@render versions()}
-      </div>
-    </header>
-
     <!-- Its scroller clips: it stands a step out and pads the step back, so
          a focus ring on its edge is drawn whole (The One Ring Rule); under a
          finger its foot holds the last row's touch areas too (The 44 Touch
@@ -266,38 +164,37 @@
           class="flex min-w-0 flex-col pb-space-5 last:pb-0"
         >
           {#if section.head}
-            <h3 class={sectionHeadVariants({ class: "m-0 mb-space-2" })}>
+            <h3
+              class={sectionHeadVariants({
+                inset: "flush",
+                class: "mb-space-2",
+              })}
+            >
               <span
                 class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
                 >{section.head}</span
               >
             </h3>
           {/if}
-          <!-- One grid for the section; each dial its own subgrid row, so a
-               name stands close to its control (narrow, over it) and apart
-               from the next dial. Every row holds the restore glyph's column,
-               so no control changes width as its value changes. -->
+          <!-- One grid for the section; each control its own subgrid row,
+               its name beside it, rows a step apart as a panel's are. -->
           <div
-            class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 gap-y-space-3 @max-timeline/dials:grid-cols-(--narrow) @max-timeline/dials:gap-y-space-4"
+            class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 gap-y-space-2 @max-timeline/dials:grid-cols-(--narrow)"
             style:--cols={COLUMNS}
             style:--narrow={NARROW_COLUMNS}
           >
             {#each section.dials as dial (dial.name)}
               {@const value = shownOf(dial)}
-              {@const edited = !asWritten && changed.includes(dial.name)}
-              {@const inked = edited && changedMark === "ink"}
+              {@const edited = changed.includes(dial.name)}
               {@const id = `dial-${dial.name}`}
-              {@const toggle = dial.kind === "toggle"}
-              <!-- mark-line: the restore glyph stands in its own column, centred on its control's field, never beside the name's words -->
               <div
-                class="col-span-full grid min-w-0 grid-cols-subgrid items-start gap-y-space-1"
+                class="col-span-full grid min-w-0 grid-cols-subgrid items-center"
                 data-dial-row={dial.name}
               >
                 {#if dial.kind === "action"}
-                  <!-- An action: its name is its button's, across the row. -->
+                  <!-- An action: its name is its button's, from the controls' edge. -->
                   <Button
-                    class="col-span-2 justify-self-start"
-                    disabled={asWritten}
+                    class="col-start-2 justify-self-start"
                     onclick={() => {
                       const next = (presses[dial.name] ?? 0) + 1;
                       presses = { ...presses, [dial.name]: next };
@@ -307,48 +204,35 @@
                     variant="outline">{nameOf(dial)}</Button
                   >
                 {:else}
-                  <!-- Its name centred on its control's field on a desk;
-                       narrow, over it (a toggle's beside its switch, as the
-                       view card's are). -->
                   <label
-                    class={[
-                      "flex min-h-c-input-h min-w-0 items-center type-label text-ink-row text-pretty wrap-anywhere",
-                      !toggle &&
-                        "@max-timeline/dials:col-span-full @max-timeline/dials:min-h-0",
-                    ]}
+                    class="flex min-h-c-input-h min-w-0 items-center type-label text-ink-row text-pretty wrap-anywhere"
                     for={id}>{nameOf(dial)}</label
                   >
-                  <!-- Read only in As written, its value drawn as it is: the
-                       agent's colour is the agent's. -->
                   <div
-                    class={[
-                      "flex min-h-c-input-h min-w-0 items-center",
-                      toggle ? "justify-end" : "@max-timeline/dials:col-span-2",
-                      asWritten && "pointer-events-none",
-                    ]}
+                    class="flex min-h-c-input-h min-w-0 items-center"
                     data-dial={dial.name}
-                    inert={asWritten || undefined}
                   >
                     {#if dial.kind === "number"}
                       {@const start = Number(written[dial.name] ?? 0)}
+                      {@const hand = held?.name === dial.name ? held : null}
                       <div class="min-w-0 flex-1" {id}>
                         <DialNumber
-                          changed={inked}
                           {dial}
-                          form={numberForm}
+                          dragging={hand?.as === "dragging"}
                           label={nameOf(dial)}
                           {lang}
                           onchange={(next) => onchange(dial.name, next)}
                           range={rangeOf(dial, start)}
+                          typing={hand?.as === "typing" ? hand.text : null}
                           value={Number(value ?? start)}
                         />
                       </div>
                     {:else if dial.kind === "color"}
                       <div class="min-w-0 flex-1" {id}>
                         <DialColour
-                          changed={inked}
                           label={nameOf(dial)}
                           onchange={(next) => onchange(dial.name, next)}
+                          {...layer(dial.name)}
                           value={String(value ?? "")}
                         />
                       </div>
@@ -359,16 +243,16 @@
                           onchange(dial.name, next)}
                         type="single"
                         value={String(value ?? "")}
+                        {...layer(dial.name)}
                       >
                         <Select.Trigger
                           aria-label={nameOf(dial)}
                           class="w-full min-w-0"
                           {id}
-                          tone={inked ? "edited" : undefined}
                         >
                           <!-- Its value in the fields' own size, the 16px floor
                                a field takes on a phone and under a finger
-                               (design.css), so every dial's value reads alike. -->
+                               (design.css), so every control's value reads alike. -->
                           <span
                             class="min-w-0 truncate num max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)"
                             >{shown.figure}{#if shown.unit}<span
@@ -379,11 +263,22 @@
                         </Select.Trigger>
                         <Select.Content>
                           {#each dial.options ?? [] as option (option)}
-                            <Select.Item label={option} value={option} />
+                            {@const shownOption = splitUnit(option)}
+                            <!-- Each option as the field writes it: its figure, its unit muted. -->
+                            <Select.Item label={option} value={option}>
+                              {#snippet children()}
+                                <span class="num"
+                                  >{shownOption.figure}{#if shownOption.unit}<span
+                                      class="ms-space-1 text-ink-muted"
+                                      >{shownOption.unit}</span
+                                    >{/if}</span
+                                >
+                              {/snippet}
+                            </Select.Item>
                           {/each}
                         </Select.Content>
                       </Select.Root>
-                    {:else if toggle}
+                    {:else if dial.kind === "toggle"}
                       <Switch
                         checked={value === true}
                         {id}
@@ -398,14 +293,12 @@
                             dial.name,
                             (event.currentTarget as HTMLInputElement).value
                           )}
-                        tone={inked ? "edited" : undefined}
                         value={String(value ?? "")}
                       />
                     {/if}
                   </div>
-                  <!-- The restore glyph's column, held in every row, the glyph
-                       centred on its control's field (never on a line under
-                       it): a changed value's way back. -->
+                  <!-- The undo glyph's column, held in every row: a changed
+                       value's way back, in the edit's ink. -->
                   <span
                     class="flex h-c-input-h w-c-btn-h-xs items-center justify-center"
                   >
@@ -424,9 +317,7 @@
                             onclick={() => onreset([dial.name], false)}
                             press="pressable"
                             size="icon-xs"
-                            tone={changedMark === "glyph"
-                              ? "edited"
-                              : undefined}
+                            tone="edited"
                             variant="ghost"
                           />
                         {/snippet}
@@ -439,15 +330,33 @@
           </div>
         </section>
       {/each}
+      {#if changed.length > 0 || undoable}
+        <!-- After the rows, at the controls' end, so nothing above it moves
+             as it comes and goes. -->
+        <div
+          class="flex min-w-0 items-center justify-end pt-space-3"
+          data-slot="dials-foot"
+        >
+          {#if changed.length > 0}
+            <Button
+              aria-label={words.dials.resetAllSaid}
+              data-slot="reset-all"
+              icon={IconReset}
+              label={words.resetAll}
+              onclick={() => onreset(changed, true)}
+              size="sm"
+              variant="ghost"
+            />
+          {:else}
+            <Button
+              data-slot="undo-reset"
+              onclick={onundo}
+              size="sm"
+              variant="ghost">{words.undoReset}</Button
+            >
+          {/if}
+        </div>
+      {/if}
     </div>
-    {#if changed.length > 0 || kept.length > 0 || undoable}
-      <!-- Narrow, the versions stand at the face's foot. -->
-      <div
-        class="hidden min-w-0 flex-none items-center justify-between gap-space-2 border-t border-border-hairline pt-space-2 @max-timeline/dials:flex"
-        data-slot="dials-foot"
-      >
-        {@render versions()}
-      </div>
-    {/if}
   </div>
 </TooltipProvider>

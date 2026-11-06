@@ -13,7 +13,9 @@ import { tv } from "#lib/utils.js";
  *
  * - `scale`: the control's colours over --dur-control, its transform over
  *   --dur-toggle, pressed to --press-scale; standing in a bar's glass it is
- *   grouped, and tints as a bar item does (`glass-item:`).
+ *   grouped, and tints as a bar item does (`glass-item:`); opening a list,
+ *   a menu or a card it tints and stands still (`opens-layer:`, its
+ *   `--press-scale` 1, design.css).
  * - `tint`: `press-tint`, with the control's colours eased.
  * - `pressable`: the house's own compact press (app.css `.pressable`): it
  *   scales and eases only its transform and shadow, so its colours change at
@@ -23,7 +25,7 @@ export const pressVariants = tv({
   variants: {
     press: {
       scale:
-        "[transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)] motion-safe:pressed:not-disabled:not-aria-busy:not-glass-item:[transform:scale(var(--press-scale))] glass-item:press-tint",
+        "[transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)] motion-safe:pressed:not-disabled:not-aria-busy:not-glass-item:[transform:scale(var(--press-scale))] opens-layer:press-tint glass-item:press-tint",
       tint: "press-tint [transition:var(--transition-control)]",
       pressable: "pressable",
     },

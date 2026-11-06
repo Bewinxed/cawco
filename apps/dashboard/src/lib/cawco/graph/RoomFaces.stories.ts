@@ -16,7 +16,7 @@ export default {
 /** The room beside the stage, States shown: its switch's chosen face lifted in the groove. */
 export const Faces = { parameters: { viewport: 1440 } };
 
-/** With the Dials face, Map shown. */
+/** With the Controls face, Map shown. */
 export const WithDials = {
   args: { chosen: "map", dials: true },
   parameters: { viewport: 1440 },
@@ -28,7 +28,7 @@ export const Phone = {
   parameters: { viewport: 390 },
 };
 
-/** The drawer with the Dials face, Dials shown. */
+/** The drawer with the Controls face, Controls shown. */
 export const DrawerDials = {
   args: { width: 390, drawer: true, dials: true, chosen: "dials" },
   parameters: { viewport: 390 },

@@ -10,6 +10,7 @@ import {
   dialsOfConfig as readConfig,
 } from "@cawco/core/dial-config";
 import type { CanvasDial } from "@cawco/core/stage";
+import Color from "colorjs.io";
 
 /**
  * A dial as the Dials face draws it: the agent's `CanvasDial` (a number, a
@@ -99,32 +100,43 @@ export const isColour = (typed: string): boolean =>
   typeof CSS !== "undefined" && CSS.supports("color", typed.trim());
 
 /**
- * A colour as `#rrggbb` for the platform's picker, which takes no other
- * form: painted on a one-pixel canvas and its pixel read back, so any colour
- * the browser reads (an oklch(), a color(display-p3 …), a token's resolved
- * value) converts, mapped into sRGB as the browser paints it; a colour it
- * can't read is black.
+ * A colour as the picker takes it (`rgba()`, 0 to 255 and an alpha): any
+ * colour the browser reads (an oklch(), a color(display-p3 …), a token's
+ * resolved value) mapped into sRGB by colorjs.io; a colour it can't read is
+ * opaque black.
  */
-const HEX6 = /^#[0-9a-f]{6}$/iu;
+export function rgbaOf(colour: string): string {
+  try {
+    const srgb = new Color(colour.trim()).to("srgb").toGamut();
+    const [r = 0, g = 0, b = 0] = srgb.coords.map((one) =>
+      Math.round((one ?? 0) * 255)
+    );
+    return `rgba(${r}, ${g}, ${b}, ${srgb.alpha ?? 1})`;
+  } catch {
+    return "rgba(0, 0, 0, 1)";
+  }
+}
 
-export function hexOf(colour: string): string {
-  if (HEX6.test(colour)) {
-    return colour.toLowerCase();
+/** The notations a colour picked is written back in, by the space it was written in; any other is written as hex. */
+const KEPT_SPACES = new Set(["oklch", "oklab", "lch", "lab", "p3", "hsl"]);
+
+/**
+ * A colour picked (`rgba()`) written as `like` is written, so a value the
+ * agent wrote in oklch() stays in oklch() as he turns it: oklch, oklab,
+ * lch, lab, display-p3 and hsl in their own notation; hex and everything
+ * else as hex (eight digits with an alpha).
+ */
+export function colourLike(picked: string, like: string): string {
+  const colour = new Color(picked);
+  let space = "srgb";
+  try {
+    space = new Color(like.trim()).space.id;
+  } catch {
+    // A colour it can't read is written as hex.
   }
-  if (typeof document === "undefined" || !isColour(colour)) {
-    return "#000000";
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = 1;
-  canvas.height = 1;
-  const paint = canvas.getContext("2d", { willReadFrequently: true });
-  if (!paint) {
-    return "#000000";
-  }
-  paint.fillStyle = colour;
-  paint.fillRect(0, 0, 1, 1);
-  const [r = 0, g = 0, b = 0] = paint.getImageData(0, 0, 1, 1).data;
-  return `#${[r, g, b].map((one) => one.toString(16).padStart(2, "0")).join("")}`;
+  return KEPT_SPACES.has(space)
+    ? colour.to(space).toString({ precision: 4 })
+    : colour.to("srgb").toString({ format: "hex", collapse: false });
 }
 
 /** The dials he changed from as written, by name. */

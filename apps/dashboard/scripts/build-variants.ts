@@ -178,6 +178,11 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
    it a frame in, so the press never painted. */
 @custom-variant pressed (&:is(:active, [data-pressed]));
 
+/* A control that opens a list, a menu or a card: bits-ui writes
+   \`aria-haspopup\` on each trigger. It never scales under a press (design.css
+   holds its \`--press-scale\` at 1); a kit Button that is one tints instead. */
+@custom-variant opens-layer (&:where([aria-haspopup]:not([aria-haspopup="false"])));
+
 @custom-variant reduced-transparency {
   @media (prefers-reduced-transparency: reduce) {
     @slot;

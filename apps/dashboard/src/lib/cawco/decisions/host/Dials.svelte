@@ -1,6 +1,6 @@
 <!--
   Values the person tunes rather than picks, on the design graph's own dial
-  controls (graph/Dials.svelte: a number's pill, a colour's field, the kit's
+  controls (graph/Dials.svelte: a number's field with its fill, a colour's field and picker, the kit's
   Select, Switch and Input, an action's button), drawn in their own well
   where the program puts it, under the media it tunes. Its config is
   the shape agents write (graph dials.ts `dialsOfConfig`): a
@@ -12,14 +12,12 @@
   same (dials.ts), and hears each turn (`onvalues`).
 -->
 <script lang="ts">
-  import { decisionsWords } from "@cawco/core/words/decisions";
   import GraphDials from "../../graph/Dials.svelte";
   import {
     type DialValue,
     type DialValues,
     dialsOfConfig,
   } from "../../graph/dials";
-  import type { Version } from "../../graph/VersionSwitch.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, picks } from "./page.svelte.js";
   import Well from "./Well.svelte";
@@ -63,19 +61,9 @@
       );
     }
   });
-  let version = $state<Version>("yours");
-  /** The values he kept as versions of their own, in the order he kept them. */
-  let kept = $state<DialValues[]>([]);
   let undo = $state<DialValues | null>(null);
-  /** The values as set: his over as written, a version he kept over it, or as written alone. */
-  const set = $derived.by((): DialValues => {
-    if (typeof version === "number") {
-      return { ...read.written, ...kept[version] };
-    }
-    return version === "written"
-      ? read.written
-      : { ...read.written, ...values };
-  });
+  /** The values as set: his over as written. */
+  const set = $derived<DialValues>({ ...read.written, ...values });
   // The page's own drawing takes every set, the first too.
   $effect(() => {
     onvalues?.($state.snapshot(set));
@@ -101,7 +89,6 @@
   <div class="flex w-full min-w-0 flex-col" data-slot="dials-well">
     <GraphDials
       dials={read.dials}
-      {kept}
       lang={undefined}
       onchange={turn}
       onreset={(paths, all) => {
@@ -111,24 +98,15 @@
         values = Object.fromEntries(
           Object.entries(values).filter(([path]) => !paths.includes(path))
         );
-        version = "yours";
         keep();
-      }}
-      onkeep={() => {
-        kept = [...kept, values];
       }}
       onundo={() => {
         values = undo ?? {};
         undo = null;
         keep();
       }}
-      onversion={(next) => {
-        version = next;
-      }}
-      say={decisionsWords.dialsGoWithSend}
       undoable={undo !== null}
       {values}
-      {version}
       written={read.written}
     />
   </div>

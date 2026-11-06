@@ -26,6 +26,9 @@
    *   drawn inside it is its whole look, no fill of its own ("Needs you is
    *   a mark, never a surface", DESIGN.md), and it scales on press as a
    *   compact control.
+   * - `swatch`: a colour's swatch that opens its picker (the design graph's
+   *   colour control): the swatch drawn inside it is its whole look, its
+   *   focus ring hugging it.
    */
   export const popoverTriggerVariants = tv({
     variants: {
@@ -40,6 +43,8 @@
         "strip-home":
           "press-tint flex h-c-usage-strip-home-h items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         mark: "pressable inline-flex rounded-xs",
+        swatch:
+          "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1",
         meter:
           "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-ink-muted text-label tabular-nums transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-error-9 data-warn:not-data-critical:not-data-compacting:text-warning-9",
       },

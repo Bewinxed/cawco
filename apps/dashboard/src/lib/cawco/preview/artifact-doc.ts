@@ -89,8 +89,6 @@ export interface ArtifactView extends ArtifactChoices {
   revisedAt: string | null;
   /** The anchors of the latest changes the person has looked at (the doc's `seen`, core `seenOf`). */
   seen: ReadonlySet<string>;
-  /** Who made the last Send (`meta.sentBy`): the hub's own once every question had his answer, else his; null before any. */
-  sentBy: "hub" | "person" | null;
   /** A sheet's stage, as the hub keeps it (live components): its status and the errors in the modules the sheet imports. */
   stage: StageState | null;
   /** A component's tuned timing, every move's records (the doc's `tuned` map, core tuned.ts). */
@@ -173,14 +171,6 @@ const downWhy = (code: number | null): string =>
 /** Why the link is down when its open socket heard nothing for core `SILENT_MS`. */
 const SILENT_WHY = `The link to the hub stopped answering. ${KEEPS_TRYING}`;
 
-/** Who made the last Send, as `meta.sentBy` says it; a Send from before it was kept is his (hub 3dfbd1264). */
-const sentByOf = (by: unknown, at: unknown): ArtifactView["sentBy"] => {
-  if (typeof at !== "string") {
-    return null;
-  }
-  return by === "hub" ? "hub" : "person";
-};
-
 const viewOf = (doc: Doc): ArtifactView => {
   const meta = doc.getMap("meta");
   const gone = goneOf(doc);
@@ -197,7 +187,6 @@ const viewOf = (doc: Doc): ArtifactView => {
     pageHash: (meta.get("pageHash") as string | undefined) ?? null,
     sentAt: (meta.get("sentAt") as string | undefined) ?? null,
     ownSend: meta.get("ownSend") === true,
-    sentBy: sentByOf(meta.get("sentBy"), meta.get("sentAt")),
     pins: pins.sort((a, b) => a.number - b.number),
     revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
     stage: (meta.get("stage") as StageState | undefined) ?? null,

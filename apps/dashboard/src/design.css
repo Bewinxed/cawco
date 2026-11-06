@@ -456,6 +456,15 @@
     opacity: 0.72;
   }
 
+  /* A control that opens a list, a menu or a card (a select, a menu
+     button, a popover's trigger: bits-ui writes `aria-haspopup` on each)
+     never shrinks under a press (The Press Rule): what opens hangs from it,
+     so it stands still. Every press scale reads `--press-scale`, so this
+     one value holds them all at 1, whichever recipe drew the control. */
+  :where([aria-haspopup]:not([aria-haspopup="false"])) {
+    --press-scale: 1;
+  }
+
   /* A held press summons our menu; the platform's callout would fight it. */
   [data-slot="context-menu-trigger"] {
     -webkit-touch-callout: none;
@@ -2084,9 +2093,21 @@
   }
 }
 
+/* What stands behind a colour with an alpha: a checkerboard of the recess
+   and the raised surface, a step a tile (a colour control's swatch). */
+@utility checker {
+  background: repeating-conic-gradient(
+      var(--surface-recess-deep) 0 25%,
+      var(--surface-raised) 0 50%
+    )
+    0 0 / var(--space-2) var(--space-2);
+}
+
 /* Instant press feedback (DESIGN.md: "a compact control scale to 0.97 on
    press and a wide or grouped one tint"): the hand feels the control before
-   release. Two kinds, chosen by the element's size:
+   release. Two kinds, chosen by the element's size (a control that opens a
+   list, a menu or a card never scales: `--press-scale` is 1 on it, base
+   layer above):
    - `pressable` scales. Only for a compact, standalone control: a button, an
      icon button, a chip, a switch, about 44px tall at most, not full width,
      not one of a segmented group.
