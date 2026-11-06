@@ -15,7 +15,9 @@
  * At 1440 (desk), 680 and 390, light and dark:
  *
  *  1. desk: the Files control stands inside the bar's glass group, and its
- *     count's box is no wider or taller than the folder's (pin 1, 9);
+ *     count is the kit's corner badge on the folder's top trailing quarter:
+ *     its leading edge at or past the folder's centre, its foot at or above
+ *     the folder's middle (pin 1, 9; bar-count holds every width);
  *  2. desk: Files floats (a fixed box, the page's height unchanged);
  *  3. desk: each region scrolls on its own (scrollHeight > clientHeight on
  *     the region's scroller, the page not growing) (pin 2);
@@ -188,6 +190,18 @@ const heldReads = () => {
   };
   return { hold, release: () => release() };
 };
+/** Where a corner badge stands on its glyph: its leading edge past the glyph's centre, and its foot above the glyph's middle, px. */
+const cornerOf = (
+  glyph: { x: number; y: number; w: number; h: number } | null,
+  count: { x: number; bottom: number } | null
+) =>
+  glyph && count
+    ? {
+        pastCentre: count.x - (glyph.x + glyph.w / 2),
+        aboveMiddle: glyph.y + glyph.h / 2 - count.bottom,
+      }
+    : null;
+
 /** The sidebar row's name once its count stands. */
 const FILES_COUNTED = /Files, \d+/u;
 
@@ -649,7 +663,10 @@ const desk = async (
     (n) => n > 0,
     60_000
   );
-  // 1. The control in the group, and its count no larger than its folder.
+  // 1. The control in the group, and its count the kit's corner badge
+  // (BarItem `count`, Badge `corner`): on the folder's top trailing
+  // quarter, its leading edge at or past the folder's centre and its foot
+  // at or above the folder's middle, whatever its width.
   const bar = await page.evaluate(() => {
     const item = document.querySelector("[data-files-control]");
     const glyph = document.querySelector(
@@ -660,38 +677,32 @@ const desk = async (
     );
     const rect = (el: Element | null) => {
       const r = el?.getBoundingClientRect();
-      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      return r
+        ? {
+            x: r.x,
+            y: r.y,
+            w: r.width,
+            h: r.height,
+            right: r.right,
+            bottom: r.bottom,
+          }
+        : null;
     };
     return {
       inGroup: !!item?.closest("[data-bar-group]"),
       glyph: rect(glyph),
       count: rect(count),
-      overlap:
-        glyph && count
-          ? Math.max(
-              0,
-              Math.min(
-                glyph.getBoundingClientRect().right,
-                count.getBoundingClientRect().right
-              ) -
-                Math.max(
-                  glyph.getBoundingClientRect().left,
-                  count.getBoundingClientRect().left
-                )
-            )
-          : -1,
       said: count?.textContent,
     };
   });
+  const corner = cornerOf(bar.glyph, bar.count);
   kit.check(
-    `1 (${theme}): Files stands in the bar's glass group, its count's box no wider or taller than the folder's and clear of its ink`,
+    `1 (${theme}): Files stands in the bar's glass group, its count the corner badge on the folder's top trailing quarter`,
     bar.inGroup &&
-      !!bar.glyph &&
-      !!bar.count &&
-      bar.count.w <= bar.glyph.w &&
-      bar.count.h <= bar.glyph.h &&
-      bar.overlap === 0,
-    JSON.stringify(bar)
+      !!corner &&
+      corner.pastCentre >= -0.5 &&
+      corner.aboveMiddle >= -0.5,
+    JSON.stringify({ ...bar, corner })
   );
   await sweep(page, `closed 1440 ${theme}`);
 
