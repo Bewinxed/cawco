@@ -10,8 +10,9 @@ import {
   deletePin,
   goneOf,
   honourDeletions,
-  lostReplies,
+  lostWrites,
   type Pin,
+  type RefusedWrites,
   readPins,
   replyToPin,
   resolvePin,
@@ -21,7 +22,6 @@ import {
   seenOf,
   seePin,
   sendHeld,
-  type ThreadEntry,
 } from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
@@ -43,7 +43,7 @@ import { commentWords } from "@cawco/core/words/comments";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
-import { Doc } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { openPageWrites } from "./open-pages";
 
@@ -271,21 +271,6 @@ export const askAgain = (
     "so the comment wasn't asked again. Ask again."
   );
 
-/** The person's entries in pin `pin`'s thread that a refused write of the pane's held and the hub's doc does not. */
-export interface RefusedEntries {
-  entries: ThreadEntry[];
-  pin: string;
-}
-
-/**
- * What of the person's the pane held in `pins` before a refused write that
- * `doc`, the hub's after it, does not: each of their entries in a thread
- * the hub still holds. A pin the hub holds none of is the page's to keep
- * (overlay artifact.ts `keepRefused`), or deleted.
- */
-const lostEntries = (pins: Record<string, Pin>, doc: Doc): RefusedEntries[] =>
-  lostReplies(Object.values(pins), readPins(doc));
-
 /**
  * Joins the artifact's doc: `changed` hears every view of it, each sync's
  * too (an empty doc's first), and `synced` hears whether it is held yet
@@ -295,8 +280,9 @@ const lostEntries = (pins: Record<string, Pin>, doc: Doc): RefusedEntries[] =>
  * is tried again, and an open socket silent for core `SILENT_MS` is said
  * down at once and opened again. A write of the pane's the hub would not
  * keep is said on the socket, which stays (hub artifacts/sync.ts
- * `refusal`): `refused` hears the hub's reason and the pins as the pane
- * held them, so the person's refused writes are kept aside; then the pane
+ * `refusal`): `refused` hears the hub's reason and what of the person's
+ * the hub didn't keep (core `lostWrites`: replies, resolves, deletes, Send
+ * all and its note), so each is kept aside where it was made; then the pane
  * goes on in a fresh doc, a new Yjs client, on a socket of its own, as the
  * page's overlay does (Yjs takes one client's updates in clock order only,
  * so the old one's would all wait on the refused write).
@@ -306,7 +292,7 @@ export function joinArtifact(
   artifactId: string,
   changed: (view: ArtifactView) => void,
   synced: (sync: DocSync) => void,
-  refused: (why: string, lost: RefusedEntries[]) => void
+  refused: (why: string, lost: RefusedWrites) => void
 ): ArtifactDoc {
   // The hub's `/ws/artifact/<session>/<artifact>`, through the dashboard's
   // own `/ws` relay: never the preview's origin, which is the page's.
@@ -314,8 +300,8 @@ export function joinArtifact(
   let held = false;
   /** The pane let it go: a rejoin still queued doesn't start. */
   let gone = false;
-  /** A refusal's reason and the pins as the refused doc held them, until the fresh doc has the hub's ({@link lostEntries}). */
-  let refusing: { pins: Record<string, Pin>; why: string } | null = null;
+  /** A refusal's reason and a copy of the refused doc, until the fresh doc has the hub's (core `lostWrites`). */
+  let refusing: { refused: Doc; why: string } | null = null;
   /** The pane is closing its own socket (Try again, a rejoin, its end): not a drop. */
   let closingOurs = false;
   /** Running from a drop until a sync: says the link down at its end. */
@@ -421,8 +407,10 @@ export function joinArtifact(
       // The hub's doc is in after a refusal: what of the person's it holds
       // not is theirs to keep aside.
       if (refusing && into === doc) {
-        refused(refusing.why, lostEntries(refusing.pins, into));
+        const { refused: was, why } = refusing;
         refusing = null;
+        refused(why, lostWrites(was, into));
+        was.destroy();
       }
       if (!held || lost) {
         held = true;
@@ -463,15 +451,20 @@ export function joinArtifact(
   }
 
   /**
-   * The hub would not keep a write of the pane's: the reason and the pins
-   * as `from` held them go to `refused`, which keeps the person's refused
-   * writes aside, and the pane goes on in a fresh doc ({@link again}).
+   * The hub would not keep a write of the pane's: the reason and what of
+   * the person's `from` held that the hub's doc doesn't go to `refused`,
+   * which keeps the person's refused writes aside, and the pane goes on in a fresh doc ({@link again}).
    */
   function refusedBy(reason: string, from: Doc) {
     const said = reason.trim() || "The hub didn't keep it.";
+    // The refused doc as it stood, kept until the hub's is in: what of the
+    // person's it held that the hub's doesn't is theirs to keep aside.
+    const copy = new Doc();
+    applyUpdate(copy, encodeStateAsUpdate(from));
+    refusing?.refused.destroy();
     refusing = {
       why: ENDS_SENTENCE.test(said) ? said : `${said}.`,
-      pins: Object.fromEntries(readPins(from)),
+      refused: copy,
     };
     // Out of y-websocket's own message handling first.
     queueMicrotask(again);
@@ -553,6 +546,8 @@ export function joinArtifact(
     },
     destroy: () => {
       gone = true;
+      refusing?.refused.destroy();
+      refusing = null;
       clearDown();
       stalls.stop();
       quiet.stop();

@@ -125,6 +125,8 @@
     pageComposer,
     held = 0,
     onsendheld,
+    sendRefused = null,
+    onsendrefusedclosed,
     onresolve,
     onretrypin,
     onshown,
@@ -172,6 +174,10 @@
     held?: number;
     /** Send all: everything held goes with `note`; the refusal's sentence when nothing went. */
     onsendheld?: (note: string) => string | null;
+    /** Send all the hub refused (core `lostWrites`): its note and the hub's reason, said in the note it was sent from, open again with its words. */
+    sendRefused?: { note: string; why: string } | null;
+    /** The person put away a refused Send all's note (Cancel, Escape): the pane lets it go. */
+    onsendrefusedclosed?: () => void;
     onresolve: (id: string, resolved: boolean) => void;
     /** A comment not sent, tried again: it goes to the session once more. */
     onretrypin: (id: string) => void;
@@ -480,6 +486,25 @@
       noting = false;
     }
   });
+  // A Send all the hub refused stands open again where it was pressed: its
+  // note as written, and why it didn't go.
+  $effect(() => {
+    const refused = sendRefused;
+    if (refused) {
+      untrack(() => {
+        ({ note, why: noteRefused } = refused);
+        noting = true;
+      });
+    }
+  });
+  /** The person puts the note away: a refused Send all's with it. */
+  function closeNote() {
+    noting = false;
+    noteRefused = null;
+    if (sendRefused) {
+      onsendrefusedclosed?.();
+    }
+  }
   /** Send all stands in the bar: Search, + and Sort fold into More. */
   const sending = $derived(held > 0 && onsendheld !== undefined);
   /** + opens the whole page's composer inside the rail (a desk's). */
@@ -935,7 +960,11 @@
             aria-label={said.sendHeldLabel(held)}
             data-slot="send-held"
             onclick={() => {
-              noting = !noting;
+              if (noting) {
+                closeNote();
+                return;
+              }
+              noting = true;
               noteRefused = null;
               if (noting && pageOpen) {
                 onpageclose?.();
@@ -1007,7 +1036,7 @@
           } else if (event.key === "Escape") {
             event.preventDefault();
             event.stopPropagation();
-            noting = false;
+            closeNote();
           }
         }}
         placeholder={said.heldNote}
@@ -1020,12 +1049,8 @@
         </p>
       {/if}
       <div class="flex justify-end gap-space-2">
-        <Button
-          onclick={() => {
-            noting = false;
-          }}
-          size="sm"
-          variant="ghost">{said.cancelSearch}</Button
+        <Button onclick={closeNote} size="sm" variant="ghost"
+          >{said.cancelSearch}</Button
         >
         <Button
           aria-keyshortcuts="Control+Enter Meta+Enter"

@@ -1514,14 +1514,13 @@ export const heldNoteOf = (doc: MapDoc): HeldNote | undefined => {
  * The person's Send all: every entry they held let go in one write, with
  * their `note` kept beside them for the delivery that carries them
  * ({@link heldNoteOf}); that delivery is the one every comment takes, once
- * quiet. The count let go, or the refusal's sentence when nothing is held or
- * the note is too long.
+ * quiet. The count let go, or the refusal's sentence when nothing is held.
+ * The hub holds the note to its bound ({@link heldNoteProblem}): a note past
+ * it is refused there, and comes back as every refused write of the
+ * person's does ({@link lostWrites}).
  */
 export function sendHeld(doc: MapDoc, note: string): number | string {
   const text = note.trim();
-  if (text.length > COMMENT_LIMITS.text) {
-    return `A note holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so nothing was sent. Shorten it, then send again.`;
-  }
   const entries = entriesOf(doc);
   const held = [...entries.entries()].filter(
     ([, entry]) => entry.held && !entry.sentAt
@@ -1543,6 +1542,29 @@ export function sendHeld(doc: MapDoc, note: string): number | string {
   return held.length;
 }
 
+/**
+ * Why a person's held note (`meta.heldNote`, {@link HeldNote}) may not be
+ * kept, or null: gone, or its time and words within a comment's bound. The
+ * hub's word on Send all's note (hub artifacts/sync.ts).
+ */
+export const heldNoteProblem = (value: unknown): string | null => {
+  if (value === undefined) {
+    return null;
+  }
+  const note = value as { at?: unknown; text?: unknown } | null;
+  if (!(
+    note &&
+    typeof note === "object" &&
+    typeof note.at === "string" &&
+    typeof note.text === "string"
+  )) {
+    return "A held note is its time and its words, so nothing was sent.";
+  }
+  return note.text.length > COMMENT_LIMITS.text
+    ? `A note holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so nothing was sent. Shorten it, then send again.`
+    : null;
+};
+
 /** A delivery's line for the person's note with the comments they held and sent together. */
 export const notedLine = (text: string): string =>
   `- My note with these comments: ${JSON.stringify(text)}`;
@@ -1552,11 +1574,75 @@ export const notedLine = (text: string): string =>
  * until their Send; the refusal's sentence when they were not kept, and
  * nothing was written.
  */
-/** A pin's replies the hub refused, by pin: each entry as written, and the hub's reason. */
+/**
+ * The person's writes on a pin the hub refused, by pin, and the hub's
+ * reason: each reply as written, and the resolve or reopen (`resolved`) or
+ * the delete (`deleted`) it didn't keep.
+ */
 export type RefusedReplies = Record<
   string,
-  { entries: ThreadEntry[]; why: string }
+  { entries: ThreadEntry[]; why: string; resolved?: boolean; deleted?: true }
 >;
+
+/**
+ * What of the person's writes a doc the hub refused held that the hub's
+ * doc after the refusal does not ({@link lostWrites}).
+ */
+export interface RefusedWrites {
+  /** Pins the person deleted that the hub still holds. */
+  deletes: string[];
+  /** Each pin's replies the hub holds none of ({@link lostReplies}). */
+  replies: { entries: ThreadEntry[]; pin: string }[];
+  /** A resolve or reopen the hub didn't keep: what the person asked. */
+  resolves: { pin: string; resolved: boolean }[];
+  /** Send all, which the hub didn't keep: the note it went with, "" with none. */
+  sendHeld: { note: string } | null;
+}
+
+/**
+ * The person's writes `refused`, a doc the hub refused a write of, held
+ * that `hub`, the hub's doc after it, does not: their replies, a resolve or
+ * reopen, a delete, and Send all (an entry they let go that the hub still
+ * holds held, and its note). A pin the hub holds none of is the page's to
+ * keep (overlay artifact.ts `keepRefused`).
+ */
+export const lostWrites = (refused: MapDoc, hub: MapDoc): RefusedWrites => {
+  const before = readPins(refused);
+  const after = readPins(hub);
+  const resolves = [...before.values()].flatMap((pin) => {
+    const now = after.get(pin.id);
+    const resolved = !!pin.resolvedAt;
+    return now &&
+      resolved !== !!now.resolvedAt &&
+      (!resolved || pin.resolvedBy !== "agent")
+      ? [{ pin: pin.id, resolved }]
+      : [];
+  });
+  const goneThere = goneOf(hub);
+  const deletes = [...goneOf(refused).keys()].filter(
+    (pin) => after.has(pin) && !goneThere.has(pin)
+  );
+  const lettingGo = [...after.values()].some((pin) => {
+    const was = before.get(pin.id);
+    return pin.thread.some(
+      (entry) =>
+        entry.held &&
+        !entry.sentAt &&
+        was?.thread.some((one) => one.id === entry.id && !one.held)
+    );
+  });
+  const note = heldNoteOf(refused);
+  return {
+    replies: lostReplies(before.values(), after),
+    resolves,
+    deletes,
+    sendHeld: lettingGo
+      ? {
+          note: note && note.at !== heldNoteOf(hub)?.at ? note.text : "",
+        }
+      : null,
+  };
+};
 
 /**
  * Pin `thread` with each of `kept` after it, once: the person's replies a

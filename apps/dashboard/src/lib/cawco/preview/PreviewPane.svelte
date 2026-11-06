@@ -8,6 +8,8 @@
     pinHeld,
     pinProblem,
     previewMode,
+    type RefusedReplies,
+    type RefusedWrites,
     replyAgain,
     type ThreadEntry,
     withKeptReplies,
@@ -179,7 +181,6 @@
     LINK_DOWN_MS,
     type ListHold,
     NOT_REACHING,
-    type RefusedEntries,
     retryComment,
     sendArtifact,
   } from "./artifact-doc";
@@ -1107,22 +1108,18 @@
    */
   let pagePins = $state.raw<Record<string, Pin>>({});
   /**
-   * The person's replies of the pane's the hub refused (artifact-doc.ts
-   * `refusedBy`), by pin: each entry as written, and the hub's reason. Kept
-   * on the device apart from the doc, as the page keeps its refused
-   * comments (overlay artifact.ts `keepRefused`), and drawn in their
-   * thread where they stood, unsent, with the reason and Try again
-   * ({@link retryPin}). A reload keeps them.
+   * The person's writes on a pin the hub refused (artifact-doc.ts
+   * `refusedBy`, core `lostWrites`), by pin: each reply as written, a
+   * resolve or reopen, a delete, and the hub's reason. Kept on the device
+   * apart from the doc, as the page keeps its refused comments (overlay
+   * artifact.ts `keepRefused`), and said on the pin where it was made, not
+   * sent, with the reason and Try again ({@link retryPin}), its replies in
+   * their thread where they stood. A reload keeps them.
    */
-  let refusedReplies = $state.raw<
-    Record<string, { entries: ThreadEntry[]; why: string }>
-  >({});
+  let refusedReplies = $state.raw<RefusedReplies>({});
   const refusedKey = (id: string) => `cawco-refused-replies:${id}`;
   /** `next` as the pane keeps it, on the device too. */
-  function keepReplies(
-    id: string,
-    next: Record<string, { entries: ThreadEntry[]; why: string }>
-  ) {
+  function keepReplies(id: string, next: RefusedReplies) {
     refusedReplies = next;
     if (Object.keys(next).length > 0) {
       writeJson(refusedKey(id), next);
@@ -1130,18 +1127,51 @@
       unstore("local", refusedKey(id));
     }
   }
-  /** A refusal's entries the hub doesn't hold, kept aside with its reason. */
-  function keepRefused(id: string, why: string, lost: RefusedEntries[]) {
+  /**
+   * Send all the hub refused: the note it went with and the hub's reason,
+   * said in the rail's note where it was pressed (CommentRail `sendRefused`),
+   * the held comments still held and the note as written, ready to send
+   * again. Kept on the device; a reload keeps it.
+   */
+  let sendRefused = $state.raw<{ note: string; why: string } | null>(null);
+  const sendRefusedKey = (id: string) => `cawco-refused-send:${id}`;
+  /** `next` as the pane keeps it, on the device too. */
+  function keepSendRefused(
+    id: string,
+    next: { note: string; why: string } | null
+  ) {
+    sendRefused = next;
+    if (next) {
+      writeJson(sendRefusedKey(id), next);
+    } else {
+      unstore("local", sendRefusedKey(id));
+    }
+  }
+  /** A refusal's writes the hub doesn't hold, each kept aside with its reason where it was made. */
+  function keepRefused(id: string, why: string, lost: RefusedWrites) {
     const next = { ...refusedReplies };
-    for (const { pin, entries } of lost) {
+    const on = (pin: string) => {
+      next[pin] = { ...(next[pin] ?? { entries: [] }), why };
+      return next[pin];
+    };
+    for (const { pin, entries } of lost.replies) {
       const was = next[pin]?.entries ?? [];
       const ids = new Set(entries.map((entry) => entry.id));
-      next[pin] = {
-        entries: [...was.filter((entry) => !ids.has(entry.id)), ...entries],
-        why,
-      };
+      on(pin).entries = [
+        ...was.filter((entry) => !ids.has(entry.id)),
+        ...entries,
+      ];
+    }
+    for (const { pin, resolved } of lost.resolves) {
+      on(pin).resolved = resolved;
+    }
+    for (const pin of lost.deletes) {
+      on(pin).deleted = true;
     }
     keepReplies(id, next);
+    if (lost.sendHeld) {
+      keepSendRefused(id, { note: lost.sendHeld.note, why });
+    }
   }
   /**
    * The person's replies the hub refused that the page keeps (written
@@ -1594,10 +1624,17 @@
   /** The comments the person holds to send together (core `pinHeld`): Send all's count. */
   const heldCount = $derived(pins.filter(pinHeld).length);
   /** Send all: every held comment and reply let go in one write with the note; the hub's next delivery carries them (core `sendHeld`). */
-  const sendHeldNow = (note: string): string | null =>
-    doc
-      ? doc.sendHeld(note)
-      : "The pane lost the page's document, so nothing was sent. Reload, then send again.";
+  const sendHeldNow = (note: string): string | null => {
+    if (!doc) {
+      return "The pane lost the page's document, so nothing was sent. Reload, then send again.";
+    }
+    const refused = doc.sendHeld(note);
+    // Gone to the hub: a refusal of it comes back (`keepRefused`).
+    if (refused === null && artifactId) {
+      keepSendRefused(artifactId, null);
+    }
+    return refused;
+  };
   /**
    * What Send sends (the artifact panel's surface brief, How comments reach the session): each pick
    * since the last Send. The person's comments go by themselves. Drawn only
@@ -1694,9 +1731,19 @@
       refusedKey(id),
       z.record(
         z.string(),
-        z.object({ entries: z.array(ThreadEntrySchema), why: z.string() })
+        z.object({
+          entries: z.array(ThreadEntrySchema),
+          why: z.string(),
+          resolved: z.boolean().optional(),
+          deleted: z.literal(true).optional(),
+        })
       ),
       {}
+    );
+    sendRefused = readJson(
+      sendRefusedKey(id),
+      z.object({ note: z.string(), why: z.string() }).nullable(),
+      null
     );
     const joined = joinArtifact(
       session,
@@ -1838,18 +1885,32 @@
     }
   }
   /**
-   * A refused reply's Try again: each of its words written into the pane's
-   * doc again, now the hub's (artifact-doc.ts `again`), and let go of once
+   * A refused write's Try again on pin `id`: its delete, or its resolve or
+   * reopen, and each of its replies' words written into the pane's doc
+   * again, now the hub's (artifact-doc.ts `again`), and let go of once
    * written; one still refused stays with why.
    */
   function retryRefused(artifactKey: string, id: string) {
     const kept = refusedReplies[id];
     if (!(kept && doc)) {
       throw new Error(
-        "The pane lost the page's document, so the reply wasn't kept. Reload, then try again."
+        "The pane lost the page's document, so it wasn't written again. Reload, then try again."
       );
     }
     const live = doc;
+    let act: string | null = null;
+    if (kept.deleted) {
+      act = live.delete(id);
+    } else if (kept.resolved !== undefined) {
+      act = live.resolve(id, kept.resolved);
+    }
+    if (act) {
+      keepReplies(artifactKey, {
+        ...refusedReplies,
+        [id]: { ...kept, why: act },
+      });
+      throw new Error(act);
+    }
     const { left, why } = replyAgain(refusedReplies, id, (said) =>
       live.reply(id, said)
     );
@@ -4469,6 +4530,12 @@
     down={linkDown}
     held={heldCount}
     onsendheld={sendHeldNow}
+    onsendrefusedclosed={() => {
+      if (artifactId) {
+        keepSendRefused(artifactId, null);
+      }
+    }}
+    {sendRefused}
     focused={focusedPin}
     hold={listHold}
     {layout}

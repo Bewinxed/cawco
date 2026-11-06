@@ -37,6 +37,7 @@ import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
   COMMENT_LIMITS,
   goneProblem,
+  heldNoteProblem,
   isSendControl,
   type MarkPictures,
   pinsProblem,
@@ -184,25 +185,6 @@ const requestsProblem = (
  * the delivery that carries them takes away.
  */
 const HELD_NOTE_KEY = "heldNote";
-
-/** Why a person's held note (core `HeldNote`) may not be kept, or null: gone, or its time and words within a comment's bound. */
-const heldNoteProblem = (value: unknown): string | null => {
-  if (value === undefined) {
-    return null;
-  }
-  const note = value as { at?: unknown; text?: unknown } | null;
-  if (!(
-    note &&
-    typeof note === "object" &&
-    typeof note.at === "string" &&
-    typeof note.text === "string"
-  )) {
-    return "A held note is its time (at) and its words (text).";
-  }
-  return note.text.length > COMMENT_LIMITS.text
-    ? `A held note holds ${COMMENT_LIMITS.text.toLocaleString()} characters.`
-    : null;
-};
 
 /**
  * Why a person's change to `meta` may not be kept: on any artifact they

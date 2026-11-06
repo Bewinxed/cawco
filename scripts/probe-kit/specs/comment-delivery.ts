@@ -85,6 +85,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import {
+  COMMENT_LIMITS,
+  heldNoteProblem,
   notedLine,
   type Pin,
   wroteLine,
@@ -663,20 +665,26 @@ const HELD_WORDS = [
 ] as const;
 const AT_ONCE_WORDS = "Sent at once between the held ones.";
 const HELD_NOTE = "Two from one pass over the page; fix them together.";
+/** A note past what one holds (core `COMMENT_LIMITS.text`): the hub refuses Send all with it (core `heldNoteProblem`). */
+const LONG_NOTE = "n".repeat(COMMENT_LIMITS.text + 1);
 
 /**
  * 14. Held comments: Alt+Enter holds a comment instead of sending it. Held
  * ones never reach the session (nor its comment_read) while one sent at
  * once with Enter still goes, alone; the rail's Send all sends the held ones
  * once, as one delivery with the person's note, and they are stamped sent.
+ * 14b. Send all the hub refuses (its note past the bound) is never lost:
+ * the rail's note stands open again with its words and the hub's reason,
+ * the comments still held and nothing delivered, and still after a reload.
  */
 const heldChecks = async (
   on: On,
-  frame: Frame,
+  pageAt: Frame,
   artifact: string,
   callIn: (to: string, tool: string, input: object) => Promise<string>
 ) => {
   const { kit, page, session } = on;
+  let frame = pageAt;
   const top = Math.max(
     0,
     ...Object.values((await docOf(frame)).pins).map((pin) => pin.number)
@@ -711,17 +719,69 @@ const heldChecks = async (
     HELD_WORDS.every((held) => !read.includes(held)),
     read.slice(0, 300)
   );
-  // Send all, from the rail's bar, with a note.
-  const beforeSend = heard.length;
+  // 14b. Send all with a note the hub refuses: kept where it was sent from.
+  const beforeRefused = heard.length;
   await page.locator(`${PANE} [data-slot="comments"]`).first().click();
   const sendAll = page.locator(`${RAIL} [data-slot="send-held"]`);
   await sendAll.waitFor({ timeout: 5000 });
   const says = await sendAll.getAttribute("aria-label");
   await sendAll.click();
-  await page
+  const noteField = page
     .locator(`${RAIL} [data-slot="held-note"]`)
-    .getByRole("textbox")
-    .fill(HELD_NOTE);
+    .getByRole("textbox");
+  await noteField.fill(LONG_NOTE);
+  await page.locator(`${RAIL} [data-slot="send-held-now"]`).click();
+  const refusedSaid = heldNoteProblem({ at: "", text: LONG_NOTE }) ?? "";
+  const standsRefused = async () => ({
+    note: (await noteField.inputValue({ timeout: 1000 }).catch(() => ""))
+      .length,
+    why: (
+      await page
+        .locator(`${RAIL} [data-slot="held-note"] [role="alert"]`)
+        .textContent({ timeout: 1000 })
+        .catch(() => null)
+    )?.trim(),
+  });
+  const refusedNow = await until(
+    "the refused Send all's note, open again with why",
+    standsRefused,
+    (now) => now.note === LONG_NOTE.length && now.why === refusedSaid,
+    10_000
+  ).catch(standsRefused);
+  await Bun.sleep(STILL_MS);
+  // The held comments as the hub's doc holds them, the page's copy of it.
+  const heldOnHub = async () => {
+    const { pins } = await docOf(frame);
+    return [first, second]
+      .map((n) => numbered(pins, n))
+      .every((pin) => !!pin?.thread[0]?.held && !pin.sentAt);
+  };
+  const refusedHeld = await heldOnHub();
+  // A reload keeps it: the rail opened again shows the note and why.
+  await page.reload();
+  frame = await pageFrame(on);
+  await rowsOf(page);
+  const reloaded = await until(
+    "the refused Send all's note after a reload",
+    standsRefused,
+    (now) => now.note === LONG_NOTE.length && now.why === refusedSaid,
+    15_000
+  ).catch(standsRefused);
+  kit.check(
+    "14b: Send all the hub refuses (a note past the bound) stands in the rail's note again with its words and the hub's reason, the comments still held and nothing delivered, and a reload keeps it",
+    refusedNow.note === LONG_NOTE.length &&
+      refusedNow.why === refusedSaid &&
+      refusedHeld &&
+      deliveries(beforeRefused).length === 0 &&
+      reloaded.note === LONG_NOTE.length &&
+      reloaded.why === refusedSaid &&
+      (await heldOnHub()),
+    `before reload ${JSON.stringify(refusedNow)}; held ${refusedHeld}; ${deliveries(beforeRefused).length} deliveries; after reload ${JSON.stringify(reloaded)}`
+  );
+
+  // Send all, from the rail's note, with a note it keeps.
+  const beforeSend = heard.length;
+  await noteField.fill(HELD_NOTE);
   await page.locator(`${RAIL} [data-slot="send-held-now"]`).click();
   const together = await nextDelivery(
     "the held comments' delivery",
