@@ -431,6 +431,18 @@ const rowsOf = async (page: Page) => {
   await settle(page, 350);
   return list;
 };
+/**
+ * Pin `number`'s open thread: its card beside its pill, or the well's
+ * bottom sheet while it holds a thread (on a phone, and in a pane under
+ * 640px, where a row's thread opens in the Comments sheet over its list,
+ * PreviewPane `threadPushed`), never that sheet holding the list.
+ */
+const threadOf = (page: Page, number: number | string) =>
+  page
+    .locator(
+      `:is([data-slot="pin-card"][data-pin-card="${number}"], [data-slot="thread-sheet"]:has([data-slot="pin-top"]))`
+    )
+    .first();
 /** Pin `number`'s thread, opened from its row in the rail. */
 const openRow = async (page: Page, number: number) =>
   (await rowsOf(page))
@@ -601,9 +613,7 @@ const replyOn = async (
   words: string
 ) => {
   await openRow(page, number);
-  const card = page.locator(
-    `[data-slot="pin-card"][data-pin-card="${number}"]`
-  );
+  const card = threadOf(page, number);
   await card.waitFor({ timeout: 5000 });
   const entries = numbered((await docOf(frame)).pins, number)?.thread.length;
   await card.getByRole("combobox").fill(words);
@@ -709,7 +719,8 @@ const heldChecks = async (
   const says = await sendAll.getAttribute("aria-label");
   await sendAll.click();
   await page
-    .locator(`${RAIL} [data-slot="held-note"] textarea`)
+    .locator(`${RAIL} [data-slot="held-note"]`)
+    .getByRole("textbox")
     .fill(HELD_NOTE);
   await page.locator(`${RAIL} [data-slot="send-held-now"]`).click();
   const together = await nextDelivery(
@@ -774,7 +785,7 @@ const readFirstChecks = async (
   );
   const later = heard.length;
   await openRow(page, 4);
-  const card = page.locator('[data-slot="pin-card"][data-pin-card="4"]');
+  const card = threadOf(page, 4);
   await card.waitFor({ timeout: 5000 });
   await card.getByRole("combobox").fill(LATER_WORDS);
   await card.getByRole("button", { name: "Reply" }).click();
@@ -866,9 +877,7 @@ const wholePageChecks = async (on: On, frame: Frame) => {
     .locator(`svg[data-cawco-pins-fixed] g[data-pin="${WHOLE_PIN}"]`)
     .count();
   await openRow(page, WHOLE_PIN);
-  const opened = page.locator(
-    `[data-slot="pin-card"][data-pin-card="${WHOLE_PIN}"]`
-  );
+  const opened = threadOf(page, WHOLE_PIN);
   await opened.waitFor({ timeout: 5000 });
   const gone = await opened.locator('[data-slot="gone"]').count();
   await page.keyboard.press("Escape");
@@ -1000,9 +1009,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
     5000
   ).catch(() => null);
   await openRow(page, DOWN_COMMENT).catch(() => undefined);
-  const card = page.locator(
-    `[data-slot="pin-card"][data-pin-card="${DOWN_COMMENT}"]`
-  );
+  const card = threadOf(page, DOWN_COMMENT);
   await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   const shown = await card
     .locator('[data-slot="thread"]')
@@ -1585,8 +1592,8 @@ const endedWriterChecks = async (
    */
   const readCard = async (words: string) => {
     await openRow(tab, 1);
-    const entries = tab.locator(
-      '[data-slot="pin-card"][data-pin-card="1"] [data-slot="entry"][data-by="agent"]'
+    const entries = threadOf(tab, 1).locator(
+      '[data-slot="entry"][data-by="agent"]'
     );
     const said = await until(
       "the agent's words in pin 1's thread",
@@ -1906,7 +1913,7 @@ const run = async (kit: Kit) => {
   const before3 = heard.length;
   const events3 = events.length;
   await openRow(page, 2);
-  const card2 = page.locator('[data-slot="pin-card"][data-pin-card="2"]');
+  const card2 = threadOf(page, 2);
   await card2.waitFor({ timeout: 5000 });
   await card2.getByRole("combobox").fill("On second thought, keep the weight.");
   await card2.getByRole("button", { name: "Reply" }).click();
@@ -1944,8 +1951,7 @@ const run = async (kit: Kit) => {
   // 4. The person resolves pin 3: its one resolve line.
   const before4 = heard.length;
   await openRow(page, 3);
-  await page
-    .locator('[data-slot="pin-card"][data-pin-card="3"]')
+  await threadOf(page, 3)
     .getByRole("button", { name: "Resolve" })
     .click();
   await until(

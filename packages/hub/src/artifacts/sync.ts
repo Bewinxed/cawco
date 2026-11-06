@@ -178,17 +178,56 @@ const requestsProblem = (
   return null;
 };
 
-/** Why a screen's change to a canvas's `meta` may not be kept: it keeps its pen mode there, and nothing else. */
+/**
+ * The key of `meta` a person writes on any artifact: Send all's note beside
+ * the comments they held (core comments.ts `sendHeld`, `HeldNote`), which
+ * the delivery that carries them takes away.
+ */
+const HELD_NOTE_KEY = "heldNote";
+
+/** Why a person's held note (core `HeldNote`) may not be kept, or null: gone, or its time and words within a comment's bound. */
+const heldNoteProblem = (value: unknown): string | null => {
+  if (value === undefined) {
+    return null;
+  }
+  const note = value as { at?: unknown; text?: unknown } | null;
+  if (!(
+    note &&
+    typeof note === "object" &&
+    typeof note.at === "string" &&
+    typeof note.text === "string"
+  )) {
+    return "A held note is its time (at) and its words (text).";
+  }
+  return note.text.length > COMMENT_LIMITS.text
+    ? `A held note holds ${COMMENT_LIMITS.text.toLocaleString()} characters.`
+    : null;
+};
+
+/**
+ * Why a person's change to `meta` may not be kept: on any artifact they
+ * write Send all's note ({@link HELD_NOTE_KEY}), on a canvas its pen mode
+ * too ({@link PEN_KEYS}), and nothing else.
+ */
 const metaProblem = (
   before: YMap<unknown>,
-  after: YMap<unknown>
+  after: YMap<unknown>,
+  canvas: boolean
 ): string | null => {
   for (const key of new Set([...after.keys(), ...before.keys()])) {
     const value = after.get(key);
-    if (!PEN_KEYS.has(key)) {
-      if (!same(value, before.get(key))) {
-        return "A screen keeps only penMode and penDetected in a canvas's meta.";
+    if (same(value, before.get(key))) {
+      continue;
+    }
+    if (key === HELD_NOTE_KEY) {
+      const problem = heldNoteProblem(value);
+      if (problem) {
+        return problem;
       }
+    } else if (!(canvas && PEN_KEYS.has(key))) {
+      return canvas
+        ? "A screen keeps only penMode, penDetected and heldNote in a canvas's meta."
+        : "A page changes its artifact's meta only by its held note.";
     } else if (!(value === undefined || typeof value === "boolean")) {
       return `${key} is true or false.`;
     }
@@ -298,7 +337,7 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
     return `A canvas keeps at most ${CANVAS_LIMITS.elements} elements.`;
   }
   return (
-    metaProblem(doc.getMap("meta"), trial.getMap("meta")) ??
+    metaProblem(doc.getMap("meta"), trial.getMap("meta"), true) ??
     elements
       .toArray()
       .map(entryProblem)
@@ -322,6 +361,7 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
   for (const name of MAPS) {
     if (!(
       name === "state" ||
+      name === "meta" ||
       INK_MAPS.includes(name) ||
       (component && name === TUNED_MAP) ||
       sameMap(trial.getMap(name), doc.getMap(name))
@@ -330,6 +370,7 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
     }
   }
   const ink =
+    metaProblem(doc.getMap("meta"), trial.getMap("meta"), false) ??
     inkMapsProblem(doc, trial) ??
     (component ? tunedProblem([...trial.getMap(TUNED_MAP).entries()]) : null);
   if (ink) {
