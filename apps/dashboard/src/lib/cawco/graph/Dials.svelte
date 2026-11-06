@@ -161,37 +161,40 @@
       class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto p-space-1 coarse:pb-space-4"
       data-slot="dials-rows"
     >
-      {#each sections as section (section.head)}
-        <section
-          aria-label={section.head ?? undefined}
-          class="flex min-w-0 flex-col pb-space-5 last:pb-0"
-        >
-          {#if section.head}
-            <h3
-              class={sectionHeadVariants({
-                inset: "flush",
-                class: "mb-space-2",
-              })}
-            >
-              <span
-                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                >{section.head}</span
-              >
-            </h3>
-          {/if}
-          <!-- One grid for the section; each control its own subgrid row,
-               its name beside it, rows a step apart as a panel's are. -->
-          <div
-            class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 gap-y-space-2 @max-timeline/dials:grid-cols-(--narrow)"
-            style:--cols={COLUMNS}
-            style:--narrow={NARROW_COLUMNS}
+      <!-- One grid for every section, so each control starts on one edge
+           whatever its heading; each section a subgrid of it, each control
+           its own subgrid row, its name beside it, rows a step apart as a
+           panel's are. -->
+      <div
+        class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
+        data-slot="dials-grid"
+        style:--cols={COLUMNS}
+        style:--narrow={NARROW_COLUMNS}
+      >
+        {#each sections as section (section.head)}
+          <section
+            aria-label={section.head ?? undefined}
+            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
           >
+            {#if section.head}
+              <h3
+                class={sectionHeadVariants({
+                  inset: "flush",
+                  class: "col-span-full",
+                })}
+              >
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                  >{section.head}</span
+                >
+              </h3>
+            {/if}
             {#each section.dials as dial (dial.name)}
               {@const value = shownOf(dial)}
               {@const edited = changed.includes(dial.name)}
               {@const id = `dial-${dial.name}`}
               <div
-                class="col-span-full grid min-w-0 grid-cols-subgrid items-center"
+                class="col-span-full grid min-w-0 grid-cols-subgrid items-start"
                 data-dial-row={dial.name}
               >
                 {#if dial.kind === "action"}
@@ -251,6 +254,7 @@
                         {...layer(dial.name)}
                       >
                         <Select.Trigger
+                          align={shown.unit ? "end" : undefined}
                           aria-label={nameOf(dial)}
                           class="w-full min-w-0"
                           {id}
@@ -260,10 +264,7 @@
                                (design.css), so every control's value reads alike;
                                a figure at the field's end, as a number's is. -->
                           <span
-                            class={[
-                              "min-w-0 truncate num max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)",
-                              shown.unit && "flex-1 text-end",
-                            ]}
+                            class="min-w-0 truncate num max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)"
                             >{shown.figure}{#if shown.unit}<span
                                 class="ms-space-1 text-ink-muted"
                                 >{shown.unit}</span
@@ -347,38 +348,36 @@
                 {/if}
               </div>
             {/each}
-          </div>
-        </section>
-      {/each}
-      {#if changed.length > 0 || undoable}
-        <!-- After the rows, at the controls' end, so nothing above it moves
+          </section>
+        {/each}
+        {#if changed.length > 0 || undoable}
+          <!-- After the rows, at the controls' end, so nothing above it moves
              as it comes and goes. -->
-        <div
-          class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow) [&>*]:col-span-2 [&>*]:col-start-2 [&>*]:justify-self-end"
-          data-slot="dials-foot"
-          style:--cols={COLUMNS}
-          style:--narrow={NARROW_COLUMNS}
-        >
-          {#if changed.length > 0}
-            <Button
-              aria-label={words.dials.resetAllSaid}
-              data-slot="reset-all"
-              icon={IconReset}
-              label={words.resetAll}
-              onclick={() => onreset(changed, true)}
-              size="sm"
-              variant="ghost"
-            />
-          {:else}
-            <Button
-              data-slot="undo-reset"
-              onclick={onundo}
-              size="sm"
-              variant="ghost">{words.undoReset}</Button
-            >
-          {/if}
-        </div>
-      {/if}
+          <div
+            class="col-span-2 col-start-2 flex min-w-0 justify-end"
+            data-slot="dials-foot"
+          >
+            {#if changed.length > 0}
+              <Button
+                aria-label={words.dials.resetAllSaid}
+                data-slot="reset-all"
+                icon={IconReset}
+                label={words.resetAll}
+                onclick={() => onreset(changed, true)}
+                size="sm"
+                variant="ghost"
+              />
+            {:else}
+              <Button
+                data-slot="undo-reset"
+                onclick={onundo}
+                size="sm"
+                variant="ghost">{words.undoReset}</Button
+              >
+            {/if}
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 </TooltipProvider>

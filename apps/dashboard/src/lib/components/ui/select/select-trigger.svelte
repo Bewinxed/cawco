@@ -25,6 +25,10 @@
         /** A plain field: the small corner, the control's edge, field pads. */
         field: "rounded-sm border border-border-control px-space-3 py-space-2",
       },
+      /** `end`: its value at its end, before its mark, as a number field
+          writes its figure (the design graph's Controls: a select whose
+          options are a figure and a unit). */
+      align: { end: "*:first:flex-1 *:first:text-end" },
       /** A filter chip that is on (`data-on`): the selected pair, no edge,
           its ink held over the placeholder's. */
       chosen: {
@@ -52,6 +56,7 @@
     tone,
     look,
     chosen,
+    align,
     ...restProps
   }: WithoutChild<SelectPrimitive.TriggerProps> &
     SelectTriggerLooks & {
@@ -80,7 +85,7 @@
     "dark:aria-invalid:border-error-9/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
-    selectTriggerVariants({ size, measure, tone, look, chosen }),
+    selectTriggerVariants({ size, measure, tone, look, chosen, align }),
     className
   )}
   data-size={size}
