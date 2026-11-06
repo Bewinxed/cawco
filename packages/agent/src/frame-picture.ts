@@ -19,6 +19,7 @@
 import { withPngScale } from "@cawco/core/picture-scale";
 import type { FramePictureRead, Interaction } from "@cawco/core/stage";
 import type { Page } from "playwright-core";
+import { holdTimeAnimations } from "./chromium";
 
 /** Why a state's picture can't be taken as it is, in words a tool answers. */
 class FramePictureRefusal extends Error {}
@@ -181,33 +182,7 @@ export async function statePicture(
   const top = Math.floor(rect.y * scale) / scale;
   const width = Math.ceil(rect.x + rect.w - left - SAME);
   const height = Math.ceil(rect.y + rect.h - top - SAME);
-  // Animations held as Playwright's `animations: "disabled"` holds them (a
-  // finite one at its end, an endless one at its start), save those that run
-  // on a scroller's clock rather than time's: the house edge fade is one,
-  // and held by Playwright it was cancelled, so no picture drew the fade
-  // that says a card's thread runs on past its edge (a review read the cut
-  // as a heading stranded mid-thread).
-  await page.evaluate(() => {
-    interface Run {
-      cancel: () => void;
-      effect: { getComputedTiming: () => { endTime?: number | null } } | null;
-      finish: () => void;
-      timeline: { constructor: { name: string } } | null;
-    }
-    const doc = (
-      globalThis as unknown as { document: { getAnimations: () => Run[] } }
-    ).document;
-    for (const run of doc.getAnimations()) {
-      if (run.timeline?.constructor.name !== "DocumentTimeline") {
-        continue;
-      }
-      if (Number.isFinite(run.effect?.getComputedTiming().endTime)) {
-        run.finish();
-      } else {
-        run.cancel();
-      }
-    }
-  });
+  await holdTimeAnimations(page);
   const png = await page.screenshot({
     clip: { x: left, y: top, width, height },
     caret: "hide",

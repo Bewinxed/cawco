@@ -36,6 +36,7 @@ import {
   greet,
   type HelloArtifact,
   HOST_STAND_IN,
+  holdTimeAnimations,
   isHelloArtifact,
   launchChromium,
 } from "./chromium";
@@ -377,10 +378,10 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
       Math.max(tall, PICTURE_VIEW.height),
       PICTURE_LIMITS.maxHeight
     );
+    await holdTimeAnimations(page);
     const png = await page.screenshot({
       fullPage: true,
       clip: { x: 0, y: 0, width, height },
-      animations: "disabled",
       caret: "hide",
       timeout: PICTURE_LIMITS.shotMs,
     });

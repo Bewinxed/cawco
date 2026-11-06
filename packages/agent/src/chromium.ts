@@ -12,7 +12,7 @@
  * `host`), and {@link greet} says the hello the dashboard's pane would.
  */
 
-import type { Browser, Page } from "playwright-core";
+import type { Browser, Frame, Page } from "playwright-core";
 import { browserExecutable, chromiumSandboxed } from "./capabilities";
 
 /** Why this machine can't launch its browser, in the words a tool answers. */
@@ -121,5 +121,48 @@ export async function greet(
       theme: "light",
       ...(inset ? { inset } : {}),
     }
+  );
+}
+
+/**
+ * Holds `page`'s animations for a picture, in every frame it holds, as
+ * Playwright's `animations: "disabled"` holds them (a finite one at its end,
+ * an endless one at its start), save those that run on a scroller's clock
+ * rather than time's. Playwright's own hold cancels those too, so no picture
+ * drew the house's scroll edges: the fade under a floating bar, the fade that
+ * says a card's thread runs on past its edge. A frame that goes while it is
+ * read holds nothing.
+ */
+export async function holdTimeAnimations(page: Page): Promise<void> {
+  await Promise.all(
+    page.frames().map((frame: Frame) =>
+      frame
+        .evaluate(() => {
+          interface Run {
+            cancel: () => void;
+            effect: {
+              getComputedTiming: () => { endTime?: number | null };
+            } | null;
+            finish: () => void;
+            timeline: { constructor: { name: string } } | null;
+          }
+          const doc = (
+            globalThis as unknown as {
+              document: { getAnimations: () => Run[] };
+            }
+          ).document;
+          for (const run of doc.getAnimations()) {
+            if (run.timeline?.constructor.name !== "DocumentTimeline") {
+              continue;
+            }
+            if (Number.isFinite(run.effect?.getComputedTiming().endTime)) {
+              run.finish();
+            } else {
+              run.cancel();
+            }
+          }
+        })
+        .catch(() => undefined)
+    )
   );
 }
