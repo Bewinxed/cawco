@@ -20,9 +20,12 @@
  *    again. With nothing asked of the stage, the new agent's log says the
  *    stage `starting`, then `live`, and that it was started again after the
  *    agent's restart. Before the fix this leg fails: nothing starts it.
- * 3. Then the canvas through its preview origin answers 200, and the stage
- *    started once since the restart: the request found it live, never woke
- *    it.
+ * 3. Then, the agent's log saying the stage `live` and started once since
+ *    the restart before anything asks for it, the canvas through its preview
+ *    origin answers 200, and the stage still started once since the restart:
+ *    the request found it live, never woke it. A start is a `starting` or
+ *    `waking` line: the daemon's re-send of each stage's state on
+ *    registering with the hub (stage.ts `tellStages`) logs no line.
  *
  * Beside it, before the restart, a delegate in a workspace of its own hands
  * up a preview whose server CawCo's stage runs there (`serve`, agent
@@ -32,15 +35,19 @@
  *
  * 2b. With nothing asked of it, the new agent's log says the served
  *     preview's port `live` and started again after the agent's restart.
- * 4. Then the preview's origin answers the delegate's page, and the server
- *    started once since the restart.
+ * 4. Then, its server said `live` and started once since the restart before
+ *    the read, the preview's origin answers the delegate's page, and the
+ *    server still started once since the restart.
  *
  *   bun scripts/probe-kit/run.ts stage-carried
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { STAGE_RESUMED_SAID } from "../../../packages/core/src/stage";
+import {
+  STAGE_RESUMED_SAID,
+  type StageStatus,
+} from "../../../packages/core/src/stage";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import type { Kit, Spec } from "../kit";
@@ -49,6 +56,13 @@ import { passedFetch } from "../preview-pass";
 const CREATE = "mcp__cawco__artifact_create";
 const STORY = "src/Card.stories.js";
 const STATUS = /"status":"(\w+)"/u;
+const STATUSES: StageStatus[] = [
+  "starting",
+  "waking",
+  "live",
+  "error",
+  "asleep",
+];
 const ID = /"id":"([0-9a-f-]{36})"/u;
 const short = (said: string) => said.replaceAll(/\s+/gu, " ").slice(0, 600);
 /** Ours: a stage clone's install and its host's start, with room. */
@@ -191,9 +205,27 @@ const rootStageLines = (log: string): string[] => stageLines(log, ".");
 const backAfter = (said: string[]): boolean =>
   said.some((one) => one.startsWith("live")) &&
   said.some((one) => one.startsWith(STAGE_RESUMED_SAID));
-/** How many times its lines say it started. */
+/** A line's status word, when it is a status line (stage.ts `tell`: `live`, `starting (why)`, `live, 2 error(s)`). */
+const statusOf = (one: string): StageStatus | undefined =>
+  STATUSES.find(
+    (status) =>
+      one === status ||
+      one.startsWith(`${status} (`) ||
+      one.startsWith(`${status}, `)
+  );
+/**
+ * How many times its lines say it started: each `starting` or `waking` line
+ * is one start, as stage.ts `tell` logs a move and the daemon's re-send on
+ * registering with the hub (`tellStages`) logs none.
+ */
 const startsIn = (said: string[]): number =>
-  said.filter((one) => one === "starting" || one === "waking").length;
+  said.filter((one) => {
+    const status = statusOf(one);
+    return status === "starting" || status === "waking";
+  }).length;
+/** Where its last status line says it is now. */
+const nowIn = (said: string[]): string =>
+  said.map(statusOf).findLast((status) => status !== undefined) ?? "unsaid";
 
 const run = async (kit: Kit) => {
   const { check } = kit;
@@ -341,6 +373,9 @@ const run = async (kit: Kit) => {
   );
 
   // 3. Its canvas answers through its preview origin, and the request woke nothing.
+  const rootBefore = rootStageLines(await mark.since());
+  const rootNow = nowIn(rootBefore);
+  const rootStartsBefore = startsIn(rootBefore);
   const { port } = (await (
     await fetchHub(
       fetch,
@@ -366,12 +401,18 @@ const run = async (kit: Kit) => {
   ).catch(answered);
   const starts = startsIn(rootStageLines(await mark.since()));
   check(
-    "3: after the restart its canvas answers 200 through its preview origin, the stage started once since: the request found it live",
-    status === "200" && starts === 1,
-    `preview port ${port}: ${status}; starts since the restart: ${starts}`
+    "3: after the restart the stage is live before its canvas is asked for, its canvas answers 200 through its preview origin, and the stage started once since: the request found it live and started nothing",
+    rootNow === "live" &&
+      rootStartsBefore === 1 &&
+      status === "200" &&
+      starts === 1,
+    `before the request: ${rootNow}, starts since the restart ${rootStartsBefore}; preview port ${port}: ${status}; starts since the restart after it: ${starts}`
   );
 
   // 4. The served preview answers at its port, and the read woke nothing.
+  const servedBefore = stageLines(await mark.since(), SERVED_AT);
+  const servedNow = nowIn(servedBefore);
+  const servedStartsBefore = startsIn(servedBefore);
   const servedAfter = await until(
     "the served preview after the restart",
     servedReads,
@@ -380,9 +421,12 @@ const run = async (kit: Kit) => {
   ).catch(servedReads);
   const servedStarts = startsIn(stageLines(await mark.since(), SERVED_AT));
   check(
-    "4: after the restart the served preview answers the delegate's page through its origin, its server started once since: the read found it live",
-    servedAfter === "200 the page" && servedStarts === 1,
-    `the preview: ${servedAfter}; starts since the restart: ${servedStarts}`
+    "4: after the restart the served preview's server is live before it is read, the preview answers the delegate's page through its origin, and its server started once since: the read found it live and started nothing",
+    servedNow === "live" &&
+      servedStartsBefore === 1 &&
+      servedAfter === "200 the page" &&
+      servedStarts === 1,
+    `before the read: ${servedNow}, starts since the restart ${servedStartsBefore}; the preview: ${servedAfter}; starts since the restart after it: ${servedStarts}`
   );
 };
 
