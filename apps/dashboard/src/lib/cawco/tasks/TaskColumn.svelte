@@ -92,10 +92,12 @@
     fresh?: string | null;
     /**
      * A card whose move the hub has not answered: it stands where it was
-     * let go, faded and busy (`aria-busy`), and nothing around it moves.
-     * No line under it: one that came and went with the answer pushed the
-     * cards below down and pulled them back up after every drop; a refusal
-     * is said under the card (`refused`).
+     * let go, drawn as any card is, busy to a screen reader (`aria-busy`).
+     * Planka and Vikunja show a moved card as it lands while their server
+     * answers (Planka updates its store before its request; Vikunja marks
+     * no card); a refusal here is said under the card (`refused`). A line
+     * under it pushed the cards below, and a fade made it look unsure of
+     * a move the person had made.
      */
     moving?: (id: string) => boolean;
     /** A move the hub refused: the card is back here, the reason under it. */
@@ -147,7 +149,6 @@
     aria-busy={moving?.(task.id) || undefined}
     data-archived={archived || undefined}
     data-flip={thing?.isDragSource ? undefined : ""}
-    data-moving={moving?.(task.id) || undefined}
     data-new={fresh === task.id || undefined}
     data-pickable={onpick ? "" : undefined}
     data-picked={on || undefined}

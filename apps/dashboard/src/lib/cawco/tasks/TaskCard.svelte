@@ -102,7 +102,7 @@
   aria-current={current ? "true" : undefined}
   data-drag-face
   data-task-card
-  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out not-group-data-picked/task:not-aria-current:hover:bg-surface-hover aria-current:bg-selected-bg group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
+  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color] duration-(--dur-control) ease-out not-group-data-picked/task:not-aria-current:hover:bg-surface-hover aria-current:bg-selected-bg group-data-picked/task:bg-selected-bg"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
