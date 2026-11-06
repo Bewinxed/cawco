@@ -15,6 +15,7 @@
     "./run-captured": "./src/run-captured.ts",
     "./octokit-answer": "./src/octokit-answer.ts",
     "./activity": "./src/activity.ts",
+    "./session-questions": "./src/session-questions.ts",
     "./artifact-kinds": "./src/artifact-kinds.ts",
     "./find-match": "./src/find-match.ts",
     "./bundle-css-guard": "./src/bundle-css-guard.ts",
@@ -316,6 +317,7 @@
     "./words/lfs": "./src/words/lfs.ts",
     "./words/git-door": "./src/words/git-door.ts",
     "./words/plan": "./src/words/plan.ts",
+    "./words/waiting": "./src/words/waiting.ts",
     "./workspace-needs": "./src/workspace-needs.ts"
   },
   "main": "./src/index.ts",

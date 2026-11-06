@@ -1042,6 +1042,19 @@ export interface TasksChangedFrame {
   taskId?: string;
 }
 
+/**
+ * Hub-originated: a session closed one of its questions to the person
+ * (`question_close`, taken or withdrawn): what a session's tree asked him
+ * moved without anything in Needs you moving, so a screen listing a
+ * session's questions (core session-questions.ts) reads them again.
+ */
+export interface QuestionsMovedFrame {
+  /** The artifact that asked it. */
+  artifactId: string;
+  instanceId?: undefined;
+  kind: "questions.moved";
+}
+
 export interface DecisionsChangedFrame {
   instanceId?: undefined;
   /**

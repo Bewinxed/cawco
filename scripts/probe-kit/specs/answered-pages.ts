@@ -430,6 +430,7 @@ const run = async ({ check }: Kit) => {
         name: page.name,
         does: "pick",
         link: `[Answered page](cawco:artifact/${PAGE})`,
+        title: "Answered page",
       },
       session: null,
       questions: stillAsked(questionsOfPage(twoPicks)),
@@ -441,10 +442,13 @@ const run = async ({ check }: Kit) => {
         name: "card-close-gone",
         does: "pick",
         link: `[Card close gone](cawco:artifact/${delegatePage})`,
+        title: "Card close gone",
       },
       session: {
         ended: true,
+        id: DELEGATE,
         link: `[Land the title bars](cawco:session/${DELEGATE})`,
+        title: "Land the title bars",
       },
       questions: stillAsked(
         questionsOf({

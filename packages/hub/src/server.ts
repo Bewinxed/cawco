@@ -15237,6 +15237,12 @@ export const createServer = (
     },
     acknowledged: () => noticesSeen.ids(),
     needsMoved: () => artifactLane.moved(),
+    questionsMoved: (artifactId) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "questions.moved", artifactId },
+      }),
     // A pin's reply that asks: the artifact's item as the lane reads it now
     // (its count), pushed unless it is put away with Not now or not in the lane.
     pinAsked: (artifactId, text) => {

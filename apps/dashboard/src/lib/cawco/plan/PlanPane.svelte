@@ -60,7 +60,6 @@
    * to the room over the row (to the top of the composer's dock).
    */
   import { untrack } from "svelte";
-  import type { Attachment } from "svelte/attachments";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
@@ -72,7 +71,10 @@
   import { popOut } from "../motion/pop.svelte";
   import { send } from "../project-tasks";
   import { planAsked, takePlan } from "../reference-things.svelte";
-  import { composerLayerOf } from "../transcript/composer-layer.svelte";
+  import {
+    holdComposerLayer,
+    roomOver,
+  } from "../transcript/composer-layer.svelte";
   import PlanTree from "./PlanTree.svelte";
 
   let {
@@ -114,19 +116,8 @@
     });
   });
 
-  /**
-   * The room it may rise into: from the ring's row up to the top of the
-   * composer's dock, a step short of it, read once as it opens.
-   */
-  const room: Attachment<HTMLElement> = (node) => {
-    const row = node.offsetParent;
-    const dock = node.closest('[data-slot="dock"]');
-    if (row && dock) {
-      const over =
-        row.getBoundingClientRect().top - dock.getBoundingClientRect().top;
-      node.style.setProperty("--plan-room", `${Math.max(0, over - 16)}px`);
-    }
-  };
+  /** The room it may rise into: from the ring's row up to the top of the composer's dock. */
+  const room = roomOver("--plan-room");
 
   /** Shuts it, and the focus goes back to its ring. */
   function shut(): void {
@@ -137,22 +128,8 @@
     ring?.focus();
   }
 
-  /**
-   * It holds its pane's composer layer while it is open: the tray's shelf
-   * opening over the same row takes it, and the plan shuts.
-   */
-  const layerOwner = Symbol("plan");
-  const layer = $derived(composerLayerOf(instanceId));
-  $effect.pre(() => {
-    const held = layer;
-    untrack(() => held.take(layerOwner));
-    return () => held.drop(layerOwner);
-  });
-  $effect(() => {
-    if (!layer.holds(layerOwner)) {
-      untrack(onclose);
-    }
-  });
+  // It holds the composer's layer while it is open: the tray's shelf opening over the same row takes it, and the plan shuts.
+  holdComposerLayer(() => instanceId, "plan", () => onclose());
 
   let section = $state<HTMLElement>();
   let body = $state<HTMLElement>();

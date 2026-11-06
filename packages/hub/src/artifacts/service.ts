@@ -142,6 +142,10 @@ import {
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
+import type {
+  SessionQuestion,
+  SessionQuestionsRead,
+} from "@cawco/core/session-questions";
 import {
   type CanvasDial,
   type CanvasEdge,
@@ -810,10 +814,11 @@ export interface AskedOf {
     kind: ArtifactKind;
     link: string;
     name: string;
+    title: string;
   };
   questions: Question[];
-  /** The session that holds it, when it is not the reader: its link, and whether it ended (the reader takes its questions up). */
-  session: { ended: boolean; link: string } | null;
+  /** The session that holds it, when it is not the reader: its id, title and link, and whether it ended (the reader takes its questions up). */
+  session: { ended: boolean; id: string; link: string; title: string } | null;
 }
 
 /** What `question_close` answers: the question, by its link, as it stands now. */
@@ -2058,6 +2063,12 @@ export interface ArtifactServiceDeps {
    * when it has none; throws a refusal when every port is taken.
    */
   previewAddress: (instanceId: string) => PreviewAddress;
+  /**
+   * A session closed one of artifact `artifactId`'s questions to the person
+   * (taken or withdrawn): every screen listing a session's questions reads
+   * them again (core `QuestionsMovedFrame`).
+   */
+  questionsMoved: (artifactId: string) => void;
   /**
    * A preview no panel shows, loaded once on its own origin as a pane's
    * load would be (its machine's listener started for what its row names
@@ -7733,12 +7744,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             name: row.name,
             does: row.does,
             link: artifactLink(row.id, row.title),
+            title: row.title,
           },
           session:
             row.instanceId === null || row.instanceId === instance.id
               ? null
               : {
+                  id: row.instanceId,
                   link: sessionNamed(row.instanceId),
+                  title: owner
+                    ? sessionLabel(owner).name
+                    : "a session since removed",
                   ended: !owner || deps.finished(owner),
                 },
           questions,
@@ -9697,6 +9713,41 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     questions: (instanceId: string): AskedOf[] =>
       askedBy(sessionOf(instanceId)),
 
+    /** The same questions as session `instanceId`'s own screen lists them (core session-questions.ts). */
+    sessionQuestions: (instanceId: string): SessionQuestionsRead => ({
+      questions: askedBy(sessionOf(instanceId)).flatMap((of) =>
+        of.questions.flatMap((question): SessionQuestion[] =>
+          question.state === "open" || question.state === "answered"
+            ? [
+                {
+                  key: question.key,
+                  kind: question.kind,
+                  words: question.words,
+                  state: question.state,
+                  answeredAt:
+                    question.state === "answered"
+                      ? (question.answer?.at ?? null)
+                      : null,
+                  stop: question.stop,
+                  artifact: {
+                    id: of.artifact.id,
+                    kind: of.artifact.kind,
+                    title: of.artifact.title,
+                  },
+                  session: of.session
+                    ? {
+                        id: of.session.id,
+                        title: of.session.title,
+                        ended: of.session.ended,
+                      }
+                    : null,
+                },
+              ]
+            : []
+        )
+      ),
+    }),
+
     /**
      * `question_close`: the session takes question `question` (it acted on
      * his answer, `why` his words quoted) or withdraws it (`why` what
@@ -9728,6 +9779,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `[artifacts] ${row.name} ${question.key} ${close.as} by ${instance.id}`
       );
       deps.needsMoved();
+      deps.questionsMoved(row.id);
       return { as: close.as, link: question.link, words: question.words };
     },
 
