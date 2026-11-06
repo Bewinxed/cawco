@@ -52,15 +52,15 @@
     {#if waiting > 0}
       <IconNeedsYou aria-hidden="true" class="text-status-attn-glyph" />
       <span aria-hidden="true" class="num whitespace-nowrap"
-        >{waiting}<span class="@max-phone/tray:hidden">
-          {waitingWords.needYouWord(waiting)}</span
+        >{waiting}<span class="@max-phone/tray:hidden"
+          >{` ${waitingWords.needYouWord(waiting)}`}</span
         ></span
       >
     {:else}
       <IconTick aria-hidden="true" />
       <span aria-hidden="true" class="num whitespace-nowrap"
-        >{answered}<span class="@max-phone/tray:hidden">
-          {waitingWords.answeredWord}</span
+        >{answered}<span class="@max-phone/tray:hidden"
+          >{` ${waitingWords.answeredWord}`}</span
         ></span
       >
     {/if}
