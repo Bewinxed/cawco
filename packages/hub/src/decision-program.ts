@@ -864,6 +864,25 @@ export type ImageRead = { bytes: Uint8Array } | { problem: string };
 
 const FILE_NAME = /[^A-Za-z0-9._-]+/gu;
 
+/** Each file `program`'s Images name, once, in the order its page keeps them. */
+const imageNames = (read: ProgramRead): string[] => [...new Set(read.images)];
+
+/** Where a page keeps the file Image `name` shows, the `index`th its program names: `files/<n>-<name>`, from the page's folder. */
+const imagePath = (name: string, index: number): string =>
+  `files/${index}-${(name.split("/").at(-1) ?? "image").replace(FILE_NAME, "-")}`;
+
+/**
+ * The files a page built from kept program `program` shows, by the name
+ * each Image gives: where each stands in the page's folder.
+ */
+export const keptImagePaths = (program: string): Map<string, string> =>
+  new Map(
+    imageNames(readKept(program)).map((name, index) => [
+      name,
+      imagePath(name, index),
+    ])
+  );
+
 /**
  * `raw` checked and built: each Canvas's and Preview's artifact resolved
  * whole by `artifact`, each file its Images name read with `image`
@@ -877,7 +896,7 @@ export const buildProgram = async (
   kinds: readonly Kind[]
 ): Promise<BuiltProgram> => {
   const checked = checkProgram(raw, kinds, artifact);
-  const names = [...new Set(checked.read.images)];
+  const names = imageNames(checked.read);
   const reads = await Promise.all(names.map(image));
   const problems = reads.flatMap((read, index) =>
     "problem" in read ? [`Image("${names[index]}"): ${read.problem}`] : []
@@ -886,7 +905,7 @@ export const buildProgram = async (
     refuse(problems);
   }
   const files = names.map((name, index) => ({
-    path: `files/${index}-${(name.split("/").at(-1) ?? "image").replace(FILE_NAME, "-")}`,
+    path: imagePath(name, index),
     bytes: (reads[index] as { bytes: Uint8Array }).bytes,
   }));
   const addresses = Object.fromEntries(

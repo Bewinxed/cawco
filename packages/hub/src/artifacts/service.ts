@@ -174,6 +174,7 @@ import { SettleRefusal } from "../decides-file";
 import {
   type ArtifactNamed,
   type BuiltProgram,
+  keptImagePaths,
   mergeProgram,
   PROGRAM_FILE,
   ProgramRefusal,
@@ -1758,12 +1759,22 @@ export type StageAt = { session: InstanceRow } | { workspace: string };
 
 /**
  * What a page is built from: a decision page's `program` (with the folder
- * its relative Image files are in, when it has one), inline `html`, a work
- * folder's page.oui or page.html (`dir`), or the project folder's
- * `decisions/<name>/`.
+ * its relative Image files are in, when it has one, and on a revision the
+ * pictures the page already shows), inline `html`, a work folder's page.oui
+ * or page.html (`dir`), or the project folder's `decisions/<name>/`.
  */
 export type PageFrom =
-  | { program: string; dir?: string | undefined }
+  | {
+      program: string;
+      dir?: string | undefined;
+      /**
+       * A revision's: each picture the page shows, by the name its Image
+       * gives. A name is read where its file stands, as on a create; one
+       * whose file no longer stands there (its folder gone with the session
+       * that wrote it, its machine away) shows the picture the page keeps.
+       */
+      shown?: ReadonlyMap<string, Uint8Array>;
+    }
   | { html: string }
   | { dir: string }
   | { folder: true };
@@ -3993,9 +4004,31 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * The pictures decision page `id` shows, from its folder (`writePage`), by
+   * the name each Image of its kept program `program` gives.
+   */
+  const shownPictures = (
+    id: string,
+    program: string
+  ): Map<string, Uint8Array> => {
+    const folder = join(deps.root, id);
+    const shown = new Map<string, Uint8Array>();
+    for (const [name, path] of keptImagePaths(program)) {
+      const file = join(folder, path);
+      if (existsSync(file)) {
+        shown.set(name, new Uint8Array(readFileSync(file)));
+      }
+    }
+    return shown;
+  };
+
+  /**
    * Where a decision page's relative Image files are read on a revision:
-   * the work folder it was published from (`dir`), kept in its doc's meta;
-   * none for one published inline or from the project's folder.
+   * the work folder it was last published from (`dir`), kept in its doc's
+   * meta; none for one published inline or from the project's folder. A
+   * revision's statements carry no folder of their own, whichever session
+   * sends them; a picture the page already shows is kept when its file no
+   * longer stands there ({@link shownPictures}).
    */
   const keepProgramDir = (
     row: ArtifactRow,
@@ -6942,6 +6975,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       {
         program: merged.merged,
         dir: typeof dir === "string" ? dir : undefined,
+        shown: shownPictures(row.id, existing),
       },
       row.heldFor === null
     );

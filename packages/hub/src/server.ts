@@ -13745,6 +13745,38 @@ export const createServer = (
   /** The most one Image's file may hold. Our bound: a page's pictures load with it. */
   const IMAGE_LIMIT = 2 * 1024 * 1024;
 
+  /** Where a program's Images are read from: its work folder, the project's folder, and on a revision the pictures its page shows. */
+  interface ImageAt {
+    dir?: string | undefined;
+    inFolder?: true;
+    shown?: ReadonlyMap<string, Uint8Array> | undefined;
+  }
+
+  /** An Image's file as it stands where its name points, or why it can't be read there, in a sentence. */
+  const imageFile = async (
+    row: InstanceRow,
+    file: string,
+    at: ImageAt
+  ): Promise<{ bytes: Uint8Array } | string> => {
+    let path = file;
+    if (!file.startsWith("/")) {
+      if (!at.dir) {
+        return at.inFolder
+          ? "the project's folder keeps text only: name the picture by its absolute path on your machine."
+          : "a file beside the program needs your work folder: publish with dir, or name the picture by its absolute path.";
+      }
+      path = posix.join(at.dir, file);
+    }
+    const read = await readMachineMedia(row.machineId, path);
+    if (read === "offline") {
+      return "your machine is not connected.";
+    }
+    if (read === "timeout") {
+      return "your machine didn't answer.";
+    }
+    return "refused" in read ? read.refused : read;
+  };
+
   /**
    * A decision page's program, for `from`: given inline, a work folder's
    * page.oui on the session's machine, or the project folder's
@@ -13755,13 +13787,9 @@ export const createServer = (
     row: InstanceRow,
     folder: string,
     from: PageFrom
-  ): Promise<
-    | { dir?: string | undefined; inFolder?: true; text: string }
-    | PageRefusal
-    | undefined
-  > => {
+  ): Promise<(ImageAt & { text: string }) | PageRefusal | undefined> => {
     if ("program" in from) {
-      return { text: from.program, dir: from.dir };
+      return { text: from.program, dir: from.dir, shown: from.shown };
     }
     if ("dir" in from) {
       const agent = registry.agent(row.machineId);
@@ -13785,32 +13813,24 @@ export const createServer = (
     }
   };
 
-  /** An Image's file: an absolute path on the session's machine, or one in the work folder the program came from. */
+  /**
+   * An Image's file: an absolute path on the session's machine, or one in
+   * the work folder the program came from; on a revision, a picture the
+   * page shows whose file no longer stands there is the one the page keeps
+   * (artifacts/service.ts `PageFrom`).
+   */
   const programImage = async (
     row: InstanceRow,
     file: string,
-    at: { dir?: string | undefined; inFolder?: true }
+    at: ImageAt
   ): Promise<ImageRead> => {
-    let path = file;
-    if (!file.startsWith("/")) {
-      if (!at.dir) {
-        return {
-          problem: at.inFolder
-            ? "the project's folder keeps text only: name the picture by its absolute path on your machine."
-            : "a file beside the program needs your work folder: publish with dir, or name the picture by its absolute path.",
-        };
-      }
-      path = posix.join(at.dir, file);
+    const read = await imageFile(row, file, at);
+    const kept = at.shown?.get(file);
+    if (typeof read === "string" && kept) {
+      return { bytes: kept };
     }
-    const read = await readMachineMedia(row.machineId, path);
-    if (read === "offline") {
-      return { problem: "your machine is not connected." };
-    }
-    if (read === "timeout") {
-      return { problem: "your machine didn't answer." };
-    }
-    if ("refused" in read) {
-      return { problem: read.refused };
+    if (typeof read === "string") {
+      return { problem: read };
     }
     return read.bytes.byteLength > IMAGE_LIMIT
       ? {

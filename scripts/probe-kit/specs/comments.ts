@@ -276,7 +276,7 @@
  */
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame, Locator, Page, WebSocketRoute } from "playwright-core";
 import { PNG } from "pngjs";
@@ -899,6 +899,7 @@ const runOn = async (kit: Kit, on: On) => {
   if (ONLY_LEG === "changed") {
     await changedChecks(on);
     await canvasChangedChecks(on, id);
+    await keptPictureChecks(on);
     return;
   }
   if (ONLY_LEG === "switch") {
@@ -944,6 +945,8 @@ const runOn = async (kit: Kit, on: On) => {
     // Pointing and what changed: the links, their chips, the ring and the dot.
     () => pointChecks(on, { id, made, one, two }),
     () => changedChecks(on),
+    // A decision page's picture outlives the folder it was published from.
+    () => keptPictureChecks(on),
     // The Work Outlives Its Surface Rule on the composer.
     () => draftChecks(on),
     // A press on Comment always sends, however its draft folds.
@@ -8906,6 +8909,78 @@ const pointChecks = async (
     `sheet ${JSON.stringify(sheet)}; view ${JSON.stringify(view)}; artifact ${onPhone ? id : "not shown"}; thread ${phoneOpen}`
   );
   await phone.close();
+};
+
+/**
+ * A decision page keeps the pictures it shows: published from a work folder
+ * with a relative Image, that folder then removed (its session ended), a
+ * revision that leaves the Image as written still builds, the picture the
+ * page shows kept and nothing marked changed but the card it rewrote.
+ */
+const keptPictureChecks = async (on: On) => {
+  const folder = join(on.fleet.sandbox, "kept-picture");
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, "line.png"), greyPng(140));
+  await writeFile(join(folder, "page.oui"), pointProgram("line.png"));
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "pick",
+    title: "Launch cards kept",
+    ask: "Pick for the launch",
+    name: "kept-picture",
+    dir: folder,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  await rm(folder, { recursive: true, force: true });
+  const revised = await on.call(UPDATE, {
+    id,
+    statements: POINT_REVISION,
+  });
+  on.kit.check(
+    'kept picture: a decision page published from a work folder with Image("line.png"), that folder removed, takes a revision that leaves the Image as written, answering the card it rewrote',
+    !!id &&
+      revised.includes(`(cawco:decision/${id}/tone)`) &&
+      !revised.includes('Image(\\"line.png\\")'),
+    `create ${made.slice(made.indexOf("{"), made.indexOf("{") + 200)}; update ${revised.slice(revised.indexOf("{"), revised.indexOf("{") + 400)}`
+  );
+  const drawn = await frameHolding(on.page, id, "the kept-picture page");
+  const shown = drawn
+    ? await until(
+        "the kept picture drawn and the revision's changes",
+        () =>
+          drawn.evaluate(() => {
+            const image = document.querySelector<HTMLImageElement>(
+              'img[src$="files/0-line.png"]'
+            );
+            const meta = (
+              window as unknown as {
+                cawcoArtifact: {
+                  doc: {
+                    getMap: (n: string) => { get: (k: string) => unknown };
+                  };
+                };
+              }
+            ).cawcoArtifact.doc.getMap("meta");
+            const changes = meta.get("changes") as {
+              items: { anchor: string; kind: string }[];
+            } | null;
+            return {
+              width: image?.complete ? image.naturalWidth : 0,
+              changes:
+                changes?.items.map((item) => [item.kind, item.anchor]) ?? null,
+            };
+          }),
+        (now) => now.width > 0 && now.changes !== null,
+        15_000
+      ).catch(() => null)
+    : null;
+  on.kit.check(
+    "kept picture: the revised page draws the picture it kept (48px wide) and marks only the card it rewrote as changed",
+    shown?.width === 48 &&
+      JSON.stringify(shown.changes) ===
+        JSON.stringify([["card", "#decision-tone"]]),
+    JSON.stringify(shown)
+  );
 };
 
 /** A page whose revision rewords one paragraph, puts one in and takes one out. */
