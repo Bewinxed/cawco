@@ -17,6 +17,15 @@
  * ({@link SendBody} `pins`). An entry's pictures, texts and files are
  * stored on the hub by reference ({@link CommentAttachment}).
  *
+ * A comment or a reply may be held instead (the owner, 2026-11-05: one key
+ * sends it, another holds it, one act sends everything held): its entry is
+ * marked `held` in the doc, and no delivery carries it ({@link withoutHeld}),
+ * nor a stroke group drawn after it, until the person's Send all clears
+ * every mark in one write with their note ({@link sendHeld}); the next
+ * delivery, the same one as ever, then carries them all with the note
+ * ({@link heldNoteOf}). Held entries are the doc's, so they outlive a reload,
+ * the page and the panel.
+ *
  * A pin is placed again after every revision of the page by its anchor, in
  * one order ({@link findAnchor}): the element at its source's file:line
  * (among several written by that one line, the one its selector names that
@@ -326,6 +335,8 @@ export interface ThreadEntry {
   by: "person" | "agent";
   /** Files an agent's reply names as changed. */
   files?: string[];
+  /** The person held it to send with the others ({@link sendHeld}): no delivery carries it until then. A person's unsent entry only. */
+  held?: true;
   id: string;
   /** When it was delivered to the session; a person's entry only. */
   sentAt?: string;
@@ -1229,7 +1240,7 @@ export const pinSaid = (pin: Pin): string =>
     JSON.stringify([
       !!pin.resolvedAt,
       pin.thread
-        .filter((entry) => entry.by === "person")
+        .filter((entry) => entry.by === "person" && !entry.held)
         .map((entry) => [entry.id, entry.text]),
     ])
   );
@@ -1405,6 +1416,8 @@ export function honourDeletions(doc: MapDoc): () => void {
 /** What the person said in one entry: their words, and what they attached. */
 export interface Said {
   attachments?: CommentAttachment[];
+  /** Held to send with the others, not sent once quiet ({@link ThreadEntry.held}). */
+  held?: boolean;
   text: string;
 }
 
@@ -1435,8 +1448,97 @@ function personEntry(
     text,
     at: new Date().toISOString(),
     ...(attachments.length > 0 ? { attachments } : {}),
+    ...(said.held ? { held: true as const } : {}),
   };
 }
+
+/** Whether a pin holds words the person held back to send with the others. */
+export const pinHeld = (pin: Pin): boolean =>
+  pin.thread.some((entry) => entry.held && !entry.sentAt);
+
+/**
+ * Pin `pin` as a delivery may carry it: without what the person holds. A pin
+ * whose comment is held is held whole (a reply written at once on it waits
+ * with it): its thread holds none of their unsent words, so it is not ready
+ * to go ({@link pinReady}); a pin the session has heard keeps its thread but
+ * the held entries, which stay owed ({@link pinHeard} stamps only what went).
+ */
+export const withoutHeld = (pin: Pin): Pin => {
+  if (!pinHeld(pin)) {
+    return pin;
+  }
+  const whole = !pinKnown(pin) && !!pin.thread[0]?.held;
+  return {
+    ...pin,
+    thread: pin.thread.filter((entry) =>
+      whole ? entry.by !== "person" || !!entry.sentAt : !entry.held
+    ),
+  };
+};
+
+/**
+ * The pins as the session may read them (`comment_read`, `artifact_read`):
+ * what the person holds left out ({@link withoutHeld}), and a pin they hold
+ * whole not there at all, until their Send all.
+ */
+export const pinsToTell = (pins: Iterable<Pin>): Pin[] =>
+  [...pins]
+    .map(withoutHeld)
+    .filter(
+      (pin) =>
+        pin.kind === "annotation" || pin.thread.length > 0 || pinKnown(pin)
+    );
+
+/** The person's note with what they held, kept until the delivery that carries them (`meta.heldNote`). */
+export interface HeldNote {
+  at: string;
+  text: string;
+}
+
+/** The note `doc` holds for the held comments' delivery, if one waits. */
+export const heldNoteOf = (doc: MapDoc): HeldNote | undefined => {
+  const note = doc.getMap("meta").get("heldNote") as HeldNote | undefined;
+  return note && typeof note.text === "string" && note.text.trim()
+    ? note
+    : undefined;
+};
+
+/**
+ * The person's Send all: every entry they held let go in one write, with
+ * their `note` kept beside them for the delivery that carries them
+ * ({@link heldNoteOf}); that delivery is the one every comment takes, once
+ * quiet. The count let go, or the refusal's sentence when nothing is held or
+ * the note is too long.
+ */
+export function sendHeld(doc: MapDoc, note: string): number | string {
+  const text = note.trim();
+  if (text.length > COMMENT_LIMITS.text) {
+    return `A note holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so nothing was sent. Shorten it, then send again.`;
+  }
+  const entries = entriesOf(doc);
+  const held = [...entries.entries()].filter(
+    ([, entry]) => entry.held && !entry.sentAt
+  );
+  if (held.length === 0) {
+    return "Nothing is held here, so nothing was sent.";
+  }
+  doc.transact(() => {
+    for (const [key, { held: _held, ...entry }] of held) {
+      entries.set(key, entry);
+    }
+    if (text) {
+      doc.getMap("meta").set("heldNote", {
+        at: new Date().toISOString(),
+        text,
+      } satisfies HeldNote);
+    }
+  });
+  return held.length;
+}
+
+/** A delivery's line for the person's note with the comments they held and sent together. */
+export const notedLine = (text: string): string =>
+  `- My note with these comments: ${JSON.stringify(text)}`;
 
 /**
  * The person's words, and what they attached, in pin `pin`'s thread, unsent

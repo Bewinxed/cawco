@@ -296,8 +296,15 @@
       class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col gap-space-5 overflow-x-clip px-(--page-in) pt-(--page-in) pb-space-5"
       data-slot="page-column"
     >
+      <!-- The page's title: under a panel's head, which names the page by
+           this same title (the overlay's `data-cawco-headed`), it is left
+           out, so it is never read twice; a setup page keeps its own, which
+           is the project's name renamed in place. -->
       <header
-        class="mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2"
+        class={[
+          "mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2",
+          !setupPage && "[:root[data-cawco-headed]_&]:hidden",
+        ]}
         data-slot="page-head"
       >
         <span class="mark-cell">

@@ -15,14 +15,22 @@ export const artifactWords = {
   draftTitle: "Your canvas",
   /** The title of a decision page's Diagram opened as a canvas (hub server.ts `openDiagramAsCanvas`), `page` that page's title. */
   diagramTitle: (page: string) => `${page} diagram`,
-  /** A row's Remove, for a screen reader: its trailing glyph says it. */
-  removeNamed: (title: string) => `Remove ${title}`,
+  /** The menu the title opens, for a screen reader: the session's artifacts. */
+  artifacts: "This session's artifacts",
   remove: "Remove",
+  /** The question a removal asks under the menu's last item. */
+  /** The artifacts menu's last item: removes the one on show, whose row the menu marks above it. */
+  removeShown: "Remove from this session",
+  /** Its question; one asked from another row (Delete on it) names that one. */
+  removeShownAsk: "Remove this artifact?",
+  removeArtifactAsk: (title: string) => `Remove ${title}?`,
+  removeArtifactBody: "This can't be undone.",
+  removingArtifact: "Removing…",
   /** A promoted row's tag: its commit, short. */
   promoted: (commit: string) => `Promoted ${commit}`,
   promotedTitle: "Promoted into the project's folder",
   notRemoved: (title: string, why: string) => `${title} wasn't removed: ${why}`,
-  /** The head's line under the name once the person's Send is in and the session has not changed it since. */
+  /** What describes the title (the menu's first row and its tooltip) once the person's Send is in and the session has not changed it since. */
   sentTo: (session: string) => `Sent to ${session}`,
   /** A row's dot, for a screen reader: the person has something to do on it. */
   waitingOnYou: commonWords.needsYou,

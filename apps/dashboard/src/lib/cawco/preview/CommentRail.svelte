@@ -1,20 +1,34 @@
 <script lang="ts">
-  import type { Pin } from "@cawco/core/comments";
+  import { type Pin, pinHeld } from "@cawco/core/comments";
   import { parse } from "@cawco/core/find-match";
   import { pinName } from "@cawco/core/pin-name";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   /**
    * The Comments rail (the artifact panel's surface brief, The Comments rail): beside the page on a
-   * desk, the head's Comments its pressed toggle, the page narrowed to meet
-   * it; on a phone, or a pane under 640px, the well's foot sheet, at most 60%
-   * of it. It closes only by its Close or by Comments, never by a press
-   * outside or Esc.
+   * desk, the head's Comments its pressed toggle (its one way shut there),
+   * the page narrowed to meet it; on a phone, or a pane under 640px, the
+   * well's bottom sheet (PreviewPane, ThreadSheet's drawer: a grabber, half
+   * its room and the whole room), shut by its Close, a drag down or
+   * Comments, never by a press outside.
    *
-   * Its head (44px): Comments, then Sort, a comment on the whole page and
-   * Close, each the `sm` ghost glyph. Under it the search field (Find's
-   * engine, core find-match, over each comment's number, words, place and
-   * state; `/` focuses it, Esc clears it), and Open and Resolved, the
-   * segmented filter, each count only above 0. Then the rows, newest first
+   * Its bar is one row (The Title Bars Follow Liquid Glass Rule; HIG,
+   * Toolbars, Item groupings), the same pattern as the panel's head above
+   * it: leading, on the phone's sheet only, Close in its own glass (HIG,
+   * Sheets: a single-view sheet's Cancel leads), then the title, the list
+   * in front with its count (To check, Open or Resolved), a title menu
+   * (HIG, Toolbars: "Next to the title, the toolbar can include a document
+   * menu") choosing the list and the order, hung from the title as one
+   * shape with it (BarMenu); trailing, one glass of bare symbols: Search and
+   * a comment on the whole page. A row of tabs under the bar would be a
+   * second row, and three tabs with their counts and the glass take more
+   * than the rail's 320px. While To check holds comments and another list
+   * is in front, the title wears the needs-you dot. Search (or `/`) turns
+   * the bar into the search field and its Close (HIG, Search fields: in a
+   * top toolbar search "appears as a toolbar button. When someone taps it,
+   * it animates into a search field"): Find's engine, core find-match, over
+   * each comment's number, words, place and state; Esc clears it, and Esc
+   * on an empty field or its Close folds it back.
+   * Then the rows, newest first
    * by last activity (or top of page first), each one press in up to four
    * lines (The Row Dress Rule): the same pill as on the page in its mark
    * cell; the place, its name in label at 500 in the row ink and its age at
@@ -42,24 +56,27 @@
   import { MediaQuery } from "svelte/reactivity";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+    BarPopover,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconAgent,
+    IconChevronDown,
     IconClose,
     IconDocument,
     IconPlus,
     IconRefresh,
     IconSearch,
-    IconSort,
     IconSuccess,
     IconUser,
   } from "#lib/icons.js";
@@ -71,6 +88,7 @@
     reveal,
     revealOut,
   } from "../motion/curves.svelte";
+  import { unfold } from "../motion/fold.svelte";
   import { LINK_DROPPED, type ListHold } from "./artifact-doc";
   import {
     attachedTo,
@@ -97,6 +115,11 @@
     onretry,
     onclose,
     onpage,
+    pageOpen = false,
+    onpageclose,
+    pageComposer,
+    held = 0,
+    onsendheld,
     onresolve,
     onretrypin,
     onshown,
@@ -131,6 +154,19 @@
     onclose: () => void;
     /** A comment on the whole page: its composer opens. */
     onpage: () => void;
+    /**
+     * Beside the page: the whole-page comment's composer stands, hung from
+     * the glass its + is in (BarPopover), never far from it over the page.
+     */
+    pageOpen?: boolean;
+    /** That composer put away (Escape, a press outside it). */
+    onpageclose?: () => void;
+    /** That composer, as the pane draws it. */
+    pageComposer?: Snippet;
+    /** The comments whose words the person holds to send together (core `pinHeld`). */
+    held?: number;
+    /** Send all: everything held goes with `note`; the refusal's sentence when nothing went. */
+    onsendheld?: (note: string) => string | null;
     onresolve: (id: string, resolved: boolean) => void;
     /** A comment not sent, tried again: it goes to the session once more. */
     onretrypin: (id: string) => void;
@@ -156,7 +192,7 @@
     scroll?: number;
   } = $props();
 
-  /** A finger taps the page, a mouse clicks it: the empty line says which; no Resolve on a row under a finger. */
+  /** No Resolve on a row under a finger. */
   const coarse = new MediaQuery("(pointer: coarse)");
 
   let query = $state("");
@@ -173,25 +209,92 @@
     return () => clearTimeout(wait);
   });
   let searchField = $state<HTMLInputElement | null>(null);
-  /** `/` from the pane: the search field takes the keyboard. */
+  /** The bar is the search field: Search pressed, or `/`. */
+  let searching = $state(false);
+  let searchButton = $state<HTMLElement | null>(null);
+  /** `/` from the pane, or Search: the bar becomes the field, and it takes the keyboard. */
   export function focusSearch() {
-    searchField?.focus();
+    searching = true;
+  }
+  // The field takes the keyboard as it stands in the bar.
+  $effect(() => {
+    if (searching && searchField) {
+      searchField.focus();
+    }
+  });
+  /** The field folds back into its symbol, which takes the keyboard back. */
+  function closeSearch() {
+    query = "";
+    searching = false;
+    requestAnimationFrame(() => searchButton?.focus());
   }
 
   const openPins = $derived(pins.filter((pin) => !pin.resolvedAt));
   const resolvedPins = $derived(pins.filter((pin) => !!pin.resolvedAt));
-  const shown = $derived(
-    filter === "check" && checks
-      ? checks.pins.flatMap((id) => pins.filter((pin) => pin.id === id))
-      : searched(
-          sortedPins(filter === "open" ? openPins : resolvedPins, sort),
-          asked
-        )
+  /** A comment waiting on him: an answer he hasn't read. */
+  const waitsOnYou = (pin: Pin) => unread.has(pin.id) && !live.has(pin.id);
+  /** A list in its order, what waits on him first (his job here is to find and answer it). */
+  const waitingFirst = (list: Pin[]) => [
+    ...list.filter(waitsOnYou),
+    ...list.filter((pin) => !waitsOnYou(pin)),
+  ];
+  /**
+   * A search looks in every list, never the one in front alone, and its hits
+   * stand under the name of the list each is in (Open, Resolved), so a hit
+   * is never hidden behind a list he isn't on.
+   */
+  const searchedGroups = $derived(
+    asked.trim()
+      ? [
+          {
+            value: "open" as const,
+            name: said.open,
+            pins: searched(sortedPins(openPins, sort), asked),
+          },
+          {
+            value: "resolved" as const,
+            name: said.resolved,
+            pins: searched(sortedPins(resolvedPins, sort), asked),
+          },
+        ].filter((group) => group.pins.length > 0)
+      : null
   );
+  const shown = $derived.by(() => {
+    if (searchedGroups) {
+      return searchedGroups.flatMap((group) => group.pins);
+    }
+    if (filter === "check" && checks) {
+      return checks.pins.flatMap((id) => pins.filter((pin) => pin.id === id));
+    }
+    return waitingFirst(
+      sortedPins(filter === "open" ? openPins : resolvedPins, sort)
+    );
+  });
   const failed = $derived(typeof hold === "object" ? hold.failed : null);
-  /** A tab's label: its count once the pins are read, and only above 0 (The Earned Count Rule). */
-  const tab = (name: string, count: number) =>
-    hold === "ready" && count > 0 ? `${name} ${count}` : name;
+  /** A list's count once the pins are read, and only above 0 (The Earned Count Rule). */
+  const counted = (count: number) =>
+    hold === "ready" && count > 0 ? count : null;
+  /** Each list the title menu chooses: its name and its count. */
+  const lists = $derived([
+    ...(checks
+      ? [{ value: "check" as const, name: said.toCheck, count: checks.count }]
+      : []),
+    { value: "open" as const, name: said.open, count: openPins.length },
+    {
+      value: "resolved" as const,
+      name: said.resolved,
+      count: resolvedPins.length,
+    },
+  ]);
+  const inFront = $derived(
+    lists.find((one) => one.value === filter) ?? lists[0]
+  );
+  /** To check holds comments while another list is in front: the title's dot says so. */
+  const waiting = $derived(
+    checks && filter !== "check" && hold === "ready" && checks.count > 0
+      ? checks.count
+      : 0
+  );
   /** The query's words, for the matching words a row marks. */
   const marked = $derived(parse(asked).tokens);
 
@@ -268,18 +371,67 @@
     }
   };
 
-  /** A row's words, each word of the query marked in the selection ink. */
+  /**
+   * A row's words, each word of the query marked in the selection ink: the
+   * runs between the hits joined into one text each, so the row's name reads
+   * as its words do, spaces and all.
+   */
   const WORD_AT = /([\p{L}\p{N}]+)/u;
-  const segments = (text: string) =>
-    marked.length === 0
-      ? [{ text, hit: false }]
-      : text
-          .split(WORD_AT)
-          .filter(Boolean)
-          .map((part) => ({
-            text: part,
-            hit: marked.some((word) => part.toLowerCase().startsWith(word)),
-          }));
+  const segments = (text: string) => {
+    if (marked.length === 0) {
+      return [{ text, hit: false }];
+    }
+    const runs: { text: string; hit: boolean }[] = [];
+    for (const part of text.split(WORD_AT).filter(Boolean)) {
+      const hit = marked.some((word) => part.toLowerCase().startsWith(word));
+      const last = runs.at(-1);
+      if (last && !last.hit && !hit) {
+        last.text += part;
+      } else {
+        runs.push({ text: part, hit });
+      }
+    }
+    return runs;
+  };
+
+  /** Where the query's first word starts in `text`, as a row marks it (a word starting with it); -1 for none. */
+  const firstHit = (text: string): number => {
+    let at = 0;
+    for (const part of text.split(WORD_AT)) {
+      if (marked.some((word) => part.toLowerCase().startsWith(word))) {
+        return at;
+      }
+      at += part.length;
+    }
+    return -1;
+  };
+  /** How far into a line a match may stand before the line starts near it instead, characters. Our call: under a line of the rail. */
+  const HIT_LEAD = 40;
+  /** `text`, starting a few words before its first match when that stands further in than a clamped line shows. */
+  const aroundHit = (text: string): string => {
+    const at = firstHit(text);
+    if (at <= HIT_LEAD) {
+      return text;
+    }
+    const from = text.lastIndexOf(" ", at - HIT_LEAD / 2);
+    return `…${text.slice(from > 0 ? from + 1 : at)}`;
+  };
+  /**
+   * What a row's words line says: the comment's first words, or, while a
+   * search finds the comment by words further in (in them past what two
+   * lines show, or in a reply), the passage holding the first match, so
+   * every row a search shows marks what it was found by.
+   */
+  const wordsOf = (pin: Pin, first: string): string => {
+    if (marked.length === 0) {
+      return first;
+    }
+    if (firstHit(first) >= 0) {
+      return aroundHit(first);
+    }
+    const holding = pin.thread.find((entry) => firstHit(entry.text) >= 0);
+    return holding ? aroundHit(holding.text) : first;
+  };
 
   /** A pill's dot: the agent at work on it, else an answer unread, else none. */
   const dotOf = (pin: Pin): "live" | "unread" | null => {
@@ -293,8 +445,32 @@
   const ink = (washed: boolean, own: string) =>
     washed ? "text-selected-ink" : own;
 
+  /** Send all's note standing open under the bar, its words, and why the last Send all didn't go. */
+  let noting = $state(false);
+  let note = $state("");
+  let noteRefused = $state<string | null>(null);
+  // Nothing held, nothing to send: the note goes with the last of them.
+  $effect(() => {
+    if (held === 0) {
+      noting = false;
+    }
+  });
+  function sendHeldNow() {
+    const refused = onsendheld?.(note) ?? null;
+    noteRefused = refused;
+    if (refused === null) {
+      note = "";
+      noting = false;
+    }
+  }
+
   /** What a row says on its line 3, if anything. */
   const backOf = (pin: Pin) => {
+    // Held to send with the others: marked Unsent (the owner's pick, "When
+    // does the agent hear a comment?", 2026-10-26).
+    if (pinHeld(pin)) {
+      return { kind: "held" as const };
+    }
     const why = markState(pin) === "unsent" ? whyNotSent(pin) : null;
     if (why) {
       return { kind: "notSent" as const, why };
@@ -350,17 +526,18 @@
       onpointerleave={() => onhover(null)}
       type="button"
     >
-      <span class="mark-cell">
+      <!-- The pill's cell holds a three-figure pill, so every row's words start at one x. -->
+      <span
+        class="mark-cell w-c-pin-cell-w flex-none justify-start justify-items-start"
+      >
         <PinMark
           dot={dotOf(pin)}
           {gone}
           number={pin.number}
           state={markState(pin)}
         />
-        {#if dotOf(pin) === "unread"}<span class="sr-only"
-            >{said.pinNewAnswer(pin.number)}</span
-          >{:else if dotOf(pin) === "live"}<span class="sr-only"
-            >{said.working}</span
+        <!-- A new answer is said in words on the row's last line. -->
+        {#if dotOf(pin) === "live"}<span class="sr-only">{said.working}</span
           >{/if}
       </span>
       <span class="flex flex-1 min-w-0 flex-col">
@@ -370,7 +547,10 @@
             class={[
               "min-w-0 truncate type-label font-medium",
               ink(washed, gone ? "text-ink-subtle" : "text-ink-row"),
-            ]}>{gone ? said.elementGone : pinName(pin)}</span
+            ]}
+            >{#each segments(gone ? said.elementGone : pinName(pin)) as part, at (at)}{#if part.hit}<mark
+                  class="bg-selection text-inherit rounded-xs">{part.text}</mark
+                >{:else}{part.text}{/if}{/each}</span
           >
           <span
             data-slot="age"
@@ -387,7 +567,7 @@
               "mt-space-row line-clamp-2 type-body text-pretty wrap-anywhere",
               ink(washed, "text-ink-strong"),
             ]}
-            >{#each segments(firstWords) as part, at (at)}{#if part.hit}<mark
+            >{#each segments(wordsOf(pin, firstWords)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
                 >{:else}{part.text}{/if}{/each}</span
           >
@@ -434,6 +614,12 @@
             data-line="back"
             data-not-sent="">{said.notSent(back.why)}</span
           >
+        {:else if back?.kind === "held"}
+          <span
+            class={["mt-space-1 type-meta", ink(washed, "text-ink-muted")]}
+            data-line="back"
+            data-held="">{said.unsent}</span
+          >
         {:else if back?.kind === "said"}
           {@const Speaker = back.by === "agent" ? IconAgent : IconUser}
           <span
@@ -454,7 +640,13 @@
               data-box
               data-speaker={back.by}><Speaker class="size-icon-sm" /></span
             ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{back.text}</span
+              >{#if back.unread}<span
+                  class="text-status-attn-ink font-medium"
+                  data-slot="new-answer">{`${said.newAnswer} · `}</span
+                >{/if}{#each segments(marked.length > 0 ? aroundHit(back.text) : back.text) as part, at (at)}{#if part.hit}<mark
+                    class="bg-selection text-inherit rounded-xs"
+                    >{part.text}</mark
+                  >{:else}{part.text}{/if}{/each}</span
             ></span
           >
         {/if}
@@ -500,100 +692,269 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:w-full data-[layout=sheet]:max-h-full data-[layout=sheet]:border-t data-[layout=sheet]:border-border-hairline data-[layout=sheet]:rounded-ss-lg data-[layout=sheet]:rounded-se-lg data-[layout=sheet]:shadow-drawer"
+  class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised in-data-rail-float:bg-transparent data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
 >
+  <!-- One row: Close leading on the sheet, the title menu, the glass;
+       searching, the field and its Close. The title names a part of the
+       panel, so it stands a step under the panel's own (the head's Row, 16px):
+       Label, 13px at 500, as HIG Typography sets macOS's Headline (13) for a
+       pane's heading, at every width. -->
   <header
     data-slot="head"
-    class="flex flex-none items-center gap-space-1 h-c-sheet-inspector-head-h ps-space-4 pe-space-2"
+    data-searching={searching || undefined}
+    class="flex flex-none items-center gap-space-1 h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
   >
-    <h2
-      data-slot="title"
-      class="flex-1 min-w-0 m-0 truncate text-ink-strong type-label"
-    >
-      {said.comments}
-    </h2>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger
-        aria-label={said.sort}
-        size="icon-sm"
-        title={said.sort}
-        variant="ghost"
-      >
-        <IconSort />
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
-        <DropdownMenu.RadioGroup
-          onValueChange={(next) => {
-            sort = next === "top" ? "top" : "newest";
+    {#if searching}
+      <InputGroup.Root class="flex-1">
+        <InputGroup.Addon><IconSearch /></InputGroup.Addon>
+        <InputGroup.Input
+          aria-keyshortcuts="/"
+          aria-label={said.searchComments}
+          data-slot="search"
+          onkeydown={(event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              if (query) {
+                query = "";
+              } else {
+                closeSearch();
+              }
+            }
           }}
-          value={sort}
+          placeholder={said.searchComments}
+          type="search"
+          bind:ref={searchField}
+          bind:value={query}
+        />
+        {#if query}
+          <InputGroup.Addon align="inline-end">
+            <InputGroup.Button
+              aria-label={said.clearSearch}
+              onclick={() => {
+                query = "";
+                searchField?.focus();
+              }}
+              size="icon-xs"
+              title={said.clearSearch}><IconClose /></InputGroup.Button
+            >
+          </InputGroup.Addon>
+        {/if}
+      </InputGroup.Root>
+      <!-- Cancel puts the search away (HIG, Search fields: a Cancel button
+           beside the field), in words, so it never reads as the field's own
+           Clear (×), which only empties it. -->
+      <BarGlass form="group">
+        <button
+          class="select-none touch-hit press-tint px-space-3 text-ink-strong type-label"
+          data-bar-item
+          data-slot="cancel-search"
+          onclick={closeSearch}
+          type="button"
         >
-          <DropdownMenu.RadioItem value="newest"
-            >{said.newestFirst}</DropdownMenu.RadioItem
+          {said.cancelSearch}
+        </button>
+      </BarGlass>
+    {:else}
+      {#if layout === "sheet"}
+        <BarGlass form="group">
+          <BarItem
+            data-slot="close"
+            icon={IconClose}
+            label={said.closeComments}
+            onclick={onclose}
+          />
+        </BarGlass>
+      {/if}
+      <div class="flex min-w-0 flex-1">
+        <BarGlass flare="end" form="title">
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  aria-label={`${said.whichComments}: ${inFront?.name ?? ""}${waiting ? `, ${said.toCheckWaiting(waiting)}` : ""}`}
+                  class="select-none touch-hit press-tint mark-line min-w-0 gap-space-2 ps-space-2 pe-space-1"
+                  data-bar-item
+                  data-box
+                  data-slot="list"
+                  type="button"
+                >
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-label"
+                    data-slot="title">{inFront?.name}</span
+                  >
+                  {#if inFront && counted(inFront.count) !== null}
+                    <span
+                      class="flex-none text-ink-muted type-label num"
+                      data-slot="count">{counted(inFront.count)}</span
+                    >
+                  {/if}
+                  {#if waiting}
+                    <!-- To check holds comments while another list is in front:
+                         said in words beside the title, the needs-you dot
+                         leading them (DESIGN.md, Status dot), never the dot
+                         alone. -->
+                    <span
+                      aria-hidden="true"
+                      class="flex flex-none items-center gap-space-1 text-ink-strong type-label mark-line"
+                      data-box
+                      data-slot="waiting"
+                      ><span
+                        class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+                        data-box
+                      ></span><span class="num"
+                        >{said.toCheckWaiting(waiting)}</span
+                      ></span
+                    >
+                  {/if}
+                  <IconChevronDown
+                    aria-hidden="true"
+                    class="size-icon-sm flex-none text-ink-muted"
+                  />
+                </button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <BarMenu label={said.whichComments}>
+              <DropdownMenu.RadioGroup
+                onValueChange={(next) => {
+                  filter = next as "check" | "open" | "resolved";
+                }}
+                value={filter}
+              >
+                {#each lists as one (one.value)}
+                  <DropdownMenu.RadioItem value={one.value}
+                    ><span class="min-w-0 flex-1">{one.name}</span
+                    >{#if counted(one.count) !== null}<span
+                        class="text-ink-muted num">{counted(one.count)}</span
+                      >{/if}</DropdownMenu.RadioItem
+                  >
+                {/each}
+              </DropdownMenu.RadioGroup>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Group>
+                <DropdownMenu.GroupHeading
+                  >{said.order}</DropdownMenu.GroupHeading
+                >
+                <DropdownMenu.RadioGroup
+                  onValueChange={(next) => {
+                    sort = next === "top" ? "top" : "newest";
+                  }}
+                  value={sort}
+                >
+                  <DropdownMenu.RadioItem value="newest"
+                    >{said.newestFirst}</DropdownMenu.RadioItem
+                  >
+                  <DropdownMenu.RadioItem value="top"
+                    >{said.topOfPageFirst}</DropdownMenu.RadioItem
+                  >
+                </DropdownMenu.RadioGroup>
+              </DropdownMenu.Group>
+            </BarMenu>
+          </DropdownMenu.Root>
+        </BarGlass>
+      </div>
+      <BarGlass form="group">
+        <BarItem
+          aria-keyshortcuts="/"
+          icon={IconSearch}
+          keys="/"
+          label={said.searchComments}
+          onclick={focusSearch}
+          bind:ref={searchButton}
+        />
+        {#if layout === "beside" && pageComposer}
+          <!-- A comment on the whole page: its composer hangs from this glass,
+               connected to its +, as every card a bar opens does. -->
+          <Popover.Root
+            onOpenChange={(next) => {
+              if (next) {
+                onpage();
+              } else {
+                onpageclose?.();
+              }
+            }}
+            open={pageOpen}
           >
-          <DropdownMenu.RadioItem value="top"
-            >{said.topOfPageFirst}</DropdownMenu.RadioItem
-          >
-        </DropdownMenu.RadioGroup>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
-    <Button
-      aria-label={said.onWholePage}
-      icon={IconPlus}
-      onclick={onpage}
-      size="icon-sm"
-      title={said.onWholePage}
-      variant="ghost"
-    />
-    <Button
-      aria-label={said.closeComments}
-      icon={IconClose}
-      onclick={onclose}
-      size="icon-sm"
-      title={said.closeComments}
-      variant="ghost"
-    />
+            <Popover.Trigger>
+              {#snippet child({ props })}
+                <BarItem icon={IconPlus} label={said.onWholePage} {props} />
+              {/snippet}
+            </Popover.Trigger>
+            <BarPopover label={said.onWholePage}>
+              <div class="w-c-pin-card-w max-w-full p-space-2">
+                {@render pageComposer()}
+              </div>
+            </BarPopover>
+          </Popover.Root>
+        {:else}
+          <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
+        {/if}
+      </BarGlass>
+      {#if held > 0 && onsendheld}
+        <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
+             "Only specify one primary action, and put it on the trailing
+             side"), its count what it sends; pressed, its note unfolds
+             under the bar. -->
+        <Button
+          aria-expanded={noting}
+          aria-label={said.sendHeldLabel(held)}
+          data-slot="send-held"
+          onclick={() => {
+            noting = !noting;
+            noteRefused = null;
+          }}><span>{said.send}</span><span class="num">{held}</span></Button
+        >
+      {/if}
+    {/if}
   </header>
-  <div class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-2">
-    <InputGroup.Root>
-      <InputGroup.Addon><IconSearch /></InputGroup.Addon>
-      <InputGroup.Input
-        aria-keyshortcuts="/"
-        aria-label={said.searchComments}
-        data-slot="search"
+  {#if noting && held > 0 && onsendheld}
+    <!-- Send all's note, under the bar where Send was pressed, as Delete
+         asks under the card's bar: one note to the agent with everything
+         held, then Send. ⌘↩ sends from the note. -->
+    <div
+      class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-3"
+      data-slot="held-note"
+      transition:unfold
+    >
+      <Textarea
+        aria-label={said.heldNote}
         onkeydown={(event: KeyboardEvent) => {
-          if (event.key === "Escape" && query) {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            sendHeldNow();
+          } else if (event.key === "Escape") {
             event.preventDefault();
             event.stopPropagation();
-            query = "";
+            noting = false;
           }
         }}
-        placeholder={said.searchComments}
-        type="search"
-        bind:ref={searchField}
-        bind:value={query}
+        placeholder={said.heldNote}
+        rows={2}
+        bind:value={note}
       />
-    </InputGroup.Root>
-    <Tabs
-      onValueChange={(next) => {
-        filter = next as "check" | "open" | "resolved";
-      }}
-      size="compact"
-      value={filter}
-      values={checks ? ["check", "open", "resolved"] : ["open", "resolved"]}
-    >
-      <TabsList aria-label="Which comments">
-        {#if checks}
-          <TabItem label={tab(said.toCheck, checks.count)} value="check" />
-        {/if}
-        <TabItem label={tab(said.open, openPins.length)} value="open" />
-        <TabItem
-          label={tab(said.resolved, resolvedPins.length)}
-          value="resolved"
-        />
-      </TabsList>
-    </Tabs>
-  </div>
+      {#if noteRefused}
+        <p class="m-0 type-meta text-status-fail-ink" role="alert">
+          {noteRefused}
+        </p>
+      {/if}
+      <div class="flex justify-end gap-space-2">
+        <Button
+          onclick={() => {
+            noting = false;
+          }}
+          size="sm"
+          variant="ghost">{said.cancelSearch}</Button
+        >
+        <Button
+          aria-keyshortcuts="Control+Enter Meta+Enter"
+          data-slot="send-held-now"
+          onclick={sendHeldNow}
+          size="sm">{said.sendHeldCount(held)}</Button
+        >
+      </div>
+    </div>
+  {/if}
   {#if down !== null && failed === null}
     <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
     <RowFault
@@ -608,7 +969,7 @@
   {/if}
   <div
     data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain border-t border-border-hairline kit-edge-fade-block"
+    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain kit-edge-fade-block"
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}
@@ -633,7 +994,9 @@
             class="flex items-start gap-space-3 min-h-c-artifact-row-h px-space-2 py-space-2"
             data-slot="skeleton-row"
           >
-            <span class="mark-cell">
+            <span
+              class="mark-cell w-c-pin-cell-w flex-none justify-start justify-items-start"
+            >
               <Skeleton cell="pin" radius="pill" />
             </span>
             <span class="flex flex-1 min-w-0 flex-col">
@@ -669,7 +1032,31 @@
         in:reveal
         {@attach keepScroll}
       >
-        {#if filter === "check" && checks}
+        {#if searchedGroups}
+          {#if searchedGroups.length > 0}
+            {#each searchedGroups as group (group.value)}
+              <!-- The list each hit is in, named over its hits. -->
+              <h3
+                class="m-0 px-space-2 pt-space-2 pb-space-1 text-ink-muted type-meta first:pt-0"
+                data-slot="hits-in"
+              >
+                {group.name} <span class="num">{group.pins.length}</span>
+              </h3>
+              <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
+                {#each group.pins as pin (pin.id)}
+                  {@render boundedRow(pin)}
+                {/each}
+              </ol>
+            {/each}
+          {:else}
+            <p
+              data-slot="pin-list-empty"
+              class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
+            >
+              {said.noMatch(asked.trim())}
+            </p>
+          {/if}
+        {:else if filter === "check" && checks}
           {#if checks.count > 0}
             <ol
               class="flex flex-col gap-space-row m-0 p-0 list-none"
@@ -697,20 +1084,12 @@
               {@render boundedRow(pin)}
             {/each}
           </ol>
-        {:else if asked.trim()}
+        {:else if filter === "open"}
           <p
             data-slot="pin-list-empty"
             class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
           >
-            {said.noMatch(asked.trim())}
-          </p>
-        {:else if filter === "open"}
-          <p
-            data-slot="pin-list-empty"
-            class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
-          >
-            <span class="text-ink-strong type-label">{said.noneOpen}</span>
-            {coarse.current ? said.noneOpenTap : said.noneOpenClick}
+            {said.noneOpen}
           </p>
         {:else}
           <p

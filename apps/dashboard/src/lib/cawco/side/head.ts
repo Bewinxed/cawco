@@ -7,9 +7,13 @@
  * mode as one button, the chosen mode's glyph opening the three; Send
  * and Comments by glyph and count), the first with no room and every one
  * after it going in head order into one More menu before Close, so a wider
- * head never stands fewer. Then forms widen, each only where the room left
- * holds it: the mode takes its three segments back, then, on a pane
- * {@link WORDS_FROM}px or wider, Send and then Comments their words.
+ * head never stands fewer. The name takes the rest of its own width (on a
+ * phone's head, two lines' worth) once the controls up to
+ * {@link NAME_AFTER} stand, before any after them, so Reload, Open and
+ * Expand go to More before the title an agent wrote is cut; and forms
+ * widen only after it, each only where the room left holds it: the mode takes its three segments
+ * back, then, on a pane {@link WORDS_FROM}px or wider, Send and then
+ * Comments their words (the artifact panel's surface brief, The title).
  */
 import type { Component, Snippet } from "svelte";
 
@@ -26,6 +30,13 @@ export interface HeadItem {
   key: string;
   /** The same control as More's entries. */
   menu: Snippet;
+  /**
+   * Where it stands in the head (HIG, Toolbars, Item groupings): in the
+   * trailing glass of bare symbols (none), the centre (the mode, a
+   * segmented control), or after the glass as the one prominent action
+   * (Send, Take over).
+   */
+  place?: "centre" | "prominent";
   /** Its place in {@link HEAD_PRIORITY}: the lower stands while the higher goes to More. */
   priority: number;
   /** `bar` says words its glyph and count stand without (Send, Comments): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */
@@ -49,6 +60,9 @@ export const HEAD_PRIORITY = {
 
 /** The name keeps its own width up to this, in px, before any control stands. */
 export const NAME_KEEPS = 120;
+
+/** The controls of this priority or lower stand before the name takes the rest of its width: the prominent action, the mode and Comments. */
+const NAME_AFTER = HEAD_PRIORITY.comments;
 
 /** A pane this wide, in px, or wider lets Send and Comments say their words where the room holds them. */
 export const WORDS_FROM = 640;
@@ -75,11 +89,16 @@ interface Sized {
  * width it will be drawn at: `more.counted` while a `counted` control is
  * still to go in it, else `more.glyph`. Each control's place so hangs on
  * the ones before it and on `room` alone, and who stands grows with `room`,
- * so a wider head stands every control a narrower one does. Then forms
- * widen in priority order, each only where the room left holds the
+ * so a wider head stands every control a narrower one does. Before the
+ * first control past {@link NAME_AFTER}, the name takes what it still wants
+ * past what it kept (`nameWants`), as much as the room left beside More
+ * holds; then forms widen in priority order, each only where the room left holds the
  * difference: a one-button form its whole form first, then, with `words`
  * (a pane {@link WORDS_FROM}px or wider), a control's words. `gap` is the
- * head's own between any two.
+ * head's own between what always stands; `itemGap` the glass's between its
+ * controls and More (under a finger the glass spaces its symbols wider than
+ * the head its groups: taken at the head's, the controls stood 10px each
+ * wider than measured and the name lost that room).
  */
 export function standing(
   room: number,
@@ -87,31 +106,45 @@ export function standing(
   kept: number[],
   more: { counted: number; glyph: number },
   items: Sized[],
-  words: boolean
+  words: boolean,
+  nameWants = 0,
+  itemGap = gap
 ): Map<string, Standing> {
   const base = kept.reduce((sum, width) => sum + width + gap, -gap);
   const narrowest = (one: Sized) =>
     Math.min(one.width, one.compact ?? one.width);
   const ranked = [...items].sort((a, b) => a.priority - b.priority);
-  const all = ranked.reduce((sum, one) => sum + gap + narrowest(one), 0);
+  const all = ranked.reduce((sum, one) => sum + itemGap + narrowest(one), 0);
   const whole = base + all <= room;
   /** More's room beside the controls from `from` on, which go in it. */
   const moreOf = (from: number) =>
     whole
       ? 0
-      : gap +
+      : itemGap +
         (ranked.slice(from).some((one) => one.counted)
           ? more.counted
           : more.glyph);
   let left = room - base;
   const shown = new Map<string, Standing>();
+  let named = false;
+  /** The name takes the rest of its width, as much as the room left beside More holds (`from` on going in it). */
+  const name = (from: number) => {
+    if (!named) {
+      named = true;
+      left -= Math.max(0, Math.min(nameWants, left - moreOf(from)));
+    }
+  };
   for (const [at, one] of ranked.entries()) {
-    if (gap + narrowest(one) + moreOf(at + 1) > left) {
+    if (one.priority > NAME_AFTER) {
+      name(at);
+    }
+    if (itemGap + narrowest(one) + moreOf(at + 1) > left) {
       break;
     }
-    left -= gap + narrowest(one);
+    left -= itemGap + narrowest(one);
     shown.set(one.key, narrowest(one) < one.width ? "compact" : "whole");
   }
+  name(shown.size);
   left -= moreOf(shown.size);
   const widen = (one: Sized) => {
     const back = one.width - narrowest(one);

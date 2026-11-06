@@ -5,6 +5,7 @@
     newAnswer,
     type Pin,
     type PreviewMode,
+    pinHeld,
     pinProblem,
     previewMode,
     replyAgain,
@@ -77,7 +78,7 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -91,15 +92,12 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { Toggle } from "#lib/components/ui/toggle/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconAlert,
     IconArchive,
     IconChat,
-    IconChevronLeft,
-    IconChevronRight,
     IconExternal,
-    IconEyeClosed,
     IconGlobe,
     IconInteract,
     IconLock,
@@ -111,7 +109,6 @@
     IconTrash,
     IconTuning,
     IconUndock,
-    IconWarningTriangle,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
@@ -158,9 +155,8 @@
     easeDrawer,
     easeOut,
     motionOk,
+    numberOf,
     revealOn,
-    rise,
-    sheetSlide,
   } from "../motion/curves.svelte";
   import { landKey } from "../motion/keyed.svelte";
   import { settleAway } from "../motion/rest.js";
@@ -197,7 +193,9 @@
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import CanvasView from "./CanvasView.svelte";
   import ChangeLines, { type ChangeLine } from "./ChangeLines.svelte";
+  import ChangesTag from "./ChangesTag.svelte";
   import CommentRail from "./CommentRail.svelte";
+  import CommentsButton from "./CommentsButton.svelte";
   import CoverState, { type CoverWaiting } from "./CoverState.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
   import type { CommentDrafts } from "./comment-drafts.svelte";
@@ -207,6 +205,7 @@
     type RailSort,
   } from "./comment-rows";
   import { loadedPanes } from "./loaded.svelte";
+  import ModeButton from "./ModeButton.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
@@ -1380,8 +1379,6 @@
       ? artifactWords.sentTo(ownerName)
       : (artifact?.ask ?? "")
   );
-  /** Whether the head has room for its line under the name (SideSurface's rule); else the menu says it first. */
-  let lineStands = $state(true);
   /*
    * A sheet's stage (live components): the project's own dev toolchain
    * (Vite, Astro or Nuxt), which the
@@ -1609,6 +1606,13 @@
       ? pins.filter((pin) => !pin.resolvedAt).length
       : 0
   );
+  /** The comments the person holds to send together (core `pinHeld`): Send all's count. */
+  const heldCount = $derived(pins.filter(pinHeld).length);
+  /** Send all: every held comment and reply let go in one write with the note; the hub's next delivery carries them (core `sendHeld`). */
+  const sendHeldNow = (note: string): string | null =>
+    doc
+      ? doc.sendHeld(note)
+      : "The pane lost the page's document, so nothing was sent. Reload, then send again.";
   /**
    * What Send sends (the artifact panel's surface brief, How comments reach the session): each pick
    * since the last Send. The person's comments go by themselves. Drawn only
@@ -1898,12 +1902,16 @@
       {
         type: "cawco:hello",
         theme: theme.resolved,
+        // The head names the page by its title: a page that says it too (a
+        // decision page's own title) leaves it out (overlay `data-cawco-headed`).
+        headed: !inset,
         ...(artifact
           ? {
               artifact: {
                 id: artifact.id,
                 kind: artifact.kind,
                 name: artifact.name,
+                title: artifact.title,
               },
               sync: artifactSyncPath(artifact.id),
             }
@@ -1996,7 +2004,12 @@
   const drawnPin = $derived.by(() => {
     if (!openPin) {
       lastDrawn = closingPin;
-    } else if (floatSheet || !connected || pinHeard === openPin) {
+    } else if (
+      floatSheet ||
+      threadPushed ||
+      !connected ||
+      pinHeard === openPin
+    ) {
       lastDrawn = openPin;
     }
     return lastDrawn;
@@ -2020,9 +2033,24 @@
   let composerFloat = $state<HTMLElement>();
   /** The thread's or the composer's float: told to the page as what covers it on a phone. */
   let cardFloat = $state<HTMLElement>();
-  /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a thread, a composer or a place picker stands, so neither covers the other. */
+  /** The comment being written was asked for the whole page from the rail's + (its composer then hangs from the rail's glass beside the page). */
+  let composingPage = $state(false);
+  $effect(() => {
+    if (!composing) {
+      composingPage = false;
+    }
+  });
+  /** Changed since you looked, over the page at the well's foot: told to the page as what covers it. */
+  let changesTag = $state<HTMLFieldSetElement>();
+  /** How tall the page's own foot bar stands over its viewport's foot, px (`cawco:page-foot`): the tag stands above it. */
+  let pageFoot = $state(0);
+  /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
+  const pageHung = $derived(
+    composingPage && !!composing && listOpen && !railSheet
+  );
+  /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
   const railAway = $derived(
-    listOpen && railSheet && (!!cardPin || !!composing || !!picking)
+    listOpen && railSheet && (!!composing || !!picking)
   );
   /**
    * How much of the well's foot a software keyboard covers, px: what stands
@@ -2069,19 +2097,24 @@
   /**
    * What the host's chrome covers of the page, told to its overlay
    * (`cawco:covered`, the page's viewport px): on a phone, the thread or the
-   * composer standing at the well's foot. A pin the pane opens is brought
-   * out from under them (pins.ts `reveal`). Told again as either resizes,
-   * and as nothing once neither stands. The rail's foot sheet is a layer
-   * over the page that never moves it: it stands aside for a thread
-   * (`railAway`), so no pin is brought out from under it.
+   * composer standing at the well's foot; at every width, Changed since you
+   * looked floating at the foot. A pin the pane opens is brought out from
+   * under them (pins.ts `reveal`). Told again as any resizes, and as
+   * nothing once none stands. The rail's foot sheet holding its list is a
+   * layer over the page that never moves it, so no pin is brought out from
+   * under it; holding a thread (`threadPushed`), it is told, so that
+   * thread's pin is.
    */
   $effect(() => {
     const frame = iframe;
-    const sheetCard = floatSheet ? (cardFloat ?? composerFloat ?? null) : null;
+    const floating = floatSheet ? (cardFloat ?? composerFloat ?? null) : null;
+    const sheetCard = threadPushed ? (railSurface ?? null) : floating;
     if (!(frame && connected)) {
       return;
     }
-    const covering = [sheetCard].filter((el): el is HTMLElement => !!el);
+    const covering = [sheetCard, changesTag].filter(
+      (el): el is HTMLElement => !!el
+    );
     if (covering.length === 0) {
       post({ type: "cawco:covered", boxes: [] });
       return;
@@ -2109,6 +2142,40 @@
       sayCovered = null;
       sized.disconnect();
     };
+  });
+  /**
+   * Room under the page's foot while Changed since you looked floats over it
+   * (`cawco:foot-room`, px): from the tag's top to the frame's foot and a
+   * gap, so the page scrolls that much further and its last line comes clear
+   * of the tag, as iOS insets content under a floating bottom bar; none once
+   * the tag goes.
+   */
+  $effect(() => {
+    const frame = iframe;
+    const tag = changesTag;
+    if (!(frame && connected)) {
+      return;
+    }
+    if (!tag) {
+      post({ type: "cawco:foot-room", px: 0 });
+      return;
+    }
+    const gap = numberOf("--space-2");
+    const sayNow = () => {
+      const foot = frame.getBoundingClientRect().bottom - frame.clientTop;
+      post({
+        type: "cawco:foot-room",
+        px: Math.max(
+          0,
+          Math.ceil(foot - tag.getBoundingClientRect().top + gap)
+        ),
+      });
+    };
+    const sized = frameObserver(sayNow);
+    sized.observe(tag);
+    sized.observe(frame);
+    sized.request();
+    return () => sized.disconnect();
   });
   /** Pins the agent is working on: the last delivery carried them and its turn runs. */
   const live = $derived.by(() => {
@@ -2490,18 +2557,6 @@
     }
   });
 
-  /** J and K step the tag while it holds the focus; elsewhere they step the pins. */
-  function tagKey(event: KeyboardEvent) {
-    const key = event.key.toLowerCase();
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-      return;
-    }
-    if (key === "j" || key === "k") {
-      event.preventDefault();
-      stepChange(key === "j" ? 1 : -1, "key");
-    }
-  }
-
   /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
   const stepping = $derived(
     pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
@@ -2736,15 +2791,15 @@
       parked: kept.parked,
     });
   }
-  /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once. */
-  function comment(text: string) {
+  /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once; `held`, kept to send with the others (core `ThreadEntry.held`). */
+  function comment(text: string, held = false) {
     if (!(composing && nextDraft)) {
       return;
     }
     const said = saidIn(nextDraft, text);
     composing.error = "";
     composing.sending = true;
-    post({ type: "cawco:comment", ...said });
+    post({ type: "cawco:comment", ...said, held });
   }
   /** The page's answer to Comment: written, the composer goes; refused, the words are back in it with why. */
   function heardComment(message: Record<string, unknown>) {
@@ -2913,12 +2968,12 @@
     placingFrom = null;
   }
   /** The person's words in the open thread; a resolved pin's reply reopens it ("Reply to reopen"). */
-  function reply(text: string) {
+  function reply(text: string, held = false) {
     const draft = replyDraft;
     if (!(openPin && draft)) {
       return;
     }
-    const said = saidIn(draft, text);
+    const said = { ...saidIn(draft, text), held };
     const reopens = !!cardPin?.resolvedAt;
     if (onlyOnPage(openPin)) {
       // The page holds the pin and keeps the words on its device until the
@@ -3385,6 +3440,13 @@
       case "cawco:change-stops":
         pageStops = changeStopsOf(message.stops);
         break;
+      // The page's own foot bar over the viewport's foot (its Send): Changed since you looked stands above it.
+      case "cawco:page-foot":
+        pageFoot =
+          typeof message.px === "number" && Number.isFinite(message.px)
+            ? Math.max(0, message.px)
+            : 0;
+        break;
       case "cawco:change-pressed":
         changePressed(message.anchor);
         break;
@@ -3603,6 +3665,47 @@
    * Undock fly that same iframe between the composer and here.
    */
   const isCanvas = $derived(artifact?.kind === "canvas");
+  /** The rail's bottom sheet stands up (ThreadSheet `open`). */
+  const railSheetOpen = $derived(
+    listOpen && railPlaced && !isCanvas && railSheet && !railAway
+  );
+  /** The rail's bottom sheet is drawn: from its open until it has slid down (ThreadSheet `onclosed`). */
+  let railSheetDrawn = $state(false);
+  /** The rail's bottom sheet's surface: what covers the page while a thread stands in it. */
+  let railSurface = $state<HTMLElement>();
+  /**
+   * A thread opened while the Comments sheet stands opens in that sheet,
+   * over its list, Back leading (HIG, Sheets: "Display only one sheet at a
+   * time"), never as a second sheet after the list's goes.
+   */
+  const threadPushed = $derived(
+    listOpen && railPlaced && !isCanvas && railSheet && openPin !== null
+  );
+  /** The list in front holds nothing: the sheet stands low, never half its room empty (ThreadSheet `short`). */
+  const railEmpty = $derived(
+    listFilter === "check"
+      ? checkCount === 0
+      : !pins.some((pin) =>
+          listFilter === "open" ? !pin.resolvedAt : !!pin.resolvedAt
+        )
+  );
+  /** Back, in the sheet: the list again, the thread gone at once (no card goes back into a pill). */
+  function backToList() {
+    closeCard();
+    closingPin = null;
+  }
+  /** The Comments sheet goes, with a thread standing in it. */
+  function closeSheet() {
+    if (threadPushed) {
+      backToList();
+    }
+    showList(false);
+  }
+  $effect(() => {
+    if (railSheetOpen) {
+      railSheetDrawn = true;
+    }
+  });
   /*
    * A browser (Projects spec §5.11, "The view") is its stream in the well
    * (BrowserView), its head's own control Take over, or Hand back while the
@@ -3852,6 +3955,7 @@
         priority: HEAD_PRIORITY.control,
         bar: controlBar,
         menu: controlMenu,
+        place: "prominent",
       });
     }
     // A decision page's one Send is its own, at its foot (its doc's
@@ -3862,6 +3966,7 @@
         priority: HEAD_PRIORITY.send,
         bar: sendBar,
         menu: sendMenu,
+        place: "prominent",
         words: true,
       });
     }
@@ -3917,6 +4022,7 @@
         compact: modeCompact,
         menu: modeMenu,
         group: true,
+        place: "centre",
       });
       all.push({
         key: "comments",
@@ -3924,7 +4030,6 @@
         bar: commentsBar,
         menu: commentsMenu,
         count: { glyph: IconChat, n: listOpen ? 0 : openCount, of: "Comments" },
-        words: true,
       });
     }
     all.push({
@@ -4034,7 +4139,9 @@
 {/snippet}
 
 <!-- The head's controls, each as the head draws it and as More's entries
-     (SideSurface `items`, by the head's priority rule). -->
+     (SideSurface `items`, by the head's priority rule): the bare symbols of
+     its glass, the mode in its centre, and Send (or a browser's Take over)
+     the one prominent action after the glass, on the coral. -->
 {#snippet sendBar()}
   <!-- What of the page the session hasn't heard, picks and comments alike: one press sends it all. -->
   <Button
@@ -4042,9 +4149,7 @@
     aria-label={`${commentWords.send}, ${unsentCount} unsent`}
     onclick={() => sendAll("panel-head")}
     pending={sending}
-    size="sm"
     title="Send what the session hasn't heard"
-    variant="ghost"
   >
     <PendingContent icon={IconSend} pending={sending} />
     <span data-slot="send-label" class="in-form-compact:hidden"
@@ -4073,7 +4178,6 @@
     onclick={browserControl}
     pending={browserActing}
     pendingLabel={holding ? browserWords.handingBack : browserWords.takingOver}
-    size="sm"
     variant={holding ? "outline" : "default"}
   />
 {/snippet}
@@ -4090,14 +4194,15 @@
 {/snippet}
 
 {#snippet createBar()}
-  <Button
-    aria-label="New canvas"
+  <BarItem
+    aria-busy={making || undefined}
     icon={IconPlus}
-    onclick={newCanvas}
-    pending={making}
-    size="icon-sm"
-    title="New canvas"
-    variant="ghost"
+    label="New canvas"
+    onclick={() => {
+      if (!making) {
+        newCanvas();
+      }
+    }}
   />
 {/snippet}
 {#snippet createMenu()}
@@ -4110,18 +4215,17 @@
 {/snippet}
 
 {#snippet undockBar()}
-  <Button
+  <BarItem
     data-slot="other"
-    aria-label="Undock"
-    dimmed={mode !== "interact" && !isCanvas}
-    disabled={!stage}
-    onclick={() => giveBack(false)}
-    size="icon-sm"
-    title="Undock"
-    variant="ghost"
-  >
-    <IconUndock />
-  </Button>
+    aria-disabled={!stage || undefined}
+    icon={IconUndock}
+    label="Undock"
+    onclick={() => {
+      if (stage) {
+        giveBack(false);
+      }
+    }}
+  />
 {/snippet}
 {#snippet undockMenu()}
   <DropdownMenu.Item disabled={!stage} onSelect={() => giveBack(false)}>
@@ -4132,17 +4236,13 @@
 {#snippet openBar()}
   {#if artifact}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
-    <Button
+    <BarItem
       data-slot="other"
-      aria-label="Open in new tab"
-      dimmed={mode !== "interact" && !isCanvas}
       href={`/artifact/${encodeURIComponent(artifact.id)}`}
-      rel="noopener"
-      size="icon-sm"
-      target="_blank"
-      title="Open in new tab"
-      variant="ghost"><IconExternal /></Button
-    >
+      icon={IconExternal}
+      label="Open in new tab"
+      props={{ rel: "noopener", target: "_blank" }}
+    />
   {/if}
 {/snippet}
 {#snippet openMenu()}
@@ -4185,15 +4285,22 @@
 
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
-  <Toggle
-    aria-label={artifactWords.inspect}
-    onPressedChange={(open) => showInspector(open)}
-    pressed={inspectOpen}
-    size="sm"
-    title={artifactWords.inspectTitle}
-  >
-    <IconTuning />
-  </Toggle>
+  <Tip label={artifactWords.inspectTitle}>
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label={artifactWords.inspect}
+        aria-pressed={inspectOpen}
+        class="select-none touch-hit press-tint aria-pressed:bg-surface-pressed"
+        data-bar-item
+        data-box
+        onclick={() => showInspector(!inspectOpen)}
+        type="button"
+      >
+        <IconTuning aria-hidden="true" data-slot="bar-symbol" />
+      </button>
+    {/snippet}
+  </Tip>
 {/snippet}
 {#snippet inspectMenu()}
   <!-- Its glyph as the bar's, so its words start where More's other entries' do. -->
@@ -4209,39 +4316,41 @@
   <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
        the kit's segmented control, its indicator on the chosen one. -->
   <div data-slot="modes">
-    <Tabs
-      onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
-      size="compact"
-      value={mode}
-      values={["interact", "comment", "draw"]}
-    >
-      <TabsList aria-label={previewWords.previewMode}>
-        <TabItem
-          aria-keyshortcuts="V"
-          glyphOnly
-          icon={IconInteract}
-          label="Interact"
-          title="Interact (V): the page gets every click"
-          value="interact"
-        />
-        <TabItem
-          aria-keyshortcuts="C"
-          glyphOnly
-          icon={IconPin}
-          label="Comment"
-          title="Comment (C): a click pins a comment"
-          value="comment"
-        />
-        <TabItem
-          aria-keyshortcuts="D"
-          glyphOnly
-          icon={IconPen}
-          label="Draw"
-          title="Draw (D): drag to draw on the page"
-          value="draw"
-        />
-      </TabsList>
-    </Tabs>
+    <BarGlass form="group">
+      <Tabs
+        onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
+        size="bar"
+        value={mode}
+        values={["interact", "comment", "draw"]}
+      >
+        <TabsList aria-label={previewWords.previewMode}>
+          <TabItem
+            aria-keyshortcuts="V"
+            glyphOnly
+            icon={IconInteract}
+            label="Interact"
+            title="Interact (V): the page gets every click"
+            value="interact"
+          />
+          <TabItem
+            aria-keyshortcuts="C"
+            glyphOnly
+            icon={IconPin}
+            label="Comment"
+            title="Comment (C): a click pins a comment"
+            value="comment"
+          />
+          <TabItem
+            aria-keyshortcuts="D"
+            glyphOnly
+            icon={IconPen}
+            label="Draw"
+            title="Draw (D): drag to draw on the page"
+            value="draw"
+          />
+        </TabsList>
+      </Tabs>
+    </BarGlass>
   </div>
 {/snippet}
 {#snippet modeMenu()}
@@ -4273,60 +4382,53 @@
 <!-- The mode as one button where the head has no room for its three
      segments: the chosen mode's glyph, opening the three. -->
 {#snippet modeCompact()}
-  {@const Glyph = MODE_GLYPHS[mode]}
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger
-      aria-label={`Mode: ${MODE_WORDS[mode]}`}
-      size="icon-sm"
-      title={`Mode: ${MODE_WORDS[mode]} (V, C, D)`}
-      variant="ghost"
-    >
-      <Glyph />
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" width="compact">
-      {@render modeMenu()}
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
+  <ModeButton
+    glyph={MODE_GLYPHS[mode]}
+    keys="V, C, D"
+    menu={modeMenu}
+    word={MODE_WORDS[mode]}
+  />
+{/snippet}
+
+<!-- The comment being written: in its float by its target, or, a whole-page
+     comment asked from the rail beside the page, hung from the rail's glass
+     (CommentRail `pageComposer`). -->
+{#snippet composerBody()}
+  {#if composing && kit && nextDraft}
+    {@const Composer = kit.CommentComposer}
+    <Composer
+      action="Comment"
+      chain={composing.chain.map((one) =>
+        pinName({
+          anchor: one.anchor,
+          elements: one.elements,
+        } as unknown as Pin)
+      )}
+      chosen={composing.chosen}
+      draft={nextDraft}
+      focus
+      onchange={() => drafts?.changed(NEXT_COMMENT)}
+      onchoose={(index) => post({ type: "cawco:compose-target", index })}
+      onhold={(text) => comment(text, true)}
+      onsubmit={(text) => comment(text)}
+      placeholder={commentWords.composeHint}
+      sendError={composing.error}
+      sending={composing.sending}
+    />
+  {/if}
 {/snippet}
 
 {#snippet commentsBar()}
-  <!-- The Comments rail's toggle; the count is the open comments', drawn only while the rail is shut. -->
-  <Button
-    data-slot="comments"
-    aria-expanded={listOpen}
-    aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}${linkDown ? `, ${NOT_REACHING}` : ""}`}
-    data-link-down={linkDown ? "" : undefined}
-    expanded="pressed"
+  <CommentsButton
+    count={openCount}
+    down={linkDown ? NOT_REACHING : null}
+    label={commentsTitle}
     onclick={() => showList(!listOpen)}
-    size="sm"
-    title={commentsTitle}
-    variant="ghost"
-  >
-    <!-- The open count is the kit Badge's corner form on the bubble's
-         top trailing corner (ui/badge `corner`): it takes no room, so the
-         bubble stays centred in its glyph form. -->
-    <!-- mark-line: the count is a badge on the bubble's corner, never words beside it -->
-    <span
-      class="relative inline-grid flex-none"
-      data-box
-      data-slot="comments-glyph"
-      style:--count-glyph="var(--icon-md)"
-      ><IconChat />{#if openCount > 0 && !listOpen}<Badge
-          data-slot="count"
-          size="corner"><span>{openCount}</span></Badge
-        >{/if}</span
-    ><span class="in-form-compact:hidden" data-slot="comments-label"
-      >Comments</span
-    >
-    {#if !pinsShown}
-      <!-- ⇧C hid the pins: said where the person looks for them. -->
-      <IconEyeClosed />
-    {/if}
-    {#if linkDown}
-      <!-- The comments aren't reaching the agent: said where the person looks for them, why in the panel. -->
-      <IconWarningTriangle class="text-data-bad" />
-    {/if}
-  </Button>
+    open={listOpen}
+    held={heldCount}
+    {pinsShown}
+    toCheck={checkCount}
+  />
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
@@ -4338,17 +4440,12 @@
 {/snippet}
 
 {#snippet reloadBar()}
-  <Button
+  <BarItem
     data-slot="other"
-    aria-label="Reload"
-    dimmed={mode !== "interact" && !isCanvas}
+    icon={IconRefresh}
+    label="Reload"
     onclick={reloadPage}
-    size="icon-sm"
-    title="Reload"
-    variant="ghost"
-  >
-    <IconRefresh />
-  </Button>
+  />
 {/snippet}
 {#snippet reloadMenu()}
   <DropdownMenu.Item onSelect={reloadPage}>
@@ -4365,7 +4462,6 @@
       {instanceId}
       held={preview?.artifacts}
       line={headLine}
-      lineDropped={!lineStands}
       lineId={`${paneId}-line`}
       onrefused={(reason, chosen) => {
         refusals.set(actKey, {
@@ -4418,6 +4514,8 @@
   <CommentRail
     bind:this={rail}
     down={linkDown}
+    held={heldCount}
+    onsendheld={sendHeldNow}
     focused={focusedPin}
     hold={listHold}
     {layout}
@@ -4438,8 +4536,12 @@
       if (openPin) {
         closeCard();
       }
+      composingPage = true;
       post({ type: "cawco:compose-page" });
     }}
+    onpageclose={cancelComposer}
+    pageComposer={composerBody}
+    pageOpen={pageHung}
     onresolve={(id, resolved) => resolvePin(resolved, id)}
     onretry={relink}
     onretrypin={retryPin}
@@ -4483,7 +4585,6 @@
     class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >
-    {@render changesBar()}
     <div
       class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
       bind:this={well}
@@ -4500,80 +4601,30 @@
     items={headItems}
     label="Preview"
     onclose={ownTab ? backToSession : close}
+    placement={sheet ? "sheet" : "beside"}
     subtitle={headLine}
     subtitleId={`${paneId}-line`}
     {switcher}
     {switcherAt}
     titleControl={artifact ? artifactTitle : undefined}
-    above={changesBar}
     beside={railBeside}
     bind:section
-    bind:subtitleStands={lineStands}
     bind:well
   >
     {@render framed()}
   </SideSurface>
 {/if}
 
-<!-- Changed since you looked, in its own room above the well (the artifact panel's surface brief, Changed since you looked). -->
+<!-- Changed since you looked: a glass over the page at the well's foot (ChangesTag). -->
 {#snippet changesBar()}
   {#if changeStops.length > 0 && !isCanvas}
-    {@const total = tour?.length ?? changeStops.length}
-    <!-- Changed since you looked: its own bar between the head and the
-           well, so it never stands over the page (the page starts under
-           it), stepping through the stops (‹ ›; J and K while it holds the
-           focus). -->
-    <div
-      data-slot="changes-bar"
-      class="flex flex-none justify-center min-w-0 pb-space-2"
-      in:rise={"--dur-panel"}
-      out:rise={"--dur-exit"}
-    >
-      <fieldset
-        data-slot="changes-tag"
-        aria-label={commentWords.changedSince(total)}
-        class="mark-line w-fit max-w-full p-0 m-0 min-w-0 flex items-center h-c-btn-h-sm coarse:h-c-btn-h-lg border border-border-hairline rounded-md bg-surface-raised text-size-label font-medium text-ink-strong"
-      >
-        <button
-          aria-label={commentWords.previousChange}
-          class="touch-hit grid place-items-center h-full px-space-2 rounded-s-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-          data-box
-          data-slot="change-previous"
-          onkeydown={tagKey}
-          onclick={(event) =>
-            stepChange(-1, event.detail === 0 ? "key" : "pointer")}
-          title={commentWords.previousChange}
-          type="button"
-        >
-          <IconChevronLeft class="size-icon-md" />
-        </button>
-        <button
-          class="touch-hit min-w-0 h-full px-space-1 overflow-clip text-ellipsis whitespace-nowrap num can-hover:hover:bg-surface-hover"
-          data-slot="change-count"
-          onkeydown={tagKey}
-          onclick={(event) =>
-            stepChange(tour ? 0 : 1, event.detail === 0 ? "key" : "pointer")}
-          type="button"
-        >
-          {tour
-            ? commentWords.changeOf(tourAt + 1, total)
-            : commentWords.changedSince(total)}
-        </button>
-        <button
-          aria-label={commentWords.nextChange}
-          class="touch-hit grid place-items-center h-full px-space-2 rounded-e-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-          data-box
-          data-slot="change-next"
-          onkeydown={tagKey}
-          onclick={(event) =>
-            stepChange(1, event.detail === 0 ? "key" : "pointer")}
-          title={commentWords.nextChange}
-          type="button"
-        >
-          <IconChevronRight class="size-icon-md" />
-        </button>
-      </fieldset>
-    </div>
+    <ChangesTag
+      above={pageFoot}
+      at={tour ? tourAt : null}
+      onstep={stepChange}
+      total={tour?.length ?? changeStops.length}
+      bind:ref={changesTag}
+    />
   {/if}
 {/snippet}
 
@@ -4991,21 +5042,86 @@
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
-  {#if listOpen && railPlaced && !isCanvas && railSheet && !railAway}
-    <!-- The rail as the well's foot sheet, at most 60% of it: on a phone and
-         in a pane under 640px. A layer over the page (the artifact panel's surface brief, The
-         Comments rail): the frame keeps its whole box under it, so the page
-         neither moves, resizes nor scrolls as it opens, drags or closes.
-         A keyboard's lift stands it over the keyboard, no taller than the
-         well's room above it. -->
-    <div
-      class="absolute inset-x-0 bottom-(--keyboard-lift,0px) z-2 flex max-h-over-keyboard-60"
-      data-slot="rail-sheet"
-      in:sheetSlide={{ leaving: false }}
-      out:sheetSlide={{ leaving: true }}
+  <!-- A pin's thread as its card holds it: the drawn pin's whole, or the
+       rested-on pin's as its peek (`peek`), the same card; `pushed`, opened
+       in the Comments sheet over its list, Back leading. -->
+  {#snippet thread(
+    pin: Pin,
+    draft: ComposerDraft,
+    peek: boolean,
+    pushed = false
+  )}
+    {#if kit}
+      {@const Card = kit.PinCard}
+      <Card
+        agentName={owner ? ownerName : "The session"}
+        changes={(view?.activity[pin.id]?.length ?? 0) > 0
+          ? threadChanges
+          : undefined}
+        marked={peek || !!pinAt?.mark}
+        session={owner ? instanceId : null}
+        {draft}
+        link={pinLink(pin.number)}
+        live={live.has(pin.id)}
+        name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
+        back={pushed
+          ? { to: commentWords.comments, onback: backToList }
+          : undefined}
+        onclose={pushed ? closeSheet : () => closeCard()}
+        ondelete={deleteOpenPin}
+        ondraft={() => drafts?.changed(pin.id)}
+        onfind={() => focusPin(pin.id, true)}
+        onplace={placeElsewhere}
+        onhold={(text) => reply(text, true)}
+        onreply={(text) => reply(text)}
+        onresolve={(resolved) => resolvePin(resolved)}
+        onretry={() => retryPin(pin.id)}
+        parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
+        {peek}
+        {pin}
+        placing={placing === pin.id}
+        problem={peek ? null : cardError}
+        sending={!peek && replying}
+        retrying={pinsRetrying.has(pin.id)}
+        whyNotSent={notSentWhy(pin)}
+      />
+    {/if}
+  {/snippet}
+  {#if railSheetDrawn}
+    <!-- The rail as the well's bottom sheet, on a phone and in a pane under
+         640px: the kit's drawer (ThreadSheet's host), its grabber and two
+         stops, half its room where it opens and the whole room (HIG, Sheets:
+         "Include a grabber in a resizable sheet"; the medium and large
+         detents), dragged below the lower one it goes, as Close does. A
+         layer over the page: the frame keeps its whole box under it, so the
+         page neither moves, resizes nor scrolls as it opens, drags or
+         closes. A thread opened while it stands opens in it, over the list,
+         Back leading (HIG, Sheets: "Display only one sheet at a time"); it
+         stands aside while a composer or a place picker stands, and comes
+         back as it was. -->
+    <ThreadSheet
+      label={threadPushed && cardPin
+        ? `Comment ${cardPin.number}`
+        : commentWords.comments}
+      onclose={closeSheet}
+      onclosed={() => {
+        if (!railSheetOpen) {
+          railSheetDrawn = false;
+        }
+      }}
+      onmoved={() => sayCovered?.()}
+      open={railSheetOpen}
+      short={railEmpty && !threadPushed}
+      bind:surface={railSurface}
     >
-      {@render railOf("sheet")}
-    </div>
+      {#if threadPushed && cardPin && kit && replyDraft}
+        {#key cardPin.id}
+          {@render thread(cardPin, replyDraft, false, true)}
+        {/key}
+      {:else}
+        {@render railOf("sheet")}
+      {/if}
+    </ThreadSheet>
   {/if}
   <!-- What stands over the page beside a pill (the frame fills the well):
        the composer while a comment is written, the thread once it is, and
@@ -5027,8 +5143,7 @@
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     {@attach measureRoom}
   >
-    {#if composing && kit && nextDraft}
-      {@const Composer = kit.CommentComposer}
+    {#if composing && kit && nextDraft && !pageHung}
       <PinFloat
         bare
         box={composing.at?.box ?? null}
@@ -5039,64 +5154,12 @@
         slot="pin-composer"
         bind:float={composerFloat}
       >
-        <Composer
-          action="Comment"
-          chain={composing.chain.map((one) =>
-            pinName({
-              anchor: one.anchor,
-              elements: one.elements,
-            } as unknown as Pin)
-          )}
-          chosen={composing.chosen}
-          draft={nextDraft}
-          focus
-          onchange={() => drafts?.changed(NEXT_COMMENT)}
-          onchoose={(index) => post({ type: "cawco:compose-target", index })}
-          onsubmit={(text) => comment(text)}
-          placeholder={commentWords.composeHint}
-          sendError={composing.error}
-          sending={composing.sending}
-        />
+        {@render composerBody()}
       </PinFloat>
     {/if}
-    <!-- A pin's thread as its card holds it: the drawn pin's whole, or the
-         rested-on pin's as its peek (`peek`), the same card. -->
-    {#snippet thread(pin: Pin, draft: ComposerDraft, peek: boolean)}
-      {#if kit}
-        {@const Card = kit.PinCard}
-        <Card
-          agentName={owner ? ownerName : "The session"}
-          changes={(view?.activity[pin.id]?.length ?? 0) > 0
-            ? threadChanges
-            : undefined}
-          marked={peek || !!pinAt?.mark}
-          session={owner ? instanceId : null}
-          {draft}
-          link={pinLink(pin.number)}
-          live={live.has(pin.id)}
-          name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
-          onclose={() => closeCard()}
-          ondelete={deleteOpenPin}
-          ondraft={() => drafts?.changed(pin.id)}
-          onfind={() => focusPin(pin.id, true)}
-          onplace={placeElsewhere}
-          onreply={(text) => reply(text)}
-          onresolve={(resolved) => resolvePin(resolved)}
-          onretry={() => retryPin(pin.id)}
-          parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
-          {peek}
-          {pin}
-          placing={placing === pin.id}
-          problem={peek ? null : cardError}
-          sending={!peek && replying}
-          retrying={pinsRetrying.has(pin.id)}
-          whyNotSent={notSentWhy(pin)}
-        />
-      {/if}
-    {/snippet}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
          another's never moves to it. -->
-    {#if cardPin && kit && replyDraft}
+    {#if cardPin && kit && replyDraft && !threadPushed}
       {#key cardPin.id}
         {#if floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
@@ -5207,4 +5270,5 @@
       {/if}
     </div>
   {/if}
+  {@render changesBar()}
 {/snippet}

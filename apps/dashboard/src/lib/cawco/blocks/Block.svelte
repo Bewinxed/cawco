@@ -25,12 +25,12 @@
   import { commonWords } from "@cawco/core/words/common";
   import type { Component, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { BarMore } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     IconArrowDown,
     IconArrowUp,
     IconEyeClosed,
-    IconMore,
     IconWindow,
   } from "#lib/icons.js";
   import {
@@ -156,60 +156,52 @@
       data-box
     >
       {@render action?.()}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger
-          aria-label={commonWords.moreFor(title)}
-          class="touch-hit"
-          size="icon-sm"
-          variant="ghost"
-        >
-          <IconMore />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-auto">
-          <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
-            <IconArrowUp />
-            <span>{words.moveUp}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
-            <IconArrowDown />
-            <span>{words.moveDown}</span>
-          </DropdownMenu.Item>
-          {#if !wideOnly}
-            <DropdownMenu.Separator />
-            <DropdownMenu.RadioGroup
-              onValueChange={(next) => onwidth(next as BlockWidth)}
-              value={width}
+      <!-- More in a glass of its own, its menu hung from that glass as one
+           shape with it (BarMenu), as a head's menus hang. -->
+      <BarMore label={commonWords.moreFor(title)}>
+        <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
+          <IconArrowUp />
+          <span>{words.moveUp}</span>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
+          <IconArrowDown />
+          <span>{words.moveDown}</span>
+        </DropdownMenu.Item>
+        {#if !wideOnly}
+          <DropdownMenu.Separator />
+          <DropdownMenu.RadioGroup
+            onValueChange={(next) => onwidth(next as BlockWidth)}
+            value={width}
+          >
+            <DropdownMenu.RadioItem value="narrow"
+              >{words.narrow}</DropdownMenu.RadioItem
             >
-              <DropdownMenu.RadioItem value="narrow"
-                >{words.narrow}</DropdownMenu.RadioItem
-              >
-              <DropdownMenu.RadioItem value="wide"
-                >{words.wide}</DropdownMenu.RadioItem
-              >
-            </DropdownMenu.RadioGroup>
-            {#if columns === 1}
-              <p class="m-0 px-space-3 pb-space-1 type-meta text-ink-muted">
-                {words.widerScreens}
-              </p>
-            {/if}
+            <DropdownMenu.RadioItem value="wide"
+              >{words.wide}</DropdownMenu.RadioItem
+            >
+          </DropdownMenu.RadioGroup>
+          {#if columns === 1}
+            <p class="m-0 px-space-3 pb-space-1 type-meta text-ink-muted">
+              {words.widerScreens}
+            </p>
           {/if}
-          {#if hideable || view}
-            <DropdownMenu.Separator />
-          {/if}
-          {#if hideable}
-            <DropdownMenu.Item onSelect={onhide}>
-              <IconEyeClosed />
-              <span>{words.hide}</span>
-            </DropdownMenu.Item>
-          {/if}
-          {#if view}
-            <DropdownMenu.Item onSelect={ontab}>
-              <IconWindow />
-              <span>{words.showAsTab}</span>
-            </DropdownMenu.Item>
-          {/if}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+        {/if}
+        {#if hideable || view}
+          <DropdownMenu.Separator />
+        {/if}
+        {#if hideable}
+          <DropdownMenu.Item onSelect={onhide}>
+            <IconEyeClosed />
+            <span>{words.hide}</span>
+          </DropdownMenu.Item>
+        {/if}
+        {#if view}
+          <DropdownMenu.Item onSelect={ontab}>
+            <IconWindow />
+            <span>{words.showAsTab}</span>
+          </DropdownMenu.Item>
+        {/if}
+      </BarMore>
     </span>
   </header>
   <!-- The board fills the page's height less its head (BlockPage measures

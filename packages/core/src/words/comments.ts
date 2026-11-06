@@ -48,6 +48,17 @@ export const commentWords = {
   // The rail.
   comments: "Comments",
   searchComments: "Search comments",
+  /** The search field's Clear: its words go, the field stays. */
+  clearSearch: "Clear the search",
+  /** The search's way out: the field folds back into its symbol. */
+  /** Puts the rail's search away (its field back into Search), beside the field: never the field's own Clear. */
+  cancelSearch: "Cancel",
+  /** The rail's title menu, read out: which comments it lists, and in what order. */
+  whichComments: "Which comments",
+  /** The title menu's second group: the order the rows come in. */
+  order: "Order",
+  /** The title's dot while another list is in front: what waits in To check. */
+  toCheckWaiting: (n: number) => `${n} to check`,
   sort: "Sort",
   newestFirst: "Newest first",
   topOfPageFirst: "Top of page first",
@@ -61,6 +72,19 @@ export const commentWords = {
   noneResolved: "Nothing resolved yet",
   noMatch: (query: string) => `Nothing matches “${query}”`,
   attached: (n: number) => `${n} attached`,
+  // Held comments (the owner, 2026-11-05): Hold beside the composer's send, Send all in the rail's bar.
+  hold: "Hold",
+  holdTitle: "Hold it, to send later with the others (⌥↩)",
+  /** A held comment's row, and its pill's name: the agent hasn't heard it. */
+  unsent: "Unsent",
+  /** Send all, read out. */
+  sendHeldLabel: (n: number) =>
+    `Send ${n} held ${n === 1 ? "comment" : "comments"}`,
+  sendHeldCount: (n: number) => `Send ${n} ${n === 1 ? "comment" : "comments"}`,
+  /** Send all's note field. */
+  heldNote: "Add a note for the agent",
+  /** The head's Comments button, read out: what waits to be sent. */
+  heldWaiting: (n: number) => `${n} unsent`,
   // The page's Send: its picks.
   send: "Send",
   sendCount: (n: number) => `Send ${n}`,
@@ -83,11 +107,11 @@ export const commentWords = {
     `${NOT_SENT} the hub couldn't be reached for ${seconds} seconds. Your picks are kept on this page and reach the hub once it's back; press Send again then.`,
   // Changed since you looked: the tag over the page, and what a screen reader hears.
   changedSince: (n: number) => `${n} changed since you looked`,
-  changeOf: (k: number, n: number) => `${k} of ${n}`,
+  /** The changes tag on its tour: where it stands, with its noun kept. */
+  changeOf: (k: number, n: number) => `Change ${k} of ${n}`,
   previousChange: "Previous change",
   nextChange: "Next change",
   newAnswer: "New answer",
-  pinNewAnswer: (n: number) => `Pin ${n}, new answer`,
   // What changed for a comment: its thread's change lines, the rail's To check, the turn's chips.
   changed: "Changed",
   /** A change chip, read out: what changed, and that it opens there. */

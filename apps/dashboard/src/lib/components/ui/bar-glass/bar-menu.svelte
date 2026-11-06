@@ -20,7 +20,7 @@
   import DropdownMenuContent from "#lib/components/ui/dropdown-menu/dropdown-menu-content.svelte";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { cn } from "#lib/utils.js";
-  import { glassHold } from "./bar-glass.svelte";
+  import { hungFromGlass } from "./hung.svelte";
 
   let {
     label,
@@ -35,22 +35,14 @@
   > & {
     /** What it holds, read out. */
     label: string;
-    /** Its width, the kit menu's (`compact`, `regular`, `wide`). */
-    width?: "compact" | "regular" | "wide";
+    /** Its width, the kit menu's (`compact`, `regular`, `wide`, `tiles`, `titles`). */
+    width?: "compact" | "regular" | "wide" | "tiles" | "titles";
     ref?: HTMLElement | null;
     children: Snippet;
   } = $props();
 
-  const glass = glassHold();
-  let joined = $state(false);
   // The glass draws its join while this card stands drawn out of it.
-  $effect(() => {
-    if (!joined) {
-      return;
-    }
-    glass.hung(true);
-    return () => glass.hung(false);
-  });
+  const { glass, card } = hungFromGlass();
 </script>
 
 <HangCard
@@ -64,7 +56,7 @@
   menuWidth={width}
   side="bottom"
   sideOffset={0}
-  bind:joined
+  bind:joined={card.joined}
   bind:ref
 >
   {@render children()}

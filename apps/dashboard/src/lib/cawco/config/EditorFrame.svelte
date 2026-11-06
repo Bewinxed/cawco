@@ -26,9 +26,9 @@
     revealHere,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { BarMore } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { IconMore, IconTrash } from "#lib/icons.js";
+  import { IconTrash } from "#lib/icons.js";
   import { page } from "$app/state";
   import { cawco } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
@@ -184,31 +184,19 @@
         </div>
         {#if ondelete && deleteLabel}
           <span class="hidden max-phone:inline-flex">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <Button
-                    {...props}
-                    aria-label={configureWords.more}
-                    size="icon"
-                    variant="ghost"
-                  >
-                    <IconMore />
-                  </Button>
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="end" class="w-auto" min="regular">
-                <DropdownMenu.Item
-                  disabled={down !== null || deleting || saving}
-                  onSelect={ondelete}
-                  title={down ?? undefined}
-                  variant="destructive"
-                >
-                  <IconTrash />
-                  <span>{deleteLabel}</span>
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
+            <!-- More in a glass of its own, its menu hung from that glass as
+                 one shape with it (BarMenu), as a head's menus hang. -->
+            <BarMore label={configureWords.more}>
+              <DropdownMenu.Item
+                disabled={down !== null || deleting || saving}
+                onSelect={ondelete}
+                title={down ?? undefined}
+                variant="destructive"
+              >
+                <IconTrash />
+                <span>{deleteLabel}</span>
+              </DropdownMenu.Item>
+            </BarMore>
           </span>
         {/if}
       </header>

@@ -89,7 +89,7 @@
       selectedIndex?: number;
       onSelect?: (index: number) => void;
       defaultValue?: string;
-      /** One step of the size ladder: 36px outer by default, 28px compact. */
+      /** One step of the size ladder: 36px outer by default, 28px compact; `bar`, no well of its own, the tabs a bar's items in the BarGlass round them. */
       size?: TabsSize;
       /** A segmented control in a well (default), or folder tabs on a shelf. */
       variant?: TabsVariant;

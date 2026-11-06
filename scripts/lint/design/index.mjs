@@ -5,6 +5,7 @@
 import path from "node:path";
 import { defineRule } from "golar/unstable";
 import { barItemsOutsideKit } from "./bar-item.mjs";
+import { detachedBarMenus } from "./bar-menu.mjs";
 import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
 import { countBadges } from "./count-badge.mjs";
@@ -328,6 +329,7 @@ const FIND = {
   "house/follows-props": followsProps,
   "house/bar-item-in-kit": barItemsOutsideKit,
   "house/count-in-badge": countBadges,
+  "house/no-detached-bar-menu": detachedBarMenus,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

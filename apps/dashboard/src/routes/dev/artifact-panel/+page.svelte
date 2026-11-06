@@ -1,0 +1,701 @@
+<script lang="ts">
+  /**
+   * The artifact panel whole, for judging it at its widths: its head (the
+   * artifact's title and its menu, the mode, the glass, Close), the page in
+   * its well, the Comments rail beside the page on a desk and the Comments
+   * sheet over it on a phone (under 640px), and a thread opened. The real
+   * parts (SideSurface, ArtifactMenu, CommentRail, ThreadSheet, PinCard) on
+   * real records (records.ts): the decision page title-bars-close, its five
+   * pins as they stand, and the session's artifacts. The page is its own
+   * picture (the bench reaches no hub, and the page's doc is the hub's), and
+   * the artifacts menu's read of the hub is answered here from the records.
+   *
+   * `?state=`: `rest` (the rail shut), `rail` (the open comments; on a
+   * phone the sheet at half its room), `full` (the phone's sheet at its
+   * whole room), `resolved`, `none` (no comments at all), `check` (To check
+   * holds two while Open is in front), `list` (the rail's title menu open),
+   * `search` (searching "HIG", with hits), `miss` (searching, none),
+   * `artifacts` (the title's menu open), `thread` (comment 4 opened; on a
+   * phone in the Comments sheet, Back leading), `changes` (Changed since you
+   * looked over the page's foot), `long` (150 comments), `compose` (a
+   * comment on the whole page being written), `more` (the head's More open,
+   * where the head has one), `view` (the canvas view's menu open), `mode`
+   * (the mode's one-button form open, where the head draws it), `delete`
+   * (comment 4's Delete pressed: its question under the card's bar),
+   * `remove` (the artifacts menu's Remove pressed: its question in the menu),
+   * `found` (Resolved in front, searching "HIG": the hits in every list),
+   * `scrolled` (the page scrolled to its foot, its top under the head's glass),
+   * `held` (three comments held to send together: Send 3 in the rail's bar,
+   * each row Unsent, the head's bubble ringed), `note` (Send all pressed: its
+   * note under the bar), `hold` (a comment being written: Hold beside send).
+   * The picture stands for a decision page as the panel shows it: its own
+   * title left out under the head, which names it (overlay
+   * `data-cawco-headed`), its top starting the head's room down
+   * (`c-head-room`) and scrolling under the glass. `?rail=` places the
+   * desk's Comments (over, beside, hung) and `?line=1` sets the title over
+   * its description: the structures on the owner's decision page.
+   */
+  import { type Pin, pinHeld } from "@cawco/core/comments";
+  import { commentWords } from "@cawco/core/words/comments";
+  import { onMount } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { pressOutside } from "#lib/cawco/press-outside.js";
+  import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
+  import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
+  import ChangesTag from "#lib/cawco/preview/ChangesTag.svelte";
+  import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
+  import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
+  import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
+  import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
+  import type { RailSort } from "#lib/cawco/preview/comment-rows.js";
+  import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
+  import PinCard from "#lib/cawco/preview/PinCard.svelte";
+  import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
+  import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
+  import { setSideExpand } from "#lib/cawco/side/expand.js";
+  import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
+  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarPopover,
+  } from "#lib/components/ui/bar-glass/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import {
+    IconChat,
+    IconExternal,
+    IconInteract,
+    IconPen,
+    IconPin,
+    IconRefresh,
+  } from "#lib/icons.js";
+  import { page } from "$app/state";
+  import pageDesk from "./page-desk.webp";
+  import pagePhone from "./page-phone.webp";
+  import { ARTIFACTS, HELD, LONG, PINS } from "./records";
+
+  const INSTANCE = "bench-artifact-panel";
+  /** The hub's show of an artifact: its id. */
+  const SHOW_PATH = /\/artifacts\/([^/]+)\/show$/u;
+  const asked = page.url.searchParams.get("state") ?? "rail";
+  /**
+   * Where the Comments rail floats on a desk (`?rail=`): `over` the page's
+   * trailing side, the page keeping its width under it; `beside` the page,
+   * the page stopping short of it with its ground running under the glass
+   * (Adopting Liquid Glass: content "beneath sidebars and inspectors"
+   * without "placing content under it"); or `hung` from the Comments
+   * bubble, as tall as its comments.
+   */
+  const railAt = (page.url.searchParams.get("rail") ?? "beside") as
+    "over" | "beside" | "hung";
+  /** The title over its description in the bar (`?line=1`), a window's subtitle. */
+  const described = page.url.searchParams.get("line") === "1";
+  const phone = new MediaQuery("(width < 640px)");
+  /** The picture stands scrolled to its foot. */
+  const scrolled = asked === "scrolled" || asked === "changes";
+
+  /** The artifact on show: the newest, until the menu shows another. */
+  let shownId = $state(ARTIFACTS[0]?.id ?? "");
+  const shown = $derived(
+    ARTIFACTS.find((one) => one.id === shownId) ?? ARTIFACTS[0]
+  );
+  // The artifacts menu reads the session's artifacts from the hub and asks it
+  // to show one: answered here from the records, the one asked for shown.
+  const hubFetch = window.fetch.bind(window);
+  const listed = `/api/instances/${INSTANCE}/artifacts`;
+  window.fetch = (input, init) => {
+    const path = String(input);
+    if (!path.startsWith(listed)) {
+      return hubFetch(input, init);
+    }
+    const show = path.match(SHOW_PATH);
+    if (show?.[1]) {
+      shownId = decodeURIComponent(show[1]);
+      return Promise.resolve(Response.json({}));
+    }
+    return Promise.resolve(Response.json(ARTIFACTS));
+  };
+  /** Send all pressed: what was held stands sent. */
+  let heldSent = $state(false);
+  const holding = asked === "held" || asked === "note";
+  /** The pins as the state has them: none, or resolved three, or as they stand. */
+  const pins: Pin[] = $derived.by(() => {
+    if (holding) {
+      return [
+        ...PINS,
+        ...(heldSent
+          ? HELD.map((one) => ({
+              ...one,
+              sentAt: one.at,
+              thread: one.thread.map(({ held: _held, ...entry }) => ({
+                ...entry,
+                sentAt: one.at,
+              })),
+            }))
+          : HELD),
+      ];
+    }
+    if (asked === "none") {
+      return [];
+    }
+    if (asked === "long") {
+      return LONG;
+    }
+    if (asked === "resolved" || asked === "found") {
+      return PINS.map((one, at) =>
+        at < 3 ? { ...one, resolvedAt: "2026-11-05T10:00:00.000Z" } : one
+      );
+    }
+    return PINS;
+  });
+  let listOpen = $state(
+    asked !== "rest" && asked !== "changes" && asked !== "scrolled"
+  );
+  let filter = $state<"check" | "open" | "resolved">(
+    asked === "resolved" || asked === "found" ? "resolved" : "open"
+  );
+  let sort = $state<RailSort>("newest");
+  let openPin = $state<string | null>(
+    asked === "thread" || asked === "delete" ? (PINS[3]?.id ?? null) : null
+  );
+  const thread = $derived(pins.find((one) => one.id === openPin) ?? null);
+  /** The reply's draft and the next comment's, apart, as the pane keeps them. */
+  const replyDraft = new ComposerDraft();
+  const nextDraft = new ComposerDraft();
+  const openCount = $derived(pins.filter((one) => !one.resolvedAt).length);
+  const heldCount = $derived(pins.filter(pinHeld).length);
+  const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
+  let mode = $state<"interact" | "comment" | "draw">("interact");
+  const MODE_GLYPHS = {
+    interact: IconInteract,
+    comment: IconPin,
+    draw: IconPen,
+  };
+  const MODE_WORDS = { interact: "Interact", comment: "Comment", draw: "Draw" };
+  /** A canvas's view (Map, Verify), standing for a component artifact's in the head. */
+  const view = new CanvasViewState(INSTANCE);
+  /** Changed since you looked: five stops, the tour not started. */
+  let tourAt = $state<number | null>(null);
+  /** A comment on the whole page being written. */
+  let composing = $state(asked === "compose" || asked === "hold");
+  if (asked === "hold") {
+    nextDraft.text =
+      "do you think the close button size is mismatched vs the search/add?";
+  }
+  /** The phone's composer sheet, whose outside presses put it away (PreviewPane's rule). */
+  let composerFloat = $state<HTMLElement>();
+  $effect(() => {
+    const float = composerFloat;
+    if (!float) {
+      return;
+    }
+    return pressOutside(float, () => {
+      composing = false;
+    });
+  });
+  // Escape puts the composer away, as the pane's does.
+  $effect(() => {
+    if (!composing) {
+      return;
+    }
+    const away = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        composing = false;
+      }
+    };
+    addEventListener("keydown", away);
+    return () => removeEventListener("keydown", away);
+  });
+  let well = $state({ w: 0, h: 0 });
+  const measureWell = frameSize<HTMLElement>((node) => {
+    well = { w: node.clientWidth, h: node.clientHeight };
+  });
+
+  setSideExpand({
+    available: true,
+    backLabel: "Back to conversation",
+    collapse: () => false,
+    expanded: false,
+    toggle: () => undefined,
+  });
+
+  let rail = $state<ReturnType<typeof CommentRail>>();
+  /** How long the head takes to fit, ms: two frames' reads and writes, with room. */
+  const FITTED = 300;
+  /** Opens what the state names once the panel stands (its head fitted, which draws More): a menu, the search with its words, the sheet's whole room. */
+  /** The control each state presses once the panel stands. */
+  const PRESSES: Record<string, string> = {
+    list: '[data-slot="list"]',
+    more: '[data-slot="more"]',
+    view: '[aria-label="Canvas view"]',
+    mode: '[aria-label^="Mode:"]',
+    artifacts: "[data-artifact-trigger]",
+    remove: "[data-artifact-trigger]",
+    note: '[data-slot="send-held"]',
+    delete: '[data-slot="delete"]',
+    full: "[data-thread-grab]",
+  };
+  onMount(() => {
+    const press = (selector: string) =>
+      document.querySelector<HTMLElement>(selector)?.click();
+    setTimeout(() => {
+      const control = PRESSES[asked];
+      if (control) {
+        press(control);
+      }
+      if (asked === "remove") {
+        setTimeout(() => press("[data-artifact-remove]"), FITTED);
+      } else if (asked === "search" || asked === "miss" || asked === "found") {
+        rail?.focusSearch();
+        requestAnimationFrame(() => {
+          const field = document.querySelector<HTMLInputElement>(
+            'input[data-slot="search"]'
+          );
+          if (field) {
+            field.value = asked === "miss" ? "zebra" : "HIG";
+            field.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        });
+      }
+    }, FITTED);
+  });
+  // The bench names no fleet: the panel's own words stand for the session's.
+  const agent = "The session";
+  /** The decision page's own foot bar, px: what the overlay tells the pane of it (the picture's Send bar). */
+  const PAGE_FOOT = 66;
+  /** The stops Changed since you looked steps through. */
+  const CHANGES = 5;
+</script>
+
+{#snippet modeBar()}
+  <BarGlass form="group">
+    <Tabs
+      onValueChange={(next) => {
+        mode = next as typeof mode;
+      }}
+      size="bar"
+      value={mode}
+      values={["interact", "comment", "draw"]}
+    >
+      <TabsList aria-label="Preview mode">
+        <TabItem
+          glyphOnly
+          icon={IconInteract}
+          label="Interact"
+          value="interact"
+        />
+        <TabItem glyphOnly icon={IconPin} label="Comment" value="comment" />
+        <TabItem glyphOnly icon={IconPen} label="Draw" value="draw" />
+      </TabsList>
+    </Tabs>
+  </BarGlass>
+{/snippet}
+{#snippet modeMenu()}
+  <DropdownMenu.RadioGroup
+    onValueChange={(next) => {
+      mode = next as typeof mode;
+    }}
+    value={mode}
+  >
+    <DropdownMenu.RadioItem value="interact"
+      ><IconInteract /><span>Interact</span></DropdownMenu.RadioItem
+    >
+    <DropdownMenu.RadioItem value="comment"
+      ><IconPin /><span>Comment</span></DropdownMenu.RadioItem
+    >
+    <DropdownMenu.RadioItem value="draw"
+      ><IconPen /><span>Draw</span></DropdownMenu.RadioItem
+    >
+  </DropdownMenu.RadioGroup>
+{/snippet}
+<!-- The mode's one-button form, as PreviewPane draws it. -->
+{#snippet modeCompact()}
+  <ModeButton
+    glyph={MODE_GLYPHS[mode]}
+    menu={modeMenu}
+    word={MODE_WORDS[mode]}
+  />
+{/snippet}
+{#snippet viewBar()}
+  <CanvasView onverify={() => undefined} {view} />
+{/snippet}
+{#snippet viewMenu()}
+  <CanvasView as="sub" onverify={() => undefined} {view} />
+{/snippet}
+{#snippet commentsBar()}
+  {#if railAt === "hung" && !phone.current}
+    <!-- The rail hung from the bubble's glass as one shape with it, as tall
+         as its comments up to the well's foot; it stays while the page is
+         pressed (Comment mode marks the page under it). -->
+    <Popover.Root
+      onOpenChange={(next) => {
+        listOpen = next;
+      }}
+      open={listOpen}
+    >
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <CommentsButton
+            count={openCount}
+            held={heldCount}
+            label="Comments (⇧C hides the pins)"
+            open={listOpen}
+            {props}
+            toCheck={checked.length}
+          />
+        {/snippet}
+      </Popover.Trigger>
+      <BarPopover
+        interactOutsideBehavior="ignore"
+        label={commentWords.comments}
+        onOpenAutoFocus={(event: Event) => event.preventDefault()}
+        trapFocus={false}
+      >
+        <div
+          class="flex max-h-(--bits-popover-content-available-height) min-h-0 w-c-comments-w"
+          data-rail-float="hung"
+        >
+          {@render railOf("beside")}
+        </div>
+      </BarPopover>
+    </Popover.Root>
+  {:else}
+    <CommentsButton
+      count={openCount}
+      label="Comments (⇧C hides the pins)"
+      onclick={() => {
+        listOpen = !listOpen;
+      }}
+      held={heldCount}
+      open={listOpen}
+      toCheck={checked.length}
+    />
+  {/if}
+{/snippet}
+{#snippet commentsMenu()}
+  <DropdownMenu.Item
+    onSelect={() => {
+      listOpen = !listOpen;
+    }}><IconChat /><span>Comments</span></DropdownMenu.Item
+  >
+{/snippet}
+{#snippet reloadBar()}
+  <BarItem icon={IconRefresh} label="Reload" onclick={() => undefined} />
+{/snippet}
+{#snippet reloadMenu()}
+  <DropdownMenu.Item><IconRefresh /><span>Reload</span></DropdownMenu.Item>
+{/snippet}
+{#snippet openBar()}
+  <BarItem href="#open" icon={IconExternal} label="Open in new tab" />
+{/snippet}
+{#snippet openMenu()}
+  <DropdownMenu.Item
+    ><IconExternal /><span>Open in new tab</span></DropdownMenu.Item
+  >
+{/snippet}
+
+{#snippet title()}
+  <ArtifactMenu
+    held={ARTIFACTS.map((one) => one.id)}
+    instanceId={INSTANCE}
+    {described}
+    line={shown?.ask ?? ""}
+    lineId="bench-line"
+    onrefused={() => undefined}
+    shown={{
+      id: shown?.id ?? "",
+      kind: "page",
+      title: shown?.title ?? "",
+    }}
+  />
+{/snippet}
+
+{#snippet railOf(layout: "beside" | "sheet")}
+  <CommentRail
+    bind:this={rail}
+    checks={{
+      count: checked.length,
+      pins: checked.filter((id): id is string => !!id),
+      changes: noChanges,
+      unasked: null,
+    }}
+    down={null}
+    focused={openPin}
+    held={heldCount}
+    hold="ready"
+    onsendheld={() => {
+      heldSent = true;
+      return null;
+    }}
+    {layout}
+    live={new Set()}
+    onclose={() => {
+      listOpen = false;
+    }}
+    onhover={() => undefined}
+    onopen={(id) => {
+      openPin = id;
+    }}
+    onpage={() => {
+      openPin = null;
+      composing = true;
+    }}
+    onpageclose={() => {
+      composing = false;
+    }}
+    pageComposer={composer}
+    pageOpen={composing && listOpen && !phone.current}
+    onresolve={() => undefined}
+    onretry={() => undefined}
+    onretrypin={() => undefined}
+    open={openPin}
+    {pins}
+    unread={new Set(checked.filter((id): id is string => !!id))}
+    bind:filter
+    bind:sort
+  />
+{/snippet}
+{#snippet noChanges(_pin: Pin)}{/snippet}
+{#snippet composer()}
+  <CommentComposer
+    action="Comment"
+    chain={[commentWords.wholePage]}
+    draft={nextDraft}
+    focus
+    onhold={() => {
+      composing = false;
+    }}
+    onsubmit={() => {
+      composing = false;
+    }}
+    placeholder={commentWords.composeHint}
+  />
+{/snippet}
+
+<!-- The rail as a floating glass panel under the head, inset from the
+     card's edges with corners concentric with it (the capsules' radius). -->
+{#snippet railBeside()}
+  {#if listOpen && !phone.current && railAt !== "hung"}
+    <div
+      class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-(--c-float-inner-r) border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+      data-rail-float={railAt}
+    >
+      {@render railOf("beside")}
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet card(one: Pin, pushed = false)}
+  <PinCard
+    agentName={agent}
+    back={pushed
+      ? {
+          to: commentWords.comments,
+          onback: () => {
+            openPin = null;
+          },
+        }
+      : undefined}
+    draft={replyDraft}
+    link={`#comment-${one.number}`}
+    name={one.title ?? ""}
+    onclose={() => {
+      openPin = null;
+      if (pushed) {
+        listOpen = false;
+      }
+    }}
+    ondelete={() => Promise.resolve()}
+    onfind={() => undefined}
+    onhold={() => undefined}
+    onplace={() => undefined}
+    onreply={() => undefined}
+    onresolve={() => undefined}
+    onretry={() => undefined}
+    parent={null}
+    pin={one}
+    problem={null}
+  />
+{/snippet}
+
+<Tooltip.Provider>
+  <div
+    class="h-dvh bg-surface-recess p-space-2 max-phone:p-0"
+    data-bench-panel={asked}
+  >
+    <SideSurface
+      beside={railBeside}
+      items={[
+        {
+          key: "mode",
+          priority: HEAD_PRIORITY.mode,
+          bar: modeBar,
+          compact: modeCompact,
+          menu: modeMenu,
+          group: true,
+          place: "centre",
+        },
+        {
+          key: "comments",
+          priority: HEAD_PRIORITY.comments,
+          bar: commentsBar,
+          menu: commentsMenu,
+          count: {
+            glyph: IconChat,
+            n: listOpen ? 0 : openCount,
+            of: "Comments",
+          },
+        },
+        {
+          key: "reload",
+          priority: HEAD_PRIORITY.reload,
+          bar: reloadBar,
+          menu: reloadMenu,
+        },
+        {
+          key: "open",
+          priority: HEAD_PRIORITY.open,
+          bar: openBar,
+          menu: openMenu,
+        },
+        ...(asked === "view"
+          ? [
+              {
+                key: "view",
+                priority: HEAD_PRIORITY.view,
+                bar: viewBar,
+                menu: viewMenu,
+                group: true,
+              },
+            ]
+          : []),
+      ] satisfies HeadItem[]}
+      label="Preview"
+      mode="interact"
+      of="preview"
+      onclose={() => undefined}
+      placement={phone.current ? "sheet" : "beside"}
+      subtitle={shown?.ask}
+      subtitleId="bench-line"
+      titleControl={title}
+      float
+    >
+      <!-- The page runs to the card's top under the floating head, keeping
+           the head's room at its top (c-head-room) so its first line starts
+           clear of the glass and scrolls beneath it. -->
+      <div
+        class="size-full overflow-y-auto overscroll-contain pt-c-head-room"
+        data-slot="bench-page"
+        {@attach measureWell}
+        {@attach (node) => {
+          if (scrolled) {
+            requestAnimationFrame(() => {
+              node.scrollTop = node.scrollHeight;
+            });
+          }
+        }}
+      >
+        <img
+          alt={shown?.title}
+          class={[
+            "block h-auto max-w-full",
+            // The page lays itself out to the well's whole width where the
+            // rail floats over it (the picture drawn to it), so what the
+            // glass covers is page, as it would be.
+            !phone.current && railAt !== "beside" && "w-full",
+          ]}
+          src={phone.current ? pagePhone : pageDesk}
+        />
+      </div>
+      {#if asked === "changes"}
+        <!-- The page's own foot bar (its Send) stands at the picture's foot,
+             scrolled there: 66px, as the overlay reads it (cawco:page-foot). -->
+        <ChangesTag
+          above={PAGE_FOOT}
+          at={tourAt}
+          onstep={(by) => {
+            tourAt =
+              tourAt === null
+                ? 0
+                : (((tourAt + by) % CHANGES) + CHANGES) % CHANGES;
+          }}
+          total={CHANGES}
+        />
+      {/if}
+      {#if composing && phone.current}
+        <!-- A comment on the whole page on a phone: the composer as the
+             well's foot sheet, as PreviewPane draws it; a press outside it,
+             or Escape, puts it away. -->
+        <div class="contents">
+          <PinFloat
+            bare
+            box={null}
+            label={commentWords.comment}
+            mark={null}
+            room={well}
+            sheet
+            slot="pin-composer"
+            bind:float={composerFloat}
+          >
+            {@render composer()}
+          </PinFloat>
+        </div>
+      {/if}
+      {#if phone.current}
+        <!-- The Comments sheet: its list, or a thread opened from it in the same sheet, Back leading. -->
+        <ThreadSheet
+          label={thread ? `Comment ${thread.number}` : commentWords.comments}
+          onclose={() => {
+            openPin = null;
+            listOpen = false;
+          }}
+          open={listOpen && !composing}
+          short={pins.length === 0 && !thread}
+        >
+          {#if thread}
+            {#key thread.id}
+              {@render card(thread, true)}
+            {/key}
+          {:else}
+            {@render railOf("sheet")}
+          {/if}
+        </ThreadSheet>
+        {#if thread && !listOpen}
+          <ThreadSheet
+            label={`Comment ${thread.number}`}
+            onclose={() => {
+              openPin = null;
+            }}
+            open
+          >
+            {@render card(thread)}
+          </ThreadSheet>
+        {/if}
+      {:else if thread}
+        <!-- The card beside its pin in the pane's own shell (PinFloat), its
+             pill where the picture draws comment 4's. -->
+        <div class="contents">
+          <PinFloat
+            label={`Comment ${thread.number}`}
+            mark={{ x: Math.max(0, well.w - 360), y: 96, w: 28, h: 28 }}
+            open
+            pin={thread.number}
+            room={well}
+            slot="pin-card"
+          >
+            {@render card(thread)}
+          </PinFloat>
+        </div>
+      {/if}
+    </SideSurface>
+  </div>
+</Tooltip.Provider>

@@ -3,10 +3,8 @@
    * The card beside a page (Split), one for whatever it holds: a
    * conversation's plan or preview, a project's task. One header, one well:
    * - the header leads with the Plan | Preview switch while both are there,
-   *   then what is on show (`title`): the words the switch does not already
-   *   say, so "Preview" or "Plan" is never said twice, and never a line
-   *   under them (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "One
-   *   bar, one row"; an ask is content); then the
+   *   then what is on show (`title`, `subtitle`): the words the switch does
+   *   not already say, so "Preview" or "Plan" is never said twice; then the
    *   pane's own controls (`actions`), Expand on a desk (expand.ts) and
    *   Close, every one in the same button recipe and press;
    * - the well is the content's ground, the recess inside a hairline, its
@@ -18,20 +16,25 @@
    * A pane that gives its controls as `items` has them stand by the head's
    * priority rule (head.ts): the name keeps its width up to 120px, Close
    * stands last, the controls that fit stand as a priority prefix at their
-   * narrowest, the rest going in head order into one More, and forms widen
-   * after (the mode's segments, then on a 640px pane the words) where the
-   * room left holds them.
+   * narrowest, the rest going in head order into one More, then the name
+   * takes the rest of its own width (two lines' worth on a phone), and
+   * forms widen after (the mode's segments, then on a 640px pane the words)
+   * where the room left holds them.
    *
    * Expanded over the whole split, the card meets its edges: no inset,
    * corner or shadow, and the well's sides go, so a page is drawn at the
    * split's full width. The head keeps its place, so the control just
    * pressed is still under the pointer to press back.
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+  } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconClose,
     IconMaximize,
@@ -57,7 +60,8 @@
     titleCode = false,
     subtitle,
     subtitleId,
-    subtitleStands = $bindable(true),
+    subtitleCode = false,
+    placement = "beside",
     actions,
     items,
     onclose,
@@ -69,7 +73,7 @@
     well = $bindable(),
     section = $bindable(),
     beside,
-    above,
+    float = false,
     children,
   }: {
     /** What the card is, read out. */
@@ -88,17 +92,19 @@
     titleControl?: Snippet;
     /** The title is a path or an identifier (a folder file's path), set as code. */
     titleCode?: boolean;
-    /**
-     * What is on show says this of itself (an artifact's ask). It is never
-     * a line under the name: the head reads it out as the title control's
-     * description (`subtitleId`) and draws nothing, so the pane says it
-     * where it shows facts (the artifact menu's first row).
-     */
+    /** What describes it (an artifact's ask, a task's id): never a line in the bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "Facts about the surface … are content, never a second line in the bar"); the title's tooltip and its description, and a title control says it in its own menu. */
     subtitle?: string;
     /** The description's id, for the control it describes. */
     subtitleId?: string;
-    /** Whether the line stands in the head: never, so the pane says it elsewhere. */
-    subtitleStands?: boolean;
+    /** The line is an identifier (a task's id), set as code. */
+    subtitleCode?: boolean;
+    /**
+     * Where the card stands: beside the page (Close trails, in a group of
+     * its own), or a sheet (a phone's): Close leads, as a single-view
+     * sheet's does (HIG, Sheets: "for sheets with a single view, the Cancel
+     * button belongs on the leading edge of the top toolbar").
+     */
+    placement?: "beside" | "sheet";
     /** The pane's own controls, before Close. */
     actions?: Snippet;
     /** The pane's own controls, before Expand and Close, standing by the head's priority rule (head.ts). */
@@ -125,11 +131,16 @@
      */
     beside?: Snippet;
     /**
-     * What stands between the head and the well, in its own room: the
-     * preview's Changed since you looked bar. It never stands over the
-     * well's content, which starts under it.
+     * The head floats as glass over the well (Adopting Liquid Glass:
+     * "Liquid Glass applies to the topmost layer of the interface", content
+     * "scrolls beneath controls"): the well fills the card to its edges, the
+     * head's groups stand over its top on the scroll edge effect, and the
+     * content keeps `--c-head-room` at its top so its first line starts
+     * clear of the glass. What stands `beside` floats too, placed by its
+     * own `data-rail-float` (over the page, or beside it with the page
+     * stopping short of it).
      */
-    above?: Snippet;
+    float?: boolean;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -157,6 +168,24 @@
   );
   let head = $state<HTMLElement>();
   let identity = $state<HTMLElement>();
+  /**
+   * Where a control stands in the head: the mode's segments in the centre,
+   * the one prominent action after the glass, the rest in the glass. A
+   * centre control drawn in its one-button form is one of the glass's
+   * symbols, beside More (HIG, Toolbars, Item groupings: on iPhone, "controls
+   * for tool selection and the More menu grouped on the trailing edge"; a
+   * glass of its own would be a third group for one symbol).
+   */
+  const inCentre = $derived(
+    all.filter((one) => one.place === "centre" && formOf(one.key) !== "compact")
+  );
+  const inGlass = $derived(
+    all.filter(
+      (one) =>
+        !one.place || (one.place === "centre" && formOf(one.key) === "compact")
+    )
+  );
+  const prominent = $derived(all.filter((one) => one.place === "prominent"));
   /** The controls standing in the head, and how; null until the head is measured: all of them whole. */
   let shown = $state<Map<string, Standing> | null>(null);
   /** The name's own width, up to {@link NAME_KEEPS}: it gives up no more of it to the controls. */
@@ -166,16 +195,6 @@
   const stands = (key: string) => shown === null || shown.has(key);
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
   const more = $derived(all.filter((one) => !stands(one.key)));
-  /** The mode, which stands in the head's centre. */
-  const centred = $derived(all.filter((one) => one.key === "mode"));
-  /** The prominent action with words (Send, a browser's Take over), outside the glass. */
-  const worded = $derived(
-    all.filter((one) => one.key === "send" || one.key === "control")
-  );
-  /** Every other control: a bare symbol in the trailing glass group. */
-  const glassed = $derived(
-    all.filter((one) => !(centred.includes(one) || worded.includes(one)))
-  );
   /** The count a control in More says on it (Comments'), only above 0 (The Earned Count Rule). */
   const moreCount = $derived(
     more.find((one) => one.count && one.count.n > 0)?.count
@@ -192,8 +211,6 @@
   let zoom = 1;
 
   /** A box's width as laid out: its drawn width over the head's zoom. */
-  /** Positions that take a box out of its row's flow. */
-  const OUT_OF_FLOW = new Set(["absolute", "fixed"]);
   const laidOut = (el: Element): number =>
     el.getBoundingClientRect().width / zoom;
 
@@ -247,70 +264,69 @@
     return width;
   }
 
-  /**
-   * The head's controls as one row: a glass group's items stand in the row
-   * where the group does (its own gap is the head's), and its inline
-   * padding (`pads`) is room the row gives up, beside the gaps its items
-   * already stand apart by. A glass is no member of the row with a gap of
-   * its own: counted as one, each group took a gap more than it is laid out
-   * with, and a head with room for every control stood the mode compact
-   * (session-sheet leg 18: 505px of controls whole in a 509px head, read
-   * as 513). What a glass draws out of the flow (its join, as wide as the
-   * glass) takes no room: counted, it widened as the controls stood, so
-   * they went to More, the glass narrowed and they stood again, every frame
-   * (the probe's Caw preview at 680, never still).
-   */
-  function rowOf(el: HTMLElement): { row: Element[]; pads: number } {
-    const row: Element[] = [];
-    let pads = 0;
-    for (const child of el.children) {
-      if ((child as HTMLElement).dataset.slot === "tools") {
-        const style = getComputedStyle(child);
-        pads +=
-          (Number.parseFloat(style.paddingInlineStart) || 0) +
-          (Number.parseFloat(style.paddingInlineEnd) || 0);
-        row.push(
-          ...[...child.children].filter(
-            (one) => !OUT_OF_FLOW.has(getComputedStyle(one).position)
-          )
-        );
-      } else {
-        row.push(child);
-      }
-    }
-    return { row, pads };
-  }
+  /** The head's glass group of controls, and the glass Close stands in. */
+  let glass = $state<HTMLElement | null>(null);
 
-  /** What always stands (the switch, Close) as drawn, and the room its glasses' padding takes; each control's width, and More's, kept while it stands. */
+  /**
+   * What always stands (the switch, Close's glass) as drawn, and the room
+   * the glass's own inset takes (`pads`); each control's width, and More's,
+   * kept while it stands. The controls stand in the head (the mode) or in
+   * its glass (the rest). The inset narrows the room rather than standing
+   * as a member of the row: as a member it took a gap more than it is laid
+   * out with (main's 45ac350ee8, session-sheet leg 18).
+   */
   function drawnWidths(el: HTMLElement, name: HTMLElement) {
-    const { row, pads } = rowOf(el);
     const kept: number[] = [];
-    for (const child of row) {
+    let pads = 0;
+    const parts = [...el.children, ...(glass?.children ?? [])];
+    for (const child of parts) {
       const one = child as HTMLElement;
-      const width = laidOut(one);
-      const item = one.dataset.headItem;
-      if (item && !one.hidden) {
-        if (one.dataset.form === "compact") {
-          widths.set(`${item}:compact`, width);
-        } else {
-          widths.set(item, width);
-          const own = all.find((each) => each.key === item);
-          if (own?.words && !own.compact) {
-            widths.set(`${item}:compact`, compactWidth(one));
-          }
+      if (glass && one.contains(glass)) {
+        pads += insetOf(glass);
+      } else if (one.dataset.slot !== "join") {
+        const width = keepWidth(one);
+        if (width !== null && one !== name) {
+          kept.push(width);
         }
-      } else if (one.dataset.slot === "more") {
-        widths.set(
-          one.querySelector('[data-slot="more-count"]')
-            ? "more:counted"
-            : "more",
-          width
-        );
-      } else if (!item && one !== name) {
-        kept.push(width);
       }
     }
     return { kept, pads };
+  }
+
+  /** The glass's own inset, start and end: what it adds round its controls. */
+  function insetOf(at: HTMLElement): number {
+    const style = getComputedStyle(at);
+    return (
+      (Number.parseFloat(style.paddingInlineStart) || 0) +
+      (Number.parseFloat(style.paddingInlineEnd) || 0)
+    );
+  }
+
+  /** A control's or More's width, kept by its key; else what always stands, its width. */
+  function keepWidth(one: HTMLElement): number | null {
+    const width = laidOut(one);
+    const item = one.dataset.headItem;
+    if (item) {
+      if (one.hidden) {
+        return null;
+      }
+      if (one.dataset.form === "compact") {
+        widths.set(`${item}:compact`, width);
+        return null;
+      }
+      widths.set(item, width);
+      const own = all.find((each) => each.key === item);
+      if (own?.words && !own.compact) {
+        widths.set(`${item}:compact`, compactWidth(one));
+      }
+      return null;
+    }
+    if (one.dataset.slot === "more") {
+      const counted = one.querySelector('[data-slot="more-count"]');
+      widths.set(counted ? "more:counted" : "more", width);
+      return null;
+    }
+    return width;
   }
 
   /**
@@ -330,6 +346,37 @@
     return Math.ceil(Math.min(own, NAME_KEEPS + pad));
   }
 
+  /**
+   * What the name wants past what it keeps: its lead's words whole on one
+   * line, or, where it wraps to two lines (a phone's head: its lead's
+   * `-webkit-line-clamp` is 2), seven tenths of that (two lines break at words, never at the half), with the chevron and insets round them; less
+   * {@link nameWidth}. Read with its words held to one line for the read.
+   */
+  function nameWants(name: HTMLElement, keeps: number): number {
+    const lead =
+      name.querySelector<HTMLElement>('[data-slot="name-lead"]') ??
+      (name.firstElementChild as HTMLElement | null);
+    if (!lead) {
+      return 0;
+    }
+    const twoLines = getComputedStyle(lead).webkitLineClamp === "2";
+    // What stands round the words in the title control (its chevron, its
+    // insets), as drawn now.
+    const control = lead.closest("button") ?? lead;
+    const around = laidOut(control) - laidOut(lead);
+    const was = lead.style.whiteSpace;
+    lead.style.whiteSpace = "nowrap";
+    const whole = laidOut(lead) + runsPast(lead);
+    lead.style.whiteSpace = was;
+    const style = getComputedStyle(name);
+    const pad =
+      (Number.parseFloat(style.paddingInlineStart) || 0) +
+      (Number.parseFloat(style.paddingInlineEnd) || 0);
+    // Two lines break at words, never at the half: 70% of one line holds them.
+    const wants = (twoLines ? whole * 0.7 : whole) + around + pad;
+    return Math.max(0, Math.ceil(wants) - keeps);
+  }
+
   /** The name's margins (they take its ring room back): what it adds to the head beside its box. */
   function nameMargins(name: HTMLElement): number {
     const style = getComputedStyle(name);
@@ -337,6 +384,11 @@
       (Number.parseFloat(style.marginInlineStart) || 0) +
       (Number.parseFloat(style.marginInlineEnd) || 0)
     );
+  }
+
+  /** Which controls stand, from the head's room and what each was drawn at. */
+  function fit(): void {
+    measureFit()?.();
   }
 
   /**
@@ -358,9 +410,12 @@
     }
     const { gap, room } = roomOf(head);
     const { kept, pads } = drawnWidths(head, identity);
-    // More and a form not drawn yet are Close's recipe, its glyph alone,
-    // until they stand to be read.
-    const glyph = kept.at(-1) ?? 0;
+    // More and a form not drawn yet are a bar item, its symbol alone, until
+    // they stand to be read.
+    const glyph =
+      Number.parseFloat(
+        getComputedStyle(head).getPropertyValue("--c-bar-item")
+      ) || 0;
     const moreGlyph = widths.get("more") ?? glyph;
     const next = standing(
       room - pads,
@@ -378,7 +433,9 @@
           : {}),
       })),
       // The pane's width: the card's, the head's box inside it.
-      head.clientWidth >= WORDS_FROM
+      head.clientWidth >= WORDS_FROM,
+      nameWants(identity, keeps),
+      glass ? Number.parseFloat(getComputedStyle(glass).columnGap) || gap : gap
     );
     return () => {
       name();
@@ -417,9 +474,9 @@
     if (identity) {
       seen.observe(identity);
     }
-    // Each of the pane's controls by its key, so a pane's items arriving
-    // re-observes them.
-    for (const one of all) {
+    // Each of the pane's controls by its key, where it stands now, so a pane's
+    // items arriving or a control changing places re-observes them.
+    for (const one of [...inCentre, ...inGlass, ...prominent]) {
       const child = el.querySelector(
         `[data-head-item="${CSS.escape(one.key)}"]`
       );
@@ -434,81 +491,23 @@
     }
     return () => seen.disconnect();
   });
-  // The line never stands in the head: the pane says it elsewhere.
-  $effect.pre(() => {
-    if (subtitle !== undefined && subtitleStands) {
-      subtitleStands = false;
+  // A new name is measured as it comes, once it is drawn.
+  $effect(() => {
+    if (title !== undefined) {
+      untrack(fit);
     }
   });
 </script>
 
-{#snippet standingItem(one: HeadItem, place = "")}
-  <div
-    data-form={formOf(one.key)}
-    data-head-item={one.key}
-    class={["unhidden:flex unhidden:flex-none", place]}
-    hidden={!stands(one.key)}
-  >
-    {#if one.compact && formOf(one.key) === "compact"}
-      {@render one.compact()}
-    {:else}
-      {@render one.bar()}
-    {/if}
-  </div>
-{/snippet}
-
-{#snippet moreMenu()}
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger
-      data-slot="more"
-      aria-label={moreCount
-        ? `More, ${moreCount.of} ${moreCount.n} open`
-        : "More"}
-      face="count"
-      size={moreCount ? "sm" : "icon-sm"}
-      title="More"
-      variant="ghost"
-    >
-      <IconMore />
-      {#if moreCount}
-        <!-- The count says what it counts: its control's own glyph beside it (Comments' chat-square), so "⋯ 2" never reads as two things in More. -->
-        <!-- A mark line of its own (a box on the trigger's): its count
-                 trimmed beside its glyph. -->
-        <span
-          data-box
-          data-slot="more-count"
-          class="mark-line inline-flex items-center gap-space-1 text-ink-muted num"
-          ><moreCount.glyph data-box /><span>{moreCount.n}</span></span
-        >
-      {/if}
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" width="regular">
-      {#each more as one, at (one.key)}
-        {#if at > 0 && (one.group || more[at - 1]?.group)}
-          <DropdownMenu.Separator />
-        {/if}
-        {@render one.menu()}
-      {/each}
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
-{/snippet}
-
 {#snippet expandBar()}
   {#if expand}
-    <Button
+    <BarItem
       aria-keyshortcuts={expanded ? "Escape" : undefined}
-      aria-label={expanded ? expand.backLabel : "Expand"}
+      icon={expanded ? IconMinimize : IconMaximize}
+      keys={expanded ? "Esc" : undefined}
+      label={expanded ? expand.backLabel : "Expand"}
       onclick={() => expand.toggle()}
-      size="icon-sm"
-      title={expanded ? `${expand.backLabel} (Esc)` : "Expand"}
-      variant="ghost"
-    >
-      {#if expanded}
-        <IconMinimize />
-      {:else}
-        <IconMaximize />
-      {/if}
-    </Button>
+    />
   {/if}
 {/snippet}
 
@@ -524,14 +523,63 @@
   {/if}
 {/snippet}
 
+<!-- One of the pane's controls where it stands, whole or in its narrowest form; hidden while it stands in More. -->
+{#snippet headItem(one: HeadItem)}
+  <div
+    data-form={formOf(one.key)}
+    data-head-item={one.key}
+    class="unhidden:flex unhidden:flex-none"
+    hidden={!stands(one.key)}
+  >
+    {#if one.compact && formOf(one.key) === "compact"}
+      {@render one.compact()}
+    {:else}
+      {@render one.bar()}
+    {/if}
+  </div>
+{/snippet}
+
+<!-- Close, a bare symbol in a glass of its own (HIG, Toolbars: "Group
+     navigation controls and critical actions like Done, Close, or Save in
+     dedicated, familiar, and visually distinct sections"); while the card
+     closes it holds its place and swallows presses, and a close that failed
+     says so in its ink. -->
+{#snippet closeGlass()}
+  <BarGlass form="group">
+    <Tip label="Close">
+      {#snippet children(tip)}
+        <button
+          {...tip}
+          data-slot="close"
+          aria-busy={closing || undefined}
+          aria-label="Close"
+          class="select-none touch-hit press-tint data-failed:text-error-11 aria-busy:cursor-default"
+          data-bar-item
+          data-box
+          data-failed={closeFailed || undefined}
+          onclick={() => {
+            if (!closing) {
+              onclose();
+            }
+          }}
+          type="button"
+        >
+          <IconClose aria-hidden="true" data-slot="bar-symbol" />
+        </button>
+      {/snippet}
+    </Tip>
+  </BarGlass>
+{/snippet}
+
 <section
   data-slot="side-card"
   data-side-card={of}
   data-side-surface-expanded={expanded || undefined}
   data-expanded-recessed={(expanded && recessed) || undefined}
   data-recessed={recessed || undefined}
+  data-float={float || undefined}
   aria-label={label}
-  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg concentric-in r-outer-lg r-inset-space-2 bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  class="group/card @container data-float:relative data-float:overflow-hidden data-float:not-data-side-surface-expanded:rounded-(--c-float-panel-r) data-float:p-0 flex h-full min-h-0 min-w-0 flex-col rounded-lg concentric-in r-outer-lg r-inset-space-2 bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none not-data-float:data-side-surface-expanded:px-0 not-data-float:data-side-surface-expanded:pt-space-3 not-data-float:data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none not-data-float:data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
@@ -544,98 +592,156 @@
        area under a finger reaches past the head's foot, and the well, placed
        after it (`relative`), took that strip's presses (The 44 Touch Rule;
        canvas-design B read Close's reach below as 6 of its 7px). -->
+  <!-- One bar, one row (DESIGN.md, The Title Bars Follow Liquid Glass
+       Rule; HIG, Toolbars, Item groupings): leading, Close on a sheet, the
+       switch, then the title, the view's own name, a menu where it opens
+       one; in the centre the mode; trailing, one glass of bare symbols with
+       More last, the one prominent action, and Close in a glass of its own
+       beside the page. Stacked over what stands under it (`relative z-1`):
+       a control's 44px area under a finger reaches past the head's foot. -->
   <header
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
-    class="relative z-1 flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-5 coarse:data-fitted:hit-gap-x-space-5"
+    data-placement={placement}
+    class="relative z-2 flex h-c-btn-h-lg flex-none items-center gap-space-1 group-data-float/card:absolute group-data-float/card:inset-x-0 group-data-float/card:top-0 group-data-float/card:h-c-head-room group-data-float/card:px-space-2 group-data-float/card:opacity-(--head-shown) hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
     bind:this={head}
   >
+    {#if placement === "sheet"}
+      {@render closeGlass()}
+    {/if}
     {#if switcher && switcherAt === "start"}
       {@render switcher()}
     {/if}
     <!-- The name keeps its own width up to NAME_KEEPS (`--name-keeps`, set
-         from its lead as drawn), so the actions never draw over it; what it
-         holds is cut at its own box, which reaches a focus ring's width past
-         the name on every side (the negative margin takes it back), so a
-         title control's ring is not cut. Its text stands where the controls'
-         text does, their inset: a switch before it takes its own inset
-         back, and a title control's padding is its text's inset. -->
+         from its lead as drawn), so the controls never draw over it; what
+         it holds is cut at its own box, which reaches a focus ring's width
+         past the name on every side (the negative margin takes it back). It
+         is the HIG's bar title: Headline, plain text (the row role, 16px at
+         500, the house's ceiling). What describes it stands as its
+         description, never a line under it. -->
     <div
       data-slot="identity"
       data-controlled={titleControl ? "" : undefined}
       data-switched={switcher && switcherAt === "start" ? "" : undefined}
-      class={[
-        "-m-space-1 flex min-w-(--name-keeps) flex-col items-start overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1",
-        centred.some((one) => stands(one.key)) ? "flex-initial" : "flex-1",
-      ]}
+      class="-m-space-1 flex min-w-(--name-keeps) flex-1 items-center overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
       style:--name-keeps="{nameKeeps}px"
       bind:this={identity}
     >
       {#if titleControl}
         {@render titleControl()}
       {:else if title}
-        <!-- What is on show is a name in a toolbar row of 30px label-type
-             controls and the switch's label-type tabs: the label role
-             (DESIGN.md, The Role, Not Size Rule). The title role is a
-             sheet's own head (ui/drawer/sheet-head), which stands over its
-             content, not in a bar. -->
-        <span
+        <h2
           data-slot="title"
+          aria-describedby={subtitle ? subtitleId : undefined}
           data-code={titleCode || undefined}
-          class="truncate text-ink-strong type-label data-code:type-code"
-          >{title}</span
+          class="m-0 truncate text-ink-strong type-row data-code:type-code"
+          title={subtitle || undefined}
         >
+          {title}
+        </h2>
       {/if}
       {#if subtitle}
-        <!-- Read out as the title control's description, never drawn in the bar. -->
-        <span class="sr-only" data-slot="subtitle" id={subtitleId}
-          >{subtitle}</span
+        <span
+          data-slot="subtitle"
+          data-code={subtitleCode || undefined}
+          class="sr-only"
+          id={subtitleId}>{subtitle}</span
         >
       {/if}
     </div>
     {@render actions?.()}
-    <!-- The mode stands in the centre; what acts on the view stands
-         trailing as one glass group of bare symbols, then the one prominent
-         action with words (Send, a browser's Take over), then Close in a
-         group of its own (The Title Bars Follow Liquid Glass Rule; HIG,
-         Toolbars: "Keep actions with text labels separate"). -->
-    {#each centred as one (one.key)}
-      {@render standingItem(one, "mx-auto")}
+    {#each inCentre as one (one.key)}
+      {@render headItem(one)}
     {/each}
-    {#if glassed.length > 0 || more.length > 0 || (!items && expand?.available)}
-      <BarGlass form="group">
-        {#each glassed as one (one.key)}
-          {@render standingItem(one)}
-        {/each}
-        {#if more.length > 0}
-          {@render moreMenu()}
-        {/if}
-        {#if !items && expand?.available}
-          {@render expandBar()}
-        {/if}
-      </BarGlass>
+    {#if inGlass.length > 0 || more.length > 0 || (!items && expand?.available)}
+      <div
+        class="contents"
+        {@attach (node) => {
+          glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
+          return () => {
+            glass = null;
+          };
+        }}
+      >
+        <BarGlass form="group">
+          {#each inGlass as one (one.key)}
+            {@render headItem(one)}
+          {/each}
+          {#if more.length > 0}
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <Tip label="More">
+                    {#snippet children(tip)}
+                      <button
+                        {...tip}
+                        {...props}
+                        data-slot="more"
+                        aria-label={moreCount
+                          ? `More, ${moreCount.of} ${moreCount.n} open`
+                          : "More"}
+                        class="select-none touch-hit press-tint"
+                        data-bar-item
+                        data-box
+                        data-counted={moreCount ? "" : undefined}
+                        type="button"
+                      >
+                        <IconMore aria-hidden="true" data-slot="bar-symbol" />
+                        {#if moreCount}
+                          <!-- The count says what it counts: its control's own glyph beside it (Comments' bubble), so "⋯ 2" never reads as two things in More. -->
+                          <span
+                            data-box
+                            data-slot="more-count"
+                            class="mark-line inline-flex items-center gap-space-1 text-ink-muted num"
+                            ><moreCount.glyph data-box /><span data-slot="num"
+                              >{moreCount.n}</span
+                            ></span
+                          >
+                        {/if}
+                      </button>
+                    {/snippet}
+                  </Tip>
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <BarMenu label="More" width="regular">
+                {#each more as one, at (one.key)}
+                  {#if at > 0 && (one.group || more[at - 1]?.group)}
+                    <DropdownMenu.Separator />
+                  {/if}
+                  {@render one.menu()}
+                {/each}
+              </BarMenu>
+            </DropdownMenu.Root>
+          {/if}
+          {#if !items && expand?.available}
+            {@render expandBar()}
+          {/if}
+        </BarGlass>
+      </div>
     {/if}
-    {#each worded as one (one.key)}
-      {@render standingItem(one)}
+    {#each prominent as one (one.key)}
+      {@render headItem(one)}
     {/each}
     {#if switcher && switcherAt === "end"}
       {@render switcher()}
     {/if}
-    <BarGlass form="group">
-      <Button
-        data-slot="close"
-        aria-label="Close"
-        failed={closeFailed}
-        icon={IconClose}
-        onclick={onclose}
-        pending={closing}
-        size="icon-sm"
-        title="Close"
-        variant="ghost"
-      />
-    </BarGlass>
+    {#if placement === "beside"}
+      {@render closeGlass()}
+    {/if}
   </header>
-  {@render above?.()}
+  {#if float}
+    <!-- The scroll edge effect (Adopting Liquid Glass: a scroll view's
+         edge effect "helps maintain sufficient legibility and contrast for
+         controls by obscuring content that scrolls beneath them"): what
+         passes under the head is blurred and washed toward the card's
+         ground, fading out a step under the glass. At rest the page's own
+         room is under it, so it draws nothing a reader sees. -->
+    <div
+      aria-hidden="true"
+      data-slot="scroll-edge"
+      class="pointer-events-none absolute inset-x-0 top-0 z-1 h-c-scroll-edge-h bg-linear-to-b from-material-panel to-transparent glass-backdrop mask-b-from-40% reduced-transparency:backdrop-filter-none contrast-more:backdrop-filter-none"
+    ></div>
+  {/if}
   {#if recessed}
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
@@ -644,12 +750,15 @@
          hears nothing; the cue is the cursor and the pressed segment), the
          edge easing in and out except while the split slides, and points a
          crosshair. -->
-    <div class="flex min-h-0 flex-1 gap-space-2" data-slot="well-row">
+    <div
+      class="relative flex min-h-0 flex-1 gap-space-2 group-data-float/card:gap-0 group-data-float/card:bg-surface-well has-[>[data-rail-float=beside]]:*:data-side-well:me-c-rail-float-room"
+      data-slot="well-row"
+    >
       <div
         data-side-well
         data-mode={mode && mode !== "interact" ? mode : undefined}
         data-ringed={mode ? "" : undefined}
-        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden concentric-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden concentric-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-float/card:rounded-none group-data-float/card:border-0 group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
         bind:this={well}
       >
         {@render children()}

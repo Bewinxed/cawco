@@ -10,7 +10,7 @@
    * (PinMark) and by its joined face on a card's surface alike, so it
    * stands at the same place by its figure in both.
    */
-  let { dot }: { dot: "live" | "unread" } = $props();
+  let { dot }: { dot: "live" | "unread" | "held" } = $props();
 </script>
 
 {#if dot === "live"}
@@ -21,6 +21,13 @@
     data-dot="live"
     data-live
   />
+{:else if dot === "held"}
+  <!-- Held to send together: a hollow ring, as a held pill is hollow. -->
+  <span
+    aria-hidden="true"
+    class="absolute -end-space-row -top-space-row size-(--status-dot-size) rounded-pill border border-ink-muted bg-surface-raised ring-(length:--status-dot-cut) ring-surface-raised"
+    data-dot="held"
+  ></span>
 {:else}
   <span
     aria-hidden="true"

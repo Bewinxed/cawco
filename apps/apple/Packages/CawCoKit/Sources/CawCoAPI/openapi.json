@@ -45525,6 +45525,11 @@
               "type": "string"
             }
           },
+          "held": {
+            "description": "The person held it to send with the others ({@link sendHeld}): no delivery carries it until then. A person's unsent entry only.",
+            "const": true,
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },

@@ -103,7 +103,7 @@ import {
 } from "./frames";
 import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
-import { contentNearIn, OVERLAY_OWN, ownNode, startInk } from "./ink";
+import { contentNearIn, keepFoot, OVERLAY_OWN, ownNode, startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
@@ -2084,6 +2084,57 @@ addEventListener("resize", () => {
   changesSeen += 1;
 });
 
+/**
+ * How tall the page's own foot bar stands over the viewport's foot, px: a
+ * fixed or sticky box (a decision page's Send, an app's tab bar) under any of
+ * three points along the viewport's last pixel row, the overlay's own nodes
+ * left out; 0 for none. Told to the host (`cawco:page-foot`) as it changes,
+ * read on load, scroll and resize in the next frame, so what the host floats
+ * over the page's foot (Changed since you looked) stands clear of it.
+ */
+function pageFootNow(): number {
+  const y = innerHeight - 1;
+  let top = innerHeight;
+  for (const share of [0.25, 0.5, 0.75]) {
+    for (const el of document.elementsFromPoint(innerWidth * share, y)) {
+      if (ownNode(el)) {
+        continue;
+      }
+      for (let at: Element | null = el; at; at = at.parentElement) {
+        const { position } = getComputedStyle(at);
+        if (position === "fixed" || position === "sticky") {
+          const box = at.getBoundingClientRect();
+          if (box.bottom >= innerHeight - 1 && box.height < innerHeight / 2) {
+            top = Math.min(top, box.top);
+          }
+          break;
+        }
+      }
+      break;
+    }
+  }
+  return Math.max(0, Math.round(innerHeight - top));
+}
+let pageFootTold = -1;
+let pageFootAsked = false;
+function tellPageFoot() {
+  if (pageFootAsked) {
+    return;
+  }
+  pageFootAsked = true;
+  requestAnimationFrame(() => {
+    pageFootAsked = false;
+    const px = pageFootNow();
+    if (px !== pageFootTold) {
+      pageFootTold = px;
+      post("cawco:page-foot", { px });
+    }
+  });
+}
+addEventListener("scroll", tellPageFoot, { passive: true, capture: true });
+addEventListener("resize", tellPageFoot);
+addEventListener("load", tellPageFoot);
+
 /** The count of the page's changes as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
 function changesNow(doc: Document): number {
   if (!readDocs.has(doc)) {
@@ -2899,6 +2950,8 @@ async function writeDraft(message: HostMessage) {
     attachments: Array.isArray(message.attachments)
       ? (message.attachments as CommentAttachment[])
       : [],
+    // Held to send with the others (core `ThreadEntry.held`).
+    held: message.held === true,
   };
   const at = drafting;
   const target = at && draftWritten(at, at.named[at.chosen]);
@@ -3267,6 +3320,9 @@ type HostMessage = Record<string, unknown>;
 const COVERED_MOST = 4;
 
 /** The host's covered boxes, the viewport's px; each finite and sized, or left out. */
+/** The most room the host may keep under the page's foot, px: a floating bar's, never a page's. */
+const FOOT_ROOM_MOST = 200;
+
 function coveredOf(value: unknown): Box[] {
   return (Array.isArray(value) ? value.slice(0, COVERED_MOST) : []).flatMap(
     (raw) => {
@@ -3350,6 +3406,15 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
   {
     "cawco:hello": (message) => {
       ready();
+      pageFootTold = -1;
+      tellPageFoot();
+      // A host whose head names the page by its title (the artifact
+      // panel's): the page's own copy of it may stand aside (a decision
+      // page's title, under `:root[data-cawco-headed]`).
+      document.documentElement.toggleAttribute(
+        "data-cawco-headed",
+        (message as { headed?: unknown }).headed === true
+      );
       // The host names the artifact this page is, and where its doc is synced.
       const hello = message as {
         artifact: Parameters<typeof artifact.join>[0];
@@ -3461,6 +3526,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
           attachments: Array.isArray(message.attachments)
             ? (message.attachments as CommentAttachment[])
             : [],
+          held: message.held === true,
         })
       ),
     "cawco:resolve": (message) =>
@@ -3587,6 +3653,14 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     // What the host's chrome covers of the page (its Comments list, a
     // phone's card): a pin it opens is brought out from under it.
     "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
+    // What the host's chrome floats over the page's foot (Changed since you
+    // looked), px: the page scrolls that much further, so its last line
+    // comes clear of it.
+    "cawco:foot-room": (message) => {
+      const px = typeof message.px === "number" ? message.px : 0;
+      keepFoot(Number.isFinite(px) ? Math.min(px, FOOT_ROOM_MOST) : 0);
+      pins.draw();
+    },
     // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
     // same window hears its ask and this answer, and neither is the other.
     // A picture that throws is answered too, with why: unanswered, the host

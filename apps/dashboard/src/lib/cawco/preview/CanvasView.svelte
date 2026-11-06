@@ -1,15 +1,17 @@
 <script lang="ts">
   /**
    * A component artifact's view in the panel's head (canvas-view.svelte.ts):
-   * the kit's dropdown menu under the head's own button (the `sm` ghost, as
-   * Inspect), so the head keeps its room; or, once the head has no room for
+   * an item of the head's glass whose menu hangs from it (BarMenu, as
+   * Inspect's item beside it), so the head keeps its room; or, once the head has no room for
    * it, the same entries as a submenu of the head's More. Map first (the
    * map over the design graph), Verify last, a design system round whose
    * verdict goes to the session. The stage's width, scheme and motion are
    * the design graph's view card.
    */
   import { previewWords } from "@cawco/core/words/preview";
+  import { BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconLayers } from "#lib/icons.js";
   import type { CanvasViewState } from "./canvas-view.svelte";
 
@@ -49,17 +51,28 @@
   </DropdownMenu.Sub>
 {:else}
   <DropdownMenu.Root>
-    <!-- The head's own control, as Inspect beside it: the kit's sm ghost. -->
-    <DropdownMenu.Trigger
-      aria-label={previewWords.canvasView}
-      size="icon-sm"
-      title="Canvas view: map, verify"
-      variant="ghost"
-    >
-      <IconLayers />
+    <!-- An item of the head's glass, as Inspect beside it; its menu hangs from the glass (BarMenu). -->
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <Tip label="Canvas view: map, verify">
+          {#snippet children(tip)}
+            <button
+              {...tip}
+              {...props}
+              aria-label={previewWords.canvasView}
+              class="select-none touch-hit press-tint"
+              data-bar-item
+              data-box
+              type="button"
+            >
+              <IconLayers aria-hidden="true" data-slot="bar-symbol" />
+            </button>
+          {/snippet}
+        </Tip>
+      {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" width="regular">
+    <BarMenu label={previewWords.canvasView}>
       {@render entries()}
-    </DropdownMenu.Content>
+    </BarMenu>
   </DropdownMenu.Root>
 {/if}
