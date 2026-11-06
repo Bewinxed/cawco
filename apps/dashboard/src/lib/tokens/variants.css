@@ -404,6 +404,7 @@
 @custom-variant slot-command-item (&[data-slot="command-item"]);
 @custom-variant slot-command-list (&[data-slot="command-list"]);
 @custom-variant slot-command-shortcut (&[data-slot="command-shortcut"]);
+@custom-variant slot-comment-rail (&[data-slot="comment-rail"]);
 @custom-variant slot-composer (&[data-slot="composer"]);
 @custom-variant slot-composer-field (&[data-slot="composer-field"]);
 @custom-variant slot-context-menu-content (&[data-slot="context-menu-content"]);

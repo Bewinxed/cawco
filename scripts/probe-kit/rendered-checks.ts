@@ -4382,10 +4382,19 @@ function readInPage(args: InPageArgs): InPageRead {
         !el.matches(':disabled, [aria-disabled="true"]') &&
         (glassFor(el) || inGroove(el))
     );
+    // While a menu stands, a press outside it only puts it away (WAI-ARIA
+    // menu pattern; bits-ui's DropdownMenu): what stands outside it is read
+    // once the menu is gone, never half covered by it.
+    const menus = [...document.querySelectorAll('[role="menu"]')].filter(
+      (menu) => menu.getClientRects().length > 0
+    );
     for (const el of read) {
       // A control a layer covers (the rail's segments under its open
       // Sort menu) takes no finger: it is read when it stands in front.
-      if (!touchable(el)) {
+      if (
+        !touchable(el) ||
+        (menus.length > 0 && !menus.some((menu) => menu.contains(el)))
+      ) {
         continue;
       }
       const b = el.getBoundingClientRect();
