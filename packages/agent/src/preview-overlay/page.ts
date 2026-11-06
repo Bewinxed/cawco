@@ -3147,6 +3147,47 @@ window.addEventListener(
 const PAGE_CONTROL =
   "a[href], button, input, select, textarea, summary, [contenteditable], [role=button], [role=checkbox], [role=link], [role=menuitem], [role=option], [role=radio], [role=switch], [role=tab]";
 
+/**
+ * Esc pressed in the page that the page left unhandled is the host's
+ * (`cawco:key`), from a field too: with the focus in this frame the host's
+ * document hears no key, so its open layers (a design graph's popover over
+ * its stage, which bits-ui closes from the host's document) and the pane's
+ * own (its split) would stand. The page has the first claim, as on the
+ * shell's combos (`leftToShell`, below, whose note says why a listener
+ * added here runs last): one it handled (`defaultPrevented`, its own
+ * popover closed) or whose propagation it stopped stays its own. A key a
+ * script dispatched (a story's play on the stage) is never the person's.
+ */
+let escapePress: KeyboardEvent | null = null;
+
+function escapeLeft(event: KeyboardEvent) {
+  window.removeEventListener("keydown", escapeLeft);
+  if (event !== escapePress) {
+    return;
+  }
+  escapePress = null;
+  if (!event.defaultPrevented) {
+    post("cawco:key", { key: "Escape" });
+  }
+}
+
+function escapeToHost(event: KeyboardEvent) {
+  window.removeEventListener("keydown", escapeLeft);
+  escapePress = null;
+  if (
+    !event.isTrusted ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    !artifact.keeps() ||
+    artifact.kind() === "canvas"
+  ) {
+    return;
+  }
+  escapePress = event;
+  window.addEventListener("keydown", escapeLeft);
+}
+
 /** Whether `target` takes typing: the page's own keys stay its own there. */
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -3169,6 +3210,10 @@ window.addEventListener(
       event.stopImmediatePropagation();
       mode("interact");
       post("cawco:escape");
+      return;
+    }
+    if (event.key === "Escape") {
+      escapeToHost(event);
       return;
     }
     const letter = event.key.length === 1 ? event.key.toLowerCase() : null;

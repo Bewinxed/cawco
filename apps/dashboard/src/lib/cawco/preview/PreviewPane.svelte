@@ -163,7 +163,6 @@
   import { refusals } from "../refusals.svelte";
   import { heardInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
-  import { sideExpand } from "../side/expand";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import RailFloat from "../side/RailFloat.svelte";
   import SideSurface from "../side/SideSurface.svelte";
@@ -273,8 +272,6 @@
     /** Where the switch stands in the bar (SideSurface `switcherAt`). */
     switcherAt?: "start" | "end";
   } = $props();
-  /** The split's expansion, beside a conversation on a desk (SideSplit). */
-  const expand = sideExpand();
   let iframe = $state<HTMLIFrameElement>();
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -3214,7 +3211,7 @@
    * The pane's keys: V, C and D its modes, ⇧C every pin hidden or shown, J
    * and K a step through the pins, Enter opens one, `/` the rail's search;
    * Esc unwinds one at a time: the composer, then the thread, then Comment
-   * or Draw back to Interact.
+   * or Draw back to Interact (`parentEscape`).
    */
   function pressKey(name: PaneKey) {
     if ((name === "v" || name === "c" || name === "d") && !isCanvas) {
@@ -3239,10 +3236,6 @@
         cancelComposer();
       } else if (openPin) {
         closeCard();
-      } else if (mode === "interact") {
-        // Heard from the page (`cawco:key`): with nothing of the pane's to
-        // close, Esc gives the split back. The window's Esc is SideSplit's.
-        expand?.collapse();
       } else {
         setMode("interact");
       }
@@ -3284,6 +3277,28 @@
       event.preventDefault();
       pressKey(name);
     }
+  }
+  /**
+   * Esc pressed in the page and left to the host (overlay page.ts
+   * `escapeToHost`): the focus in the frame keeps every key from this
+   * document, so it is pressed here at the frame, where this document's
+   * own Esc lands while the frame has the focus, and every Esc rule of the
+   * host answers it in its own order: the topmost open layer first
+   * (bits-ui's escape layer, on the document: a design graph's popover over
+   * its stage, the preview's sheet), then the pane's unwinding
+   * (`parentEscape`), the split's expansion (Split `escapeExpanded`) and
+   * Full size (Shell).
+   */
+  function escapeFromPage() {
+    iframe?.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      })
+    );
   }
   export function parentEscape(event: KeyboardEvent) {
     if (
@@ -3574,7 +3589,11 @@
           // A key the page's window heard: what it starts here lands at once
           // (motion/keyed), as for this window's own keys.
           landKey();
-          pressKey(name);
+          if (name === "Escape") {
+            escapeFromPage();
+          } else {
+            pressKey(name);
+          }
         }
         break;
       }
