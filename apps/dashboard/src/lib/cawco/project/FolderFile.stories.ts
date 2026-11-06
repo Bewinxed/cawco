@@ -26,7 +26,7 @@ export const Picture = {};
 
 /** The same PNG on its own page under 900px, with Back. */
 export const PicturePage = {
-  args: { page: true },
+  args: { page: { backTo: "cawco" } },
   parameters: { viewport: 390 },
 };
 

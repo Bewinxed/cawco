@@ -5,7 +5,13 @@
    * A task, whole, in the page beside what it was opened from (DESIGN.md,
    * The Open Page Rule): on a desk the side card of a split (Split, through
    * the project page or a conversation's SideSplit), the board or the
-   * transcript live beside it; on a phone its own page, with Back.
+   * transcript live beside it; on a phone its own page, its bar Back's
+   * symbol alone, named by where it goes (DESIGN.md, The Title Bars Follow
+   * Liquid Glass Rule: "Back and Close are symbols, named by where they
+   * go"). The bar names no task: its title is the head's first heading
+   * under it, and its id, never a bar's ("A title is the view's own short
+   * name, never … an id"), leads the facts line, as it leads the board's
+   * card (TaskCard).
    *
    * Its head stands still: the facts line (its stage, Working or Queued,
    * its dates, its labels at the end), then its title; under it a Review ·
@@ -44,16 +50,10 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import {
-    IconChevronLeft,
-    IconError,
-    IconNeedsYou,
-    IconWorking,
-  } from "#lib/icons.js";
+  import { IconError, IconNeedsYou, IconWorking } from "#lib/icons.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
   import { artifactNamed } from "../artifact-names.svelte";
   import { cawco } from "../client.svelte";
@@ -82,6 +82,7 @@
   import RowFault from "../RowFault.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { sessionPlace, sessionTitle } from "../session-names.svelte";
+  import PageSurface from "../side/PageSurface.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import type { MarkStatus } from "../TreeMark.svelte";
   import { openBeside } from "./beside.svelte";
@@ -107,8 +108,7 @@
     onchanged,
     onclose,
     onopen,
-    page = false,
-    backLabel = "Back",
+    page,
     switcher,
     pageOf = () => null,
   }: {
@@ -129,10 +129,8 @@
     onclose: () => void;
     /** Shows another task in this one's place (an edge, a blocker). */
     onopen: (id: string) => void;
-    /** A phone: the task is its own page, with Back, not a card beside the board. */
-    page?: boolean;
-    /** What Back says on a phone's page. */
-    backLabel?: string;
+    /** A phone: the task is its own page, with Back to `backTo` (the view's name, Back's tooltip and accessible name), not a card beside the board. */
+    page?: { backTo: string };
     /** The switch between what stands beside a conversation (SideSplit). */
     switcher?: Snippet;
   } = $props();
@@ -455,6 +453,14 @@
       class="flex flex-none flex-col gap-space-2 pt-space-2 px-(--pane-inline) pb-space-3"
     >
       <div data-slot="meta" class="flex flex-wrap items-center gap-space-2">
+        {#if page}
+          <!-- Its id, which the page's bar never prints: the facts'
+               first, as the board's card leads with it. -->
+          <span
+            data-slot="id"
+            class="type-meta font-mono liga-none text-ink-subtle">{taskId}</span
+          >
+        {/if}
         {#if shown}
           <!-- What the skeleton stood for, in its reveal. -->
           <span
@@ -817,28 +823,11 @@
 {/snippet}
 
 {#if page}
-  <!-- The head floats over the task (`--side-room`, the top bar's
-       height), the scroll edge effect under it. -->
-  <section
-    aria-label="Task {taskId}"
-    class="relative flex flex-1 flex-col min-h-0 timeline-scope-transcript-head"
-    style:--side-room="var(--c-top-bar-h)"
-  >
-    <HeadFade band="var(--side-room)" tint="bg-surface-recess" />
-    <header
-      data-slot="page-head"
-      class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-2 pe-space-5 ps-space-3"
-    >
-      <Button onclick={onclose} size="sm" variant="ghost">
-        <IconChevronLeft />
-        <span>{backLabel}</span>
-      </Button>
-      <span class="ms-auto type-meta font-mono liga-none text-ink-subtle"
-        >{taskId}</span
-      >
-    </header>
+  <!-- Its own page on a phone: Back to the view, no title over the task's
+       own (its head's first heading), its id in the facts line. -->
+  <PageSurface backTo={page.backTo} label="Task {taskId}" {onclose}>
     {@render content()}
-  </section>
+  </PageSurface>
 {:else}
   <SideSurface
     of="task"

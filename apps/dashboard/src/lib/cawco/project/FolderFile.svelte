@@ -8,7 +8,11 @@
    * text. A Caw reply's chips, a report's file chips, Configure's project
    * delegate types and a task's attached files link to it. It opens
    * in the page (The Open Page Rule): the card beside the view on a desk
-   * (SideSurface, in the page's Split), its own page with Back under 900px.
+   * (SideSurface, in the page's Split), its own page with Back under 900px:
+   * its bar Back's symbol and the file's name, its path the page's first
+   * line (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "a path is
+   * never printed in a bar"; "Back and Close are symbols, named by where
+   * they go").
    * A path the hub refuses (not in the folder, outside it) says so in the
    * hub's words; only the hub reads the folder.
    */
@@ -17,13 +21,12 @@
   import { filesWords } from "@cawco/core/words/files";
   import { failureWords, hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { fileName } from "#lib/components/features/diff-language.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
-  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconChevronLeft } from "#lib/icons.js";
   import { folderRawHref } from "../project-tasks";
+  import PageSurface from "../side/PageSurface.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import TaskOutput from "../tasks/TaskOutput.svelte";
 
@@ -31,17 +34,14 @@
     projectId,
     path,
     onclose,
-    page = false,
-    backLabel = "Back",
+    page,
   }: {
     projectId: string;
     path: string;
     /** Close on a desk; Back on a phone. */
     onclose: () => void;
-    /** Under 900px: the file is its own page, with Back, not a card beside the view. */
-    page?: boolean;
-    /** What Back says on its own page. */
-    backLabel?: string;
+    /** Under 900px: the file is its own page, with Back to `backTo` (the view's name, Back's tooltip and accessible name), not a card beside the view. */
+    page?: { backTo: string };
   } = $props();
 
   const kind = $derived(deliverableKind(path));
@@ -99,6 +99,15 @@
     data-folder-file={path}
   >
     <div class="flex flex-col gap-space-2 p-space-5">
+      {#if page}
+        <!-- Its path, which the bar names by the file alone: words to read
+             and copy, wrapping where it runs long. -->
+        <bdi
+          data-slot="page-path"
+          class="type-meta font-mono liga-none wrap-anywhere text-ink-subtle"
+          >{path}</bdi
+        >
+      {/if}
       {#if media}
         <TaskOutput
           bare
@@ -132,33 +141,17 @@
 {/snippet}
 
 {#if page}
-  <!-- Its own page under 900px, headed as a task's (TaskPane's page): Back,
-       then the path at the row's end, cut short where it runs long. The
-       head floats over the file (`--side-room`, the top bar's height), the
-       scroll edge effect under it. -->
-  <section
-    aria-label={path}
-    class="relative flex min-h-0 flex-1 flex-col timeline-scope-transcript-head"
+  <!-- Its own page under 900px: Back to the view, the file's name its
+       title, its path the body's first line. -->
+  <PageSurface
+    backTo={page.backTo}
     data-file-page
-    style:--side-room="var(--c-top-bar-h)"
+    label={path}
+    {onclose}
+    title={fileName(path)}
   >
-    <HeadFade band="var(--side-room)" tint="bg-surface-recess" />
-    <header
-      data-slot="page-head"
-      class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-2 pr-space-5 pl-space-3"
-    >
-      <Button onclick={onclose} size="sm" variant="ghost">
-        <IconChevronLeft />
-        <span>{backLabel}</span>
-      </Button>
-      <bdi
-        data-slot="page-path"
-        class="ms-auto min-w-0 overflow-clip type-meta font-mono liga-none text-ellipsis whitespace-nowrap text-ink-subtle"
-        >{path}</bdi
-      >
-    </header>
     {@render body()}
-  </section>
+  </PageSurface>
 {:else}
   <SideSurface
     of="file"

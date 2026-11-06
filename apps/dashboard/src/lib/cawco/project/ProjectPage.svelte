@@ -2363,9 +2363,8 @@
         >
           {#key openFile}
             <FolderFile
-              backLabel={project.name}
               onclose={closeFile}
-              page
+              page={{ backTo: project.name }}
               path={openFile}
               {projectId}
             />
@@ -2379,12 +2378,11 @@
         >
           <TaskPane
             {allowedFrom}
-            backLabel={project.name}
             onchanged={changed}
             onclose={closeTask}
             onmove={(id, stage) => move(id, stage)}
             onopen={openOne}
-            page
+            page={{ backTo: project.name }}
             {pageOf}
             {projectId}
             {stages}
