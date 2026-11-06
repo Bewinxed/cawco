@@ -15,7 +15,7 @@ export type ToolPlatform = "linux" | "darwin" | "win32";
  * One way to put a tool on a machine. A copy already there goes on again
  * with the method that holds it (its `footprint`, or what `holds` asks);
  * any other install takes, in catalog order, the first method whose
- * `platforms` match and whose `needs` is present, among the methods that
+ * `platforms` match and whose `needs` runs here ({@link needProbe}), among the methods that
  * hold nothing when the tool has any (a package manager's method is for the
  * copy it holds), else among all. A pinned install takes only a method with
  * a `pinnedCommand`. There is no fallback past a method that ran and failed
@@ -50,10 +50,11 @@ export interface ToolInstallMethod {
    */
   native?: string;
   /**
-   * A binary that must already be on the machine for this method to be
-   * eligible — 'npm', 'brew', 'winget'. Absent means always eligible. CawCo
-   * never installs it: a machine without it takes the next method, or is told
-   * what is missing.
+   * A binary that must already run on the machine for this method to be
+   * eligible — 'npm', 'brew', 'winget': on the PATH, and answering its
+   * {@link needProbe} with exit 0. Absent means always eligible. CawCo
+   * never installs it: a machine where it is missing or does not run takes
+   * the next method, or is told what is missing and what it said.
    */
   needs?: string;
   /**
@@ -677,6 +678,21 @@ export const TOOL_CATALOG: ToolSpec[] = [
     ],
   },
 ];
+
+/**
+ * What a method's need (`ToolInstallMethod.needs`) is asked to tell whether
+ * it runs here: its own `--version`, which starts the binary and its runtime
+ * as an install would. A binary present but unable to run fails it: an
+ * `npm` whose `#!/usr/bin/env node` finds no `node` exits 127 with
+ * "/usr/bin/env: 'node': No such file or directory". Asking the binary
+ * itself covers each manager's own runtime (npm's Node, brew's Ruby) with no
+ * table of runtimes to keep. Windows PowerShell takes no `--version` (its
+ * `-Version` names a version to start), so it is asked to exit.
+ */
+export const needProbe = (need: string): string[] =>
+  need === "powershell"
+    ? ["-NoProfile", "-NonInteractive", "-Command", "exit 0"]
+    : ["--version"];
 
 export const toolSpec = (id: string): ToolSpec | undefined =>
   TOOL_CATALOG.find((spec) => spec.id === id);

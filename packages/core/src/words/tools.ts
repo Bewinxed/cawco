@@ -125,6 +125,16 @@ export const toolWords = {
   /** A pinned version the copy's method can't install (a Homebrew cask carries one version): nothing was run. */
   cannotPin: (method: string, name: string, version: string) =>
     `${method} installs only the version it carries, not ${name} ${version}, the version the fleet pins. Pin the version ${method} carries, or install ${name} there without ${method}.`,
+  /** An install method's need (core `ToolInstallMethod.needs`) that is not on the machine's PATH. */
+  needMissing: (need: string) => `${need} is not on this machine's PATH`,
+  /**
+   * An install method's need that is on the PATH and fails its probe (core
+   * `needProbe`): where it is, and the last of what it said.
+   */
+  needBroken: (path: string, said: string) =>
+    `${path} does not run here${said ? `: ${said}` : ""}`,
+  /** No install method runs here: why each method's need can't serve, in catalog order. */
+  noInstaller: (why: string[]) => `no installer runs here: ${why.join("; ")}`,
   /**
    * The fix a refused harness's sentence ends on when CawCo updates its CLI
    * with no press (Claude Code older than CawCo's floor).

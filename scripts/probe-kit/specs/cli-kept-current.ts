@@ -229,9 +229,14 @@ ln -sfn "$S/versions/$NEW" "$S/bin/claude"
 echo "Claude Code successfully installed!"
 `;
 
-/** `curl` as a stand-in: whatever it is asked for, it writes the stand-in installer to its `-o` file. */
+/**
+ * `curl` as a stand-in: `--version`, the probe that says it runs (core
+ * `needProbe`), answered; anything else asked for, it writes the stand-in
+ * installer to its `-o` file.
+ */
 const curl = (dir: string): string => `#!${systemProgram("bash")}
 S=${JSON.stringify(dir)}
+if [ "$1" = "--version" ]; then echo "curl (stand-in)"; exit 0; fi
 out=""
 while [ $# -gt 0 ]; do
   if [ "$1" = "-o" ]; then out="$2"; shift; fi
@@ -240,9 +245,14 @@ done
 while IFS= read -r line; do printf '%s\\n' "$line"; done < "$S/install.sh" > "$out"
 `;
 
-/** `brew` as a stand-in: `upgrade claude-code` re-points the launcher at the channel's build in its Caskroom. */
+/**
+ * `brew` as a stand-in: `--version`, the probe that says it runs (core
+ * `needProbe`), answered and not counted among its calls; `upgrade
+ * claude-code` re-points the launcher at the channel's build in its Caskroom.
+ */
 const brew = (dir: string): string => `#!${systemProgram("bash")}
 S=${JSON.stringify(dir)}
+if [ "$1" = "--version" ]; then echo "Homebrew (stand-in)"; exit 0; fi
 echo "brew $*" >> "$S/calls"
 while [ -e "$S/hold" ]; do sleep 0.1; done
 if [ "$1 $2" != "upgrade claude-code" ]; then exit 1; fi

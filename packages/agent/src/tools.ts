@@ -20,6 +20,7 @@ import type {
   ToolUpdateSwitches,
 } from "@cawco/core";
 import {
+  needProbe,
   olderThan,
   switchOn,
   TOOL_CATALOG,
@@ -332,6 +333,32 @@ const asksHold = async (
   return ran?.code === 0 && ran.stdout.trim() !== "";
 };
 
+/** How long a method's need is given to answer its probe (core `needProbe`): brew starts Ruby for it. */
+const NEED_WAIT_MS = 15_000;
+
+/**
+ * Why a method's need (core `ToolInstallMethod.needs`) can't serve an
+ * install here, or none when it runs: on the PATH ({@link resolveBin}) and
+ * answering its probe (core `needProbe`) with exit 0 within
+ * {@link NEED_WAIT_MS}. Present is not enough: an `npm` whose shebang finds
+ * no `node` is on the PATH and runs nothing (niftybot.art: "/usr/bin/env:
+ * 'node': No such file or directory"), and was chosen over a curl that ran.
+ */
+const needUnmet = async (need: string): Promise<string | undefined> => {
+  const bin = resolveBin(need);
+  if (!bin) {
+    return toolWords.needMissing(need);
+  }
+  const ran = await askProgram([bin, ...needProbe(need)], NEED_WAIT_MS);
+  if (ran?.code === 0) {
+    return undefined;
+  }
+  const said = ran
+    ? oneLine(tail(Bun.stripANSI(ran.stderr.trim() || ran.stdout)))
+    : `it did not answer within ${NEED_WAIT_MS / 1000}s`;
+  return toolWords.needBroken(bin, said);
+};
+
 /** Whether a method is for the copies it holds: a footprint, or a question for its package manager. */
 const holdsCopies = (method: ToolInstallMethod): boolean =>
   method.footprint !== undefined || method.holds !== undefined;
@@ -467,11 +494,11 @@ const tracked = (spec: ToolSpec): boolean => spec.install.some(holdsCopies);
  * catalog has no method for, or its method cannot run on this machine now.
  * Never a first-eligible method instead: that is a second copy.
  */
-const refusal = (
+const refusal = async (
   spec: ToolSpec,
   at: Found,
   version: string | undefined
-): string | undefined => {
+): Promise<string | undefined> => {
   if (!tracked(spec)) {
     return undefined;
   }
@@ -487,10 +514,10 @@ const refusal = (
   if (!at.method.platforms.includes(platform() as ToolPlatform)) {
     return `${at.path} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
   }
-  if (at.method.needs && !resolveBin(at.method.needs)) {
-    return `${at.path} was installed with ${at.method.label}, and ${at.method.needs} is not on this machine's PATH`;
-  }
-  return undefined;
+  const unmet = at.method.needs ? await needUnmet(at.method.needs) : undefined;
+  return unmet
+    ? `${at.path} was installed with ${at.method.label}, and ${unmet}`
+    : undefined;
 };
 
 /** The command a method runs for `version`. */
@@ -519,13 +546,13 @@ export const installAdvice = async (
     return { refusal: `${id} is not in the tool catalog` };
   }
   const want = spec.exactVersion ?? version;
-  const choice = methodFor(spec, await findCopy(spec), want);
+  const choice = await methodFor(spec, await findCopy(spec), want);
   if ("refused" in choice) {
     return { refusal: choice.refused };
   }
   return "method" in choice
     ? { command: commandOf(choice.method, want) }
-    : { refusal: `${spec.name}: ${noMethod(spec).detail}` };
+    : { refusal: `${spec.name}: ${noMethod(spec, choice.unmet).detail}` };
 };
 
 /** Whether `version` is a policy pin: asked, and not the one version CawCo's build runs. */
@@ -538,7 +565,7 @@ const isPin = (
 type MethodChoice =
   | { method: ToolInstallMethod }
   | { method?: ToolInstallMethod; refused: string }
-  | { none: true };
+  | { unmet: string[] };
 
 /**
  * THE ONE CHOICE of what an install of `spec` at `version` runs here, for
@@ -546,19 +573,20 @@ type MethodChoice =
  * `ToolInstallMethod`): a copy a method holds (its footprint, or its
  * manager's answer, {@link holdsCopies}) takes that method, or why it can't
  * run here (`refusal`); any other install takes the first method this
- * machine can run among those that hold no copies, when the tool has any (a
+ * machine can run ({@link needUnmet}: its need runs, not just stands on
+ * the PATH) among those that hold no copies, when the tool has any (a
  * package manager's method is for the copy it holds), else among all. A pin takes only a method that installs a given version: a
  * copy's own method that can't says so ({@link toolWords.cannotPin}), and
  * nothing runs.
  */
-const methodFor = (
+const methodFor = async (
   spec: ToolSpec,
   at: Found | undefined,
   version: string | undefined
-): MethodChoice => {
+): Promise<MethodChoice> => {
   const pinned = isPin(spec, version);
   if (at) {
-    const refused = refusal(spec, at, version);
+    const refused = await refusal(spec, at, version);
     if (refused) {
       return { refused, ...(at.method ? { method: at.method } : {}) };
     }
@@ -572,10 +600,21 @@ const methodFor = (
     }
   }
   const unheld = spec.install.filter((one) => !holdsCopies(one));
-  const chosen = (unheld.length > 0 ? unheld : spec.install).find(
-    (one) => eligible(one) && !(pinned && one.pinnedCommand === undefined)
+  const here = (unheld.length > 0 ? unheld : spec.install).filter(
+    (one) =>
+      one.platforms.includes(platform() as ToolPlatform) &&
+      !(pinned && one.pinnedCommand === undefined)
   );
-  return chosen ? { method: chosen } : { none: true };
+  // In catalog order, each asked only once the ones before it can't run.
+  const unmet: string[] = [];
+  for (const one of here) {
+    const why = one.needs ? await needUnmet(one.needs) : undefined;
+    if (!why) {
+      return { method: one };
+    }
+    unmet.push(`${one.label}: ${why}`);
+  }
+  return { unmet };
 };
 
 /** How long one read of a tool's settings is given, its own process's start included. */
@@ -976,7 +1015,7 @@ const probeTool = async (
   }
   // A tool CawCo is built against is installed only at its one version.
   if (want && version !== want) {
-    const refused = refusal(spec, at, want);
+    const refused = await refusal(spec, at, want);
     return {
       id: spec.id,
       state: "failed",
@@ -1167,30 +1206,18 @@ const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
   return kept ?? status;
 };
 
-const eligible = (method: ToolInstallMethod): boolean =>
-  method.platforms.includes(platform() as ToolPlatform) &&
-  (!method.needs || resolveBin(method.needs) !== undefined);
-
-/** Why nothing can be run here, named exactly enough for the user to fix it. */
-const noMethod = (spec: ToolSpec): ToolStatus => {
-  const here = platform();
-  const needs = [
-    ...new Set(
-      spec.install
-        .filter((method) => method.platforms.includes(here as ToolPlatform))
-        .map((method) => method.needs)
-        .filter((need): need is string => need !== undefined)
-    ),
-  ];
-  return {
-    id: spec.id,
-    state: "unsupported",
-    detail: needs.length
-      ? `no eligible installer: needs one of ${needs.join(", ")}`
-      : `${spec.name} has no installer for ${here}`,
-    at: Date.now(),
-  };
-};
+/**
+ * Why nothing can be run here, named exactly enough for the user to fix it:
+ * each method {@link methodFor} weighed and why it can't run (`unmet`).
+ */
+const noMethod = (spec: ToolSpec, unmet: string[]): ToolStatus => ({
+  id: spec.id,
+  state: "unsupported",
+  detail: unmet.length
+    ? toolWords.noInstaller(unmet)
+    : `${spec.name} has no installer for ${platform()}`,
+  at: Date.now(),
+});
 
 /**
  * Runs a method: whether it exited 0, and the tail of what it said (its
@@ -1268,7 +1295,7 @@ const install = async (
   ask: InstallAsk
 ): Promise<ToolStatus> => {
   const at = tracked(spec) ? await findCopy(spec) : undefined;
-  const choice = methodFor(spec, at, version);
+  const choice = await methodFor(spec, at, version);
   if ("refused" in choice) {
     // A tool CawCo keeps current keeps its copy's standing (the words on a
     // copy that still runs); any other fails, as it always has.
@@ -1285,7 +1312,7 @@ const install = async (
     );
   }
   if (!("method" in choice)) {
-    return remember(noMethod(spec));
+    return remember(noMethod(spec, choice.unmet));
   }
   const { method } = choice;
   // A copy's owner may have turned its updates off: CawCo's own (automatic)
