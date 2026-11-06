@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import type { HarnessKind } from "@cawco/core/harness";
   import { namedModels } from "@cawco/core/model-names";
   /**
    * Which model answers — for a session that is running, and for one that is
@@ -17,8 +18,8 @@
   import * as Command from "#lib/components/ui/command/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconUnfold } from "#lib/icons.js";
+  import { covers } from "./model-catalog";
   import {
-    covers,
     MODEL_DEFAULT,
     modelLabel,
     models,
@@ -36,7 +37,7 @@
   }: {
     /** The model in force, as the id it is known by. `''` is the SDK's own choice. */
     value: string;
-    harness: string;
+    harness: HarnessKind;
     /** Chosen. Rejections belong to the caller — it owns the slot they show in. */
     onchoose: (model: string) => void | Promise<void>;
     /** Whether "Default" is offered — it is, wherever no model at all is a choice. */
@@ -62,11 +63,15 @@
   const offered = $derived(models.forHarness(harness));
   const named = $derived(namedModels(offered));
   const recent = $derived(models.recentFor(harness));
-  /** A typed id nothing on the list already covers — the whole point of the field. */
+  /**
+   * A typed id nothing on the list already covers — the whole point of the
+   * field — that some machine would start a session on.
+   */
   const custom = $derived(
     trimmed.length > 0 &&
       !offered.some((row) => covers(row, trimmed)) &&
-      !recent.includes(trimmed)
+      !recent.includes(trimmed) &&
+      models.admits(harness, trimmed)
   );
 
   /** Why the list could not be read, said under it rather than as a fake row. */

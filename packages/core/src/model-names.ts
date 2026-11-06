@@ -22,7 +22,12 @@
  * - Two rows still alike (OpenCode and pi list one model from several
  *   providers) are told apart by provider, else by id.
  */
-import { type HarnessKind, harnessNamed, type ModelInfo } from "./harness";
+import {
+  type HarnessKind,
+  type HarnessReport,
+  harnessNamed,
+  type ModelInfo,
+} from "./harness";
 import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
 import { decidesWords } from "./words/decides";
@@ -274,6 +279,50 @@ export type ModelListing =
   | { readonly read: false; readonly why?: string };
 
 /**
+ * What `harness` lists on one machine, from what the hub and the dashboard
+ * both hold of it: Claude Code's rows read once an account signed in there
+ * has its catalog read (`catalogs`, the hub's account catalogs of those
+ * accounts), else unread with the hub's fault reading one (`faults`);
+ * OpenCode's and pi's read once the machine's `report` carries its `models`
+ * (empty when it read none), else unread with its `modelsUnread`. Unread is
+ * what a machine that just installed the harness, or whose read failed,
+ * reports: never taken as a list to admit any model by.
+ */
+export const modelListingOn = (
+  harness: HarnessKind,
+  there: {
+    readonly report?: Pick<HarnessReport, "models" | "modelsUnread">;
+    readonly catalogs?: readonly (readonly ModelInfo[])[];
+    readonly faults?: readonly string[];
+  }
+): ModelListing => {
+  if (harness === "claude") {
+    const read = there.catalogs ?? [];
+    if (read.length > 0) {
+      return { read: true, rows: read.flat() };
+    }
+    const why = there.faults?.[0];
+    return { read: false, ...(why ? { why } : {}) };
+  }
+  if (there.report?.models) {
+    return { read: true, rows: there.report.models };
+  }
+  const why = there.report?.modelsUnread;
+  return { read: false, ...(why ? { why } : {}) };
+};
+
+/**
+ * Whether a `harness` session may start on `model` where the harness lists
+ * `listing`: the one test {@link unlistedModelRefusal} refuses by, for a
+ * picker that offers only what a start there is admitted on.
+ */
+export const modelAdmitted = (
+  harness: HarnessKind,
+  model: string,
+  listing: ModelListing
+): boolean => modelListed(harness, listing.read ? listing.rows : [], model);
+
+/**
  * Why a `harness` session on `machine` cannot run `model`, judged against
  * `listing`, the models the harness lists there ({@link modelListed}):
  * undefined when it lists it, and for what the harness takes with no list
@@ -294,10 +343,10 @@ export const unlistedModelRefusal = (
   model: string,
   listing: ModelListing
 ): string | undefined => {
-  const rows = listing.read ? listing.rows : [];
-  if (modelListed(harness, rows, model)) {
+  if (modelAdmitted(harness, model, listing)) {
     return;
   }
+  const rows = listing.read ? listing.rows : [];
   const name = accountsWords.harnesses[harness];
   if (!listing.read) {
     return spawnWords.unlistedModel.unread(name, machine, model, listing.why);

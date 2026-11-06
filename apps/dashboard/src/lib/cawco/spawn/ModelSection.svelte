@@ -220,7 +220,7 @@
   });
 
   const catalog = $derived(models.forHarness(listHarness, machineIds));
-  const recent = $derived(models.recentFor(listHarness));
+  const recent = $derived(models.recentFor(listHarness, machineIds));
   const use = $derived.by<ModelUse>(() => ({
     lastSpawnAt: lastSpawnAt(listHarness),
     lastUsedAt: Object.fromEntries(
@@ -247,9 +247,18 @@
         entry.aliases.some((alias) => alias.toLowerCase() === q)
     ) || recent.some((id) => id.toLowerCase() === q)
   );
+  /**
+   * The typed id as a row of its own, when it is one the hub would start a
+   * session on here (models `admits`); one it would refuse is never offered.
+   */
   const showCustomRow = $derived(
-    q.length > 2 && !exact && isIdShaped(query.trim())
+    q.length > 2 &&
+      !exact &&
+      isIdShaped(query.trim()) &&
+      models.admits(listHarness, query.trim(), machineIds)
   );
+  /** Why the harness lists nothing to pick here, when its list is unread. */
+  const unread = $derived(models.unread(listHarness, machineIds));
   const noResults = $derived(rows.length === 0 && !showCustomRow);
   const modelIdx = $derived(
     Math.max(
@@ -473,11 +482,12 @@
             in:crossIn
             out:crossOut
           >
-            {#if q}
+            {#if unread}
+              {unread}
+            {:else if q}
               {spawnWords.model.noMatch(harnessName(listHarness), query)}
             {:else}
-              {models.unread(listHarness, machineIds) ??
-                spawnWords.model.noneReported(harnessName(listHarness))}
+              {spawnWords.model.noneReported(harnessName(listHarness))}
             {/if}
           </div>
         {/if}

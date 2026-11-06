@@ -7,15 +7,27 @@
  * why ({@link models}`.unread`).
  */
 
-import type { ModelInfo } from "@cawco/core/harness";
+import type { HarnessKind, ModelInfo } from "@cawco/core/harness";
 import { isEffortLevel } from "@cawco/core/harness";
 import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
-import { LONG_CONTEXT, modelNameIn } from "@cawco/core/model-names";
+import {
+  LONG_CONTEXT,
+  type ModelListing,
+  modelListingOn,
+  modelNameIn,
+} from "@cawco/core/model-names";
 import { z } from "zod";
 import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { cawco } from "./client.svelte";
-import { type HarnessModel, modelsForHarness } from "./model-catalog";
+import {
+  admittedOn,
+  covers,
+  type HarnessModel,
+  type ListingsOn,
+  modelsForHarness,
+  typedOffered,
+} from "./model-catalog";
 import { readJson, writeJson } from "./storage";
 import { speakerName } from "./transcript/speaker";
 
@@ -142,9 +154,14 @@ function unread(harness: string, machineIds?: string[]): string | null {
   if (said === null) {
     return null;
   }
-  return said.length > 0
-    ? `${speakerName(harness)}'s models couldn't be read. ${said.join(" ")}`
-    : "The hub hasn't read the models of the Claude accounts signed in here yet. It tries again until it can.";
+  if (said.length > 0) {
+    return `${speakerName(harness)}'s models couldn't be read. ${said.join(" ")}`;
+  }
+  // Only Claude's catalogs are read by the hub; another harness that says
+  // nothing has said nothing yet.
+  return harness === "claude"
+    ? "The hub hasn't read the models of the Claude accounts signed in here yet. It tries again until it can."
+    : null;
 }
 
 /**
@@ -169,6 +186,52 @@ function claudeUnread(machineIds: string[]): string[] | null {
     .filter((fault) => accounts.has(fault.accountId))
     .map((fault) => fault.reason);
 }
+
+/**
+ * What `harness` lists on `machineId`, as the hub judges a start there
+ * (core `modelListingOn`): the catalogs read of the Claude accounts signed
+ * in there, with the faults of those not read, and the machine's report of
+ * OpenCode or pi.
+ */
+function listingOn(harness: HarnessKind, machineId: string): ModelListing {
+  const view = cawco.accounts;
+  const signedIn = new Set(
+    (view?.signins ?? [])
+      .filter(
+        (signin) =>
+          signin.state === "signed-in" && signin.machineId === machineId
+      )
+      .map((signin) => signin.accountId)
+  );
+  return modelListingOn(harness, {
+    report: cawco.machines
+      .find((machine) => machine.machineId === machineId)
+      ?.harnesses?.find((report) => report.harness === harness),
+    catalogs: (view?.catalogs ?? [])
+      .filter((kept) => signedIn.has(kept.accountId))
+      .map((kept) => kept.models),
+    faults: (view?.catalogFaults ?? [])
+      .filter((fault) => signedIn.has(fault.accountId))
+      .map((fault) => fault.reason),
+  });
+}
+
+/**
+ * Where a picker judges a model for `harness`: on `machineIds`, every one;
+ * with none chosen, on any machine of the fleet.
+ */
+const listingsOn = (harness: HarnessKind, machineIds?: string[]): ListingsOn =>
+  machineIds?.length
+    ? {
+        every: true,
+        listings: machineIds.map((machineId) => listingOn(harness, machineId)),
+      }
+    : {
+        every: false,
+        listings: cawco.machines.map((machine) =>
+          listingOn(harness, machine.machineId)
+        ),
+      };
 
 /** Reads the claude windows the hub has observed, for pickers that size models. */
 export async function loadModelWindows(): Promise<void> {
@@ -204,22 +267,25 @@ export const models = {
       machineIds
     ),
   unread,
-  /** Ids typed in for `harness` that its offered list does not cover, newest first. */
-  recentFor: (harness: string): string[] => {
-    const rows = modelsForHarness(catalog(), harness);
-    return (store.recent[harness] ?? []).filter(
-      (id) => !rows.some((row) => covers(row, id))
-    );
-  },
+  /**
+   * Ids typed in for `harness` that its offered list on `machineIds` does
+   * not cover and a start there is admitted on (model-catalog
+   * `typedOffered`), newest first.
+   */
+  recentFor: (harness: HarnessKind, machineIds?: string[]): string[] =>
+    typedOffered(
+      harness,
+      store.recent[harness] ?? [],
+      modelsForHarness(catalog(), harness, machineIds),
+      listingsOn(harness, machineIds)
+    ),
+  /**
+   * Whether a start on `id`, typed in, is admitted for `harness` on
+   * `machineIds` (model-catalog `admittedOn`).
+   */
+  admits: (harness: HarnessKind, id: string, machineIds?: string[]): boolean =>
+    admittedOn(harness, id, listingsOn(harness, machineIds)),
 };
-
-/**
- * An offered row stands for a model id if either name matches: `system.init`
- * reports the wire id (`claude-sonnet-5`) while the row that offers it is keyed
- * by its alias (`sonnet`).
- */
-export const covers = (row: ModelInfo, model: string): boolean =>
-  row.value === model || row.resolvedModel === model;
 
 /**
  * A row that names a choice rather than a model. More than one row can resolve
@@ -271,7 +337,8 @@ export function modelLabel(model: string, harness?: string): string {
  * it off a list. A typed id is, by definition, one the catalog does not offer
  * — that is the whole reason it was typed — so nothing here checks it against
  * the catalog. `models.recentFor` hides any that the catalog later comes to
- * cover, and each harness's shortlist is capped, so a typo costs one slot
+ * cover or a start on the machine is not admitted on, and each harness's
+ * shortlist is capped, so a typo costs one slot
  * until it scrolls off.
  */
 export function rememberModel(model: string, harness: string): void {

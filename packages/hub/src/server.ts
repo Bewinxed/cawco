@@ -514,6 +514,7 @@ import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import {
   type ModelListing,
+  modelListingOn,
   modelNameIn,
   namedModels,
   unlistedModelRefusal,
@@ -5111,49 +5112,32 @@ export const createServer = (
     }
   };
   /**
-   * What `harness` lists on `machineId` (core `ModelListing`): Claude Code's
-   * rows read once an account signed in there has its catalog read (the
-   * hub's account catalogs), else unread with the hub's last fault reading
-   * one; OpenCode's and pi's read once the machine's report carries its
-   * `models` (empty when it read none), else unread with the machine's
-   * `modelsUnread`. Unread is what a machine that just installed the
-   * harness, or whose read failed, reports: never taken as a list to admit
-   * any model by.
+   * What `harness` lists on `machineId` (core `modelListingOn`): the
+   * catalogs read of the Claude accounts signed in there, with the faults
+   * of those not read, and the machine's report of OpenCode or pi.
    */
   const modelListing = (
     machineId: string,
     harness: HarnessKind
   ): ModelListing => {
-    if (harness === "claude") {
-      const signedIn = db.accounts
-        .signins()
-        .filter(
-          (signin) =>
-            signin.state === "signed-in" && signin.machineId === machineId
-        )
-        .map((signin) => signin.accountId);
-      const read = db.accounts
+    const signedIn = db.accounts
+      .signins()
+      .filter(
+        (signin) =>
+          signin.state === "signed-in" && signin.machineId === machineId
+      )
+      .map((signin) => signin.accountId);
+    return modelListingOn(harness, {
+      report: db
+        .listAgents()
+        .find((machine) => machine.machineId === machineId)
+        ?.harnesses?.find((one) => one.harness === harness),
+      catalogs: db.accounts
         .catalogs()
-        .filter((catalog) => signedIn.includes(catalog.accountId));
-      if (read.length > 0) {
-        return { read: true, rows: read.flatMap((catalog) => catalog.models) };
-      }
-      const why = signedIn
-        .map((account) => catalogFaults.get(account))
-        .find((fault) => fault !== undefined);
-      return { read: false, ...(why ? { why } : {}) };
-    }
-    const report = db
-      .listAgents()
-      .find((machine) => machine.machineId === machineId)
-      ?.harnesses?.find((one) => one.harness === harness);
-    if (report?.models) {
-      return { read: true, rows: report.models };
-    }
-    return {
-      read: false,
-      ...(report?.modelsUnread ? { why: report.modelsUnread } : {}),
-    };
+        .filter((catalog) => signedIn.includes(catalog.accountId))
+        .map((catalog) => catalog.models),
+      faults: signedIn.flatMap((account) => catalogFaults.get(account) ?? []),
+    });
   };
   /**
    * Why a `harness` session on `machineId` may not start on `model`: one the
