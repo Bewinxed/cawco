@@ -6,9 +6,12 @@
  * client hook (hooks.client.ts), to `/api/dashboard-errors` on its own
  * origin; a decision page's from its host (decisions/host/host.ts), to core
  * `PREVIEW_ERRORS_PATH` on its preview origin, the hub's own path there.
- * Each catches the window's uncaught errors and rejections, and anything else
- * reports through {@link reportError} (the dashboard's `handleError`, the
- * OpenUI renderer's throws).
+ * Anything either catches reports through {@link reportError} (the
+ * dashboard's `handleError`, the OpenUI renderer's throws). The dashboard's
+ * reporter also catches its window's uncaught errors and rejections; a
+ * decision page's are the preview overlay's, which reports every page's to
+ * the same path with its artifact and revision (agent preview-overlay
+ * faults.ts), so `artifact_read` says them.
  */
 
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/frames";
@@ -172,14 +175,15 @@ export function reportError(
 
 /**
  * Starts the page's reporter: its errors go to `to` (an {@link ErrorSink}) on the page's own
- * origin, as build `version`, and the window's uncaught errors and
- * rejections with them. The window is listened to once; a second call
- * only moves where the errors go.
+ * origin, as build `version`, and on the dashboard the window's uncaught
+ * errors and rejections with them (a preview origin's are its overlay's).
+ * The window is listened to once; a second call only moves where the
+ * errors go.
  */
 export function reportErrorsTo(to: ErrorSink, version: string): void {
   const listening = sink !== null;
   sink = { to, version };
-  if (listening) {
+  if (listening || to === "preview") {
     return;
   }
   addEventListener("error", (event) => {

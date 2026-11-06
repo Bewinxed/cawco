@@ -1564,6 +1564,33 @@ export interface components {
     };
     "POST /api/dashboard-errors": {
       body: {
+        fault?: {
+          artifact: string;
+          fault:
+            | {
+                control: string;
+                /** @constant */
+                kind: "dial";
+                panel: string;
+                path: string;
+              }
+            | {
+                column: number | null;
+                file: string | null;
+                /** @constant */
+                kind: "error";
+                line: number | null;
+                message: string;
+                source: string | null;
+              }
+            | {
+                element: string;
+                /** @constant */
+                kind: "asset";
+                url: string;
+              };
+          revision: number;
+        };
         message: string;
         path: string;
         sessionId: string | null;

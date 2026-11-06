@@ -129,6 +129,13 @@ import {
   parse,
 } from "@cawco/core/find-match";
 import type { InkGroup } from "@cawco/core/ink";
+import {
+  faultsAt,
+  faultsWith,
+  type PageFault,
+  type PageFaultReport,
+  type PageFaultsKept,
+} from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
 import {
@@ -678,6 +685,8 @@ export interface ArtifactRead {
     formatted?: string | null;
     lines: { from: number; to: number };
   };
+  /** What a browser met drawing it at this revision (core page-faults.ts): dials its panel doesn't draw, uncaught errors, assets that failed. */
+  faults?: PageFault[];
   /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
   held?: string;
   id: string;
@@ -1065,6 +1074,9 @@ const FORKED_AT = "forkedAt";
 
 /** The doc meta key a decision page's open views follow for its pieces' versions: the last piece moved and the version it stands at (service `versionMoved`, agent preview-overlay page.ts `mediaMoved`). */
 const MEDIA_AT = "mediaAt";
+
+/** The doc meta key of what a browser met drawing a page or preview at its revision now (core page-faults.ts, service `pageFault`). */
+const FAULTS = "faults";
 
 /** The doc meta key of a preview whose folder its machine said is gone at its last start, with the daemon's words (service `sourceSeen`). */
 const SOURCE_GONE = "sourceGone";
@@ -4152,6 +4164,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       .changes(row.id, { after: heardSeq(row), by: "person" })
       .some((change) => change.seq <= since);
 
+  /** What a browser met drawing `row` at its revision now (`meta.faults`, {@link pageFault}); nothing when it met nothing. */
+  const faultsOf = (
+    row: ArtifactRow,
+    doc: Doc
+  ): Pick<ArtifactRead, "faults"> => {
+    const faults = faultsAt(
+      doc.getMap("meta").get(FAULTS) as PageFaultsKept | undefined,
+      row.revision
+    );
+    return faults.length > 0 ? { faults } : {};
+  };
+
   /**
    * A page or preview as the session reads it, which counts as its read
    * when `ownersRead`: its owner's. A maker's read leaves the owner's unread.
@@ -4219,6 +4243,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...(servedOf(row) && doc.getMap("meta").get("stage")
         ? { stage: doc.getMap("meta").get("stage") as StageState }
         : {}),
+      ...faultsOf(row, doc),
     };
   };
 
@@ -8948,6 +8973,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         if (inPanel(row)) {
           relistOf(row);
         }
+      }
+    },
+
+    /**
+     * A fault page or preview `report.artifact` met as a browser drew it
+     * (core page-faults.ts), its overlay's report: kept in its doc
+     * (`meta.faults`) for `artifact_read`, the revision it is drawn at now
+     * alone, each fault once and the first 20 (core `faultsWith`). A
+     * report from a page served at another revision is let go: what it met
+     * is no longer what is drawn.
+     */
+    pageFault: (report: PageFaultReport): void => {
+      const row = db.get(report.artifact);
+      if (
+        !(row && (row.kind === "page" || row.kind === "preview")) ||
+        report.revision !== row.revision
+      ) {
+        return;
+      }
+      const kept = faultsWith(
+        docs.doc(row.id).getMap("meta").get(FAULTS) as
+          PageFaultsKept | undefined,
+        row.revision,
+        report.fault
+      );
+      if (kept) {
+        docs.transact(row.id, "hub", (doc) => {
+          doc.getMap("meta").set(FAULTS, kept);
+        });
       }
     },
 

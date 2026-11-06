@@ -13,13 +13,15 @@
  * - otherwise (the top document, a frame of another origin's page, the
  *   preview inside the dashboard's pane, or an artifact embedded in a page
  *   whose tag says so, `data-embed`: a decision page's Canvas, which joins
- *   its own doc): the overlay runs (page.ts).
+ *   its own doc): the overlay runs (page.ts), the page's faults heard from
+ *   here on (faults.ts).
  *
  * page.ts is reached only through `import()`, which the IIFE bundle keeps
  * lazy, so a frame that stands down never evaluates it. Where it runs, it
  * starts in the microtask after this script, before the parser goes on.
  */
 import { here, mark, parentMark, watchHistory } from "./boot";
+import { watchFaults } from "./faults";
 import { hold, installHold } from "./hold";
 
 // First, before any script of the page's asks for a frame or a timer.
@@ -36,5 +38,7 @@ if (above) {
   here.navigated = () => above.frameChanged();
   mark.frameChanged = () => above.frameChanged();
 } else {
+  // Before any script of the page's: what it meets as it draws is heard from its start.
+  watchFaults();
   import("./page");
 }

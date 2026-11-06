@@ -335,6 +335,7 @@ async function hubListener(
     reach: () => Promise.resolve({ ok: true as const, upstream: at }),
     upstream: () => at,
     stageAnswered: () => undefined,
+    pageFault: () => undefined,
     rowAt: (asked: string) => (asked === embed ? row : undefined),
     artifactAt: (asked: string) => (asked === embed ? row.id : undefined),
     unreachable: () => undefined,

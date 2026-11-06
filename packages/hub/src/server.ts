@@ -16103,6 +16103,7 @@ export const createServer = (
     reach: (row) => previewService.reach(row),
     upstream: (row) => previewService.upstreamOf(row),
     stageAnswered: (artifactId) => artifacts.stageAnswered(artifactId),
+    pageFault: (report) => artifacts.pageFault(report),
     artifactAt: (key) => {
       const origin = originOfKey(key);
       return origin === null ? undefined : db.artifacts.byOrigin(origin)?.id;

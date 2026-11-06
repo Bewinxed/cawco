@@ -750,6 +750,127 @@
                   "userAgent": {
                     "maxLength": 512,
                     "type": "string"
+                  },
+                  "fault": {
+                    "type": "object",
+                    "properties": {
+                      "artifact": {
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "type": "string"
+                      },
+                      "revision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "fault": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "dial"
+                              },
+                              "control": {
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "panel": {
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "path": {
+                                "maxLength": 500,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "control",
+                              "panel",
+                              "path"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "error"
+                              },
+                              "column": {
+                                "minimum": 0,
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "file": {
+                                "maxLength": 500,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "line": {
+                                "minimum": 0,
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "message": {
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "source": {
+                                "maxLength": 500,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "column",
+                              "file",
+                              "line",
+                              "message",
+                              "source"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "asset"
+                              },
+                              "element": {
+                                "maxLength": 500,
+                                "type": "string"
+                              },
+                              "url": {
+                                "maxLength": 500,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "element",
+                              "url"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "artifact",
+                      "revision",
+                      "fault"
+                    ]
                   }
                 },
                 "required": [
@@ -43547,6 +43668,13 @@
               "lines"
             ]
           },
+          "faults": {
+            "description": "What a browser met drawing it at this revision (core page-faults.ts): dials its panel doesn't draw, uncaught errors, assets that failed.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PageFault"
+            }
+          },
           "held": {
             "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
             "type": "string"
@@ -43950,6 +44078,109 @@
           "session",
           "sources",
           "why"
+        ]
+      },
+      "PageFault": {
+        "description": "One fault a page met.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "A dial of `cawcoDials(panel, config)` the panel doesn't draw: its path in the config, and its kind as written (core dial-config.ts `unread`).",
+                "type": "string",
+                "enum": [
+                  "dial"
+                ]
+              },
+              "control": {
+                "type": "string"
+              },
+              "panel": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "control",
+              "kind",
+              "panel",
+              "path"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "An uncaught error or rejection: its message, and where it was thrown when the browser says (the file as a path on the page's origin, else its address).",
+                "type": "string",
+                "enum": [
+                  "error"
+                ]
+              },
+              "column": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "file": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "line": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "source": {
+                "description": "Its line's words, when it was thrown in the page's own document: what to find it by in the page's source.",
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "column",
+              "file",
+              "kind",
+              "line",
+              "message",
+              "source"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "An element's file that failed to load: the element, and the address it asked for.",
+                "type": "string",
+                "enum": [
+                  "asset"
+                ]
+              },
+              "element": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "element",
+              "kind",
+              "url"
+            ]
+          }
         ]
       },
       "StageUnreached": {

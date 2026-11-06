@@ -22,10 +22,16 @@
  * (it is a module, deferred): `{{DIALS}}` sets a stand-in first that holds
  * each call's controller and its listeners (`window.cawcoDialsHeld`), and
  * this module draws each of them, then takes `cawcoDials`'s place.
+ *
+ * A control the panel doesn't draw (a `{ type: "spring" }`, a list) is
+ * told to the preview overlay as a page fault (core page-faults.ts), which
+ * reaches the agent's `artifact_read`: the page's config is its own
+ * script's, which the hub can't read from the page as a program's.
  */
 import { DIALS_REM, DIALS_ROOT } from "@cawco/core/dials-root";
+import { PAGE_FAULT_EVENT, type PageFault } from "@cawco/core/page-faults";
 import { mount } from "svelte";
-import type { DialValues } from "../../graph/dials";
+import { type DialValues, dialsOfConfig } from "../../graph/dials";
 import { tokensOn } from "../../motion/curves.svelte";
 import { watchEdgeFades } from "../../motion/fade-runs.svelte";
 import DialsRoot, { type Panel, shown } from "./DialsRoot.svelte";
@@ -97,8 +103,20 @@ async function makeRoot(): Promise<void> {
 /** Whether the root is made, or being made: once a page. */
 let rooted = false;
 
-/** A panel drawn for `held`: its values handed to its listeners at each turn. */
+/** A panel drawn for `held`: its values handed to its listeners at each turn, each control it doesn't draw told as a fault. */
 function draw(held: Held): void {
+  for (const unread of dialsOfConfig(held.config).unread) {
+    dispatchEvent(
+      new CustomEvent<PageFault>(PAGE_FAULT_EVENT, {
+        detail: {
+          kind: "dial",
+          panel: held.name,
+          path: unread.path,
+          control: unread.kind,
+        },
+      })
+    );
+  }
   const { controller } = held;
   const listeners = new Set<Listener>(controller.listeners ?? []);
   const panel: Panel = {

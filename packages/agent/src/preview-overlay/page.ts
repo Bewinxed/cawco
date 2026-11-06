@@ -86,6 +86,7 @@ import {
   type Remote,
   startEmbeds,
 } from "./embeds";
+import { faultsGoTo } from "./faults";
 import { fillFields, trackFields } from "./fields";
 import {
   type Box,
@@ -186,6 +187,15 @@ if (alone && seededId && seededKind) {
     `/__cawco/artifact/${seededId}`
   );
 }
+/** The page's faults go to its artifact at the revision it stands at, once it knows both (faults.ts). */
+function aimFaults(): void {
+  const id = artifact.id();
+  const { revision } = artifact.meta();
+  if (id && revision !== null) {
+    faultsGoTo(id, revision);
+  }
+}
+aimFaults();
 // Before any listener that stops a press: a morph waits for every pointer up.
 watchPointers();
 
@@ -867,6 +877,7 @@ artifact.watch({
     tellDoc();
   },
   meta: () => {
+    aimFaults();
     republished();
     mediaMoved();
     toldSent();
@@ -882,6 +893,7 @@ artifact.watch({
   marked: () => picturesLater(),
   link: (link) => tellLink(link),
   synced: () => {
+    aimFaults();
     reflect();
     if (keepsFields()) {
       fillFields(artifact.state());

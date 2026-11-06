@@ -22,6 +22,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
+import type { PageFaultReport } from "@cawco/core/page-faults";
 import { passDomainRefusal } from "@cawco/core/pass-domain";
 import {
   asksUpgrade,
@@ -439,6 +440,8 @@ export interface PreviewListenerDeps {
   originOf: (artifactId: string) => string | undefined;
   /** The session that holds an artifact (its panel); undefined when there is none, as for a project's page whose session is gone. */
   ownerOf: (artifactId: string) => string | undefined;
+  /** A fault a page met as it drew (core page-faults.ts), reported by its overlay on an origin that serves its artifact: kept for `artifact_read`. */
+  pageFault: (report: PageFaultReport) => void;
   picture: ReturnType<typeof artifactPicture>;
   /** The page's pictures of the person's marks, held for their delivery. */
   pictures: ReturnType<typeof artifactPictures>;
@@ -1023,7 +1026,12 @@ async function serveSession(
     );
   }
   if (pathname === PREVIEW_ERRORS_PATH) {
-    return takeErrorReport(request);
+    // A fault is kept only for an artifact this origin serves.
+    return takeErrorReport(request, (report) => {
+      if (deps.servedOn(report.artifact, instanceId)) {
+        deps.pageFault(report);
+      }
+    });
   }
   const told = artifactAsked(request, server, pathname, instanceId, deps);
   if (told !== null) {

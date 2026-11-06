@@ -1,3 +1,5 @@
+import type { PageFault } from "../page-faults";
+
 /**
  * What the hub's artifact tools answer a session (artifact_create,
  * artifact_update, artifact_show, artifact_delete, comment_read): a hand-off
@@ -7,6 +9,25 @@
  * (scripts/probe-words-check.ts refuses a copy).
  */
 export const artifactToolWords = {
+  /** The head of `artifact_read`'s faults: what a browser met as it drew the page at this revision (core page-faults.ts). */
+  faultsHead: (revision: number) =>
+    `What a browser met drawing revision ${revision} (each once, the first 20):`,
+  /** One fault a page met, in words. */
+  pageFault: (fault: PageFault): string => {
+    if (fault.kind === "dial") {
+      return `- Dial ${fault.path} of cawcoDials("${fault.panel}") is ${fault.control}, a control the panel doesn't draw: it is not drawn.`;
+    }
+    if (fault.kind === "asset") {
+      return `- A ${fault.element} failed to load ${fault.url}.`;
+    }
+    let place = "";
+    if (fault.line !== null) {
+      place = ` at line ${fault.line}${fault.column === null ? "" : `, column ${fault.column}`} of ${fault.file ?? "the page as served"}`;
+    } else if (fault.file) {
+      place = ` in ${fault.file}`;
+    }
+    return `- Uncaught error${place}: ${fault.message}${fault.source ? `\n  The line: ${fault.source}` : ""}`;
+  },
   /** The person's Ask again, its section's last line: an update changed what the comment stands on and it got no answer. */
   askedAgain:
     "- The person asks again: your update changed what this comment stands on, and you didn't answer it. Answer it with comment_reply.",

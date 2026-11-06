@@ -471,6 +471,10 @@ export const artifactReadWords = (read: ArtifactRead): Presented => {
     read.draft && "The person has it open in the composer and has not sent it.",
     read.held && artifactToolWords.readsNext(read.held),
     pickLines(read, now),
+    !!read.faults?.length && [
+      artifactToolWords.faultsHead(read.revision),
+      ...read.faults.map(artifactToolWords.pageFault),
+    ],
     canvasLines(read, now),
     writeLines(read),
     read.workspace &&
