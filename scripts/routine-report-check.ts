@@ -8,7 +8,8 @@
  * - `NO_REPLY` (outcome `silent`): no `tell`, no note, no push.
  * - A `tell` that answers `woke: false`: a note naming why.
  * - A first failure retries; a second one notes, pushes and needs you.
- * - A routine in no project pushes its result; a conversation run's result is a note.
+ * - A routine in no project pushes its result; a conversation run's result
+ *   and the memory curator's are notes.
  *
  * Run by `bun run check` (scripts/check.ts); it fails naming each case
  * whose answer differs.
@@ -235,11 +236,24 @@ const expect = (name: string, ok: boolean, got: unknown) => {
     did
   );
 }
+{
+  const did = await drive(DELIVERED, WOKE, {
+    routine: routine({ target: "curator" }),
+  });
+  expect(
+    "the memory curator's result, a proposal the person approves, is a note",
+    did.tells.length === 0 &&
+      did.notes.length === 1 &&
+      did.notes[0]?.phase === "delivered" &&
+      did.pushes.length === 0,
+    did
+  );
+}
 
 if (wrong.length > 0) {
   console.error(`routine-report-check: ${wrong.join("\n  ")}`);
   process.exit(1);
 }
 console.log(
-  "routine-report-check: 7 cases: delivered tells Caw, NO_REPLY silent, unheard noted with why, failures unchanged, no-project pushed, conversation noted"
+  "routine-report-check: 8 cases: delivered tells Caw, NO_REPLY silent, unheard noted with why, failures unchanged, no-project pushed, conversation and curator noted"
 );

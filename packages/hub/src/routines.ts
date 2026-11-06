@@ -39,7 +39,8 @@
  *   conversation (caw.ts `tell`, kind `routine-report`) that wakes Caw, as
  *   any delegate's report wakes the session that started it; with Caw off
  *   or past the project's cap it is a note saying why he did not hear it.
- *   A routine in no project pushes it to you.
+ *   The memory curator's result is a note: it reaches you as a memory
+ *   proposal. A routine in no project pushes it to you.
  * - **Conversation runs** are a send to the project's conversation (caw.ts
  *   `tell`), as any event is, and run on. Caw answers with
  *   `routine_result` under the same output contract, settled the same way,
@@ -547,9 +548,26 @@ const clipReason = (words: string): string => {
   return `${space > REASON_MAX / 2 ? cut.slice(0, space) : cut}…`;
 };
 
-/** What a delegate run is told about its output, after the routine's prompt: in a project its result reports to Caw. */
-const contractOf = (routine: Pick<RoutineRow, "projectId">): string =>
-  `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${routine.projectId ? LEAD_ANSWERS : ANSWERS}`;
+/**
+ * Whether a run's delivered result reports to the project's lead, Caw,
+ * waking him. Only a project's delegate and orchestrator runs do. A
+ * conversation run's result is Caw's own answer. The memory curator's
+ * result reaches the person as a memory proposal waiting on their approval
+ * (Needs you), so Caw has nothing to act on and a wake would cost a turn for
+ * nothing. A routine in no project has no lead.
+ */
+const reportsToLead = (
+  routine: Pick<RoutineRow, "projectId" | "target">
+): boolean =>
+  !!routine.projectId &&
+  routine.target !== "conversation" &&
+  routine.target !== "curator";
+
+/** What a delegate run is told about its output, after the routine's prompt: one that reports to Caw is told so. */
+const contractOf = (
+  routine: Pick<RoutineRow, "projectId" | "target">
+): string =>
+  `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${reportsToLead(routine) ? LEAD_ANSWERS : ANSWERS}`;
 
 /** What the project's conversation is told about a run's output, after the routine's prompt. */
 const leadContract = (runId: string): string =>
@@ -590,7 +608,8 @@ export interface SurfaceDeps {
  * reports to the project's lead, Caw, and wakes him, as every delegate's
  * report wakes the session that started it; with Caw off (or past the
  * project's cap) it is a note saying why he did not hear it. A conversation
- * run's result is Caw's own answer, so it is a note. A routine in no project
+ * run's result and the memory curator's are notes ({@link reportsToLead}).
+ * A routine in no project
  * pushes its result to you. A first failure is retried at once; a second one
  * is raised to you. Answers whether it needs you.
  */
@@ -616,7 +635,9 @@ export const surfaceRun = (
       });
       return false;
     }
-    if (routine.target === "conversation") {
+    // A conversation run's result is Caw's own answer; the curator's reaches
+    // the person as a memory proposal ({@link reportsToLead}): each a note.
+    if (!reportsToLead(routine)) {
       note(routine, run, "delivered", words);
       return false;
     }
