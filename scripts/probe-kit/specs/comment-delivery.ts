@@ -1951,9 +1951,7 @@ const run = async (kit: Kit) => {
   // 4. The person resolves pin 3: its one resolve line.
   const before4 = heard.length;
   await openRow(page, 3);
-  await threadOf(page, 3)
-    .getByRole("button", { name: "Resolve" })
-    .click();
+  await threadOf(page, 3).getByRole("button", { name: "Resolve" }).click();
   await until(
     "pin 3 resolved",
     () => docOf(frame),

@@ -1461,11 +1461,12 @@ async function moveChips(kit: Kit, page: Page, at: string): Promise<void> {
   await checks.at(page, "the face at rest");
   let opened = 0;
   let failed = 0;
+  const stuck: string[] = [];
   // A row's own press: the first child of its name cell, never a chip's.
   const rows = page.locator(
     `${GRAPH} [data-slot="clip"] > div:first-child > button[aria-expanded]`
   );
-  for (let row = 0; row < (await rows.count()); row += 1) {
+  eachRow: for (let row = 0; row < (await rows.count()); row += 1) {
     const press = rows.nth(row);
     const name = (await press.getAttribute("aria-label")) ?? `row ${row}`;
     if ((await press.getAttribute("aria-expanded")) !== "true") {
@@ -1493,14 +1494,78 @@ async function moveChips(kit: Kit, page: Page, at: string): Promise<void> {
       if ((await page.locator("body").innerText()).startsWith("500")) {
         failed += 1;
       }
+      // Escape put it away: no popover still drawn, nor its wrapper taking
+      // presses over the next chip. What stands instead is said whole.
+      const left = await standingAfterEscape(page);
+      if (left) {
+        stuck.push(`${name}: ${label}: ${left}`);
+        break eachRow;
+      }
     }
   }
   kit.check(
     `move-chips ${at}: every row's settings chips open and close, none ends on an error page`,
-    opened > 0 && failed === 0,
-    `${opened} opened, ${failed} on an error page`
+    opened > 0 && failed === 0 && stuck.length === 0,
+    `${opened} opened, ${failed} on an error page${stuck.length > 0 ? `; Escape left open: ${stuck.join("; ")}` : ""}`
   );
   checks.report();
+}
+
+/**
+ * What still stands after Escape on an open settings chip, or null when
+ * nothing does: each kit popover still drawn (its state, its wrapper's
+ * pointer-events), where the focus is, every bits-ui escape layer (the
+ * topmost of which takes Escape) and each tooltip shown.
+ */
+async function standingAfterEscape(page: Page): Promise<string | null> {
+  return await page.evaluate(() => {
+    const drawn = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-slot="popover-content"]'
+      ),
+    ].filter((one) => {
+      const r = one.getBoundingClientRect();
+      return r.width > 1 && r.height > 1;
+    });
+    if (drawn.length === 0) {
+      return null;
+    }
+    const what = (el: Element | null) =>
+      el
+        ? `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${el.getAttribute("data-slot") ? `[data-slot=${el.getAttribute("data-slot")}]` : ""}${el.getAttribute("aria-label") ? `[aria-label="${el.getAttribute("aria-label")}"]` : ""}`
+        : "none";
+    const layers = (
+      globalThis as unknown as {
+        bitsEscapeLayers?: Map<
+          { opts?: { ref?: { current?: Element } } },
+          { current: string }
+        >;
+      }
+    ).bitsEscapeLayers;
+    const tips = [
+      ...document.querySelectorAll(
+        '[data-slot="tooltip-content"]:not([data-state="closed"]), [data-tooltip-content]:not([data-state="closed"])'
+      ),
+    ].map((tip) => tip.textContent?.trim().slice(0, 40));
+    return JSON.stringify({
+      drawn: drawn.map((one) => ({
+        state: one.getAttribute("data-state"),
+        wrapper: getComputedStyle(
+          one.closest("[data-bits-floating-content-wrapper]") ?? one
+        ).pointerEvents,
+        holds: what(one.querySelector("input, button")),
+      })),
+      focus: what(document.activeElement),
+      frameFocused: document.activeElement?.tagName === "IFRAME",
+      layers: layers
+        ? [...layers].map(
+            ([layer, behaviour]) =>
+              `${what(layer.opts?.ref?.current ?? null)}:${behaviour.current}`
+          )
+        : "none",
+      tips,
+    });
+  });
 }
 
 /** move-runs: the row of two runs moves one run at a time, by a drag and by an arrow. */
