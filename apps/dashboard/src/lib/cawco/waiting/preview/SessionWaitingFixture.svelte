@@ -26,7 +26,9 @@
    * staying open. `opened`/`landed` draw a press already made: `ask`, the
    * question grown; `card`, the first card's page open in the panel.
    */
+  import { untrack } from "svelte";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
+  import { provideHub } from "#lib/cawco/hub-seam.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import { minimizedAsks } from "#lib/cawco/minimized-asks.svelte.js";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
@@ -94,6 +96,12 @@
   let shown = $state(false);
   $effect.pre(() => {
     shown = opened;
+  });
+
+  // The hub as the composer's question reads it: connected, so its Answer is live; nothing here reads the hub's REST.
+  provideHub({
+    state: "connected",
+    read: () => Promise.reject(new Error("The canvas reaches no hub.")),
   });
 
   /** A press the fixture answers with nothing: the plan's ring and the composer's send are another screen's. */
@@ -174,7 +182,9 @@
   // Folded to its bar as the story opens, unless the story is the press that grew it.
   $effect.pre(() => {
     if (asked) {
-      minimizedAsks.set("r-question", landed !== "ask");
+      const fold = landed !== "ask";
+      // Untracked: the store reads its own set as it writes, and the story's fold would answer every later press.
+      untrack(() => minimizedAsks.set("r-question", fold));
       if (landed === "ask") {
         shown = false;
       }
@@ -339,7 +349,9 @@
         </div>
         {@render conversation()}
         {#if paged}
-          <div class="absolute inset-x-0 bottom-0 top-space-6 z-3 flex">
+          <!-- Caw's panel holds one view at a time: the page takes it whole,
+               its Close leading back to the conversation. -->
+          <div class="absolute inset-0 z-3 flex flex-col">
             {@render panel(paged, "sheet")}
           </div>
         {/if}
@@ -392,11 +404,13 @@
           {@render conversation()}
         </div>
         {#if paged && !phone.current}
-          <div class="flex w-1/2 flex-none p-space-2">
+          <div class="flex w-1/2 flex-none flex-col p-space-2">
             {@render panel(paged, "beside")}
           </div>
         {:else if paged}
-          <div class="absolute inset-x-0 bottom-0 top-space-6 z-3 flex">
+          <div
+            class="absolute inset-x-0 bottom-0 top-space-6 z-3 flex flex-col"
+          >
             {@render panel(paged, "sheet")}
           </div>
         {/if}
