@@ -26,6 +26,7 @@
  */
 import { join } from "node:path";
 import type { FrameLocator, Page } from "playwright-core";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, type View } from "../kit";
@@ -150,11 +151,13 @@ const run = async (kit: Kit) => {
   // Rows written behind the hub's back: the board reads a session's row
   // again when the hub changes it (server.ts `refreshBoard`), so the
   // delegate is renamed through the hub, as the person renames one.
-  const renamed = await fetch(`${fleet.base}/api/instances/${delegate}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title: DELEGATE }),
-  });
+  const renamed = await fetchHub(
+    fleet.base,
+    hubRequest("PATCH /api/instances/:id", {
+      path: { id: delegate },
+      body: { title: DELEGATE },
+    })
+  );
   kit.check(
     "setup: the delegate's work item and workspace are written, and the hub reads its row again",
     renamed.ok,
@@ -167,16 +170,18 @@ const run = async (kit: Kit) => {
     )[0]?.state ?? "none";
 
   const board = await fleet.api<{ id: string }>(
-    `/api/instances/${plain}/artifacts`,
-    {
-      kind: "preview",
-      does: "try",
-      title: "Probe try artifact",
-      ask: "Try the board",
-      name: "board",
-      port,
-      path: "/",
-    }
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: plain },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try the board",
+        name: "board",
+        port,
+        path: "/",
+      },
+    })
   );
 
   const views: View[] = ["desk", "phone"];

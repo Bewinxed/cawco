@@ -37,6 +37,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ArtifactSummary } from "../../../packages/core/src";
+import {
+  type HubSent,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
@@ -90,11 +94,15 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Files reached",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Files reached",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const inProject = { projectId: project.id };
   const parent = await fleet.spawn("claude", "Parent", src, inProject);
   const outsider = await fleet.spawn("claude", "Outsider", src, inProject);
@@ -149,11 +157,20 @@ const run = async (kit: Kit) => {
     )[0]?.state ?? "none";
 
   const files = (id: string) =>
-    fleet.api<ArtifactSummary[]>(`/api/instances/${id}/artifacts/files`);
+    fleet.api<ArtifactSummary[]>(
+      hubRequest("GET /api/instances/:id/artifacts/files", { path: { id } })
+    );
   const menu = (id: string) =>
-    fleet.api<ArtifactSummary[]>(`/api/instances/${id}/artifacts`);
-  const create = (id: string, body: object) =>
-    fleet.api<{ id: string }>(`/api/instances/${id}/artifacts`, body);
+    fleet.api<ArtifactSummary[]>(
+      hubRequest("GET /api/instances/:id/artifacts", { path: { id } })
+    );
+  const create = (
+    id: string,
+    body: HubSent<"POST /api/instances/:id/artifacts">["body"]
+  ) =>
+    fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", { path: { id }, body })
+    );
 
   // The parent's conversation open on a desk, its panel the person's.
   const page = await kit.page("desk");
@@ -189,7 +206,12 @@ const run = async (kit: Kit) => {
       held.some((one) => one.id === working.id),
     `files [${before.map((one) => one.name).join(", ")}]; menu [${held.map((one) => one.name).join(", ")}]`
   );
-  await fleet.api(`/api/instances/${parent}/artifacts/${working.id}/show`, {});
+  await fleet.api(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+      path: { id: parent, artifact: working.id },
+      body: {},
+    })
+  );
   const after = await until(
     "the shown canvas in the parent's Files",
     () => files(parent),

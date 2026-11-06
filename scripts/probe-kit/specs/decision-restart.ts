@@ -41,6 +41,7 @@
  *   bun scripts/probe-kit/run.ts decision-restart
  */
 import type { Frame, Page } from "playwright-core";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type Kit, open, type Spec } from "../kit";
@@ -125,7 +126,9 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
-  const range = await fleet.api<{ ports: string }>("/api/preview-settings");
+  const range = await fleet.api<{ ports: string }>(
+    hubRequest("GET /api/preview-settings")
+  );
   const first = Number(range.ports.split("–")[0]);
   const tunnel = await passTunnel(kit.out, first, base);
   await storeHostMode(fleet, passPattern("{port}", tunnel.front));
@@ -146,7 +149,11 @@ const run = async (kit: Kit) => {
     return;
   }
   const read = () =>
-    fleet.api<Read>(`/api/instances/${session}/artifacts/${id}`);
+    fleet.api<Read>(
+      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+        path: { id: session, artifact: id },
+      })
+    );
   const pickOf = async () =>
     (await read()).state["rail-close"]?.options?.join() ?? "";
 

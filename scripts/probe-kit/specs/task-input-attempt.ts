@@ -23,6 +23,8 @@
  *
  *   bun scripts/probe-kit/run.ts task-input-attempt
  */
+
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -103,12 +105,16 @@ const spec: Spec = {
     await fleet.agentUp();
     await fleet.accountSignedIn();
 
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Kitchen refit",
-      machineId: MACHINE,
-      cwd: fleet.repo,
-      caw: false,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Kitchen refit",
+          machineId: MACHINE,
+          cwd: fleet.repo,
+          caw: false,
+        },
+      })
+    );
     // The project's session: it sets the stages up, parents the attempt
     // and turns the switch off in a2.
     const leadId = await fleet.spawn("claude", "Refit lead", fleet.repo, {
@@ -124,13 +130,20 @@ const spec: Spec = {
       content: STAGES_MD,
     });
     const task = await fleet.api<{ id: string }>(
-      `/api/projects/${project.id}/tasks`,
-      { title: "Fit the oak worktops", description: `${BRIEF}: oak, 40 mm.` }
+      hubRequest("POST /api/projects/:id/tasks", {
+        path: { id: project.id },
+        body: {
+          title: "Fit the oak worktops",
+          description: `${BRIEF}: oak, 40 mm.`,
+        },
+      })
     );
     const started = await fleet
       .api<{ workItemId: string | null }>(
-        `/api/projects/${project.id}/tasks/${task.id}/attempts`,
-        { parentInstanceId: leadId }
+        hubRequest("POST /api/projects/:id/tasks/:taskId/attempts", {
+          path: { id: project.id, taskId: task.id },
+          body: { parentInstanceId: leadId },
+        })
       )
       .catch((error: unknown) =>
         error instanceof Error ? error.message : String(error)
@@ -157,9 +170,14 @@ const spec: Spec = {
       : false;
 
     const comment = (text: string) =>
-      fleet.api(`/api/projects/${project.id}/tasks/${task.id}/comments`, {
-        text,
-      });
+      fleet.api(
+        hubRequest("POST /api/projects/:id/tasks/:taskId/comments", {
+          path: { id: project.id, taskId: task.id },
+          body: {
+            text,
+          },
+        })
+      );
 
     // a1. A live attempt hears the comment; the conversation does too.
     await comment("TI-LIVE: leave a 3 mm gap at the wall.");

@@ -17,6 +17,7 @@ import {
   Gone,
   readWithin,
 } from "../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import { unhandled } from "../../packages/core/src/unhandled";
 
 const [, , hub, machineId, prefix] = Bun.argv;
@@ -27,9 +28,11 @@ const DEADLINE = Date.now() + 900_000;
 /** The machine's update phase as the hub says it; a hub down mid-restart is unanswered "dead". */
 function phase(): Promise<Bounded<string | undefined>> {
   return readWithin(1000, async (signal) => {
-    const body = (await fetch(`${hub}/api/binary-updates/machines`, {
-      signal,
-    })
+    const body = (await fetchHub(
+      hub,
+      hubRequest("GET /api/binary-updates/machines"),
+      { signal }
+    )
       .then((response) => response.json())
       .catch((error: unknown) => {
         throw new Gone(`the hub: ${error}`);

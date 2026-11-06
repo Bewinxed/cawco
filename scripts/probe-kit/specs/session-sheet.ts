@@ -197,6 +197,11 @@ import {
 } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright-core";
+import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import {
   commandLines,
@@ -656,7 +661,7 @@ const sweep = async (
   retired: { workspaceId: string }[];
 }> =>
   (await (
-    await fetch(`${base}/api/workspaces/retire`, { method: "POST" })
+    await fetchHub(base, hubRequest("POST /api/workspaces/retire"))
   ).json()) as Awaited<ReturnType<typeof sweep>>;
 
 /**
@@ -675,10 +680,12 @@ const sentNpm = async (
   const sent = id
     ? await fleet
         .api<{ sentAt?: string }>(
-          `/api/instances/${who}/artifacts/${id}/send`,
-          {
-            text: "The card reads right",
-          }
+          hubRequest("POST /api/instances/:id/artifacts/:artifact/send", {
+            path: { id: who, artifact: id },
+            body: {
+              text: "The card reads right",
+            },
+          })
         )
         .then((answer) => answer.sentAt ?? "no sentAt")
         .catch((error: unknown) => String(error))
@@ -1385,14 +1392,16 @@ async function panelLegs(
   const madeId = made.match(ID)?.[1];
   const mapRead = madeId
     ? await desk.evaluate(
-        async (path) => {
-          const answer = await fetch(path);
+        async (request) => {
+          const answer = await fetch(request.path, request);
           return {
             status: answer.status,
             body: (await answer.json().catch(() => null)) as CanvasMap | null,
           };
         },
-        `/api/instances/${encodeURIComponent(session)}/artifacts/${madeId}/map`
+        hubRequest("GET /api/instances/:id/artifacts/:artifact/map", {
+          path: { id: session, artifact: madeId },
+        })
       )
     : null;
   const center = mapRead?.body?.center;
@@ -1516,25 +1525,28 @@ async function treeSheetLeg(
   }
   const desk = await panelPage(kit, base, parent, "desk", "light");
   /** A POST from the dashboard's page, as session `who`'s panel makes it. */
-  const panelPost = (who: string, act: string, body: object) =>
-    desk.evaluate(
-      async ([at, payload]) => {
-        const response = await fetch(at, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: payload,
-        });
-        return { status: response.status, text: await response.text() };
-      },
-      [
-        `/api/instances/${who}/artifacts/${sheet}/${act}`,
-        JSON.stringify(body),
-      ] as const
+  const panelPost = (request: HubRequest) =>
+    desk.evaluate(async (asked) => {
+      const response = await fetch(asked.path, asked);
+      return { status: response.status, text: await response.text() };
+    }, request);
+  const sheetPost = (who: string, body: typeof save) =>
+    panelPost(
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/sheet", {
+        path: { id: who, artifact: sheet },
+        body,
+      })
+    );
+  const verifyPost = (who: string) =>
+    panelPost(
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/verify", {
+        path: { id: who, artifact: sheet },
+      })
     );
   const save = {
     args: { story: "One", values: { title: PARENT_TITLE } },
   };
-  const saved = await panelPost(parent, "sheet", save);
+  const saved = await sheetPost(parent, save);
   let reads = 0;
   const readBack = await until(
     "the saved title in the delegate's read",
@@ -1555,7 +1567,7 @@ async function treeSheetLeg(
     saved.status === 200 && readBack.includes(PARENT_TITLE),
     `${saved.status} ${short(saved.text).slice(0, 200)}; read: ${short(readBack).slice(0, 200)}`
   );
-  const verified = await panelPost(parent, "verify", {});
+  const verified = await verifyPost(parent);
   const verdict = await until(
     "the verifier's verdict told to the delegate",
     () =>
@@ -1571,8 +1583,8 @@ async function treeSheetLeg(
     `${verified.status} ${short(verified.text).slice(0, 300)}; the delegate told: ${short(verdict).slice(0, 200) || "nothing"}`
   );
   const refused = artifactToolWords.noArtifact(sheet);
-  const outsiderSave = await panelPost(outsider, "sheet", save);
-  const outsiderVerify = await panelPost(outsider, "verify", {});
+  const outsiderSave = await sheetPost(outsider, save);
+  const outsiderVerify = await verifyPost(outsider);
   kit.check(
     "26: a session outside the tree is refused the sheet's Save and Verify, 404, with today's words",
     outsiderSave.status === 404 &&
@@ -1616,11 +1628,11 @@ async function neverDrawnLeg(
   const panelArtifacts = async () =>
     (
       await desk.evaluate(
-        (who) =>
-          fetch(`/api/instances/${who}/artifacts`).then((response) =>
-            response.json()
-          ),
-        session
+        (request) =>
+          fetch(request.path, request).then((response) => response.json()),
+        hubRequest("GET /api/instances/:id/artifacts", {
+          path: { id: session },
+        })
       )
     ).map((one: { name: string }) => one.name) as string[];
   // 25. A canvas whose page never comes: the cover gives way once its stage's time is up.
@@ -2180,9 +2192,12 @@ const run = async (kit: Kit) => {
     );
     // 5c. The canvas open on its own origin (hub server.ts `frameAddress`), its section failed; the file written, it draws there by itself.
     const { port } = (await (
-      await fetch(`${fleet.base}/api/artifacts/${laterId}/preview-address`, {
-        method: "POST",
-      })
+      await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/artifacts/:artifact/preview-address", {
+          path: { artifact: String(laterId) },
+        })
+      )
     ).json()) as { port?: number };
     const page = await kit.page("desk");
     await passInto(page.context(), fleet, `http://127.0.0.1:${port ?? 0}`);
@@ -2297,9 +2312,12 @@ const run = async (kit: Kit) => {
 
     // 5. The sheet on its own origin (hub server.ts `frameAddress`), and the session's edit reaching it.
     const { port } = (await (
-      await fetch(`${fleet.base}/api/artifacts/${sheet}/preview-address`, {
-        method: "POST",
-      })
+      await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/artifacts/:artifact/preview-address", {
+          path: { artifact: sheet },
+        })
+      )
     ).json()) as { port?: number };
     const page = await kit.page("desk");
     await passInto(page.context(), fleet, `http://127.0.0.1:${port ?? 0}`);

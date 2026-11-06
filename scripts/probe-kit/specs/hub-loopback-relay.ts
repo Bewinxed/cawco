@@ -40,6 +40,7 @@
  */
 import { networkInterfaces } from "node:os";
 import { carryElsewhere } from "../../../packages/agent/src/hub-loopback";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { freePort } from "../socket-served";
@@ -80,7 +81,9 @@ const overTailnet = async (kit: Kit) => {
   const serving = await until(
     "the hub serving HTTPS on the stub's tailnet address",
     async () =>
-      (await (await fetch(`${fleet.base}/api/tailnet-https`)).json()) as {
+      (await (
+        await fetchHub(fleet.base, hubRequest("GET /api/tailnet-https"))
+      ).json()) as {
         state: string;
       },
     (read) => read.state === "serving",

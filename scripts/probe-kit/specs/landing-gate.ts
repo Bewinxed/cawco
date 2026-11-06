@@ -35,6 +35,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
@@ -198,11 +199,15 @@ const run = async (kit: Kit) => {
 
   /** A project of its own on `dir`, with its parent, gate.md as given (none: no file). */
   const projectOn = async (dir: string, name: string, gate?: string) => {
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name,
-      machineId: MACHINE,
-      cwd: dir,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name,
+          machineId: MACHINE,
+          cwd: dir,
+        },
+      })
+    );
     if (gate !== undefined) {
       await declareGate(fleet.base, project.id, gate);
     }
@@ -254,15 +259,16 @@ const run = async (kit: Kit) => {
     )[0];
   const delegate = (tag: Tag, cwd: string, parent: string) =>
     fleet.api<{ workItemId: string; workspaceId: string; text: string }>(
-      "/api/work-items",
-      {
-        parentInstanceId: parent,
-        title: `Commit ${tag}`,
-        prompt: `PROBE-GATE-${tag}: commit a file, then finish.`,
-        harness: "claude",
-        model: "claude-haiku-4-5",
-        cwd,
-      }
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title: `Commit ${tag}`,
+          prompt: `PROBE-GATE-${tag}: commit a file, then finish.`,
+          harness: "claude",
+          model: "claude-haiku-4-5",
+          cwd,
+        },
+      })
     );
   const ended = (tag: Tag, id: string) =>
     until(

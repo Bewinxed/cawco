@@ -56,6 +56,7 @@ import { AGENT_BUNDLE_EXECUTABLE } from "../packages/core/src/agent-bundle";
 import { releaseTag } from "../packages/core/src/binary-distribution";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
+import { hubInit, hubRequest } from "../packages/core/src/hub-request";
 import { machineFetch } from "../packages/core/src/machine-key";
 import { hubDbPath } from "../packages/core/src/paths";
 import {
@@ -198,10 +199,11 @@ const gatePassed = async (commit: string): Promise<boolean> => {
     return false;
   }
   const { hubUrl } = installation;
+  const gate = hubRequest("GET /api/landing-gate", { query: { tree } });
   const asked = await readWithin(ANNOUNCE_MS, async (signal) => {
     const response = await machineFetch(
-      `${hubUrl}/api/landing-gate?tree=${tree}`,
-      { signal }
+      `${hubUrl}${gate.path}`,
+      hubInit(gate, { signal })
     );
     return {
       ok: response.ok,

@@ -41,6 +41,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { toolWords } from "../../lib/tool-call";
@@ -95,15 +96,15 @@ interface Parked {
 
 /** The approvals `instanceId` has on every screen now. */
 const parkedOf = async (fleet: KitFleet, instanceId: string) =>
-  (await fleet.api<Parked[]>("/api/pending")).filter(
+  (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).filter(
     (one) => one.instanceId === instanceId && one.requestId?.startsWith("ask_")
   );
 
 /** Whether a rule named `name` is among the fleet's rules. */
 const ruleMade = async (fleet: KitFleet, name: string): Promise<boolean> =>
-  (await fleet.api<{ rules: { name: string }[] }>("/api/rules")).rules.some(
-    (rule) => rule.name === name
-  );
+  (
+    await fleet.api<{ rules: { name: string }[] }>(hubRequest("GET /api/rules"))
+  ).rules.some((rule) => rule.name === name);
 
 /** `instanceId`'s `admin_rules_write` making a disabled rule named `name`: the call's words. */
 const writeRule = async (fleet: KitFleet, instanceId: string, name: string) =>
@@ -177,7 +178,7 @@ const promptLeg = async (kit: Kit, fleet: KitFleet) => {
   await fleet.send(prompted, BASH_STEP);
   /** The harness's own prompts `prompted` has on every screen (not the hub's asks). */
   const promptsOf = async () =>
-    (await fleet.api<Parked[]>("/api/pending")).filter(
+    (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).filter(
       (one) => one.instanceId === prompted && !one.requestId?.startsWith("ask_")
     );
   const [prompt] = await until(
@@ -230,17 +231,19 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
   const caller = await fleet.spawn("claude", "Continuing caller", cwd, {
     permissionMode: "acceptEdits",
   });
-  const paused = await fetch(`${fleet.base}/api/machines/${MACHINE}/pause`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      until: new Date(Date.now() + 10 * 60_000).toISOString(),
-    }),
-  });
+  const paused = await fetchHub(
+    fleet.base,
+    hubRequest("POST /api/machines/:machineId/pause", {
+      path: { machineId: MACHINE },
+      body: {
+        until: new Date(Date.now() + 10 * 60_000).toISOString(),
+      },
+    })
+  );
   const before = new Set(
-    (await fleet.api<ContinuationJob[]>("/api/continuations")).map(
-      (one) => one.id
-    )
+    (
+      await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
+    ).map((one) => one.id)
   );
   const continuing = toolWords(
     {
@@ -260,9 +263,9 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
   const job = await until(
     "the continuation held at its start",
     async () =>
-      (await fleet.api<ContinuationJob[]>("/api/continuations")).find(
-        (one) => !before.has(one.id)
-      ),
+      (
+        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
+      ).find((one) => !before.has(one.id)),
     (one) => one?.stage === "starting",
     60_000
   ).catch(() => undefined);
@@ -273,15 +276,21 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
     ["fullSend"]
   );
   const callerMode = modeOf(fleet, caller);
-  await fleet.api(`/api/machines/${MACHINE}/resume`, {});
+  await fleet.api(
+    hubRequest("POST /api/machines/:machineId/resume", {
+      path: { machineId: MACHINE },
+    })
+  );
   const answered = await continuing;
   const started = job
     ? await until(
         "the continuation started",
         async () =>
-          (await fleet.api<ContinuationJob[]>("/api/continuations")).find(
-            (one) => one.id === job.id
-          ),
+          (
+            await fleet.api<ContinuationJob[]>(
+              hubRequest("GET /api/continuations")
+            )
+          ).find((one) => one.id === job.id),
         (one) => one !== undefined && ["started", "failed"].includes(one.stage),
         180_000
       ).catch(() => undefined)

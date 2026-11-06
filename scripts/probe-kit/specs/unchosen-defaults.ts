@@ -58,6 +58,7 @@ import {
   ARTIFACT_SESSION_PATH,
 } from "../../../packages/core/src/frames";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
@@ -115,7 +116,9 @@ const HTTP = /^http/u;
 /** The hub's online word on the fleet's machine. */
 const machineOnline = async (fleet: KitFleet): Promise<boolean> =>
   (
-    await fleet.api<{ machineId: string; status: string }[]>("/api/agents")
+    await fleet.api<{ machineId: string; status: string }[]>(
+      hubRequest("GET /api/agents")
+    )
   ).find((row) => row.machineId === MACHINE)?.status === "online";
 
 /** A port nothing listens on yet. */
@@ -281,8 +284,9 @@ const dialogWith = async (
 
 /** Checks 3 and 4: the New Session dialog. */
 const form = async (kit: Kit, fleet: KitFleet, base: string) => {
-  const agents =
-    await fleet.api<{ hostname: string; machineId: string }[]>("/api/agents");
+  const agents = await fleet.api<{ hostname: string; machineId: string }[]>(
+    hubRequest("GET /api/agents")
+  );
   const hostname = agents.find((row) => row.machineId === MACHINE)?.hostname;
   const label = hostname ? machineLabel(hostname) : MACHINE;
   const page = await kit.page("desk");
@@ -302,7 +306,7 @@ const form = async (kit: Kit, fleet: KitFleet, base: string) => {
             }[];
             machineId: string;
           }[]
-        >("/api/agents")
+        >(hubRequest("GET /api/agents"))
       )
         .find((row) => row.machineId === MACHINE)
         ?.harnesses?.find((one) => one.harness === "opencode"),
@@ -447,12 +451,16 @@ const fromProject = async (kit: Kit, fleet: KitFleet, base: string) => {
   const dir = `${fleet.sandbox}/chosen`;
   await $`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
   const name = "Chosen";
-  const { id } = await fleet.api<{ id: string }>("/api/projects", {
-    name,
-    machineId: MACHINE,
-    cwd: dir,
-    caw: false,
-  });
+  const { id } = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name,
+        machineId: MACHINE,
+        cwd: dir,
+        caw: false,
+      },
+    })
+  );
   const page = await kit.page("desk");
   await open(page, `${base}/project/${id}`, "body");
   await page.evaluate(() => {
@@ -724,9 +732,10 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   }
 
   // 10. Its session's panel closed while the artifact lives: the tab stays on it.
-  const closed = await fetch(`${fleet.base}/api/instances/${session}/preview`, {
-    method: "DELETE",
-  });
+  const closed = await fetchHub(
+    fleet.base,
+    hubRequest("DELETE /api/instances/:id/preview", { path: { id: session } })
+  );
   const tabFrame = placeTab.page.locator('iframe[title="Preview"]');
   // A frame the hub's closed panel would take away goes within a frame or two of its word; a second is many of them.
   await placeTab.page.waitForTimeout(1000);
@@ -771,9 +780,11 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
     return;
   }
   const deletedTab = await tabOn(doomed);
-  const removed = await fetch(
-    `${fleet.base}/api/instances/${session}/artifacts/${doomed}`,
-    { method: "DELETE" }
+  const removed = await fetchHub(
+    fleet.base,
+    hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
+      path: { id: session, artifact: doomed },
+    })
   );
   const gone = await refusedWith(deletedTab, ARTIFACT_GONE);
   kit.check(
@@ -789,11 +800,12 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
     return;
   }
   const trustedTab = await tabOn(kept);
-  const turned = await fetch(`${fleet.base}/api/auth/pairing`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ required: true, kind: "app", name: "Probe app" }),
-  });
+  const turned = await fetchHub(
+    fleet.base,
+    hubRequest("PUT /api/auth/pairing", {
+      body: { required: true, kind: "app", name: "Probe app" },
+    })
+  );
   const app = (await turned.json().catch(() => ({}))) as { token?: string };
   fleet.authorize(app.token ?? null);
   const unpaired = await refusedWith(trustedTab, PAIRING_REQUIRED);

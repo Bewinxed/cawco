@@ -50,6 +50,7 @@
  *   bun scripts/probe-kit/run.ts ended-item-work
  */
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   isAlive,
@@ -277,15 +278,20 @@ const serving = async (
   while (Date.now() < deadline) {
     try {
       // The session's preview, on its own origin (hub server.ts `frameAddress`).
-      const listed = await fetch(
-        `${fleet.base}/api/instances/${instanceId}/artifacts`
+      const listed = await fetchHub(
+        fleet.base,
+        hubRequest("GET /api/instances/:id/artifacts", {
+          path: { id: instanceId },
+        })
       );
       const preview = (
         (await listed.json()) as { id: string; kind: string }[]
       ).find((one) => one.kind === "preview");
-      const address = await fetch(
-        `${fleet.base}/api/artifacts/${preview?.id}/preview-address`,
-        { method: "POST" }
+      const address = await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/artifacts/:artifact/preview-address", {
+          path: { artifact: String(preview?.id) },
+        })
       );
       const { port } = (await address.json()) as { port?: number };
       const read = await readWithin(5000, async (signal) => {
@@ -445,11 +451,15 @@ const spec: Spec = {
     await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo ended > README.md && git add -A && git commit -qm 'First commit'`
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Ended item work",
-      machineId: MACHINE,
-      cwd: repo,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Ended item work",
+          machineId: MACHINE,
+          cwd: repo,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", repo, {
       projectId: project.id,
     });
@@ -464,14 +474,18 @@ const spec: Spec = {
         id
       )[0];
     const delegate = (tag: "A" | "B", title: string) =>
-      fleet.api<Started>("/api/work-items", {
-        parentInstanceId: parent,
-        title,
-        prompt: `PROBE-ENDED-${tag}: run the commands.`,
-        harness: "claude",
-        model: "claude-haiku-4-5",
-        cwd: repo,
-      });
+      fleet.api<Started>(
+        hubRequest("POST /api/work-items", {
+          body: {
+            parentInstanceId: parent,
+            title,
+            prompt: `PROBE-ENDED-${tag}: run the commands.`,
+            harness: "claude",
+            model: "claude-haiku-4-5",
+            cwd: repo,
+          },
+        })
+      );
     try {
       // A: a server of the delegate's own, shown by the parent's preview.
       const a = await delegate("A", TITLE_A);
@@ -500,7 +514,9 @@ const spec: Spec = {
         ITEM_MS
       ).catch(() => itemState(a.workItemId));
       const servers = await serverPids(MARK_A);
-      const swept = await fleet.api<Sweep>("/api/workspaces/retire", {});
+      const swept = await fleet.api<Sweep>(
+        hubRequest("POST /api/workspaces/retire")
+      );
       const hold = swept.kept.find((one) => one.workspaceId === wa.id)?.hold;
       // Past the settle's own end: SIGTERM, its grace and the SIGKILL.
       await Bun.sleep(10_000);
@@ -548,7 +564,12 @@ const spec: Spec = {
             metadata?: { notice?: string; noteTitle?: string };
             type: string;
           }[];
-        }>(`/api/instances/${parent}/transcript?limit=400`)
+        }>(
+          hubRequest("GET /api/instances/:id/transcript", {
+            path: { id: parent },
+            query: { limit: "400" },
+          })
+        )
       ).blocks.filter((block) =>
         block.content.includes(leakWords.yourDelegate)
       );
@@ -565,12 +586,14 @@ const spec: Spec = {
           parentRows.map((block) => ({ type: block.type, ...block.metadata }))
         )
       );
-      const deleted = await fetch(
-        `${fleet.base}/api/instances/${parent}/artifacts/${artifact}`,
-        { method: "DELETE" }
+      const deleted = await fetchHub(
+        fleet.base,
+        hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
+          path: { id: parent, artifact },
+        })
       );
       const deletedAt = Date.now();
-      await fleet.api("/api/workspaces/retire", {});
+      await fleet.api(hubRequest("POST /api/workspaces/retire"));
       const ended = await until(
         "A's server ended",
         () => servers.filter((pid) => isAlive(listedPid(pid))),

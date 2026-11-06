@@ -197,3 +197,33 @@ export const hubRequestAsGiven = <R extends HubRoute>(
     query?: Record<string, unknown>;
   } & (HubSent<R> extends { path: infer P } ? { path: P } : unknown)
 ): HubRequest => requestOf(route, sent as Parts);
+
+/** `request` as `fetch`'s init, `init`'s own fields (a signal, credentials, other headers) beside it. */
+export const hubInit = (
+  request: HubRequest,
+  init: RequestInit = {}
+): RequestInit => {
+  const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(request.headers ?? {})) {
+    headers.set(name, value);
+  }
+  return {
+    ...init,
+    method: request.method,
+    headers,
+    ...(request.body === undefined ? {} : { body: request.body }),
+  };
+};
+
+/**
+ * `request` sent to the hub at `base` (its origin, or `""` on a page the hub
+ * serves through its own origin), `init`'s own fields beside it, through
+ * `through`: `fetch`, or a caller's own (a SvelteKit load's).
+ */
+export const fetchHub = (
+  base: string,
+  request: HubRequest,
+  init: RequestInit = {},
+  through: typeof fetch = fetch
+): Promise<Response> =>
+  through(`${base}${request.path}`, hubInit(request, init));

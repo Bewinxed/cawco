@@ -33,6 +33,7 @@
  */
 import type { FrameLocator, Page } from "playwright-core";
 import { OVERLAY_PATH } from "../../../packages/core/src/frames";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, type View } from "../kit";
 
@@ -101,25 +102,34 @@ const run = async (kit: Kit) => {
   const port = Number(new URL(base).port);
   const session = await fleet.spawn("claude", TITLE, fleet.repo);
 
-  const at = `/api/instances/${session}/artifacts`;
-  const accounts = await fleet.api<{ id: string }>(at, {
-    kind: "preview",
-    does: "try",
-    title: "Probe try artifact",
-    ask: "Try the accounts list",
-    name: "accounts",
-    port,
-    path: "/config/accounts",
-  });
-  const board = await fleet.api<{ id: string }>(at, {
-    kind: "preview",
-    does: "try",
-    title: "Probe try artifact",
-    ask: "Try the board",
-    name: "board",
-    port,
-    path: "/",
-  });
+  const accounts = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try the accounts list",
+        name: "accounts",
+        port,
+        path: "/config/accounts",
+      },
+    })
+  );
+  const board = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try the board",
+        name: "board",
+        port,
+        path: "/",
+      },
+    })
+  );
 
   /** `id`'s own tab on `page`, its frame's document read once `done` holds, else as it stands. */
   const tabReads = async (
@@ -161,14 +171,19 @@ const run = async (kit: Kit) => {
   await deskBoard.context().close();
 
   // 5. A decision page whose card shows the Accounts preview.
-  const decision = await fleet.api<{ id: string }>(at, {
-    kind: "page",
-    does: "pick",
-    title: "Probe pick artifact",
-    ask: "Pick the accounts view",
-    name: "accounts-view",
-    program: program(accounts.id),
-  });
+  const decision = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick the accounts view",
+        name: "accounts-view",
+        program: program(accounts.id),
+      },
+    })
+  );
   const pageTab = await kit.page("desk");
   await open(pageTab, `${base}/artifact/${decision.id}`, FRAME);
   const card = pageTab.frameLocator(FRAME).first();
@@ -183,7 +198,11 @@ const run = async (kit: Kit) => {
   const picked = async () => {
     const read = await fleet.api<{
       state?: Record<string, { options?: string[] }>;
-    }>(`${at}/${decision.id}`);
+    }>(
+      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+        path: { id: session, artifact: decision.id },
+      })
+    );
     return read.state?.view?.options ?? [];
   };
   const pickedAt = Date.now();

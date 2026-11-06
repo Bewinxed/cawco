@@ -43,6 +43,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { AuthContext } from "ssh2";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
@@ -147,7 +148,9 @@ async function run(kit: Kit): Promise<void> {
     });
     await fleet.hubUp();
     const offer = await fleet
-      .api<{ manifest?: Manifest }>("/api/binary-updates/latest")
+      .api<{ manifest?: Manifest }>(
+        hubRequest("GET /api/binary-updates/latest")
+      )
       .catch((error: Error) => ({ manifest: undefined, error: error.message }));
     const target = `${process.platform}-${process.arch}`;
     const { manifest } = offer;
@@ -163,14 +166,23 @@ async function run(kit: Kit): Promise<void> {
 
     // The add, held on the machine once its key is written: the forward stands.
     writeFileSync(hold, "");
-    added = await fleet.api<SshJoinJob>("/api/machines/ssh", {
-      target: `${USER}@127.0.0.1`,
-      port,
-    });
+    added = await fleet.api<SshJoinJob>(
+      hubRequest("POST /api/machines/ssh", {
+        body: {
+          target: `${USER}@127.0.0.1`,
+          port,
+        },
+      })
+    );
     const keyFile = join(home, ".config", "cawco", "machine-key");
     const job = await until(
       "the add carrying the hub and the machine's key written",
-      () => fleet.api<SshJoinJob>(`/api/machines/ssh/${added?.id}`),
+      () =>
+        fleet.api<SshJoinJob>(
+          hubRequest("GET /api/machines/ssh/:id", {
+            path: { id: String(added?.id) },
+          })
+        ),
       (read) =>
         read.state !== "running" ||
         (Boolean(read.hubUrl) &&
@@ -211,7 +223,11 @@ console.log(JSON.stringify({ settings: settings.status, status: answer.status, s
       holdMs: number,
       past: string
     ) => {
-      const url = `${hubUrl}/api/binary-updates/artifacts/${encodeURIComponent(manifest.version)}/${encodeURIComponent(wanted.archive)}`;
+      const url = `${hubUrl}${
+        hubRequest("GET /api/binary-updates/artifacts/:version/:archive", {
+          path: { version: manifest.version, archive: wanted.archive },
+        }).path
+      }`;
       const child = Bun.spawn([process.execPath, ask, hubUrl, url], {
         env: {
           ...process.env,
@@ -284,7 +300,11 @@ console.log(JSON.stringify({ settings: settings.status, status: answer.status, s
     rmSync(hold, { force: true });
     if (added) {
       await fleet
-        .api(`/api/machines/ssh/${added.id}/stop`, {})
+        .api(
+          hubRequest("POST /api/machines/ssh/:id/stop", {
+            path: { id: added.id },
+          })
+        )
         .catch(() => undefined);
     }
     proxy.stop();

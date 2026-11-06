@@ -40,6 +40,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { readWithin } from "../../../packages/core/src/bounded";
+import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
@@ -113,19 +118,10 @@ const respond = (request: Seen): Reply => {
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
 /** The hub's own routes, which the admin tools call (admin-tools.ts). */
-const hubCall = async (
-  fleet: Fleet,
-  method: string,
-  path: string,
-  body?: unknown
-): Promise<unknown> => {
+const hubCall = async (fleet: Fleet, request: HubRequest): Promise<unknown> => {
+  const { method, path } = request;
   const read = await readWithin(30_000, async (signal) => {
-    const response = await fetch(`${fleet.base}${path}`, {
-      method,
-      headers: { "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal,
-    });
+    const response = await fetchHub(fleet.base, request, { signal });
     return { status: response.status, text: await response.text() };
   });
   if (read.kind === "unanswered") {
@@ -257,11 +253,15 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Quiet",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Quiet",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
@@ -269,14 +269,18 @@ const run = async (kit: Kit) => {
     instanceId: string;
     workItemId: string;
     workspaceId: string;
-  }>("/api/work-items", {
-    parentInstanceId: parent,
-    title: "Long command D",
-    prompt: `${TAG} run the long command, then wait.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: src,
-  });
+  }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Long command D",
+        prompt: `${TAG} run the long command, then wait.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: src,
+      },
+    })
+  );
   const id = d.workspaceId;
   const clone = await until(
     "D's clone",
@@ -307,15 +311,21 @@ const run = async (kit: Kit) => {
   // reads.
   const hookId = crypto.randomUUID();
   const hookAs = (row: string, scope: "project" | "user", name: string) =>
-    hubCall(fleet, "PUT", `/api/fleet/hooks/${row}`, {
-      enabled: true,
-      handler: { type: "command" },
-      scope,
-      ...(scope === "project" ? { projectId: project.id } : {}),
-      name,
-      event: "Notification",
-      script: `#!${systemProgram("bash")}\nexit 0`,
-    });
+    hubCall(
+      fleet,
+      hubRequest("PUT /api/fleet/hooks/:id", {
+        path: { id: row },
+        body: {
+          enabled: true,
+          handler: { type: "command" },
+          scope,
+          ...(scope === "project" ? { projectId: project.id } : {}),
+          name,
+          event: "Notification",
+          script: `#!${systemProgram("bash")}\nexit 0`,
+        },
+      })
+    );
   const hook = (name: string) => hookAs(hookId, "project", name);
   const quiet = await synced(fleet, () => hook("quiet probe hook"));
   const afterQuiet = await heldOf(home, id);

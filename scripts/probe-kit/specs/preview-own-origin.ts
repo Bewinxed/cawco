@@ -28,6 +28,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Engine, type Kit, open, type Spec } from "../kit";
 
@@ -102,33 +103,51 @@ const run = async (kit: Kit) => {
     await mkdir(dir, { recursive: true });
     await Bun.write(join(dir, "index.html"), folderPage(word));
   }
-  const at = `/api/instances/${session}/artifacts`;
-  const alpha = await fleet.api<{ id: string }>(at, {
-    kind: "preview",
-    does: "try",
-    title: "Probe try artifact",
-    ask: "Try the alpha folder",
-    name: "alpha",
-    dir: folders.alpha,
-  });
-  const beta = await fleet.api<{ id: string }>(at, {
-    kind: "preview",
-    does: "try",
-    title: "Probe try artifact",
-    ask: "Try the beta folder",
-    name: "beta",
-    dir: folders.beta,
-  });
-  const page = await fleet.api<{ id: string }>(at, {
-    kind: "page",
-    does: "pick",
-    title: "Probe pick artifact",
-    ask: "Pick the word",
-    name: "word-page",
-    program: program(alpha.id),
-  });
+  const alpha = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try the alpha folder",
+        name: "alpha",
+        dir: folders.alpha,
+      },
+    })
+  );
+  const beta = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try the beta folder",
+        name: "beta",
+        dir: folders.beta,
+      },
+    })
+  );
+  const page = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick the word",
+        name: "word-page",
+        program: program(alpha.id),
+      },
+    })
+  );
   const shownOnHub = async (id: string) =>
-    (await fleet.api<{ shown: boolean }>(`/api/artifacts/${id}`)).shown;
+    (
+      await fleet.api<{ shown: boolean }>(
+        hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } })
+      )
+    ).shown;
 
   /** An artifact's own tab, its frame drawn. */
   const tab = async (on: Page, id: string) => {

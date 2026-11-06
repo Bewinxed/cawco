@@ -34,6 +34,7 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE } from "../../scratch-fleet";
 import {
   checkoutSchema,
@@ -115,13 +116,12 @@ const spec: Spec = {
               string,
               { availableVersion?: string; channel: string; phase: string }
             >;
-          }>("/api/binary-updates/machines")
+          }>(hubRequest("GET /api/binary-updates/machines"))
         ).machines[MACHINE];
 
       // 1. N published: found, polled, nothing newer.
       const foundN = await fleet.api<{ version: string }>(
-        "/api/binary-updates/check",
-        {}
+        hubRequest("POST /api/binary-updates/check")
       );
       check(
         "N published: the check finds N",
@@ -152,8 +152,7 @@ const spec: Spec = {
       // 2. N+1 published: the check finds it.
       mirror.publish(next);
       const foundNext = await fleet.api<{ version: string }>(
-        "/api/binary-updates/check",
-        {}
+        hubRequest("POST /api/binary-updates/check")
       );
       check(
         "N+1 published: the check finds N+1",
@@ -164,8 +163,10 @@ const spec: Spec = {
       // 3. One install on the machine, as update_machines sends it.
       const before = asked.length;
       const report = await fleet.api<UpdateReport>(
-        `/api/agents/${MACHINE}/update`,
-        { version: foundNext.version, commandId: crypto.randomUUID() }
+        hubRequest("POST /api/agents/:machineId/update", {
+          path: { machineId: MACHINE },
+          body: { version: foundNext.version, commandId: crypto.randomUUID() },
+        })
       );
       const archive = next.manifest.artifacts.find(
         (row) => row.target === `${process.platform}-${process.arch}`

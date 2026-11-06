@@ -48,6 +48,7 @@ import { platform, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import { keychainLocked } from "../../../packages/agent/src/login-keychain";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { machineWords } from "../../../packages/core/src/words/machine";
 import {
   startedPath,
@@ -522,7 +523,7 @@ const spec: Spec = {
       await fleet.agentUp();
 
       const machineRow = async () =>
-        (await fleet.api<AgentRow[]>("/api/agents")).find(
+        (await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
           (row) => row.machineId === MACHINE
         );
       const before = await until(

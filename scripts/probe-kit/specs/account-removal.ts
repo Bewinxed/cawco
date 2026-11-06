@@ -39,6 +39,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { DAY_MS } from "../../../packages/core/src/time";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { configureWords } from "../../../packages/core/src/words/configure";
@@ -156,9 +157,13 @@ const asleep = async (fleet: KitFleet, id: string) => {
 };
 
 const removeAccount = async (fleet: KitFleet, id: string, machine = "") => {
-  const response = await fetch(
-    `${fleet.base}/api/accounts/${id}${machine ? `/machines/${machine}` : ""}`,
-    { method: "DELETE" }
+  const response = await fetchHub(
+    fleet.base,
+    machine
+      ? hubRequest("DELETE /api/accounts/:id/machines/:machineId", {
+          path: { id, machineId: machine },
+        })
+      : hubRequest("DELETE /api/accounts/:id", { path: { id } })
   );
   const text = await response.text();
   return { status: response.status, text };
@@ -187,15 +192,17 @@ const spec: Spec = {
       Date.now()
     );
     // New sessions fill A first: B is where they move.
-    const routed = await fetch(`${fleet.base}/api/accounts/routing/anthropic`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        yours: { strategy: "fill-first" },
-        delegates: { strategy: "fill-first" },
-        atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
-      }),
-    });
+    const routed = await fetchHub(
+      fleet.base,
+      hubRequest("PUT /api/accounts/routing/:provider", {
+        path: { provider: "anthropic" },
+        body: {
+          yours: { strategy: "fill-first" },
+          delegates: { strategy: "fill-first" },
+          atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+        },
+      })
+    );
     kit.check(
       "setup: routing fills A first",
       routed.ok,
@@ -255,7 +262,7 @@ const spec: Spec = {
 
     // (a) The confirm's read.
     const removal = await fleet.api<{ moving: number; staying: number }>(
-      `/api/accounts/${A}/removal`
+      hubRequest("GET /api/accounts/:id/removal", { path: { id: A } })
     );
     kit.check(
       "(a) the confirm reads 3 sessions moving to another account, none staying",
@@ -536,7 +543,7 @@ const spec: Spec = {
     await asleep(fleet, running);
     const bGone = await removeAccount(fleet, B);
     const lastRead = await fleet.api<{ moving: number; staying: number }>(
-      `/api/accounts/${C}/removal`
+      hubRequest("GET /api/accounts/:id/removal", { path: { id: C } })
     );
     const last = await removeAccount(fleet, C);
     kit.check(
@@ -553,7 +560,7 @@ const spec: Spec = {
       async () =>
         (
           await fleet.api<{ id: string; stalled?: { words: string } }[]>(
-            "/api/instances"
+            hubRequest("GET /api/instances")
           )
         ).find((one) => one.id === resting),
       (one) => one?.stalled !== undefined,

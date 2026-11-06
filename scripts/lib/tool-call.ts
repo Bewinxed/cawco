@@ -9,6 +9,7 @@
  * program that read its old shape, by name, never silently.
  */
 import { readWithin } from "../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import {
   envelopeText,
   recordOf,
@@ -70,15 +71,14 @@ const request = (
   meta?: Record<string, unknown>
 ): Promise<Response> =>
   via === "door"
-    ? fetch(`${session.base}/api/delegation/call/${session.id}`, {
-        method: "POST",
-        signal,
-        headers: {
-          "content-type": "application/json",
-          Authorization: `Bearer ${session.credential}`,
-        },
-        body: JSON.stringify({ name, arguments: args }),
-      })
+    ? fetchHub(
+        session.base,
+        hubRequest("POST /api/delegation/call/:instanceId", {
+          path: { instanceId: session.id },
+          body: { name, arguments: args },
+        }),
+        { signal, headers: { Authorization: `Bearer ${session.credential}` } }
+      )
     : fetch(
         `${session.base}/mcp/cawco?instanceId=${encodeURIComponent(session.id)}`,
         {

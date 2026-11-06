@@ -20,6 +20,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  type HubSent,
+  hubInit,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { effectiveImageChoice } from "../../../packages/core/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import type { Kit, Spec } from "../kit";
@@ -41,22 +46,19 @@ export default {
         join(scratch, "hub", "hub.db"),
         join(scratch, "home")
       );
-      const call = async (method: "GET" | "PUT", body?: object) => {
+      const call = async (
+        body?: HubSent<"PUT /api/image-settings">["body"]
+      ) => {
+        const request = body
+          ? hubRequest("PUT /api/image-settings", { body })
+          : hubRequest("GET /api/image-settings");
         const response = await hub.handle(
-          new Request("http://127.0.0.1/api/image-settings", {
-            method,
-            ...(body
-              ? {
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify(body),
-                }
-              : {}),
-          })
+          new Request(`http://127.0.0.1${request.path}`, hubInit(request))
         );
         return { status: response.status, text: await response.text() };
       };
 
-      const unset = await call("GET");
+      const unset = await call();
       check(
         "a. no row: chatgpt on its own model",
         unset.status === 200 &&
@@ -69,15 +71,15 @@ export default {
           JSON.stringify({ provider: "chatgpt" })
       );
 
-      const oneModel = await call("PUT", {
+      const oneModel = await call({
         provider: "antigravity",
         model: "other",
       });
-      const unknown = await call("PUT", {
+      const unknown = await call({
         provider: "gemini-api",
         model: "nope",
       });
-      const none = await call("PUT", { provider: "dall-e" });
+      const none = await call({ provider: "dall-e" });
       check(
         "b. a model on antigravity, an unknown Gemini model, no such provider: refused in words",
         oneModel.status === 400 &&
@@ -97,15 +99,15 @@ export default {
       );
       check(
         "b. the setting is unchanged",
-        (await call("GET")).text ===
+        (await call()).text ===
           JSON.stringify({ provider: "chatgpt", model: null })
       );
 
-      const set = await call("PUT", {
+      const set = await call({
         provider: "gemini-api",
         model: "gemini-3-pro-image",
       });
-      const read = await call("GET");
+      const read = await call();
       check(
         "c. gemini-api on gemini-3-pro-image: kept and read back",
         set.status === 200 &&

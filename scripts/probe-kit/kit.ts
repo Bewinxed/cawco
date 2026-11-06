@@ -35,6 +35,7 @@ import {
   unlock,
 } from "../../packages/core/src/flock";
 import { HEAVY_SLOT_ENV } from "../../packages/core/src/heavy-slots";
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import { unhandled } from "../../packages/core/src/unhandled";
 import {
   type Fleet,
@@ -1566,8 +1567,9 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
   for (const { id, title } of instances) {
     const name = `${(title ?? "untitled").replace(/[^\w-]+/gu, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
     try {
-      const response = await fetch(
-        `${fleet.base}/api/instances/${id}/transcript`
+      const response = await fetchHub(
+        fleet.base,
+        hubRequest("GET /api/instances/:id/transcript", { path: { id } })
       );
       await writeFile(join(dir, "transcripts", name), await response.text());
     } catch (error) {

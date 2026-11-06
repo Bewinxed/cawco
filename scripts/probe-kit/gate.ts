@@ -1,3 +1,4 @@
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 /**
  * A scratch project's merge checks, declared as the person declares one:
  * `gate.md` written into its hub folder through the folder route (hub
@@ -47,11 +48,13 @@ export const declareGate = async (
   projectId: string,
   content: string
 ): Promise<void> => {
-  const put = await fetch(`${base}/api/projects/${projectId}/folder/file`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: "gate.md", content }),
-  });
+  const put = await fetchHub(
+    base,
+    hubRequest("PUT /api/projects/:id/folder/file", {
+      path: { id: projectId },
+      body: { path: "gate.md", content },
+    })
+  );
   if (!put.ok) {
     throw new Error(`gate.md: ${put.status} ${await put.text()}`);
   }

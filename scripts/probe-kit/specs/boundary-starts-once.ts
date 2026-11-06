@@ -34,6 +34,7 @@ import {
   HARNESSES,
   type HarnessKind,
 } from "../../../packages/core/src/harness";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   MACHINE,
   MODEL,
@@ -151,14 +152,18 @@ const oneHarness = async (
   const started = await fleet.api<{
     instanceId: string;
     workspaceId: string;
-  }>("/api/work-items", {
-    parentInstanceId: parent,
-    title: `Run once, ${harness}`,
-    prompt: `${tagOf(harness)} run the command once, then wait.`,
-    harness,
-    model: MODEL[harness],
-    cwd: src,
-  });
+  }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: `Run once, ${harness}`,
+        prompt: `${tagOf(harness)} run the command once, then wait.`,
+        harness,
+        model: MODEL[harness],
+        cwd: src,
+      },
+    })
+  );
   const mark = ranMark(harness);
   const ran = await until(
     `${harness}'s command's output`,
@@ -242,11 +247,15 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Once",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Once",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });

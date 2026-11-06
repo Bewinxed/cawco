@@ -41,6 +41,7 @@
  *   bun scripts/probe-kit/run.ts continuation-held-start
  */
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { ACCOUNT, delay, MACHINE, MODEL, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -77,12 +78,11 @@ const turnTaken = async (fleet: KitFleet, title: string): Promise<string> => {
 /** `source` continued from its asks, as another session's `continue_session` asks it: no filing turn, no summary. */
 const continueFromAsks = (fleet: KitFleet, source: string) =>
   readWithin(30_000, async (signal) => {
-    const response = await fetch(
-      `${fleet.base}/api/instances/${source}/continue`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+    const response = await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/instances/:id/continue", {
+        path: { id: source },
+        body: {
           asksOnly: true,
           askedBy: source,
           target: {
@@ -90,9 +90,9 @@ const continueFromAsks = (fleet: KitFleet, source: string) =>
             model: MODEL.claude,
             permissionMode: "bypassPermissions",
           },
-        }),
-        signal,
-      }
+        },
+      }),
+      { signal }
     );
     const body = (await response.json().catch(() => ({}))) as {
       continuationId?: string;
@@ -106,9 +106,9 @@ const settled = (fleet: KitFleet, id: string) =>
   until(
     `continuation ${id}'s end`,
     async () =>
-      (await fleet.api<ContinuationJob[]>("/api/continuations")).find(
-        (one) => one.id === id
-      ),
+      (
+        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
+      ).find((one) => one.id === id),
     (one) => one !== undefined && ["started", "failed"].includes(one.stage),
     180_000
   ).catch((error: Error) => ({ stage: `none: ${error.message}` }));
@@ -146,7 +146,9 @@ const healthLook = async (
 ): Promise<{ ms: number; ok: boolean }> => {
   const from = performance.now();
   const read = await readWithin(HEALTH_MS, (signal) =>
-    fetch(`${base}/health`, { signal }).then((response) => response.ok)
+    fetchHub(base, hubRequest("GET /health"), { signal }).then(
+      (response) => response.ok
+    )
   );
   return {
     ms: Math.round(performance.now() - from),
@@ -171,13 +173,15 @@ export default {
 
     const source = await turnTaken(fleet, "held-start source");
 
-    const paused = await fetch(`${fleet.base}/api/machines/${MACHINE}/pause`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        until: new Date(Date.now() + PAUSE_MS).toISOString(),
-      }),
-    });
+    const paused = await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/machines/:machineId/pause", {
+        path: { machineId: MACHINE },
+        body: {
+          until: new Date(Date.now() + PAUSE_MS).toISOString(),
+        },
+      })
+    );
     if (paused.status !== 200) {
       throw new Error(
         `the machine could not be paused: ${paused.status} ${await paused.text()}`
@@ -207,7 +211,9 @@ export default {
       return;
     }
 
-    const jobs = await fleet.api<ContinuationJob[]>("/api/continuations");
+    const jobs = await fleet.api<ContinuationJob[]>(
+      hubRequest("GET /api/continuations")
+    );
     const standing = jobs.find((one) => one.id === job.continuationId);
     const said = (await mark.since())
       .split("\n")
@@ -220,7 +226,11 @@ export default {
       `job ${JSON.stringify(standing)}; lines ${JSON.stringify(said)}`
     );
 
-    await fleet.api(`/api/machines/${MACHINE}/resume`, {});
+    await fleet.api(
+      hubRequest("POST /api/machines/:machineId/resume", {
+        path: { machineId: MACHINE },
+      })
+    );
     const ended = await settled(fleet, job.continuationId);
     const target = job.targetInstanceId
       ? fleet.instance(job.targetInstanceId)

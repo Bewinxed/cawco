@@ -57,6 +57,7 @@ import type { Page, Response, WebSocketRoute } from "playwright-core";
 import type { AgentRow } from "../../../packages/core/src";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { RECONNECTING_MS } from "../../../packages/core/src/handover";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   machineCalled,
   machineFaultWords,
@@ -336,7 +337,9 @@ const run = async (kit: Kit): Promise<void> => {
   );
 
   // c. Reloads while the turn streams.
-  const newest = `/api/instances/${busy}/transcript`;
+  const newest = hubRequest("GET /api/instances/:id/transcript", {
+    path: { id: busy },
+  }).path;
   for (let at = 1; at <= RELOADS; at += 1) {
     const streaming = fleet.instance(busy)?.status === "running";
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -478,15 +481,19 @@ const run = async (kit: Kit): Promise<void> => {
   await until(
     "the machine away",
     async () =>
-      (await fleet.api<AgentRow[]>("/api/agents")).find(
+      (await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
         (row) => row.machineId === MACHINE
       )?.status,
     (status) => status !== "online",
     30_000
   );
   take(heard);
-  const stored = `/api/instances/${STORED}/transcript`;
-  const attachments = `/api/instances/${STORED}/attachments`;
+  const stored = hubRequest("GET /api/instances/:id/transcript", {
+    path: { id: STORED },
+  }).path;
+  const attachments = hubRequest("GET /api/instances/:id/attachments", {
+    path: { id: STORED },
+  }).path;
   // The hub's own answer for it, asked beside the page (not in its log).
   const hubSays = await page.request.get(`${base}${stored}`);
   await page.goto(
@@ -542,7 +549,10 @@ const run = async (kit: Kit): Promise<void> => {
   await page.locator(`${ATTACHMENTS_FAULT} [data-details]`).click();
   await settle(page, 400);
   const machineWords = machineFaultWords(
-    machineCalled(MACHINE, await fleet.api<AgentRow[]>("/api/agents")),
+    machineCalled(
+      MACHINE,
+      await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))
+    ),
     "offline"
   );
   const faultSaid = (

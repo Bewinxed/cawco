@@ -104,6 +104,10 @@ import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright-core";
+import {
+  type HubRequest,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { HUB_TAKE_MEASURE } from "../../../packages/core/src/stream";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
@@ -1596,10 +1600,10 @@ function coldBudgets(kit: Kit, loads: Cold[]): void {
 /** Nav: cold loads, then the home's common presses. */
 async function navLeg(live: Live, session: string | undefined) {
   const { kit, page } = live;
-  const projects = await page.evaluate(async () => {
-    const answer = await fetch("/api/projects");
+  const projects = await page.evaluate(async (request) => {
+    const answer = await fetch(request.path, request);
     return answer.ok ? ((await answer.json()) as { id: string }[]) : [];
-  });
+  }, hubRequest("GET /api/projects"));
   const paths = [
     "/session",
     ...(session ? [`/session/${session}`] : []),
@@ -1705,8 +1709,8 @@ const stillFrames = () =>
   });
 
 /** The board, as this browser is answered it: the rows, or the status refused. */
-const boardRead = async (): Promise<unknown> => {
-  const answer = await fetch("/api/instances");
+const boardRead = async (request: HubRequest): Promise<unknown> => {
+  const answer = await fetch(request.path, request);
   return answer.ok ? ((await answer.json()) as unknown) : answer.status;
 };
 
@@ -1794,7 +1798,10 @@ async function measureLive(
   };
   const page = await desk();
   await page.goto(`${base}/session`, { waitUntil: "domcontentloaded" });
-  const board = await page.evaluate(boardRead);
+  const board = await page.evaluate(
+    boardRead,
+    hubRequest("GET /api/instances")
+  );
   if (!Array.isArray(board)) {
     kit.check(
       "the hub's board answers this browser",

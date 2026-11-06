@@ -48,6 +48,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CATALOG_SETTLE_MS } from "../../../packages/agent/src/harnesses/opencode-client";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   MACHINE,
   MODEL,
@@ -526,15 +527,24 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Source burst",
-      machineId: MACHINE,
-      cwd: src,
-    });
-    await fleet.api(`/api/projects/${project.id}/places`, {
-      machineId: OTHER,
-      path: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Source burst",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
+    await fleet.api(
+      hubRequest("POST /api/projects/:id/places", {
+        path: { id: project.id },
+        body: {
+          machineId: OTHER,
+          path: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
@@ -542,16 +552,20 @@ const spec: Spec = {
     // 1. Every create at once, half on each machine.
     const calls = await Promise.allSettled(
       Array.from({ length: DELEGATES }, (_, lane) =>
-        fleet.api("/api/work-items", {
-          parentInstanceId: parent,
-          title: `Source burst ${lane}`,
-          prompt: "Say ok.",
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd: src,
-          lands: "none",
-          ...(lane % 2 === 1 ? { machineId: OTHER } : {}),
-        })
+        fleet.api(
+          hubRequest("POST /api/work-items", {
+            body: {
+              parentInstanceId: parent,
+              title: `Source burst ${lane}`,
+              prompt: "Say ok.",
+              harness: "claude",
+              model: "claude-haiku-4-5",
+              cwd: src,
+              lands: "none",
+              ...(lane % 2 === 1 ? { machineId: OTHER } : {}),
+            },
+          })
+        )
       )
     );
     const refusals = calls.flatMap((call, lane) =>

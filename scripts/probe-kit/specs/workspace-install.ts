@@ -46,6 +46,7 @@
 import { lstatSync } from "node:fs";
 import { readdir, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   copyPath,
@@ -381,11 +382,15 @@ const parentOn = async (
   repo: string,
   name: string
 ): Promise<string> => {
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name,
-    machineId: MACHINE,
-    cwd: repo,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name,
+        machineId: MACHINE,
+        cwd: repo,
+      },
+    })
+  );
   return fleet.spawn("claude", "Parent", repo, { projectId: project.id });
 };
 
@@ -397,15 +402,16 @@ const delegate = async (
   tag: Tag
 ): Promise<Delegated> => {
   const started = await fleet.api<{ instanceId: string; workspaceId: string }>(
-    "/api/work-items",
-    {
-      parentInstanceId: parent,
-      title: `Install ${tag}`,
-      prompt: `PROBE-INSTALL-${tag}: install the dependencies.`,
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd: repo,
-    }
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: `Install ${tag}`,
+        prompt: `PROBE-INSTALL-${tag}: install the dependencies.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: repo,
+      },
+    })
   );
   const row = await until(
     `${tag}'s workspace cut`,

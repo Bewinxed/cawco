@@ -66,6 +66,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { movedLine, restoredWords } from "../../../packages/core/src/injected";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import { workWords } from "../../../packages/core/src/words/work";
@@ -644,7 +645,7 @@ const ownerLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const orphan = await sleeps(OWNER_SLEEP);
   shell.kill("SIGKILL");
   await shell.exited;
-  await scene.fleet.api("/api/workspaces/retire", {});
+  await scene.fleet.api(hubRequest("POST /api/workspaces/retire"));
   const retired = await scene.stateBecomes(wo.id, "archived");
   const named = (await scene.fleet.logs("agent"))
     .split("\n")
@@ -872,7 +873,7 @@ const removalLeg = async (kit: Kit, scene: Scene): Promise<void> => {
     `${item?.state}; ${row.state}; clone ${existsSync(wu.path) ? "stands" : "gone"}; ${removing} ${existsSync(removing) ? "stands" : "gone"}; ${failed ?? (await linesOf(scene.fleet, wu.id))}`
   );
   await Bun.$`chflags -R nouchg ${removing}`.quiet().nothrow();
-  await scene.fleet.api("/api/workspaces/retire", {});
+  await scene.fleet.api(hubRequest("POST /api/workspaces/retire"));
   const retired = await scene.stateBecomes(wu.id, "archived");
   check(
     "(u) once the flag is gone, the next sweep retires it and nothing of it is left",
@@ -961,11 +962,15 @@ const projectAt = async (
       .quiet();
   }
   return (
-    await fleet.api<{ id: string }>("/api/projects", {
-      name,
-      machineId: MACHINE,
-      cwd: dir,
-    })
+    await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name,
+          machineId: MACHINE,
+          cwd: dir,
+        },
+      })
+    )
   ).id;
 };
 
@@ -1032,16 +1037,20 @@ const spec: Spec = {
           SETTLE_MS
         ).catch(() => workspaceOf(id)),
       delegate: (tag, cwd, extra = {}) =>
-        fleet.api<Started>("/api/work-items", {
-          parentInstanceId: parent,
-          title: `Holds probe ${tag}`,
-          prompt: `PROBE-HOLDS-${tag}: do your part.`,
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd,
-          ...(cwd === tree ? { parentInstanceId: treeParent } : {}),
-          ...extra,
-        }),
+        fleet.api<Started>(
+          hubRequest("POST /api/work-items", {
+            body: {
+              parentInstanceId: parent,
+              title: `Holds probe ${tag}`,
+              prompt: `PROBE-HOLDS-${tag}: do your part.`,
+              harness: "claude",
+              model: "claude-haiku-4-5",
+              cwd,
+              ...(cwd === tree ? { parentInstanceId: treeParent } : {}),
+              ...extra,
+            },
+          })
+        ),
       ended: (started) =>
         until(
           `work item ${started.workItemId} ended`,

@@ -46,6 +46,11 @@ import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
 import { HARNESSES, type HarnessKind } from "../packages/core/src/harness";
 import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../packages/core/src/hub-request";
+import {
   darwinUserDirs,
   socketPathProblem,
   workspaceCacheDir,
@@ -2441,15 +2446,11 @@ async function standUp(
       .slice(-20);
     return `Sockets on ${previewPorts} (ss -tanp, state all): ${sockets.length}\n${sockets.join("\n") || "(none)"}\nThe hub's kept preview ports: ${kept}\nThe hub's last [preview] lines: ${said.length}\n${said.join("\n") || "(none)"}`;
   };
-  const api = async <T>(path: string, body?: unknown): Promise<T> => {
+  const api = async <T>(request: HubRequest): Promise<T> => {
+    const { path } = request;
     const read = await readWithin(30_000, async (signal) => {
-      const response = await fetch(`${base}${path}`, {
-        method: body === undefined ? "GET" : "POST",
-        headers: {
-          ...ownerHeaders(),
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      const response = await fetchHub(base, request, {
+        headers: ownerHeaders(),
         signal,
       });
       const text = await response.text();
@@ -2778,7 +2779,7 @@ async function standUp(
       "hub",
       "the hub answering",
       () =>
-        fetch(`${base}/health`).then(
+        fetchHub(base, hubRequest("GET /health")).then(
           async (r) =>
             (r.ok ? await r.json() : undefined) as
               { hubId?: unknown } | undefined
@@ -2890,7 +2891,7 @@ async function standUp(
         err,
         label,
         async () => {
-          last = (await api<AgentRow[]>("/api/agents")).find(
+          last = (await api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
             (row) => row.machineId === machineId
           );
           return last !== undefined && online(last);
@@ -3031,7 +3032,9 @@ async function standUp(
     );
   /** The Claude report the hub holds from the first machine's agent, as its failure words say it. */
   const claudeReportWords = async (): Promise<string> => {
-    const report = (await api<AgentRow[]>("/api/agents").catch(() => []))
+    const report = (
+      await api<AgentRow[]>(hubRequest("GET /api/agents")).catch(() => [])
+    )
       .find((row) => row.machineId === MACHINE)
       ?.harnesses?.find((one) => one.harness === "claude");
     return report

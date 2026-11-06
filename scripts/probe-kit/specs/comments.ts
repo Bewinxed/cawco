@@ -289,6 +289,7 @@ import {
   readPins,
 } from "../../../packages/core/src/comments";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { pinName } from "../../../packages/core/src/pin-name";
 import { unhandled } from "../../../packages/core/src/unhandled";
@@ -3992,10 +3993,12 @@ const roomChecks = async (on: On) => {
   const replies = 20;
   for (let n = 1; n <= replies; n += 1) {
     await on.fleet.api(
-      `/api/instances/${on.session}/artifacts/comments/${pin.id}/reply`,
-      {
-        text: `Reply ${n} of ${replies}: made the card's spacing tighter, and this line runs long enough to wrap.`,
-      }
+      hubRequest("POST /api/instances/:id/artifacts/comments/:pin/reply", {
+        path: { id: on.session, pin: pin.id },
+        body: {
+          text: `Reply ${n} of ${replies}: made the card's spacing tighter, and this line runs long enough to wrap.`,
+        },
+      })
     );
   }
   await (
@@ -4632,8 +4635,10 @@ const sizingPin = async (on: On) => {
     return null;
   }
   await on.fleet.api(
-    `/api/instances/${on.session}/artifacts/comments/${pin.id}/reply`,
-    { text: SIZING_ANSWER }
+    hubRequest("POST /api/instances/:id/artifacts/comments/:pin/reply", {
+      path: { id: on.session, pin: pin.id },
+      body: { text: SIZING_ANSWER },
+    })
   );
   return { id, number: pin.number, second: second.number };
 };
@@ -7771,8 +7776,10 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
   await card.getByRole("button", { name: "Close", exact: true }).click();
   await settle(on.page, 1500);
   await on.fleet.api(
-    `/api/instances/${on.session}/artifacts/comments/${await pinIdOn("#a")}/reply`,
-    { text: "Made it a step larger." }
+    hubRequest("POST /api/instances/:id/artifacts/comments/:pin/reply", {
+      path: { id: on.session, pin: await pinIdOn("#a") },
+      body: { text: "Made it a step larger." },
+    })
   );
   await pressOn("#a", 0.8, 0.5);
   await submit("And its weight, too.");
@@ -11995,15 +12002,11 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   const pinned = frame ? pinNumbered((await docOf(frame)).pins, 1) : undefined;
   // The session's own title, forty words, as the owner names it.
   const renamed = await on.page.evaluate(
-    async ({ session, title }) =>
-      (
-        await fetch(`/api/instances/${session}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ title }),
-        })
-      ).status,
-    { session: on.session, title: FORTY_WORDS }
+    async (request) => (await fetch(request.path, request)).status,
+    hubRequest("PATCH /api/instances/:id", {
+      path: { id: on.session },
+      body: { title: FORTY_WORDS },
+    })
   );
   await agentSays(
     on,

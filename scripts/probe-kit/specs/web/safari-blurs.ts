@@ -36,6 +36,7 @@
  */
 import type { Page } from "playwright-core";
 import { readWithin } from "../../../../packages/core/src/bounded";
+import { hubRequest } from "../../../../packages/core/src/hub-request";
 import { machineWords } from "../../../../packages/core/src/words/machine";
 import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
@@ -453,12 +454,16 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
 }
 
 async function sheetCases(kit: Kit, fleet: KitFleet, base: string) {
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Harbour",
-    machineId: MACHINE,
-    cwd: fleet.repo,
-    caw: false,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Harbour",
+        machineId: MACHINE,
+        cwd: fleet.repo,
+        caw: false,
+      },
+    })
+  );
   for (const title of ["Alpha", "Beta"]) {
     await fleet.spawn("claude", title, fleet.repo, { projectId: project.id });
   }

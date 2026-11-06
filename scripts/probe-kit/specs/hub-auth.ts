@@ -58,6 +58,11 @@ import {
 } from "../../../packages/core/src/asks";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
+import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/index";
 import { httpProof } from "../../../packages/core/src/machine-key";
 import { unhandled } from "../../../packages/core/src/unhandled";
@@ -139,11 +144,14 @@ const credentialOf = async (fleet: Fleet, instanceId: string) =>
 
 /** One request: its status, its text and its headers. */
 const ask = async (
-  url: string,
+  base: string,
+  request: HubRequest,
   init: RequestInit = {}
 ): Promise<{ headers: Headers; status: number; text: string }> => {
+  const { method, path } = request;
+  const url = `${base}${path}`;
   const read = await readWithin(60_000, async (signal) => {
-    const response = await fetch(url, { ...init, signal });
+    const response = await fetchHub(base, request, { ...init, signal });
     return {
       status: response.status,
       text: await response.text(),
@@ -155,18 +163,12 @@ const ask = async (
       return read.value;
     case "unanswered":
       throw new Error(
-        `${init.method ?? "GET"} ${url} did not answer within ${read.after} ms (${read.reason})`
+        `${method} ${url} did not answer within ${read.after} ms (${read.reason})`
       );
     default:
       unhandled("read", read);
   }
 };
-
-const json = (body: unknown, headers: Record<string, string> = {}) => ({
-  method: "POST",
-  headers: { "content-type": "application/json", ...headers },
-  body: JSON.stringify(body),
-});
 
 /** A tool call through the REST door, as the session the credential is: its words. */
 const callTool = async (
@@ -331,11 +333,15 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Auth",
-      machineId: MACHINE,
-      cwd: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Auth",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
@@ -347,8 +353,8 @@ const spec: Spec = {
     const bearer = { authorization: `Bearer ${parentKey}` };
 
     // ── Trusted ──────────────────────────────────────────────────────────
-    const anonymous = await ask(`${fleet.base}/api/agents`);
-    const devicesRead = await ask(`${fleet.base}/api/devices`);
+    const anonymous = await ask(fleet.base, hubRequest("GET /api/agents"));
+    const devicesRead = await ask(fleet.base, hubRequest("GET /api/devices"));
     check(
       "(t1) trusted: an owner request with no credential works (GET /api/agents, GET /api/devices)",
       anonymous.status === 200 &&
@@ -356,17 +362,20 @@ const spec: Spec = {
         devicesRead.status === 200,
       `${anonymous.status}, ${devicesRead.status} ${devicesRead.text.slice(0, 200)}`
     );
-    const asSession = await ask(`${fleet.base}/api/agents`, {
+    const asSession = await ask(fleet.base, hubRequest("GET /api/agents"), {
       headers: bearer,
     });
-    const turnOn = await ask(`${fleet.base}/api/auth/pairing`, {
-      ...json({ required: true }, bearer),
-      method: "PUT",
-    });
-    const forged = await ask(`${fleet.base}/api/agents`, {
+    const turnOn = await ask(
+      fleet.base,
+      hubRequest("PUT /api/auth/pairing", { body: { required: true } }),
+      { headers: bearer }
+    );
+    const forged = await ask(fleet.base, hubRequest("GET /api/agents"), {
       headers: { authorization: `Bearer ${"x".repeat(43)}` },
     });
-    const mode = JSON.parse((await ask(`${fleet.base}/api/auth`)).text) as {
+    const mode = JSON.parse(
+      (await ask(fleet.base, hubRequest("GET /api/auth"))).text
+    ) as {
       mode: string;
     };
     check(
@@ -384,8 +393,12 @@ const spec: Spec = {
       "socket opened with a Bearer"
     );
     const archivedByCurl = await ask(
-      `${fleet.base}/api/workspaces/nothing/archive`,
-      json({}, bearer)
+      fleet.base,
+      hubRequest("POST /api/workspaces/:id/archive", {
+        path: { id: "nothing" },
+        body: {},
+      }),
+      { headers: bearer }
     );
     check(
       "(t2) trusted: a session's curl to POST /api/workspaces/:id/archive is refused (403): no session archives a workspace",
@@ -394,7 +407,9 @@ const spec: Spec = {
     );
 
     // (t3) The agent records the hub it joined; rediscovery takes that hub alone.
-    const { hubId } = JSON.parse((await ask(`${fleet.base}/health`)).text) as {
+    const { hubId } = JSON.parse(
+      (await ask(fleet.base, hubRequest("GET /health"))).text
+    ) as {
       hubId: string;
     };
     const config = await until(
@@ -473,15 +488,17 @@ const spec: Spec = {
     const after = await until(
       "the browser paired",
       () =>
-        paired.evaluate(() =>
-          fetch("/api/auth").then(
-            (response) =>
-              response.json() as Promise<{
-                caller: string;
-                device: { id: string; name: string } | null;
-                mode: string;
-              }>
-          )
+        paired.evaluate(
+          (request) =>
+            fetch(request.path, request).then(
+              (response) =>
+                response.json() as Promise<{
+                  caller: string;
+                  device: { id: string; name: string } | null;
+                  mode: string;
+                }>
+            ),
+          hubRequest("GET /api/auth")
         ),
       (value) => value.mode === "pairing" && value.device !== null,
       30_000
@@ -538,7 +555,7 @@ const spec: Spec = {
     );
 
     // ── Pairing on ───────────────────────────────────────────────────────
-    const refused = await ask(`${fleet.base}/api/agents`);
+    const refused = await ask(fleet.base, hubRequest("GET /api/agents"));
     check(
       "(p1) an anonymous request is refused: 401, marked pairing required",
       refused.status === 401 &&
@@ -549,10 +566,11 @@ const spec: Spec = {
     held.register("probe-anonymous");
     await Bun.sleep(2000);
     const waitingList = await fleet.api<{ machineId: string }[]>(
-      "/api/machines/waiting"
+      hubRequest("GET /api/machines/waiting")
     );
-    const agentsNow =
-      await fleet.api<{ machineId: string; status: string }[]>("/api/agents");
+    const agentsNow = await fleet.api<{ machineId: string; status: string }[]>(
+      hubRequest("GET /api/agents")
+    );
     check(
       "(p1) a register with no proof is held: its first frame the challenge, then waiting, no ack, nothing online",
       held.frames[0]?.verb === "admission" &&
@@ -566,17 +584,21 @@ const spec: Spec = {
         ),
       JSON.stringify(held.frames)
     );
-    await ask(`${fleet.base}/api/machines/waiting/probe-anonymous/refuse`, {
-      method: "POST",
-      headers: { authorization: `Owner ${cookie?.value ?? ""}` },
-    });
+    await ask(
+      fleet.base,
+      hubRequest("POST /api/machines/waiting/:machineId/refuse", {
+        path: { machineId: "probe-anonymous" },
+      }),
+      { headers: { authorization: `Owner ${cookie?.value ?? ""}` } }
+    );
     held.close();
 
     const forger = await machineSocket(fleet.base);
     forger.register(MACHINE);
     await until("the forged register closed", () => forger.closed(), Boolean);
-    const stillOnline =
-      await fleet.api<{ machineId: string; status: string }[]>("/api/agents");
+    const stillOnline = await fleet.api<
+      { machineId: string; status: string }[]
+    >(hubRequest("GET /api/agents"));
     check(
       "(p2) a forged register with a known machineId is refused and closed (4403); the machine stays online",
       forger.closed()?.code === 4403 &&
@@ -592,12 +614,16 @@ const spec: Spec = {
     joining.catch(() => undefined);
     await until(
       "probe-new waiting",
-      () => fleet.api<{ machineId: string }[]>("/api/machines/waiting"),
+      () =>
+        fleet.api<{ machineId: string }[]>(
+          hubRequest("GET /api/machines/waiting")
+        ),
       (list) => list.some((one) => one.machineId === "probe-new"),
       120_000
     );
-    const beforeAdmit =
-      await fleet.api<{ machineId: string; status: string }[]>("/api/agents");
+    const beforeAdmit = await fleet.api<
+      { machineId: string; status: string }[]
+    >(hubRequest("GET /api/agents"));
     check(
       "(p3) a new machine waits: listed waiting, not online",
       !beforeAdmit.some(
@@ -637,14 +663,28 @@ const spec: Spec = {
         join(machine.home, ".config", "cawco", "machine-key")
       ).text()
     ).trim();
-    const asMachine = (path: string) =>
-      ask(`${fleet.base}${path}`, {
-        headers: proofOf("probe-new", newMachineKey, hubId, "GET", path),
+    const asMachine = (request: HubRequest) =>
+      ask(fleet.base, request, {
+        headers: proofOf(
+          "probe-new",
+          newMachineKey,
+          hubId,
+          "GET",
+          request.path
+        ),
       });
     const [fleetList, ownRow, otherRow] = await Promise.all([
-      asMachine("/api/agents"),
-      asMachine("/api/agents/probe-new"),
-      asMachine(`/api/agents/${MACHINE}`),
+      asMachine(hubRequest("GET /api/agents")),
+      asMachine(
+        hubRequest("GET /api/agents/:machineId", {
+          path: { machineId: "probe-new" },
+        })
+      ),
+      asMachine(
+        hubRequest("GET /api/agents/:machineId", {
+          path: { machineId: MACHINE },
+        })
+      ),
     ]);
     const own = ownRow.status === 200 ? JSON.parse(ownRow.text) : undefined;
     check(
@@ -682,25 +722,37 @@ const spec: Spec = {
     const started = JSON.parse(
       (
         await ask(
-          `${fleet.base}/api/pair`,
-          json({ kind: "cli", name: "a session" }, bearer)
+          fleet.base,
+          hubRequest("POST /api/pair", {
+            body: { kind: "cli", name: "a session" },
+          }),
+          { headers: bearer }
         )
       ).text
     ) as { userCode: string };
     const selfApprove = await ask(
-      `${fleet.base}/api/pair/requests/${started.userCode}/approve`,
-      json({}, bearer)
+      fleet.base,
+      hubRequest("POST /api/pair/requests/:userCode/approve", {
+        path: { userCode: started.userCode },
+      }),
+      { headers: bearer }
     );
     const anonApprove = await ask(
-      `${fleet.base}/api/pair/requests/${started.userCode}/approve`,
-      { method: "POST" }
+      fleet.base,
+      hubRequest("POST /api/pair/requests/:userCode/approve", {
+        path: { userCode: started.userCode },
+      })
     );
     check(
       "(p4) a session that started a pairing can't approve it: 403 with its credential, 401 without",
       selfApprove.status === 403 && anonApprove.status === 401,
       `${selfApprove.status}, ${anonApprove.status}`
     );
-    await fleet.api(`/api/pair/requests/${started.userCode}/deny`, {});
+    await fleet.api(
+      hubRequest("POST /api/pair/requests/:userCode/deny", {
+        path: { userCode: started.userCode },
+      })
+    );
     // An install that needs the person is an ask the hub keeps (core
     // asks.ts): the call answers at once, and the answer comes as a send.
     const installCall = await callTool(
@@ -718,7 +770,7 @@ const spec: Spec = {
             requestId?: string;
             payload?: { askId?: string; toolName?: string };
           }[]
-        >("/api/pending"),
+        >(hubRequest("GET /api/pending")),
       (list) => list.some(isInstallAsk),
       60_000
     );
@@ -811,10 +863,12 @@ const spec: Spec = {
       "the new browser paired",
       () =>
         stranger
-          .evaluate(() =>
-            fetch("/api/auth").then(
-              (response) => response.json() as Promise<{ caller: string }>
-            )
+          .evaluate(
+            (request) =>
+              fetch(request.path, request).then(
+                (response) => response.json() as Promise<{ caller: string }>
+              ),
+            hubRequest("GET /api/auth")
           )
           .catch(() => undefined),
       (value) => value.caller === "owner",
@@ -839,19 +893,24 @@ const spec: Spec = {
     const ask2 = JSON.parse(
       (
         await ask(
-          `${fleet.base}/api/pair`,
-          json({ kind: "cli", name: "a cross-site test" })
+          fleet.base,
+          hubRequest("POST /api/pair", {
+            body: { kind: "cli", name: "a cross-site test" },
+          })
         )
       ).text
     ) as { userCode: string };
+    const approving = hubRequest("POST /api/pair/requests/:userCode/approve", {
+      path: { userCode: ask2.userCode },
+    }).path;
     const elsewhere = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
       fetch: () =>
         new Response(
           `<!doctype html><a id="to" href="${dashboard}/session">Open the fleet</a>
-          <form id="via-dashboard" method="POST" action="${dashboard}/api/pair/requests/${ask2.userCode}/approve"><button>go</button></form>
-          <form id="via-hub" method="POST" action="${fleet.base}/api/pair/requests/${ask2.userCode}/approve"><button>go</button></form>`,
+          <form id="via-dashboard" method="POST" action="${dashboard}${approving}"><button>go</button></form>
+          <form id="via-hub" method="POST" action="${fleet.base}${approving}"><button>go</button></form>`,
           { headers: { "content-type": "text/html" } }
         ),
     });
@@ -891,8 +950,9 @@ const spec: Spec = {
           text: await answered.text(),
         });
       }
-      const still =
-        await fleet.api<{ userCode: string }[]>("/api/pair/requests");
+      const still = await fleet.api<{ userCode: string }[]>(
+        hubRequest("GET /api/pair/requests")
+      );
       check(
         "(p5c) a cross-site POST to an owner route is refused (403 at the dashboard and at the hub) and the pairing still waits",
         posted[0]?.status === 403 &&
@@ -904,14 +964,21 @@ const spec: Spec = {
       );
     } finally {
       elsewhere.stop(true);
-      await fleet.api(`/api/pair/requests/${ask2.userCode}/deny`, {});
+      await fleet.api(
+        hubRequest("POST /api/pair/requests/:userCode/deny", {
+          path: { userCode: ask2.userCode },
+        })
+      );
     }
 
     // (p6) Installing a session's credential takes a machine's proof.
     const install = (headers: Record<string, string>) =>
       ask(
-        `${fleet.base}/api/session-identities/install`,
-        json({ instanceIds: [parent] }, headers)
+        fleet.base,
+        hubRequest("POST /api/session-identities/install", {
+          body: { instanceIds: [parent] },
+        }),
+        { headers }
       );
     const [byNobody, byOwner, bySession] = await Promise.all([
       install({}),
@@ -930,14 +997,18 @@ const spec: Spec = {
     const delegated = await fleet.api<{
       workItemId: string;
       workspaceId: string;
-    }>("/api/work-items", {
-      parentInstanceId: parent,
-      title: "Commit and end A",
-      prompt: "PROBE-AUTH-A: commit a file.",
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd: src,
-    });
+    }>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title: "Commit and end A",
+          prompt: "PROBE-AUTH-A: commit a file.",
+          harness: "claude",
+          model: "claude-haiku-4-5",
+          cwd: src,
+        },
+      })
+    );
     const item = await until(
       "work item A ended",
       () =>
@@ -973,15 +1044,13 @@ const spec: Spec = {
     );
 
     // (p8) Off is trusted again.
-    const off = await ask(`${fleet.base}/api/auth/pairing`, {
-      ...json(
-        { required: false },
-        { authorization: `Owner ${cookie?.value ?? ""}` }
-      ),
-      method: "PUT",
-    });
+    const off = await ask(
+      fleet.base,
+      hubRequest("PUT /api/auth/pairing", { body: { required: false } }),
+      { headers: { authorization: `Owner ${cookie?.value ?? ""}` } }
+    );
     fleet.authorize(null);
-    const open200 = await ask(`${fleet.base}/api/agents`);
+    const open200 = await ask(fleet.base, hubRequest("GET /api/agents"));
     check(
       "(p8) turning it off returns to trusted: no credential is the person again, and every key is forgotten",
       off.status === 200 &&

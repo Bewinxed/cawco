@@ -20,6 +20,11 @@
  *
  *   bun scripts/probe-kit/run.ts view-args
  */
+
+import {
+  hubRequest,
+  hubRequestAsGiven,
+} from "../../../packages/core/src/hub-request";
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply } from "../../scratch-fleet";
@@ -45,12 +50,16 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
 
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Garden views",
-    machineId: MACHINE,
-    cwd: fleet.repo,
-    caw: false,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Garden views",
+        machineId: MACHINE,
+        cwd: fleet.repo,
+        caw: false,
+      },
+    })
+  );
   const session = await fleet.spawn("claude", "Garden views", fleet.repo, {
     projectId: project.id,
   });
@@ -83,13 +92,26 @@ const run = async (kit: Kit) => {
   );
 
   // 2. The route.
-  const route = `/api/projects/${project.id}/view-tools/tasks`;
-  const routeRefused = await fleet.api(route, { limit: 5 }).then(
-    (answer) => `answered ${JSON.stringify(answer)}`,
-    (error: unknown) => (error instanceof Error ? error.message : String(error))
-  );
+  const routeRefused = await fleet
+    .api(
+      // Sent as given: the route's refusal is what this proves.
+      hubRequestAsGiven("POST /api/projects/:id/view-tools/tasks", {
+        path: { id: project.id },
+        body: { limit: 5 },
+      })
+    )
+    .then(
+      (answer) => `answered ${JSON.stringify(answer)}`,
+      (error: unknown) =>
+        error instanceof Error ? error.message : String(error)
+    );
   const routeTaken = await fleet
-    .api<{ rows?: unknown[] }>(route, {})
+    .api<{ rows?: unknown[] }>(
+      hubRequest("POST /api/projects/:id/view-tools/tasks", {
+        path: { id: project.id },
+        body: {},
+      })
+    )
     .catch((error: unknown) => ({
       refused: error instanceof Error ? error.message : String(error),
     }));

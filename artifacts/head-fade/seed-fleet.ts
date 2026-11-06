@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { hubRequest } from "../../packages/core/src/hub-request";
 /**
  * A scratch fleet holding one session with a long transcript, for the head
  * fade's captures (web here, iOS through mac-capture.sh): a real hub, agent
@@ -59,7 +60,9 @@ try {
       `step ${n}'s reply in the transcript`,
       () =>
         fleet
-          .api<{ messages?: unknown[] }>(`/api/instances/${id}/transcript`)
+          .api<{ messages?: unknown[] }>(
+            hubRequest("GET /api/instances/:id/transcript", { path: { id } })
+          )
           .then((page) => JSON.stringify(page)),
       (text) => text.includes(`Step ${n} is done.`),
       120_000

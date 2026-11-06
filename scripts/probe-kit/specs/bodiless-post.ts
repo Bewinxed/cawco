@@ -36,6 +36,7 @@ import { mkdir } from "node:fs/promises";
 import { connect } from "node:http2";
 import { join } from "node:path";
 import { couldNot } from "../../../apps/dashboard/src/lib/cawco/hub-read";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { dashboardRelay } from "../../../packages/hub/src/tailnet-https";
 import { scratchCertificate } from "../cloudflare-front";
 import type { Kit, Spec } from "../kit";
@@ -43,7 +44,9 @@ import { freePort, publishBuild, serveUnder } from "../socket-served";
 
 /** The fleet's OAuth MCP server, as the person named it. */
 const SERVER = "ProbeOAuth";
-const SIGN_IN = `/api/fleet/mcp/${SERVER}/sign-in`;
+const SIGN_IN = hubRequest("POST /api/fleet/mcp/:name/sign-in", {
+  path: { name: SERVER },
+}).path;
 
 /** What a request answered: its status, its type, its body, and the protocol it went over. */
 interface Answer {
@@ -162,14 +165,16 @@ const run = async (kit: Kit) => {
     fleet.launch("hub");
     await fleet.hubUp();
     const providerOrigin = `http://127.0.0.1:${provider.port}`;
-    const saved = await fetch(`${fleet.base}/api/fleet/mcp/${SERVER}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        config: { type: "http", url: `${providerOrigin}/mcp` },
-        enabled: true,
-      }),
-    });
+    const saved = await fetchHub(
+      fleet.base,
+      hubRequest("PUT /api/fleet/mcp/:name", {
+        path: { name: SERVER },
+        body: {
+          config: { type: "http", url: `${providerOrigin}/mcp` },
+          enabled: true,
+        },
+      })
+    );
     const row = (await saved.json()) as { auth?: { mode?: string } };
     kit.check(
       "0: the probe's server is saved to the fleet as an OAuth server",
@@ -221,7 +226,10 @@ const run = async (kit: Kit) => {
       said(overServe)
     );
 
-    const test = await postOverH2(secure, "/api/push/test");
+    const test = await postOverH2(
+      secure,
+      hubRequest("POST /api/push/test").path
+    );
     kit.check(
       "3: Send test with no body through the relay answers the hub's own refusal for a fleet with no phone (409), not a parse problem",
       test.status === 409 && !test.type.includes("problem+json"),

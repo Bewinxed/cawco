@@ -1,4 +1,4 @@
-import type { HubRequest } from "@cawco/core/hub-request";
+import { fetchHub, type HubRequest } from "@cawco/core/hub-request";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { z } from "zod";
 /**
@@ -195,21 +195,7 @@ export const hubFetch = (
   request: HubRequest,
   init: RequestInit = {},
   through: typeof globalThis.fetch = fetch
-): Promise<Response> => through(request.path, initOf(request, init));
-
-/** `request` as `fetch`'s init, `init`'s own fields beside it. */
-const initOf = (request: HubRequest, init: RequestInit): RequestInit => {
-  const headers = new Headers(init.headers);
-  for (const [name, value] of Object.entries(request.headers ?? {})) {
-    headers.set(name, value);
-  }
-  return {
-    ...init,
-    method: request.method,
-    headers,
-    ...(request.body === undefined ? {} : { body: request.body }),
-  };
-};
+): Promise<Response> => fetchHub("", request, init, through);
 
 /**
  * A refused read as a clause without its stop: the hub's words with their
@@ -385,7 +371,7 @@ export async function readHub<T>(
   request: HubRequest,
   init: RequestInit = {}
 ): Promise<HubRead<T>> {
-  const response = await fetch(request.path, initOf(request, init));
+  const response = await fetchHub("", request, init, fetch);
   if (!response.ok) {
     return { ok: false, ...(await hubFailure(response)) };
   }

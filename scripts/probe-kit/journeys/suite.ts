@@ -28,6 +28,7 @@ import { join } from "node:path";
 import type { ConsoleMessage, Locator, Page } from "playwright-core";
 import type { ArtifactNeedsFrame } from "../../../packages/core/src/artifact-needs";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { PRESENCE_ONBOARDING_SKIPPED } from "../../../packages/core/src/presence-onboarding";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
@@ -231,12 +232,16 @@ async function furnish(fleet: KitFleet, data: Data): Promise<void> {
     const dir = join(fleet.sandbox, `${data}-project-${at}`);
     await mkdir(dir, { recursive: true });
     await Bun.$`git init -q -b main ${dir}`.quiet();
-    await fleet.api("/api/projects", {
-      name: long(name),
-      machineId: MACHINE,
-      cwd: dir,
-      caw: false,
-    });
+    await fleet.api(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: long(name),
+          machineId: MACHINE,
+          cwd: dir,
+          caw: false,
+        },
+      })
+    );
   }
 }
 
@@ -274,7 +279,7 @@ async function restore(
   since: number,
   hubMachine?: string
 ): Promise<void> {
-  const up = await fetch(`${fleet.base}/health`)
+  const up = await fetchHub(fleet.base, hubRequest("GET /health"))
     .then((r) => r.ok)
     .catch(() => false);
   if (!up) {
@@ -282,7 +287,10 @@ async function restore(
   }
   await eventually(
     "the machine online on the hub",
-    () => fleet.api<{ machineId: string; status: string }[]>("/api/agents"),
+    () =>
+      fleet.api<{ machineId: string; status: string }[]>(
+        hubRequest("GET /api/agents")
+      ),
     (rows) =>
       rows.some((row) => row.machineId === MACHINE && row.status === "online"),
     120_000
@@ -326,7 +334,7 @@ type Pending =
 export async function waiting(
   fleet: KitFleet
 ): Promise<{ artifacts: ArtifactNeedsFrame["needs"]; asks: unknown[] }> {
-  const listed = await fleet.api<Pending[]>("/api/pending");
+  const listed = await fleet.api<Pending[]>(hubRequest("GET /api/pending"));
   const asks: unknown[] = [];
   const artifacts: ArtifactNeedsFrame["needs"] = [];
   for (const { payload } of listed) {

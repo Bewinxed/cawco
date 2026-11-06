@@ -55,6 +55,7 @@ import {
   resolvePin,
   writePin,
 } from "../../../packages/core/src/comments";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -279,7 +280,10 @@ const legM = async (
     15_000
   ).catch(() => undefined);
   const read = await fleet.api<CommentRead>(
-    `/api/instances/${session}/artifacts/comments?artifact=${artifact}&filter=all`
+    hubRequest("GET /api/instances/:id/artifacts/comments", {
+      path: { id: session },
+      query: { artifact, filter: "all" },
+    })
   );
   const told = read.artifacts[0]?.pins.find((one) => one.id === pin);
   replier.leave();
@@ -1070,7 +1074,10 @@ const legW = async (kit: Kit, fleet: KitFleet, session: string) => {
     async () =>
       (
         await fleet.api<CommentRead>(
-          `/api/instances/${session}/artifacts/comments?artifact=${artifact}&filter=all`
+          hubRequest("GET /api/instances/:id/artifacts/comments", {
+            path: { id: session },
+            query: { artifact, filter: "all" },
+          })
         )
       ).artifacts[0]?.pins.find((one) => one.id === whole.id),
     Boolean,

@@ -52,6 +52,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import {
+  type HubRequest,
+  hubInit,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
+import {
   type MachinePath,
   machinePath,
 } from "../../../packages/core/src/machine-path";
@@ -72,7 +77,7 @@ interface Answer {
 
 /** The in-process hub and what the legs read it with. */
 interface Rig {
-  call: (method: string, path: string, body?: object) => Promise<Answer>;
+  call: (request: HubRequest) => Promise<Answer>;
   db: Awaited<ReturnType<typeof inProcess>>["db"];
   /** Every journal line the hub wrote. */
   journal: string[];
@@ -127,7 +132,7 @@ const there = (path: string): Promise<boolean> =>
 
 /** The forgotten projects the hub lists now. */
 const listed = async (rig: Rig): Promise<Listed[]> =>
-  ((await rig.call("GET", "/api/projects/forgotten")).json as
+  ((await rig.call(hubRequest("GET /api/projects/forgotten"))).json as
     Listed[] | undefined) ?? [];
 
 /** A project carrying a checkout, a task, a routine, a rule, an account, a page and a session. */
@@ -153,46 +158,77 @@ const seed = async (rig: Rig): Promise<Seeded> => {
   });
   // Set up on the code template, so its tasks have stages.
   db.setProjectTemplate(id, "code");
-  const task = await call("POST", `/api/projects/${id}/tasks`, {
-    title: TASK,
-  });
-  const routine = await call("POST", "/api/routines", {
-    projectId: id,
-    name: "Probe routine",
-    cron: "0 9 * * *",
-    timeZone: "UTC",
-    target: "conversation",
-    prompt: "Say how the project stands.",
-    keep: true,
-  });
-  const rule = await call("POST", "/api/rules", {
-    name: "Probe rule",
-    enabled: true,
-    pattern: "probe phrase",
-    matchKind: "phrase",
-    caseSensitive: false,
-    wholeWord: false,
-    watch: "text",
-    reply: "The probe rule fired.",
-    timing: "turn",
-    repeat: true,
-    scope: { projectId: id },
-  });
-  const account = await call("POST", "/api/accounts", {
-    provider: "anthropic",
-    kind: "subscription",
-    label: "Probe account",
-  });
+  const task = await call(
+    hubRequest("POST /api/projects/:id/tasks", {
+      path: { id },
+      body: {
+        title: TASK,
+      },
+    })
+  );
+  const routine = await call(
+    hubRequest("POST /api/routines", {
+      body: {
+        projectId: id,
+        name: "Probe routine",
+        cron: "0 9 * * *",
+        timeZone: "UTC",
+        target: "conversation",
+        prompt: "Say how the project stands.",
+        keep: true,
+      },
+    })
+  );
+  const rule = await call(
+    hubRequest("POST /api/rules", {
+      body: {
+        name: "Probe rule",
+        enabled: true,
+        pattern: "probe phrase",
+        matchKind: "phrase",
+        caseSensitive: false,
+        wholeWord: false,
+        watch: "text",
+        reply: "The probe rule fired.",
+        timing: "turn",
+        repeat: true,
+        scope: { projectId: id },
+      },
+    })
+  );
+  const account = await call(
+    hubRequest("POST /api/accounts", {
+      body: {
+        provider: "anthropic",
+        kind: "subscription",
+        label: "Probe account",
+      },
+    })
+  );
   const accountId = idOf(account);
-  const allowed = await call("PUT", `/api/projects/${id}/accounts`, {
-    accounts: [accountId],
-  });
-  const own = await call("PATCH", `/api/projects/${id}`, {
-    account: accountId,
-  });
-  const area = await call("POST", "/api/areas", { name: "Probe area" });
+  const allowed = await call(
+    hubRequest("PUT /api/projects/:id/accounts", {
+      path: { id },
+      body: {
+        accounts: [accountId],
+      },
+    })
+  );
+  const own = await call(
+    hubRequest("PATCH /api/projects/:id", {
+      path: { id },
+      body: {
+        account: accountId,
+      },
+    })
+  );
+  const area = await call(
+    hubRequest("POST /api/areas", { body: { name: "Probe area" } })
+  );
   const areaId = idOf(area);
-  const inArea = await call("PUT", `/api/projects/${id}/area`, { areaId });
+  const inArea = await call(
+    hubRequest("PUT /api/projects/:id/area", { path: { id }, body: { areaId } })
+  );
   const pageId = crypto.randomUUID();
   const now = Date.now();
   raw
@@ -257,9 +293,13 @@ const held = async (rig: Rig, seeded: Seeded) => {
   const { call, db, raw } = rig;
   const { id } = seeded;
   const project = db.project(id);
-  const tasks = await call("GET", `/api/projects/${id}/tasks`);
-  const routines = await call("GET", `/api/routines?projectId=${id}`);
-  const { rules } = (await call("GET", "/api/rules")).json as {
+  const tasks = await call(
+    hubRequest("GET /api/projects/:id/tasks", { path: { id } })
+  );
+  const routines = await call(
+    hubRequest("GET /api/routines", { query: { projectId: id } })
+  );
+  const { rules } = (await call(hubRequest("GET /api/rules"))).json as {
     rules: { id: string; scope: { projectId?: string } }[];
   };
   const page = raw
@@ -317,7 +357,9 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
     JSON.stringify(before)
   );
 
-  const forgot = await call("DELETE", `/api/projects/${id}`);
+  const forgot = await call(
+    hubRequest("DELETE /api/projects/:id", { path: { id } })
+  );
   // What the task's filing started (its triage, its waits) reads on after
   // the forget: none of it makes the folder again.
   await Bun.sleep(1000);
@@ -338,7 +380,9 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
     gone.browser === "Probe browser",
     JSON.stringify(gone.browser)
   );
-  const area = await call("GET", `/api/areas/${seeded.areaId}`);
+  const area = await call(
+    hubRequest("GET /api/areas/:id", { path: { id: seeded.areaId } })
+  );
   kit.check(
     "a. its area stands, the forget taking nothing of it",
     area.status === 200 &&
@@ -408,7 +452,9 @@ const refusedLeg = async (rig: Rig, seeded: Seeded): Promise<number> => {
     checkout: { machineId: MACHINE, path: seeded.checkout },
     remote: null,
   });
-  const placeTaken = await call("POST", `/api/projects/${id}/restore`);
+  const placeTaken = await call(
+    hubRequest("POST /api/projects/:id/restore", { path: { id } })
+  );
   check(
     rig,
     "c. a live project at its checkout: refused in core's words",
@@ -417,9 +463,11 @@ const refusedLeg = async (rig: Rig, seeded: Seeded): Promise<number> => {
         projectTrashWords.placeTaken(NAME, "Probe blocker", seeded.checkout),
     placeTaken.text
   );
-  await call("DELETE", `/api/projects/${blocker}`);
+  await call(hubRequest("DELETE /api/projects/:id", { path: { id: blocker } }));
   db.createProject({ id, name: "Probe usurper", remote: null });
-  const idTaken = await call("POST", `/api/projects/${id}/restore`);
+  const idTaken = await call(
+    hubRequest("POST /api/projects/:id/restore", { path: { id } })
+  );
   check(
     rig,
     "c. a live project under its id: refused in core's words",
@@ -427,7 +475,7 @@ const refusedLeg = async (rig: Rig, seeded: Seeded): Promise<number> => {
       idTaken.text === projectTrashWords.idTaken("Probe usurper", id),
     idTaken.text
   );
-  await call("DELETE", `/api/projects/${id}`);
+  await call(hubRequest("DELETE /api/projects/:id", { path: { id } }));
   // The usurper's own forget is in the trash now, newer: the restore names
   // the probe's own by when it was forgotten.
   return (
@@ -445,9 +493,14 @@ const restoreLeg = async (
 ): Promise<void> => {
   const { call, journal, kit } = rig;
   const { id } = seeded;
-  const restored = await call("POST", `/api/projects/${id}/restore`, {
-    forgottenAt,
-  });
+  const restored = await call(
+    hubRequest("POST /api/projects/:id/restore", {
+      path: { id },
+      body: {
+        forgottenAt,
+      },
+    })
+  );
   const after = await held(rig, seeded);
   kit.note(`after: ${JSON.stringify(after)}`);
   check(
@@ -493,9 +546,14 @@ const restoreLeg = async (
     ).length === 1,
     lines.join(" | ")
   );
-  const again = await call("POST", `/api/projects/${id}/restore`, {
-    forgottenAt,
-  });
+  const again = await call(
+    hubRequest("POST /api/projects/:id/restore", {
+      path: { id },
+      body: {
+        forgottenAt,
+      },
+    })
+  );
   check(
     rig,
     "d. a second restore finds nothing to bring back",
@@ -510,10 +568,15 @@ const oldFolderLeg = async (rig: Rig): Promise<void> => {
   const old = crypto.randomUUID();
   db.createProject({ id: old, name: "Probe old", remote: null });
   db.setProjectTemplate(old, "code");
-  const oldTask = await call("POST", `/api/projects/${old}/tasks`, {
-    title: "Kept in the folder alone",
-  });
-  await call("DELETE", `/api/projects/${old}`);
+  const oldTask = await call(
+    hubRequest("POST /api/projects/:id/tasks", {
+      path: { id: old },
+      body: {
+        title: "Kept in the folder alone",
+      },
+    })
+  );
+  await call(hubRequest("DELETE /api/projects/:id", { path: { id: old } }));
   // As a hub before this change left it: the folder, nothing beside it.
   for (const one of await rig.trash()) {
     if (one.startsWith(`${old}-`) && one.endsWith(".json")) {
@@ -531,7 +594,9 @@ const oldFolderLeg = async (rig: Rig): Promise<void> => {
       entry.brings.tasks === 1,
     JSON.stringify({ oldTask: oldTask.status, entry })
   );
-  const unnamed = await call("POST", `/api/projects/${old}/restore`);
+  const unnamed = await call(
+    hubRequest("POST /api/projects/:id/restore", { path: { id: old } })
+  );
   check(
     rig,
     "e. its restore needs a name: refused in core's words",
@@ -539,10 +604,17 @@ const oldFolderLeg = async (rig: Rig): Promise<void> => {
       unnamed.text === projectTrashWords.nameNeeded(old),
     unnamed.text
   );
-  const named = await call("POST", `/api/projects/${old}/restore`, {
-    name: "Probe old, back",
-  });
-  const tasks = await call("GET", `/api/projects/${old}/tasks`);
+  const named = await call(
+    hubRequest("POST /api/projects/:id/restore", {
+      path: { id: old },
+      body: {
+        name: "Probe old, back",
+      },
+    })
+  );
+  const tasks = await call(
+    hubRequest("GET /api/projects/:id/tasks", { path: { id: old } })
+  );
   check(
     rig,
     "e. named, it comes back under its id with its folder and its task",
@@ -568,7 +640,9 @@ const runningBrowserLeg = async (rig: Rig): Promise<void> => {
     projectId: id,
     takeover: null,
   });
-  const forgot = await call("DELETE", `/api/projects/${id}`);
+  const forgot = await call(
+    hubRequest("DELETE /api/projects/:id", { path: { id } })
+  );
   check(
     rig,
     "f. a browser that runs and can't be stopped keeps the project, its browser as it was",
@@ -590,14 +664,19 @@ const projectWithTasks = async (
   rig.db.createProject({ id, name, remote: null });
   rig.db.setProjectTemplate(id, "code");
   for (const title of titles) {
-    await rig.call("POST", `/api/projects/${id}/tasks`, { title });
+    await rig.call(
+      hubRequest("POST /api/projects/:id/tasks", {
+        path: { id },
+        body: { title },
+      })
+    );
   }
   return id;
 };
 
 /** A forget as a hub before records left it: the folder in the trash, nothing beside it. */
 const forgetAsBefore = async (rig: Rig, id: string): Promise<void> => {
-  await rig.call("DELETE", `/api/projects/${id}`);
+  await rig.call(hubRequest("DELETE /api/projects/:id", { path: { id } }));
   for (const one of await rig.trash()) {
     if (one.startsWith(`${id}-`) && one.endsWith(".json")) {
       await rm(join(rig.trashDir, one));
@@ -658,9 +737,14 @@ const foldLeg = async (rig: Rig): Promise<void> => {
       JSON.stringify({ id: keeper, name: "Probe keeper", tasks: 1 }),
     JSON.stringify(partlyListed)
   );
-  const folded = await call("POST", `/api/projects/${dup}/restore`, {
-    name: "Probe dup, back",
-  });
+  const folded = await call(
+    hubRequest("POST /api/projects/:id/restore", {
+      path: { id: dup },
+      body: {
+        name: "Probe dup, back",
+      },
+    })
+  );
   check(
     rig,
     "g. the fold is not restored: refused in core's words",
@@ -695,8 +779,15 @@ const placesLeg = async (rig: Rig): Promise<void> => {
     remote: null,
   });
   db.setProjectTemplate(recorded, "code");
-  await call("POST", `/api/projects/${recorded}/tasks`, { title: "Placed" });
-  await call("DELETE", `/api/projects/${recorded}`);
+  await call(
+    hubRequest("POST /api/projects/:id/tasks", {
+      path: { id: recorded },
+      body: { title: "Placed" },
+    })
+  );
+  await call(
+    hubRequest("DELETE /api/projects/:id", { path: { id: recorded } })
+  );
   const row = (await listed(rig)).find((one) => one.id === recorded);
   const folder = (await rig.trash()).find(
     (one) => one.startsWith(`${recorded}-`) && !one.endsWith(".json")
@@ -726,9 +817,14 @@ const placesLeg = async (rig: Rig): Promise<void> => {
   );
   // The delete reads the same places: its machine away, it is refused
   // naming that machine; nothing of it went.
-  const away = await call("POST", `/api/projects/${recorded}/delete`, {
-    fromDisk: true,
-  });
+  const away = await call(
+    hubRequest("POST /api/projects/:id/delete", {
+      path: { id: recorded },
+      body: {
+        fromDisk: true,
+      },
+    })
+  );
   check(
     rig,
     "h. a delete with its files reads the same checkout: refused while its machine is away, naming it",
@@ -742,7 +838,12 @@ const placesLeg = async (rig: Rig): Promise<void> => {
   db.createProject({ id: old, name: "Probe hinted", remote: null });
   db.setProjectTemplate(old, "code");
   for (const title of ["First hinted task", "Newest hinted task"]) {
-    await call("POST", `/api/projects/${old}/tasks`, { title });
+    await call(
+      hubRequest("POST /api/projects/:id/tasks", {
+        path: { id: old },
+        body: { title },
+      })
+    );
   }
   await writeFolderFiles(
     old,
@@ -806,8 +907,8 @@ const placesLeg = async (rig: Rig): Promise<void> => {
 /** A project's board as the dashboard reads it: its stages and its tasks at once. */
 const boardOf = async (rig: Rig, id: string) => {
   const [stages, tasks] = await Promise.all([
-    rig.call("GET", `/api/projects/${id}/stages`),
-    rig.call("GET", `/api/projects/${id}/tasks`),
+    rig.call(hubRequest("GET /api/projects/:id/stages", { path: { id } })),
+    rig.call(hubRequest("GET /api/projects/:id/tasks", { path: { id } })),
   ]);
   const read = stages.json as
     { source?: string; stages?: { name: string }[] } | undefined;
@@ -844,14 +945,26 @@ const twoTasksLeg = async (
     await import("../../../packages/hub/src/project-trash");
   const id = crypto.randomUUID();
   db.createProject({ id, name: `Probe two ${template}`, remote: null });
-  const applied = await call("POST", `/api/projects/${id}/stages/template`, {
-    template,
-  });
+  const applied = await call(
+    hubRequest("POST /api/projects/:id/stages/template", {
+      path: { id },
+      body: {
+        template,
+      },
+    })
+  );
   const titles = ["First of two", "Second of two"];
   const made: number[] = [];
   for (const title of titles) {
     made.push(
-      (await call("POST", `/api/projects/${id}/tasks`, { title })).status
+      (
+        await call(
+          hubRequest("POST /api/projects/:id/tasks", {
+            path: { id },
+            body: { title },
+          })
+        )
+      ).status
     );
   }
   if (template !== "code") {
@@ -861,7 +974,14 @@ const twoTasksLeg = async (
   const entry = (await listed(rig)).find((one) => one.id === id);
   const name = `Probe two ${template}, back`;
   const restored = caughtUp
-    ? (await call("POST", `/api/projects/${id}/restore`, { name })).status
+    ? (
+        await call(
+          hubRequest("POST /api/projects/:id/restore", {
+            path: { id },
+            body: { name },
+          })
+        )
+      ).status
     : await projectTrash(db)
         .restore(id, { name })
         .then(
@@ -910,16 +1030,12 @@ export default {
       const raw = new Database(dbPath);
       raw.run("PRAGMA busy_timeout = 5000");
       const rig: Rig = {
-        call: async (method, path, body) => {
+        call: async (request) => {
           const response = await hub.handle(
-            new Request(`http://127.0.0.1${path}`, {
-              method,
-              headers: {
-                [PRESENCE_HEADER]: PRESENCE,
-                ...(body ? { "content-type": "application/json" } : {}),
-              },
-              ...(body ? { body: JSON.stringify(body) } : {}),
-            })
+            new Request(
+              `http://127.0.0.1${request.path}`,
+              hubInit(request, { headers: { [PRESENCE_HEADER]: PRESENCE } })
+            )
           );
           const text = await response.text();
           let json: unknown;

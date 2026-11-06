@@ -59,6 +59,7 @@ import {
   TREE_STORE_DIR,
 } from "../../../packages/core/src/claude-dirs";
 import type { HarnessKind } from "../../../packages/core/src/harness";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import {
   MACHINE,
@@ -335,15 +336,16 @@ const delegate = async (
   for (const leg of among) {
     legs.set(leg.key, leg);
     const started = await fleet.api<{ workspaceId: string }>(
-      "/api/work-items",
-      {
-        parentInstanceId: parent,
-        title: `Read the skill, ${leg.key}`,
-        prompt: `${tagOf(leg.key)} read the fleet skills.`,
-        harness: leg.harness,
-        model: MODEL[leg.harness],
-        cwd: src,
-      }
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title: `Read the skill, ${leg.key}`,
+          prompt: `${tagOf(leg.key)} read the fleet skills.`,
+          harness: leg.harness,
+          model: MODEL[leg.harness],
+          cwd: src,
+        },
+      })
     );
     const [row] = fleet.query<{ path: string }>(
       "SELECT path FROM workspaces WHERE id = ?",
@@ -517,15 +519,17 @@ const spec: Spec = {
     });
     const put = async (name: string, extra: object = {}) => {
       const read = await readWithin(120_000, async (signal) => {
-        const response = await fetch(`${fleet.base}/api/fleet/skills/${name}`, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            source: `http://127.0.0.1:${server.port}/${name}.tar.gz`,
-            ...extra,
+        const response = await fetchHub(
+          fleet.base,
+          hubRequest("PUT /api/fleet/skills/:name", {
+            path: { name },
+            body: {
+              source: `http://127.0.0.1:${server.port}/${name}.tar.gz`,
+              ...extra,
+            },
           }),
-          signal,
-        });
+          { signal }
+        );
         return {
           ok: response.ok,
           status: response.status,
@@ -580,11 +584,15 @@ const spec: Spec = {
         .cwd(src)
         .env({ ...process.env, HOME: home })
         .quiet();
-      const project = await fleet.api<{ id: string }>("/api/projects", {
-        name: "Reads",
-        machineId: MACHINE,
-        cwd: src,
-      });
+      const project = await fleet.api<{ id: string }>(
+        hubRequest("POST /api/projects", {
+          body: {
+            name: "Reads",
+            machineId: MACHINE,
+            cwd: src,
+          },
+        })
+      );
       await put(SKILL);
       await put(PLACED, { projectId: project.id });
 

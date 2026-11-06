@@ -76,10 +76,12 @@ const requestOf = async (route: Route): Promise<Schema> => {
   if (names.length > 0) {
     const declared = hooks.params ? await jsonSchemaOf(hooks.params) : {};
     const own = isSchema(declared.properties) ? declared.properties : {};
+    // A parameter the route declares no schema for is any segment: a
+    // number fills one as well as a string (hub-request.ts encodes either).
     properties.path = {
       type: "object",
       properties: Object.fromEntries(
-        names.map((name) => [name, own[name] ?? { type: "string" }])
+        names.map((name) => [name, own[name] ?? { type: ["string", "number"] }])
       ),
       required: names,
     };

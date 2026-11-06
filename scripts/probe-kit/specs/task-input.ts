@@ -29,6 +29,8 @@
  *
  *   bun scripts/probe-kit/run.ts task-input
  */
+
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -93,12 +95,16 @@ const spec: Spec = {
     await fleet.agentUp();
     await fleet.accountSignedIn();
 
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Kitchen refit",
-      machineId: MACHINE,
-      cwd: fleet.repo,
-      caw: false,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Kitchen refit",
+          machineId: MACHINE,
+          cwd: fleet.repo,
+          caw: false,
+        },
+      })
+    );
     // An agent of the project: it sets the stages up, and comments in i4.
     const agentId = await fleet.spawn("claude", "Refit lead", fleet.repo, {
       projectId: project.id,
@@ -115,8 +121,10 @@ const spec: Spec = {
 
     // i1. A task the person adds at the board.
     const task = await fleet.api<{ id: string }>(
-      `/api/projects/${project.id}/tasks`,
-      { title: "Price the oak worktops TI-ADD" }
+      hubRequest("POST /api/projects/:id/tasks", {
+        path: { id: project.id },
+        body: { title: "Price the oak worktops TI-ADD" },
+      })
     );
     const added = await wakesSettled(fleet, "TI-ADD");
     check(
@@ -126,9 +134,14 @@ const spec: Spec = {
     );
 
     const comment = (text: string) =>
-      fleet.api(`/api/projects/${project.id}/tasks/${task.id}/comments`, {
-        text,
-      });
+      fleet.api(
+        hubRequest("POST /api/projects/:id/tasks/:taskId/comments", {
+          path: { id: project.id, taskId: task.id },
+          body: {
+            text,
+          },
+        })
+      );
 
     // i2. The person's comment.
     await comment("TI-ONE: oak or walnut, whichever ships before March.");
@@ -153,7 +166,7 @@ const spec: Spec = {
 
     // i4. An agent's comment, and the conversation's own.
     const view = await fleet.api<{ instanceId: string | null }>(
-      `/api/projects/${project.id}/caw`
+      hubRequest("GET /api/projects/:id/caw", { path: { id: project.id } })
     );
     const agentSaid = await toolWords(agent, "task_comment", {
       task: task.id,
@@ -189,7 +202,7 @@ const spec: Spec = {
       reason: "The person reads the board themselves this week.",
     });
     const offView = await fleet.api<{ hearsTasks?: boolean }>(
-      `/api/projects/${project.id}/caw`
+      hubRequest("GET /api/projects/:id/caw", { path: { id: project.id } })
     );
     await comment("TI-OFF: hold the order until Friday.");
     await Bun.sleep(SETTLE_MS);

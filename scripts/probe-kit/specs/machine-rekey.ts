@@ -24,6 +24,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -91,29 +92,34 @@ async function run(kit: Kit): Promise<void> {
     await fleet.agentUp();
     await fleet.accountSignedIn();
 
-    const rule = await fleet.api<{ id: string }>("/api/rules", {
-      name: "Rekey probe rule",
-      enabled: true,
-      pattern: PHRASE,
-      matchKind: "phrase",
-      caseSensitive: false,
-      wholeWord: false,
-      watch: "text",
-      reply: REPLY,
-      timing: "turn",
-      repeat: true,
-      scope: { machineId: MACHINE },
-    });
+    const rule = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/rules", {
+        body: {
+          name: "Rekey probe rule",
+          enabled: true,
+          pattern: PHRASE,
+          matchKind: "phrase",
+          caseSensitive: false,
+          wholeWord: false,
+          watch: "text",
+          reply: REPLY,
+          timing: "turn",
+          repeat: true,
+          scope: { machineId: MACHINE },
+        },
+      })
+    );
     const session = await fleet.spawn("claude", "Rekey probe");
     const fires = async () =>
       (
         await fleet.api<{
           activity: { instanceId: string; totalFires: number }[];
-        }>(`/api/rules/${rule.id}/activity`)
+        }>(hubRequest("GET /api/rules/:id/activity", { path: { id: rule.id } }))
       ).activity.find((one) => one.instanceId === session)?.totalFires ?? 0;
     const rules = async () =>
-      (await fleet.api<{ rules: RuleRead[] }>("/api/rules")).rules;
-    const agents = () => fleet.api<AgentRead[]>("/api/agents");
+      (await fleet.api<{ rules: RuleRead[] }>(hubRequest("GET /api/rules")))
+        .rules;
+    const agents = () => fleet.api<AgentRead[]>(hubRequest("GET /api/agents"));
     /** How many requests the model has had whose words hold `words`. */
     const heard = (words: string) =>
       fleet.seen.filter((one) => one.last.includes(words)).length;
@@ -205,9 +211,12 @@ async function run(kit: Kit): Promise<void> {
       "the machine removed once its agent is away",
       async () => {
         const read = await readWithin(30_000, async (signal) => {
-          const response = await fetch(
-            `${fleet.base}/api/agents/${encodeURIComponent(RENAMED)}`,
-            { method: "DELETE", signal }
+          const response = await fetchHub(
+            fleet.base,
+            hubRequest("DELETE /api/agents/:machineId", {
+              path: { machineId: RENAMED },
+            }),
+            { signal }
           );
           return response.ok ? await response.text() : undefined;
         });

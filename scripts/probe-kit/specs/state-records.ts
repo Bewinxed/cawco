@@ -37,6 +37,11 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import type {
   DamagedHubRecord,
   DamagedRow,
@@ -101,13 +106,17 @@ const delegate = async (
     instanceId: string;
     workItemId: string;
     workspaceId: string;
-  }>("/api/work-items", {
-    parentInstanceId: parent.id,
-    title: `Hold workspace ${tag}`,
-    prompt: `PROBE-${tag}: say ok.`,
-    harness: "claude",
-    cwd,
-  });
+  }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent.id,
+        title: `Hold workspace ${tag}`,
+        prompt: `PROBE-${tag}: say ok.`,
+        harness: "claude",
+        cwd,
+      },
+    })
+  );
   // Its item fails on its third quiet turn, in under a second against the
   // mock model, and its session sleeps as its item ends (hub server.ts
   // `sleepFinished`): running, or asleep after it ran, it started. The
@@ -142,18 +151,9 @@ const delegate = async (
 /** A POST whose refusal is an answer too: its status and text. */
 const posted = async (
   base: string,
-  path: string,
-  body?: unknown
+  request: HubRequest
 ): Promise<{ status: number; text: string }> => {
-  const response = await fetch(`${base}${path}`, {
-    method: "POST",
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-  });
+  const response = await fetchHub(base, request);
   return { status: response.status, text: await response.text() };
 };
 
@@ -170,9 +170,12 @@ const noticesPhase = async (
     damagedBoard.noticesDamaged?.file === noticesFile,
     JSON.stringify(damagedBoard.noticesDamaged)
   );
-  const refusedAck = await posted(base, "/api/notices/seen", {
-    ids: ["probe:while-damaged"],
-  });
+  const refusedAck = await posted(
+    base,
+    hubRequest("POST /api/notices/seen", {
+      body: { ids: ["probe:while-damaged"] },
+    })
+  );
   check(
     "(f) an acknowledgement is refused, saying the record is damaged",
     refusedAck.status === 409 &&
@@ -181,7 +184,7 @@ const noticesPhase = async (
       ),
     `${refusedAck.status} ${refusedAck.text}`
   );
-  const reset = await posted(base, "/api/notices/reset");
+  const reset = await posted(base, hubRequest("POST /api/notices/reset"));
   check(
     "(f) Reset answers with a fresh record",
     reset.status === 200 && reset.text === JSON.stringify({ seen: [] }),
@@ -199,9 +202,12 @@ const noticesPhase = async (
     healedBoard.noticesDamaged === null,
     JSON.stringify(healedBoard.noticesDamaged)
   );
-  const ack = await posted(base, "/api/notices/seen", {
-    ids: ["probe:after-reset"],
-  });
+  const ack = await posted(
+    base,
+    hubRequest("POST /api/notices/seen", {
+      body: { ids: ["probe:after-reset"] },
+    })
+  );
   check(
     "(f) acknowledging works again",
     ack.status === 200 && ack.text.includes("probe:after-reset"),
@@ -226,7 +232,7 @@ const spec: Spec = {
       "session-wakeups"
     );
     const noticesFile = join(fleet.sandbox, "hub", "notices-seen.json");
-    const rows = () => fleet.api<Row[]>("/api/instances");
+    const rows = () => fleet.api<Row[]>(hubRequest("GET /api/instances"));
     const rowOf = async (id: string) =>
       (await rows()).find((row) => row.id === id);
 
@@ -249,11 +255,15 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Records",
-      machineId: MACHINE,
-      cwd: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Records",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
@@ -268,7 +278,11 @@ const spec: Spec = {
       (row) => row?.status === "stopped",
       60_000
     );
-    await fleet.api("/api/notices/seen", { ids: ["probe:before-the-crash"] });
+    await fleet.api(
+      hubRequest("POST /api/notices/seen", {
+        body: { ids: ["probe:before-the-crash"] },
+      })
+    );
     const pathOf = (id: string) =>
       fleet.query<{ path: string }>(
         "SELECT path FROM workspaces WHERE id = ?",
@@ -486,8 +500,10 @@ const spec: Spec = {
     const archiveA = async (): Promise<{ state: string }> => {
       try {
         return await fleet.api<{ state: string }>(
-          `/api/workspaces/${a.workspaceId}/archive`,
-          {}
+          hubRequest("POST /api/workspaces/:id/archive", {
+            path: { id: a.workspaceId },
+            body: {},
+          })
         );
       } catch (error) {
         return { state: String(error) };

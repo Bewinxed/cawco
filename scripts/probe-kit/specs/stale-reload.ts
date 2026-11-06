@@ -31,6 +31,7 @@
  */
 
 import type { Page, WebSocketRoute } from "playwright-core";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { updatesWords } from "../../../packages/core/src/words/updates";
 import { until } from "../../scratch-fleet";
@@ -215,14 +216,19 @@ const leg = async (
   // a. A draft, the panel, then no input; the update lands.
   const draftA = `Kept across the reload ${index}`;
   await typeDraft(page, draftA);
-  await fleet.api(`/api/instances/${session}/artifacts`, {
-    kind: "page",
-    does: "judge",
-    title: "Probe judge artifact",
-    ask: "Judge this page: pin anything that reads wrong",
-    name: `kept-${index}`,
-    html: PAGE,
-  });
+  await fleet.api(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "page",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge this page: pin anything that reads wrong",
+        name: `kept-${index}`,
+        html: PAGE,
+      },
+    })
+  );
   await until(
     "the panel showing the page",
     () => panelHeading(page),

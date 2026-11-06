@@ -77,6 +77,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
@@ -412,14 +413,18 @@ const delegate = (
   title: string,
   prompt: string
 ) =>
-  fleet.api<{ workItemId: string; workspaceId: string }>("/api/work-items", {
-    parentInstanceId: parent,
-    title,
-    prompt,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: src,
-  });
+  fleet.api<{ workItemId: string; workspaceId: string }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title,
+        prompt,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: src,
+      },
+    })
+  );
 
 /** The fleet up, a project whose main tracks `.mcp.json` and `opencode.json`, and its parent session. */
 const scene = async (kit: Kit) => {
@@ -446,11 +451,15 @@ const scene = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Tracked denies",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Tracked denies",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });

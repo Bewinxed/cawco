@@ -54,6 +54,7 @@ import {
   type PreviewTicket,
   previewEnterUrl,
 } from "../../../packages/core/src/frames";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { RELAY_HEADER } from "../../../packages/core/src/preview-proxy";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -312,9 +313,12 @@ const probe = async (kit: Kit) => {
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
   const address = async () =>
     (await (
-      await fetch(`${fleet.base}/api/artifacts/${id}/preview-address`, {
-        method: "POST",
-      })
+      await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/artifacts/:artifact/preview-address", {
+          path: { artifact: id },
+        })
+      )
     ).json()) as { origin?: string; port?: number };
   const sessionPort = (await address()).port ?? 0;
   const portOrigin = `http://127.0.0.1:${sessionPort}`;
@@ -404,7 +408,7 @@ const probe = async (kit: Kit) => {
   // 6. Host mode behind Cloudflare over https, entered with a ticket. Its
   // names stand under localtest.me, which the browser is told is 127.0.0.1.
   const range = (await (
-    await fetch(`${fleet.base}/api/preview-settings`)
+    await fetchHub(fleet.base, hubRequest("GET /api/preview-settings"))
   ).json()) as { ports: string };
   const first = Number(range.ports.split("–")[0]);
   const hostFront = cloudflareTo(
@@ -415,10 +419,12 @@ const probe = async (kit: Kit) => {
     mode: "host",
     pattern: `https://p-{port}.${PASS_DOMAIN}:${hostFront.port}`,
   });
-  const stored = await fleet.api<{ mode: string }>("/api/preview-settings");
+  const stored = await fleet.api<{ mode: string }>(
+    hubRequest("GET /api/preview-settings")
+  );
   const origin = (await address()).origin ?? "none";
   const { ticket } = (await (
-    await fetch(`${fleet.base}/api/preview-ticket`, { method: "POST" })
+    await fetchHub(fleet.base, hubRequest("POST /api/preview-ticket"))
   ).json()) as PreviewTicket;
   const named = await kit.page("desk", {
     ignoreHTTPSErrors: true,
@@ -443,11 +449,10 @@ const probe = async (kit: Kit) => {
   // 7. A real Vite dev server: before (straight), then through the preview,
   // in port mode again: host mode's listener took the range's first port,
   // so the preview's own port is read once it is made.
-  await fetch(`${fleet.base}/api/preview-settings`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mode: "port" }),
-  });
+  await fetchHub(
+    fleet.base,
+    hubRequest("PUT /api/preview-settings", { body: { mode: "port" } })
+  );
   const free = Bun.serve({ port: 0, fetch: () => new Response() });
   const vitePort = free.port as number;
   free.stop(true);
@@ -514,8 +519,9 @@ const probe = async (kit: Kit) => {
   );
   // The Vite preview's own origin (hub server.ts `frameAddress`).
   const viteAddress = await fleet.api<{ port?: number }>(
-    `/api/artifacts/${viteMade.match(ANSWERED_ID)?.[1] ?? ""}/preview-address`,
-    {}
+    hubRequest("POST /api/artifacts/:artifact/preview-address", {
+      path: { artifact: viteMade.match(ANSWERED_ID)?.[1] ?? "" },
+    })
   );
   const viteOrigin = `http://127.0.0.1:${viteAddress.port ?? 0}`;
   // The agent's listener for it: the one 0.0.0.0 port the start opened.

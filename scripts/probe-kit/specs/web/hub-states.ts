@@ -31,6 +31,10 @@
  * and each state swept for spills and overlaps (journeys/scan.ts).
  */
 import type { Page, WebSocketRoute } from "playwright-core";
+import {
+  fetchHub,
+  hubRequest,
+} from "../../../../packages/core/src/hub-request";
 import { connectionWords } from "../../../../packages/core/src/words/connection";
 import { bezierAt, sameCurve } from "../../anim";
 import { scan } from "../../journeys/scan";
@@ -1279,11 +1283,13 @@ async function runLeg(
   if (view === "desk" && theme === "light") {
     // The hub's own word: its machine says it is installing.
     const put = (state: object) =>
-      fetch(`${hub}/api/binary-updates/machines/scratch-fleet/state`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(state),
-      }).then((r) => r.status);
+      fetchHub(
+        hub,
+        hubRequest("PUT /api/binary-updates/machines/:machineId/state", {
+          path: { machineId: "scratch-fleet" },
+          body: state,
+        })
+      ).then((r) => r.status);
     const answered = await put(installing("installing"));
     const told = await until(
       async () => UPDATING_PROBE.test((await bandNow(page)).words),
@@ -1890,9 +1896,13 @@ const spec: Spec = {
     const base = await fleet.dashboard();
     // The project whose board reads come back as a tunnel's 502: one the hub
     // keeps, so the rail lists it as it would.
-    const probe = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Probe",
-    });
+    const probe = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Probe",
+        },
+      })
+    );
     const findings = { count: 0 };
     await neverConnected(kit, base);
     for (const view of ["phone", "narrowDesk", "desk"] as const) {

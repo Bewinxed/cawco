@@ -53,6 +53,7 @@ import type { Page } from "playwright-core";
 import type { CdpLink } from "../../../packages/agent/src/browser/cdp-takeover";
 import { readWithin } from "../../../packages/core/src/bounded";
 import type { BrowserKey } from "../../../packages/core/src/browser";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { browserWords } from "../../../packages/core/src/words/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, kitsOwnMessage, open, type Spec, settle } from "../kit";
@@ -444,30 +445,35 @@ export async function typeIntoTakeover(
   await fleet.agentUp();
   await fleet.accountSignedIn();
 
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Keyboard",
-    machineId: MACHINE,
-    cwd: fleet.repo,
-    caw: false,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Keyboard",
+        machineId: MACHINE,
+        cwd: fleet.repo,
+        caw: false,
+      },
+    })
+  );
   const key: BrowserKey = `project:${project.id}`;
   const remote: Remote = {
     key,
     dataHome: fleet.env.XDG_DATA_HOME as string,
   };
-  const keyPath = `/api/browsers/${encodeURIComponent(key)}`;
   const session = await fleet.spawn("claude", "Keyboard", fleet.repo, {
     projectId: project.id,
   });
   // Started as the panel starts it; answered once it is live, which on a
   // container host's first start waits on its image's build.
   const start = await readWithin(LIVE_WITHIN_MS, async (signal) => {
-    const response = await fetch(`${fleet.base}${keyPath}/start`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ machineId: MACHINE }),
-      signal,
-    });
+    const response = await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/browsers/:key/start", {
+        path: { key },
+        body: { machineId: MACHINE },
+      }),
+      { signal }
+    );
     return `${response.status} ${await response.text()}`;
   });
   const answered =
@@ -533,10 +539,15 @@ export async function typeIntoTakeover(
   );
 
   // 1. Take over from the session's panel: the panel opens on the browser.
-  await fleet.api(`${keyPath}/takeover`, {
-    instanceId: session,
-    machineId: MACHINE,
-  });
+  await fleet.api(
+    hubRequest("POST /api/browsers/:key/takeover", {
+      path: { key },
+      body: {
+        instanceId: session,
+        machineId: MACHINE,
+      },
+    })
+  );
   const taken = await until(
     "the take-over draws frames with the person in control",
     () => viewOf(page),
@@ -732,8 +743,18 @@ export async function typeIntoTakeover(
   checks.report();
   await desk.close();
 
-  await fleet.api(`${keyPath}/handback`, { machineId: MACHINE });
-  await fleet.api(`${keyPath}/remove`, { machineId: MACHINE });
+  await fleet.api(
+    hubRequest("POST /api/browsers/:key/handback", {
+      path: { key },
+      body: { machineId: MACHINE },
+    })
+  );
+  await fleet.api(
+    hubRequest("POST /api/browsers/:key/remove", {
+      path: { key },
+      body: { machineId: MACHINE },
+    })
+  );
   await page.close();
 }
 

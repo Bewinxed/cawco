@@ -47,6 +47,7 @@
  *   bun scripts/probe-kit/run.ts preview-rehand
  */
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { downOf } from "../../../packages/core/src/preview-proxy";
 import { artifactLink } from "../../../packages/core/src/references";
 import { workWords } from "../../../packages/core/src/words/work";
@@ -214,8 +215,9 @@ const tabReads = async (page: Parameters<typeof open>[0]) => {
  */
 const originReads = async (fleet: KitFleet, id: string) => {
   const { port } = await fleet.api<{ port: number }>(
-    `/api/artifacts/${id}/preview-address`,
-    {}
+    hubRequest("POST /api/artifacts/:artifact/preview-address", {
+      path: { artifact: id },
+    })
   );
   const response = await passedFetch(fleet, `http://127.0.0.1:${port}/`, {
     headers: { "sec-fetch-mode": "navigate" },
@@ -254,11 +256,15 @@ const spec: Spec = {
     await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo rehand > README.md && git add -A && git commit -qm 'First commit'`
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Preview rehand",
-      machineId: MACHINE,
-      cwd: repo,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Preview rehand",
+          machineId: MACHINE,
+          cwd: repo,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", repo, {
       projectId: project.id,
     });
@@ -268,14 +274,18 @@ const spec: Spec = {
       credential: await fleet.sessionCredential(id),
     });
     const delegate = (tag: Tag) =>
-      fleet.api<Started>("/api/work-items", {
-        parentInstanceId: parent,
-        title: `Hand up page ${tag}`,
-        prompt: `PROBE-REHAND-${tag}: hand up your page, then wait.`,
-        harness: "claude",
-        model: "claude-haiku-4-5",
-        cwd: repo,
-      });
+      fleet.api<Started>(
+        hubRequest("POST /api/work-items", {
+          body: {
+            parentInstanceId: parent,
+            title: `Hand up page ${tag}`,
+            prompt: `PROBE-REHAND-${tag}: hand up your page, then wait.`,
+            harness: "claude",
+            model: "claude-haiku-4-5",
+            cwd: repo,
+          },
+        })
+      );
     const workspaceState = (id: string) =>
       fleet.query<{ state: string }>(
         "SELECT state FROM workspaces WHERE id = ?",
@@ -307,16 +317,15 @@ const spec: Spec = {
 
     /** His own archive of workspace `id` (no credential: the person, on a hub that trusts its network), its unlanded work let go, confirmed or not. */
     const ownerArchive = async (id: string, anyway: boolean) => {
-      const response = await fetch(
-        `${fleet.base}/api/workspaces/${id}/archive`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+      const response = await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/workspaces/:id/archive", {
+          path: { id },
+          body: {
             discard: true,
             ...(anyway ? { anyway } : {}),
-          }),
-        }
+          },
+        })
       );
       return { status: response.status, text: await response.text() };
     };
@@ -381,7 +390,7 @@ const spec: Spec = {
     const retired = await until(
       "WA retired",
       async () => {
-        await fleet.api("/api/workspaces/retire", {});
+        await fleet.api(hubRequest("POST /api/workspaces/retire"));
         return workspaceState(a.workspaceId);
       },
       (state) => state === "archived",
@@ -457,7 +466,7 @@ const spec: Spec = {
             requestId?: string;
             payload?: { input?: { waiting?: string }; toolName?: string };
           }[]
-        >("/api/pending"),
+        >(hubRequest("GET /api/pending")),
       (list) => list.some((one) => one.payload?.toolName === DISCARD_TOOL),
       60_000
     ).catch(() => []);
@@ -513,7 +522,9 @@ const spec: Spec = {
     });
     const named = await fleet
       .api<{ waiting: { id: string; title: string }[] }>(
-        `/api/workspaces/${c.workspaceId}/waiting`
+        hubRequest("GET /api/workspaces/:id/waiting", {
+          path: { id: c.workspaceId },
+        })
       )
       .catch(() => ({ waiting: [] }));
     const unconfirmed = await ownerArchive(c.workspaceId, false);

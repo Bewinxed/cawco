@@ -34,6 +34,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   isAlive,
   listedPid,
@@ -187,22 +188,30 @@ const run = async (kit: Kit) => {
   const home = fleet.env.HOME as string;
   const repo = join(fleet.sandbox, "code");
   await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && printf 'unasked probe\\n' > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm 'First commit'`.quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Boundary ended unasked",
-    machineId: MACHINE,
-    cwd: repo,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Boundary ended unasked",
+        machineId: MACHINE,
+        cwd: repo,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });
-  const item = await fleet.api<{ workItemId: string }>("/api/work-items", {
-    parentInstanceId: parent,
-    title: "Run commands while the boundary ends",
-    prompt: `${TAG}: run commands, then finish.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: repo,
-  });
+  const item = await fleet.api<{ workItemId: string }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Run commands while the boundary ends",
+        prompt: `${TAG}: run commands, then finish.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: repo,
+      },
+    })
+  );
   const itemOf = () =>
     fleet.query<{ state: string; error: string | null; workspace_id: string }>(
       "SELECT state, error, workspace_id FROM work_items WHERE id = ?",

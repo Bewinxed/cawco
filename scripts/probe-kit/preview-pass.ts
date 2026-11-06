@@ -14,6 +14,7 @@ import {
   type PreviewTicket,
   previewEnterUrl,
 } from "../../packages/core/src/frames";
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 
 /** The fleet as a pass needs it: the hub's base, where tickets are asked. */
 interface Hub {
@@ -25,9 +26,10 @@ const held = new Map<string, string>();
 
 /** A new pass for `origin`: `name=value`, or the entry's answer said as an error. */
 const enterOrigin = async (hub: Hub, origin: string): Promise<string> => {
-  const asked = await fetch(`${hub.base}/api/preview-ticket`, {
-    method: "POST",
-  });
+  const asked = await fetchHub(
+    hub.base,
+    hubRequest("POST /api/preview-ticket")
+  );
   if (!asked.ok) {
     throw new Error(
       `the hub gave no preview ticket: ${asked.status} ${await asked.text()}`

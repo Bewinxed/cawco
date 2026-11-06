@@ -74,6 +74,7 @@ import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { HOUR_MS } from "../../../packages/core/src/time";
 import {
   envOf,
@@ -343,11 +344,15 @@ const standUp = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Beat",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Beat",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   // The project's folder on the hub, which its workspaces read (core
   // workspace-policy.ts `projectFolder`): the access round 4 takes away.
   await mkdir(projectFolderOf(fleet, project.id), { recursive: true });
@@ -360,14 +365,18 @@ const standUp = async (kit: Kit) => {
       instanceId: string;
       workItemId: string;
       workspaceId: string;
-    }>("/api/work-items", {
-      parentInstanceId: parent,
-      title,
-      prompt,
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd: src,
-    });
+    }>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title,
+          prompt,
+          harness: "claude",
+          model: "claude-haiku-4-5",
+          cwd: src,
+        },
+      })
+    );
   return { delegate, fleet, home, parent, project: project.id };
 };
 
@@ -811,9 +820,10 @@ const deletedStops = async (
   );
   const running = await boundariesOf(fleet, h.id);
   const asked = Date.now();
-  const deleted = await fetch(`${fleet.base}/api/projects/${h.project}`, {
-    method: "DELETE",
-  });
+  const deleted = await fetchHub(
+    fleet.base,
+    hubRequest("DELETE /api/projects/:id", { path: { id: h.project } })
+  );
   const answer = `${deleted.status} ${await deleted.text()}`;
   const after = await until(
     "H's boundary replaced",

@@ -20,6 +20,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { relay } from "../relay";
@@ -57,30 +58,43 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Hub remote at any address",
-      machineId: MACHINE,
-      cwd: src,
-    });
-    await fleet.api(`/api/projects/${project.id}/places`, {
-      machineId: OTHER,
-      path: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Hub remote at any address",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
+    await fleet.api(
+      hubRequest("POST /api/projects/:id/places", {
+        path: { id: project.id },
+        body: {
+          machineId: OTHER,
+          path: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
     const delegate = (machineId?: string) =>
       fleet
-        .api("/api/work-items", {
-          parentInstanceId: parent,
-          title: "Hub remote probe",
-          prompt: "Say ok.",
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd: src,
-          lands: "none",
-          ...(machineId ? { machineId } : {}),
-        })
+        .api(
+          hubRequest("POST /api/work-items", {
+            body: {
+              parentInstanceId: parent,
+              title: "Hub remote probe",
+              prompt: "Say ok.",
+              harness: "claude",
+              model: "claude-haiku-4-5",
+              cwd: src,
+              lands: "none",
+              ...(machineId ? { machineId } : {}),
+            },
+          })
+        )
         .then(
           () => "started",
           (error: unknown) => String(error)

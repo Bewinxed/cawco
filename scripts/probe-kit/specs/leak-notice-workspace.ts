@@ -66,6 +66,7 @@ import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { browserExecutable } from "../../../packages/agent/src/capabilities";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   isAlive,
@@ -377,25 +378,30 @@ const spec: Spec = {
     await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo leak > README.md && git add -A && git commit -qm 'First commit'`
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Leak notice",
-      machineId: MACHINE,
-      cwd: repo,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Leak notice",
+          machineId: MACHINE,
+          cwd: repo,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", repo, {
       projectId: project.id,
     });
     try {
       const item = await fleet.api<{ instanceId: string; workItemId: string }>(
-        "/api/work-items",
-        {
-          parentInstanceId: parent,
-          title: "Leak in a workspace",
-          prompt: `${TAG}: run the commands.`,
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd: repo,
-        }
+        hubRequest("POST /api/work-items", {
+          body: {
+            parentInstanceId: parent,
+            title: "Leak in a workspace",
+            prompt: `${TAG}: run the commands.`,
+            harness: "claude",
+            model: "claude-haiku-4-5",
+            cwd: repo,
+          },
+        })
       );
       const workspace = await until(
         "the delegate's workspace",

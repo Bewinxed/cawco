@@ -38,6 +38,7 @@
  * screen, in Chromium and WebKit.
  */
 import type { Page } from "playwright-core";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   AWAY_AFTER_DEFAULT_MS,
   AWAY_AFTER_MAX_MS,
@@ -264,7 +265,11 @@ const run = async (kit: Kit) => {
   // (updates/update-toast.svelte.ts): every load is read in front of them,
   // a key pressed on it and the hub saying them here before the toast goes
   // up, on their away clock at its longest.
-  await fleet.api("/api/person/away-clock", { awayAfterMs: AWAY_AFTER_MAX_MS });
+  await fleet.api(
+    hubRequest("POST /api/person/away-clock", {
+      body: { awayAfterMs: AWAY_AFTER_MAX_MS },
+    })
+  );
 
   for (const [legAt, [engine, view]] of LEGS.entries()) {
     for (const [routeAt, route] of ROUTES.entries()) {
@@ -287,7 +292,7 @@ const run = async (kit: Kit) => {
         await page.keyboard.press("Shift");
         await until(
           "the person here",
-          () => fleet.api<PersonView>("/api/person"),
+          () => fleet.api<PersonView>(hubRequest("GET /api/person")),
           (person) => person.state === "here",
           30_000
         );
@@ -326,9 +331,13 @@ const run = async (kit: Kit) => {
     }
   }
 
-  await fleet.api("/api/person/away-clock", {
-    awayAfterMs: AWAY_AFTER_DEFAULT_MS,
-  });
+  await fleet.api(
+    hubRequest("POST /api/person/away-clock", {
+      body: {
+        awayAfterMs: AWAY_AFTER_DEFAULT_MS,
+      },
+    })
+  );
 };
 
 const spec: Spec = {

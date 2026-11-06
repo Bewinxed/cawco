@@ -76,6 +76,10 @@
  *     the segment's panel (it holds the cards, so it takes no Tab stop).
  */
 import type { Page } from "playwright-core";
+import {
+  type HubRequest,
+  hubRequest,
+} from "../../../../packages/core/src/hub-request";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { filesWords } from "../../../../packages/core/src/words/files";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
@@ -394,138 +398,132 @@ const openSession = async (
  * routes, as the dashboard and the pane call them): pages, and for each
  * the thumbnail a pane would keep, drawn on a canvas at its own shape.
  */
-const seed = (page: Page, id: string, names: string[]) =>
-  page.evaluate(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every seed in it
-    async (seeds) => {
-      const {
-        instanceId,
-        names: all,
-        titles,
-        pricing,
-        broken,
-        unpictured,
-        shapes,
-      } = seeds;
-      const made: string[] = [];
-      for (const [i, name] of all.entries()) {
-        const words =
-          name === pricing
-            ? "The pricing tiers for the hub, and what each plan carries."
-            : `Page ${i} of the session's work.`;
-        const response = await fetch(
-          `/api/instances/${encodeURIComponent(instanceId)}/artifacts`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              kind: "page",
-              name,
-              does: "judge",
-              title: titles[name],
-              ask: `Judge ${titles[name]}: pin anything that reads wrong`,
-              html: `<!doctype html><html><body><h1>${name}</h1><p>${words}</p></body></html>`,
-            }),
-          }
-        );
-        if (!response.ok) {
-          throw new Error(
-            `create ${name}: ${response.status} ${await response.text()}`
-          );
-        }
-        const { id: artifactId } = (await response.json()) as { id: string };
-        made.push(artifactId);
-        if (unpictured.includes(name)) {
-          continue;
-        }
-        let light: string;
-        if (name === broken) {
-          // A PNG's signature and header, and nothing a decoder can draw.
-          const bytes = new Uint8Array(64);
-          bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-          bytes.set(
-            [0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 1, 0, 0, 0, 0, 160],
-            8
-          );
-          light = btoa(String.fromCharCode(...bytes));
-        } else {
-          const canvas = document.createElement("canvas");
-          const [w, h] = shapes[name] ?? [
-            320,
-            [200, 240, 427, 180][i % 4] ?? 200,
-          ];
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.fillStyle = `oklch(0.94 0.03 ${(i * 37) % 360})`;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "#222";
-            ctx.font = "bold 22px sans-serif";
-            ctx.fillText(name.slice(0, 22), 16, 40);
-            ctx.fillStyle = "#888";
-            for (let row = 0; row < 6; row += 1) {
-              ctx.fillRect(16, 64 + row * 18, 240 - row * 20, 8);
-            }
-          }
-          light = canvas.toDataURL("image/png").split(",")[1] ?? "";
-        }
-        const kept = await fetch(
-          `/api/instances/${encodeURIComponent(instanceId)}/artifacts/${encodeURIComponent(artifactId)}/thumbnail`,
-          {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ light, dark: null, single: true }),
-          }
-        );
-        if (!kept.ok) {
-          throw new Error(
-            `thumbnail ${name}: ${kept.status} ${await kept.text()}`
-          );
-        }
-      }
-      return made;
-    },
-    {
-      instanceId: id,
-      names,
-      titles: Object.fromEntries(names.map((name) => [name, titleOf(name)])),
-      pricing: PRICING,
-      broken: BROKEN,
-      unpictured: UNPICTURED,
-      shapes: SHAPES,
+const seed = async (
+  page: Page,
+  id: string,
+  names: string[]
+): Promise<string[]> => {
+  const made: string[] = [];
+  for (const [i, name] of names.entries()) {
+    const words =
+      name === PRICING
+        ? "The pricing tiers for the hub, and what each plan carries."
+        : `Page ${i} of the session's work.`;
+    const title = titleOf(name);
+    const created = await pageAsk(
+      page,
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id },
+        body: {
+          kind: "page",
+          name,
+          does: "judge",
+          title,
+          ask: `Judge ${title}: pin anything that reads wrong`,
+          html: `<!doctype html><html><body><h1>${name}</h1><p>${words}</p></body></html>`,
+        },
+      })
+    );
+    if (!created.ok) {
+      throw new Error(`create ${name}: ${created.status} ${created.text}`);
     }
-  );
+    const { id: artifactId } = JSON.parse(created.text) as { id: string };
+    made.push(artifactId);
+    if (UNPICTURED.includes(name)) {
+      continue;
+    }
+    const light =
+      name === BROKEN
+        ? brokenPng()
+        : await page.evaluate(drawThumbnail, {
+            name,
+            i,
+            shape: SHAPES[name] ?? null,
+          });
+    const kept = await pageAsk(
+      page,
+      hubRequest("PUT /api/instances/:id/artifacts/:artifact/thumbnail", {
+        path: { id, artifact: artifactId },
+        body: { light, dark: null, single: true },
+      })
+    );
+    if (!kept.ok) {
+      throw new Error(`thumbnail ${name}: ${kept.status} ${kept.text}`);
+    }
+  }
+  return made;
+};
+
+/** A PNG's signature and header, and nothing a decoder can draw, base64. */
+const brokenPng = (): string => {
+  const bytes = new Uint8Array(64);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  bytes.set([0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 1, 0, 0, 0, 0, 160], 8);
+  return Buffer.from(bytes).toString("base64");
+};
+
+/** The thumbnail a pane would keep of page `name`, drawn in the page on a canvas at its own shape, base64. Serialized into the page. */
+const drawThumbnail = ({
+  name,
+  i,
+  shape,
+}: {
+  i: number;
+  name: string;
+  shape: readonly [number, number] | null;
+}): string => {
+  const canvas = document.createElement("canvas");
+  const [w, h] = shape ?? [320, [200, 240, 427, 180][i % 4] ?? 200];
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = `oklch(0.94 0.03 ${(i * 37) % 360})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#222";
+    ctx.font = "bold 22px sans-serif";
+    ctx.fillText(name.slice(0, 22), 16, 40);
+    ctx.fillStyle = "#888";
+    for (let row = 0; row < 6; row += 1) {
+      ctx.fillRect(16, 64 + row * 18, 240 - row * 20, 8);
+    }
+  }
+  return canvas.toDataURL("image/png").split(",")[1] ?? "";
+};
+
+/** `request` sent from the dashboard's page, as the person's browser sends it: its status and text. */
+const pageAsk = (page: Page, request: HubRequest) =>
+  page.evaluate(async (asked) => {
+    const response = await fetch(asked.path, asked);
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: await response.text(),
+    };
+  }, request);
 
 /** Seeds the decision pages, unpictured, as a session's agent makes them (OpenUI programs). */
-const seedDecisions = (page: Page, id: string) =>
-  page.evaluate(
-    async ({ instanceId, pages }) => {
-      for (const { name, title, program } of pages) {
-        const response = await fetch(
-          `/api/instances/${encodeURIComponent(instanceId)}/artifacts`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              kind: "page",
-              name,
-              does: "pick",
-              title,
-              ask: "Pick one option on each card",
-              program,
-            }),
-          }
-        );
-        if (!response.ok) {
-          throw new Error(
-            `create ${name}: ${response.status} ${await response.text()}`
-          );
-        }
-      }
-    },
-    { instanceId: id, pages: DECISIONS }
-  );
+const seedDecisions = async (page: Page, id: string) => {
+  for (const { name, title, program } of DECISIONS) {
+    const response = await pageAsk(
+      page,
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id },
+        body: {
+          kind: "page",
+          name,
+          does: "pick",
+          title,
+          ask: "Pick one option on each card",
+          program,
+        },
+      })
+    );
+    if (!response.ok) {
+      throw new Error(`create ${name}: ${response.status} ${response.text}`);
+    }
+  }
+};
 
 /** A small PNG, base64, a picture an attachment carries. */
 const PICTURE =
@@ -1141,28 +1139,33 @@ const reviewLegs = async (
   await page.keyboard.press("Enter");
   await page.locator("[data-files-card]").first().waitFor();
   await atRest(page);
-  const order = await page.evaluate(async (id) => {
-    const listed = (await (
-      await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts/files`)
-    ).json()) as { id: string }[];
-    const cards = [
-      ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
-    ];
-    const lanes = cards.map((item) => getComputedStyle(item).gridColumnStart);
-    const columns = Number(
-      getComputedStyle(
-        document.querySelector("[data-files-cards]") as Element
-      ).gridTemplateColumns.split(" ").length
-    );
-    return {
-      same:
-        cards.map((item) => item.dataset.artifact).join() ===
-        listed.map((one) => one.id).join(),
-      oneGrid: new Set(cards.map((item) => item.parentElement)).size === 1,
-      topRow: new Set(lanes.slice(0, columns)).size === columns,
-      columns,
-    };
-  }, ids.many);
+  const order = await page.evaluate(
+    async (request) => {
+      const listed = (await (await fetch(request.path, request)).json()) as {
+        id: string;
+      }[];
+      const cards = [
+        ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
+      ];
+      const lanes = cards.map((item) => getComputedStyle(item).gridColumnStart);
+      const columns = Number(
+        getComputedStyle(
+          document.querySelector("[data-files-cards]") as Element
+        ).gridTemplateColumns.split(" ").length
+      );
+      return {
+        same:
+          cards.map((item) => item.dataset.artifact).join() ===
+          listed.map((one) => one.id).join(),
+        oneGrid: new Set(cards.map((item) => item.parentElement)).size === 1,
+        topRow: new Set(lanes.slice(0, columns)).size === columns,
+        columns,
+      };
+    },
+    hubRequest("GET /api/instances/:id/artifacts/files", {
+      path: { id: ids.many },
+    })
+  );
   kit.check(
     "15: the cards are drawn once, in one grid, in the hub's order (newest first), the first row across every column",
     order.same && order.oneGrid && order.topRow,
@@ -2035,27 +2038,41 @@ const roundThree = async (
     (thumbs) => thumbs.every((one) => one === "picture"),
     60_000
   ).catch(() => null);
+  const listed = JSON.parse(
+    (
+      await pageAsk(
+        drawn,
+        hubRequest("GET /api/instances/:id/artifacts", {
+          path: { id: ids.many },
+        })
+      )
+    ).text
+  ) as { id: string; name: string; thumbnail: unknown }[];
   const kept = await drawn.evaluate(
-    async ({ id, names }) => {
-      const listed = (await (
-        await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts`)
-      ).json()) as { id: string; name: string; thumbnail: unknown }[];
-      return Promise.all(
-        listed
-          .filter((one) => names.includes(one.name))
-          .map(async (one) => {
-            const found = (await (
-              await fetch(`/api/artifacts/${encodeURIComponent(one.id)}`)
-            ).json()) as { shown: boolean };
+    async ({ names, rows }) =>
+      Promise.all(
+        rows
+          .filter(({ one }) => names.includes(one.name))
+          .map(async ({ one, found: asked }) => {
+            const found = (await (await fetch(asked.path, asked)).json()) as {
+              shown: boolean;
+            };
             return {
               name: one.name,
               thumbnail: one.thumbnail !== null,
               shown: found.shown,
             };
           })
-      );
-    },
-    { id: ids.many, names: UNPICTURED }
+      ),
+    {
+      names: UNPICTURED,
+      rows: listed.map((one) => ({
+        one,
+        found: hubRequest("GET /api/artifacts/:artifact", {
+          path: { artifact: one.id },
+        }),
+      })),
+    }
   );
   kit.check(
     "32: a page no pane had a picture of is drawn unseen by Files and kept by the hub, its card taking the picture, and it is never shown in the session's panel for it",
@@ -2660,11 +2677,8 @@ const keysLeg = async (
     engine
   );
   await page.evaluate(
-    (session) =>
-      fetch(`/api/instances/${encodeURIComponent(session)}/preview`, {
-        method: "DELETE",
-      }),
-    id
+    (request) => fetch(request.path, request),
+    hubRequest("DELETE /api/instances/:id/preview", { path: { id } })
   );
   await page
     .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {
@@ -3070,11 +3084,8 @@ const pickLeg = async (
     engine
   );
   await page.evaluate(
-    (session) =>
-      fetch(`/api/instances/${encodeURIComponent(session)}/preview`, {
-        method: "DELETE",
-      }),
-    id
+    (request) => fetch(request.path, request),
+    hubRequest("DELETE /api/instances/:id/preview", { path: { id } })
   );
   await page
     .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {

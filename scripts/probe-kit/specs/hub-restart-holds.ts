@@ -48,6 +48,7 @@ import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 import { writePin } from "../../../packages/core/src/comments";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls, toolReply } from "../../tool-calls";
@@ -273,15 +274,19 @@ const delegate = async (
   tag: string,
   extra: object = {}
 ): Promise<string> => {
-  const made = await legs.fleet.api<{ workItemId: string }>("/api/work-items", {
-    parentInstanceId: parent,
-    title: `Restart leg ${tag}`,
-    prompt: `PROBE-RH-${tag}: do your part.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: legs.repo,
-    ...extra,
-  });
+  const made = await legs.fleet.api<{ workItemId: string }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: `Restart leg ${tag}`,
+        prompt: `PROBE-RH-${tag}: do your part.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: legs.repo,
+        ...extra,
+      },
+    })
+  );
   await until(
     `${tag}'s session running`,
     () => itemOf(legs.fleet, made.workItemId),
@@ -563,19 +568,21 @@ const legD = async (legs: Legs) => {
 const legE = async (legs: Legs) => {
   const { check, fleet } = legs;
   const put = (method: "PUT" | "DELETE") =>
-    fetch(`${fleet.base}/api/delegate-types/${TYPE_E}`, {
-      method,
-      headers: { "content-type": "application/json" },
-      ...(method === "PUT"
-        ? {
-            body: JSON.stringify({
+    fetchHub(
+      fleet.base,
+      method === "PUT"
+        ? hubRequest("PUT /api/delegate-types/:name", {
+            path: { name: TYPE_E },
+            body: {
               description: "A probe's type",
               harness: "claude",
               model: "claude-haiku-4-5",
-            }),
-          }
-        : {}),
-    });
+            },
+          })
+        : hubRequest("DELETE /api/delegate-types/:name", {
+            path: { name: TYPE_E },
+          })
+    );
   const madeType = await put("PUT");
   const item = await delegate(legs, legs.parent, "E", { type: TYPE_E });
   const session = itemOf(fleet, item)?.instance_id ?? "";
@@ -745,11 +752,15 @@ const standUp = async (kit: Kit): Promise<Legs> => {
     .cwd(repo)
     .env(env)
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Hub restart",
-    machineId: MACHINE,
-    cwd: repo,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Hub restart",
+        machineId: MACHINE,
+        cwd: repo,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });

@@ -7,6 +7,11 @@ import { readWithin } from "../../packages/core/src/bounded";
 import { detach } from "../../packages/core/src/detach";
 import { withFetchCap } from "../../packages/core/src/fetch-cap";
 import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../packages/core/src/hub-request";
+import {
   accountClaudeJson,
   accountConfigDir,
 } from "../../packages/core/src/paths";
@@ -214,6 +219,8 @@ const watchUnit: Watched = {
 };
 /** The safety deadline: a busy machine is slow, never wrong (nightly e83078b6d). */
 const READY_DEADLINE_MS = 120_000;
+/** The proof's hub, on its own port. */
+const HUB = "http://127.0.0.1:43456";
 /**
  * Polls `url` every 100 ms until it answers OK with `predicate` true, the
  * process it waits on exits, or the safety deadline passes.
@@ -339,7 +346,9 @@ try {
   await exec("proof-fixture");
   spawn("sessiond");
   const hub = watchChild("the hub", "hub", spawn("hub"));
-  console.log(`health ${await wait("http://127.0.0.1:43456/health", hub)}`);
+  console.log(
+    `health ${await wait(`${HUB}${hubRequest("GET /health").path}`, hub)}`
+  );
   // The machine joined this hub as an install joins it (cli joined-hub.ts,
   // binary-install's own step): `up --hub` names a hub for its run and saves
   // none (discover.ts `settle`), so without this the agent is not the
@@ -350,7 +359,7 @@ try {
   const captureWs = await capture();
   let agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const registered = await wait(
-    "http://127.0.0.1:43456/api/agents",
+    `${HUB}${hubRequest("GET /api/agents").path}`,
     watchChild("the agent", "up", agent),
     (s) => JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
@@ -362,15 +371,11 @@ try {
   if (!machine) {
     throw new Error("No online proof machine");
   }
-  async function post(path: string, body: unknown) {
-    const response = await fetch(`http://127.0.0.1:43456${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  async function post(request: HubRequest) {
+    const response = await fetchHub(HUB, request);
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(`Hub API ${path}: ${response.status} ${text}`);
+      throw new Error(`Hub API ${request.path}: ${response.status} ${text}`);
     }
     return JSON.parse(text) as Record<string, unknown>;
   }
@@ -401,14 +406,19 @@ try {
   console.log(`embedded dashboard served ${page.length} characters`);
   const ws = await openDashboard();
   console.log("dashboard websocket is held open before worker restart");
-  const crossOrigin = await fetch("http://127.0.0.1:43458/api/agents", {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-      origin: "https://untrusted.invalid",
-    },
-    body: "x=1",
-  });
+  // A form's POST from another site to the hub's agents path through the
+  // dashboard: refused by the origin check before any route is read.
+  const crossOrigin = await fetch(
+    `http://127.0.0.1:43458${hubRequest("GET /api/agents").path}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "https://untrusted.invalid",
+      },
+      body: "x=1",
+    }
+  );
   if (crossOrigin.status !== 403) {
     throw new Error(`CSRF check was lost: ${crossOrigin.status}`);
   }
@@ -434,10 +444,11 @@ try {
   // A CawCo account the machine signs in to as it registers again below, as
   // `claude auth login` leaves one (prove-stage2.sh account-dir.sh): no real
   // credential, only what lets the stub harness start a session.
-  const account = (await post("/api/accounts", {
-    provider: "anthropic",
-    kind: "subscription",
-  })) as { id: string };
+  const account = (await post(
+    hubRequest("POST /api/accounts", {
+      body: { provider: "anthropic", kind: "subscription" },
+    })
+  )) as { id: string };
   const accountDir = accountConfigDir(account.id);
   mkdirSync(accountDir, { recursive: true, mode: 0o700 });
   writeFileSync(
@@ -454,11 +465,11 @@ try {
   await agent.exited;
   agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const restarted = watchChild("the agent", "up", agent);
-  await wait("http://127.0.0.1:43456/api/agents", restarted, (s) =>
+  await wait(`${HUB}${hubRequest("GET /api/agents").path}`, restarted, (s) =>
     JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
   await exec("proof-custody-check");
-  await wait("http://127.0.0.1:43456/api/accounts", restarted, (s) =>
+  await wait(`${HUB}${hubRequest("GET /api/accounts").path}`, restarted, (s) =>
     (
       JSON.parse(s) as { signins: { accountId: string; state: string }[] }
     ).signins.some(
@@ -484,7 +495,7 @@ try {
     })
   );
   // A first start materializes the harness's runtime: as long as stage 2 gives one.
-  await wait("http://127.0.0.1:43456/api/instances", restarted, (s) =>
+  await wait(`${HUB}${hubRequest("GET /api/instances").path}`, restarted, (s) =>
     (JSON.parse(s) as { id: string; status: string }[]).some(
       (row) => row.id === sessionId && row.status === "running"
     )
@@ -528,14 +539,19 @@ try {
         { headers: { "content-type": "text/html; charset=utf-8" } }
       ),
   });
-  previewShown = post(`/api/instances/${sessionId}/artifacts`, {
-    kind: "preview",
-    does: "try",
-    title: "Probe try artifact",
-    ask: "Try this page and say whether it works",
-    name: "binary-proof",
-    port: devServer.port,
-  });
+  previewShown = post(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: sessionId },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try this page and say whether it works",
+        name: "binary-proof",
+        port: devServer.port,
+      },
+    })
+  );
   let previewAnswer = "no answer yet";
   previewShown.then(
     (answer) => {

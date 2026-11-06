@@ -87,6 +87,7 @@ import {
   COMPACTION_ORIGIN,
   CONTEXT_LINE,
 } from "../../../packages/core/src/harness";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { contextWords } from "../../../packages/core/src/words/context";
 import { fileDue } from "../../../packages/hub/src/at-limit";
@@ -427,7 +428,7 @@ const reads = (fleet: KitFleet) => {
           content?: string;
           metadata?: { noteTitle?: string; subtype?: string };
         }[];
-      }>(`/api/instances/${id}/transcript`)
+      }>(hubRequest("GET /api/instances/:id/transcript", { path: { id } }))
     ).blocks
       .filter((block) => block.metadata?.subtype === CONTEXT_LINE)
       .map((block) => ({

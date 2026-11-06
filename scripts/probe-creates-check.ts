@@ -15,7 +15,8 @@
  *    `artifact_create`, or a module constant holding one;
  * 2. the `input` of a literal whose `name` is the tool's name; or
  * 3. a literal with both `kind` and `does` in a file that names the tool,
- *    outside a `.api(…)` call (the hub's API takes no title of necessity).
+ *    outside a hub request (core `hubRequest`, which holds it to what its
+ *    route takes, and that takes no title of necessity) or a `.api(…)` call.
  *
  * Each must hold `title`, or a spread (`{ ...input }`, whose own literal is
  * read where it is written). A leg that proves the refusal writes
@@ -37,6 +38,8 @@ import ts from "typescript";
 const ROOT = join(import.meta.dir, "..");
 const TOOL = /artifact_create$/u;
 const NAMES_TOOL = /artifact_create/u;
+/** Core's request door (hub-request.ts), whose route types hold what it sends. */
+const HUB_DOOR = /^hubRequest(?:AsGiven)?$/u;
 
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
@@ -98,8 +101,9 @@ export const untitledCreates = (file: string, text: string): string[] => {
     for (let up = node.parent; up; up = up.parent) {
       if (
         ts.isCallExpression(up) &&
-        ts.isPropertyAccessExpression(up.expression) &&
-        up.expression.name.text.startsWith("api")
+        ((ts.isPropertyAccessExpression(up.expression) &&
+          up.expression.name.text.startsWith("api")) ||
+          (ts.isIdentifier(up.expression) && HUB_DOOR.test(up.expression.text)))
       ) {
         return true;
       }
@@ -200,7 +204,7 @@ await calls.call(fleet, session, CREATE, { kind: "page", name: "a", ask: "x" });
 calls.ask("1", { name: "artifact_create", input: { kind: "page", name: "b" } });
 const input = { kind: "page", does: "pick", name: "c" };
 await call(CREATE, { kind: "page", does: "pick", title: "Titled", name: "d" });
-await fleet.api("/api/instances/s/artifacts", { kind: "page", does: "pick", name: "e" });`;
+await fleet.api(hubRequest("POST /api/instances/:id/artifacts", { path: { id: "s" }, body: { kind: "page", does: "pick", name: "e" } }));`;
 
 if (import.meta.main) {
   const planted = untitledCreates(join(ROOT, "planted.ts"), PLANTED);

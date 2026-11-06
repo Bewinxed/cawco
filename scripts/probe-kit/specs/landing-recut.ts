@@ -59,6 +59,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { movedLine } from "../../../packages/core/src/injected";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
@@ -344,11 +345,15 @@ const settled = (fleet: Fleet, label: string, id: string, mark: string) =>
 const delegated = async (fleet: Fleet, tag: Tag, lockfile: boolean) => {
   const repo = join(fleet.sandbox, `code-${tag}`);
   await makeRepo(repo, fleet.env.HOME as string, lockfile);
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: `Landing recut ${tag}`,
-    machineId: MACHINE,
-    cwd: repo,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: `Landing recut ${tag}`,
+        machineId: MACHINE,
+        cwd: repo,
+      },
+    })
+  );
   await declareGate(fleet.base, project.id, JS_GATE);
   const parent = await fleet.spawn("claude", `Parent ${tag}`, repo, {
     projectId: project.id,
@@ -357,14 +362,18 @@ const delegated = async (fleet: Fleet, tag: Tag, lockfile: boolean) => {
     instanceId: string;
     workItemId: string;
     workspaceId: string;
-  }>("/api/work-items", {
-    parentInstanceId: parent,
-    title: `Commit ${tag}`,
-    prompt: `PROBE-RECUT-GATE-${tag}: commit a file, then finish.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: repo,
-  });
+  }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: `Commit ${tag}`,
+        prompt: `PROBE-RECUT-GATE-${tag}: commit a file, then finish.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: repo,
+      },
+    })
+  );
   return { project, parent, started };
 };
 

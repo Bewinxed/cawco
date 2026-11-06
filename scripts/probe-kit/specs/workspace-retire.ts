@@ -98,6 +98,12 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import {
+  fetchHub,
+  type HubRequest,
+  type HubSent,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
 import { unhandled } from "../../../packages/core/src/unhandled";
@@ -119,11 +125,13 @@ import { type Kit, ROOT, type Spec } from "../kit";
 /** One request given `ms` to answer: its status and text; one not answered in time throws saying so. */
 const requestWithin = async (
   ms: number,
-  url: string,
-  init: RequestInit
+  base: string,
+  request: HubRequest
 ): Promise<{ ok: boolean; status: number; text: string }> => {
+  const { method, path } = request;
+  const url = `${base}${path}`;
   const read = await readWithin(ms, async (signal) => {
-    const response = await fetch(url, { ...init, signal });
+    const response = await fetchHub(base, request, { signal });
     return {
       ok: response.ok,
       status: response.status,
@@ -135,7 +143,7 @@ const requestWithin = async (
       return read.value;
     case "unanswered":
       throw new Error(
-        `${init.method ?? "GET"} ${url} did not answer within ${read.after} ms (${read.reason})`
+        `${method} ${url} did not answer within ${read.after} ms (${read.reason})`
       );
     default:
       unhandled("read", read);
@@ -489,7 +497,7 @@ interface Scene {
   /** An archive asked over HTTP: its status and its answer's text. */
   archiveOver: (
     id: string,
-    body?: object
+    body?: HubSent<"POST /api/workspaces/:id/archive">["body"]
   ) => Promise<{ status: number; text: string }>;
   /** A tool of the parent's, called as the parent: its status and its answer's text. */
   callAsParent: (
@@ -620,7 +628,7 @@ const archivePhase = async (
     `${kept.status} ${kept.text}`
   );
   const held = await fleet.api<{ holds: string; size: string }>(
-    `/api/workspaces/${k.id}/held`
+    hubRequest("GET /api/workspaces/:id/held", { path: { id: k.id } })
   );
   check(
     "(e) GET held names what K holds now, read again by the refused archive: 1 commit on no remote, 2 changed files, and its size",
@@ -899,14 +907,18 @@ const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     instanceId: string;
     workItemId: string;
     workspaceId: string;
-  }>("/api/work-items", {
-    parentInstanceId: scene.parentId,
-    title: "Commit and end Q",
-    prompt: "PROBE-RETIRE-Q: commit a file.",
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: scene.src,
-  });
+  }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: scene.parentId,
+        title: "Commit and end Q",
+        prompt: "PROBE-RETIRE-Q: commit a file.",
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: scene.src,
+      },
+    })
+  );
   const wq = workspaceOf(started.workspaceId);
   const landing = await until(
     "Q's merge checks running",
@@ -1053,7 +1065,9 @@ const previewPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     (now) => now === "sleeping",
     SETTLE_MS
   ).catch(() => undefined);
-  const swept = await fleet.api<Sweep>("/api/workspaces/retire", {});
+  const swept = await fleet.api<Sweep>(
+    hubRequest("POST /api/workspaces/retire")
+  );
   const hold = swept.kept.find((one) => one.workspaceId === wp.id)?.hold ?? "";
   check(
     "(p) P's work lands and its session sleeps, and its workspace stays active, the sweep naming the artifact that shows it",
@@ -1110,17 +1124,15 @@ const unstartablePhase = async (kit: Kit, scene: Scene): Promise<void> => {
   ).catch(() => ["still running"]);
   const followUp = await requestWithin(
     120_000,
-    `${fleet.base}/api/work-items`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    fleet.base,
+    hubRequest("POST /api/work-items", {
+      body: {
         parentInstanceId: scene.parentId,
         title: "Go on in B",
         prompt: "PROBE-RETIRE-B: go on.",
         workspace: wb.id,
-      }),
-    }
+      },
+    })
   );
   const refusedText = followUp.text;
   check(
@@ -1269,7 +1281,9 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `DELETE ${statuses.join(", ")}; H ${h.state}; G ${g.state} ${existsSync(wg.path) ? "husk stands" : "gone"}; S ${s.state}`
   );
   const heldS = await fleet
-    .api<Held>(`/api/workspaces/${ws.id}/held`)
+    .api<Held>(
+      hubRequest("GET /api/workspaces/:id/held", { path: { id: ws.id } })
+    )
     .catch((error: unknown) => ({ holds: String(error) }) as Held);
   check(
     "(g) S, a husk with a user's file, is held with what it holds, the file standing",
@@ -1277,7 +1291,9 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       existsSync(join(ws.path, "notes.txt")),
     JSON.stringify(heldS)
   );
-  const again = await fleet.api<Sweep>("/api/workspaces/retire", {});
+  const again = await fleet.api<Sweep>(
+    hubRequest("POST /api/workspaces/retire")
+  );
   const hub = (await fleet.logs("hub"))
     .split("\n")
     .filter((line) => line.includes("[workspaces]"));
@@ -1382,10 +1398,12 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
     `standing: ${standing(wk, "K").join(", ")}`
   );
   const words = await fleet
-    .api<Held>(`/api/workspaces/${wk.id}/held`)
+    .api<Held>(
+      hubRequest("GET /api/workspaces/:id/held", { path: { id: wk.id } })
+    )
     .catch((error: unknown) => ({ holds: String(error) }) as Held);
   const { held: list } = await fleet.api<{ held: Held[] }>(
-    "/api/workspaces/held"
+    hubRequest("GET /api/workspaces/held")
   );
   check(
     "(c) K's holding words: 1 commit on no remote, its size and machine, at GET held and in GET /api/workspaces/held (K alone)",
@@ -1447,11 +1465,15 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Retire",
-      machineId: MACHINE,
-      cwd: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Retire",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
@@ -1480,14 +1502,18 @@ const spec: Spec = {
           instanceId: string;
           workItemId: string;
           workspaceId: string;
-        }>("/api/work-items", {
-          parentInstanceId: parent,
-          title: `Commit and end ${tag}`,
-          prompt: `PROBE-RETIRE-${tag}: commit a file.`,
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd: src,
-        });
+        }>(
+          hubRequest("POST /api/work-items", {
+            body: {
+              parentInstanceId: parent,
+              title: `Commit and end ${tag}`,
+              prompt: `PROBE-RETIRE-${tag}: commit a file.`,
+              harness: "claude",
+              model: "claude-haiku-4-5",
+              cwd: src,
+            },
+          })
+        );
         await onStart?.(workspaceOf(started.workspaceId));
         const item = await until(
           `work item ${tag} ended`,
@@ -1533,21 +1559,20 @@ const spec: Spec = {
         (
           await requestWithin(
             60_000,
-            `${fleet.base}/api/instances/${parent}/artifacts/${id}`,
-            { method: "DELETE" }
+            fleet.base,
+            hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
+              path: { id: parent, artifact: id },
+            })
           )
         ).status,
       archiveOver: async (id, body) => {
         const archived = await requestWithin(
           120_000,
-          `${fleet.base}/api/workspaces/${id}/archive`,
-          {
-            method: "POST",
-            ...(body && {
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(body),
-            }),
-          }
+          fleet.base,
+          hubRequest("POST /api/workspaces/:id/archive", {
+            path: { id },
+            ...(body && { body }),
+          })
         );
         return { status: archived.status, text: archived.text };
       },

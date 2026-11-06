@@ -22,6 +22,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { INPUTS_COUNT_LIMIT } from "../../../packages/core/src/harness";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
@@ -166,11 +167,15 @@ const spec: Spec = {
       (signin) => signin === "signed-in",
       120_000
     );
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Handoff sends",
-      machineId: MACHINE,
-      cwd: fleet.sandbox,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Handoff sends",
+          machineId: MACHINE,
+          cwd: fleet.sandbox,
+        },
+      })
+    );
     plan.parent = await fleet.spawn("claude", "Parent", fleet.sandbox, {
       projectId: project.id,
     });
@@ -178,15 +183,19 @@ const spec: Spec = {
     plan.file = join(far.home, FILE);
     await writeFile(plan.file, TOKEN);
 
-    const started = await fleet.api<Started>("/api/work-items", {
-      parentInstanceId: plan.parent,
-      title: "Send the ledger up",
-      prompt: `${LEAF}: hand the ledger to your parent, then finish.`,
-      harness: "claude",
-      model: MODEL.claude,
-      host: true,
-      machineId: FAR,
-    });
+    const started = await fleet.api<Started>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: plan.parent,
+          title: "Send the ledger up",
+          prompt: `${LEAF}: hand the ledger to your parent, then finish.`,
+          harness: "claude",
+          model: MODEL.claude,
+          host: true,
+          machineId: FAR,
+        },
+      })
+    );
     const state = await until(
       "the leaf's item ended",
       () =>

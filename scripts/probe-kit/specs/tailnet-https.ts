@@ -45,6 +45,7 @@ import { userInfo } from "node:os";
 import { join } from "node:path";
 import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { tailnetWords } from "../../../packages/core/src/words/tailnet";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { leasePortRange, until } from "../../scratch-fleet";
@@ -528,9 +529,11 @@ const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   const { bin, env, pairAt, set } = await tailnetStub(fleet);
   const read = async (): Promise<Read> =>
-    (await fetch(`${fleet.base}/api/tailnet-https`)).json() as Promise<Read>;
+    (
+      await fetchHub(fleet.base, hubRequest("GET /api/tailnet-https"))
+    ).json() as Promise<Read>;
   const health = async () =>
-    (await fetch(`${fleet.base}/health`)).json() as Promise<{
+    (await fetchHub(fleet.base, hubRequest("GET /health"))).json() as Promise<{
       dashboard: string;
       secureDashboard: string | null;
     }>;
@@ -873,11 +876,14 @@ const run = async (kit: Kit) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const named = await context.newPage();
     await open(named, `${https}/`, "[data-needs-caw]");
-    const secure = await named.evaluate(async () => ({
-      secure: window.isSecureContext,
-      origin: location.origin,
-      api: (await fetch("/api/tailnet-https")).status,
-    }));
+    const secure = await named.evaluate(
+      async (request) => ({
+        secure: window.isSecureContext,
+        origin: location.origin,
+        api: (await fetch(request.path, request)).status,
+      }),
+      hubRequest("GET /api/tailnet-https")
+    );
     kit.check(
       "5: on its name the dashboard loads in a secure context, its API through the relay",
       secure.secure && secure.origin === https && secure.api === 200,

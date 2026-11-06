@@ -55,6 +55,7 @@ import { dirname, join } from "node:path";
 import { removeOwned } from "../../../packages/agent/src/browser/container-host";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
 import { keptBrowserOwner } from "../../../packages/agent/src/browser/state";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import {
@@ -684,21 +685,23 @@ const run = async (kit: Kit) => {
 
   // Every session's browser tool, as a person adds it: the door it is
   // launched through is the session's way into the gate.
-  const put = await fetch(`${fleet.base}/api/fleet/mcp/chrome-devtools`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      config: {
-        command: "npx",
-        args: [
-          "-y",
-          `chrome-devtools-mcp@${MCP_VERSION}`,
-          "--no-usage-statistics",
-        ],
+  const put = await fetchHub(
+    fleet.base,
+    hubRequest("PUT /api/fleet/mcp/:name", {
+      path: { name: "chrome-devtools" },
+      body: {
+        config: {
+          command: "npx",
+          args: [
+            "-y",
+            `chrome-devtools-mcp@${MCP_VERSION}`,
+            "--no-usage-statistics",
+          ],
+        },
+        enabled: true,
       },
-      enabled: true,
-    }),
-  });
+    })
+  );
   kit.check("the fleet runs chrome-devtools-mcp", put.ok, String(put.status));
   const tool = (await until(
     "the machine's sync set the fleet's chrome-devtools",
@@ -716,7 +719,9 @@ const run = async (kit: Kit) => {
   )) as SessionEntry;
 
   // Host mode, its names behind an https front on every address.
-  const range = await fleet.api<{ ports: string }>("/api/preview-settings");
+  const range = await fleet.api<{ ports: string }>(
+    hubRequest("GET /api/preview-settings")
+  );
   const first = Number(range.ports.split("–")[0]);
   const front = cloudflareTo(
     `127.0.0.1:${first}`,
@@ -774,12 +779,16 @@ const legs = async (
   await Bun.$`git init -q -b main && bun install --lockfile-only --no-progress && git add -A && git -c user.email=p@p -c user.name=p commit -q -m browse`
     .cwd(dir)
     .quiet();
-  const { id: projectId } = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Browse",
-    machineId: MACHINE,
-    cwd: dir,
-    caw: false,
-  });
+  const { id: projectId } = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Browse",
+        machineId: MACHINE,
+        cwd: dir,
+        caw: false,
+      },
+    })
+  );
   const writer = await fleet.spawn("claude", "Lamp page", dir, { projectId });
   const doorFile = join(
     home,
@@ -803,23 +812,32 @@ const legs = async (
   );
   const outsider = await fleet.spawn("claude", "Outsider", fleet.repo);
   const witness = await fleet.spawn("claude", "Witness", dir, { projectId });
-  const at = `/api/instances/${writer}/artifacts`;
-  const sheet = await fleet.api<{ id: string }>(at, {
-    kind: "component",
-    does: "judge",
-    title: "Probe judge artifact",
-    ask: "Judge the lamp switch",
-    name: "lamp-switch",
-    file: STORY,
-  });
-  const page = await fleet.api<{ id: string }>(at, {
-    kind: "page",
-    does: "pick",
-    title: "Probe pick artifact",
-    ask: "Pick the lamp switch",
-    name: "lamp-page",
-    program: program(sheet.id),
-  });
+  const sheet = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: writer },
+      body: {
+        kind: "component",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge the lamp switch",
+        name: "lamp-switch",
+        file: STORY,
+      },
+    })
+  );
+  const page = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: writer },
+      body: {
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick the lamp switch",
+        name: "lamp-page",
+        program: program(sheet.id),
+      },
+    })
+  );
 
   /**
    * The session `who` calls artifact_browse on `id` under marker `n`: its
@@ -906,8 +924,9 @@ const legs = async (
 
   // (e) The session's pass opens none of another session's names.
   const theirs = await fleet.api<{ origin?: string }>(
-    `/api/instances/${outsider}/preview-address`,
-    {}
+    hubRequest("POST /api/instances/:id/preview-address", {
+      path: { id: outsider },
+    })
   );
   const refusedThere = await tab.navigate(`${theirs.origin}/`);
   const lockedThere = await until(

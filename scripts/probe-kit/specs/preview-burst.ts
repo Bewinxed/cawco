@@ -59,6 +59,7 @@ import http2 from "node:http2";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { HopByHopHeader } from "../../../packages/core/src/hop-headers";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { PREVIEW_WHY_META } from "../../../packages/core/src/index";
 import {
   processArgs,
@@ -912,9 +913,12 @@ async function realJoin(kit: Kit): Promise<void> {
   // The sheet's own origin (hub server.ts `frameAddress`).
   const id = ANSWERED_ID.exec(created)?.[1] ?? "";
   const { port } = (await (
-    await fetch(`${fleet.base}/api/artifacts/${id}/preview-address`, {
-      method: "POST",
-    })
+    await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/artifacts/:artifact/preview-address", {
+        path: { artifact: id },
+      })
+    )
   ).json()) as { port?: number };
   const origin = `http://127.0.0.1:${port ?? 0}`;
   const page: Page = await kit.page("desk");

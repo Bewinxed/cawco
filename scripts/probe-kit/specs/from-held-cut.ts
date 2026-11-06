@@ -43,6 +43,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
@@ -201,11 +202,15 @@ const scene = async (
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "From held",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "From held",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
@@ -220,15 +225,16 @@ const heldPhase = async (
   src: string
 ): Promise<{ head: string; source: Workspace } | undefined> => {
   const ahead = await fleet.api<{ workItemId: string; workspaceId: string }>(
-    "/api/work-items",
-    {
-      parentInstanceId: parent,
-      title: "Commit and stop",
-      prompt: `${AHEAD}: commit a file, then stop.`,
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd: src,
-    }
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Commit and stop",
+        prompt: `${AHEAD}: commit a file, then stop.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: src,
+      },
+    })
   );
   const item = await until(
     "the delegate's item failed as blocked",
@@ -368,7 +374,9 @@ const cutPhase = async (
   );
   const after = workspaceOf(fleet, source.id);
   const words = await fleet
-    .api<{ holds: string }>(`/api/workspaces/${source.id}/held`)
+    .api<{ holds: string }>(
+      hubRequest("GET /api/workspaces/:id/held", { path: { id: source.id } })
+    )
     .catch((error: unknown) => ({ holds: String(error) }));
   const sourceHead = existsSync(source.path)
     ? await gitIn(source.path, "rev-parse", "HEAD")

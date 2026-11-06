@@ -32,6 +32,7 @@
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { delay } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -70,11 +71,13 @@ export default {
     const mark = await fleet.logMark("hub");
     signal(pid, "SIGSTOP");
     const asked = Date.now();
-    const answer = await fetch(`${fleet.base}/api/agents/${OTHER}/inspect`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    }).then(async (response) => ({
+    const answer = await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/agents/:machineId/inspect", {
+        path: { machineId: OTHER },
+        body: {},
+      })
+    ).then(async (response) => ({
       status: response.status,
       said: (await response.text()).slice(0, 300),
     }));
@@ -108,8 +111,12 @@ export default {
     const before = await fleet.logMark("hub");
     signal(pid, "SIGSTOP");
     const from = Date.now();
-    const read = fetch(
-      `${fleet.base}/api/agents/${OTHER}/media?path=${encodeURIComponent(picture)}`
+    const read = fetchHub(
+      fleet.base,
+      hubRequest("GET /api/agents/:machineId/media", {
+        path: { machineId: OTHER },
+        query: { path: picture },
+      })
     ).then(async (response) => ({
       status: response.status,
       size: (await response.arrayBuffer()).byteLength,

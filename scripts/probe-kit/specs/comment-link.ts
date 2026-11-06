@@ -64,6 +64,7 @@
  */
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { hiddenTabs } from "../hidden-tab";
 import { idleProxy } from "../idle-proxy";
@@ -300,7 +301,12 @@ const hubPins = async ({ fleet, id, session }: At) =>
         id: string;
         pins: { id: string; thread: { text: string }[] }[];
       }[];
-    }>(`/api/instances/${session}/artifacts/comments?artifact=${id}&filter=all`)
+    }>(
+      hubRequest("GET /api/instances/:id/artifacts/comments", {
+        path: { id: session },
+        query: { artifact: id, filter: "all" },
+      })
+    )
   ).artifacts.find((one) => one.id === id)?.pins ?? [];
 
 const withWords = (pins: { thread: { text: string }[] }[], words = PIN_WORDS) =>
@@ -342,15 +348,17 @@ const run = async (kit: Kit) => {
   const dashboard = await servedDashboard(kit, fleet);
   const session = await fleet.spawn("claude", "Comment link", fleet.repo);
   const { id } = await fleet.api<{ id: string }>(
-    `/api/instances/${session}/artifacts`,
-    {
-      kind: "page",
-      does: "judge",
-      title: "Probe judge artifact",
-      ask: "Judge this page: pin anything that reads wrong",
-      name: NAME,
-      html: PAGE,
-    }
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "page",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge this page: pin anything that reads wrong",
+        name: NAME,
+        html: PAGE,
+      },
+    })
   );
   const proxy = await idleProxy(IDLE_MS);
   // The control's server: it answers the upgrade and never says a word.

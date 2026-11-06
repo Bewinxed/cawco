@@ -39,6 +39,7 @@ import {
   type WindowAsk,
 } from "../../../packages/core/src";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { delay, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -113,7 +114,9 @@ const watched = async <T>(
   const sampling = (async () => {
     while (!sampler.signal.aborted) {
       const asked = performance.now();
-      await fetch(`${fleet.base}/health`).catch(() => undefined);
+      await fetchHub(fleet.base, hubRequest("GET /health")).catch(
+        () => undefined
+      );
       health = Math.max(health, performance.now() - asked);
       agentPeak = Math.max(agentPeak, await rssOf(agent));
       hubPeak = Math.max(hubPeak, await rssOf(hub));
@@ -308,7 +311,10 @@ export default {
     );
     const pageOf = (cursor?: string) =>
       fleet.api<TranscriptPage>(
-        `/api/instances/${key}/transcript?limit=60${cursor ? `&before=${encodeURIComponent(cursor)}` : ""}`
+        hubRequest("GET /api/instances/:id/transcript", {
+          path: { id: key },
+          query: { limit: "60", ...(cursor ? { before: cursor } : {}) },
+        })
       );
 
     const first = await watched(fleet, agent, hub, () => pageOf());

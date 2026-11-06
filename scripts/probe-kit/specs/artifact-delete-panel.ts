@@ -30,6 +30,8 @@
  *     session deleting the same artifacts seconds later sends) is refused
  *     naming the id, never a 500, and removes nothing.
  */
+
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
@@ -65,7 +67,6 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Panel holds", fleet.repo);
-  const at = `${fleet.base}/api/instances/${encodeURIComponent(session)}`;
 
   let sent = 0;
   /**
@@ -115,27 +116,44 @@ const run = async (kit: Kit) => {
   };
   /** The person's press as the dashboard sends it (artifact-api.ts `showArtifact`). */
   const personShows = async (id: string) => {
-    const response = await fetch(`${at}/artifacts/${id}/show`, {
-      method: "POST",
-    });
+    const response = await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+        path: { id: session, artifact: id },
+      })
+    );
     await response.text();
   };
   /** The person's Remove in the panel's menu (artifact-api.ts `removeArtifact`). */
   const personRemoves = async (id: string) => {
-    const response = await fetch(`${at}/artifacts/${id}`, {
-      method: "DELETE",
-    });
+    const response = await fetchHub(
+      fleet.base,
+      hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
+        path: { id: session, artifact: id },
+      })
+    );
     return (await response.json()) as { showing: { id: string } | null };
   };
   /** The person's Close (artifact-api.ts `deletePreview`). */
   const personCloses = async () => {
-    await (await fetch(`${at}/preview`, { method: "DELETE" })).text();
+    await (
+      await fetchHub(
+        fleet.base,
+        hubRequest("DELETE /api/instances/:id/preview", {
+          path: { id: session },
+        })
+      )
+    ).text();
   };
   /** What the session's panel shows now, by the hub: an id, or null. */
   const panel = async (): Promise<string | null> => {
     const { artifacts } = await fleet.api<{
       artifacts: { id: string; shown: boolean }[];
-    }>(`/api/instances/${encodeURIComponent(session)}/artifacts/list`);
+    }>(
+      hubRequest("GET /api/instances/:id/artifacts/list", {
+        path: { id: session },
+      })
+    );
     return artifacts.find((row) => row.shown)?.id ?? null;
   };
   const label = (
@@ -219,7 +237,9 @@ const run = async (kit: Kit) => {
   const listed = async (): Promise<string[]> =>
     (
       await fleet.api<{ id: string }[]>(
-        `/api/instances/${encodeURIComponent(session)}/artifacts`
+        hubRequest("GET /api/instances/:id/artifacts", {
+          path: { id: session },
+        })
       )
     ).map((row) => row.id);
   const ways: [string, string, (id: string, name: string) => string][] = [

@@ -72,6 +72,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import type { Pin } from "../../../packages/core/src/comments";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import {
@@ -1428,11 +1429,10 @@ export const runFiles = async (
   await open(page, `${base}/session/${leg.session}`, "[data-files-control]");
   if (leg.panel === "shut") {
     await page.evaluate(
-      (id) =>
-        fetch(`/api/instances/${encodeURIComponent(id)}/preview`, {
-          method: "DELETE",
-        }),
-      leg.session
+      (request) => fetch(request.path, request),
+      hubRequest("DELETE /api/instances/:id/preview", {
+        path: { id: leg.session },
+      })
     );
     await page
       .locator('[data-slot="side-card"]')
@@ -1441,12 +1441,10 @@ export const runFiles = async (
     // Opened beside the session as its agent opens it: a leg before may
     // have shut it, and the hub keeps it shut.
     await page.evaluate(
-      ({ id, artifact }) =>
-        fetch(
-          `/api/instances/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifact)}/show`,
-          { method: "POST" }
-        ),
-      { id: leg.session, artifact: leg.artifact }
+      (request) => fetch(request.path, request),
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+        path: { id: leg.session, artifact: leg.artifact },
+      })
     );
     await page
       .locator(PANEL_FRAME)
@@ -1569,12 +1567,16 @@ const run = async (kit: Kit) => {
   const fleet = await fleetUp(kit);
   // The session runs in a project's checkout, so the navigation lists it
   // under that project ({@link runNarrow}); no Caw is asked to set it up.
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Chip wraps",
-    machineId: MACHINE,
-    cwd: fleet.repo,
-    caw: false,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Chip wraps",
+        machineId: MACHINE,
+        cwd: fleet.repo,
+        caw: false,
+      },
+    })
+  );
   const session = await fleet.spawn("claude", "Chip wraps", fleet.repo);
   const id = await made(kit, "1", "chip-wraps", () =>
     fleet.send(session, calls.words("1"))
@@ -2009,17 +2011,24 @@ export const runStill = async (
   }
   const name = `still preview, ${leg.engine}${leg.folder ? ` (${leg.folder})` : ""}`;
   const { id } = await fleet.api<{ id: string }>(
-    `/api/instances/${session}/artifacts`,
-    {
-      kind: "preview",
-      does: "judge",
-      title: "Probe judge artifact",
-      ask: "Judge the frame scaled to the window",
-      name: `still-${leg.engine}`,
-      dir: folder,
-    }
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "preview",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge the frame scaled to the window",
+        name: `still-${leg.engine}`,
+        dir: folder,
+      },
+    })
   );
-  await fleet.api(`/api/instances/${session}/artifacts/${id}/show`, {});
+  await fleet.api(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+      path: { id: session, artifact: id },
+      body: {},
+    })
+  );
   const page = await kit.page("desk", {
     engine: leg.engine,
     theme: "light",

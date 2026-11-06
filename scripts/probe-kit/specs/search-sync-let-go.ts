@@ -44,6 +44,7 @@ import {
   TRANSCRIPT_QUERY_MS,
   type TranscriptAnswer,
 } from "../../../packages/core/src/find";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { LATE_MS } from "../../../packages/core/src/loop-watch";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { searchWords } from "../../../packages/core/src/words/search";
@@ -161,7 +162,7 @@ const sessionsOf = (answer: { result?: unknown }): Set<string> =>
 const findViaHub = async (fleet: KitFleet, query: string) => {
   const at = performance.now();
   const answer = await fleet.api<FindAnswer>(
-    `/api/find?q=${encodeURIComponent(query)}&limit=20`
+    hubRequest("GET /api/find", { query: { q: query, limit: "20" } })
   );
   return {
     ms: Math.round(performance.now() - at),

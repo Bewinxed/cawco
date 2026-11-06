@@ -28,6 +28,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, readdirSync, readlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { databaseHolder } from "../../../packages/core/src/db-lock";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -95,7 +96,7 @@ const pairingOff = async (env: Record<string, string | undefined>) => {
 
 /** What an anonymous call to an owner route answers: 200 trusted, refused while paired devices are required. */
 const anonymous = (base: string): Promise<number> =>
-  fetch(`${base}/api/delegate-types`).then((r) => r.status);
+  fetchHub(base, hubRequest("GET /api/delegate-types")).then((r) => r.status);
 
 /** Pairing-off requests or answers left beside the database. */
 const leftOver = (db: string): string[] =>
@@ -111,18 +112,21 @@ const spec: Spec = {
     // 1. One connection, and the delegate types on it.
     const hub = fleet.launch("hub");
     await fleet.hubUp();
-    const saved = await fetch(`${fleet.base}/api/delegate-types/${TYPE}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        description: "A type the probe saves through the hub.",
-        harness: "claude",
-        model: "sonnet",
-      }),
-    });
-    const listed = (await fetch(`${fleet.base}/api/delegate-types`).then((r) =>
-      r.json()
-    )) as { types: { name: string }[] };
+    const saved = await fetchHub(
+      fleet.base,
+      hubRequest("PUT /api/delegate-types/:name", {
+        path: { name: TYPE },
+        body: {
+          description: "A type the probe saves through the hub.",
+          harness: "claude",
+          model: "sonnet",
+        },
+      })
+    );
+    const listed = (await fetchHub(
+      fleet.base,
+      hubRequest("GET /api/delegate-types")
+    ).then((r) => r.json())) as { types: { name: string }[] };
     kit.check(
       "a delegate type saved through the hub's route is read back through it",
       saved.ok && listed.types.some((type) => type.name === TYPE),
@@ -186,11 +190,12 @@ const spec: Spec = {
     );
 
     // 4. cawco pairing off beside the running hub goes through the hub.
-    const on = await fetch(`${fleet.base}/api/auth/pairing`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ required: true, kind: "app", name: "Probe" }),
-    });
+    const on = await fetchHub(
+      fleet.base,
+      hubRequest("PUT /api/auth/pairing", {
+        body: { required: true, kind: "app", name: "Probe" },
+      })
+    );
     const refusedWhilePaired = await anonymous(fleet.base);
     kit.check(
       "paired devices required: an anonymous call to an owner route is refused",

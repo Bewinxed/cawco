@@ -16,6 +16,7 @@
  */
 import { existsSync } from "node:fs";
 import { readWithin } from "../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 
 const [, , hub, accountId, machineId, stop] = Bun.argv;
 if (!(hub && accountId && machineId && stop)) {
@@ -32,7 +33,9 @@ interface Accounts {
 const ask = async (): Promise<string> => {
   try {
     const read = await readWithin(ANSWER_MS, async (signal) => {
-      const res = await fetch(`${hub}/api/accounts`, { signal });
+      const res = await fetchHub(hub, hubRequest("GET /api/accounts"), {
+        signal,
+      });
       return res.ok ? ((await res.json()) as Accounts) : undefined;
     });
     if (read.kind === "unanswered" || !read.value) {

@@ -81,6 +81,7 @@
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
@@ -1723,7 +1724,7 @@ const removeCheck = async (
     [STAGE, CHIP]
   );
   const listed = await fleet.api<{ id: string }[]>(
-    `/api/instances/${session}/artifacts`
+    hubRequest("GET /api/instances/:id/artifacts", { path: { id: session } })
   );
   kit.check(
     "13: Remove folds the drawn canvas as Done does (its runs on --dur-grow-exit), leaves no canvas in the message, and the session still lists the artifact",
@@ -1946,7 +1947,9 @@ const syncCheck = async (on: On) => {
   const hubDrawn = () =>
     fleet
       .api<{ file: { elements: { isDeleted?: boolean }[] } }>(
-        `/api/artifacts/${id}/export`
+        hubRequest("GET /api/artifacts/:artifact/export", {
+          path: { artifact: id },
+        })
       )
       .then((out) => out.file.elements.filter((el) => !el.isDeleted).length);
   const held = await until(
@@ -2494,7 +2497,9 @@ const chipCheck = async (on: On): Promise<string | null> => {
     return null;
   }
   const exported = await fleet.api<{ png: string | null }>(
-    `/api/artifacts/${id}/export`
+    hubRequest("GET /api/artifacts/:artifact/export", {
+      path: { artifact: id },
+    })
   );
   const name = (
     await page.textContent(`${CHIP} [data-slot="att-name"]`)
@@ -2523,7 +2528,11 @@ const chipCheck = async (on: On): Promise<string | null> => {
 const sendCheck = async (on: On, id: string) => {
   const { kit, page, fleet, session } = on;
   const read = () =>
-    fleet.api<Read>(`/api/instances/${session}/artifacts/${id}`);
+    fleet.api<Read>(
+      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+        path: { id: session, artifact: id },
+      })
+    );
   const before = await read();
   const rows = await page.locator('[data-slot="turn"][data-you]').count();
   await page.focus(FIELD);
@@ -2714,9 +2723,11 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   const label = width ? `${view} ${width}px` : view;
   // The session's panel shows what an earlier run docked: closed, so its
   // drawer stands over nothing this run presses.
-  await fetch(
-    `${on.fleet.base}/api/instances/${encodeURIComponent(on.session)}/preview`,
-    { method: "DELETE" }
+  await fetchHub(
+    on.fleet.base,
+    hubRequest("DELETE /api/instances/:id/preview", {
+      path: { id: on.session },
+    })
   );
   const page = await kit.page(view);
   if (width) {

@@ -44,6 +44,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   isAlive,
@@ -210,17 +211,16 @@ const spec: Spec = {
         W,
         Date.now()
       );
-      const routed = await fetch(
-        `${fleet.base}/api/accounts/routing/anthropic`,
-        {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+      const routed = await fetchHub(
+        fleet.base,
+        hubRequest("PUT /api/accounts/routing/:provider", {
+          path: { provider: "anthropic" },
+          body: {
             yours: { strategy: "fill-first" },
             delegates: { strategy: "fill-first" },
             atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
-          }),
-        }
+          },
+        })
       );
       check(
         "setup: routing fills R first, then W",
@@ -254,24 +254,29 @@ const spec: Spec = {
       await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo moved > README.md && git add -A && git commit -qm 'First commit'`
         .env({ ...process.env, HOME: home })
         .quiet();
-      const project = await fleet.api<{ id: string }>("/api/projects", {
-        name: "Move ends tasks",
-        machineId: MACHINE,
-        cwd: repo,
-      });
+      const project = await fleet.api<{ id: string }>(
+        hubRequest("POST /api/projects", {
+          body: {
+            name: "Move ends tasks",
+            machineId: MACHINE,
+            cwd: repo,
+          },
+        })
+      );
       const parent = await fleet.spawn("claude", "Parent", repo, {
         projectId: project.id,
       });
       const item = await fleet.api<{ instanceId: string; workItemId: string }>(
-        "/api/work-items",
-        {
-          parentInstanceId: parent,
-          title: "Sleep, then move",
-          prompt: `${TAG}: start the sleep.`,
-          harness: "claude",
-          model: MODEL.claude,
-          cwd: repo,
-        }
+        hubRequest("POST /api/work-items", {
+          body: {
+            parentInstanceId: parent,
+            title: "Sleep, then move",
+            prompt: `${TAG}: start the sleep.`,
+            harness: "claude",
+            model: MODEL.claude,
+            cwd: repo,
+          },
+        })
       );
       const delegate = item.instanceId;
 

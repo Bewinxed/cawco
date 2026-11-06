@@ -55,6 +55,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sessionEnv } from "../../../packages/agent/src/harnesses/claude";
 import type { HarnessKind } from "../../../packages/core/src/harness";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
@@ -333,16 +334,20 @@ const probe = async (
   started: Started;
   state?: string;
 }> => {
-  const started = await fleet.api<Started>("/api/work-items", {
-    parentInstanceId: parent,
-    title: `${tag.toLowerCase()} probe`,
-    prompt: `${tag}: read the machine with one shell command, then finish.`,
-    harness,
-    model: MODEL[harness],
-    ...("host" in how
-      ? { host: true, ...(how.inputs ? { inputs: how.inputs } : {}) }
-      : { cwd: how.cwd, lands: "none" }),
-  });
+  const started = await fleet.api<Started>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: `${tag.toLowerCase()} probe`,
+        prompt: `${tag}: read the machine with one shell command, then finish.`,
+        harness,
+        model: MODEL[harness],
+        ...("host" in how
+          ? { host: true, ...(how.inputs ? { inputs: how.inputs } : {}) }
+          : { cwd: how.cwd, lands: "none" }),
+      },
+    })
+  );
   await live?.(started);
   const state = await until(
     `${tag}'s item ended`,
@@ -499,18 +504,22 @@ const claudeHost = async (
     `item ${JSON.stringify(item)}; row ${JSON.stringify(row)}; home ${home}`
   );
   const refused = await fleet
-    .api("/api/work-items", {
-      parentInstanceId: parent,
-      title: "Refused host probe",
-      prompt: "never runs",
-      harness: "claude",
-      model: MODEL.claude,
-      host: true,
-      from: read.started.workspaceId,
-      owns: ["src/**"],
-      lands: "main",
-      outputs: ["report.md"],
-    })
+    .api(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title: "Refused host probe",
+          prompt: "never runs",
+          harness: "claude",
+          model: MODEL.claude,
+          host: true,
+          from: read.started.workspaceId,
+          owns: ["src/**"],
+          lands: "main",
+          outputs: ["report.md"],
+        },
+      })
+    )
     .then(
       () => "filed",
       (error: unknown) =>
@@ -541,15 +550,19 @@ const hostIn = (
   cwd: string
 ): Promise<string> =>
   fleet
-    .api("/api/work-items", {
-      parentInstanceId: parent,
-      title,
-      prompt: "never runs",
-      harness: "claude",
-      model: MODEL.claude,
-      host: true,
-      cwd,
-    })
+    .api(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title,
+          prompt: "never runs",
+          harness: "claude",
+          model: MODEL.claude,
+          host: true,
+          cwd,
+        },
+      })
+    )
     .then(
       () => "filed",
       (error: unknown) =>
@@ -696,11 +709,15 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Host delegates",
-      machineId: MACHINE,
-      cwd: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Host delegates",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });

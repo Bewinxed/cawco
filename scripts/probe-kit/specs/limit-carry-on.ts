@@ -41,6 +41,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { DAY_MS, HOUR_MS } from "../../../packages/core/src/time";
 import type { LimitRow } from "../../../packages/hub/src/at-limit";
 import {
@@ -175,11 +176,13 @@ const sleepOf = async (fleet: KitFleet, id: string): Promise<string> => {
 };
 
 const moveTo = (fleet: KitFleet, id: string, accountId: string) =>
-  fetch(`${fleet.base}/api/instances/${id}/account`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ accountId }),
-  });
+  fetchHub(
+    fleet.base,
+    hubRequest("POST /api/instances/:id/account", {
+      path: { id },
+      body: { accountId },
+    })
+  );
 
 /** (a) and (b): the person's move of a cut session at rest, and of a resting one. */
 const onTheFleet = async (kit: Kit): Promise<void> => {
@@ -198,15 +201,17 @@ const onTheFleet = async (kit: Kit): Promise<void> => {
   );
   // Moving at the limit off: a cut session is held where it is, until a
   // person moves it.
-  const routed = await fetch(`${fleet.base}/api/accounts/routing/anthropic`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      yours: { strategy: "fill-first" },
-      delegates: { strategy: "fill-first" },
-      atLimit: { move: false, waitMinutes: 15, moveWholeUnderK: 200 },
-    }),
-  });
+  const routed = await fetchHub(
+    fleet.base,
+    hubRequest("PUT /api/accounts/routing/:provider", {
+      path: { provider: "anthropic" },
+      body: {
+        yours: { strategy: "fill-first" },
+        delegates: { strategy: "fill-first" },
+        atLimit: { move: false, waitMinutes: 15, moveWholeUnderK: 200 },
+      },
+    })
+  );
   kit.check(
     "setup: routing fills R first and holds a session at its limit",
     routed.ok,

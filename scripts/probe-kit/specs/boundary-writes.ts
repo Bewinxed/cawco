@@ -66,6 +66,7 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { RELAY_URL } from "../../../packages/agent/src/proxy-relay";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { isAlive, signal } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyPath, gitInCopy, inCopyExists } from "../copy";
@@ -387,24 +388,29 @@ const run = async (kit: Kit) => {
   );
 
   const repo = await makeRepo(fleet);
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Boundary writes",
-    machineId: MACHINE,
-    cwd: repo,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Boundary writes",
+        machineId: MACHINE,
+        cwd: repo,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });
   const started = await fleet.api<{ instanceId: string; workspaceId: string }>(
-    "/api/work-items",
-    {
-      parentInstanceId: parent,
-      title: "Boundary writes",
-      prompt: `${TAG}: write, install and commit.`,
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd: repo,
-    }
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Boundary writes",
+        prompt: `${TAG}: write, install and commit.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: repo,
+      },
+    })
   );
   const said =
     (await until(
@@ -580,15 +586,16 @@ const checkEngineCache = async (
   );
 
   const reused = await fleet.api<{ instanceId: string; workspaceId: string }>(
-    "/api/work-items",
-    {
-      parentInstanceId: parent,
-      title: "Engine reuse",
-      prompt: `${REUSE_TAG}: run the launcher again.`,
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd: repo,
-    }
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Engine reuse",
+        prompt: `${REUSE_TAG}: run the launcher again.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: repo,
+      },
+    })
   );
   const again =
     (await until(

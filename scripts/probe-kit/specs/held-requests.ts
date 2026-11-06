@@ -33,6 +33,11 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { delay, MACHINE, until } from "../../scratch-fleet";
@@ -59,21 +64,9 @@ interface Answered {
 }
 
 /** `path` asked of the hub (POST with `body`), answered or refused, with when. */
-const ask = async (
-  fleet: KitFleet,
-  path: string,
-  body?: unknown
-): Promise<Answered> => {
+const ask = async (fleet: KitFleet, request: HubRequest): Promise<Answered> => {
   const asked = Date.now();
-  const response = await fetch(`${fleet.base}${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-  });
+  const response = await fetchHub(fleet.base, request);
   return {
     ms: Date.now() - asked,
     status: response.status,
@@ -159,7 +152,12 @@ const spec: Spec = {
     const freeze = (frozen: boolean) =>
       signal(pid, frozen ? "SIGSTOP" : "SIGCONT");
     const inspect = () =>
-      fleet.api<{ cwd?: string }>(`/api/agents/${OTHER}/inspect`, {});
+      fleet.api<{ cwd?: string }>(
+        hubRequest("POST /api/agents/:machineId/inspect", {
+          path: { machineId: OTHER },
+          body: {},
+        })
+      );
     // Back in time.
     const before = await fleet.logMark("hub");
     freeze(true);
@@ -192,7 +190,13 @@ const spec: Spec = {
 
     // Away past the deadline.
     freeze(true);
-    const late = ask(fleet, `/api/agents/${OTHER}/inspect`, {});
+    const late = ask(
+      fleet,
+      hubRequest("POST /api/agents/:machineId/inspect", {
+        path: { machineId: OTHER },
+        body: {},
+      })
+    );
     await delay(500);
     between.cut();
     const failed = await late;
@@ -211,7 +215,7 @@ const spec: Spec = {
       async () =>
         (
           await fleet.api<{ machineId: string; status: string }[]>(
-            "/api/agents"
+            hubRequest("GET /api/agents")
           )
         ).find((one) => one.machineId === OTHER)?.status === "online" ||
         undefined,
@@ -253,7 +257,10 @@ const spec: Spec = {
       (rows) => rows.some((one) => one.state === "read"),
       60_000
     );
-    const sizing = `/api/instances/${id}/continue?asks=true`;
+    const sizing = hubRequest("GET /api/instances/:id/continue", {
+      path: { id },
+      query: { asks: true },
+    });
     const sized = await ask(fleet, sizing);
     check(
       "the session's continuation is sized while its machine is here",

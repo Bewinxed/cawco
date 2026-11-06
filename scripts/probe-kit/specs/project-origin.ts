@@ -54,6 +54,7 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the legs are read in order, one after another.
 import type { Frame, Page } from "playwright-core";
 import { PREVIEW_PASS_COOKIE } from "../../../packages/core/src/frames";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
 import {
@@ -235,23 +236,31 @@ const run = async (kit: Kit) => {
   // A project of an id shape the hub stores beside its UUIDs (capitals and
   // `_`, as an older project's): made with no place, so nothing names its id
   // yet, its id given here, then its place added as a folder joins one.
-  const { id: made } = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Pairing",
-    caw: false,
-  });
+  const { id: made } = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Pairing",
+        caw: false,
+      },
+    })
+  );
   const projectId = "Pairing_Old-1";
   fleet.write("UPDATE projects SET id = ? WHERE id = ?", projectId, made);
-  await fleet.api(`/api/projects/${projectId}/places`, {
-    machineId: MACHINE,
-    path: dir,
-  });
+  await fleet.api(
+    hubRequest("POST /api/projects/:id/places", {
+      path: { id: projectId },
+      body: {
+        machineId: MACHINE,
+        path: dir,
+      },
+    })
+  );
   const writer = await fleet.spawn("claude", "Pair the code", dir, {
     projectId,
   });
   const later = await fleet.spawn("claude", "Ship the pairing", dir, {
     projectId,
   });
-  const at = (session: string) => `/api/instances/${session}/artifacts`;
   /** Every Cookie header the dev servers were sent. */
   const cookies: string[] = [];
   // Two dev servers on the machine's host, each shown as a preview of its port.
@@ -270,27 +279,39 @@ const run = async (kit: Kit) => {
   const server = devServer(SITE);
   const otherServer = devServer(OTHER);
   const preview = (name: string, port: number) =>
-    fleet.api<{ id: string }>(at(writer), {
-      kind: "preview",
-      does: "try",
-      title: "Probe try artifact",
-      ask: "Try this page and say whether it works",
-      name,
-      port,
-      machine: MACHINE,
-    });
+    fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: writer },
+        body: {
+          kind: "preview",
+          does: "try",
+          title: "Probe try artifact",
+          ask: "Try this page and say whether it works",
+          name,
+          port,
+          machine: MACHINE,
+        },
+      })
+    );
   const site = await preview("pairing-site", server.port as number);
   const other = await preview("pairing-other", otherServer.port as number);
-  const page = await fleet.api<{ id: string }>(at(writer), {
-    kind: "page",
-    does: "pick",
-    title: "Probe pick artifact",
-    ask: "Pick how the code leaves",
-    name: "pairing-behaviour",
-    program: pageProgram(site.id, other.id),
-  });
+  const page = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: writer },
+      body: {
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick how the code leaves",
+        name: "pairing-behaviour",
+        program: pageProgram(site.id, other.id),
+      },
+    })
+  );
   const base = await fleet.dashboard();
-  const range = await fleet.api<{ ports: string }>("/api/preview-settings");
+  const range = await fleet.api<{ ports: string }>(
+    hubRequest("GET /api/preview-settings")
+  );
   const first = Number(range.ports.split("–")[0]);
   // The owner's tunnel: https in front of the names and of the dashboard.
   const tunnel = await passTunnel(kit.out, first, base);
@@ -298,7 +319,7 @@ const run = async (kit: Kit) => {
   for (const mode of MODES) {
     await storeHostMode(fleet, settingsOf(mode, tunnel.front));
     const settings = await fleet.api<{ mode: string; passDomain?: string }>(
-      "/api/preview-settings"
+      hubRequest("GET /api/preview-settings")
     );
     // Host mode's names are loaded by a dashboard reached under their domain.
     const board = mode === "port" ? base : tunnel.board;
@@ -311,9 +332,12 @@ const run = async (kit: Kit) => {
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
     // Brought to the front of the writer's panel, as Files opens it.
     await (
-      await fetch(`${fleet.base}${at(writer)}/${page.id}/show`, {
-        method: "POST",
-      })
+      await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+          path: { id: writer, artifact: page.id },
+        })
+      )
     ).text();
     const panel = await drawnBy(
       tab,
@@ -377,10 +401,10 @@ const run = async (kit: Kit) => {
     );
 
     // (d) Revoked: every frame locks at its next load.
-    const revoked = await tab.evaluate(async () => {
-      const answer = await fetch("/api/preview-pass", { method: "DELETE" });
+    const revoked = await tab.evaluate(async (request) => {
+      const answer = await fetch(request.path, request);
       return `${answer.status} ${await answer.text()}`;
-    });
+    }, hubRequest("DELETE /api/preview-pass"));
     const before = heard.length;
     const shown = await pageFrame(tab);
     if (shown) {
@@ -449,9 +473,10 @@ const run = async (kit: Kit) => {
   await until(
     "the stopped writing session deleted",
     async () => {
-      const deleted = await fetch(`${fleet.base}/api/instances/${writer}`, {
-        method: "DELETE",
-      });
+      const deleted = await fetchHub(
+        fleet.base,
+        hubRequest("DELETE /api/instances/:id", { path: { id: writer } })
+      );
       deleteSaid = `${deleted.status} ${await deleted.text()}`;
       return deleted.ok;
     },
@@ -497,7 +522,9 @@ const run = async (kit: Kit) => {
       `${mode}: the pick on the hub`,
       () =>
         fleet.api<{ state: Record<string, { options?: string[] }> }>(
-          `${at(later)}/${page.id}`
+          hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+            path: { id: later, artifact: page.id },
+          })
         ),
       (read) => (read.state.leave?.options ?? []).includes(option),
       15_000

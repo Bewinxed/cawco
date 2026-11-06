@@ -134,6 +134,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { REPLAY_ID } from "../../../packages/agent/src/stage-host/canvas/replays";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   STAGE_COMPARE,
   STAGE_DIFFERENCES,
@@ -1886,7 +1887,11 @@ const run = async (kit: Kit) => {
   );
   if (moveId) {
     const readMove = () =>
-      fleet.api<ValuesRead>(`/api/instances/${routines}/artifacts/${moveId}`);
+      fleet.api<ValuesRead>(
+        hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+          path: { id: routines, artifact: moveId },
+        })
+      );
     await moveDesk(kit, base, moveId, readMove, checks);
     await movePhone(kit, base, moveId, checks);
   }
@@ -1913,7 +1918,11 @@ const run = async (kit: Kit) => {
       base,
       dialsId,
       () =>
-        fleet.api<ValuesRead>(`/api/instances/${session}/artifacts/${dialsId}`),
+        fleet.api<ValuesRead>(
+          hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+            path: { id: session, artifact: dialsId },
+          })
+        ),
       () =>
         call("dials-update", "mcp__cawco__artifact_update", {
           id: dialsId,
@@ -1926,7 +1935,10 @@ const run = async (kit: Kit) => {
 
   // 6. A picture of a state, through the daemon's render on the stage.
   const picture = await fleet.api<{ png?: string | null }>(
-    `/api/instances/${session}/artifacts/${id}?png=true&state=${encodeURIComponent(JSON.stringify({ story: "Two" }))}`
+    hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+      path: { id: session, artifact: id },
+      query: { png: "true", state: JSON.stringify({ story: "Two" }) },
+    })
   );
   const size = picture.png ? pngSize(Buffer.from(picture.png, "base64")) : null;
   kit.check(

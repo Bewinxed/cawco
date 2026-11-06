@@ -14,6 +14,7 @@
  *    again: a write on it reaches the hub's doc through the new socket.
  */
 import type { Page } from "playwright-core";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { COMPOSER, type Kit, open, type Spec } from "../kit";
@@ -45,15 +46,21 @@ const passOn = (page: Page) => ({
     return pass ? `${pass.name}=${pass.value}` : "";
   },
   enter: (origin: string) =>
-    page.evaluate(async (at) => {
-      const given = await fetch("/api/preview-ticket", { method: "POST" });
-      const { ticket } = (await given.json()) as { ticket: string };
-      await fetch(`${at}/__cawco/enter?ticket=${encodeURIComponent(ticket)}`, {
-        mode: "no-cors",
-        credentials: "include",
-        cache: "no-store",
-      });
-    }, origin),
+    page.evaluate(
+      async ({ at, ticketing }) => {
+        const given = await fetch(ticketing.path, ticketing);
+        const { ticket } = (await given.json()) as { ticket: string };
+        await fetch(
+          `${at}/__cawco/enter?ticket=${encodeURIComponent(ticket)}`,
+          {
+            mode: "no-cors",
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
+      },
+      { at: origin, ticketing: hubRequest("POST /api/preview-ticket") }
+    ),
 });
 
 /** The link of the page at `origin`, as its overlay holds it; empty while it holds none. */

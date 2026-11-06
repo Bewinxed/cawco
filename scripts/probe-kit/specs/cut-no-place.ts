@@ -35,6 +35,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/index";
 import {
   ACCOUNT,
@@ -123,16 +124,20 @@ const delegateIn = (
   title: string
 ): Promise<Started | string> =>
   fleet
-    .api<Started>("/api/work-items", {
-      parentInstanceId: parent,
-      title,
-      prompt: `${TAG}: say ok.`,
-      harness: "claude",
-      model: MODEL.claude,
-      machineId: FAR,
-      cwd,
-      lands: "none",
-    })
+    .api<Started>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title,
+          prompt: `${TAG}: say ok.`,
+          harness: "claude",
+          model: MODEL.claude,
+          machineId: FAR,
+          cwd,
+          lands: "none",
+        },
+      })
+    )
     .catch((error: unknown) =>
       error instanceof Error ? error.message : String(error)
     );
@@ -182,11 +187,15 @@ const spec: Spec = {
     );
     const src = join(fleet.sandbox, "src");
     await repository(src, home, false);
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Cut with no place",
-      machineId: MACHINE,
-      cwd: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Cut with no place",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });

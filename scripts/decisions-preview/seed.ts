@@ -28,6 +28,11 @@ import {
   changedEntry,
 } from "../../packages/core/src/choices";
 import type { BuiltInKind } from "../../packages/core/src/decides";
+import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../packages/core/src/hub-request";
 import { unhandled } from "../../packages/core/src/unhandled";
 import { type Fleet, until } from "../scratch-fleet";
 
@@ -589,23 +594,10 @@ const pageProgram = (page: SeedPage, pictures: string): string => {
 };
 
 /** A JSON request to the fleet's hub; its answer, or its refusal thrown. */
-const hub = async <T>(
-  fleet: Fleet,
-  method: string,
-  path: string,
-  body?: unknown
-): Promise<T> => {
+const hub = async <T>(fleet: Fleet, request: HubRequest): Promise<T> => {
+  const { method, path } = request;
   const read = await readWithin(60_000, async (signal) => {
-    const response = await fetch(`${fleet.base}${path}`, {
-      method,
-      ...(body === undefined
-        ? {}
-        : {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-      signal,
-    });
+    const response = await fetchHub(fleet.base, request, { signal });
     const text = await response.text();
     if (!response.ok) {
       throw new Error(`${method} ${path}: ${response.status} ${text}`);
@@ -729,16 +721,17 @@ const publish = async (
 ): Promise<string> => {
   const made = await hub<{ id: string }>(
     fleet,
-    "POST",
-    `/api/instances/${writer}/artifacts`,
-    {
-      kind: "page",
-      name: page.name,
-      does: "pick",
-      title: "Probe pick artifact",
-      ask: page.ask,
-      program: pageProgram(page, pictures),
-    }
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: writer },
+      body: {
+        kind: "page",
+        name: page.name,
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: page.ask,
+        program: pageProgram(page, pictures),
+      },
+    })
   );
   await pickAsThePerson(fleet, writer, made.id, picks);
   return made.id;
@@ -761,12 +754,16 @@ export async function seedDecisions(
   fleet: Fleet,
   project: { cwd: string; machineId: string; name: string }
 ): Promise<Seeded> {
-  const { id: projectId } = await fleet.api<{ id: string }>("/api/projects", {
-    name: project.name,
-    machineId: project.machineId,
-    cwd: project.cwd,
-    caw: false,
-  });
+  const { id: projectId } = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: project.name,
+        machineId: project.machineId,
+        cwd: project.cwd,
+        caw: false,
+      },
+    })
+  );
   const writers: Record<string, string> = {};
   for (const page of [LANDING, PRICING, ONBOARDING]) {
     writers[page.name] = await fleet.spawn("claude", page.writer, project.cwd, {
@@ -801,32 +798,34 @@ export async function seedDecisions(
   // The pricing page: I'm done picking, then Make tasks, then its tasks filed.
   await hub(
     fleet,
-    "POST",
-    `/api/projects/${projectId}/decisions/pricing/send`,
-    {}
+    hubRequest("POST /api/projects/:id/decisions/:name/send", {
+      path: { id: projectId, name: "pricing" },
+      body: {},
+    })
   );
   await hub(
     fleet,
-    "POST",
-    `/api/projects/${projectId}/decisions/pricing/tasks`
+    hubRequest("POST /api/projects/:id/decisions/:name/tasks", {
+      path: { id: projectId, name: "pricing" },
+    })
   );
   const stages = await hub<{ stages: { kind: string | null; name: string }[] }>(
     fleet,
-    "GET",
-    `/api/projects/${projectId}/stages`
+    hubRequest("GET /api/projects/:id/stages", { path: { id: projectId } })
   );
   const done = stages.stages.find((stage) => stage.kind === "done")?.name;
   const tasks: Record<string, string> = {};
   for (const [index, task] of PRICING_TASKS.entries()) {
     const filed = await hub<{ id: string }>(
       fleet,
-      "POST",
-      `/api/projects/${projectId}/tasks`,
-      {
-        title: task.title,
-        fields: { decided: `pricing#${task.card}` },
-        ...(index === 0 && done ? { stage: done } : {}),
-      }
+      hubRequest("POST /api/projects/:id/tasks", {
+        path: { id: projectId },
+        body: {
+          title: task.title,
+          fields: { decided: `pricing#${task.card}` },
+          ...(index === 0 && done ? { stage: done } : {}),
+        },
+      })
     );
     tasks[task.card] = filed.id;
   }

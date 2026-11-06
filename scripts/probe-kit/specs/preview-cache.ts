@@ -34,6 +34,7 @@ import {
   type PreviewTicket,
   previewEnterUrl,
 } from "../../../packages/core/src/frames";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -186,9 +187,12 @@ const probe = async (kit: Kit) => {
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
   const address = async () =>
     (await (
-      await fetch(`${fleet.base}/api/artifacts/${id}/preview-address`, {
-        method: "POST",
-      })
+      await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/artifacts/:artifact/preview-address", {
+          path: { artifact: id },
+        })
+      )
     ).json()) as { origin?: string; port?: number };
   const direct = `http://127.0.0.1:${(await address()).port ?? 0}`;
   // Its port is behind the lock too: the person's pass on its host.
@@ -281,18 +285,20 @@ const probe = async (kit: Kit) => {
 
   // 2. Host mode, its names on the range's first port, behind the lock.
   const range = (await (
-    await fetch(`${fleet.base}/api/preview-settings`)
+    await fetchHub(fleet.base, hubRequest("GET /api/preview-settings"))
   ).json()) as { ports: string };
   const first = Number(range.ports.split("–")[0]);
   await storeHostMode(fleet, {
     mode: "host",
     pattern: `https://p-{port}.${PASS_DOMAIN}:${first}`,
   });
-  const stored = await fleet.api<{ mode: string }>("/api/preview-settings");
+  const stored = await fleet.api<{ mode: string }>(
+    hubRequest("GET /api/preview-settings")
+  );
   const origin = (await address()).origin ?? "";
   const host = origin ? new URL(origin).host : "";
   const { ticket } = (await (
-    await fetch(`${fleet.base}/api/preview-ticket`, { method: "POST" })
+    await fetchHub(fleet.base, hubRequest("POST /api/preview-ticket"))
   ).json()) as PreviewTicket;
   const byHost = `http://127.0.0.1:${first}`;
   const entered = await read(previewEnterUrl(byHost, ticket, "/src/main.js"), {

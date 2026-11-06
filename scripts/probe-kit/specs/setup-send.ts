@@ -63,6 +63,10 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { setupPageAt } from "../../../packages/core/src/artifact-needs";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
+import {
+  hubRequest,
+  hubRequestAsGiven,
+} from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
 import { toolWords } from "../../lib/tool-call";
@@ -151,12 +155,16 @@ interface Pending {
 
 /** A project of its own and its session, which writes the setup page. */
 const projectWithSession = async (fleet: KitFleet, name: string) => {
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name,
-    machineId: MACHINE,
-    cwd: fleet.repo,
-    caw: false,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name,
+        machineId: MACHINE,
+        cwd: fleet.repo,
+        caw: false,
+      },
+    })
+  );
   const session = await fleet.spawn("claude", name, fleet.repo, {
     projectId: project.id,
   });
@@ -170,11 +178,19 @@ const projectWithSession = async (fleet: KitFleet, name: string) => {
     session,
     call: (tool: string, input: Record<string, unknown>) =>
       toolWords(as, tool, input),
-    stages: () => fleet.api<StagesRead>(`/api/projects/${project.id}/stages`),
+    stages: () =>
+      fleet.api<StagesRead>(
+        hubRequest("GET /api/projects/:id/stages", { path: { id: project.id } })
+      ),
     /** The board's Set up: the hub's answer, its status and words. */
     setUp: async () => {
       try {
-        await fleet.api(`/api/projects/${project.id}/decisions/setup/send`, {});
+        await fleet.api(
+          hubRequest("POST /api/projects/:id/decisions/:name/send", {
+            path: { id: project.id, name: "setup" },
+            body: {},
+          })
+        );
         return "200";
       } catch (error) {
         return error instanceof Error ? error.message : String(error);
@@ -224,7 +240,7 @@ const run = async (kit: Kit) => {
   });
   const parked = await until(
     "the question parked for the person",
-    () => fleet.api<Pending[]>("/api/pending"),
+    () => fleet.api<Pending[]>(hubRequest("GET /api/pending")),
     (list) => list.some((one) => one.payload?.instanceId === own.session),
     60_000
   );
@@ -255,7 +271,7 @@ const run = async (kit: Kit) => {
   });
   const answered = await until(
     "the answer off the person's list",
-    () => fleet.api<Pending[]>("/api/pending"),
+    () => fleet.api<Pending[]>(hubRequest("GET /api/pending")),
     (list) => !list.some((one) => one.payload?.instanceId === own.session),
     60_000
   ).then(
@@ -301,7 +317,9 @@ const run = async (kit: Kit) => {
 
   // 3. Caw draws the page again after that Send; Set up again.
   const page = await fleet.api<{ artifactId: string | null }>(
-    `/api/projects/${own.id}/decisions/setup`
+    hubRequest("GET /api/projects/:id/decisions/:name", {
+      path: { id: own.id, name: "setup" },
+    })
   );
   const redrawn = await own.call("artifact_update", {
     id: page.artifactId ?? "",
@@ -358,8 +376,10 @@ const run = async (kit: Kit) => {
   );
   const handed = await fleet
     .api<{ instanceId?: string; to: string }>(
-      `/api/projects/${ended.id}/decisions/setup/send`,
-      {}
+      hubRequest("POST /api/projects/:id/decisions/:name/send", {
+        path: { id: ended.id, name: "setup" },
+        body: {},
+      })
     )
     .catch((error: unknown) => ({
       to: error instanceof Error ? error.message : String(error),
@@ -400,21 +420,25 @@ const run = async (kit: Kit) => {
 
   // 6. New project with Caw: the answer before his start ends.
   const createdAt = Date.now();
-  const made6 = await fleet.api<{ id: string }>("/api/projects", {
-    prompt: "Keep track of my flat hunt for next spring.",
-    promptId: crypto.randomUUID(),
-    caw: true,
-  });
+  const made6 = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        prompt: "Keep track of my flat hunt for next spring.",
+        promptId: crypto.randomUUID(),
+        caw: true,
+      },
+    })
+  );
   const answeredIn = Date.now() - createdAt;
   const atAnswer = await fleet.api<{
     instanceId: string | null;
     starting?: boolean;
-  }>(`/api/projects/${made6.id}/caw`);
+  }>(hubRequest("GET /api/projects/:id/caw", { path: { id: made6.id } }));
   const started = await until(
     "Caw's conversation started",
     () =>
       fleet.api<{ instanceId: string | null; starting?: boolean }>(
-        `/api/projects/${made6.id}/caw`
+        hubRequest("GET /api/projects/:id/caw", { path: { id: made6.id } })
       ),
     (view) => view.instanceId !== null && view.starting === false,
     120_000
@@ -471,13 +495,17 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
     program: OFFICE,
   });
   const row = await fleet.api<{ artifactId: string | null }>(
-    `/api/projects/${office.id}/decisions/setup`
+    hubRequest("GET /api/projects/:id/decisions/:name", {
+      path: { id: office.id, name: "setup" },
+    })
   );
   const id = row.artifactId ?? "";
   const shown = await fleet
     .api<{ opened: boolean; href?: string }>(
-      `/api/instances/${office.session}/artifacts/${id}/show`,
-      {}
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+        path: { id: office.session, artifact: id },
+        body: {},
+      })
     )
     .catch((error: unknown) => ({
       opened: false,
@@ -485,7 +513,7 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
     }));
   const needs = await fleet.api<{
     needs: { artifactId: string; href: string }[];
-  }>("/api/artifact-needs");
+  }>(hubRequest("GET /api/artifact-needs"));
   const rows = needs.needs.filter((one) => one.artifactId === id);
   kit.check(
     "8: a project's setup page opens in no panel: Caw's create answers that the board draws it, the person's show lands on the project's board, its Needs-you row leads to its first open card on the project's page",
@@ -606,15 +634,17 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
     program: OFFICE,
   });
   const row = await fleet.api<{ artifactId: string | null }>(
-    `/api/projects/${office.id}/decisions/setup`
+    hubRequest("GET /api/projects/:id/decisions/:name", {
+      path: { id: office.id, name: "setup" },
+    })
   );
   const id = row.artifactId ?? "";
   const shown = await fleet
     .api<{ opened: boolean; href?: string }>(
-      `/api/instances/${office.session}/artifacts/${id}/show`,
-      // The place a card chip's show names (core `ArtifactPlace`), as
-      // artifact-api.ts `showArtifact` sends it (route body since 5646cadda).
-      { at: { card: "routines" } }
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+        path: { id: office.session, artifact: id },
+        body: { at: { card: "routines" } },
+      })
     )
     .catch((error: unknown) => ({
       opened: false,
@@ -625,9 +655,13 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
   // field (hub unknown-fields.ts), never answered as a show of the page's
   // top, as r487 was.
   const oldShape = await fleet
-    .api(`/api/instances/${office.session}/artifacts/${id}/show`, {
-      card: "routines",
-    })
+    .api(
+      // Sent as given: the route's refusal is what this proves.
+      hubRequestAsGiven("POST /api/instances/:id/artifacts/:artifact/show", {
+        path: { id: office.session, artifact: id },
+        body: { card: "routines" },
+      })
+    )
     .then(
       (answer) => `answered ${JSON.stringify(answer)}`,
       (error: unknown) =>
@@ -642,7 +676,7 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
   );
   const needs = await fleet.api<{
     needs: { artifactId: string; href: string }[];
-  }>("/api/artifact-needs");
+  }>(hubRequest("GET /api/artifact-needs"));
   const rows = needs.needs.filter((one) => one.artifactId === id);
   kit.check(
     "9: a set-up project's setup page lands on its Decisions tab: Caw's create says so, a card chip's show lands at that card, and so does its Needs-you row",
@@ -718,11 +752,15 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
       }
     }).observe(document, { childList: true, subtree: true });
   });
-  const made = await fleet.api<{ id: string }>("/api/projects", {
-    prompt: WORDS7,
-    promptId: crypto.randomUUID(),
-    caw: true,
-  });
+  const made = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        prompt: WORDS7,
+        promptId: crypto.randomUUID(),
+        caw: true,
+      },
+    })
+  );
   await open(page, `${base}/project/${made.id}`, '[data-slot="caw-seat"]');
   const panel = page.locator("[data-caw-panel]");
   // A project just made opens on his panel (CawLead `arrive`, its board empty).

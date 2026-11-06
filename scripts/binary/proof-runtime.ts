@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
 import { renderCanvas } from "../../packages/agent/src/stage-render";
 import { readWithin } from "../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import {
   type ReleaseManifest,
   signManifest,
@@ -85,7 +86,9 @@ if (verb === "proof-stack") {
   }
   try {
     const live = await readWithin(1000, (signal) =>
-      fetch("http://192.168.3.100:3456/health", { signal })
+      fetchHub("http://192.168.3.100:3456", hubRequest("GET /health"), {
+        signal,
+      })
     );
     switch (live.kind) {
       case "answered":

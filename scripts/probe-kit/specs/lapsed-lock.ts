@@ -29,6 +29,8 @@
  *
  *   bun scripts/probe-kit/run.ts lapsed-lock
  */
+
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import {
   AWAY_AFTER_DEFAULT_MS,
   DEVICE_TTL_MS,
@@ -49,7 +51,11 @@ interface Person {
 }
 
 const person = async (fleet: KitFleet): Promise<string> =>
-  ((await (await fetch(`${fleet.base}/api/person`)).json()) as Person).state;
+  (
+    (await (
+      await fetchHub(fleet.base, hubRequest("GET /api/person"))
+    ).json()) as Person
+  ).state;
 
 /** A tab's beat: the person's last input `idleMs` ago, its machine as Idle Detection reads it. */
 const beat = (
@@ -58,20 +64,21 @@ const beat = (
   machine: MachineState | undefined,
   clientId = TAB
 ) =>
-  fetch(`${fleet.base}/api/presence`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      clientId,
-      client: "web",
-      sessionId: null,
-      active: true,
-      showing: [],
-      saidAt: Date.now(),
-      ...(idleMs === undefined ? {} : { idleMs }),
-      ...(machine === undefined ? {} : { machine }),
-    }),
-  });
+  fetchHub(
+    fleet.base,
+    hubRequest("POST /api/presence", {
+      body: {
+        clientId,
+        client: "web",
+        sessionId: null,
+        active: true,
+        showing: [],
+        saidAt: Date.now(),
+        ...(idleMs === undefined ? {} : { idleMs }),
+        ...(machine === undefined ? {} : { machine }),
+      },
+    })
+  );
 
 const reads = (fleet: KitFleet, want: string) =>
   until(

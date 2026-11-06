@@ -40,6 +40,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { type ToolRecord, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -310,7 +311,7 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
         id: string;
         places: { path: string; held?: unknown }[];
       }[]
-    >("/api/projects")
+    >(hubRequest("GET /api/projects"))
   ).find((one) => one.id === scene.projectId);
   // A workspace is no place of its project (hub migration 0322): its clone
   // is listed nowhere there, and a place at its path holds nothing of it.
@@ -632,11 +633,15 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Held",
-      machineId: MACHINE,
-      cwd: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Held",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
@@ -666,15 +671,19 @@ const spec: Spec = {
           SETTLE_MS
         ).catch(() => workspaceOf(id)),
       delegate: (tag, extra = {}) =>
-        fleet.api<Started>("/api/work-items", {
-          parentInstanceId: parent,
-          title: `Held probe ${tag}`,
-          prompt: `PROBE-HELD-${tag}: commit a file.`,
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          ...(tag === "T" ? {} : { cwd: src }),
-          ...extra,
-        }),
+        fleet.api<Started>(
+          hubRequest("POST /api/work-items", {
+            body: {
+              parentInstanceId: parent,
+              title: `Held probe ${tag}`,
+              prompt: `PROBE-HELD-${tag}: commit a file.`,
+              harness: "claude",
+              model: "claude-haiku-4-5",
+              ...(tag === "T" ? {} : { cwd: src }),
+              ...extra,
+            },
+          })
+        ),
       ended: (started) =>
         until(
           `work item ${started.workItemId} ended`,

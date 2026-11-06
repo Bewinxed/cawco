@@ -27,6 +27,7 @@
  *   bun scripts/probe-kit/run.ts continuation-send-reads
  */
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { MODEL, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -58,21 +59,20 @@ const readOf = (fleet: KitFleet, id: string, send: string) =>
 /** `source` continued from its asks, as a person's Continue asks it: a separate session, no summary. */
 const continueFromAsks = (fleet: KitFleet, source: string) =>
   readWithin(30_000, async (signal) => {
-    const response = await fetch(
-      `${fleet.base}/api/instances/${source}/continue`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+    const response = await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/instances/:id/continue", {
+        path: { id: source },
+        body: {
           asksOnly: true,
           target: {
             harness: "claude",
             model: MODEL.claude,
             permissionMode: "bypassPermissions",
           },
-        }),
-        signal,
-      }
+        },
+      }),
+      { signal }
     );
     return (await response.json().catch(() => ({}))) as {
       continuationId?: string;
@@ -125,9 +125,11 @@ export default {
     await until(
       `continuation ${jobId} started`,
       async () =>
-        (await fleet.api<ContinuationJob[]>("/api/continuations")).find(
-          (one) => one.id === jobId
-        )?.stage,
+        (
+          await fleet.api<ContinuationJob[]>(
+            hubRequest("GET /api/continuations")
+          )
+        ).find((one) => one.id === jobId)?.stage,
       (stage) => stage === "started" || stage === "failed",
       180_000
     );
@@ -163,7 +165,7 @@ export default {
       reads.push(read);
     }
     const listed = await fleet
-      .api<ContinuationJob[]>("/api/continuations")
+      .api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
       .then((jobs) => jobs.find((one) => one.id === jobId)?.stage)
       .catch((error: Error) => error.message);
     check(

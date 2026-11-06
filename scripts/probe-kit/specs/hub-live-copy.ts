@@ -39,6 +39,11 @@
 import { copyFileSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import {
+  fetchHub,
+  type HubRequest,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { MACHINE } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -58,10 +63,13 @@ const HELD =
 const BRIEF_HOLD = /\[loop\] the hub's loop was held about \d+ s/gu;
 
 /** One probe of `url`, as the trial makes it: its time to answer, or null for none within the probe's bound. */
-const probe = async (url: string): Promise<number | null> => {
+const probe = async (
+  base: string,
+  request: HubRequest
+): Promise<number | null> => {
   const from = performance.now();
   const read = await readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-    const response = await fetch(url, { signal });
+    const response = await fetchHub(base, request, { signal });
     await response.arrayBuffer();
   }).catch(() => undefined);
   return read?.kind === "answered"
@@ -109,13 +117,18 @@ async function run(kit: Kit): Promise<void> {
       : {}
   );
   await fleet.hubUp();
-  const health = `${fleet.base}/health`;
-  const row = `${fleet.base}/api/agents/${encodeURIComponent(MACHINE)}`;
+  const health = hubRequest("GET /health");
+  const row = hubRequest("GET /api/agents/:machineId", {
+    path: { machineId: MACHINE },
+  });
   const reads: { at: number; health: number | null; row: number | null }[] = [];
   const from = Date.now();
   while (Date.now() - from < WATCH_MS) {
     const at = Date.now() - from;
-    const [h, r] = await Promise.all([probe(health), probe(row)]);
+    const [h, r] = await Promise.all([
+      probe(fleet.base, health),
+      probe(fleet.base, row),
+    ]);
     reads.push({ at, health: h, row: r });
     const spent = Date.now() - from - at;
     await Bun.sleep(Math.max(0, PROBE_EVERY_MS - spent));

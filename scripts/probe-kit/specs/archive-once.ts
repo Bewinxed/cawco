@@ -18,6 +18,8 @@
  *
  *   bun scripts/probe-kit/run.ts archive-once
  */
+
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { delay } from "../../scratch-fleet";
 import { heldProxy } from "../held-proxy";
 import type { Kit, Spec } from "../kit";
@@ -67,7 +69,9 @@ async function run(kit: Kit): Promise<void> {
     });
     await fleet.hubUp();
     const offer = await fleet
-      .api<{ manifest?: Manifest }>("/api/binary-updates/latest")
+      .api<{ manifest?: Manifest }>(
+        hubRequest("GET /api/binary-updates/latest")
+      )
       .catch((error: Error) => ({ manifest: undefined, error: error.message }));
     const target = `${process.platform}-${process.arch}`;
     const artifact = offer.manifest?.artifacts.find(
@@ -81,17 +85,20 @@ async function run(kit: Kit): Promise<void> {
     if (!(artifact && offer.manifest)) {
       return;
     }
-    const url = `${fleet.base}/api/binary-updates/artifacts/${encodeURIComponent(offer.manifest.version)}/${encodeURIComponent(artifact.archive)}`;
+    const archived = hubRequest(
+      "GET /api/binary-updates/artifacts/:version/:archive",
+      { path: { version: offer.manifest.version, archive: artifact.archive } }
+    );
     const before = archiveBytes(proxy.carried());
     const connectsBefore = proxy.targets().length;
     proxy.hold(true);
     const asks = Array.from({ length: ASKS }, async (): Promise<Asked> => {
       // The hub answers at once: 503 while it fetches, as a machine hears it.
-      let response = await fetch(url);
+      let response = await fetchHub(fleet.base, archived);
       while (response.status === 503) {
         await response.arrayBuffer();
         await delay(1000);
-        response = await fetch(url);
+        response = await fetchHub(fleet.base, archived);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
       return {

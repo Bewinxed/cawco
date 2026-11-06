@@ -53,6 +53,7 @@
  */
 
 import type { Page, WebSocketRoute } from "playwright-core";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import {
   AWAY_AFTER_DEFAULT_MS,
   AWAY_AFTER_MIN_MS,
@@ -250,18 +251,17 @@ const report = async (
   fleet: KitFleet,
   state: Record<string, unknown>
 ): Promise<void> => {
-  const response = await fetch(
-    `${fleet.base}/api/binary-updates/machines/${MACHINE}/state`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+  const response = await fetchHub(
+    fleet.base,
+    hubRequest("PUT /api/binary-updates/machines/:machineId/state", {
+      path: { machineId: MACHINE },
+      body: {
         channel: "nightly",
         hostsHub: true,
         updatedAt: Date.now(),
         ...state,
-      }),
-    }
+      },
+    })
   );
   if (!response.ok) {
     throw new Error(
@@ -555,7 +555,7 @@ const leg = async (
   const name = `${engine} ${view}`;
   const check = (what: string, ok: boolean, detail: unknown) =>
     kit.check(`${name}: ${what}`, ok, JSON.stringify(detail));
-  const person = () => fleet.api<PersonView>("/api/person");
+  const person = () => fleet.api<PersonView>(hubRequest("GET /api/person"));
   /** A fresh page, a key pressed in it, and the hub saying the person is here. */
   const fresh = async () => {
     const page = await kit.page(view, { engine });
@@ -684,7 +684,11 @@ const leg = async (
   await installedHere(given);
 
   // d and e. No input for the away clock, after Update when idle or no choice.
-  await fleet.api("/api/person/away-clock", { awayAfterMs: AWAY_AFTER_MIN_MS });
+  await fleet.api(
+    hubRequest("POST /api/person/away-clock", {
+      body: { awayAfterMs: AWAY_AFTER_MIN_MS },
+    })
+  );
   for (const [label, choose] of [
     ["d: after Update when idle", true],
     ["e: with no choice", false],
@@ -726,9 +730,13 @@ const leg = async (
     noErrors(label.slice(0, 1), update);
     await page.close();
   }
-  await fleet.api("/api/person/away-clock", {
-    awayAfterMs: AWAY_AFTER_DEFAULT_MS,
-  });
+  await fleet.api(
+    hubRequest("POST /api/person/away-clock", {
+      body: {
+        awayAfterMs: AWAY_AFTER_DEFAULT_MS,
+      },
+    })
+  );
 };
 
 const run = async (kit: Kit) => {

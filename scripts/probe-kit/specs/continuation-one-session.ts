@@ -29,6 +29,7 @@
  *   bun scripts/probe-kit/run.ts continuation-one-session
  */
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type {
   ContinuationJob,
   InstanceStatus,
@@ -55,12 +56,11 @@ const turnTaken = async (fleet: KitFleet, title: string): Promise<string> => {
 /** `source` continued from its asks, as its own `continue_session` asks it: one session. */
 const continueFromAsks = (fleet: KitFleet, source: string) =>
   readWithin(30_000, async (signal) => {
-    const response = await fetch(
-      `${fleet.base}/api/instances/${source}/continue`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+    const response = await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/instances/:id/continue", {
+        path: { id: source },
+        body: {
           asksOnly: true,
           askedBy: source,
           target: {
@@ -68,9 +68,9 @@ const continueFromAsks = (fleet: KitFleet, source: string) =>
             model: MODEL.claude,
             permissionMode: "bypassPermissions",
           },
-        }),
-        signal,
-      }
+        },
+      }),
+      { signal }
     );
     const body = (await response.json().catch(() => ({}))) as {
       continuationId?: string;
@@ -84,9 +84,9 @@ const settled = (fleet: KitFleet, id: string) =>
   until(
     `continuation ${id}'s end`,
     async () =>
-      (await fleet.api<ContinuationJob[]>("/api/continuations")).find(
-        (one) => one.id === id
-      ),
+      (
+        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
+      ).find((one) => one.id === id),
     (one) => one !== undefined && ["started", "failed"].includes(one.stage),
     180_000
   ).catch((error: Error) => ({

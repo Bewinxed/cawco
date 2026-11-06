@@ -46,6 +46,11 @@ import {
   recordInstall,
   versionDirectory,
 } from "../../../packages/core/src/binary-installation";
+import {
+  type HubRequest,
+  hubInit,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { signalGroup, spawnedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { createBinaryUpdates } from "../../../packages/hub/src/binary-updates";
@@ -81,9 +86,11 @@ const startHub = (dbPath: string) => {
       setState: () => undefined,
       states: () => new Map(),
     });
-    const settings = async (init?: RequestInit): Promise<unknown> => {
+    const settings = async (
+      request: HubRequest = hubRequest("GET /api/binary-updates/settings")
+    ): Promise<unknown> => {
       const response = await routes.handle(
-        new Request("http://hub/api/binary-updates/settings", init)
+        new Request(`http://hub${request.path}`, hubInit(request))
       );
       return response.ok
         ? await response.json()
@@ -138,11 +145,9 @@ const spec: Spec = {
           firstLine.includes("stable, auto-update off"),
         firstLine ?? `it said: ${JSON.stringify(first.said)}`
       );
-      const put = await first.settings({
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(SAVED),
-      });
+      const put = await first.settings(
+        hubRequest("PUT /api/binary-updates/settings", { body: SAVED })
+      );
       kit.note(`saved the policy: ${JSON.stringify(put)}`);
 
       let previous: string | undefined;

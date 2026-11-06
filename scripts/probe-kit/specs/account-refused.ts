@@ -58,6 +58,12 @@ import type {
   AccountSignin,
 } from "../../../packages/core/src/accounts";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import {
+  fetchHub,
+  type HubRequest,
+  hubInit,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { DAY_MS, HOUR_MS } from "../../../packages/core/src/time";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import type { ClaudeRefusal } from "../../../packages/hub/src/accounts";
@@ -69,6 +75,10 @@ import {
   until,
 } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+
+/** `request` as the in-process hub reads it (`hub.handle`). */
+const hubAsked = (request: HubRequest): Request =>
+  new Request(`http://127.0.0.1${request.path}`, hubInit(request));
 
 const MACHINE_A = "machine-a";
 const MACHINE_B = "machine-b";
@@ -410,9 +420,11 @@ const wayBack = async (
 
   // The route runs the same check: here no machine is connected.
   const routed = await hub.handle(
-    new Request(`http://127.0.0.1/api/accounts/${refused.id}/refusal-check`, {
-      method: "POST",
-    })
+    hubAsked(
+      hubRequest("POST /api/accounts/:id/refusal-check", {
+        path: { id: refused.id },
+      })
+    )
   );
   const routedBody = await routed.text();
   const machineRefused = account("four@example.com", "Four's", "org-4");
@@ -420,9 +432,10 @@ const wayBack = async (
     signOutRefused(db, MACHINE_A, machineRefused.id, auth);
   }
   const machineRoute = await hub.handle(
-    new Request(
-      `http://127.0.0.1/api/accounts/${machineRefused.id}/refusal-check`,
-      { method: "POST" }
+    hubAsked(
+      hubRequest("POST /api/accounts/:id/refusal-check", {
+        path: { id: machineRefused.id },
+      })
     )
   );
   const machineBody = await machineRoute.text();
@@ -663,15 +676,17 @@ const throughTheAgent = async (kit: Kit): Promise<void> => {
         Date.now()
       );
     }
-    const routed = await fetch(`${fleet.base}/api/accounts/routing/anthropic`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        yours: { strategy: "fill-first" },
-        delegates: { strategy: "fill-first" },
-        atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
-      }),
-    });
+    const routed = await fetchHub(
+      fleet.base,
+      hubRequest("PUT /api/accounts/routing/:provider", {
+        path: { provider: "anthropic" },
+        body: {
+          yours: { strategy: "fill-first" },
+          delegates: { strategy: "fill-first" },
+          atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+        },
+      })
+    );
     kit.check(
       "E setup: routing fills R first, then W, then V",
       routed.ok,
@@ -713,14 +728,18 @@ const throughTheAgent = async (kit: Kit): Promise<void> => {
     const delegate = await fleet.api<{
       instanceId: string;
       workItemId: string;
-    }>("/api/work-items", {
-      parentInstanceId: resting,
-      title: "refused delegate",
-      prompt: `${DELEGATE}: say ok.`,
-      harness: "claude",
-      model: MODEL.claude,
-      host: true,
-    });
+    }>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: resting,
+          title: "refused delegate",
+          prompt: `${DELEGATE}: say ok.`,
+          harness: "claude",
+          model: MODEL.claude,
+          host: true,
+        },
+      })
+    );
     const refusedTo = await until(
       "R signed out on both machines",
       () => [
@@ -795,15 +814,16 @@ const throughTheAgent = async (kit: Kit): Promise<void> => {
 
     // Placement takes R no more.
     const next = await fleet.api<{ instanceId: string; workItemId: string }>(
-      "/api/work-items",
-      {
-        parentInstanceId: resting,
-        title: "next delegate",
-        prompt: `${NEXT}: say ok.`,
-        harness: "claude",
-        model: MODEL.claude,
-        host: true,
-      }
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: resting,
+          title: "next delegate",
+          prompt: `${NEXT}: say ok.`,
+          harness: "claude",
+          model: MODEL.claude,
+          host: true,
+        },
+      })
     );
     kit.check(
       "E3: placement starts the next delegate on W, never on R",

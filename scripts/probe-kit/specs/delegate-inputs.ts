@@ -29,6 +29,7 @@
  */
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/index";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -149,11 +150,15 @@ const setUp = async (
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Delegate inputs",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Delegate inputs",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
@@ -389,17 +394,21 @@ const spec: Spec = {
     const { check } = kit;
     const { fleet, home, parent, projectId, src } = await setUp(kit);
     const delegate = (inputs: string[]) =>
-      fleet.api<Started>("/api/work-items", {
-        parentInstanceId: parent,
-        title: "Delegate inputs probe",
-        prompt: `${TAG}: read your input, then finish.`,
-        harness: "claude",
-        model: "claude-haiku-4-5",
-        cwd: src,
-        lands: "none",
-        outputs: [OUTPUT],
-        inputs,
-      });
+      fleet.api<Started>(
+        hubRequest("POST /api/work-items", {
+          body: {
+            parentInstanceId: parent,
+            title: "Delegate inputs probe",
+            prompt: `${TAG}: read your input, then finish.`,
+            harness: "claude",
+            model: "claude-haiku-4-5",
+            cwd: src,
+            lands: "none",
+            outputs: [OUTPUT],
+            inputs,
+          },
+        })
+      );
     await refusesKeys(kit, fleet, home, delegate);
     await refusesMissing(kit, fleet, delegate);
     await refusesHiddenMissing(kit, fleet, home, delegate);

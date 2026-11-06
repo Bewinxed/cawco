@@ -4,6 +4,7 @@
  */
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
+import { hubInit, hubRequest } from "../packages/core/src/hub-request";
 import { machineFetch } from "../packages/core/src/machine-key";
 import type { ReleaseManifest } from "../packages/core/src/release-manifest";
 
@@ -34,10 +35,11 @@ export async function announce(published: ReleaseManifest): Promise<void> {
   }
   const { hubUrl } = installation;
   const check = async (): Promise<{ channel: string; version: string }> => {
+    const request = hubRequest("POST /api/binary-updates/check");
     const asked = await readWithin(ANNOUNCE_MS, async (signal) => {
       const response = await machineFetch(
-        `${hubUrl}/api/binary-updates/check`,
-        { method: "POST", signal }
+        `${hubUrl}${request.path}`,
+        hubInit(request, { signal })
       );
       return {
         ok: response.ok,

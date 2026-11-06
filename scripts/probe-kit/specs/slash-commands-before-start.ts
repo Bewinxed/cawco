@@ -23,6 +23,7 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   type SlashCommand,
 } from "../../../packages/core/src/harness";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { MACHINE, MODEL, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -64,14 +65,16 @@ const spec: Spec = {
     await fleet.accountSignedIn();
     seedFolder(fleet.workdir);
 
-    const query = new URLSearchParams({
-      harness: "claude",
-      cwd: fleet.workdir,
-      // The model the session below starts on (scratch-fleet `spawn`).
-      model: MODEL.claude,
-    });
     const before = await fleet.api<SlashCommand[]>(
-      `/api/agents/${MACHINE}/commands?${query}`
+      hubRequest("GET /api/agents/:machineId/commands", {
+        path: { machineId: MACHINE },
+        query: {
+          harness: "claude",
+          cwd: fleet.workdir,
+          // The model the session below starts on (scratch-fleet `spawn`).
+          model: MODEL.claude,
+        },
+      })
     );
     const beforeNames = new Set(before.map((command) => command.name));
     check(

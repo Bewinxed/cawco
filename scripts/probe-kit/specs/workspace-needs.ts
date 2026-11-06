@@ -33,6 +33,7 @@ import { chmod, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { MachineCapability } from "../../../packages/core/src/capabilities";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import {
   workspaceNeedsDetails,
@@ -200,7 +201,7 @@ const reported = async (
         machineCapabilities?: { items: MachineCapability[] };
         machineId: string;
       }[]
-    >("/api/agents")
+    >(hubRequest("GET /api/agents"))
   )
     .find((row) => row.machineId === MACHINE)
     ?.machineCapabilities?.items.find((item) => item.id === "workspace");
@@ -213,15 +214,19 @@ const delegate = (
   title: string
 ): Promise<string> =>
   fleet
-    .api<{ workspaceId: string }>("/api/work-items", {
-      parentInstanceId: parent,
-      title,
-      prompt: `${title}: say ok.`,
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd,
-      lands: "none",
-    })
+    .api<{ workspaceId: string }>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title,
+          prompt: `${title}: say ok.`,
+          harness: "claude",
+          model: "claude-haiku-4-5",
+          cwd,
+          lands: "none",
+        },
+      })
+    )
     .then(
       (started) => `started, workspace ${started.workspaceId}`,
       (error: Error) => error.message
@@ -248,11 +253,15 @@ const legsBC = async (
       workspaceCount(fleet) === 0,
     `${refused.slice(0, 600)}; workspaces filed: ${workspaceCount(fleet)}`
   );
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Bare",
-    machineId: MACHINE,
-    cwd: home,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Bare",
+        machineId: MACHINE,
+        cwd: home,
+      },
+    })
+  );
   const inProject = await fleet.spawn("claude", "Bare project", home, {
     projectId: project.id,
   });

@@ -20,6 +20,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   MACHINE,
   MODEL,
@@ -132,25 +133,33 @@ const spec: Spec = {
     await fleet.accountSignedIn();
     const src = join(fleet.sandbox, "src");
     await mkdir(src, { recursive: true });
-    const project = await fleet.api<{ id: string }>("/api/projects", {
-      name: "Host hands back",
-      machineId: MACHINE,
-      cwd: src,
-    });
+    const project = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/projects", {
+        body: {
+          name: "Host hands back",
+          machineId: MACHINE,
+          cwd: src,
+        },
+      })
+    );
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
     const input = join(fleet.sandbox, IN_FILE);
     await writeFile(input, "handed in\n");
-    const started = await fleet.api<Started>("/api/work-items", {
-      parentInstanceId: parent,
-      title: "Hand files back",
-      prompt: `${TAG}: copy the files into $TMPDIR/outputs/, then finish.`,
-      harness: "claude",
-      model: MODEL.claude,
-      host: true,
-      inputs: [input],
-    });
+    const started = await fleet.api<Started>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title: "Hand files back",
+          prompt: `${TAG}: copy the files into $TMPDIR/outputs/, then finish.`,
+          harness: "claude",
+          model: MODEL.claude,
+          host: true,
+          inputs: [input],
+        },
+      })
+    );
     const state = await until(
       "the host delegate's item ended",
       () =>

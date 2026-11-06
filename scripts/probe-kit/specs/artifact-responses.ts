@@ -39,6 +39,7 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, ToolCalls, toolReply } from "../../tool-calls";
 import { type Kit, open, pressIn, ROOT, type Spec, settle } from "../kit";
@@ -270,7 +271,11 @@ const run = async (kit: Kit) => {
   const read = () =>
     fleet.api<{
       choices: Record<string, { note: string | null; options: string[] }>;
-    }>(`/api/instances/${session}/artifacts/${id}/view`);
+    }>(
+      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
+        path: { id: session, artifact: id },
+      })
+    );
   await pressIn(frame, '[data-option="cover"]');
   const note = frame.locator('[data-dp-note="song"]');
   const typeNote = async (words: string) => {
@@ -425,7 +430,11 @@ const run = async (kit: Kit) => {
     (
       await fleet.api<{
         artifacts: { id: string; picks?: { unsent: number } }[];
-      }>(`/api/instances/${session}/artifacts/list`)
+      }>(
+        hubRequest("GET /api/instances/:id/artifacts/list", {
+          path: { id: session },
+        })
+      )
     ).artifacts.find((one) => one.id === id)?.picks?.unsent ?? null;
   const counted = await until(
     "the later pick counted unsent",

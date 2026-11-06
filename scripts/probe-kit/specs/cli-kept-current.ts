@@ -107,6 +107,7 @@ import {
 } from "../../../packages/agent/src/tools";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { machineLabel } from "../../../packages/core/src/machine-names";
 import type { ToolStatus } from "../../../packages/core/src/tools";
 import { TOOL_CATALOG, toolSpec } from "../../../packages/core/src/tools";
@@ -858,11 +859,13 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
     await cliToolsPage(kit, fleet, { behind, off }, row);
 
     // (i) The fleet pins a version, and a press carrying none installs it.
-    const pinned = await fetch(`${fleet.base}/api/tools/claude`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pinnedVersion: PIN }),
-    });
+    const pinned = await fetchHub(
+      fleet.base,
+      hubRequest("PUT /api/tools/:id", {
+        path: { id: "claude" },
+        body: { pinnedVersion: PIN },
+      })
+    );
     const before = (await behind.calls()).length;
     const answer = await press(fleet, MACHINE);
     const onPin = await reached(
@@ -918,7 +921,9 @@ const cliToolsPage = async (
   const { check } = kit;
   const hostname =
     (
-      await fleet.api<{ hostname: string; machineId: string }[]>("/api/agents")
+      await fleet.api<{ hostname: string; machineId: string }[]>(
+        hubRequest("GET /api/agents")
+      )
     ).find((agent) => agent.machineId === MACHINE)?.hostname ?? "";
   const label = machineLabel(hostname);
   const head = toolWords.notUpdatedHead(NAME, NEWEST, label);

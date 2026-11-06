@@ -31,6 +31,7 @@
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import type { Pin } from "../../../packages/core/src/comments";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   type Engine,
@@ -166,7 +167,10 @@ type HubPin = Pin;
 const hubPins = async ({ fleet, id, session }: At): Promise<HubPin[]> =>
   (
     await fleet.api<{ artifacts: { id: string; pins: HubPin[] }[] }>(
-      `/api/instances/${session}/artifacts/comments?artifact=${id}&filter=all`
+      hubRequest("GET /api/instances/:id/artifacts/comments", {
+        path: { id: session },
+        query: { artifact: id, filter: "all" },
+      })
     )
   ).artifacts.find((one) => one.id === id)?.pins ?? [];
 
@@ -520,15 +524,17 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "App comment", fleet.repo);
   const { id } = await fleet.api<{ id: string }>(
-    `/api/instances/${session}/artifacts`,
-    {
-      kind: "page",
-      does: "judge",
-      title: "Probe judge artifact",
-      ask: "Judge this page: pin anything that reads wrong",
-      name: NAME,
-      html: PAGE,
-    }
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "page",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge this page: pin anything that reads wrong",
+        name: NAME,
+        html: PAGE,
+      },
+    })
   );
   const base = await fleet.dashboard();
   const at: At = { base, fleet, id, kit, session };

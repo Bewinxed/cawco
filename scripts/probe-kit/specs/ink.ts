@@ -57,6 +57,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CDPSession, Frame, Page, Request } from "playwright-core";
 import { PIN_MAPS } from "../../../packages/core/src/comments";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type MainTask, traceMain } from "../frames";
@@ -1262,7 +1263,9 @@ const canvasChecks = async (on: On) => {
   await on.page.waitForTimeout(500);
   const read = () =>
     on.fleet.api<{ outline?: string }>(
-      `/api/instances/${on.session}/artifacts/${id}`
+      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+        path: { id: on.session, artifact: String(id) },
+      })
     );
   const outline = await until(
     "the stroke in the outline",

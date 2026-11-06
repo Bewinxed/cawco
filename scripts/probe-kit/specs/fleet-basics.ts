@@ -29,6 +29,7 @@ import {
   syncNotice,
 } from "../../../apps/dashboard/src/lib/cawco/convergence";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type {
   FleetItemStatus,
   FleetSyncOutcome,
@@ -80,18 +81,20 @@ const spec: Spec = {
     });
     const deadPort = gone.port;
     await gone.stop(true);
-    const put = await fetch(`${fleet.base}/api/fleet/mcp/${HELD_ROW}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        config: {
-          command: "npx",
-          args: ["-y", `${HELD_ROW}@latest`],
-          env: { npm_config_registry: `http://127.0.0.1:${deadPort}/` },
+    const put = await fetchHub(
+      fleet.base,
+      hubRequest("PUT /api/fleet/mcp/:name", {
+        path: { name: HELD_ROW },
+        body: {
+          config: {
+            command: "npx",
+            args: ["-y", `${HELD_ROW}@latest`],
+            env: { npm_config_registry: `http://127.0.0.1:${deadPort}/` },
+          },
+          enabled: true,
         },
-        enabled: true,
-      }),
-    });
+      })
+    );
     check(
       `(c) the fleet holds ${HELD_ROW} before the machine joins`,
       put.ok,
@@ -101,7 +104,7 @@ const spec: Spec = {
     await fleet.agentUp();
     const joinedAt = Date.now();
     const machineRow = async () =>
-      (await fleet.api<AgentRow[]>("/api/agents")).find(
+      (await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
         (agent) => agent.machineId === MACHINE
       );
     const npxItem = `mcp:${HELD_ROW}`;
@@ -146,9 +149,9 @@ const spec: Spec = {
         settled?.status === "online",
       JSON.stringify({ item, status: settled?.status })
     );
-    const row = (await fleet.api<AgentRow[]>("/api/agents")).find(
-      (agent) => agent.machineId === MACHINE
-    );
+    const row = (
+      await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))
+    ).find((agent) => agent.machineId === MACHINE);
 
     // (a) A start with no account filed or signed in: the hub's answer on the
     // dashboard socket is an error frame for that instance.

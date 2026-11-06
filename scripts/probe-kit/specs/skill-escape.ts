@@ -69,6 +69,7 @@
 import { existsSync, readlinkSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
   MACHINE,
@@ -358,11 +359,15 @@ const scene = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Skill escape",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Skill escape",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
@@ -380,15 +385,16 @@ const delegate = async (
   src: string
 ): Promise<{ id: string; clone: string }> => {
   const made = await fleet.api<{ instanceId: string | null }>(
-    "/api/work-items",
-    {
-      parentInstanceId: parent,
-      title: "Skill escape delegate",
-      prompt: "PROBE-SKILL-BRIEF: wait for the person's steps.",
-      harness: "claude",
-      model: MODEL.claude,
-      cwd: src,
-    }
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Skill escape delegate",
+        prompt: "PROBE-SKILL-BRIEF: wait for the person's steps.",
+        harness: "claude",
+        model: MODEL.claude,
+        cwd: src,
+      },
+    })
   );
   const id = made.instanceId as string;
   await until(

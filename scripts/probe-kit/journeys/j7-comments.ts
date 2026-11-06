@@ -10,6 +10,7 @@
  * asked with the comments notice and the person's words.
  */
 
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import type { Seen } from "../../scratch-fleet";
@@ -46,14 +47,19 @@ const html = (title: string) => `<!doctype html>
 /** The session's page, made as artifact_create makes one: its id. */
 const pageFor = async (fleet: KitFleet, session: string, title: string) =>
   (
-    await fleet.api<{ id: string }>(`/api/instances/${session}/artifacts`, {
-      kind: "page",
-      does: "judge",
-      title: PAGE_TITLE,
-      ask: "Judge this page: pin anything that reads wrong",
-      name: PAGE,
-      html: html(title),
-    })
+    await fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: session },
+        body: {
+          kind: "page",
+          does: "judge",
+          title: PAGE_TITLE,
+          ask: "Judge this page: pin anything that reads wrong",
+          name: PAGE,
+          html: html(title),
+        },
+      })
+    )
   ).id;
 
 async function walk(leg: Leg): Promise<void> {

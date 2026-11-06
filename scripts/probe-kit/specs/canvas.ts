@@ -58,6 +58,10 @@
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { previewRoute } from "../../../packages/core/src/frames";
+import {
+  type HubSent,
+  hubRequest,
+} from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
@@ -400,8 +404,9 @@ const runSpec = async (kit: Kit) => {
   // own, which the hub names and the dashboard picks: core frames.ts
   // `previewRoute`).
   const address = await on.fleet.api<{ origin?: string; port?: number }>(
-    `/api/instances/${on.session}/preview-address`,
-    {}
+    hubRequest("POST /api/instances/:id/preview-address", {
+      path: { id: on.session },
+    })
   );
   const base = new URL(await on.fleet.dashboard());
   const route = previewRoute(address, base);
@@ -646,14 +651,21 @@ const imageChecks = async (on: OnCanvas) => {
     on.said.push(`pageerror (second screen): ${error.message}`)
   );
   await open(other, `${await fleet.dashboard()}/session/${session}`, COMPOSER);
-  await fleet.api(`/api/instances/${session}/artifacts/${id}/show`, {});
+  await fleet.api(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+      path: { id: session, artifact: id },
+      body: {},
+    })
+  );
   const otherFrame = await frameOf(other, id);
   // This screen's frame as it stands after the show: the canvas is an
   // origin of its own, its frame a target of its own, and the show's load
   // closes the one read before it.
   const frame = await frameOf(page, id);
   const empty = await fleet.api<{ png: string | null }>(
-    `/api/artifacts/${id}/export`
+    hubRequest("GET /api/artifacts/:artifact/export", {
+      path: { artifact: id },
+    })
   );
 
   // A press on the canvas with Select (clear of the empty state's Draw), as
@@ -711,14 +723,22 @@ const imageChecks = async (on: OnCanvas) => {
       fleet.api<{
         file: { files: Record<string, { dataURL?: string }> };
         png: string | null;
-      }>(`/api/artifacts/${id}/export`),
+      }>(
+        hubRequest("GET /api/artifacts/:artifact/export", {
+          path: { artifact: id },
+        })
+      ),
     (answer) => !!answer.png,
     10_000
   ).catch(() =>
     fleet.api<{
       file: { files: Record<string, { dataURL?: string }> };
       png: string | null;
-    }>(`/api/artifacts/${id}/export`)
+    }>(
+      hubRequest("GET /api/artifacts/:artifact/export", {
+        path: { artifact: id },
+      })
+    )
   );
   const red = exported.png
     ? await page.evaluate(async (png) => {
@@ -2679,8 +2699,15 @@ const shapeChecks = async (on: OnCanvas) => {
 /** The canvas's read, as the agent's tool reads it. */
 const reader =
   ({ fleet, session }: OnCanvas, id: string) =>
-  (query = "") =>
-    fleet.api<Read>(`/api/instances/${session}/artifacts/${id}${query}`);
+  (
+    query: HubSent<"GET /api/instances/:id/artifacts/:artifact">["query"] = {}
+  ) =>
+    fleet.api<Read>(
+      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+        path: { id: session, artifact: id },
+        query,
+      })
+    );
 
 /** Checks 1 and 2: the canvas from Mermaid, its row in the menu, B moved by id; its id and A and B. */
 const created = async (
@@ -2812,14 +2839,14 @@ const penChecks = async (
   await stroke([0.08, 0.2], [0.92, 0.85], true);
   const drawn = await until(
     "the stroke in the outline",
-    () => read(`?since=${before.seq}`),
+    () => read({ since: before.seq }),
     (answer) =>
       inks(answer.outline ?? "").some(
         (ink) =>
           ink.over.includes(agent.id) && (answer.changed ?? []).includes(ink.id)
       ),
     10_000
-  ).catch(() => read(`?since=${before.seq}`));
+  ).catch(() => read({ since: before.seq }));
   kit.check(
     "3: a pen stroke is an ink line over B in the outline, and changed names it",
     inks(drawn.outline ?? "").some(
@@ -2874,9 +2901,13 @@ const pictureChecks = async (on: OnCanvas, id: string, lifted: number) => {
     file: { type: string };
     outline: string;
     png: string | null;
-  }>(`/api/artifacts/${id}/export`);
+  }>(
+    hubRequest("GET /api/artifacts/:artifact/export", {
+      path: { artifact: id },
+    })
+  );
   const bytes = exported.png ? Buffer.from(exported.png, "base64").length : 0;
-  const withPng = await read("?png=true");
+  const withPng = await read({ png: true });
   on.kit.check(
     "5: the export answers a PNG over 1 KB within 3 s of the last change; artifact_read(png) answers the same bytes",
     !!drawnAt &&

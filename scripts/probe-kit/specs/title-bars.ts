@@ -19,6 +19,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { BAR_ITEM } from "../../../apps/dashboard/src/lib/components/ui/bar-glass/marks";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { cawPanelWords } from "../../../packages/core/src/words/onboarding";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import { type Kit, open, type Spec, type View } from "../kit";
@@ -79,11 +80,15 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Glass bars",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Glass bars",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const at = `${base}/project/${project.id}`;
   const house = new RenderedChecks(kit, "title-bars");
   const SEAT = '[data-slot="caw-seat"]';
@@ -135,9 +140,14 @@ const run = async (kit: Kit) => {
   });
   // Named as his panel's start names it (client `nameConversation`): the
   // conversation the project's row names is the one his panel shows.
-  await fleet.api(`/api/projects/${project.id}/caw/conversation`, {
-    instanceId: talk,
-  });
+  await fleet.api(
+    hubRequest("POST /api/projects/:id/caw/conversation", {
+      path: { id: project.id },
+      body: {
+        instanceId: talk,
+      },
+    })
+  );
   await fleet.send(talk, "Walk me through the glass bars, step by step.");
   await each("caw conversation tail", async (page) => {
     await page
@@ -304,14 +314,19 @@ const run = async (kit: Kit) => {
   );
 
   // A page artifact in the session's panel, for its head.
-  await fleet.api(`/api/instances/${talk}/artifacts`, {
-    kind: "page",
-    does: "judge",
-    ask: "Judge the glass bars page",
-    name: "glass-page",
-    title: "Glass bars page",
-    html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1 id="head">Glass bars</h1><p id="one">Every bar floats its controls in glass.</p></body></html>',
-  });
+  await fleet.api(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: talk },
+      body: {
+        kind: "page",
+        does: "judge",
+        ask: "Judge the glass bars page",
+        name: "glass-page",
+        title: "Glass bars page",
+        html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1 id="head">Glass bars</h1><p id="one">Every bar floats its controls in glass.</p></body></html>',
+      },
+    })
+  );
   const SESSION = `${base}/session/${talk}`;
 
   // Caw's column at its fullest bar: the conversation on show (the
@@ -329,17 +344,24 @@ const run = async (kit: Kit) => {
     await Bun.sleep(1000);
   }
   const shown = await fleet.api<{ id: string }>(
-    `/api/instances/${busy}/artifacts`,
-    {
-      kind: "page",
-      does: "judge",
-      ask: "Judge the fullest bar",
-      name: "fullest-bar",
-      title: "Fullest bar",
-      html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fullest bar</title></head><body><h1>Fullest bar</h1></body></html>',
-    }
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: busy },
+      body: {
+        kind: "page",
+        does: "judge",
+        ask: "Judge the fullest bar",
+        name: "fullest-bar",
+        title: "Fullest bar",
+        html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fullest bar</title></head><body><h1>Fullest bar</h1></body></html>',
+      },
+    })
   );
-  await fleet.api(`/api/instances/${busy}/artifacts/${shown.id}/show`, {});
+  await fleet.api(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+      path: { id: busy, artifact: shown.id },
+      body: {},
+    })
+  );
   await each("caw preview shown", async (page) => {
     // Showing brings Preview to the front, where the pane's own bar is the
     // panel's; Assistant is pressed back for the column's bar.

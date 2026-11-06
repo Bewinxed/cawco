@@ -64,6 +64,7 @@ import {
 } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import type { HarnessKind } from "../../../packages/core/src/harness";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { workWords } from "../../../packages/core/src/words/work";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
@@ -360,11 +361,15 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
 
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "User bun",
-    machineId: "scratch-fleet",
-    cwd: ts,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "User bun",
+        machineId: "scratch-fleet",
+        cwd: ts,
+      },
+    })
+  );
   await declareGate(fleet.base, project.id, JS_GATE);
   const parent = await fleet.spawn("claude", "Parent", ts, {
     projectId: project.id,
@@ -375,14 +380,18 @@ const run = async (kit: Kit) => {
       id
     )[0];
   const delegate = (tag: Tag, harness: HarnessKind = "claude") =>
-    fleet.api<{ workItemId: string }>("/api/work-items", {
-      parentInstanceId: parent,
-      title: `User bun ${tag}`,
-      prompt: `PROBE-USERBUN-${tag}: do the probe's steps.`,
-      harness,
-      model: MODEL[harness],
-      cwd: ts,
-    });
+    fleet.api<{ workItemId: string }>(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: parent,
+          title: `User bun ${tag}`,
+          prompt: `PROBE-USERBUN-${tag}: do the probe's steps.`,
+          harness,
+          model: MODEL[harness],
+          cwd: ts,
+        },
+      })
+    );
   const realTs = await realpath(ts);
   const inClone = (one: Call) => one.pwd !== ts && one.pwd !== realTs;
 

@@ -28,6 +28,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -175,11 +176,15 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Orphan pages",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Orphan pages",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
@@ -187,15 +192,19 @@ const run = async (kit: Kit) => {
     projectId: project.id,
   });
 
-  const started = await fleet.api<Started>("/api/work-items", {
-    parentInstanceId: parent,
-    title: "Mock the edit surface",
-    prompt: `${CHILD}: mock the edit surface as a page, then stop.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: src,
-    lands: "none",
-  });
+  const started = await fleet.api<Started>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Mock the edit surface",
+        prompt: `${CHILD}: mock the edit surface as a page, then stop.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: src,
+        lands: "none",
+      },
+    })
+  );
   await until(
     "the child's item failed as blocked",
     () =>

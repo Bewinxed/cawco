@@ -19,6 +19,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CONTROL_SLEEP } from "../../../packages/core/src/harness";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -37,14 +38,11 @@ const hashOf = (value: string): string =>
 /** The hub's answer to an installation ack carrying `credential`: 401 once it grants nothing. */
 const ackStatus = async (fleet: KitFleet, credential: string) =>
   (
-    await fetch(`${fleet.base}/api/session-identities/ack`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${credential}`,
-        "content-type": "application/json",
-      },
-      body: "{}",
-    })
+    await fetchHub(
+      fleet.base,
+      hubRequest("POST /api/session-identities/ack", { body: {} }),
+      { headers: { authorization: `Bearer ${credential}` } }
+    )
   ).status;
 
 /** The session's installed credential's hash, once one other than `not` is installed. */

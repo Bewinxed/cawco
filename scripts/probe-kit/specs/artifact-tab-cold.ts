@@ -56,6 +56,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   SHOWN_WAIT_MS,
   SLOW_SHOW_STEP_MS,
@@ -173,9 +174,12 @@ const run = async (kit: Kit) => {
   const base = await fleet.dashboard();
   const session = await fleet.spawn("claude", "Cold tabs", fleet.repo);
 
-  const at = `/api/instances/${session}/artifacts`;
   const shown = async (id: string) =>
-    (await fleet.api<{ shown: boolean }>(`/api/artifacts/${id}`)).shown;
+    (
+      await fleet.api<{ shown: boolean }>(
+        hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } })
+      )
+    ).shown;
 
   /**
    * An engine's own folder preview and decision page, then a third artifact
@@ -191,30 +195,45 @@ const run = async (kit: Kit) => {
       await mkdir(dir, { recursive: true });
       await Bun.write(join(dir, "index.html"), folderPage(word));
     }
-    const folder = await fleet.api<{ id: string }>(at, {
-      kind: "preview",
-      does: "try",
-      title: "Probe try artifact",
-      ask: "Try the cold folder",
-      name: `cold-folder-${engine}`,
-      dir: dirs.cold,
-    });
-    const page = await fleet.api<{ id: string }>(at, {
-      kind: "page",
-      does: "pick",
-      title: "Probe pick artifact",
-      ask: "Pick the word",
-      name: `cold-page-${engine}`,
-      program: PROGRAM,
-    });
-    await fleet.api<{ id: string }>(at, {
-      kind: "preview",
-      does: "try",
-      title: "Probe try artifact",
-      ask: "Try the front folder",
-      name: `front-folder-${engine}`,
-      dir: dirs.front,
-    });
+    const folder = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: session },
+        body: {
+          kind: "preview",
+          does: "try",
+          title: "Probe try artifact",
+          ask: "Try the cold folder",
+          name: `cold-folder-${engine}`,
+          dir: dirs.cold,
+        },
+      })
+    );
+    const page = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: session },
+        body: {
+          kind: "page",
+          does: "pick",
+          title: "Probe pick artifact",
+          ask: "Pick the word",
+          name: `cold-page-${engine}`,
+          program: PROGRAM,
+        },
+      })
+    );
+    await fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: session },
+        body: {
+          kind: "preview",
+          does: "try",
+          title: "Probe try artifact",
+          ask: "Try the front folder",
+          name: `front-folder-${engine}`,
+          dir: dirs.front,
+        },
+      })
+    );
     const unshown = !((await shown(folder.id)) || (await shown(page.id)));
     kit.check(
       `${engine}: the session's panel shows neither artifact under test before their tabs open`,
@@ -240,7 +259,9 @@ const run = async (kit: Kit) => {
     const poll = (async () => {
       while (!watching.signal.aborted) {
         const started = performance.now();
-        await fleet.api(`/api/artifacts/${id}`);
+        await fleet.api(
+          hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } })
+        );
         slowest = Math.max(slowest, performance.now() - started);
         await Bun.sleep(10);
       }
@@ -304,21 +325,31 @@ const run = async (kit: Kit) => {
   }
 
   // 4. The run's first component canvas, its host built on first request.
-  const canvas = await fleet.api<{ id: string }>(at, {
-    kind: "canvas",
-    does: "draw",
-    title: "Probe draw artifact",
-    ask: "Draw on this canvas",
-    name: "cold-canvas",
-  });
-  await fleet.api<{ id: string }>(at, {
-    kind: "preview",
-    does: "try",
-    title: "Probe try artifact",
-    ask: "Try the front folder",
-    name: "cold-canvas-front",
-    dir: join(kit.out, "chromium", "front"),
-  });
+  const canvas = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "canvas",
+        does: "draw",
+        title: "Probe draw artifact",
+        ask: "Draw on this canvas",
+        name: "cold-canvas",
+      },
+    })
+  );
+  await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: session },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try the front folder",
+        name: "cold-canvas-front",
+        dir: join(kit.out, "chromium", "front"),
+      },
+    })
+  );
   const canvasDrawn = (tab: Page) =>
     tab
       .frameLocator(CANVAS_FRAME)
@@ -339,26 +370,38 @@ const run = async (kit: Kit) => {
 
   // 3. The hub's show of a decision page, with the panel on another artifact.
   const showPage = async (name: string) => {
-    const shownPage = await fleet.api<{ id: string }>(at, {
-      kind: "page",
-      does: "pick",
-      title: "Probe pick artifact",
-      ask: "Pick the word",
-      name,
-      program: PROGRAM,
-    });
-    await fleet.api<{ id: string }>(at, {
-      kind: "preview",
-      does: "try",
-      title: "Probe try artifact",
-      ask: "Try the front folder",
-      name: `${name}-front`,
-      dir: join(kit.out, "chromium", "front"),
-    });
+    const shownPage = await fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: session },
+        body: {
+          kind: "page",
+          does: "pick",
+          title: "Probe pick artifact",
+          ask: "Pick the word",
+          name,
+          program: PROGRAM,
+        },
+      })
+    );
+    await fleet.api<{ id: string }>(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: session },
+        body: {
+          kind: "preview",
+          does: "try",
+          title: "Probe try artifact",
+          ask: "Try the front folder",
+          name: `${name}-front`,
+          dir: join(kit.out, "chromium", "front"),
+        },
+      })
+    );
     const started = performance.now();
     const answer = await fleet.api<{ opened: boolean }>(
-      `${at}/${shownPage.id}/show`,
-      {}
+      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+        path: { id: session, artifact: shownPage.id },
+        body: {},
+      })
     );
     return {
       id: shownPage.id,

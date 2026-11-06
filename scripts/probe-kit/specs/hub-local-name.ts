@@ -76,6 +76,7 @@ import makeMdns from "multicast-dns";
 import { browseMdns } from "../../../packages/agent/src/discovery";
 import { currentExecutable } from "../../../packages/core/src/binary-installation";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { reachableLinks } from "../../../packages/core/src/reachable-links";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
@@ -222,7 +223,7 @@ const askFromLan = async (
   mdns.destroy();
   const at = [...heard].find((address) => !address.includes(":"));
   const said = at
-    ? await Bun.$`curl -s --noproxy ${"*"} --interface ${from} --resolve ${`${name}:${port}:${at}`} --retry 5 --retry-connrefused --retry-delay 1 ${`http://${name}:${port}/health`}`
+    ? await Bun.$`curl -s --noproxy ${"*"} --interface ${from} --resolve ${`${name}:${port}:${at}`} --retry 5 --retry-connrefused --retry-delay 1 ${`http://${name}:${port}${hubRequest("GET /health").path}`}`
         .nothrow()
         .text()
     : "";
@@ -426,8 +427,8 @@ const localNameRead = async (
   dashboardPort: string
 ): Promise<string> => {
   const url = `http://${name}:${dashboardPort}`;
-  const read = (await fetch(`${base}/api/local-name`).then((r) =>
-    r.json()
+  const read = (await fetchHub(base, hubRequest("GET /api/local-name")).then(
+    (r) => r.json()
   )) as Record<string, unknown>;
   kit.check(
     `6: /api/local-name on ${base} says ${name} is held, the dashboard at ${url}, and carries no command`,
@@ -607,8 +608,11 @@ const heldBy = (base: string) =>
   until(
     `${base} holding its .local name`,
     async () =>
-      ((await fetch(`${base}/health`).then((r) => r.json())) as Health)
-        .localName ?? undefined,
+      (
+        (await fetchHub(base, hubRequest("GET /health")).then((r) =>
+          r.json()
+        )) as Health
+      ).localName ?? undefined,
     (name) => HELD.test(name),
     60_000
   );
@@ -654,7 +658,9 @@ const nameChecks = async (
     const port = Number(new URL(base).port);
     const answered = await asker.ask<string>({ name, type: "A" }, "A");
     const listed = (
-      (await fetch(`${base}/api/join`).then((r) => r.json())) as {
+      (await fetchHub(base, hubRequest("GET /api/join")).then((r) =>
+        r.json()
+      )) as {
         addresses: { label: string; url: string }[];
       }
     ).addresses;

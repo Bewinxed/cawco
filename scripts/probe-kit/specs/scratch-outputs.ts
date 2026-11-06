@@ -27,6 +27,7 @@
  */
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -139,11 +140,15 @@ const setUp = async (
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Scratch outputs",
-    machineId: MACHINE,
-    cwd: src,
-  });
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Scratch outputs",
+        machineId: MACHINE,
+        cwd: src,
+      },
+    })
+  );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
@@ -185,7 +190,12 @@ const retired = async (fleet: Fleet, started: Started): Promise<string> => {
     90_000
   ).catch(() => state());
   if (settled !== "archived") {
-    await fleet.api(`/api/workspaces/${started.workspaceId}/archive`, {});
+    await fleet.api(
+      hubRequest("POST /api/workspaces/:id/archive", {
+        path: { id: started.workspaceId },
+        body: {},
+      })
+    );
   }
   return state();
 };
@@ -246,15 +256,19 @@ const finishedLeg = async (
   src: string
 ): Promise<Handed[]> => {
   const { check } = kit;
-  const started = await fleet.api<Started>("/api/work-items", {
-    parentInstanceId: parent,
-    title: "Scratch outputs probe",
-    prompt: `${TAG}: write your report to $TMPDIR/outputs, then finish.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: src,
-    lands: "none",
-  });
+  const started = await fleet.api<Started>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Scratch outputs probe",
+        prompt: `${TAG}: write your report to $TMPDIR/outputs, then finish.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: src,
+        lands: "none",
+      },
+    })
+  );
   const assets = `assets/${started.workItemId.slice(0, 8)}`;
   const brief = await until(
     "the leaf's brief",
@@ -313,15 +327,19 @@ const stoppedLeg = async (
   parent: string,
   src: string
 ): Promise<Handed[]> => {
-  const started = await fleet.api<Started>("/api/work-items", {
-    parentInstanceId: parent,
-    title: "Stopped outputs probe",
-    prompt: `${STOPPED_TAG}: write an output, then keep working.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: src,
-    lands: "none",
-  });
+  const started = await fleet.api<Started>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Stopped outputs probe",
+        prompt: `${STOPPED_TAG}: write an output, then keep working.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: src,
+        lands: "none",
+      },
+    })
+  );
   const assets = `assets/${started.workItemId.slice(0, 8)}`;
   await until(
     "the stopped leaf wrote its output",
@@ -368,15 +386,19 @@ const readerLeg = async (
   src: string,
   handed: readonly Handed[]
 ): Promise<void> => {
-  const started = await fleet.api<Started>("/api/work-items", {
-    parentInstanceId: parent,
-    title: "Outputs reader probe",
-    prompt: `${READER_TAG}: keep working.`,
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: src,
-    lands: "none",
-  });
+  const started = await fleet.api<Started>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Outputs reader probe",
+        prompt: `${READER_TAG}: keep working.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: src,
+        lands: "none",
+      },
+    })
+  );
   const credential = await until(
     "the reader's session credential",
     () => fleet.sessionCredential(started.instanceId),

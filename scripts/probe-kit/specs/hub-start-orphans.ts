@@ -19,6 +19,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
@@ -89,19 +90,22 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const dir = `${fleet.sandbox}/orphans-site`;
   await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
-  const { id: projectId } = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Orphans",
-    machineId: MACHINE,
-    cwd: dir,
-    caw: false,
-  });
+  const { id: projectId } = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: {
+        name: "Orphans",
+        machineId: MACHINE,
+        cwd: dir,
+        caw: false,
+      },
+    })
+  );
   const writer = await fleet.spawn("claude", "Pair the code", dir, {
     projectId,
   });
   const other = await fleet.spawn("claude", "Name the plan", dir, {
     projectId,
   });
-  const at = (session: string) => `/api/instances/${session}/artifacts`;
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -110,37 +114,57 @@ const run = async (kit: Kit) => {
         headers: { "content-type": "text/html" },
       }),
   });
-  const site = await fleet.api<{ id: string }>(at(writer), {
-    kind: "preview",
-    does: "try",
-    title: "Probe try artifact",
-    ask: "Try this page and say whether it works",
-    name: "orphans-site",
-    port: server.port,
-    machine: MACHINE,
-  });
-  const kept = await fleet.api<{ id: string }>(at(writer), {
-    kind: "page",
-    does: "pick",
-    title: "Probe pick artifact",
-    ask: "Pick how the code leaves",
-    name: "pairing",
-    program: KEPT(site.id),
-  });
-  const orphan = await fleet.api<{ id: string }>(at(other), {
-    kind: "page",
-    does: "pick",
-    title: "Probe pick artifact",
-    ask: "Pick the plan's name",
-    name: "plan-name",
-    program: ORPHAN,
-  });
+  const site = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: writer },
+      body: {
+        kind: "preview",
+        does: "try",
+        title: "Probe try artifact",
+        ask: "Try this page and say whether it works",
+        name: "orphans-site",
+        port: server.port,
+        machine: MACHINE,
+      },
+    })
+  );
+  const kept = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: writer },
+      body: {
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick how the code leaves",
+        name: "pairing",
+        program: KEPT(site.id),
+      },
+    })
+  );
+  const orphan = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: other },
+      body: {
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick the plan's name",
+        name: "plan-name",
+        program: ORPHAN,
+      },
+    })
+  );
   for (const [session, id] of [
     [writer, kept.id],
     [other, orphan.id],
   ] as const) {
     await (
-      await fetch(`${fleet.base}${at(session)}/${id}/show`, { method: "POST" })
+      await fetchHub(
+        fleet.base,
+        hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+          path: { id: session, artifact: id },
+        })
+      )
     ).text();
   }
 
@@ -193,8 +217,9 @@ const run = async (kit: Kit) => {
   );
 
   const { port } = await fleet.api<{ port: number }>(
-    `/api/projects/${projectId}/preview-address`,
-    {}
+    hubRequest("POST /api/projects/:id/preview-address", {
+      path: { id: projectId },
+    })
   );
   const page = await passedFetch(
     fleet,
