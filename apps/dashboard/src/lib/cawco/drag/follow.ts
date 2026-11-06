@@ -14,6 +14,13 @@
  * so the collisions, the drop's flight and the scroll at an edge all read
  * the thing where it is drawn.
  *
+ * What is drawn is where the spring has carried it, and nothing else: it
+ * moves only on the spring's frame. dnd kit asks for the transform again on
+ * every pointer move, between frames; drawn there as the hand's travel less
+ * the last frame's lag, a steady glide was drawn a step ahead on each move
+ * and put back on the spring's curve a frame later, a pixel or two back
+ * every other frame, the thing trembling under the hand.
+ *
  * Where the reader asked for less motion, and for a drag the keys carry
  * (each press is a step, The Frequency Rule), it is pinned to the hand.
  */
@@ -34,15 +41,15 @@ const REST_SPEED = 5;
 const STEP_MAX = 1 / 30;
 
 export class Follow extends Modifier<DragDropManager> {
-  /** How far the drawn thing trails the hand now, in px. */
-  readonly #lag = signal<Point>({ x: 0, y: 0 });
+  /** Where the spring has carried the thing, in the pointer's travel (px); null while it is pinned to the hand. */
+  readonly #at = signal<Point | null>(null);
 
   constructor(manager: DragDropManager) {
     super(manager);
     this.registerEffect(() => {
       const { dragOperation } = this.manager;
       if (!dragOperation.status.dragging) {
-        this.#lag.value = { x: 0, y: 0 };
+        this.#at.value = null;
         return;
       }
       const keys = untracked(
@@ -94,17 +101,27 @@ export class Follow extends Modifier<DragDropManager> {
       };
       axis("x");
       axis("y");
-      const lag = { x: to.x - at.x, y: to.y - at.y };
-      const was = this.#lag.peek();
-      if (lag.x !== was.x || lag.y !== was.y) {
-        this.#lag.value = lag;
+      const was = this.#at.peek();
+      if (was?.x !== at.x || was?.y !== at.y) {
+        this.#at.value = { ...at };
       }
     };
     return () => cancelAnimationFrame(frame);
   }
 
+  /**
+   * The thing drawn where the spring has it: the transform less the hand's
+   * travel (what other modifiers add), plus the spring's place.
+   */
   override apply({ transform }: { transform: Point }): Point {
-    const lag = this.#lag.value;
-    return { x: transform.x - lag.x, y: transform.y - lag.y };
+    const at = this.#at.value;
+    if (!at) {
+      return transform;
+    }
+    const hand = this.manager.dragOperation.position.delta;
+    return {
+      x: transform.x - hand.x + at.x,
+      y: transform.y - hand.y + at.y,
+    };
   }
 }
