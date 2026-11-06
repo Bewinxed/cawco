@@ -21,7 +21,7 @@ const json = (body: unknown): Response =>
   });
 
 /** Answers the page's requests `answers` names until the returned call. */
-export function standApi(answers: BenchAnswers): () => void {
+function standApi(answers: BenchAnswers): () => void {
   const real = globalThis.fetch;
   const stood: typeof fetch = (input, init) => {
     const method = (
