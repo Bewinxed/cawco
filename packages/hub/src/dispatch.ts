@@ -114,6 +114,7 @@
  * changing, a machine with a checkout coming online. A slow timer looks
  * again as a safety net and starts nothing when nothing is ready.
  */
+
 import {
   ANY_TYPE,
   artifactName,
@@ -135,6 +136,7 @@ import type {
   TaskSummary,
   WaitWitness,
 } from "@cawco/core/task-views";
+import { stageLabel } from "@cawco/core/task-views";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WorkBudget } from "./db/schema";
@@ -945,7 +947,7 @@ export const createDispatcher = ({
     if (task.kind === "done" || task.kind === "dropped") {
       refuse(
         409,
-        `This task is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`
+        `This task is in ${stageLabel(task.stage)}, a ${task.kind} stage; move it back before starting an attempt.`
       );
     }
   };

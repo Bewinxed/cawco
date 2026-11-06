@@ -71,6 +71,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+import { stageLabel } from "@cawco/core/task-views";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
@@ -1692,7 +1693,7 @@ export const createCaw = ({
             tellQuietly(projectId, {
               by: "event",
               kind: "task-move",
-              trigger: `${taskLink(projectId, waiting.id, waiting.title)} moved to ${waiting.stage}, a stage that waits for the person`,
+              trigger: `${taskLink(projectId, waiting.id, waiting.title)} moved to ${stageLabel(waiting.stage)}, a stage that waits for the person`,
               text: `It moved there by ${event.actor.mover === "session" ? event.actor.author.name : `the ${event.actor.mover}`}${"reason" in event && event.reason ? `: ${event.reason}` : ""}.`,
             });
           }

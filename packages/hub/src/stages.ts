@@ -64,11 +64,12 @@ import {
   type StageKind,
   type StagesTemplate,
 } from "@cawco/core";
-import type {
-  SendBack,
-  Stage,
-  StageMove,
-  StageView,
+import {
+  type SendBack,
+  type Stage,
+  type StageMove,
+  type StageView,
+  stageLabel,
 } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 
@@ -444,6 +445,26 @@ export const stageNamed = (stages: Stages, name: string): Stage | undefined =>
   stages.stages.find((stage) => stage.name === name);
 
 /**
+ * The stage a person or an agent means by `said`: its name as stages.md
+ * writes it (`follow-up`), or as its column head and every sentence about a
+ * move say it (`Follow up`, core `stageLabel`), in any case. Undefined when
+ * it names none.
+ */
+export const stageCalled = (
+  stages: Stages,
+  said: string
+): string | undefined => {
+  const exact = stageNamed(stages, said.trim());
+  if (exact) {
+    return exact.name;
+  }
+  const head = stageLabel(said).toLowerCase();
+  return stages.stages.find(
+    (stage) => stageLabel(stage.name).toLowerCase() === head
+  )?.name;
+};
+
+/**
  * Whether a move closes a task or takes it past review: into a stage of kind
  * done, or out of a stage of kind `you` to one after it that is not dropped.
  */
@@ -575,21 +596,22 @@ export const nobodyProblem = (
   if (target?.kind !== "active" || worked(target, workers)) {
     return;
   }
-  const why = `nothing would work on it there. No attempt at it is live, ${to} runs no type, and this project does not start attempts on its own.`;
+  const into = stageLabel(to);
+  const why = `nothing would work on it there. No attempt at it is live, ${into} runs no type, and this project does not start attempts on its own.`;
   if (!from) {
     const waiting = waitingStageOf(stages, to);
-    return `${task} cannot start in ${to}: ${why}${waiting ? ` File it in ${waiting.name}, then start an attempt at it, which puts it in ${to}.` : ""}`;
+    return `${task} cannot start in ${into}: ${why}${waiting ? ` File it in ${stageLabel(waiting.name)}, then start an attempt at it, which puts it in ${into}.` : ""}`;
   }
   const back = sendBackOf(stages, from, workers);
   const instead = back
-    ? ` Start an attempt at it, which puts it in ${to}, or send it back to ${back.stage}${back.by === "nobody" ? ", where it waits until someone starts it" : ""}.`
-    : ` Start an attempt at it instead, which puts it in ${to}.`;
-  return `${task} cannot go from ${from} to ${to}: ${why}${instead}`;
+    ? ` Start an attempt at it, which puts it in ${into}, or send it back to ${stageLabel(back.stage)}${back.by === "nobody" ? ", where it waits until someone starts it" : ""}.`
+    : ` Start an attempt at it instead, which puts it in ${into}.`;
+  return `${task} cannot go from ${stageLabel(from)} to ${into}: ${why}${instead}`;
 };
 
 const unknownStage = (stages: Stages, name: string): string =>
   `${name} is not a stage of this project; its stages are ${listed(
-    stages.stages.map((stage) => stage.name),
+    stages.stages.map((stage) => stageLabel(stage.name)),
     "and"
   )}.`;
 
@@ -604,7 +626,7 @@ export const startProblem = (
     return unknownStage(stages, stage);
   }
   if (!mayEnter(to, who)) {
-    return `Only ${moverPhrase(to.hooks.by as Mover)} moves a task to ${stage}.`;
+    return `Only ${moverPhrase(to.hooks.by as Mover)} moves a task to ${stageLabel(stage)}.`;
   }
 };
 
@@ -626,15 +648,18 @@ export const moveProblem = (
   if (mayEnter(target, who) && covers(stages, from, to, who)) {
     return;
   }
+  const into = stageLabel(to);
   const why = mayEnter(target, who)
     ? `${moverPhrase(who)} may not make that move`
-    : `only ${moverPhrase(target.hooks.by as Mover)} moves a task to ${to}`;
+    : `only ${moverPhrase(target.hooks.by as Mover)} moves a task to ${into}`;
   const open = movesFrom(stages, from, who);
+  const phrase = moverPhrase(who);
+  const subject = phrase[0].toUpperCase() + phrase.slice(1);
   const instead =
     open.length > 0
-      ? `From ${from || "where it is"}, ${moverPhrase(who)} can move it to ${listed(open)}.`
-      : `From ${from || "where it is"}, ${moverPhrase(who)} cannot move it anywhere.`;
-  return `${task} cannot go from ${from || "no stage"} to ${to}: ${why}. ${instead}`;
+      ? `${subject} can move it to ${listed(open.map(stageLabel))}.`
+      : `${subject} cannot move it anywhere.`;
+  return `${task} cannot go from ${from ? stageLabel(from) : "no stage"} to ${into}: ${why}. ${instead}`;
 };
 
 // --- templates ---------------------------------------------------------------------

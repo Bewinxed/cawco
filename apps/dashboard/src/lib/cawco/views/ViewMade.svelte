@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stageLabel } from "@cawco/core/task-views";
   /**
    * What the project's tasks made: each task with outputs, most recently
    * changed first, as a tile headed by the task (its id, title and stage,
@@ -9,7 +10,7 @@
    */
   import { madeWords } from "@cawco/core/words/made";
   import { IconNeedsYou } from "#lib/icons.js";
-  import { outputUrl, stageLabel, type TaskSummary } from "../project-tasks";
+  import { outputUrl, type TaskSummary } from "../project-tasks";
   import TaskOutput from "../tasks/TaskOutput.svelte";
 
   let {

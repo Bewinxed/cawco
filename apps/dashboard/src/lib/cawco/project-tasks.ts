@@ -44,6 +44,7 @@ import type { StageKind } from "@cawco/core/views";
 import type { WorkItemState } from "@cawco/core/work-items";
 import {
   HUB_UNREACHABLE,
+  HubRefused,
   HubUnreachable,
   hubFetch,
   hubSaid,
@@ -259,7 +260,10 @@ export async function send<T>(
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
   if (!response.ok) {
-    throw new Error(`${await hubSaid(response)}.`);
+    const said = `${await hubSaid(response)}.`;
+    throw response.status < 500
+      ? new HubRefused(said, response.status)
+      : new Error(said);
   }
   if (!response.headers.get("content-type")?.includes("application/json")) {
     throw new Error(`${noAnswer(response.status)}.`);
@@ -570,12 +574,6 @@ export const folderFileHref = (projectId: string, path: string): string =>
 export const labelOf = (typed: string): string => typed.trim().toLowerCase();
 
 // --- what the views say -------------------------------------------------------
-
-/** `ready` → `Ready`, `follow_up` → `Follow up`: a stage as a column head says it. */
-export const stageLabel = (name: string): string => {
-  const words = name.replace(/[-_]+/gu, " ").trim();
-  return words ? words[0].toUpperCase() + words.slice(1) : "No stage";
-};
 
 /** Where a new task starts: the first stage of kind todo, else the first stage. */
 export const firstTodoStage = (stages: Stage[]): Stage | undefined =>

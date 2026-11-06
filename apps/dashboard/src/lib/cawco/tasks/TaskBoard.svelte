@@ -36,7 +36,7 @@
    * board, and its column may stand past the new edge.
    */
   import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
-  import { byRank } from "@cawco/core/task-views";
+  import { byRank, stageLabel } from "@cawco/core/task-views";
   import type { StageKind } from "@cawco/core/views";
   import { projectWords } from "@cawco/core/words/project";
   import { tick } from "svelte";
@@ -47,11 +47,7 @@
     type PlaceIn,
   } from "#lib/cawco/drag/DragProvider.svelte";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
-  import {
-    type Stage,
-    stageLabel,
-    type TaskSummary,
-  } from "#lib/cawco/project-tasks.js";
+  import type { Stage, TaskSummary } from "#lib/cawco/project-tasks.js";
   import { IconArchive } from "#lib/icons.js";
   import NewTaskForm from "./NewTaskForm.svelte";
   import { type RankWrite, ranksFor } from "./rank";
@@ -113,7 +109,7 @@
      */
     refused?: (
       id: string
-    ) => { again: () => void; reason: string; stage?: string } | null;
+    ) => { again?: () => void; reason: string; stage?: string } | null;
   } = $props();
 
   const named = $derived(new Set(stages.map((stage) => stage.name)));
@@ -180,8 +176,8 @@
   });
   /**
    * A move the hub refused, said where the person let the card go: in the
-   * column that refused it, at its head, what came of it (it went back to
-   * its column) and the hub's sentence, with Try again. The card flies back
+   * column that refused it, at its head, the hub's sentence, with Show and,
+   * where again can go otherwise, Try again. The card flies back
    * to its own column (the page's flight, motion/share); the board stays
    * where it is, and Show brings the card into view if its column stands
    * out of it. The columns stages.md closes to the card never take it: they
@@ -196,9 +192,6 @@
             ? [
                 {
                   id: task.id,
-                  back: named.has(task.stage)
-                    ? stageLabel(task.stage)
-                    : projectWords.otherStages,
                   reason: said.reason,
                   again: said.again,
                   show: () => {

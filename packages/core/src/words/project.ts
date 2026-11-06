@@ -5,9 +5,7 @@
  * (scripts/probe-words-check.ts refuses a copy).
  */
 export const projectWords = {
-  /** A card the hub would not take where it was let go: where it went back to, said in the column that refused it. */
-  movedBack: (task: string, stage: string) => `${task} went back to ${stage}.`,
-  /** Brings a card that went back into view, where it stands out of the board's view. */
+  /** Under a refused move's sentence: brings the card into view where it went back to, named as the sentence names it. */
   showTask: (task: string) => `Show ${task}`,
   /** The board's column for cards in a stage stages.md does not name. */
   otherStages: "Other stages",

@@ -317,6 +317,19 @@ export const HUB_UNREACHABLE_HEADER = "x-cawco-hub-unreachable";
 /** A request the dashboard could not get to the hub, or got no answer for. */
 export class HubUnreachable extends Error {}
 
+/**
+ * A request the hub answered with a refusal of its own (a 4xx): a rule it
+ * holds, which answers the same again until something else changes. The
+ * message is the hub's sentence.
+ */
+export class HubRefused extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 /** Whether `response` is the dashboard's own word that the hub did not answer it. */
 export function unreachedAnswer(response: Response): boolean {
   return (

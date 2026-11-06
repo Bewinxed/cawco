@@ -11,6 +11,7 @@
 </script>
 
 <script lang="ts">
+  import { stageLabel } from "@cawco/core/task-views";
   import { commonWords } from "@cawco/core/words/common";
   /**
    * What acts on the picked tasks, floating at the page's foot while any
@@ -37,7 +38,6 @@
   import {
     labelOf,
     type Stage,
-    stageLabel,
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stageLabel } from "@cawco/core/task-views";
   /**
    * A new task, inline where it will appear: a title, and the stage it
    * starts in. On the board the column is the stage; the table asks for one
@@ -8,7 +9,7 @@
    */
   import { tick } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { type Stage, stageLabel } from "#lib/cawco/project-tasks.js";
+  import type { Stage } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as Select from "#lib/components/ui/select/index.js";

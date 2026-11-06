@@ -40,7 +40,7 @@
    * Two columns once the review is wide enough (the pane expanded, the
    * task's own page): the words beside the stage, unclamped.
    */
-  import { waitsOnPick } from "@cawco/core/task-views";
+  import { stageLabel, waitsOnPick } from "@cawco/core/task-views";
   import { commonWords } from "@cawco/core/words/common";
   import {
     taskNeedsWords as needsWords,
@@ -75,7 +75,6 @@
     retryTask,
     reviewOf,
     type StagesView,
-    stageLabel,
     type TaskView,
     type TaskWait,
   } from "../project-tasks";

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stageLabel } from "@cawco/core/task-views";
   /**
    * One custom view of a project and nothing around it (PRD §5.2): what the
    * app shows in a web view, since OpenUI has no Swift renderer. The root
@@ -11,7 +12,6 @@
   import { provideMarkdownFleet } from "#lib/cawco/markdown-fleet.js";
   import { liveMarkdown } from "#lib/cawco/markdown-live.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { stageLabel } from "#lib/cawco/project-tasks.js";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import { viewsOf } from "#lib/cawco/views-api.js";
   import { Button } from "#lib/components/ui/button/index.js";

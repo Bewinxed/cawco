@@ -25,6 +25,7 @@
    * on its surface it puts the words where they go.
    */
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
+  import { stageLabel } from "@cawco/core/task-views";
   import { connectWords } from "@cawco/core/words/connect";
   import { delegateTypesWords } from "@cawco/core/words/delegate-types";
   import { mcpWords } from "@cawco/core/words/mcp";
@@ -40,7 +41,6 @@
     firstAskLabel,
     NO_SESSION_CAN_START,
   } from "#lib/cawco/empty-asks.js";
-  import { stageLabel } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconAlert,
