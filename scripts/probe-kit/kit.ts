@@ -60,6 +60,7 @@ import { scratchKeySpki } from "./cloudflare-front";
 import {
   type BrowserLog,
   browserLog,
+  coreDumpSaid,
   crashText,
   watchBrowser,
   watchContext,
@@ -1240,6 +1241,8 @@ export class Run {
     }
     const contexts: BrowserContext[] = [];
     const ends: (() => Promise<void>)[] = [];
+    /** What a crashed page's renderer died of, being read: the spec waits on it before it ends. */
+    const crashReads: Promise<void>[] = [];
     /** The run's failures before this spec: more after it, and it failed. */
     const failuresBefore = this.failures;
     const out = specOut(spec.name);
@@ -1378,32 +1381,49 @@ export class Run {
         for (const script of options.init ?? []) {
           await context.addInitScript(script);
         }
-        const page = await context.newPage();
         // A crashed renderer answers no DevTools command again, and a CDP
         // session's send waits on it for ever: closing the page rejects
         // every send still waiting, so the crash fails the spec, never hangs it.
-        page.on("crash", () => {
-          const url = page.url();
-          // What it was doing as it died (crash-watch.ts): its last frames'
-          // animations, and its browser's own last lines.
-          if (engine === "webkit") {
-            console.log(
-              `CRASH ${url}\n${crashText(page, this.logs.get(browser))}`
+        // Every page of the context is watched, the tabs a spec opens beside
+        // this one (`context().newPage()`) as much as it.
+        const crashed = (one: Page) => {
+          const at = Date.now();
+          const url = one.url();
+          one.close().catch(() => undefined);
+          if (engine === "chromium") {
+            crashReads.push(
+              this.rendererEndsSaid().then((said) => {
+                kit.check(
+                  "the page's renderer runs to the end",
+                  false,
+                  `${url}; how it ended, as the browser said: ${said}`
+                );
+              })
             );
+            return;
           }
-          page.close().catch(() => undefined);
-          if (engine !== "chromium") {
+          if (engine !== "webkit") {
             kit.check("the page's renderer runs to the end", false, url);
             return;
           }
-          this.rendererEndsSaid().then((said) =>
-            kit.check(
-              "the page's renderer runs to the end",
-              false,
-              `${url}; how it ended, as the browser said: ${said}`
-            )
+          // What it was doing as it died (crash-watch.ts): its last frames'
+          // animations and its browser's own last lines, then how its web
+          // process ended, from its core dump.
+          console.log(
+            `CRASH ${url}\n${crashText(one, this.logs.get(browser))}`
           );
-        });
+          crashReads.push(
+            coreDumpSaid(at).then((said) => {
+              kit.check(
+                "the page's renderer runs to the end",
+                false,
+                `${url}; its web process, as its core dump says:\n  ${said}`
+              );
+            })
+          );
+        };
+        context.on("page", (one) => one.on("crash", crashed));
+        const page = await context.newPage();
         // The page stands for its device in what it points with: a desk's
         // mouse, a touch screen's finger (DESK_POINTER). A leg on a page that
         // does not fails here, before it measures what the owner never sees.
@@ -1443,6 +1463,7 @@ export class Run {
         error instanceof Error ? (error.stack ?? error.message) : String(error)
       );
     } finally {
+      await Promise.all(crashReads);
       for (const context of contexts) {
         await context.close().catch(() => undefined);
       }

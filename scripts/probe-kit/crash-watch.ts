@@ -12,8 +12,15 @@
  *   that is gone.
  * - The crash and the disconnect themselves: the page's `crash` event, and
  *   the browser's `disconnected`.
+ * - How the web process died: a WebKit web process killed by a signal says
+ *   nothing on its stderr (Playwright's `Page crashed` carries no reason
+ *   either), so its core dump is read back from systemd-coredump
+ *   ({@link coreDumpSaid}): the signal and the crashing thread's frames.
+ *   A workspace's boundary hides `coredumpctl`; there the line says so, and
+ *   the host's run names the crash.
  */
 import type { Browser, BrowserContext, Logger, Page } from "playwright-core";
+import { readWithin } from "../../packages/core/src/bounded";
 
 /** How many of the browser's lines, and of the page's frames, a crash says. */
 const LINES = 40;
@@ -179,4 +186,95 @@ export function watchBrowser(
       `the browser disconnected; it said:\n  ${log.lines.slice(-LINES).join("\n  ")}`
     );
   });
+}
+
+/** How long systemd-coredump may take to file a crash's core and its stack. */
+const CORE_WAIT_MS = 20_000;
+const CORE_POLL_MS = 1000;
+/** How long one `coredumpctl info` may take to answer. */
+const CORE_ASK_MS = 10_000;
+/** How many frames of the crashing thread a crash says. */
+const CORE_FRAMES = 24;
+/** The lines of `coredumpctl info` that name the process and its end. */
+const CORE_HEAD = /^\s*(PID|Signal|Executable|Command Line|Timestamp):/u;
+const STACK_START = /^\s*Stack trace of thread/mu;
+/** Where one entry of `coredumpctl info` begins. */
+const ENTRY_START = /\n(?=\s*PID:)/u;
+
+/**
+ * The newest entry of `coredumpctl info`'s answer, once filed whole (its
+ * stack written): the lines naming the process and its signal, then the
+ * crashing thread's top frames; null while it has no stack yet.
+ */
+function coreDumpLines(out: string): string | null {
+  const entry = out.split(ENTRY_START).at(-1) ?? "";
+  if (!STACK_START.test(entry)) {
+    return null;
+  }
+  const lines = entry.split("\n");
+  const head = lines.filter((line) => CORE_HEAD.test(line));
+  const at = lines.findIndex((line) => STACK_START.test(line));
+  const frames = lines
+    .slice(at, at + 1 + CORE_FRAMES)
+    .filter((line) => line.trim() !== "");
+  return [...head, ...frames].map((line) => line.trim()).join("\n  ");
+}
+
+/** One `coredumpctl info` of `comm` since `since` (epoch ms): its exit and what it said. */
+const askCores = (since: number, comm: string) =>
+  readWithin(CORE_ASK_MS, async (signal) => {
+    const asked = Bun.spawn(
+      [
+        "coredumpctl",
+        "--no-pager",
+        "info",
+        `--since=@${Math.floor(since / 1000) - 2}`,
+        comm,
+      ],
+      { env: process.env, signal, stdout: "pipe", stderr: "pipe" }
+    );
+    const [out, err, code] = await Promise.all([
+      new Response(asked.stdout).text(),
+      new Response(asked.stderr).text(),
+      asked.exited,
+    ]);
+    return { code, out, err };
+  });
+
+/**
+ * How the newest `comm` process to dump core since `since` (epoch ms) died,
+ * as systemd-coredump filed it: its signal, then the crashing thread's top
+ * frames. Waits for the filing, which lands seconds after the death; says
+ * why when it reads none (no core in time: a SIGKILL, the kernel's OOM
+ * killer most of all, leaves none; or no `coredumpctl` runs here).
+ */
+export async function coreDumpSaid(
+  since: number,
+  comm = "WPEWebProcess"
+): Promise<string> {
+  if (process.platform !== "linux") {
+    return `no core dump read: ${process.platform} files none where the kit reads`;
+  }
+  const deadline = Date.now() + CORE_WAIT_MS;
+  let last = "nothing";
+  while (Date.now() < deadline) {
+    let asked: Awaited<ReturnType<typeof askCores>>;
+    try {
+      asked = await askCores(since, comm);
+    } catch (error) {
+      return `no core dump read: coredumpctl does not run here (${error instanceof Error ? error.message : String(error)})`;
+    }
+    if (asked.kind === "unanswered") {
+      last = `no answer within ${asked.after} ms`;
+    } else {
+      const { code, out, err } = asked.value;
+      const filed = code === 0 ? coreDumpLines(out) : null;
+      if (filed) {
+        return filed;
+      }
+      last = (err || out).trim().split("\n")[0] || `exit ${code}`;
+    }
+    await Bun.sleep(CORE_POLL_MS);
+  }
+  return `no core dump of ${comm} filed within ${CORE_WAIT_MS / 1000}s (coredumpctl: ${last}): a SIGKILL (the kernel's OOM killer, or a kill) leaves none, or core dumps are off here`;
 }
