@@ -47,7 +47,7 @@
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
  * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a segment excepted), within 1.5px or a tenth (a quarter at a corner) |
- * | glyph-place | own code                    | a control in a bar whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count's box clear of the glyph's box, a badge on the corner taking no room |
+ * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count's box clear of the glyph's box, a badge on the corner taking no room |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
  * each specimen that stands for a screen of its own carries `data-specimen`,
@@ -3957,14 +3957,39 @@ function readInPage(args: InPageArgs): InPageRead {
   // containing white text and either a number or an exclamation point — on
   // a tab"), so a counted item is its neighbours' shape, its glyph as far
   // from the fill's start as from its end, and the badge never lies on the
-  // glyph. A control in a bar whose only content is one glyph and at most a
-  // count is read: its glyph's centre within 1px of its box's on each axis,
-  // and the count's box clear of the glyph's box. Read at rest: where they
-  // stand is the same in every state, and the fill is the control's own box.
+  // glyph. A control standing in a bar's capsule of glass (the nearest box
+  // over it that draws, its own or a placed pseudo's, round at half its
+  // height) whose only content is one glyph and at most a count is read:
+  // its glyph's centre within 1px of its box's on each axis, and the count's
+  // box clear of the glyph's box. A bare glyph on a bar's ground (the
+  // phone's sidebar toggle, standing on the tabs' line in its touch area)
+  // draws no fill to centre in. Read at rest: where they stand is the same
+  // in every state, and the fill is the control's own box.
   if (!skip.has("glyph-place")) {
     const COUNT = /^\d{1,4}\+?$/u;
+    /** Whether a contour is a capsule: every corner round at half its shorter side. */
+    const capsule = (c: Contour) => {
+      const half = Math.min(c.right - c.left, c.bottom - c.top) / 2;
+      return c.r.every(([x, y]) => Math.min(x, y) >= half - 0.5);
+    };
+    /** Whether `el` stands in a capsule of glass: the nearest box over it that draws is one. */
+    const inGlass = (el: Element) => {
+      for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+        if (paints(up).length > 0) {
+          return capsule(contourOf(up));
+        }
+        for (const which of ["::before", "::after"] as const) {
+          const ps = pseudoOf(up, which);
+          const c = ps && paintsOf(ps).length > 0 ? pseudoBox(up, ps) : null;
+          if (c) {
+            return capsule(c);
+          }
+        }
+      }
+      return false;
+    };
     for (const el of controls) {
-      if (!el.closest(BAR)) {
+      if (!(el.closest(BAR) && inGlass(el))) {
         continue;
       }
       const marks = glyphs.filter((drawn) => {

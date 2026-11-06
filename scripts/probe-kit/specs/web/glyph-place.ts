@@ -20,6 +20,9 @@
  *     neighbour.
  *  4. words: a control with its name beside its glyph is not read.
  *  5. off a bar: a lone glyph button on the page is not read.
+ *  6. bare on the bar: a glyph standing off its 44px box's centre on a
+ *     bar's ground, in no glass (the phone's sidebar toggle on the tabs'
+ *     line), is not read.
  *
  *   bun scripts/probe-kit/run.ts web glyph-place
  */
@@ -76,6 +79,10 @@ const FIXTURES: Record<string, Fixture> = {
     html: `${BASE}<header><div class="glass">
   <button type="button" style="padding-inline: 6px 10px; gap: 6px">${GLYPH}<span>Comments</span></button>
 </div></header>`,
+    want: null,
+  },
+  "bare on the bar": {
+    html: `${BASE}<header><button type="button" aria-label="Open navigation" style="display: inline-flex; block-size: 44px; inline-size: 44px; padding: 17px 14px 9px 12px">${GLYPH}</button></header>`,
     want: null,
   },
   "off a bar": {
