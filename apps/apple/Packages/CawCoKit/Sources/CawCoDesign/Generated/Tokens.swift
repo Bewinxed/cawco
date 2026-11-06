@@ -673,10 +673,8 @@ public enum Size {
     public static let cBarItem: Double = 28
     /// A symbol in a bar's glass group (the top bar's, a head's): sized to the bar's text as SF Symbols are ("relative to the cap height of the San Francisco system font"), so a line glyph at 18px inks about 15px beside the head's 16px title. It was 20px in the bold-duotone cut, which the owner pinned as far too big (artifact panel, 2026-11-05).
     public static let cBarSymbol: Double = 18
-    /// The room a pane keeps at its content's top while its head floats over it (Liquid Glass: content runs to the top edge and scrolls beneath the controls): the head's glass, its inset above and the same gap below, so the content's first line starts clear of the glass and scrolls under it.
+    /// The room a side card keeps at its top while its head floats as glass (Liquid Glass: no bar behind the controls): the head's glass, its inset above and the same gap below; the page stands under it.
     public static let cHeadRoom: Double = 50
-    /// The scroll edge effect under a floating head: the head's room and a fade a step deep under it, where what scrolls beneath the glass blurs and washes toward the panel's ground.
-    public static let cScrollEdgeH: Double = 64
     /// What a page beside the floating Comments rail leaves it: the rail's width and its inset on both sides, the page's ground running on beneath the glass.
     public static let cRailFloatRoom: Double = 334
     /// The corner of a panel whose head floats as glass over its content (the artifact panel): its glass capsules' radius plus their inset from its edge, so a capsule in its corner is concentric with it (Adopting Liquid Glass: windows "adopt rounder corners to fit controls"); the Comments rail floating over the page takes the same corner, so the capsules of its own bar are concentric with it.

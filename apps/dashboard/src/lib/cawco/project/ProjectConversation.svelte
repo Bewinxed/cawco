@@ -86,8 +86,8 @@
   import {
     IconChatAdd,
     IconClose,
-    IconListRows,
-    IconMoveTab,
+    IconListRowsLinear,
+    IconMoveTabLinear,
     IconPlus,
   } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
@@ -508,7 +508,7 @@
             <BarItem
               aria-expanded={cardOpen}
               aria-haspopup="dialog"
-              icon={IconListRows}
+              icon={IconListRowsLinear}
               label={transcriptWords.sessionDetails}
               onclick={cardPress}
               onpointerenter={(event: PointerEvent) => {
@@ -525,7 +525,7 @@
             />
             <BarItem
               href={rowHref(shown ?? "")}
-              icon={IconMoveTab}
+              icon={IconMoveTabLinear}
               label={conversationWords.openAsTab}
             />
           </BarGlass>

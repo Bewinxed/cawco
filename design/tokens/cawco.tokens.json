@@ -4227,23 +4227,10 @@
         "value": 50,
         "unit": "px"
       },
-      "$description": "The room a pane keeps at its content's top while its head floats over it (Liquid Glass: content runs to the top edge and scrolls beneath the controls): the head's glass, its inset above and the same gap below, so the content's first line starts clear of the glass and scrolls under it.",
+      "$description": "The room a side card keeps at its top while its head floats as glass (Liquid Glass: no bar behind the controls): the head's glass, its inset above and the same gap below; the page stands under it.",
       "$extensions": {
         "dev.cawco": {
           "css": "calc({size.c-btn-h} + 2 * {space.space-2})"
-        }
-      }
-    },
-    "c-scroll-edge-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 64,
-        "unit": "px"
-      },
-      "$description": "The scroll edge effect under a floating head: the head's room and a fade a step deep under it, where what scrolls beneath the glass blurs and washes toward the panel's ground.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc({size.c-head-room} + {space.space-4})"
         }
       }
     },

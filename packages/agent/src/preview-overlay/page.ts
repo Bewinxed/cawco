@@ -238,7 +238,13 @@ shadow.append(sheet, layer, highlight, label);
 const TARGET_ANCHOR = anchorName();
 const TARGET_PART = "cawco-target";
 const anchoring = document.createElement("style");
-anchoring.textContent = `cawco-overlay::part(${TARGET_PART}) { ${onAnchor(TARGET_ANCHOR)} }`;
+// The anchor's rule, and the page's scrollbar left undrawn where the host
+// asks (`:root[data-cawco-bare-scroll]`, the artifact panel's): the page
+// still scrolls, by wheel, touch and keys, and no bar of its own stands
+// in the panel between the page and the glass beside it.
+anchoring.textContent = `cawco-overlay::part(${TARGET_PART}) { ${onAnchor(TARGET_ANCHOR)} }
+:root[data-cawco-bare-scroll] { scrollbar-width: none !important; }
+:root[data-cawco-bare-scroll]::-webkit-scrollbar { display: none !important; }`;
 host.append(anchoring);
 document.documentElement.append(host);
 
@@ -3422,6 +3428,12 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       document.documentElement.toggleAttribute(
         "data-cawco-headed",
         (message as { headed?: unknown }).headed === true
+      );
+      // A host that draws no scrollbar beside the page (the artifact
+      // panel's): the page's own is left undrawn.
+      document.documentElement.toggleAttribute(
+        "data-cawco-bare-scroll",
+        (message as { bareScroll?: unknown }).bareScroll === true
       );
       // The host names the artifact this page is, and where its doc is synced.
       const hello = message as {

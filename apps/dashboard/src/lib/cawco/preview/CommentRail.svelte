@@ -64,17 +64,22 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconAgent,
-    IconChevronDown,
     IconClose,
     IconDocument,
     IconPlus,
     IconRefresh,
     IconSearch,
+    IconSortLinear,
     IconSuccess,
     IconUser,
   } from "#lib/icons.js";
@@ -91,6 +96,7 @@
   import {
     attachedTo,
     lastActivity,
+    type RailList,
     type RailSort,
     STRIP,
     searched,
@@ -185,7 +191,7 @@
       changes: Snippet<[Pin]>;
       unasked: Snippet | null;
     };
-    filter?: "check" | "open" | "resolved";
+    filter?: RailList;
     sort?: RailSort;
     scroll?: number;
   } = $props();
@@ -229,6 +235,8 @@
 
   const openPins = $derived(pins.filter((pin) => !pin.resolvedAt));
   const resolvedPins = $derived(pins.filter((pin) => !!pin.resolvedAt));
+  /** What he holds to send together (core `pinHeld`): its own list while it holds any. */
+  const heldPins = $derived(pins.filter(pinHeld));
   /** A comment waiting on him: an answer he hasn't read. */
   const waitsOnYou = (pin: Pin) => unread.has(pin.id) && !live.has(pin.id);
   /**
@@ -268,15 +276,25 @@
     if (filter === "check" && checks) {
       return checks.pins.flatMap((id) => pins.filter((pin) => pin.id === id));
     }
+    const inFront: Record<Exclude<RailList, "check">, Pin[]> = {
+      open: openPins,
+      resolved: resolvedPins,
+      held: heldPins,
+    };
     return waitingFirst(
-      sortedPins(filter === "open" ? openPins : resolvedPins, sort)
+      sortedPins(inFront[filter === "check" ? "open" : filter], sort)
     );
   });
   const failed = $derived(typeof hold === "object" ? hold.failed : null);
   /** A list's count once the pins are read, and only above 0 (The Earned Count Rule). */
   const counted = (count: number) =>
     hold === "ready" && count > 0 ? count : null;
-  /** Each list the title menu chooses: its name and its count. */
+  /**
+   * The lists, each a segment under the bar with its count (HIG, Segmented
+   * controls: "a segmented control can … switch between closely related
+   * views"): To check while what changed since he looked waits, Open,
+   * Resolved, and Held while he holds any; one stands chosen.
+   */
   const lists = $derived([
     ...(checks
       ? [{ value: "check" as const, name: said.toCheck, count: checks.count }]
@@ -287,16 +305,24 @@
       name: said.resolved,
       count: resolvedPins.length,
     },
+    ...(heldPins.length > 0
+      ? [{ value: "held" as const, name: said.held, count: heldPins.length }]
+      : []),
   ]);
-  const inFront = $derived(
-    lists.find((one) => one.value === filter) ?? lists[0]
-  );
-  /** To check holds comments while another list is in front: the title's dot says so. */
-  const waiting = $derived(
-    checks && filter !== "check" && hold === "ready" && checks.count > 0
-      ? checks.count
-      : 0
-  );
+  /** A segment's words: the list's name, and its count once read and above 0 (The Earned Count Rule). */
+  const segment = (name: string, count: number) => {
+    const n = counted(count);
+    return n === null ? name : `${name} ${n}`;
+  };
+  // The list in front goes when it does (Held once all of it is sent, To
+  // check once nothing waits): Open stands in its place.
+  $effect(() => {
+    if (hold === "ready" && !lists.some((one) => one.value === filter)) {
+      untrack(() => {
+        filter = "open";
+      });
+    }
+  });
   /** The query's words, for the matching words a row marks. */
   const marked = $derived(parse(asked).tokens);
 
@@ -693,7 +719,7 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full data-[layout=beside]:not-in-data-rail-float:bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  class="flex flex-col min-h-0 w-c-comments-w max-w-full data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
 >
   <!-- One row: Close leading on the sheet, the title menu, the glass;
        searching, the field and its Close. The title names a part of the
@@ -755,157 +781,146 @@
         >
       </BarGlass>
     {:else}
-      {#if layout === "sheet"}
+      <!-- Leading: Close, on the phone's sheet (HIG, Sheets: a sheet's
+           Cancel or Close leads its bar); a cell as wide as the trailing
+           one, so the title stands in the bar's centre. -->
+      <div class="flex min-w-0 flex-1 basis-0 items-center" data-slot="lead">
+        {#if layout === "sheet"}
+          <BarGlass form="group">
+            <BarItem
+              data-slot="close"
+              icon={IconClose}
+              label={said.closeComments}
+              onclick={onclose}
+            />
+          </BarGlass>
+        {/if}
+      </div>
+      <!-- The title names the sheet or the rail (HIG, Sheets: the title in
+           the bar's centre), in the bar's own title role. -->
+      <h2
+        class="m-0 flex-none truncate text-ink-strong type-label"
+        data-slot="title"
+      >
+        {said.comments}
+      </h2>
+      <div
+        class="flex min-w-max flex-1 basis-0 items-center justify-end gap-space-1 coarse:gap-space-5"
+        data-slot="trail"
+      >
         <BarGlass form="group">
           <BarItem
-            data-slot="close"
-            icon={IconClose}
-            label={said.closeComments}
-            onclick={onclose}
+            aria-keyshortcuts="/"
+            icon={IconSearch}
+            keys="/"
+            label={said.searchComments}
+            onclick={focusSearch}
+            bind:ref={searchButton}
           />
-        </BarGlass>
-      {/if}
-      <div class="flex min-w-0 flex-1">
-        <BarGlass flare="end" form="title">
+          {#if layout === "beside" && pageComposer}
+            <!-- A comment on the whole page: its composer unfolds under the
+               bar, inside the rail, as Send all's note does: every field the
+               bar opens takes the one place, at the rail's width. -->
+            <BarItem
+              expanded={pageOpen}
+              icon={IconPlus}
+              label={said.onWholePage}
+              onclick={() => {
+                if (pageOpen) {
+                  onpageclose?.();
+                } else {
+                  noting = false;
+                  onpage();
+                }
+              }}
+              open={pageOpen}
+            />
+          {:else}
+            <BarItem
+              icon={IconPlus}
+              label={said.onWholePage}
+              onclick={onpage}
+            />
+          {/if}
+          <!-- The order the rows come in, a menu hung from its symbol (HIG,
+             Toolbars: a menu for related choices). -->
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
                 <BarItem
-                  data-slot="list"
-                  form="title"
-                  label={`${said.whichComments}: ${inFront?.name ?? ""}${waiting ? `, ${said.toCheckWaiting(waiting)}` : ""}`}
+                  data-slot="sort"
+                  icon={IconSortLinear}
+                  label={said.sort}
                   {props}
-                  tip={false}
-                >
-                  <span
-                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-label"
-                    data-slot="title">{inFront?.name}</span
-                  >
-                  {#if inFront && counted(inFront.count) !== null}
-                    <span
-                      class="flex-none text-ink-muted type-label num group-aria-expanded/bar-item:text-ink-strong"
-                      data-slot="count">{counted(inFront.count)}</span
-                    >
-                  {/if}
-                  {#if waiting}
-                    <!-- To check holds comments while another list is in front:
-                         said in words beside the title, the needs-you dot
-                         leading them (DESIGN.md, Status dot), never the dot
-                         alone. -->
-                    <span
-                      aria-hidden="true"
-                      class="flex flex-none items-center gap-space-1 text-ink-strong type-label mark-line"
-                      data-box
-                      data-slot="waiting"
-                      ><span
-                        class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
-                        data-box
-                      ></span><span class="num"
-                        >{said.toCheckWaiting(waiting)}</span
-                      ></span
-                    >
-                  {/if}
-                  <IconChevronDown
-                    aria-hidden="true"
-                    class="size-icon-sm flex-none text-ink-muted"
-                  />
-                </BarItem>
+                />
               {/snippet}
             </DropdownMenu.Trigger>
-            <BarMenu label={said.whichComments}>
+            <BarMenu label={said.order}>
               <DropdownMenu.RadioGroup
                 onValueChange={(next) => {
-                  filter = next as "check" | "open" | "resolved";
+                  sort = next === "top" ? "top" : "newest";
                 }}
-                value={filter}
+                value={sort}
               >
-                {#each lists as one (one.value)}
-                  <DropdownMenu.RadioItem value={one.value}
-                    ><span class="min-w-0 flex-1">{one.name}</span
-                    >{#if counted(one.count) !== null}<span
-                        class="text-ink-muted num">{counted(one.count)}</span
-                      >{/if}</DropdownMenu.RadioItem
-                  >
-                {/each}
+                <DropdownMenu.RadioItem value="newest"
+                  >{said.newestFirst}</DropdownMenu.RadioItem
+                >
+                <DropdownMenu.RadioItem value="top"
+                  >{said.topOfPageFirst}</DropdownMenu.RadioItem
+                >
               </DropdownMenu.RadioGroup>
-              <DropdownMenu.Separator />
-              <DropdownMenu.Group>
-                <DropdownMenu.GroupHeading
-                  >{said.order}</DropdownMenu.GroupHeading
-                >
-                <DropdownMenu.RadioGroup
-                  onValueChange={(next) => {
-                    sort = next === "top" ? "top" : "newest";
-                  }}
-                  value={sort}
-                >
-                  <DropdownMenu.RadioItem value="newest"
-                    >{said.newestFirst}</DropdownMenu.RadioItem
-                  >
-                  <DropdownMenu.RadioItem value="top"
-                    >{said.topOfPageFirst}</DropdownMenu.RadioItem
-                  >
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Group>
             </BarMenu>
           </DropdownMenu.Root>
         </BarGlass>
-      </div>
-      <BarGlass form="group">
-        <BarItem
-          aria-keyshortcuts="/"
-          icon={IconSearch}
-          keys="/"
-          label={said.searchComments}
-          onclick={focusSearch}
-          bind:ref={searchButton}
-        />
-        {#if layout === "beside" && pageComposer}
-          <!-- A comment on the whole page: its composer unfolds under the
-               bar, inside the rail, as Send all's note does: every field the
-               bar opens takes the one place, at the rail's width. -->
-          <BarItem
-            expanded={pageOpen}
-            icon={IconPlus}
-            label={said.onWholePage}
-            onclick={() => {
-              if (pageOpen) {
-                onpageclose?.();
-              } else {
-                noting = false;
-                onpage();
-              }
-            }}
-            open={pageOpen}
-          />
-        {:else}
-          <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
-        {/if}
-      </BarGlass>
-      {#if held > 0 && onsendheld}
-        <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
+        {#if held > 0 && onsendheld}
+          <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
              "Only specify one primary action, and put it on the trailing
              side"), its count what it sends; pressed, its note unfolds
              under the bar, whose own Send is then the one action and this
              one steps down to the outline. -->
-        <Button
-          aria-expanded={noting}
-          aria-label={said.sendHeldLabel(held)}
-          data-slot="send-held"
-          onclick={() => {
-            noting = !noting;
-            noteRefused = null;
-            if (noting && pageOpen) {
-              onpageclose?.();
-            }
-          }}
-          shape="capsule"
-          variant={noting ? "outline" : "default"}
-          ><span>{said.send}</span><span class="num">{held}</span></Button
-        >
-      {/if}
+          <Button
+            aria-expanded={noting}
+            aria-label={said.sendHeldLabel(held)}
+            data-slot="send-held"
+            onclick={() => {
+              noting = !noting;
+              noteRefused = null;
+              if (noting && pageOpen) {
+                onpageclose?.();
+              }
+            }}
+            shape="capsule"
+            variant={noting ? "outline" : "default"}
+            ><span>{said.send}</span><span class="num">{held}</span></Button
+          >
+        {/if}
+      </div>
     {/if}
   </header>
+  {#if !searching}
+    <!-- The lists, every one in view with its count, as a segmented
+         control under the bar, the rail's width (HIG, Segmented controls;
+         the owner's pin 5: a dropdown hid the other lists until opened). -->
+    <div
+      class="flex flex-none *:min-w-0 *:flex-1 px-space-2 pb-space-2"
+      data-slot="lists"
+    >
+      <Tabs
+        onValueChange={(next) => {
+          filter = next as RailList;
+        }}
+        size="compact"
+        value={filter}
+        values={lists.map((one) => one.value)}
+      >
+        <TabsList aria-label={said.whichComments} fill>
+          {#each lists as one (one.value)}
+            <TabItem label={segment(one.name, one.count)} value={one.value} />
+          {/each}
+        </TabsList>
+      </Tabs>
+    </div>
+  {/if}
   {#if layout === "beside" && pageOpen && pageComposer}
     <!-- The whole page's composer, under the bar where + was pressed;
          under a finger its field stands clear of the bar's controls, so
@@ -978,9 +993,13 @@
       reason={LINK_DROPPED}
     />
   {/if}
+  <!-- No scrollbar of its own: its edge fades say there is more, and its
+       width never changes as the list outgrows the rail (a scrollbar
+       there stood beside the page as a stray one, the owner's note on
+       Beside the page). -->
   <div
     data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain scrollbar-gutter-stable kit-edge-fade-block"
+    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain no-scrollbar kit-edge-fade-block"
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}

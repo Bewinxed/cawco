@@ -19,6 +19,9 @@
    *   in by the slopes; a choice travels over `--choose-dur` on
    *   `--choose-ease`, every part of it together (the owner's "Slow ·
    *   400ms").
+   * - `fill`: the track spans its row and its segments share it evenly (a
+   *   sheet's or a pane's lists under its bar, HIG Segmented controls),
+   *   each label giving way inside its own ellipsis.
    * - `scrollable`: hugs its items and gives way, never grows, when its row
    *   is narrower than they are; the edges fade the tabs past them
    *   (`kit-edge-fade`), and a chosen tab is brought clear of each fade.
@@ -59,6 +62,9 @@
         segmented: `${SEGMENTED_TRACK} [--sheet:var(--surface-lift)]`,
         folder:
           "isolate gap-0 rounded-none bg-transparent [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--radius:var(--radius-sm)] [--sheet:var(--surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
+      },
+      fill: {
+        true: "flex w-full min-w-0 [&>[data-slot=ff-tab]]:min-w-0 [&>[data-slot=ff-tab]]:flex-1",
       },
       scrollable: {
         true: "kit-edge-fade no-scrollbar min-w-0 max-w-full flex-[0_1_auto] overflow-x-auto overflow-y-hidden [--edge-room-end:var(--fade-len)] [--edge-room-start:var(--fade-len)] [&>[data-slot=ff-tab]]:shrink-0",
@@ -127,10 +133,13 @@
   let {
     class: className,
     scrollable = false,
+    fill = false,
     children,
     ...rest
   }: HTMLAttributes<HTMLDivElement> & {
     scrollable?: boolean;
+    /** The track spans its row, its segments sharing it evenly. */
+    fill?: boolean;
     children: Snippet;
   } = $props();
 
@@ -1217,6 +1226,7 @@
       size: tabs.size,
       variant: tabs.variant,
       scrollable,
+      fill,
       strip: tabs.strip,
     }),
     className

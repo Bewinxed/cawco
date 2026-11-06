@@ -11,7 +11,7 @@
   import { previewWords } from "@cawco/core/words/preview";
   import { BarItem, BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { IconLayers } from "#lib/icons.js";
+  import { IconLayers, IconLayersLinear } from "#lib/icons.js";
   import type { CanvasViewState } from "./canvas-view.svelte";
 
   interface Props {
@@ -54,7 +54,7 @@
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
         <BarItem
-          icon={IconLayers}
+          icon={IconLayersLinear}
           label={previewWords.canvasView}
           {props}
           tip="Canvas view: map, verify"

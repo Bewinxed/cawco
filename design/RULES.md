@@ -303,7 +303,7 @@ Under "Empty, loading and skeleton states" (DESIGN.md line 543); rule at line 55
 
 Under "Icons" (DESIGN.md line 569); rule at line 570.
 
-**The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts` (packages/icons): one face product-wide. The duotone's second layer is `currentColor` at 50%. A status glyph keeps its `status-*-glyph` hue and holds 3:1 as a whole on its surfaces. Chevrons, arrows and the kit's CopyButton take Solar's linear cut. Close, Plus and Tick are local glyphs on Solar's 24px grid with a 1.5 linear stroke and round caps; the Tick is also the done glyph, in `status-done-glyph`. An icon is the glyph alone: no circle, square, squircle or box stands round it, and where Solar ships only a contained cut, a container-less glyph is drawn in Solar's style.
+**The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts` (packages/icons); a bar's symbols, chevrons, arrows and CopyButton take Solar's linear cut (`…Linear`, house/bar-symbol-linear). The duotone's second layer is `currentColor` at 50%. A status glyph keeps its `status-*-glyph` hue and holds 3:1 as a whole on its surfaces. Close, Plus and Tick are local glyphs on Solar's 24px grid, a 1.5 stroke with round caps; the Tick is also the done glyph, in `status-done-glyph`. An icon is the glyph alone, no container round it; where Solar ships only a contained cut, a bare one is drawn in its style.
 - **Sizes:** 12px beside meta text, 16px in controls and rows (the default), 20px in nav and headers.
 
 ## The Caret Rule

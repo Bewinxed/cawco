@@ -279,7 +279,7 @@
 
 <svelte:window onkeydown={sendKey} />
 
-<!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The column and the foot's row stand at one width (`--column-w`, design.css `decision-page-insets`) and the scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges. The column clips sideways (`overflow-x-clip`, which no script can scroll), so the scroller has nothing to scroll sideways: a frame wider than its well for the frame before its well clips it (a window narrowed), with anything scrolled into view meanwhile, scrolled the column off the foot's edges, the foot standing outside the scroller; under the phone's line neither keeps one and its bar is drawn by nothing (`no-scrollbar`), as a phone draws none in the page's room: a window's scrollbar took 20px of it, so a 390 story stood in a 370 well and lost its last 20px. -->
+<!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The column and the foot's row stand at one width (`--column-w`, design.css `decision-page-insets`) and the scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges. The column clips sideways (`overflow-x-clip`, which no script can scroll), so the scroller has nothing to scroll sideways: a frame wider than its well for the frame before its well clips it (a window narrowed), with anything scrolled into view meanwhile, scrolled the column off the foot's edges, the foot standing outside the scroller; under the phone's line, and in the artifact panel (overlay `data-cawco-bare-scroll`, whose page and rail draw no scrollbar beside the glass), neither keeps one and its bar is drawn by nothing (`no-scrollbar`), as a phone draws none in the page's room: a window's scrollbar took 20px of it, so a 390 story stood in a 370 well and lost its last 20px. -->
 <main
   class="group/page decision-page-insets grid h-dvh min-w-0 grid-rows-page-foot pb-(--page-inset-bottom)"
   data-pictured={storyWidth > 0 ? "" : undefined}
@@ -289,7 +289,7 @@
 >
   <div
     bind:this={scroller}
-    class="kit-edge-fade-block min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable max-phone:no-scrollbar"
+    class="kit-edge-fade-block min-h-0 overflow-y-auto overscroll-y-contain scrollbar-gutter-stable max-phone:no-scrollbar in-data-cawco-bare-scroll:no-scrollbar"
     data-slot="page-scroll"
   >
     <div
@@ -344,7 +344,7 @@
   <!-- Its words and Send on one row at a desk; under a finger the count's bar gives way first, then Send wraps under the count. -->
   <footer
     {@attach morph()}
-    class="min-w-0 overflow-hidden pt-space-3 pb-safe-space-3 scrollbar-gutter-stable max-phone:no-scrollbar"
+    class="min-w-0 overflow-hidden pt-space-3 pb-safe-space-3 scrollbar-gutter-stable max-phone:no-scrollbar in-data-cawco-bare-scroll:no-scrollbar"
     data-safe-bottom
     data-slot="page-foot"
   >

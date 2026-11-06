@@ -7,7 +7,7 @@
    */
   import type { Snippet } from "svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { IconMore } from "#lib/icons.js";
+  import { IconMoreLinear } from "#lib/icons.js";
   import BarGlass from "./bar-glass.svelte";
   import BarItem from "./bar-item.svelte";
   import BarMenu from "./bar-menu.svelte";
@@ -32,7 +32,7 @@
   <DropdownMenu.Root {onOpenChange}>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <BarItem icon={IconMore} {label} {props} />
+        <BarItem icon={IconMoreLinear} {label} {props} />
       {/snippet}
     </DropdownMenu.Trigger>
     <BarMenu {label} {width}>

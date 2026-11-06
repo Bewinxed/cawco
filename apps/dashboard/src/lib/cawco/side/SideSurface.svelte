@@ -37,8 +37,10 @@
   import {
     IconClose,
     IconMaximize,
+    IconMaximizeLinear,
     IconMinimize,
-    IconMore,
+    IconMinimizeLinear,
+    IconMoreLinear,
   } from "#lib/icons.js";
   import { sideExpand } from "./expand";
   import {
@@ -130,14 +132,14 @@
      */
     beside?: Snippet;
     /**
-     * The head floats as glass over the well (Adopting Liquid Glass:
-     * "Liquid Glass applies to the topmost layer of the interface", content
-     * "scrolls beneath controls"): the well fills the card to its edges, the
-     * head's groups stand over its top on the scroll edge effect, and the
-     * content keeps `--c-head-room` at its top so its first line starts
-     * clear of the glass. What stands `beside` floats too, placed by its
-     * own `data-rail-float` (over the page, or beside it with the page
-     * stopping short of it).
+     * The head floats as glass over the card's ground (Adopting Liquid
+     * Glass: "Liquid Glass applies to the topmost layer of the interface"):
+     * no bar behind it, its groups capsules of glass in the head's room
+     * (`--c-head-room`), the well filling the card's width under that room
+     * to its foot. The page stands under the room, never under the glass: a
+     * page is another document (an artifact's frame), whose own layout a
+     * head over its top would cover. What stands `beside` floats too
+     * (RailFloat), the well stopping short of it.
      */
     float?: boolean;
     /** The well's content. */
@@ -504,7 +506,7 @@
   {#if expand}
     <BarItem
       aria-keyshortcuts={expanded ? "Escape" : undefined}
-      icon={expanded ? IconMinimize : IconMaximize}
+      icon={expanded ? IconMinimizeLinear : IconMaximizeLinear}
       keys={expanded ? "Esc" : undefined}
       label={expanded ? expand.backLabel : "Expand"}
       onclick={() => expand.toggle()}
@@ -666,7 +668,7 @@
                   <BarItem
                     count={moreCount?.n}
                     data-slot="more"
-                    icon={IconMore}
+                    icon={IconMoreLinear}
                     label={moreCount
                       ? `More, ${moreCount.of} ${moreCount.n} open`
                       : "More"}
@@ -701,19 +703,6 @@
       {@render closeGlass()}
     {/if}
   </header>
-  {#if float}
-    <!-- The scroll edge effect (Adopting Liquid Glass: a scroll view's
-         edge effect "helps maintain sufficient legibility and contrast for
-         controls by obscuring content that scrolls beneath them"): what
-         passes under the head is blurred and washed toward the card's
-         ground, fading out a step under the glass. At rest the page's own
-         room is under it, so it draws nothing a reader sees. -->
-    <div
-      aria-hidden="true"
-      data-slot="scroll-edge"
-      class="pointer-events-none absolute inset-x-0 top-0 z-1 h-c-scroll-edge-h bg-linear-to-b from-material-panel to-transparent glass-backdrop mask-b-from-40% reduced-transparency:backdrop-filter-none contrast-more:backdrop-filter-none"
-    ></div>
-  {/if}
   {#if recessed}
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
@@ -730,7 +719,7 @@
         data-side-well
         data-mode={mode && mode !== "interact" ? mode : undefined}
         data-ringed={mode ? "" : undefined}
-        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden concentric-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-float/card:rounded-none group-data-float/card:border-0 group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden concentric-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-float/card:mt-c-head-room group-data-float/card:rounded-none group-data-float/card:border-0 group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
         bind:this={well}
       >
         {@render children()}

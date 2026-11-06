@@ -92,17 +92,24 @@
     IconArchive,
     IconChat,
     IconExternal,
+    IconExternalLinear,
     IconGlobe,
     IconInteract,
+    IconInteractLinear,
     IconLock,
     IconPen,
+    IconPenLinear,
     IconPin,
+    IconPinLinear,
     IconPlus,
     IconRefresh,
+    IconRefreshLinear,
     IconSend,
     IconTrash,
     IconTuning,
+    IconTuningLinear,
     IconUndock,
+    IconUndockLinear,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
@@ -143,15 +150,7 @@
     markdownFleetAbove,
     provideMarkdownFleet,
   } from "../markdown-fleet";
-  import {
-    appear,
-    dur,
-    easeDrawer,
-    easeOut,
-    motionOk,
-    numberOf,
-    revealOn,
-  } from "../motion/curves.svelte";
+  import { appear, dur, numberOf, revealOn } from "../motion/curves.svelte";
   import { landKey } from "../motion/keyed.svelte";
   import { settleAway } from "../motion/rest.js";
   import { closeInto } from "../motion/share.svelte";
@@ -162,6 +161,7 @@
   import { runShellShortcut } from "../shell-shortcut";
   import { sideExpand } from "../side/expand";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
+  import RailFloat from "../side/RailFloat.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, unstore, writeJson } from "../storage";
   import { toast } from "../toasts";
@@ -196,6 +196,7 @@
   import {
     commentAttachments,
     NEXT_COMMENT,
+    type RailList,
     type RailSort,
   } from "./comment-rows";
   import { loadedPanes } from "./loaded.svelte";
@@ -311,28 +312,6 @@
   let pinsShown = $state(true);
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
-  /** The rail in from the well's end, its width growing from none over `--dur-panel` on `--ease-drawer`; with less motion it fades. */
-  function railIn(node: HTMLElement) {
-    const width = node.offsetWidth;
-    return motionOk.current
-      ? {
-          duration: dur("--dur-panel"),
-          easing: easeDrawer,
-          css: (t: number) => `width: ${t * width}px; opacity: ${t}`,
-        }
-      : { duration: dur("--dur-fade"), css: (t: number) => `opacity: ${t}` };
-  }
-  /** The rail out over `--dur-exit`, its width closing to none; with less motion it fades. */
-  function railOut(node: HTMLElement) {
-    const width = node.offsetWidth;
-    return motionOk.current
-      ? {
-          duration: dur("--dur-exit"),
-          easing: easeOut,
-          css: (t: number) => `width: ${t * width}px; opacity: ${t}`,
-        }
-      : { duration: dur("--dur-exit"), css: (t: number) => `opacity: ${t}` };
-  }
   let connected = $state(false);
   let loaded = $state(false);
   let reload = $state(0);
@@ -1899,6 +1878,9 @@
         // The head names the page by its title: a page that says it too (a
         // decision page's own title) leaves it out (overlay `data-cawco-headed`).
         headed: !inset,
+        // The panel draws no scrollbar beside the page: the page's own is
+        // left undrawn (overlay `data-cawco-bare-scroll`), as its rail's is.
+        bareScroll: !inset,
         ...(artifact
           ? {
               artifact: {
@@ -2086,7 +2068,7 @@
     };
   });
   /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
-  let listFilter = $state<"check" | "open" | "resolved">("open");
+  let listFilter = $state<RailList>("open");
   let listScroll = $state(0);
   /**
    * What the host's chrome covers of the page, told to its overlay
@@ -3682,13 +3664,18 @@
    */
   const placingThread = $derived(placing !== null && placing === openPin);
   /** The list in front holds nothing: the sheet stands low, never half its room empty (ThreadSheet `short`). */
-  const railEmpty = $derived(
-    listFilter === "check"
-      ? checkCount === 0
-      : !pins.some((pin) =>
-          listFilter === "open" ? !pin.resolvedAt : !!pin.resolvedAt
-        )
-  );
+  const railEmpty = $derived.by(() => {
+    switch (listFilter) {
+      case "check":
+        return checkCount === 0;
+      case "held":
+        return !pins.some(pinHeld);
+      case "resolved":
+        return !pins.some((pin) => !!pin.resolvedAt);
+      case "open":
+        return !pins.some((pin) => !pin.resolvedAt);
+    }
+  });
   /** Back, in the sheet: the list again, the thread gone at once (no card goes back into a pill). */
   function backToList() {
     closeCard();
@@ -3927,9 +3914,9 @@
 
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
-    interact: IconInteract,
-    comment: IconPin,
-    draw: IconPen,
+    interact: IconInteractLinear,
+    comment: IconPinLinear,
+    draw: IconPenLinear,
   } as const satisfies Record<PreviewMode, unknown>;
   const MODE_WORDS: Record<PreviewMode, string> = {
     interact: "Interact",
@@ -4218,7 +4205,7 @@
   <BarItem
     data-slot="other"
     aria-disabled={!stage || undefined}
-    icon={IconUndock}
+    icon={IconUndockLinear}
     label="Undock"
     onclick={() => {
       if (stage) {
@@ -4239,7 +4226,7 @@
     <BarItem
       data-slot="other"
       href={`/artifact/${encodeURIComponent(artifact.id)}`}
-      icon={IconExternal}
+      icon={IconExternalLinear}
       label="Open in new tab"
       props={{ rel: "noopener", target: "_blank" }}
     />
@@ -4287,7 +4274,7 @@
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
   <BarItem
     aria-pressed={inspectOpen}
-    icon={IconTuning}
+    icon={IconTuningLinear}
     label={artifactWords.inspect}
     onclick={() => showInspector(!inspectOpen)}
     open={inspectOpen}
@@ -4396,7 +4383,7 @@
 {#snippet reloadBar()}
   <BarItem
     data-slot="other"
-    icon={IconRefresh}
+    icon={IconRefreshLinear}
     label="Reload"
     onclick={reloadPage}
   />
@@ -4513,20 +4500,14 @@
   />
 {/snippet}
 
-<!-- The Comments rail beside the well, on the card, outside the page's
-     mode seam (the artifact panel's surface brief, The Comments rail): in from its end over
-     `--dur-panel` on `--ease-drawer`, out over `--dur-exit`; with less
-     motion it fades. -->
+<!-- The Comments rail beside the page as a floating glass panel, outside
+     the page's mode seam (the artifact panel's surface brief, The Comments
+     rail; the owner's pick "Beside the page"). -->
 {#snippet railBeside()}
   {#if listOpen && railPlaced && !isCanvas && !railSheet}
-    <div
-      class="flex flex-none min-h-0 overflow-hidden"
-      data-slot="rail-beside"
-      in:railIn
-      out:railOut
-    >
+    <RailFloat>
       {@render railOf("beside")}
-    </div>
+    </RailFloat>
   {/if}
 {/snippet}
 
@@ -4562,6 +4543,7 @@
     {switcherAt}
     titleControl={artifact ? artifactTitle : undefined}
     beside={railBeside}
+    float
     bind:section
     bind:well
   >

@@ -347,7 +347,7 @@ const STILL_MS = 14_000;
 const IMAGE_BLOCK = /"type":"image"/gu;
 /** An attachment's reference: the hub's file by its hash (core `FILE_REF`). */
 const FILE_REF_PATH = /^\/api\/files\/[0-9a-f]{64}$/u;
-/** The rail's lists, by their names in its list menu. */
+/** The rail's lists, by their segments' names. */
 const RESOLVED_LIST = /^Resolved/u;
 const OPEN_LIST = /^Open/u;
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -546,13 +546,12 @@ const shutList = async (on: On) => {
 };
 
 /**
- * The list `name` brought to the front of the rail: its title's menu
- * (CommentRail's list menu, Which comments) opened and the list picked.
+ * The list `name` brought to the front of the rail: its segment under the
+ * rail's bar (CommentRail's lists, Which comments) pressed.
  */
 const showListNamed = async (on: On, name: RegExp) => {
   const rail = await rowsOf(on);
-  await rail.locator('[data-slot="list"]').click({ timeout: 5000 });
-  await on.page.getByRole("menuitemradio", { name }).click({ timeout: 5000 });
+  await rail.getByRole("tab", { name }).click({ timeout: 5000 });
   await settle(on.page, 300);
 };
 
@@ -8016,11 +8015,11 @@ const railUseChecks = async (
       (await search.inputValue()) === "",
     JSON.stringify({ found, marked, none, all })
   );
-  // Escape again puts the search away; then the order, in the rail's list
-  // menu under Order: Top of page first, by the anchors' boxes.
+  // Escape again puts the search away; then the order, in the rail's Sort
+  // menu: Top of page first, by the anchors' boxes.
   await search.press("Escape");
   await settle(on.page, 300);
-  await railNow.locator('[data-slot="list"]').click();
+  await railNow.locator('[data-slot="sort"]').click();
   await on.page
     .getByRole("menuitemradio", { name: commentWords.topOfPageFirst })
     .click();
@@ -8042,7 +8041,7 @@ const railUseChecks = async (
       order.every((n, i) => i === 0 || ys[order[i - 1]] <= ys[n]),
     JSON.stringify({ order, ys })
   );
-  await railNow.locator('[data-slot="list"]').click();
+  await railNow.locator('[data-slot="sort"]').click();
   await on.page
     .getByRole("menuitemradio", { name: commentWords.newestFirst })
     .click();

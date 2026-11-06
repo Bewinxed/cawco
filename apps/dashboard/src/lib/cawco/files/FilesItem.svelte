@@ -13,7 +13,7 @@
    * (GlassCard), or shuts it.
    */
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
-  import { IconFiles } from "#lib/icons.js";
+  import { IconFilesLinear } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
 
   let {
@@ -35,7 +35,7 @@
   data-files-control
   data-glass-opens="files"
   expanded={barGlass.open === "files"}
-  icon={IconFiles}
+  icon={IconFilesLinear}
   {label}
   onclick={() => barGlass.toggle("files")}
   tip="Files"
