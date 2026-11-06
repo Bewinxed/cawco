@@ -3,25 +3,39 @@ import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
 import { tv } from "#lib/utils.js";
 
 /**
- * The segmented control (DESIGN.md, Segmented), used by Tabs and single
- * toggle groups: a recess-deep groove, 10px round with a 3px pad, holding a
- * lifted thumb (the raised shadow) that `slideThumb` places under the
- * chosen segment, and the segments: 30px tall, 10px in, label weight at
- * line-height 1, muted until chosen. A segment presses with the tint
- * (`press-tint` on the segment), never a scale. A group whose answer the hub
- * still owes (`data-pending`) breathes its thumb, where motion is welcome.
- * The segment is a mark line, so its words stand on their x-height. The
- * thumb and the segments are concentric with the groove (DESIGN.md, The
- * Concentric Rule; design.css `concentric-in`): its 10px less its 3px pad.
+ * The segmented control's one recipe (DESIGN.md, Segmented): a recess-deep
+ * groove holding a lifted thumb under the chosen segment and the segments,
+ * every corner concentric with the groove. Its geometry is custom
+ * properties every part reads: `--radius` the groove's corner, `--pad` its
+ * inset, `--item` a segment's height, `--shape` the thumb's and the
+ * segments' corner (the groove's less the pad). Standing alone the groove is
+ * `radius-md` round with `c-segmented-pad` of pad round 30px segments, 36px
+ * in all. Standing in a bar's glass (`glass-item:`) it is a capsule the
+ * bar item's height wherever it stands among the glass's items (a control
+ * group, its own contour for the capsules it holds), a row's pad in, and
+ * the thumb and segments capsules inside it. The kit's Tabs and single ToggleGroup draw it from the slots
+ * below; the fluid Tabs' segmented track (fluid-tabs/TabsList) takes
+ * {@link SEGMENTED_TRACK} and reads the same properties.
+ */
+export const SEGMENTED_TRACK =
+  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--item:var(--c-btn-h-sm)] [--pad:var(--c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))] glass-item:h-c-bar-item glass-item:rounded-[calc(var(--c-bar-item)_/_2)] glass-item:[--pad:var(--space-row)] glass-item:[--shape:calc(var(--c-bar-item)_/_2_-_var(--pad))]";
+
+/**
+ * The kit's segmented parts: the groove (its recipe above), the thumb that
+ * `slideThumb` places under the chosen segment (the raised shadow), and the
+ * segments: label weight at line-height 1, muted until chosen, each a mark
+ * line, so its words stand on their x-height. A segment presses with the
+ * tint (`press-tint` on the segment), never a scale. A group whose answer
+ * the hub still owes (`data-pending`) breathes its thumb, where motion is
+ * welcome.
  */
 export const segmentedVariants = tv({
   slots: {
-    group:
-      "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad concentric-in r-inset-c-segmented-pad r-outer-md glass-item:rounded-pill glass-item:r-outer-pill",
+    group: `group/segmented relative inline-flex items-center gap-space-row ${SEGMENTED_TRACK}`,
     thumb:
-      "pointer-events-none absolute start-0 top-0 origin-top-left concentric-well bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
+      "pointer-events-none absolute start-0 top-0 origin-top-left rounded-(--shape) bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
     segment:
-      "relative inline-flex h-c-btn-h-sm items-center justify-center gap-c-segment-gap concentric-well px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
+      "relative inline-flex h-(--item) items-center justify-center gap-c-segment-gap rounded-(--shape) px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong glass-item:h-auto glass-item:self-stretch",
   },
 });
 

@@ -359,8 +359,19 @@ export function scan(): string[] {
       }
     }
     const control = controlOf(parent);
+    // A badge standing on a control's corner (a count, bar-glass/count.ts):
+    // a box placed out of the control's flow that draws its own fill, the
+    // frame its words are held to, as the HIG's badge on a tab or a toolbar
+    // item stands half past the item's edge.
+    const badge =
+      control &&
+      control !== parent &&
+      style(parent).position === "absolute" &&
+      painted(parent)
+        ? parent
+        : null;
     if (control && !clipsOverflow(style(control))) {
-      const frame = control.getBoundingClientRect();
+      const frame = (badge ?? control).getBoundingClientRect();
       const out = boxes.find(
         (box) =>
           box.left < frame.left - TOLERANCE ||
@@ -370,7 +381,7 @@ export function scan(): string[] {
       );
       if (out) {
         say(
-          `“${words(text.data)}” runs out of its control “${name(control)}”: ${px(out)} past ${px(plain(frame))}`
+          `“${words(text.data)}” runs out of its ${badge ? "badge on its control" : "control"} “${name(control)}”: ${px(out)} past ${px(plain(frame))}`
         );
       }
     } else if (!control) {

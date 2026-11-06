@@ -53,6 +53,7 @@
    * on its trailing side, which goes straight on down into the card's.
    */
   import { type Snippet, untrack } from "svelte";
+  import { placeItems } from "./place.js";
 
   let {
     head,
@@ -109,10 +110,14 @@
   const drawnOut = $derived(joined || hanging > 0);
 </script>
 
-<!-- A kit part standing in the glass (a Button, a Toggle, a segmented
-     track) takes its contour, a capsule concentric with it (`data-glass`,
-     the `glass-item:` variant), as a BarItem is; a title draws no glass, so
-     its control keeps its own corner. The glass is drawn by a layer under the items (`before:`), never by the
+<!-- What stands in the glass takes its contour by where it stands
+     (design.css `concentric-row`): the glass marks each item it draws
+     leading, middle, trailing or only (`placeItems`), and a BarItem or a
+     kit part there (a Button, a Toggle, a segmented track: the
+     `glass-item:` variant, `concentric-at`) takes the capsule's radius less
+     the pad on the corners facing the glass's ends and `radius-xs` on those
+     facing a neighbour. A title draws no glass, so its control keeps its
+     own corner. The glass is drawn by a layer under the items (`before:`), never by the
      group itself: a backdrop filter on the group would make it the box
      Caw's fixed drawer is laid out in. The layer stands under every item
      (`before:-z-1` in the group's own stacking context, `isolate`): a kit
@@ -123,17 +128,19 @@
 <div
   data-slot="tools"
   class={[
-    "group/tools relative isolate flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
+    "group/tools relative isolate flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill concentric-row r-inset-c-bar-group-pad r-join-xs hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
     form === "title" && "before:hidden",
     form === "bar" &&
-      "@max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
+      "@max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:[--r-inner:var(--tools-round)] @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
   ]}
   bind:this={node}
+  {@attach (glass) => (form === "title" ? undefined : placeItems(glass))}
   data-bar-group={form === "bar" ? "" : undefined}
   data-glass={form === "title" ? undefined : ""}
   data-flare={flare}
   data-joined={drawnOut ? "" : undefined}
   style:--flare="var(--radius-lg)"
+  style:--r-outer="calc(var(--c-btn-h) / 2)"
   style:--tools-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-bar-caw-glass-phone) / 2)"}
   style:--tools-round="calc(var(--c-bar-caw-glass-phone) / 2)"
   style:--tools-neck={"calc((var(--c-tab-row-h) - var(--c-bar-caw-glass-phone)) / 2)"}
@@ -149,7 +156,7 @@
     data-slot="join"
     aria-hidden="true"
     class={[
-      "absolute inset-bs-0 -inset-be-px pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--join-round)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      "absolute inset-bs-0 -inset-be-px pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
       flare === "start"
         ? "-start-(--f) end-0"
         : "start-0 -end-(--f) -scale-x-100",
@@ -158,7 +165,6 @@
     ]}
     style:--f="var(--flare)"
     style:--h="calc(100% - 1px)"
-    style:--join-round="calc(var(--c-btn-h) / 2)"
     style:--join-edge={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to calc(100% - var(--r)) 0, arc to 100% var(--r) of var(--r) cw, line to 100% 100%, line to 0 100%, close)"}
     style:--join-edge-phone={"shape(from 0 var(--h), arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw, line to var(--f) var(--r), arc to calc(var(--f) + var(--r)) 0 of var(--r) cw, line to 100% 0, line to 100% 100%, line to 0 100%, close)"}
   ></span>

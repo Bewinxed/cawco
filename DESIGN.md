@@ -235,248 +235,6 @@ spacing:
   "7": "25px"
   "8": "32px"
   space-group: "18px"
-components:
-  button-primary:
-    backgroundColor: "{colors.action-solid}"
-    textColor: "{colors.on-action}"
-    typography: "{typography.button}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
-    height: "36px"
-  button-primary-hover:
-    backgroundColor: "{colors.action-hover}"
-  button-outline:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.button}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
-    height: "36px"
-  button-outline-hover:
-    backgroundColor: "{colors.surface-hover}"
-  button-secondary:
-    backgroundColor: "{colors.surface-recess}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.button}"
-    rounded: "{rounded.md}"
-    padding: "0 14px"
-    height: "36px"
-  button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink-strong}"
-    rounded: "{rounded.md}"
-    height: "36px"
-  button-destructive:
-    backgroundColor: "transparent"
-    textColor: "{colors.error-11}"
-    rounded: "{rounded.md}"
-    height: "36px"
-  button-destructive-hover:
-    backgroundColor: "{colors.error-3}"
-  button-sm:
-    typography: "{typography.label}"
-    rounded: "{rounded.md}"
-    padding: "0 11px"
-    height: "30px"
-  input:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    padding: "0 12px"
-    height: "36px"
-  card:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.body}"
-    rounded: "{rounded.lg}"
-    padding: "18px 0"
-  stat-tile:
-    backgroundColor: "{colors.surface-raised}"
-    rounded: "{rounded.md}"
-    padding: "7px"
-    height: "90px"
-  stat-well:
-    backgroundColor: "{colors.surface-recess}"
-    textColor: "{colors.ink-stat}"
-    typography: "{typography.kpi}"
-    rounded: "{rounded.radius-well}"
-    padding: "10px"
-  badge:
-    backgroundColor: "{colors.surface-recess}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.label}"
-    rounded: "{rounded.xs}"
-    padding: "0 6px"
-    height: "20px"
-  status-pill-live:
-    backgroundColor: "{colors.status-live-bg}"
-    textColor: "{colors.status-live-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.radius-pill}"
-    padding: "0 10px"
-    height: "24px"
-  status-pill-attn:
-    backgroundColor: "transparent"
-    textColor: "{colors.status-attn-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.radius-pill}"
-    padding: "0 10px"
-    height: "24px"
-  status-pill-done:
-    backgroundColor: "{colors.status-done-bg}"
-    textColor: "{colors.status-done-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.radius-pill}"
-    padding: "0 10px"
-    height: "24px"
-  status-pill-fail:
-    backgroundColor: "{colors.status-fail-bg}"
-    textColor: "{colors.status-fail-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.radius-pill}"
-    padding: "0 10px"
-    height: "24px"
-  status-pill-idle:
-    backgroundColor: "transparent"
-    textColor: "{colors.status-idle-ink}"
-    typography: "{typography.label}"
-    padding: "0"
-    height: "24px"
-  popover:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.label}"
-    rounded: "{rounded.lg}"
-    padding: "6px"
-  menu-item:
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.label}"
-    rounded: "{rounded.xs}"
-    padding: "0 10px"
-    height: "32px"
-  menu-item-hover:
-    backgroundColor: "{colors.surface-hover}"
-  segmented:
-    backgroundColor: "{colors.surface-recess-deep}"
-    rounded: "{rounded.md}"
-    padding: "3px"
-  segmented-thumb:
-    backgroundColor: "{colors.surface-lift}"
-    rounded: "{rounded.radius-well}"
-  segment:
-    textColor: "{colors.ink-muted}"
-    typography: "{typography.label}"
-    rounded: "{rounded.radius-well}"
-    padding: "0 10px"
-    height: "30px"
-  segment-active:
-    textColor: "{colors.ink-strong}"
-  tooltip:
-    backgroundColor: "{colors.ink-solid}"
-    textColor: "{colors.on-ink}"
-    typography: "{typography.meta}"
-    rounded: "{rounded.sm}"
-    padding: "6px 10px"
-  dialog-tray:
-    backgroundColor: "{colors.surface-recess}"
-    rounded: "{rounded.radius-modal}"
-    padding: "6px"
-  dialog-body:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.body}"
-    rounded: "{rounded.lg}"
-    padding: "18px"
-  alert:
-    backgroundColor: "{colors.surface-recess}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.body}"
-    rounded: "{rounded.md}"
-    padding: "10px 12px"
-  toast:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.body}"
-    rounded: "{rounded.lg}"
-  top-bar:
-    backgroundColor: "transparent"
-    height: "44px"
-  ledger-header:
-    backgroundColor: "{colors.surface-band}"
-    textColor: "{colors.ink-muted}"
-    typography: "{typography.column-head}"
-    rounded: "{rounded.xs}"
-    padding: "0 11px"
-    height: "32px"
-  ledger-row:
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.meta}"
-    padding: "0 11px"
-    height: "44px"
-  identity-mark:
-    backgroundColor: "{colors.mark-1}"
-    textColor: "{colors.mark-glyph}"
-    rounded: "{rounded.xs}"
-    size: "26px"
-  composer:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    rounded: "{rounded.lg}"
-    padding: "7px 7px 7px 11px"
-  composer-send:
-    backgroundColor: "{colors.action-solid}"
-    textColor: "{colors.on-action}"
-    rounded: "4px"
-    size: "34px"
-  nav-row-selected:
-    textColor: "{colors.selected-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.sm}"
-    height: "40px"
-  nav-count-selected:
-    backgroundColor: "{colors.selected-bg}"
-    textColor: "{colors.selected-ink}"
-    typography: "{typography.meta}"
-    rounded: "{rounded.radius-pill}"
-  option-chip:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.label}"
-    rounded: "{rounded.sm}"
-    height: "30px"
-  option-keycap-chosen:
-    backgroundColor: "{colors.chip-chosen-bg}"
-    textColor: "{colors.chip-chosen-ink}"
-    rounded: "{rounded.xs}"
-  filter-chip-active:
-    backgroundColor: "{colors.brand-wash}"
-    textColor: "{colors.brand-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.radius-pill}"
-    height: "21px"
-  permission-card:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink-strong}"
-    rounded: "{rounded.lg}"
-    padding: "11px"
-  permission-answer:
-    backgroundColor: "{colors.surface-recess}"
-    textColor: "{colors.ink-strong}"
-    typography: "{typography.label}"
-    rounded: "{rounded.sm}"
-    padding: "0 11px"
-    height: "30px"
-  permission-widen:
-    backgroundColor: "{colors.status-attn-bg}"
-    textColor: "{colors.status-attn-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.sm}"
-    padding: "0 11px"
-    height: "30px"
-  skeleton:
-    backgroundColor: "{colors.surface-fill}"
-    rounded: "{rounded.sm}"
 ---
 
 # Design System: CawCo
@@ -654,11 +412,11 @@ The shell is a resizable rail (228px by default, the reader's own width wins), a
 - **A title only where it helps.** A panel opened by its name carries none, its actions floating over its content. A title is the view's own short name, never the app's name, an id, a path or a breadcrumb.
 - **A place shown as a place.** A machine is its OS mark and name; a path is never printed in a bar.
 - **No bar ground.** A bar draws no fill, hairline or shadow; content runs to the top edge and the scroll edge effect blurs it under the controls, from the first scroll.
-- **Floating groups of bare symbols.** At most three groups (leading, centre, trailing), each one capsule of the panel's glass. Items are bare symbols until hovered, named in their tooltip; words only where no symbol says it. Trailing: what acts on the view, More, the prominent action, then Close (a sheet's leads, before its title).
+- **Floating groups of bare symbols.** At most three groups (leading, centre, trailing), each one capsule of the panel's glass. Items are bare symbols until hovered, named in their tooltip; words only where no symbol says it. Each is a BarItem, which alone draws its hover, pressed, selected and count (The Glass Contour Rule); a count is a badge on its top trailing corner, taking no room. Trailing: what acts on the view, More, the prominent action, then Close (a sheet's leads, before its title).
 - **One prominent action**, trailing, on `action-surface`; colour on the glass is for it and for status alone.
 - **Back and Close are symbols**, named by where they go, never the words Back or Close.
 
-**Spacing ladder.** 4, 7, 11, 14, 18, 21, 25 and 32px, measured off the reference comps.
+**Spacing ladder.** `space-1` to `space-8`, measured off the reference comps.
 
 **Density.** A 44px row pitch, a 32px header band and 90px stat tiles; the transcript runs a compact scale from the same tokens; under a coarse pointer compact relaxes to the touch floor.
 
@@ -698,19 +456,21 @@ What stands over what is a named role, never a number: `z-(--layer-<role>)`, the
 
 ## Shapes
 
-Corners are graded by role: `--radius-hair` (2px) for the smallest marks, 5px for marks, tiles and menu items, 8px for items inside a surface, 10px for controls, 12px for cards and menus, `--radius-panel` (16px) for a panel, 18px for the dialog tray. Full rounding is for state pills, switches and dots; buttons are never pills.
+Corners are graded by role, each a token: `radius-hair` for the smallest marks, `radius-xs` for marks, tiles and menu items, `radius-sm` for items inside a surface, `radius-md` for controls in the page, `radius-lg` for cards and menus, `radius-panel` for a panel, `radius-modal` for the dialog tray. Full rounding is for state pills, switches, dots and a capsule of glass.
+
+**The Glass Contour Rule.** A control standing in a bar's glass takes the glass's contour by where it stands: its corners facing the capsule's ends take the capsule's radius less the pad, those facing a neighbour `radius-xs` (BarGlass marks each item leading, middle, trailing or only; design.css `concentric-row`). Hover, pressed, selected and focus are drawn on that one box (`concentric-at`), so every state shares its contour; `state-shape` forces and reads each.
 
 **The Concentric Rule.** A surface nested in another's corner takes the outer radius less the gap between their edges, the outer's edge counted. Where no radius token is the derived value, a derived token holds it (`inner-well-r`), never a literal. A container declares its outer radius and inset once (design.css `concentric-in`) and its rows and parts take the result (`concentric-<radius>`); the hover ghost, the selection pill and the focus ring take the contour of what they mark.
 
-**The Measured Exception Rule.** The stat tile keeps the comp's radii (a 10px card round a 7px well), a panel its 16px shell, and the smallest marks the 2px hair. Each is a token.
+**The Measured Exception Rule.** The stat tile keeps the comp's radii (a card round its well), a panel its shell, and the smallest marks the hair. Each is a token.
 
 **Borders are graded.** `border-hairline` separates rows and regions; `border-control` draws a control's quiet edge; `border-button-outline` and `border-row-outline` hold 3:1 for an outline button on raised and on recess. At night a border becomes a seam of ink.
 
 **The Whole Pixel Border Rule.** A border or outline is a whole CSS pixel; a fractional stroke is an inset ring (`inset-ring-(length:--x)`) or an SVG stroke. `scripts/border-width-check.ts` refuses a fractional width.
 
-**Folder tabs.** fluid-tabs' folder variant: the chosen tab is a sheet in the surface below it, its foot flaring into the page, the rest receding on `surface-shelf`. Each tab is one SVG path (`fold-path.ts`), so body, feet and rim move as one; a pointer's choice comes forward on `--dur-settle` over `--ease-crossfade`. The session strip's picks are in its surface brief.
+**Folder tabs.** fluid-tabs' folder variant: the chosen tab is a sheet in the surface below it, its foot flaring into the page, the rest receding on `surface-shelf`. Each tab is one SVG path (`fold-path.ts`), so body, feet and rim move as one. The session strip's picks are in its surface brief.
 
-**A card that hangs from its anchor** (`HangCard`, `components/ui/hang-card`). Anchor and card are one silhouette, one fill and one stroke, the anchor's flared foot running into the card's top edge on one tangent. It wraps the kit's floating surface, so focus, Escape and a press outside are the primitive's, and it slides out of the anchor's foot and back under a cut that never moves (`translate` only), over `--dur-pop` in and `--dur-exit` out.
+**A card that hangs from its anchor** (`HangCard`, `components/ui/hang-card`). Anchor and card are one silhouette, one fill and one stroke, the anchor's flared foot running into the card's top edge on one tangent. It wraps the kit's floating surface, so focus, Escape and a press outside are the primitive's, and it slides out of the anchor's foot and back under a cut that never moves.
 
 ## Components
 
@@ -720,7 +480,7 @@ The kit lives in `apps/dashboard/src/lib/components/ui`. Shared recipes are the 
 
 ### Buttons
 Tactile and quiet: a hairline-edged raised block that dips under the hand.
-- **Sizes:** 10px radius; default 36px, `sm` 30px, `xs` 24px, `lg` 44px; icon buttons match.
+- **Sizes:** `radius-md` at the `c-btn-h` heights; icon buttons match, in the page only (in glass, The Glass Contour Rule).
 - **Outline (default):** raised, a `border-button-outline` edge, strong ink. **Primary:** `action-surface`, `on-action` text. **Secondary:** recess with a hairline. **Ghost:** transparent until hovered. **Destructive:** an `error-9` edge and `error-11` text. **Disabled:** 50%.
 - **Pending:** a running button keeps its focus and place and swallows presses; its slot cross-fades to a spinner, then a check, and its label and pending wording share one cell, so it never changes width.
 
@@ -729,48 +489,48 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 **The cursor.** An enabled button shows the pointer and a disabled or pending one the arrow, from one base style in `design.css`.
 
 ### Inputs and fields
-- **Style:** 36px, 10px radius, raised surface, `border-control` edge, `shadow-xs`, body text in `ink-strong`, muted placeholder, the coral caret (`brand-solid`).
+- **Style:** `c-btn-h` tall, `radius-md`, raised surface, `border-control` edge, `shadow-xs`, body text in `ink-strong`, muted placeholder, the coral caret (`brand-solid`).
 - **Focus:** the caret, and the field's own edge stepping to `border-control-strong` while its text has focus (`field-edge`, The Caret Rule). An invalid field keeps its error edge; a disabled one fades to 50%.
 - **Textarea:** grows a line at a time and scrolls past its ceiling.
-- **Field frame:** a frame round a borderless editor with its own controls beside it (a search with an icon, a path with Browse, a prompt with its chips) is the field: its edge steps while the text inside has focus, not while a chip or button does. A field that is the whole surface (a search strip, the composer's pill) shows its caret and nothing else.
+- **Field frame:** a frame round a borderless editor with its own controls beside it (a search with an icon, a path with Browse, a prompt with its chips) is the field: its edge steps while the text inside has focus, not while a chip or button does.
 - **Select trigger:** the input's look with a sort-vertical glyph.
 
 ### Cards and the stat tile
-- **Card:** 12px radius, raised surface, the tile shadow, no border.
+- **Card:** `radius-lg`, raised surface, the tile shadow, no border.
 - **Stat tile** (`StatTile.svelte`): a 10px card holding a recessed well 7px in (The Measured Exception Rule): the label over the value in the KPI role, `ink-stat`, its unit in meta on the same baseline. A new value morphs digit by digit (The Steady Swap Rule).
 
 ### Badges, chips and pills
-- **Badge:** 20px, 5px radius, label role, recess, 12px icons; `live`, `done` and `fail` take their status pairs, `attn` its Status dot before the word.
+- **Badge:** `radius-xs`, label role, recess; `live`, `done` and `fail` take their status pairs, `attn` its Status dot before the word.
 - **State pill:** fully round, status tint, no glyph; Needs you wears the Status dot instead of a tint, idle wears nothing.
-- **Setting chip:** 30px, 8px radius, a glyph and a chevron. A setting that can't change where it is shown is the same chip sunk (`surface-recess`, `border-hairline`, no chevron), never plain text.
-- **Option chip:** the one way an answer is picked: 30px, a keycap digit; picked, the coral edge, a recessed fill and a vermillion keycap (`chip-chosen-bg`), never the attn hue.
+- **Setting chip:** `radius-sm`, a glyph and a chevron. A setting that can't change where it is shown is the same chip sunk (`surface-recess`, `border-hairline`, no chevron), never plain text.
+- **Option chip:** the one way an answer is picked: a keycap digit; picked, the coral edge, a recessed fill and a vermillion keycap (`chip-chosen-bg`), never the attn hue.
 - **Inline chip** (ui/chip `inline`): a reference set in running text, its mark then its name and state in words, stopping at `c-inline-chip-max-w`; it keeps its words and box from its first paint. Each kind's look is one entry in `cawco/reference-looks.ts`.
 
 ### Navigation, menus and floating surfaces
-- **Popover, dropdown, select, context menu, toast** (`kit-pop`): 12px radius, `border-control` edge, overlay shadow, 6px padding, raised. It opens from its trigger's side over `--dur-pop` on the drawer curve and leaves over `--dur-exit`, as transitions on `data-state`; a change of size takes `morph()`.
+- **Popover, dropdown, select, context menu, toast** (`kit-pop`): `radius-lg`, `border-control` edge, overlay shadow, raised. It opens from its trigger's side over `--dur-pop` on the drawer curve and leaves over `--dur-exit`; a change of size takes `morph()`.
 - **Submenu:** the same surface, portalled, beside its row, or hanging from its row's foot where neither side holds it (`submenu-side.ts`).
-- **Menu item:** 5px, 32px tall (44px on a coarse pointer), label role. A chosen item shows its tick in its own ink; `surface-hover` is the only fill it takes.
+- **Menu item:** `radius-xs`, the touch floor on a coarse pointer, label role. A chosen item shows its tick in its own ink; `surface-hover` is the only fill it takes.
 - **Hover ghost and selection pill** (`highlight.svelte.ts`): one of each per list, drawn under its rows. The ghost is `surface-hover` and glides to the row under the pointer; the pill glides to a new selection, and a row picked under the ghost becomes the pill at once. No ghost on touch.
-- **Limit bar** (`usage/LimitBar`): a track, a fill in its state colour (`meter-*`), a pace tick, 4px tall in a stats strip and 8px on a page; it says whether it reads used or left.
+- **Limit bar** (`usage/LimitBar`): a track, a fill in its state colour (`meter-*`), a pace tick; it says whether it reads used or left.
 - **Ticks and dots:** a checkbox tick draws itself along its stroke; a radio dot grows from 0.6 as it fades in; with reduced motion both only fade.
-- **Table** (`ui/table`): a ledger under a `surface-band` header band in the column-head role, 44px rows, figures tabular. Where the table's own width is a phone's (`@container/table`), each row becomes a two-line card.
+- **Table** (`ui/table`): a ledger under a `surface-band` header band in the column-head role, figures tabular. Where the table's own width is a phone's (`@container/table`), each row becomes a two-line card.
 
 ### Segmented controls and tabs
-- **Segmented** (`kit-segmented`, used by Tabs and single toggle groups): a `surface-recess-deep` groove (10px, 3px padding) holding a lifted thumb (7px, concentric, raised shadow). Segments are 30px, label weight, muted until chosen. The thumb glides with position and size together on ease-in-out from wherever it is drawn. A segment presses with the tint, never a scale.
-- **Fluid tabs** (`fluid-tabs`): a track of 28px items (32px on a coarse pointer) whose active segment is a raised sheet that slides; a scrolling track fades the edge with more to scroll and glides sideways under a wheel on the `--dur-glide` spring. Arrow keys move and choose at once.
+- **Segmented** (`tabs/thumb.ts`, one recipe for Tabs, single toggle groups and fluid-tabs' track): a `surface-recess-deep` groove holding a lifted thumb, thumb and segments concentric with it (`--shape`). Alone the groove is `radius-md` round `c-segmented-pad`; in glass it is a capsule at the bar item's height, its thumb and segments capsules. Segments are label weight, muted until chosen. The thumb glides, position and size together, from wherever it is drawn. A segment presses with the tint, never a scale.
+- **Fluid tabs** (`fluid-tabs`): the segmented groove, its active segment a lifted sheet that slides; a scrolling track fades the edge with more to scroll and glides sideways under a wheel on the `--dur-glide` spring. Arrow keys move and choose at once.
 - **Folder tabs:** fluid-tabs' folder variant on `surface-shelf` (Shapes, Folder tabs).
 
 ### Tooltip
-Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, 8px radius, with a rotated square arrow. It fades in over `--dur-fade` settling `--tip-rise` toward its trigger and leaves at once (The Enter Rule names it the one exception).
+Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, `radius-sm`, with a rotated square arrow. It fades in over `--dur-fade` settling `--tip-rise` toward its trigger and leaves at once (The Enter Rule names it the one exception).
 
 ### Asking in the page
 The one way to ask before doing (`AskHere.svelte`, `ask-here.svelte.ts`). The question unfolds in the page's flow under the control that asked it, indented to its row's title: a raised tile holding the title in label, the consequence in meta, then Cancel (ghost) and the verb (destructive, or the grant's shield). It takes the focus on Cancel. The verb stays pending until its work ends; a refusal stays under the question in the refuser's words, and only work that went closes it. An action that reaches several things names them inside the question, read live.
 
 ### Dialog, sheet and drawer
 For the rare holds The Open Page Rule allows; no confirmation is a dialog.
-- **Dialog:** a recess tray (18px, 6px padding) holding a raised body (12px) over the scrim, Close a ghost icon in its corner. It enters over `--dur-panel` on ease-out, rising `--pop-rise`, and leaves over `--dur-exit`.
+- **Dialog:** a recess tray (`radius-modal`) holding a raised body over the scrim, Close a ghost icon in its corner. It enters over `--dur-panel` on ease-out, rising `--pop-rise`, and leaves over `--dur-exit`.
 - **Sheet:** a raised edge panel with the drawer shadow and Close leading its header, sliding its whole size on the drawer curve. A finger drags it 1:1, released past 30% or on a flick onto the spring; a mouse uses Close or Escape.
-- **Drawer (vaul):** every bottom sheet: full-bleed, 12px top corners, a 100×6 grabber, one header (Close, then the title; 44px under a finger), content-tall up to 85vh.
+- **Drawer (vaul):** every bottom sheet: full-bleed, `radius-lg` top corners, a grabber, one header (Close, then the title; the touch floor under a finger), content-tall up to 85vh.
 
 **The Hold-To-Select Rule.** A press that starts in a text field is never captured by a drawer or gesture round it, so iOS hold-to-select and Paste reach the field. A held press on a context-menu trigger suppresses the platform callout.
 
@@ -778,12 +538,12 @@ For the rare holds The Open Page Rule allows; no confirmation is a dialog.
 The floating surface over sonner, body type. It enters from `--pop-rise` on its edge's side and leaves toward it; under a finger it tracks 1:1 and flicks away. On a desk toasts sit in the content area's bottom-right, never over the rail; on a phone at the top under the bar, clear of the composer. A toast never paints over navigation and never carries a failure.
 
 ### Alert
-A compact tinted row, never a slab: 10px radius, body type, an optional 16px glyph spanning title and description. Variants: default (recess), destructive, warning, success and info (each its status pair). No border.
+A compact tinted row, never a slab: `radius-md`, body type, an optional glyph spanning title and description. Variants: default (recess), destructive, warning, success and info (each its status pair). No border.
 
 ### Empty, loading and skeleton states
-- **Empty** (`ui/empty`): a 20px duotone mark, a title, one body line saying why, and its one action in words (The Empty Starts Work Rule).
-- **Skeleton** (`ui/skeleton`): a `surface-fill` block at exactly the size of what it stands for, pulsing on one clock, and giving way in the reveal (motion/curves `reveal`): it fades and blurs out while the content fades in.
-- **Spinner:** a 16px ring with a quarter arc on the loop, for a pending button, a toast, or a wait under the skeleton's threshold.
+- **Empty** (`ui/empty`): a duotone mark, a title, one body line saying why, and its one action in words (The Empty Starts Work Rule).
+- **Skeleton** (`ui/skeleton`): a `surface-fill` block at exactly the size of what it stands for, pulsing on one clock, and giving way in the reveal (motion/curves `reveal`).
+- **Spinner:** a ring with a quarter arc on the loop, for a pending button, a toast, or a wait under the skeleton's threshold.
 
 **The Empty Starts Work Rule.** An empty state always offers to start the work that would fill it: its one action starts a session with Caw (or the screen's own agent) already asking for the thing, its words editable before they go. Where that can't start, it says why and offers the way by hand.
 
@@ -794,17 +554,17 @@ A compact tinted row, never a slab: 10px radius, body type, an optional 16px gly
 **The Real Wait Rule.** Nothing stands in for a wait until it has lasted `--dur-wait-grace`. Caw, once he appears, finishes his enter before what arrives lands, then fades out from the drawing he is on (assets/mascot/README.md, Contract).
 
 ### Status displays
-- **Session status:** a 16px Solar duotone glyph alone, no circle round it: refresh for Working, hand-shake for Needs you, the close X for Failed, pause for Idle and Stopped, moon-sleep for Sleeping, the bare question mark for Unreachable, a dotted ring for Not yet; then the word in label, tinted live, attn or fail where it applies. The Working glyph breathes.
+- **Session status:** a Solar duotone glyph alone, no circle round it, one per state (`workspace/session-status.ts`); then the word in label, tinted live, attn or fail where it applies. The Working glyph breathes.
 - **Live dot** (`ui/live-dot`): work in progress is never a line of words alone. Words that say what is running stand beside the live dot, a `status-dot-size` circle in `status-live-glyph` that breathes, on the mark line; where something already marks the wait (a spinner, Caw, a step's glyph) it needs none. Where a speaker is at work, the dot stands on its mark's top-end corner, cut round by `status-dot-cut`, and the words go. One breath everywhere: every live dot is on the shared breath.
 - **Task ring:** wound from the top as a clock is read, in `currentColor`. With no plan it turns an arc on the loop; with a plan the arc eases to the share done; finished, it becomes a check. Nothing planned and nothing running draws nothing.
 
 ### Identity marks and tiles
-- **Identity mark:** a square at 5px radius in a `mark-N` colour under the sheen, the vendor glyph in `mark-glyph`.
-- **Tree mark** (`TreeMark.svelte`): the 18px tile leading every row a list nests rows under. A parent with a count shows it on the tile, on a deck of copies behind it; the mark is the switch that opens its rows, its face giving way to the chevron under the pointer and while open.
+- **Identity mark:** a square at `radius-xs` in a `mark-N` colour under the sheen, the vendor glyph in `mark-glyph`.
+- **Tree mark** (`TreeMark.svelte`): the tile leading every row a list nests rows under. A parent with a count shows it on the tile, on a deck of copies behind it; the mark is the switch that opens its rows, its face giving way to the chevron under the pointer and while open.
 - **Session row** (`SessionRow.svelte`): one row for a session in every list: mark, title with its status read out first, age at the trailing edge; the session menu's trigger, draggable to split. A list owns its container, order and nesting.
 - **Working indicator** (`motion/echo`): a working tile echoes outside itself for three loops, a list's rows beating top to bottom on one clock, then rests.
 - **Status dot:** the one status shape on a tile and Needs you's mark wherever it stands: a `status-dot-size` circle on the tile's top-right corner, the tile cut round it (`status-dot-cut`). Needs you echoes three loops, then stills. No ring stands round a tile.
-- **Icon tile:** a raised 26px square at 8px with the tile shadow and a 16px duotone glyph; chosen, it inverts to `ink-solid`.
+- **Icon tile:** a raised square at `radius-sm` with the tile shadow and a duotone glyph; chosen, it inverts to `ink-solid`.
 
 ### Icons
 **The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts` (packages/icons): one face product-wide. The duotone's second layer is `currentColor` at 50%. A status glyph keeps its `status-*-glyph` hue and holds 3:1 as a whole on its surfaces. Chevrons, arrows and the kit's CopyButton take Solar's linear cut. Close, Plus and Tick are local glyphs on Solar's 24px grid with a 1.5 linear stroke and round caps; the Tick is also the done glyph, in `status-done-glyph`. An icon is the glyph alone: no circle, square, squircle or box stands round it, and where Solar ships only a contained cut, a container-less glyph is drawn in Solar's style.

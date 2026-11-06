@@ -95,6 +95,7 @@
     projectAtFolder,
     spawnSession,
   } from "../client.svelte";
+  import Choice from "../config/Choice.svelte";
   import {
     type ContinueSource,
     cancelContinuation,
@@ -168,7 +169,6 @@
     stageStart,
     startedStart,
   } from "./parked.svelte";
-  import Segmented from "./Segmented.svelte";
   import SessionFooter from "./SessionFooter.svelte";
   import { effortNotExposed } from "./ToolChips.svelte";
 
@@ -2472,8 +2472,12 @@
     >
       {#if moveFromChoice.length > 0 && moveFrom}
         <div in:unfold|global out:unfold>
-          <Segmented
-            items={moveFromChoice.map((place) => ({
+          <Choice
+            label={spawnWords.form.moveFrom}
+            onchange={(next) => {
+              moveFromPick = next;
+            }}
+            options={moveFromChoice.map((place) => ({
               value: place.id,
               label: spawnWords.form.moveFromFolder(
                 tilde(place.path),
@@ -2481,10 +2485,6 @@
                   ?.hostname ?? place.machineId
               ),
             }))}
-            label={spawnWords.form.moveFrom}
-            onchange={(value) => {
-              moveFromPick = value;
-            }}
             value={moveFrom.id}
           />
         </div>
@@ -2495,13 +2495,17 @@
           in:unfold|global
           out:unfold
         >
-          <Segmented
-            items={[
+          <Choice
+            label={spawnWords.form.opensOn}
+            onchange={(next) => {
+              if (next === "summary" || next === "asks") {
+                chooseCarry(next);
+              }
+            }}
+            options={[
               { value: "summary", label: spawnWords.form.fromSummary },
               { value: "asks", label: spawnWords.form.fromAsks },
             ]}
-            label={spawnWords.form.opensOn}
-            onchange={chooseCarry}
             value={carry}
           />
           <p aria-live="polite" class="type-meta m-0 text-ink-muted num">

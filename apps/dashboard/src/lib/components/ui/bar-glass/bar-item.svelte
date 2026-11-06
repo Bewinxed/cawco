@@ -4,18 +4,19 @@
 
   /**
    * A bar item's recipe, every state on its own box so hover, pressed,
-   * selected and focus share one contour: a capsule the bar's item tall
-   * (`--c-bar-item`), at least as wide, concentric in the glass round it
-   * (BarGlass: 36 less its 4px pad, the pill's 18 less 4). Bare until the
+   * selected and focus share one contour: the bar's item tall
+   * (`--c-bar-item`), at least as wide, its corners the glass's by where it
+   * stands (`concentric-at`, BarGlass: the ends' 18 less the 4px pad, 5px
+   * toward a neighbour), a capsule where no glass holds it. Bare until the
    * pointer rests on it (the hover only where a fine pointer can rest),
    * pressed in the kit's press tint, selected in the selected wash. Its
    * symbol (`data-slot="bar-symbol"`) is the bar's symbol size in the muted
-   * ink; a count (`data-slot="num"`) stands beside it at the label size in
-   * tabular figures, the item's ends then a symbol's inset in, the trailing
-   * one a twelfth of the symbol more for the figures' side bearing.
+   * ink, centred. A count takes no room in it: it is the bar's count
+   * badge on the item's top trailing corner (./count.ts), so a counted
+   * item is its neighbours' size and shape.
    */
   const barItemVariants = tv({
-    base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:bg-surface-hover data-lit:bg-selected-bg data-lit:text-selected-ink data-counted:gap-space-2 data-counted:ps-(--mark-inset) data-counted:pe-(--mark-end) *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none *:data-[slot=num]:type-label *:data-[slot=num]:whitespace-nowrap *:data-[slot=num]:tabular-nums",
+    base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:bg-surface-hover data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
     variants: {
       /** What it holds: a symbol, or a title's words and chevron (a bar's title as a control), or Caw's head. */
       form: {
@@ -74,6 +75,7 @@
   import { mergeProps } from "bits-ui";
   import type { Component, Snippet } from "svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { COUNT_BADGE } from "./count.js";
 
   let {
     label,
@@ -129,9 +131,8 @@
     onblur?: (event: FocusEvent) => void;
   } = $props();
 
-  /** A counted item's ends: a symbol's inset in, the trailing one a twelfth of the symbol more for the figures' side bearing. */
-  const MARK_INSET = "calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2)";
-  const MARK_END = `calc(${MARK_INSET} + var(--c-bar-symbol) / 12)`;
+  /** The symbol's inset in the item: where its top line stands under the item's top, the count's foot. */
+  const COUNT_FOOT = "calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2)";
   /** Caw's head on the phone's glass: its finger's area centred on the glass's height. */
   const CAW_HIT_TOP =
     "calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)";
@@ -160,7 +161,7 @@
     <Icon data-slot="bar-symbol" aria-hidden="true" />
   {/if}
   {#if counted}
-    <span data-slot="num" class="num">{count}</span>
+    <span data-slot="num" class={COUNT_BADGE}>{count}</span>
   {/if}
 {/snippet}
 
@@ -173,8 +174,8 @@
     aria-label={label}
     class={look}
     {href}
-    style:--mark-inset={MARK_INSET}
-    style:--mark-end={MARK_END}
+    style:--count-foot={COUNT_FOOT}
+    style:--count-glyph="var(--c-bar-symbol)"
     style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
     type={href ? undefined : "button"}
     bind:this={ref}

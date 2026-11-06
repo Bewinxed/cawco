@@ -15,14 +15,24 @@
  *  3. pressed in glass: the same glass, its item's fill only while pressed.
  *  4. selected in glass: an item drawn pressed at rest (`aria-pressed`),
  *     its fill a rounded rectangle at 8px (the Comments toggle).
+ *  5. capsules in a group: three items in one glass, each a whole capsule
+ *     under the pointer, the middle one's corners and the ends' inner
+ *     corners round toward their neighbours (the group before position
+ *     decided the corners).
  *
  * Drawn right, the rule finds nothing:
  *
- *  5. capsule items: the glass's items as capsules (a circle for a glyph,
- *     a capsule for a counted one), hovered, pressed and chosen alike.
- *  6. round with its own fill: the round Close filling itself, and one
+ *  6. joined items: a group of three, the leading item round on its
+ *     leading corners and 5px toward its neighbour, the middle 5px all
+ *     round, the trailing (counted) round on its trailing corners; hovered,
+ *     pressed and chosen alike.
+ *  7. the only item: one capsule alone in its glass, round at both ends.
+ *  8. a face that darkens: a glass's only item holding a face (Caw's
+ *     head), a 20px disc drawn at rest that darkens under the press; the
+ *     disc is the drawing, no state's fill, and its own fill is concentric.
+ *  9. round with its own fill: the round Close filling itself, and one
  *     whose child fill takes its radius (`border-radius: inherit`).
- *  7. a button alone: a 10px button on the page, and one in the middle of
+ * 10. a button alone: a 10px button on the page, and one in the middle of
  *     a 12px card, clear of its corners.
  *
  *   bun scripts/probe-kit/run.ts web state-shape
@@ -88,9 +98,23 @@ const FIXTURES: Record<string, Fixture> = {
 </div>`,
     want: "button.comments",
   },
-  "capsule items": {
+  "capsules in a group": {
     html: `${BASE}<style>
   .glass button { border-radius: 999px; }
+  .glass button:hover { background: #e6e0d6; }
+</style>
+<div class="glass" role="toolbar" aria-label="Canvas">
+  <button type="button" aria-label="New canvas"><span class="glyph"></span></button>
+  <button class="middle" type="button" aria-label="Expand"><span class="glyph"></span></button>
+  <button type="button" aria-label="Close"><span class="glyph"></span></button>
+</div>`,
+    want: "button.middle",
+  },
+  "joined items": {
+    html: `${BASE}<style>
+  .glass button { border-radius: 5px; }
+  .glass button:first-child { border-start-start-radius: 15px; border-end-start-radius: 15px; }
+  .glass button:last-child { border-start-end-radius: 15px; border-end-end-radius: 15px; }
   .glass button:is(:hover, :active, :focus-visible, [aria-pressed="true"]) { background: #e6e0d6; }
   .glass .counted { gap: 4px; display: inline-flex; align-items: center; padding-inline: 7px; }
 </style>
@@ -98,6 +122,28 @@ const FIXTURES: Record<string, Fixture> = {
   <button type="button" aria-label="New canvas"><span class="glyph"></span></button>
   <button type="button" aria-pressed="true" aria-label="Comments"><span class="glyph"></span></button>
   <button class="counted" type="button" aria-label="Files, 12"><span class="glyph"></span><span>12</span></button>
+</div>`,
+    want: null,
+  },
+  "the only item": {
+    html: `${BASE}<style>
+  .glass button { border-radius: 15px; }
+  .glass button:is(:hover, :active, [aria-pressed="true"]) { background: #e6e0d6; }
+</style>
+<div class="glass" role="toolbar" aria-label="Canvas">
+  <button type="button" aria-pressed="true" aria-label="Comments"><span class="glyph"></span></button>
+</div>`,
+    want: null,
+  },
+  "a face that darkens": {
+    html: `${BASE}<style>
+  .glass button { border-radius: 15px; }
+  .glass button:active { background: #e6e0d6; }
+  .face { inline-size: 20px; block-size: 20px; border-radius: 999px; background: #8a8178; }
+  .glass button:active .face { background: #2b2622; }
+</style>
+<div class="glass" role="toolbar" aria-label="Bar">
+  <button type="button" aria-label="Caw"><span class="face"></span></button>
 </div>`,
     want: null,
   },

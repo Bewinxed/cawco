@@ -46,7 +46,8 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
- * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it), within 1.5px or a tenth (a quarter at a corner) |
+ * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a segment excepted), within 1.5px or a tenth (a quarter at a corner) |
+ * | glyph-place | own code                    | a control in a bar whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count's box clear of the glyph's box, a badge on the corner taking no room |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
  * each specimen that stands for a screen of its own carries `data-specimen`,
@@ -97,7 +98,8 @@ export type CheckName =
   | "anchor-drift"
   | "decoration-spill"
   | "nested-radius"
-  | "state-shape";
+  | "state-shape"
+  | "glyph-place";
 
 /** The states state-shape forces on each control it reads, in the order read. */
 const FORCED = ["hover", "active", "focus-visible"] as const;
@@ -182,6 +184,10 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
   "state-shape": {
     says: "a control's hover, pressed, focus and selected fill takes its shape, concentric in its glass (The Concentric Rule)",
     by: "own code + DevTools CSS.forcePseudoState",
+  },
+  "glyph-place": {
+    says: "a bar's glyph control draws its glyph at its fill's centre, its count a badge clear of the glyph (The Earned Count Rule; HIG, Tab bars)",
+    by: "own code",
   },
 };
 
@@ -3607,9 +3613,12 @@ function readInPage(args: InPageArgs): InPageRead {
   // child or a pseudo-element draws inside a rounded control takes the
   // control's radius less its inset, and any fill inside a group's glass
   // (a capsule, or a box that draws a rounded shape) the glass's radius
-  // less its inset, so it sits concentric. A capsule's curve runs its whole
-  // length: an item anywhere along it is concentric at the capsule's radius
-  // less its inset across it. The read at rest names the controls (each in a
+  // less its inset, so it sits concentric. In a capsule, position decides
+  // the corners: a corner facing the capsule's end (no other item between)
+  // takes its radius less the inset across it, and a corner facing a
+  // neighbour one small radius, under half that, so a group's leading,
+  // middle and trailing fills read as one row; a segment stays a capsule,
+  // as its thumb is. The read at rest names the controls (each in a
   // bar, and each rounded one), keeps what each draws at rest and reads a
   // selected one's fill; each forced state's read (`forcedStates`, the
   // DevTools protocol's CSS.forcePseudoState) reads what that state draws
@@ -3691,7 +3700,9 @@ function readInPage(args: InPageArgs): InPageRead {
       );
     };
     /** The glass `el` stands in: the nearest box over it that draws (a fill, an edge, a shadow, its own or a placed pseudo's that holds it), when that is rounded and holds it still (a box that scrolls it moves it past its corners: where it stands there is the scroll's, not a drawing's). */
-    const glassOf = (el: Element): { box: Contour; name: string } | null => {
+    const glassOf = (
+      el: Element
+    ): { box: Contour; el: Element; name: string } | null => {
       const b = el.getBoundingClientRect();
       const holds = (c: Contour) =>
         c.left <= b.left + 0.5 &&
@@ -3706,7 +3717,7 @@ function readInPage(args: InPageArgs): InPageRead {
         if (paints(up).length > 0) {
           const c = contourOf(up);
           return rounded(c) && !scrollsContent(up)
-            ? { box: c, name: selectorOf(up) }
+            ? { box: c, el: up, name: selectorOf(up) }
             : null;
         }
         for (const which of ["::before", "::after"] as const) {
@@ -3717,22 +3728,88 @@ function readInPage(args: InPageArgs): InPageRead {
               : null;
           if (c && holds(c)) {
             return rounded(c)
-              ? { box: c, name: `${selectorOf(up)}${which}` }
+              ? { box: c, el: up, name: `${selectorOf(up)}${which}` }
               : null;
           }
         }
       }
       return null;
     };
-    /** Where `inner`'s corners leave `outer`'s contour, the worst corner: what it draws, what concentric is, its inset and the outer radius. */
+    /** A segment of a segmented control: a capsule like its thumb, wherever it stands in its groove. */
+    const SEGMENT = '[role="tab"], [role="radio"], [role="option"]';
+    /** What else stands in a glass as an item of it: a control or a control group. */
+    const GLASS_ITEM = `${STATE_CONTROL}, [role="tablist"], [role="radiogroup"], [role="group"]`;
+    /** Whether `item` stands inside another item of `glass`. */
+    const nestedIn = (item: Element, glass: Element) => {
+      for (
+        let up = item.parentElement;
+        up && up !== glass;
+        up = up.parentElement
+      ) {
+        if (up.matches(GLASS_ITEM)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    /**
+     * Which sides of `el` face another item inside `glass` along its axis
+     * (`before`: its left or top; `after`: its right or bottom), each item
+     * the outermost of its kind there and drawn.
+     */
+    const neighboursOf = (
+      el: Element,
+      glass: Element,
+      across: boolean
+    ): { after: boolean; before: boolean } => {
+      const b = el.getBoundingClientRect();
+      const out = { after: false, before: false };
+      for (const other of glass.querySelectorAll(GLASS_ITEM)) {
+        if (
+          other === el ||
+          other.contains(el) ||
+          el.contains(other) ||
+          nestedIn(other, glass) ||
+          !shown(other)
+        ) {
+          continue;
+        }
+        const o = other.getBoundingClientRect();
+        if (o.width < 1 || o.height < 1) {
+          continue;
+        }
+        if (across) {
+          const meets = o.top < b.bottom && o.bottom > b.top;
+          out.before ||= meets && o.right <= b.left + 0.5;
+          out.after ||= meets && o.left >= b.right - 0.5;
+        } else {
+          const meets = o.left < b.right && o.right > b.left;
+          out.before ||= meets && o.bottom <= b.top + 0.5;
+          out.after ||= meets && o.top >= b.bottom - 0.5;
+        }
+      }
+      return out;
+    };
+    /**
+     * Where `inner`'s corners leave `outer`'s contour, the worst corner:
+     * what it draws, what concentric is, its inset and the outer radius. In
+     * a capsule the corners facing its ends take its radius less the
+     * inset; those facing a neighbour (`faces`, the sides another item
+     * stands on) take one small radius, under half that (`joint`).
+     */
     const missOf = (
       inner: Contour,
-      outer: Contour
+      outer: Contour,
+      faces: { after: boolean; before: boolean } = {
+        after: false,
+        before: false,
+      }
     ): {
       at: string;
       big: number;
       drawn: number;
       inset: number;
+      joint: boolean;
       want: number;
     } | null => {
       const w = outer.right - outer.left;
@@ -3749,6 +3826,7 @@ function readInPage(args: InPageArgs): InPageRead {
         big: number;
         drawn: number;
         inset: number;
+        joint: boolean;
         off: number;
         want: number;
       } | null = null;
@@ -3780,9 +3858,11 @@ function readInPage(args: InPageArgs): InPageRead {
         const want = Math.max(0, big - inset);
         const [irx = 0, iry = 0] = inner.r[i] ?? [];
         const drawn = (irx + iry) / 2;
-        const off = Math.abs(drawn - want) - room;
+        const facesStart = h <= w ? left : top;
+        const joint = capsule && (facesStart ? faces.before : faces.after);
+        const off = joint ? drawn - want / 2 : Math.abs(drawn - want) - room;
         if (off > 0 && !(worst && worst.off >= off)) {
-          worst = { at, big, drawn, inset, off, want };
+          worst = { at, big, drawn, inset, joint, off, want };
         }
       }
       return worst;
@@ -3809,12 +3889,25 @@ function readInPage(args: InPageArgs): InPageRead {
           f.box.top >= g.box.top - 0.5 &&
           f.box.right <= g.box.right + 0.5 &&
           f.box.bottom <= g.box.bottom + 0.5;
-        const theirs = g && inside ? missOf(f.box, g.box) : null;
+        const gw = g ? g.box.right - g.box.left : 0;
+        const gh = g ? g.box.bottom - g.box.top : 0;
+        const theirs =
+          g && inside
+            ? missOf(
+                f.box,
+                g.box,
+                el.matches(SEGMENT)
+                  ? undefined
+                  : neighboursOf(el, g.el, gh <= gw)
+              )
+            : null;
         if (g && theirs) {
           say(
             "state-shape",
             el,
-            `${state}: ${f.what} fill is ${px(theirs.drawn)} round at its ${theirs.at} corner, ${px(theirs.inset)} in from ${g.name}'s ${px(theirs.big)} round glass: concentric is ${px(theirs.want)}`
+            theirs.joint
+              ? `${state}: ${f.what} fill is ${px(theirs.drawn)} round at its ${theirs.at} corner, which faces a neighbour in ${g.name}'s ${px(theirs.big)} round glass: a small radius, under half the ends' concentric ${px(theirs.want)}`
+              : `${state}: ${f.what} fill is ${px(theirs.drawn)} round at its ${theirs.at} corner, ${px(theirs.inset)} in from ${g.name}'s ${px(theirs.big)} round glass: concentric is ${px(theirs.want)}`
           );
           return;
         }
@@ -3827,9 +3920,15 @@ function readInPage(args: InPageArgs): InPageRead {
           continue;
         }
         const rest = atRest?.rest.get(el);
+        // What a child drew at rest already (a face, a mark) is the
+        // drawing, not this state's fill: only what the state paints anew.
         judge(
           el,
-          fillsOf(el).filter((f) => rest?.get(f.key) !== f.sig),
+          fillsOf(el).filter(
+            (f) =>
+              rest?.get(f.key) !== f.sig &&
+              !(f.key !== "own" && rest?.has(f.key))
+          ),
           args.forced
         );
       }
@@ -3849,6 +3948,72 @@ function readInPage(args: InPageArgs): InPageRead {
         }
       }
       stash.__stateShape = { els: read, rest };
+    }
+  }
+
+  // A bar's glyph control draws its glyph at its fill's centre, and its
+  // count takes no room in it (The Earned Count Rule): the count is a badge
+  // on the control's corner (HIG, Tab bars: "a badge — a red oval
+  // containing white text and either a number or an exclamation point — on
+  // a tab"), so a counted item is its neighbours' shape, its glyph as far
+  // from the fill's start as from its end, and the badge never lies on the
+  // glyph. A control in a bar whose only content is one glyph and at most a
+  // count is read: its glyph's centre within 1px of its box's on each axis,
+  // and the count's box clear of the glyph's box. Read at rest: where they
+  // stand is the same in every state, and the fill is the control's own box.
+  if (!skip.has("glyph-place")) {
+    const COUNT = /^\d{1,4}\+?$/u;
+    for (const el of controls) {
+      if (!el.closest(BAR)) {
+        continue;
+      }
+      const marks = glyphs.filter((drawn) => {
+        const r = drawn.getBoundingClientRect();
+        return (
+          el.contains(drawn) && shown(drawn) && r.width >= 8 && r.height >= 8
+        );
+      });
+      const said = textsIn(el)
+        .map((t) => t.node.data.trim())
+        .filter(Boolean);
+      const counts = [...el.querySelectorAll("*")].filter(
+        (d) =>
+          !d.closest("svg") &&
+          d.children.length === 0 &&
+          COUNT.test(d.textContent?.trim() ?? "") &&
+          shown(d)
+      );
+      const [glyph] = marks;
+      if (!glyph || marks.length > 1 || said.some((one) => !COUNT.test(one))) {
+        continue;
+      }
+      const box = el.getBoundingClientRect();
+      const g = glyph.getBoundingClientRect();
+      const start = g.left - box.left;
+      const end = box.right - g.right;
+      const top = g.top - box.top;
+      const bottom = box.bottom - g.bottom;
+      if (Math.abs(start - end) / 2 > 1 || Math.abs(top - bottom) / 2 > 1) {
+        say(
+          "glyph-place",
+          el,
+          `its glyph stands off its fill's centre: ${px(start)} from its start and ${px(end)} from its end, ${px(top)} from its top and ${px(bottom)} from its bottom (${px(box.width)}×${px(box.height)} fill, ${px(g.width)} glyph)${counts.length > 0 ? `, beside its count "${counts[0]?.textContent?.trim()}"` : ""}`
+        );
+        continue;
+      }
+      for (const count of counts) {
+        const c = count.getBoundingClientRect();
+        if (
+          Math.min(c.right, g.right) - Math.max(c.left, g.left) > 0.5 &&
+          Math.min(c.bottom, g.bottom) - Math.max(c.top, g.top) > 0.5
+        ) {
+          say(
+            "glyph-place",
+            el,
+            `its count "${count.textContent?.trim()}" (${px(c.left - box.left)}–${px(c.right - box.left)} × ${px(c.top - box.top)}–${px(c.bottom - box.top)} in the control) lies on its glyph (${px(start)}–${px(start + g.width)} × ${px(top)}–${px(top + g.height)})`
+          );
+        }
+      }
     }
   }
 

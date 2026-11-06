@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { SEGMENTED_TRACK } from "#lib/components/ui/tabs/thumb.js";
   import { tv } from "#lib/utils.js";
 
   /**
@@ -43,20 +44,20 @@
    *   Rule).
    */
   const tabsListVariants = tv({
-    base: "relative inline-flex flex-none select-none items-center gap-(--gap) rounded-(--radius) bg-(--muted) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--px:var(--c-tab-px)] [--radius:var(--radius-sm)] [--shape:calc(var(--radius)_-_var(--pad))] [--sheet:var(--surface-raised)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
+    base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--px:var(--c-tab-px)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
     variants: {
       size: {
         default: "",
         compact:
-          "[--item:var(--c-btn-h-xs)] [--pad:var(--space-row)] [--px:var(--c-segment-pad-x)] [--radius:var(--radius-xs)] coarse:[--item:var(--c-tab-item)]",
+          "[--px:var(--c-segment-pad-x)] coarse:[--item:var(--c-tab-item)]",
       },
       variant: {
-        /* In a bar's glass its track is a capsule, its thumb concentric
-           inside it (\`glass-item:\`, BarGlass). */
-        segmented:
-          "glass-item:rounded-pill glass-item:[--shape:var(--radius-pill)]",
+        /* The kit's one segmented recipe (tabs/thumb.ts): its groove, pad,
+           segment height and concentric corners, a capsule in a bar's
+           glass; the chosen segment lifted in surface-lift. */
+        segmented: `${SEGMENTED_TRACK} [--sheet:var(--surface-lift)]`,
         folder:
-          "isolate gap-0 rounded-none bg-transparent ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
+          "isolate gap-0 rounded-none bg-transparent [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--radius:var(--radius-sm)] [--sheet:var(--surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },
       scrollable: {
         true: "kit-edge-fade no-scrollbar min-w-0 max-w-full flex-[0_1_auto] overflow-x-auto overflow-y-hidden [--edge-room-end:var(--fade-len)] [--edge-room-start:var(--fade-len)] [&>[data-slot=ff-tab]]:shrink-0",
@@ -70,11 +71,17 @@
       },
     },
     compoundVariants: [
+      // Compact, the segmented groove holds 24px segments a row's pad in: 28px in all.
+      {
+        variant: "segmented",
+        size: "compact",
+        class: "[--item:var(--c-btn-h-xs)] [--pad:var(--space-row)]",
+      },
       {
         strip: "session",
         scrollable: true,
         class:
-          "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--c-top-bar-h)_-_var(--c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
+          "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--c-top-bar-h)_-_var(--c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:not-glass-item:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
       },
       {
         strip: "hosted",
@@ -1247,7 +1254,7 @@
     <div
       data-slot="segment"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-1 rounded-(--shape) bg-(--sheet) shadow-tile in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
+      class="pointer-events-none absolute start-0 top-0 z-1 rounded-(--shape) bg-(--sheet) shadow-raised in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
       style:transform="translate({at.left}px,{at.top}px)"
       style:width="{at.width}px"
       style:height="{at.height}px"

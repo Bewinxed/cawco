@@ -352,7 +352,7 @@
   data-slot="ff-tab"
   data-ff-tab
   class={cn(
-    "group/ff-tab relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
+    "group/ff-tab relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted glass-item:h-auto glass-item:self-stretch",
     "[&>:where(:not([data-slot=fold],[data-slot=hit]))]:relative [&>:where(:not([data-slot=fold],[data-slot=hit]))]:z-3",
     "[&:not(:has([data-slot=hit]:last-child))]:pe-(--end-pad)",
     "in-variant-folder:[&:not(:has([data-slot=hit]:last-child))]:pe-(--fold-end-pad)",

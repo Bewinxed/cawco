@@ -590,6 +590,40 @@
   border-radius: var(--r-inner, --value(--radius-*));
 }
 
+/* The Concentric Rule along a row of items in one capsule (a bar's glass
+   group, BarGlass): position decides the corners. The row declares its
+   outer radius as a length (`--r-outer`, never the pill's 999px, which a
+   box with a small corner beside it scales to nothing), its inset and the
+   one small radius its items show each other (`concentric-row
+   r-inset-c-bar-group-pad r-join-xs`). BarGlass marks each item it shows
+   with where it stands (`data-glass-at`: leading, middle, trailing, only);
+   the corners facing the row's ends take the outer radius less the inset,
+   the corners facing a neighbour the join. An item takes them on its own
+   box (`concentric-at`), so its hover, pressed, selected fill and its focus
+   ring share one contour; unplaced, it is concentric all round. */
+@utility concentric-row {
+  --r-inner: max(0px, calc(var(--r-outer) - var(--r-inset)));
+  & [data-glass-at] {
+    --r-start: var(--r-join);
+    --r-end: var(--r-join);
+  }
+  & :is([data-glass-at="leading"], [data-glass-at="only"]) {
+    --r-start: var(--r-inner);
+  }
+  & :is([data-glass-at="trailing"], [data-glass-at="only"]) {
+    --r-end: var(--r-inner);
+  }
+}
+@utility r-join-* {
+  --r-join: --value(--radius-*);
+}
+@utility concentric-at {
+  border-start-start-radius: var(--r-start, var(--r-inner));
+  border-end-start-radius: var(--r-start, var(--r-inner));
+  border-start-end-radius: var(--r-end, var(--r-inner));
+  border-end-end-radius: var(--r-end, var(--r-inner));
+}
+
 /* One side's border taken away whole, as `border-bottom: 0` takes it: no
    width, no style, the colour back to currentcolor. Tailwind's `border-b-0`
    only zeroes the width, leaving the side solid in the base border colour;

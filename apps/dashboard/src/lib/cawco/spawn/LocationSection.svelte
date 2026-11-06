@@ -32,6 +32,7 @@
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import {
     IconFolder as Folder,
     IconFolderGit as FolderGit,
@@ -44,7 +45,6 @@
   } from "#lib/icons.js";
   import { didntAnswer, machineFs } from "../client.svelte";
   import { TRY_AGAIN } from "../unanswered";
-  import Segmented from "./Segmented.svelte";
 
   let {
     mode,
@@ -194,24 +194,26 @@
     </SectionHeader>
   {/if}
   {#snippet source()}
-    <Segmented
+    <ToggleGroup.Root
+      aria-label={spawnWords.location.source}
       class={embedded ? "justify-self-box-start" : ""}
-      items={[
-        { value: "dir", label: spawnWords.location.existingFiles },
-        { value: "repo", label: spawnWords.location.cloneRepo },
-      ]}
-      label={spawnWords.location.source}
-      onchange={onmode}
+      onValueChange={(next) => {
+        if (next === "dir" || next === "repo") {
+          onmode(next);
+        }
+      }}
+      type="single"
       value={mode}
     >
-      {#snippet icon(value, on)}
-        {#if value === "dir"}
-          <Folder class="text-hue-amber-500" />
-        {:else}
-          <FolderGit style={`opacity:${on ? 1 : 0.6}`} />
-        {/if}
-      {/snippet}
-    </Segmented>
+      <ToggleGroup.Item value="dir">
+        <Folder class="text-hue-amber-500" />{spawnWords.location.existingFiles}
+      </ToggleGroup.Item>
+      <ToggleGroup.Item value="repo">
+        <FolderGit
+          class={mode === "repo" ? undefined : "opacity-60"}
+        />{spawnWords.location.cloneRepo}
+      </ToggleGroup.Item>
+    </ToggleGroup.Root>
   {/snippet}
 
   <!-- It clips its corners and is no scroller (the browser's foot sticks

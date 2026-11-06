@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T09:00:00.000Z",
+  "generatedAt": "2026-11-06T12:00:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -3232,7 +3232,7 @@
       "name": "Segmented Control",
       "kind": "nav",
       "refersTo": "segmented",
-      "description": "A recessed groove with a lifted thumb under the chosen segment; segments tint on press, never scale.",
+      "description": "A recessed groove with a lifted thumb under the chosen segment, thumb and segments concentric with it; in a bar's glass a capsule with capsule segments. Segments tint on press, never scale.",
       "html": "<div class=\"ds-seg\" role=\"tablist\"><span class=\"ds-seg-thumb\" aria-hidden=\"true\"></span><button class=\"ds-seg-item ds-seg-on\" role=\"tab\" aria-selected=\"true\">Sessions</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Machines</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Runs</button></div>",
       "css": ".ds-seg { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-recess-deep); } .ds-seg-thumb { position: absolute; top: 3px; left: 3px; width: 84px; height: 30px; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); transition: transform var(--dur-pop) var(--ease-in-out); } .ds-seg-item { position: relative; width: 84px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-well); background: transparent; color: var(--ink-muted); font: 500 var(--text-label) / 1 var(--font-body); cursor: pointer; transition: var(--transition-control); } .ds-seg-on { color: var(--ink-strong); } .ds-seg-item:not(.ds-seg-on):active { background-color: var(--surface-pressed); } .ds-seg-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
     },
@@ -3459,8 +3459,13 @@
         "section": "shapes"
       },
       {
+        "name": "The Glass Contour Rule",
+        "body": "A control standing in a bar's glass takes the glass's contour by where it stands: its corners facing the capsule's ends take the capsule's radius less the pad, those facing a neighbour `radius-xs` (BarGlass marks each item leading, middle, trailing or only; design.css `concentric-row`). Hover, pressed, selected and focus are drawn on that one box (`concentric-at`), so every state shares its contour; `state-shape` forces and reads each.",
+        "section": "shapes"
+      },
+      {
         "name": "The Measured Exception Rule",
-        "body": "The stat tile keeps the comp's radii (a 10px card round a 7px well), a panel its 16px shell, and the smallest marks the 2px hair. Each is a token.",
+        "body": "The stat tile keeps the comp's radii (a card round its well), a panel its shell, and the smallest marks the hair. Each is a token.",
         "section": "shapes"
       },
       {

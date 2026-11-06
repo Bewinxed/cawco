@@ -37,9 +37,9 @@
     IconServerAlt as Server,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import Choice from "../config/Choice.svelte";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  import Segmented from "../spawn/Segmented.svelte";
   import FindField from "./FindField.svelte";
   import FindPeek from "./FindPeek.svelte";
   import FindRow from "./FindRow.svelte";
@@ -825,15 +825,17 @@
       >Waiting for you{#if waitingCount > 0}<span class="px-space-1">·</span
         ><span data-slot="num" class="num">{waitingCount}</span>{/if}</span
     >
-    <Segmented
-      items={[
+    <Choice
+      label="Sort"
+      onchange={(next) => {
+        if (next === "age" || next === "project") {
+          finder.waitingSort = next;
+        }
+      }}
+      options={[
         { value: "age", label: "Age" },
         { value: "project", label: "Project" },
       ]}
-      label="Sort"
-      onchange={(value) => {
-        finder.waitingSort = value;
-      }}
       value={finder.waitingSort}
     />
   </div>

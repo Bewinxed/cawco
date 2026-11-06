@@ -70,7 +70,7 @@ const RING_MID = 18;
 const GLASS = {
   rim: 15,
   stand: 13,
-  pad: ["4px", "5.66667px"],
+  pad: ["0px", "0px"],
   jump: "16px",
 } as const;
 
@@ -259,7 +259,7 @@ const glassLeg = async (kit: Kit, page: Page, leg: string, desk: boolean) => {
     return;
   }
   kit.check(
-    `${leg}: .machines padding-inline is ${GLASS.pad.join(" ")} (--mark-inset, and it plus the symbol's grid margin)`,
+    `${leg}: .machines padding-inline is ${GLASS.pad.join(" ")} (its count a badge on its corner, taking no room: the item its neighbours' size)`,
     g.pad?.[0] === GLASS.pad[0] && g.pad?.[1] === GLASS.pad[1],
     `padding-inline ${g.pad?.join(" ") ?? "none"}`
   );
