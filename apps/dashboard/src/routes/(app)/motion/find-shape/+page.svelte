@@ -440,11 +440,56 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       CSS.highlights.delete("find-current");
       return;
     }
+    if (current) {
+      clearOfFind(current);
+    }
     CSS.highlights.set("find-place", new Highlight(...all));
     CSS.highlights.set(
       "find-current",
       current ? new Highlight(current) : new Highlight()
     );
+  }
+
+  /** The place last brought clear of find's surfaces, so it moves once. */
+  let cleared: string | null = null;
+  /** When the last step's seek began. */
+  let steppedAt = 0;
+  /**
+   * The words found stand clear of what find draws over the conversation
+   * (its head, the composer and Back where you were): the seek centres the
+   * place's row, and a tall row (a test run's output) can leave its words
+   * under the composer on a phone. Once per place, after its seek.
+   */
+  function clearOfFind(range: Range) {
+    const docId = currentPlace?.docId ?? null;
+    // After the seek has landed (it re-centres over its frames).
+    if (docId === cleared || !stage || performance.now() - steppedAt < 800) {
+      return;
+    }
+    let box: HTMLElement | null = range.startContainer.parentElement;
+    // The transcript's own scroller, not a tool body that scrolls inside it.
+    while (
+      box &&
+      !(
+        box.scrollHeight > box.clientHeight + 1 &&
+        box.clientHeight > window.innerHeight / 2
+      )
+    ) {
+      box = box.parentElement;
+    }
+    if (!box) {
+      return;
+    }
+    const word = range.getBoundingClientRect();
+    const view = box.getBoundingClientRect();
+    const top = view.top + (shape === "head" ? headH : 0);
+    const bottom = pill ? Math.min(view.bottom, pill.y) - 96 : view.bottom;
+    if (word.top >= top + 48 && word.bottom <= bottom) {
+      cleared = docId;
+      return;
+    }
+    box.scrollBy({ top: word.top - (top + (bottom - top) * 0.4) });
+    cleared = docId;
   }
 
   // ── The composer's place, for the composer shape ────────────────────────
@@ -569,6 +614,8 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       return;
     }
     atDoc = place.docId;
+    cleared = null;
+    steppedAt = performance.now();
     if (place.call) {
       disclosureAt(MAIN, place.call).set(true);
     }
