@@ -9,6 +9,12 @@
  * program that read its old shape, by name, never silently.
  */
 import { readWithin } from "../../packages/core/src/bounded";
+import type {
+  BareTool,
+  Sending,
+  ToolArgs,
+  ToolName,
+} from "../../packages/core/src/hub-request";
 import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import {
   envelopeText,
@@ -135,21 +141,59 @@ const call = async (
   return { refused: !!envelope.isError, status, text: envelopeText(envelope) };
 };
 
-/** `name` called as `session`, read as an agent reads it: its words. */
-export const toolWords = (
+/**
+ * `name` called as `session`, read as an agent reads it: its words. Its
+ * arguments are held to what the tool takes (core hub-routes.gen.ts, every
+ * tool a session is listed): one it doesn't take, or one missing it needs,
+ * is a type error, as at the hub's routes (core hub-request.ts `Sending`).
+ */
+export function toolWords<N extends BareTool>(
+  session: ToolSession,
+  name: N,
+  args?: Record<string, never>,
+  options?: ToolCallOptions
+): Promise<ToolWords>;
+export function toolWords<N extends ToolName, const A>(
+  session: ToolSession,
+  name: N,
+  args: Sending<A, ToolArgs<N>>,
+  options?: ToolCallOptions
+): Promise<ToolWords>;
+export function toolWords(
   session: ToolSession,
   name: string,
   args: Record<string, unknown> = {},
   options: ToolCallOptions = {}
-): Promise<ToolWords> => call(session, name, args, "words", options);
+): Promise<ToolWords> {
+  return call(session, name, args, "words", options);
+}
 
-/** `name` called as `session`, read as a program: the hub's record, or the refusal's words. Throws when the tool answered words. */
-export const toolRecord = async <T>(
+/** A tool and its arguments, held to what it takes as {@link toolWords}'s are: what {@link toolRecord} calls. */
+export interface ToolCall {
+  readonly args: Record<string, unknown>;
+  readonly name: ToolName;
+}
+
+/** Tool `name` with `args`, each one it takes and all it needs (core hub-request.ts `Sending`). */
+export function toolCall<N extends BareTool>(name: N): ToolCall;
+export function toolCall<N extends ToolName, const A>(
+  name: N,
+  args: Sending<A, ToolArgs<N>>
+): ToolCall;
+export function toolCall(
+  name: ToolName,
+  args: Record<string, unknown> = {}
+): ToolCall {
+  return { name, args };
+}
+
+/** `called` as `session`, read as a program: the hub's record, or the refusal's words. Throws when the tool answered words. */
+export async function toolRecord<T>(
   session: ToolSession,
-  name: string,
-  args: Record<string, unknown> = {},
+  called: ToolCall,
   options: ToolCallOptions = {}
-): Promise<ToolRecord<T>> => {
+): Promise<ToolRecord<T>> {
+  const { name, args } = called;
   const answer = await call(session, name, args, "record", options);
   return answer.refused
     ? { refused: true, status: answer.status, text: answer.text }
@@ -158,4 +202,4 @@ export const toolRecord = async <T>(
         refused: false, // A probe's own reading of the record it asked for.
         record: recordOf(name, answer.text) as T,
       };
-};
+}

@@ -103,6 +103,9 @@ import {
   type HubRequest,
   type HubSent,
   hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
 } from "../../../packages/core/src/hub-request";
 import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
@@ -500,9 +503,9 @@ interface Scene {
     body?: HubSent<"POST /api/workspaces/:id/archive">["body"]
   ) => Promise<{ status: number; text: string }>;
   /** A tool of the parent's, called as the parent: its status and its answer's text. */
-  callAsParent: (
-    name: string,
-    args: object
+  callAsParent: <N extends ToolName, const A>(
+    name: N,
+    args: Sending<A, ToolArgs<N>>
   ) => Promise<{ status: number; text: string }>;
   /** Deletes the parent's artifact: its status. */
   closePreview: (id: string) => Promise<number>;
@@ -1581,7 +1584,7 @@ const spec: Spec = {
         const said = await toolWords(
           { base: fleet.base, id: parent, credential },
           name,
-          args as Record<string, unknown>
+          args
         );
         return { status: said.status, text: said.text };
       },

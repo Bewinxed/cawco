@@ -79,6 +79,7 @@ import { workWords } from "../../../packages/core/src/index";
 import {
   type ToolSession,
   type ToolWords,
+  toolCall,
   toolRecord,
   toolWords,
 } from "../../lib/tool-call";
@@ -1140,29 +1141,31 @@ const reachedAs = async (
     !handed.refused && reached,
     `${handed.status} ${handed.text.slice(0, 300)} | read by the leaf: ${reached}`
   );
-  const names = async (tool: string, args: Record<string, unknown>) => {
-    const answer = await toolWords(session, tool, { target, ...args });
+  const names = async (tool: "interrupt_delegate" | "stop_delegate") => {
+    const answer = await toolWords(session, tool, { target });
     check(
       `10: ${tool} to ${form} (${target}) names that leaf`,
       !answer.refused && answer.text.includes(id8),
       `${answer.status} ${answer.text.slice(0, 300)}`
     );
   };
-  await names("interrupt_delegate", {});
+  await names("interrupt_delegate");
   await answered(kit, fleet, session, form, target, leaf.instanceId, tag);
   // Its words reach find's index a moment after they are said.
   const around = await until(
     `find's around ${target}`,
     () =>
-      toolRecord<{ around?: { id?: string } }>(session, "find", {
-        around: target,
-      }),
+      toolRecord<{ around?: { id?: string } }>(
+        session,
+        toolCall("find", { around: target })
+      ),
     (read) => !read.refused,
     90_000
   ).catch(() =>
-    toolRecord<{ around?: { id?: string } }>(session, "find", {
-      around: target,
-    })
+    toolRecord<{ around?: { id?: string } }>(
+      session,
+      toolCall("find", { around: target })
+    )
   );
   check(
     `10: find's around ${form} (${target}) reads that session`,
@@ -1171,7 +1174,7 @@ const reachedAs = async (
       ? around.text.slice(0, 300)
       : JSON.stringify(around.record.around ?? null)
   );
-  await names("stop_delegate", {});
+  await names("stop_delegate");
   const stopped = await ended(fleet, leaf.workItemId);
   check(
     `10: stop_delegate to ${form} cancels that leaf's item`,

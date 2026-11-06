@@ -62,6 +62,9 @@ import {
   fetchHub,
   type HubRequest,
   hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
 } from "../../../packages/core/src/hub-request";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/index";
 import { httpProof } from "../../../packages/core/src/machine-key";
@@ -171,12 +174,12 @@ const ask = async (
 };
 
 /** A tool call through the REST door, as the session the credential is: its words. */
-const callTool = async (
+const callTool = async <N extends ToolName, const A>(
   fleet: Fleet,
   instanceId: string,
   credential: string,
-  name: string,
-  args: Record<string, unknown>
+  name: N,
+  args: Sending<A, ToolArgs<N>>
 ) => {
   const answer = await toolWords(
     { base: fleet.base, id: instanceId, credential },

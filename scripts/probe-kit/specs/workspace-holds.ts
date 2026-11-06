@@ -66,7 +66,12 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import {
+  hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
+} from "../../../packages/core/src/hub-request";
 import { movedLine, restoredWords } from "../../../packages/core/src/injected";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import { workWords } from "../../../packages/core/src/words/work";
@@ -335,9 +340,9 @@ interface Started {
 
 /** What the legs share. */
 interface Scene {
-  call: (
-    name: string,
-    args: object
+  call: <N extends ToolName, const A>(
+    name: N,
+    args: Sending<A, ToolArgs<N>>
   ) => Promise<{ status: number; text: string }>;
   delegate: (tag: Tag, cwd: string, extra?: object) => Promise<Started>;
   ended: (started: Started) => Promise<ItemRow | undefined>;
@@ -1064,7 +1069,7 @@ const spec: Spec = {
         const answer = await toolWords(
           { base: fleet.base, id: parent, credential },
           name,
-          args as Record<string, unknown>
+          args
         );
         return { status: answer.status, text: answer.text };
       },

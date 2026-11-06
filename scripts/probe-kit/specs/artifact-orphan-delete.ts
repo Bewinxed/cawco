@@ -28,6 +28,11 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
+} from "../../../packages/core/src/hub-request";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
@@ -130,11 +135,11 @@ const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
   await fleet.sessionCredential(id);
 
 /** A CawCo tool called as session `as`, through the door its MCP server and the CLI share: its words. */
-const callAs = async (
+const callAs = async <N extends ToolName, const A>(
   fleet: KitFleet,
   as: string,
-  name: string,
-  args: Record<string, unknown>
+  name: N,
+  args: Sending<A, ToolArgs<N>>
 ): Promise<{ isError: boolean; text: string }> => {
   const said = await toolWords(
     { base: fleet.base, id: as, credential: await credentialOf(fleet, as) },

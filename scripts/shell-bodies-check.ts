@@ -22,9 +22,15 @@
  * hub-in-process.ts) and its fields against the route's body schema (hub
  * unknown-fields.ts `fieldsNotTaken`).
  *
- * It fails naming each field a route doesn't take, each body it cannot read
- * (unless listed in {@link UNREAD} with why), and each path no hub route
- * answers.
+ * And every `cawco tool <name> … '<json>'` a script runs (a session's tool,
+ * through the CLI's door): its arguments, the first JSON object after the
+ * tool's name, are matched against that tool's input schema (route-types.ts
+ * reads the same listing, hub tool-inputs.ts), its expansions read as above,
+ * and a tool no session is listed is named.
+ *
+ * It fails naming each field a route or tool doesn't take, each body it
+ * cannot read (unless listed in {@link UNREAD} with why), and each path no
+ * hub route answers.
  *
  *   bun scripts/shell-bodies-check.ts
  */
@@ -503,6 +509,82 @@ const sendsOf = (file: string, src: string): Send[] => {
 
 const sends = [...sources].flatMap(([file, src]) => sendsOf(file, src));
 
+/** A `cawco tool <name>` command, the CLI's door to a session's tool. */
+const TOOL_CALL = /\bcawco"?\s+tool\s+([a-z][a-z0-9_]*)/gu;
+/** A shell expansion as written, escaped (\`\\$x\`) or not, braced or not. */
+const EXPANSION = /\\?\$(?:\{[^}]*\}|\w+|[0-9@*#?$!-])/gu;
+
+interface ToolSend {
+  file: string;
+  line: number;
+  /** Its arguments' text, each expansion as {@link SUB}; null when it has none to read. */
+  text: string | null;
+  tool: string;
+}
+
+/** The JSON object starting at `text[from]`, its braces balanced, strings skipped; null when it never closes. */
+const objectAt = (text: string, from: number): string | null => {
+  let depth = 0;
+  let inString = false;
+  for (let i = from; i < text.length; i += 1) {
+    const c = text[i];
+    if (inString) {
+      if (c === "\\") {
+        i += 1;
+      } else if (c === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+    } else if (c === "{") {
+      depth += 1;
+    } else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(from, i + 1);
+      }
+    }
+  }
+  return null;
+};
+
+/**
+ * Each `cawco tool` command in `src`, with the first JSON object after its
+ * name on its line (continued lines joined): read through one level of
+ * quoting, as a command nested in a string (`ws_exec "… cawco tool x '{…}'"`)
+ * is run, its escaped quotes and expansions unescaped.
+ */
+const toolSendsOf = (file: string, src: string): ToolSend[] => {
+  const joined = src.replace(/\\\n/gu, "  ");
+  // A continuation joined keeps its two characters: an offset is the source's.
+  const lineAt = (offset: number) => src.slice(0, offset).split("\n").length;
+  return [...joined.matchAll(TOOL_CALL)].flatMap((found) => {
+    const offset = found.index ?? 0;
+    const start = joined.lastIndexOf("\n", offset) + 1;
+    if (joined.slice(start, offset).trimStart().startsWith("#")) {
+      return [];
+    }
+    const end = joined.indexOf("\n", offset);
+    const rest = joined
+      .slice(offset + found[0].length, end < 0 ? undefined : end)
+      .replaceAll('\\"', '"')
+      .replace(EXPANSION, SUB);
+    const open = rest.indexOf("{");
+    return [
+      {
+        file,
+        line: lineAt(offset),
+        tool: found[1] as string,
+        text: open < 0 ? null : objectAt(rest, open),
+      },
+    ];
+  });
+};
+
+const toolSends = [...sources].flatMap(([file, src]) => toolSendsOf(file, src));
+
 /** A variable body's values: each assignment of it in the function the send is in. */
 const assignmentsOf = (send: Send, name: string): Word[] => {
   const lines = (sources.get(send.file) ?? "").split("\n");
@@ -520,6 +602,8 @@ const assignmentsOf = (send: Send, name: string): Word[] => {
 const home = mkdtempSync(join(tmpdir(), "shell-bodies-"));
 const { hub } = await hubInProcess(join(home, "hub.db"), home);
 const { fieldsNotTaken } = await import("../packages/hub/src/unknown-fields");
+const { toolInputs } = await import("../packages/hub/scripts/tool-inputs");
+const tools = await toolInputs();
 interface Route {
   hooks?: { body?: unknown };
   method: string;
@@ -612,6 +696,43 @@ const failures = sends.flatMap((send) => {
     : [send.body];
   return bodies.flatMap((body) => bodyProblems(send, body, matched));
 });
+const toolFailures = toolSends.flatMap((send) => {
+  const where = `${send.file}:${send.line}`;
+  const input = tools.get(send.tool);
+  if (input === undefined) {
+    return [
+      `${where}: cawco tool ${send.tool}: no session is listed a tool by that name`,
+    ];
+  }
+  if (send.text === null) {
+    return [];
+  }
+  const value = bodyOf(send.text);
+  if (value === null) {
+    return [
+      `${where}: cawco tool ${send.tool}'s arguments are no JSON this can read: ${shownText(send.text).slice(0, 120)}`,
+    ];
+  }
+  const fields = fieldsNotTaken(input, value);
+  return fields.length > 0
+    ? [
+        `${where}: cawco tool ${send.tool} sends ${fields.map((one) => `\`${one}\``).join(", ")}, which the tool doesn't take`,
+      ]
+    : [];
+});
+failures.push(...toolFailures);
+
+/** A planted `cawco tool` call with an argument its tool doesn't take, nested as prove-stage2.sh nests one: this must find it, or it reads nothing. */
+const PLANTED_TOOL = `ws_exec "cawco tool wait_item --record '{\\"minutes\\":$M,\\"reason\\":\\"x\\",\\"seconds\\":1}'"`;
+const [planted] = toolSendsOf("planted.sh", PLANTED_TOOL);
+const plantedFields = planted?.text
+  ? fieldsNotTaken(tools.get("wait_item"), bodyOf(planted.text))
+  : [];
+if (plantedFields.join() !== "seconds") {
+  failures.push(
+    `the planted cawco tool call reads as ${JSON.stringify(plantedFields)}, not \`seconds\`: the tool calls are not read`
+  );
+}
 rmSync(home, { recursive: true, force: true });
 
 if (failures.length > 0) {
@@ -621,6 +742,6 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `shell-bodies-check: ${sends.length} send(s) in ${files.length} shell file(s), every field one its route takes`
+  `shell-bodies-check: ${sends.length} send(s) and ${toolSends.length} tool call(s) in ${files.length} shell file(s), every field one its route or tool takes`
 );
 process.exit(0);

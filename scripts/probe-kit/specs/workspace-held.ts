@@ -40,9 +40,20 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import {
+  hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
+} from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
-import { type ToolRecord, toolRecord, toolWords } from "../../lib/tool-call";
+import {
+  type ToolCall,
+  type ToolRecord,
+  toolCall,
+  toolRecord,
+  toolWords,
+} from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyGone, gitInCopy } from "../copy";
 import type { Kit, Spec } from "../kit";
@@ -221,9 +232,9 @@ interface Started {
 /** What the phases share. */
 interface Scene {
   /** A tool of the parent's, called as the parent: its status and its words. */
-  callAsParent: (
-    name: string,
-    args: object
+  callAsParent: <N extends ToolName, const A>(
+    name: N,
+    args: Sending<A, ToolArgs<N>>
   ) => Promise<{ status: number; text: string }>;
   /** A delegate asked of the parent (of `extra.parentInstanceId` when it names one), not waited for. */
   delegate: (tag: Tag, extra?: object) => Promise<Started>;
@@ -233,7 +244,7 @@ interface Scene {
   parentId: string;
   projectId: string;
   /** delegate_list called as the parent, read as its record (scripts/lib/tool-call.ts). */
-  recordAsParent: (name: string, args: object) => Promise<ToolRecord<Answer>>;
+  recordAsParent: (called: ToolCall) => Promise<ToolRecord<Answer>>;
   /** The project's repository, every delegate's cwd. */
   src: string;
   /** The workspace's row once its state is `state`, or as it stands when that does not come. */
@@ -498,8 +509,10 @@ const listed = (
   said.refused ? { refused: said.text } : said.record;
 
 /** delegate_list's record of a window, asked as the parent. */
-const windowOf = (scene: Scene, window: object) =>
-  scene.recordAsParent("delegate_list", window);
+const windowOf = <const W>(
+  scene: Scene,
+  window: Sending<W, ToolArgs<"delegate_list">>
+) => scene.recordAsParent(toolCall("delegate_list", window));
 
 /** (e) delegate_list with a window answers the delegates live inside it, in start order, and its tree's workspaces held inside it. */
 const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
@@ -511,7 +524,7 @@ const windowPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       started.workItemId
     )[0];
   const iso = (ms: number | null | undefined) =>
-    typeof ms === "number" ? new Date(ms).toISOString() : null;
+    typeof ms === "number" ? new Date(ms).toISOString() : undefined;
   /** A delegate that finishes blocked, once its workspace is held. */
   const heldOne = async (tag: Tag, extra?: object) => {
     const started = await scene.delegate(tag, extra);
@@ -697,15 +710,14 @@ const spec: Spec = {
         const said = await toolWords(
           { base: fleet.base, id: parent, credential },
           name,
-          args as Record<string, unknown>
+          args
         );
         return { status: said.status, text: said.text };
       },
-      recordAsParent: (name, args) =>
+      recordAsParent: (called) =>
         toolRecord<Answer>(
           { base: fleet.base, id: parent, credential },
-          name,
-          args as Record<string, unknown>
+          called
         ),
     };
 

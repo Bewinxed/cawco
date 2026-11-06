@@ -104,6 +104,25 @@ type Exact<T, S> = 0 extends 1 & T
           }
         : T;
 
+/**
+ * `A`, what a caller sends, as it may stand where schema type `S` is taken:
+ * all `S` needs, nothing `S` doesn't take ({@link Exact}), and never `any`.
+ * A signature takes `A` as its own type parameter (`<const A>`) so it is
+ * read as the caller wrote it, literal or typed variable.
+ */
+export type Sending<A, S> = 0 extends 1 & A ? never : A & S & Exact<A, S>;
+
+/** A CawCo tool, by its name. */
+export type ToolName = keyof ToolInputs & string;
+
+/** The arguments tool `N` takes, as a caller may send them. */
+export type ToolArgs<N extends ToolName> = ReadonlyDeep<ToolInputs[N]>;
+
+/** The tools that need no argument, called with none. */
+export type BareTool = {
+  [N in ToolName]: Record<string, never> extends ToolInputs[N] ? N : never;
+}[ToolName];
+
 /** A request as each transport sends it: spread it into `fetch`'s init. */
 export interface HubRequest {
   body?: string;
@@ -178,7 +197,7 @@ const requestOf = (route: string, parts: Parts): HubRequest => {
 export function hubRequest<R extends BareRoute>(route: R): HubRequest;
 export function hubRequest<R extends HubRoute, const S>(
   route: R,
-  sent: 0 extends 1 & S ? never : S & HubSent<R> & Exact<S, HubSent<R>>
+  sent: Sending<S, HubSent<R>>
 ): HubRequest;
 export function hubRequest(route: string, sent: Parts = {}): HubRequest {
   return requestOf(route, sent);

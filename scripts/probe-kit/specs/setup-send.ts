@@ -66,6 +66,9 @@ import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import {
   hubRequest,
   hubRequestAsGiven,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
 } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
@@ -176,8 +179,10 @@ const projectWithSession = async (fleet: KitFleet, name: string) => {
   return {
     id: project.id,
     session,
-    call: (tool: string, input: Record<string, unknown>) =>
-      toolWords(as, tool, input),
+    call: <N extends ToolName, const A>(
+      tool: N,
+      input: Sending<A, ToolArgs<N>>
+    ) => toolWords(as, tool, input),
     stages: () =>
       fleet.api<StagesRead>(
         hubRequest("GET /api/projects/:id/stages", { path: { id: project.id } })

@@ -59,7 +59,12 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import {
+  hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
+} from "../../../packages/core/src/hub-request";
 import { movedLine } from "../../../packages/core/src/injected";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
@@ -439,10 +444,10 @@ const leg = async (
   kit: Kit,
   fleet: Fleet,
   tag: LegTag,
-  callAsParent: (
+  callAsParent: <N extends ToolName, const A>(
     parent: string,
-    name: string,
-    args: object
+    name: N,
+    args: Sending<A, ToolArgs<N>>
   ) => Promise<{ status: number; text: string }>
 ): Promise<void> => {
   const { check } = kit;
@@ -659,7 +664,11 @@ const run = async (kit: Kit) => {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
   const credentials = new Map<string, string>();
-  const callAsParent = async (parent: string, name: string, args: object) => {
+  const callAsParent = async <N extends ToolName, const A>(
+    parent: string,
+    name: N,
+    args: Sending<A, ToolArgs<N>>
+  ) => {
     let credential = credentials.get(parent);
     if (credential === undefined) {
       credential = await fleet.sessionCredential(parent);
@@ -668,7 +677,7 @@ const run = async (kit: Kit) => {
     const said = await toolWords(
       { base: fleet.base, id: parent, credential },
       name,
-      args as Record<string, unknown>,
+      args,
       { timeoutMs: 300_000 }
     );
     return { status: said.status, text: said.text };

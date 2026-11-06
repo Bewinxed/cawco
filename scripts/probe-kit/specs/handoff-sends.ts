@@ -22,7 +22,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { INPUTS_COUNT_LIMIT } from "../../../packages/core/src/harness";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import {
+  hubRequest,
+  type Sending,
+  type ToolArgs,
+} from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
@@ -116,10 +120,10 @@ const carries = (said: string) => (answer: ToolWords) =>
  * its first answer is not the refusal looked for (a cold target is refused
  * once with the cost considerations, and the repeat goes on to the inputs).
  */
-const refusedHandoff = async (
+const refusedHandoff = async <const A>(
   session: ToolSession,
   expected: (answer: ToolWords) => boolean,
-  args: Record<string, unknown>
+  args: Sending<A, ToolArgs<"handoff">>
 ): Promise<ToolWords> => {
   const first = await toolWords(session, "handoff", args);
   return expected(first) ? first : await toolWords(session, "handoff", args);

@@ -4295,6 +4295,24 @@ export interface components {
       /** @description Like "Title bars close". */
       title?: string;
     };
+    "tool ask": {
+      /** @description true when work waits on the answer; false when you go ahead meanwhile. */
+      blocks: boolean;
+      /** @description Without blocks: what you go ahead with meanwhile, your assumption, e.g. "Going ahead with 90 days, then 410". */
+      meanwhile?: string;
+      /** @description Related questions asked as one, answered one at a time in a row: each a question, a short header, and its options (label, description); multiSelect when several may be picked. */
+      questions: {
+        header: string;
+        multiSelect: boolean;
+        options: {
+          description: string;
+          label: string;
+        }[];
+        question: string;
+      }[];
+      /** @description With blocks: what is paused until they answer, e.g. "Deleting the /v1 routes and the API docs". */
+      waiting?: string;
+    };
     "tool browser_ask": {
       /** @description The page's origin, e.g. https://github.com. */
       origin: string;

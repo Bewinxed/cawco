@@ -43,14 +43,19 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import {
+  hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
+} from "../../../packages/core/src/hub-request";
 import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
 } from "../../../packages/core/src/safe-git";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { welcomed } from "../../lib/keeper-dial";
-import { toolRecord, toolWords } from "../../lib/tool-call";
+import { toolCall, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -124,11 +129,11 @@ const credentialOf = async (fleet: KitFleet, parent: string): Promise<string> =>
   await fleet.sessionCredential(parent);
 
 /** A CawCo tool called as the parent, through the door its MCP server and the CLI share: its words, or with `record` the hub's record. */
-const callAs = async (
+const callAs = async <N extends ToolName, const A>(
   fleet: KitFleet,
   parent: string,
-  name: string,
-  args: Record<string, unknown>,
+  name: N,
+  args: Sending<A, ToolArgs<N>>,
   form: "words" | "record" = "words"
 ): Promise<{
   isError: boolean;
@@ -144,7 +149,10 @@ const callAs = async (
     const said = await toolWords(session, name, args);
     return { isError: said.refused, structured: {}, text: said.text };
   }
-  const said = await toolRecord<Record<string, unknown>>(session, name, args);
+  const said = await toolRecord<Record<string, unknown>>(
+    session,
+    toolCall(name, args)
+  );
   return said.refused
     ? { isError: true, structured: {}, text: said.text }
     : { isError: false, structured: said.record, text: said.text };

@@ -27,7 +27,12 @@
  */
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import {
+  hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
+} from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -156,11 +161,11 @@ const setUp = async (
 };
 
 /** The parent's tools, as it calls the hub with its own credential. */
-const parentTool = async (
+const parentTool = async <N extends ToolName, const A>(
   fleet: Fleet,
   parent: string,
-  name: string,
-  args: Record<string, unknown>
+  name: N,
+  args: Sending<A, ToolArgs<N>>
 ) =>
   await toolWords(
     {

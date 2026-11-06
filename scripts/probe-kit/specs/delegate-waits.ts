@@ -65,7 +65,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import {
+  fetchHub,
+  hubRequest,
+  type Sending,
+  type ToolArgs,
+  type ToolName,
+} from "../../../packages/core/src/hub-request";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { askCollapseId } from "../../../packages/hub/src/notifications";
@@ -133,11 +139,11 @@ const noticeHolding = (
         words.every((word) => one.all.includes(word))
     );
 
-const callAs = async (
+const callAs = async <N extends ToolName, const A>(
   fleet: KitFleet,
   as: string,
-  name: string,
-  args: Record<string, unknown>,
+  name: N,
+  args: Sending<A, ToolArgs<N>>,
   timeoutMs?: number
 ) =>
   await toolWords(

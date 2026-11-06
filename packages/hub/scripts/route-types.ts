@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import type { SchemaObject } from "openapi-typescript";
 import { hubInProcess } from "./hub-in-process";
+import { toolInputs } from "./tool-inputs";
 
 const check = process.argv.includes("--check");
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -114,16 +115,9 @@ const schemas: Record<string, Schema> = {};
 for (const route of routes) {
   schemas[`${route.method} ${route.path}`] = await requestOf(route);
 }
-// Every tool a session of any role is listed, by its name: what the tool
-// door (\`POST /api/delegation/call/:instanceId\`) and \`cawco tool\` call.
-// Loaded after the hub, whose modules it shares (hub-in-process.ts).
-const { listRoleTools } = await import("../src/role-budgets");
-const tools = new Map<string, unknown>();
-for (const { tools: listed } of listRoleTools()) {
-  for (const one of listed) {
-    tools.set(one.name, one.inputSchema);
-  }
-}
+// Every tool a session is listed, by its name: what the tool door and
+// `cawco tool` call. Loaded after the hub, whose modules it shares.
+const tools = await toolInputs();
 for (const [name, input] of [...tools].sort(([a], [b]) => a.localeCompare(b))) {
   schemas[`tool ${name}`] = await jsonSchemaOf(input);
 }
