@@ -24,7 +24,12 @@
  * A built page stops at {@link PAGE_LIMIT}.
  */
 import { bundledSkills } from "./bundled-skills";
-import { FACES_SHEET, PAGE_DIALS, PAGE_ICON } from "./decision-program";
+import {
+  DECISION_ASSETS,
+  FACES_SHEET,
+  PAGE_DIALS,
+  PAGE_ICON,
+} from "./decision-program";
 
 /** The largest page the hub publishes. */
 export const PAGE_LIMIT = 512 * 1024;
@@ -143,7 +148,10 @@ export const buildDecisionPage = async (
     ...new Set(
       [...page.matchAll(SOURCE)]
         .map((match) => match[2])
-        .filter((src) => !KEPT_SOURCE.test(src))
+        // Inline, on the web, a fragment, or the decision host's own file on every preview origin (`{{DIALS}}`'s entry): left as written.
+        .filter(
+          (src) => !(KEPT_SOURCE.test(src) || src.startsWith(DECISION_ASSETS))
+        )
     ),
   ];
   if (paths.length > 0 && !page.includes("</head>")) {
