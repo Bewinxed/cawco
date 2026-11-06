@@ -35,11 +35,11 @@
   import { byRank } from "@cawco/core/task-views";
   import type { StageKind } from "@cawco/core/views";
   import { tick } from "svelte";
-  import { crossed } from "#lib/cawco/drag/crossing.js";
   import DragProvider, {
     type DragData,
     type DragMove,
     type DragOver,
+    type PlaceIn,
   } from "#lib/cawco/drag/DragProvider.svelte";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import {
@@ -228,31 +228,29 @@
   const open = $derived(carried === null ? null : allowedFrom(carried.from));
   /**
    * Where the card in the air stands, as it moves or comes over something:
-   * into another column it may go to, where the hub's order puts it there;
-   * over another card of its own column, that card's place, once the hand
-   * has crossed its middle (drag/crossing), so the card that made room is
-   * not taken back while it is still in flight.
+   * over another column it may go to, where the hub's order puts it there;
+   * in its own column, the place of the card it covers half of
+   * (drag/crossing), taken once per crossing.
    */
-  function place(event: DragOver | DragMove) {
-    const { target } = event.operation;
-    const to = stageOf(target);
-    if (!carried || to === null || !(to === carried.from || open?.has(to))) {
+  function place(event: DragOver | DragMove, placeIn: PlaceIn) {
+    if (!carried) {
       return;
     }
-    if (columnOf(to) !== columnOf(carried.to)) {
+    const to = stageOf(event.operation.target);
+    if (
+      to !== null &&
+      columnOf(to) !== columnOf(carried.to) &&
+      (to === carried.from || open?.has(to))
+    ) {
       carried = { ...carried, to, at: null };
       return;
     }
-    const ids = (byStage.get(columnOf(to)) ?? []).map((task) => task.id);
-    const at = target ? ids.indexOf(String(target.id)) : -1;
-    const from = ids.indexOf(carried.id);
-    if (
-      at >= 0 &&
-      at !== from &&
-      String(target?.id) !== carried.id &&
-      crossed(event, from, at)
-    ) {
-      carried = { ...carried, to, at };
+    const ids = (byStage.get(columnOf(carried.to)) ?? []).map(
+      (task) => task.id
+    );
+    const at = placeIn(ids);
+    if (at !== null && at !== ids.indexOf(carried.id)) {
+      carried = { ...carried, at };
     }
   }
   /** The stage a column or card the card is over stands in. */
