@@ -1,5 +1,5 @@
 /**
- * The three rules every journey step is held to, read from the engine:
+ * The four rules every journey step is held to, read from the engine:
  *
  *  - nothing spills: no text or control shows past the screen's edge (the
  *    page itself never scrolls sideways), text inside a control stays inside
@@ -18,7 +18,11 @@
  *    control where it runs into the control's words or glyphs, or across
  *    its drawn edge; text wholly inside a drawn control (a count in its
  *    row's pill) or over the empty, undrawn part of one (a field's hint in
- *    an empty field, a row link's bare hit area) meets nothing.
+ *    an empty field, a row link's bare hit area) meets nothing;
+ *  - no row is squeezed below its lines: a row of a flex column that hides
+ *    its overflow (a `line-clamp-*` paragraph, a `truncate` label, a card
+ *    of words with no scroller in it) is as tall as it is with its shrink
+ *    held at 0.
  *
  * Every box is read as the person sees it: cut by each ancestor that clips
  * it (scrollers, `overflow: hidden`, `clip-path`, `contain: paint`; a text
@@ -555,6 +559,66 @@ export function scan(): string[] {
     if (past.length > 0) {
       say(
         `the control “${name(control)}” (${px(own)}) runs out of the box it is laid out in (${describe(holder)} ${px(frame)}): ${past.join(", ")}`
+      );
+    }
+  }
+
+  // Every row of a flex column that hides its overflow keeps its lines. A
+  // box that clips (a `line-clamp-*` paragraph, a `truncate` label, a card
+  // rounded with `overflow-hidden`) has an
+  // automatic minimum height of 0 (CSS Flexbox 1 §4.5), so a column longer
+  // than its box shrinks it below its own lines: they are cut, and the next
+  // row draws over them (PeekPane's tail, `*:shrink-0`). Read by the
+  // mechanism: the row's height with its shrink held at 0, against its
+  // height as laid out, the row put back as it was before anything paints.
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const COLUMN = /^column/u;
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const FLEX = /flex/u;
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const CLIPS = /hidden|clip/u;
+  // A row is words, or a box of words with no scroller of its own (a card
+  // that rounds its corners with `overflow-hidden`); a box that holds a
+  // scroller is a pane, sized on purpose.
+  const holdsWords = (el: Element) =>
+    Boolean(el.textContent?.trim()) &&
+    ![...el.querySelectorAll("*")].some((one) =>
+      SCROLLS.test(style(one).overflowY)
+    );
+  for (const row of document.body.querySelectorAll("*")) {
+    const parent = row.parentElement;
+    if (!(parent && row instanceof HTMLElement)) {
+      continue;
+    }
+    const p = style(parent);
+    const s = style(row);
+    const clamp = s.getPropertyValue("-webkit-line-clamp");
+    const clamped = clamp !== "" && clamp !== "none";
+    if (
+      !(FLEX.test(p.display) && COLUMN.test(p.flexDirection)) ||
+      s.position === "absolute" ||
+      s.position === "fixed" ||
+      !CLIPS.test(s.overflowY) ||
+      Number.parseFloat(s.flexShrink) === 0 ||
+      !(clamped || holdsWords(row)) ||
+      !shown(row)
+    ) {
+      continue;
+    }
+    const laid = row.getBoundingClientRect().height;
+    const was = row.style.getPropertyValue("flex-shrink");
+    const priority = row.style.getPropertyPriority("flex-shrink");
+    row.style.setProperty("flex-shrink", "0", "important");
+    const kept = row.getBoundingClientRect().height;
+    row.style.setProperty("flex-shrink", was, priority);
+    if (kept - laid > TOLERANCE) {
+      const lh = Number.parseFloat(s.lineHeight);
+      const lines =
+        clamped && lh > 0
+          ? ` (${Math.round((kept - Number.parseFloat(s.paddingTop) - Number.parseFloat(s.paddingBottom)) / lh)} line(s), clamped at ${clamp})`
+          : "";
+      say(
+        `the ${clamped ? "clamped words" : "box of words"} “${name(row)}”, a row hiding its overflow, is squeezed to ${laid.toFixed(0)}px in its flex column (${describe(parent)}), under ${kept.toFixed(0)}px, its own height${lines}: it shrinks below its lines; keep it \`shrink-0\``
       );
     }
   }

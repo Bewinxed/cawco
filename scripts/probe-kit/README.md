@@ -161,9 +161,10 @@ asserting the outcome the flow promises on the hub or the machine and on what
 the page says, never that a control exists. Every journey runs on Chromium,
 WebKit and Firefox at 390×844 and 768×1024 (touch) and 1440×900, with normal
 data and stretched (titles three times longer, twice as many items), the same
-steps everywhere. After every step the page is held to three rules
+steps everywhere. After every step the page is held to four rules
 (`journeys/scan.ts`: nothing spills, no control runs out of its row, card
-or panel, no control covers text) and to no
+or panel, no control covers text, no clamped row of a flex column squeezed
+below its lines) and to no
 console error. Locators are roles, labels and the person's words only.
 
 It prints one line per journey × engine × size × data, `PASS`, or `FAIL` with

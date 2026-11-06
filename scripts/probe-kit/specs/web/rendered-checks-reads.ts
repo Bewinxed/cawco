@@ -44,6 +44,18 @@
  *     grabber and header one stack floating over the sheet's top, the
  *     list's scroller running to that top under it and clearing it by the
  *     sheet's room (`--sheet-room`): no finding.
+ * 16. overflow, a clamped tail squeezed: a flex column that scrolls,
+ *     holding more clamped paragraphs than it has room for, each hiding
+ *     its overflow so its minimum height is 0: the column shrinks them
+ *     below their lines, and the rule names them.
+ * 17. overflow, a clamped tail kept: the same column, its rows held at
+ *     their height (`*:shrink-0`, PeekPane's tail): no finding.
+ * 18. overflow, rounded cards squeezed: the same column of cards that
+ *     round their corners with `overflow: hidden`, words inside them: the
+ *     rule names them.
+ * 19. overflow, a pane over its scroller: a page's column whose middle
+ *     pane hides its overflow and holds the scroller its words run in,
+ *     shrunk to the room left on purpose: no finding.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
@@ -127,6 +139,20 @@ const SHEET = `<style>
   .list p { margin: 0; padding: 12px; }
 </style>`;
 const SHEET_HEAD = `<div class="grab"></div><div data-slot="drawer-header"><div data-slot="tools"><button type="button" aria-label="Close">×</button></div><h2>Usage limits</h2></div>`;
+/** A peek's tail: a flex column that scrolls, its turns clamped at three lines. */
+const TAIL = (keep: string) => `<style>
+  .tail { display: flex; flex-direction: column; gap: 12px; inline-size: 320px; block-size: 240px; margin: 16px; padding: 12px 16px; overflow-y: auto; }
+  .tail p { margin: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  ${keep}
+</style><div class="tail">${[
+  "The hub rebased the branch onto main and ran the merge checks; the dashboard's build passed, and the probe kit's rendered checks named nothing.",
+  "Two delegates are still waiting on a heavy-work slot: the composer canvas has held three of eight for eleven minutes while it renders its stories.",
+  "The routine's last run reported the nightly release as shipped, its notes written from the three work items that landed since Tuesday.",
+  "A permission ask came in from the phone: the session wants to write outside its workspace, under the shared package cache, and waits on your answer.",
+  "The peek now opens at the end of the tail, so the last thing said is the first thing read, and each session keeps its own place.",
+]
+  .map((turn) => `<p>${turn}</p>`)
+  .join("")}</div>`;
 
 interface Case {
   html: string;
@@ -236,6 +262,31 @@ const CASES: Record<string, Case> = {
     rule: "mixed-icons",
     want: "finding",
     html: `${BASE}${TABS_BAR}<header><span>Glass bars</span>${GLASS(`<button type="button" aria-label="Place">${FILLED}</button>`)}</header>`,
+  },
+  "a clamped tail squeezed": {
+    rule: "overflow",
+    want: "finding",
+    html: `${BASE}${TAIL("")}`,
+  },
+  "a clamped tail kept": {
+    rule: "overflow",
+    want: "none",
+    html: `${BASE}${TAIL(".tail > * { flex-shrink: 0; }")}`,
+  },
+  "rounded cards squeezed": {
+    rule: "overflow",
+    want: "finding",
+    html: `${BASE}${TAIL(".tail p { display: block; -webkit-line-clamp: none; } .tail > p { border-radius: 8px; padding: 8px; background: #f3f3f3; }")}`,
+  },
+  "a pane over its scroller": {
+    rule: "overflow",
+    want: "none",
+    html: `${BASE}<style>
+  .page { display: flex; flex-direction: column; block-size: 240px; inline-size: 320px; }
+  .bar { block-size: 44px; padding: 12px; flex: none; }
+  .pane { min-block-size: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .scroll { overflow-y: auto; min-block-size: 0; padding: 12px; }
+</style><div class="page"><div class="bar">Run budget</div><div class="pane"><div class="scroll">${ROWS}</div></div></div>`,
   },
 };
 
