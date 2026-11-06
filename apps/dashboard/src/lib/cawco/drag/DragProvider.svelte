@@ -467,7 +467,50 @@
       betweenFrames(() => onDragMove?.(event, placing(event)));
     }
   }
+  /**
+   * dnd kit puts the thing it carried back into its list once its flight
+   * home lands (the slot held for it gives way to it): a node put into a
+   * list that moves its rows (`reflow`) reads as one arriving, and arrived
+   * from nothing, faded in from clear: the card blinked out the moment it
+   * landed. It is marked as bringing its own entrance (`data-flip-enter`
+   * "own") until the list has read it standing there again, a few frames
+   * after.
+   */
+  function landsAsItself(element: Element | undefined) {
+    if (!(element instanceof HTMLElement) || element.dataset.flipEnter) {
+      return;
+    }
+    element.dataset.flipEnter = "own";
+    // The list reads what changed in the frame after the change, and
+    // places it in that frame's observers: the mark stays through both.
+    const back = () =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            if (element.dataset.flipEnter === "own") {
+              delete element.dataset.flipEnter;
+            }
+          })
+        )
+      );
+    if (!element.hasAttribute("data-dnd-dragging")) {
+      back();
+      return;
+    }
+    const watch = new MutationObserver(() => {
+      if (!element.hasAttribute("data-dnd-dragging")) {
+        watch.disconnect();
+        back();
+      }
+    });
+    watch.observe(element, {
+      attributes: true,
+      attributeFilter: ["data-dnd-dragging"],
+    });
+  }
+
   function end(event: DragEnd) {
+    landsAsItself(event.operation.source?.element);
     redrawn?.disconnect();
     redrawn = null;
     held?.land();
