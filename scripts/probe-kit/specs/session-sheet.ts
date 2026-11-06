@@ -111,29 +111,38 @@
  *
  * 18. The panel head (side/head.ts `standing`, the artifact panel's surface brief, Artifact panel):
  *     at the desk, the canvas's name short of the 120px it keeps, every
- *     control stands, in head order, with no More, each in the form
- *     `standing` gives it: under a 640px head (the desk's pane is 523px)
- *     Send and Comments by glyph and count, their words not drawn,
- *     every other control whole;
- *     at 390 the mode stands as its one button, More stands before Close,
- *     and More's menu holds the controls that went to it, in head order.
+ *     control stands, in head order, with no More, Close last, each in the
+ *     form `standing` gives it: under a 640px head (the desk's pane is
+ *     523px) Send by glyph and count, its word not drawn, every other
+ *     control whole (Comments is its bubble and count at every width: the
+ *     surface brief, The head, "Comments as its bubble and count");
+ *     at 390 the panel is a sheet: Close leads its head (the surface brief,
+ *     The head: "Leading, Close on a phone's sheet"), the mode stands as
+ *     its one button, More is the glass's last, and More's menu holds the
+ *     controls that went to it, in head order.
  * 19. The sidebar's theme switch, with no reload, turns the canvas frame's
  *     `color-scheme` from light to dark, and the frame's own
  *     `prefers-color-scheme: dark` from false to true.
- * 20. A real held press on the canvas view stands it `data-pressed` at
- *     scale 0.97 while held and lets both go on release; its menu opens on
- *     the press and stays open.
+ * 20. A real held press on the canvas view stands it `data-pressed` in the
+ *     press tint (`surface-pressed`), moving nothing, and lets it go on
+ *     release; its menu opens on the press and stays open. A bar item stands
+ *     grouped in its glass, so it tints and never scales (DESIGN.md, The
+ *     Press Rule: "anything wide or grouped … tints to `surface-pressed`
+ *     and moves nothing"; the surface brief: "a press tints").
  * 22. Once the panel has opened (its stage sized a frame at a time), the
  *     drawing stands in the middle of the design graph's stage, at the desk
  *     and at 390: measured once the drawing holds still, never mid-move.
  * 23. Name once, its ask once, no route (owner: "ur also repeating the
  *     title of the card twice, the url should have the description there
- *     instead"; the artifact purpose spec: the ask is that line; since
- *     ec7bfa29b the head holds one row, the ask never a line under the
- *     name): at the desk and at 390 the canvas's ask is the name's tooltip,
- *     the description it is read out with and its menu's first row, and no
- *     drawn text of the head holds it; the title stands once across the panel and its canvas page,
- *     its slug in neither, and no text in either holds `/@cawco/`.
+ *     instead"; the artifact purpose spec: the ask is that line; the
+ *     owner's pick on the panel's decision page, 2026-11-06, "Title over
+ *     its description": the ask stands under the title in the bar, a
+ *     window's subtitle, and is the menu's first row and its tooltip): at
+ *     the desk and at 390 the canvas's ask is drawn once in the head, as
+ *     the name's line under its title, and is the name's tooltip, the
+ *     description it is read out with and its menu's first row; the title
+ *     stands once across the panel and its canvas page, its slug in
+ *     neither, and no text in either holds `/@cawco/`.
  * 24. The hub's map of that canvas (`GET …/artifacts/:id/map`, what the
  *     panel's Map reads) answers Card in the middle with its states, its
  *     states file from the toolchain root, and its frames' thumbnail from
@@ -943,8 +952,8 @@ async function builtStories(
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 /** The canvas page's frame, which the panel themes (PreviewPane `data-scheme`). */
 const FRAME = `${PANE} iframe[data-scheme]`;
-/** The controls with words, which only a head 640px or wider draws (side/head.ts `WORDS_FROM`). */
-const WORDED = new Set(["send", "comments"]);
+/** The controls with words, which only a head 640px or wider draws (side/head.ts `WORDS_FROM`); Comments is its bubble and count at every width. */
+const WORDED = new Set(["send"]);
 /** The panel head's order (the artifact panel's surface brief), Send to Expand; Close stands after them all. */
 const HEAD_ORDER = [
   "send",
@@ -968,9 +977,8 @@ const DRAWN_ORDER = [
   ...HEAD_ORDER.filter((key) => key !== "mode" && key !== "send"),
   "send",
 ];
-const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/u;
 
-/** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More and Close stand, More before Close. */
+/** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More stands, More the glass's last (after every control standing in the head but the prominent ones, which stand after the glass), and whether Close stands last (beside the page) or first (a phone's sheet). */
 const headOf = (page: Page) =>
   page.evaluate((pane) => {
     const head = document.querySelector<HTMLElement>(
@@ -998,6 +1006,15 @@ const headOf = (page: Page) =>
     });
     const more = head?.querySelector<HTMLElement>('[data-slot="more"]');
     const close = head?.querySelector<HTMLElement>('[data-slot="close"]');
+    const moreLeft = more?.getBoundingClientRect().left ?? 0;
+    const glassed = [
+      ...(head?.querySelectorAll<HTMLElement>("[data-head-item]") ?? []),
+    ].filter(
+      (one) =>
+        !one.hidden &&
+        one.dataset.headItem !== "send" &&
+        one.dataset.headItem !== "control"
+    );
     return {
       width: head?.clientWidth ?? null,
       room:
@@ -1009,10 +1026,12 @@ const headOf = (page: Page) =>
       name: lead ? Math.round(lead.getBoundingClientRect().width) : null,
       items,
       more: !!more,
-      moreBeforeClose:
-        !!(more && close) &&
-        more.getBoundingClientRect().right <=
-          close.getBoundingClientRect().left + 0.5,
+      moreLast:
+        !!more &&
+        glassed.every(
+          (one) => one.getBoundingClientRect().right <= moreLeft + 0.5
+        ),
+      closeFirst: !!close && !!head?.firstElementChild?.contains(close),
       closeLast: !!close && !!head?.lastElementChild?.contains(close),
     };
   }, PANE);
@@ -1056,23 +1075,27 @@ const schemeOf = async (page: Page) => {
   };
 };
 
-/** The canvas view's trigger as a held press leaves it. */
+/**
+ * The canvas view's trigger as a held press leaves it: `data-pressed`, its
+ * transform, whether its fill is the press tint (`surface-pressed` as the
+ * trigger's own scheme resolves it, read off a swatch set inside it for the
+ * read and taken out), whether it is expanded and a menu stands.
+ */
 const pressOf = (page: Page, selector: string) =>
-  page.locator(selector).evaluate((el) => ({
-    pressed: el.getAttribute("data-pressed"),
-    transform: getComputedStyle(el).transform,
-    expanded: el.getAttribute("aria-expanded"),
-    menu: !!document.querySelector('[role="menu"]'),
-  }));
-
-/** Whether a computed transform is a scale of `to` (to the third place), or none at all for 1. */
-const scaled = (transform: string, to: number) => {
-  if (to === 1) {
-    return transform === "none";
-  }
-  const [, x, y] = transform.match(SCALE) ?? [];
-  return Math.abs(Number(x) - to) < 0.001 && Math.abs(Number(y) - to) < 0.001;
-};
+  page.locator(selector).evaluate((el) => {
+    const swatch = document.createElement("span");
+    swatch.style.backgroundColor = "var(--surface-pressed)";
+    el.append(swatch);
+    const tint = getComputedStyle(swatch).backgroundColor;
+    swatch.remove();
+    return {
+      pressed: el.getAttribute("data-pressed"),
+      transform: getComputedStyle(el).transform,
+      tinted: getComputedStyle(el).backgroundColor === tint,
+      expanded: el.getAttribute("aria-expanded"),
+      menu: !!document.querySelector('[role="menu"]'),
+    };
+  });
 
 /**
  * The canvas's name, title and ask in legs 18 and 23: words no other text
@@ -1088,17 +1111,18 @@ const scaled = (transform: string, to: number) => {
  */
 const PANEL_NAME = "pcard";
 const PANEL_TITLE = "Pcard";
-/** The ask the panel's artifact is made with: the name's tooltip, its description and its menu's first row (leg 23). */
+/** The ask the panel's artifact is made with: the name's line under its title, its tooltip, its description and its menu's first row (leg 23). */
 const PANEL_ASK = "Judge the card in its panel, at every width";
 
 /**
- * Leg 23's read: where the ask stands (the name's tooltip, the description
- * it is read out with, its menu's first row, and any drawn text of the head
- * holding it), and the title, the slug and any route across the rendered
- * text of the panel and its canvas page. The ask is never a line under the
- * name (ec7bfa29b, DESIGN.md's The Title Bars Follow Liquid Glass Rule:
- * "One bar, one row"; side/SideSurface draws it as the name control's
- * description only, ArtifactMenu as its title and its menu's first row).
+ * Leg 23's read: where the ask stands (the name's line under its title,
+ * how many times the head's drawn text holds it, the name's tooltip as a
+ * resting pointer opens it, the description it is read out with and its
+ * menu's first row), and the title, the slug and any route across the
+ * rendered text of the panel and its canvas page. The ask is the title's
+ * subtitle in the bar's one row (the owner's pick "Title over its
+ * description", edf1b808f; ArtifactMenu's `name-line`, its tooltip and its
+ * menu's first row; side/SideSurface's read-out-only description).
  */
 async function describedOf(page: Page) {
   const outer = await page
@@ -1117,6 +1141,7 @@ async function describedOf(page: Page) {
         // The head's text as drawn: a node whose box is more than the 1px a
         // read-out-only description (sr-only) keeps.
         const inked: string[] = [];
+        const line = name?.querySelector('[data-slot="name-line"]');
         if (head) {
           const walk = document.createTreeWalker(head, NodeFilter.SHOW_TEXT);
           for (let node = walk.nextNode(); node; node = walk.nextNode()) {
@@ -1134,9 +1159,11 @@ async function describedOf(page: Page) {
         // What is drawn, not what is hidden (a control in More, a band's hidden name).
         const text = card.innerText;
         return {
-          tooltip: name?.title ?? null,
+          line: line?.checkVisibility()
+            ? (line.textContent?.trim() ?? null)
+            : null,
+          drawnInHead: inked.join("").split(words.ask).length - 1,
           description: description?.textContent?.trim() ?? null,
-          drawnInHead: inked.join("").includes(words.ask),
           names: text.split(words.title).length - 1,
           slugs: text.split(words.name).length - 1,
           route: text.includes("/@cawco/"),
@@ -1144,8 +1171,20 @@ async function describedOf(page: Page) {
       },
       { name: PANEL_NAME, title: PANEL_TITLE, ask: PANEL_ASK }
     );
+  // The name's tooltip, as a resting pointer opens it (the kit Tip), then
+  // the pointer off it.
+  const trigger = page.locator(`${PANE} [data-artifact-trigger]`).first();
+  await trigger.hover();
+  const tip = page.locator('[data-slot="tooltip-content"]').first();
+  const tooltip = await tip
+    .waitFor({ timeout: 10_000 })
+    .then(() => tip.textContent())
+    .then((text) => text?.trim() ?? null)
+    .catch(() => null);
+  await page.mouse.move(0, 0);
+  await tip.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => null);
   // The name's menu, its first row before the canvases it lists, then shut.
-  await page.locator(`${PANE} [data-artifact-trigger]`).first().click();
+  await trigger.click();
   const list = page.locator("[data-artifact-list]").first();
   await list.waitFor({ timeout: 10_000 });
   const menu = await list.evaluate((content) => {
@@ -1189,10 +1228,10 @@ async function describedOf(page: Page) {
         { name: PANEL_NAME, title: PANEL_TITLE }
       )
     : null;
-  return { ...outer, menu, frame: inner };
+  return { ...outer, tooltip, menu, frame: inner };
 }
 
-/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the ask as the name's tooltip, description and menu's first row and drawn nowhere in the head, the title once across panel and page, the slug nowhere, no route. */
+/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the ask as the name's line, drawn once in the head, and as its tooltip, description and menu's first row, the title once across panel and page, the slug nowhere, no route. */
 const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
   const names = read.names + (read.frame?.names ?? 0);
   const is = (what: string, got: string | null) =>
@@ -1200,11 +1239,14 @@ const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
       ? ""
       : `${what} ${JSON.stringify(got)} is not ${JSON.stringify(PANEL_ASK)}`;
   return [
+    is("name's line", read.line),
+    read.drawnInHead === 1
+      ? ""
+      : `the ask drawn ${read.drawnInHead} times in the head, not 1`,
     is("tooltip", read.tooltip),
     is("description", read.description),
     is("menu's line", read.menu.line),
     read.menu.first ? "" : "menu's line not its first row",
-    read.drawnInHead ? "the ask drawn in the head" : "",
     read.frame ? "" : "no canvas frame to read",
     names === 1
       ? ""
@@ -1240,12 +1282,12 @@ async function panelLegs(
   await drawn(desk);
 
   // 18. The head at the desk: every control stands, in head order, no More;
-  // under a 640px head the worded ones by glyph and count, the rest whole.
+  // under a 640px head Send by glyph and count, the rest whole.
   const wide = await headOf(desk);
   const keys = wide.items.map((one) => one.key);
   const worded = (wide.width ?? 0) >= 640;
   kit.check(
-    "18: at the desk every head control stands, in head order, with no More, Close last; under a 640px head Send and Comments by glyph and count with no word drawn, every other control whole",
+    "18: at the desk every head control stands, in head order, with no More, Close last; under a 640px head Send by glyph and count with no word drawn, every other control (Comments its bubble and count) whole",
     wide.items.length > 0 &&
       wide.items.every(
         (one) =>
@@ -1323,15 +1365,18 @@ async function panelLegs(
   await desk.waitForTimeout(300);
   const released = await pressOf(desk, trigger);
   kit.check(
-    "20: a held press on the canvas view stands it data-pressed at scale 0.97, lets both go on release, and its menu opens on the press and stays open",
+    "20: a held press on the canvas view stands it data-pressed in the press tint, moving nothing, lets it go on release, and its menu opens on the press and stays open",
     before.pressed === null &&
+      !before.tinted &&
       held.pressed === "true" &&
       held.expanded === "true" &&
       held.menu &&
       settled.pressed === "true" &&
-      scaled(settled.transform, 0.97) &&
+      settled.tinted &&
+      [before, held, settled, released].every(
+        (one) => one.transform === "none"
+      ) &&
       released.pressed === null &&
-      scaled(released.transform, 1) &&
       released.expanded === "true" &&
       released.menu,
     `before ${JSON.stringify(before)}; 60ms ${JSON.stringify(held)}; 460ms ${JSON.stringify(settled)}; released ${JSON.stringify(released)}`
@@ -1342,7 +1387,7 @@ async function panelLegs(
     Awaited<ReturnType<typeof describedOf>>
   >;
 
-  // 18 and 21 at 390, light and dark: the mode as one button, More before Close holding the rest.
+  // 18 and 21 at 390, light and dark: a sheet, Close leading; the mode as one button, More the glass's last holding the rest.
   for (const theme of ["light", "dark"] as const) {
     const phone = await panelPage(kit, base, session, "phone", theme);
     await drawn(phone);
@@ -1359,12 +1404,13 @@ async function panelLegs(
       entries.findIndex((entry) => entry.trim() === one.name)
     );
     kit.check(
-      `18: at 390 (${theme}) the mode stands as its one button, More before Close, and More's menu holds what went to it in head order`,
+      `18: at 390 (${theme}) Close leads the sheet's head, the mode stands as its one button, More is the glass's last, and More's menu holds what went to it in head order`,
       mode?.stands === true &&
         mode.form === "compact" &&
         narrow.more &&
-        narrow.moreBeforeClose &&
-        narrow.closeLast &&
+        narrow.moreLast &&
+        narrow.closeFirst &&
+        !narrow.closeLast &&
         gone.length > 0 &&
         at.every((one, n) => one >= 0 && (n === 0 || one > (at[n - 1] ?? -1))),
       `head ${JSON.stringify(narrow)}; More's entries ${JSON.stringify(entries)}`
@@ -1373,7 +1419,7 @@ async function panelLegs(
     described[`phone-${theme}`] = await describedOf(phone);
   }
   kit.check(
-    "23: at the desk and at 390 the canvas's ask is the name's tooltip, the description it is read out with and its menu's first row, never drawn in the head; the title stands once across the panel and its page, its slug nowhere, and no text holds /@cawco/",
+    "23: at the desk and at 390 the canvas's ask is drawn once in the head, as the name's line under its title, and is its tooltip, the description it is read out with and its menu's first row; the title stands once across the panel and its page, its slug nowhere, and no text holds /@cawco/",
     Object.keys(described).length === 3 &&
       Object.values(described).every(
         (read) => describedWrong(read).length === 0

@@ -2,18 +2,21 @@
  * A side surface's head controls where the head lacks room for them all
  * (the artifact panel's surface brief, Artifact panel, canvas and ink: the head's priority rule, the
  * web's as the native app's): the name keeps its own width up to
- * {@link NAME_KEEPS}px, Close stands last, and the rest stand by priority
+ * {@link NAME_KEEPS}px, Close stands apart (last beside the page, first
+ * on a phone's sheet), and the rest stand by priority
  * ({@link HEAD_PRIORITY}) while they fit, each in its narrowest form (the
  * mode as one button, the chosen mode's glyph opening the three; Send
- * and Comments by glyph and count), the first with no room and every one
- * after it going in head order into one More menu before Close, so a wider
+ * by glyph and count), the first with no room and every one after it
+ * going in head order into one More menu, the glass's last, so a wider
  * head never stands fewer. The name takes the rest of its own width (on a
  * phone's head, two lines' worth) once the controls up to
  * {@link NAME_AFTER} stand, before any after them, so Reload, Open and
  * Expand go to More before the title an agent wrote is cut; and forms
  * widen only after it, each only where the room left holds it: the mode takes its three segments
- * back, then, on a pane {@link WORDS_FROM}px or wider, Send and then
- * Comments their words (the artifact panel's surface brief, The title).
+ * back, then, on a pane {@link WORDS_FROM}px or wider, Send its words
+ * (the artifact panel's surface brief, The title). Comments is its bubble
+ * and count at every width (the surface brief, The head), so it has no
+ * words to take back.
  */
 import type { Component, Snippet } from "svelte";
 
@@ -39,7 +42,7 @@ export interface HeadItem {
   place?: "centre" | "prominent";
   /** Its place in {@link HEAD_PRIORITY}: the lower stands while the higher goes to More. */
   priority: number;
-  /** `bar` says words its glyph and count stand without (Send, Comments): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */
+  /** `bar` says words its glyph and count stand without (Send): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */
   words?: boolean;
 }
 
@@ -64,7 +67,7 @@ export const NAME_KEEPS = 120;
 /** The controls of this priority or lower stand before the name takes the rest of its width: the prominent action, the mode and Comments. */
 const NAME_AFTER = HEAD_PRIORITY.comments;
 
-/** A pane this wide, in px, or wider lets Send and Comments say their words where the room holds them. */
+/** A pane this wide, in px, or wider lets Send say its words where the room holds them. */
 export const WORDS_FROM = 640;
 
 /** How a control stands in the head: whole, or in its narrowest form (the mode's one button, a glyph without its words). */
