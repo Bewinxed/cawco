@@ -74,6 +74,16 @@
  *     parent as the one that has it (`writer.heardBy`). On main the press
  *     goes to the delegate (or Caw) and `heardBy` is not there.
  *
+ * (k) An agent's patch put its entry over his answer and its own read
+ *     after it, so no one heard he had answered (the artifacts probe, its
+ *     leg 4 inside leg 2's quiet window: his pick of b replaced by the
+ *     agent's a, the page settled telling no one). A patch that replaces an
+ *     answer of his after the session last had the page is refused naming
+ *     it (overwrite.ts `answersReplaced`), unless read first or held by the
+ *     patch's own test op; his answer stays news and goes once quiet. A
+ *     held next version's merge keeps his answers since its fork
+ *     (`answersKept`). On main overwrite.ts is not there.
+ *
  *   bun scripts/probe-kit/run.ts answered-pages
  */
 
@@ -81,6 +91,7 @@ import type { CanvasAuthor } from "../../../packages/core/src/canvas";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import type { Pin } from "../../../packages/core/src/comments";
 import type { DecisionCard } from "../../../packages/core/src/decisions";
+import { artifactResponsesNotice } from "../../../packages/core/src/injected";
 import type { InstanceRow } from "../../../packages/core/src/protocol";
 import { DAY_MS, MINUTE_MS } from "../../../packages/core/src/time";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
@@ -94,10 +105,17 @@ import {
   type ArtifactSessions,
   answeredWhole,
   answersUnheard,
+  heardSeq,
   needOf,
   pendingOf,
   sendsOnChange,
+  unheardKeys,
 } from "../../../packages/hub/src/artifacts/needs";
+import {
+  answersKept,
+  answersReplaced,
+  testedKeys,
+} from "../../../packages/hub/src/artifacts/overwrite";
 import {
   answersOf,
   noneOpen,
@@ -115,6 +133,7 @@ import type {
 } from "../../../packages/hub/src/artifacts/service";
 import { artifactTaker } from "../../../packages/hub/src/artifacts/taker";
 import type {
+  ArtifactChange,
   ArtifactRow,
   ArtifactsDb,
 } from "../../../packages/hub/src/db/artifacts";
@@ -781,6 +800,105 @@ const run = async ({ check }: Kit) => {
       pageTells,
       writer: projectRead.writer,
     })
+  );
+
+  // (k) An agent's patch never replaces an answer of his it has not had.
+  answerChecks(check, { changesOf, readAll });
+};
+
+/**
+ * (k): he picks b on `sheet-close` after the session's last read, and
+ * inside his quiet window the agent patches it to a. The patch is refused
+ * in words naming b (artifacts/service.ts `answersHad`, which throws before
+ * its write, so the page still reads b), the session's read stays where it
+ * was, and his answers are still news: the hub's send goes once quiet, its
+ * notice naming the page. Read first, or a test op holding b, and the same
+ * patch stands; a held next version's merge keeps his answer since its fork.
+ */
+const answerChecks = (
+  check: Kit["check"],
+  given: {
+    changesOf: ArtifactChange[];
+    readAll: { deliveredSeq: number; readSeq: number };
+  }
+) => {
+  const pickedB: Record<string, ChoiceEntry> = {
+    ...ANSWERED,
+    "sheet-close": entry({ options: ["b"] }),
+  };
+  const picked = [
+    ...given.changesOf,
+    { by: "person" as const, key: "sheet-close", seq: 41 },
+  ];
+  const toA = [
+    { op: "replace" as const, path: "/sheet-close/options", value: ["a"] },
+  ];
+  const patchedA = { ...pickedB, "sheet-close": entry({ options: ["a"] }) };
+  const replacedBy = (
+    readSeq: number,
+    patch: Parameters<typeof testedKeys>[0] = toA
+  ) =>
+    answersReplaced({
+      before: pickedB,
+      after: patchedA,
+      standing: pickedB,
+      tested: testedKeys(patch, pickedB),
+      unheard: unheardKeys(heardSeq({ ...given.readAll, readSeq }), picked),
+    });
+  const refused = replacedBy(given.readAll.readSeq);
+  const words = artifactToolWords.answersStand(
+    refused.map((key) =>
+      artifactToolWords.answerSaid(key, pickedB[key] as ChoiceEntry)
+    ),
+    "read"
+  );
+  const facts = factsFrom(questionsOfPage(pickedB));
+  const notice = artifactResponsesNotice({
+    id: PAGE,
+    kind: "page",
+    name: page.name,
+    title: page.title,
+    since: heardSeq(given.readAll),
+  });
+  check(
+    "k: he picks b after the session's read and the agent patches it to a inside his quiet window: the patch is refused naming b, nothing is written, and his answer is still news, so the hub's send goes once quiet with its notice",
+    refused.join() === "sheet-close" &&
+      words.includes("sheet-close (picked b)") &&
+      words.includes("nothing was changed") &&
+      answersUnheard(given.readAll, picked, pickedB) &&
+      answeredWhole(page, facts) &&
+      notice.includes(`title=${encodeURIComponent(page.title)}`),
+    JSON.stringify({ refused, words, notice: notice.slice(0, 120) })
+  );
+  const tested = replacedBy(given.readAll.readSeq, [
+    { op: "test", path: "/sheet-close", value: pickedB["sheet-close"] },
+    ...toA,
+  ]);
+  const testedA = replacedBy(given.readAll.readSeq, [
+    { op: "test", path: "/card-close", value: pickedB["card-close"] },
+    ...toA,
+  ]);
+  check(
+    "k: once the session has read b, or its patch's own test op holds b, the same patch stands; a test of another entry does not",
+    replacedBy(41).length === 0 &&
+      tested.length === 0 &&
+      testedA.join() === "sheet-close",
+    JSON.stringify({ afterRead: replacedBy(41), tested, testedA })
+  );
+  // A held next version forked at seq 38: its maker's patch of a merged
+  // over his b of seq 41, which the merge keeps; card-close, his before the
+  // fork, is the maker's to change.
+  const merged = {
+    ...pickedB,
+    "sheet-close": entry({ options: ["a"] }),
+    "card-close": entry({ options: ["z"] }),
+  };
+  const kept = answersKept(pickedB, merged, unheardKeys(38, picked));
+  check(
+    "k: a held next version's merge keeps his answer made after its fork (b), and lets the maker's change of one he made before it stand",
+    Object.keys(kept).join() === "sheet-close" &&
+      kept["sheet-close"].options.join() === "b",
+    JSON.stringify(kept)
   );
 };
 

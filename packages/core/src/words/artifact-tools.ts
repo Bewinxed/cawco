@@ -157,6 +157,44 @@ export const artifactToolWords = {
   /** The hub's log: the send that carried the person's marks to a session, as which message and where it stands. */
   marksWent: (id: string, session: string, message: string, state: string) =>
     `[artifacts] ${id}: the person's marks went to session ${session} as message ${message} (${state})`,
+  /**
+   * One answer of the person's as an agent's refused change names it: its
+   * choice id and what he left there (his picks, his note, his value).
+   */
+  answerSaid: (
+    id: string,
+    entry: { note: string | null; options: string[]; value: unknown }
+  ) => {
+    const parts = [
+      entry.options.length > 0 && `picked ${entry.options.join(", ")}`,
+      entry.note?.trim() &&
+        `noted ${JSON.stringify(entry.note.trim().slice(0, 200))}`,
+      entry.value !== null &&
+        entry.value !== undefined &&
+        `set to ${JSON.stringify(entry.value).slice(0, 200)}`,
+    ].filter(Boolean);
+    return `${id} (${parts.length > 0 ? parts.join("; ") : "cleared"})`;
+  },
+  /**
+   * An agent's change refused for replacing answers of the person's it had
+   * not had (hub artifacts/overwrite.ts `answersReplaced`), `answers` each
+   * {@link artifactToolWords.answerSaid}. `how` the agent may still replace
+   * them: `read`, its owner, whose read counts; `test`, a session whose read
+   * the page doesn't keep, by a test op on the entry; `held`, a next version
+   * held for its parent, where his answer is on the version they opened.
+   */
+  answersStand: (answers: readonly string[], how: "held" | "read" | "test") => {
+    const named = `The person answered ${answers.join(" and ")}`;
+    const then = {
+      held: "on the version your parent opened, after this version was made, so nothing was changed: his answer stands.",
+      read: "since you last had this page, so nothing was changed. Read it with artifact_read and decide; to replace his answer, send the patch again.",
+      test: "which you haven't had, so nothing was changed. Read it with artifact_read and decide; to replace his answer, start the patch with a test op on its entry holding his answer as it stands.",
+    }[how];
+    return how === "test" ? `${named}, ${then}` : `${named} ${then}`;
+  },
+  /** The hub's log: a held next version's merge left the person's answers since its fork as he wrote them. */
+  answersKeptAtMerge: (id: string, keys: readonly string[]) =>
+    `[artifacts] ${id}: its next version's merge kept the person's answers on ${keys.join(", ")}, written after the version was made`,
   /** The hub's log: the person's marks woke the project's Caw, their writer taking no input. */
   marksWokeCaw: (session: string, project: string, why: string) =>
     `[artifacts] the person's marks on session ${session}'s artifact woke project ${project}'s Caw: the session takes no input now (${why})`,

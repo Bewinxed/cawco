@@ -196,14 +196,15 @@ const run = async (kit: Kit) => {
   ).catch(() => dashboardReads(embed));
   await card.locator('[data-option="keep"]').first().click();
   const picked = async () => {
+    // His view, never the session's read, which would count as its read of his pick.
     const read = await fleet.api<{
-      state?: Record<string, { options?: string[] }>;
+      choices: Record<string, { options?: string[] }>;
     }>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
         path: { id: session, artifact: decision.id },
       })
     );
-    return read.state?.view?.options ?? [];
+    return read.choices.view?.options ?? [];
   };
   const pickedAt = Date.now();
   const options = await until(

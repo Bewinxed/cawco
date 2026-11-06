@@ -85,9 +85,10 @@ const respond = (request: Seen): Reply => {
   return calls.reply(request) ?? text("ok");
 };
 
+/** His view of the page (hub routes.ts `/view`): his picks and their send, read as no session's read. */
 interface Read {
+  choices: Record<string, { options?: string[] }>;
   sentAt: string | null;
-  state: Record<string, { options?: string[] }>;
 }
 
 /** The page's frame in the panel: the one on a preview name. */
@@ -150,12 +151,12 @@ const run = async (kit: Kit) => {
   }
   const read = () =>
     fleet.api<Read>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
         path: { id: session, artifact: id },
       })
     );
   const pickOf = async () =>
-    (await read()).state["rail-close"]?.options?.join() ?? "";
+    (await read()).choices["rail-close"]?.options?.join() ?? "";
 
   const tab = await kit.page("desk", {
     ignoreHTTPSErrors: true,

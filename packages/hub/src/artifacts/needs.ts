@@ -217,13 +217,28 @@ export const answersUnheard = (
   row: Pick<ArtifactRow, "deliveredSeq" | "readSeq">,
   changes: readonly ArtifactChange[],
   state: Readonly<Record<string, unknown>>
-): boolean => {
-  const heard = Math.max(row.readSeq, row.deliveredSeq);
-  return changes.some(
-    (change) =>
-      change.by === "person" && change.seq > heard && change.key in state
+): boolean =>
+  [...unheardKeys(heardSeq(row), changes)].some((key) => key in state);
+
+/**
+ * How far its session has had a page's answers: its last read
+ * (`artifact_read` stamps `readSeq`) or its last notice to read
+ * (`deliveredSeq`), whichever is later.
+ */
+export const heardSeq = (
+  row: Pick<ArtifactRow, "deliveredSeq" | "readSeq">
+): number => Math.max(row.readSeq, row.deliveredSeq);
+
+/** The keys of `state` the person changed after seq `heard`: his answers news to whoever had the page up to it. */
+export const unheardKeys = (
+  heard: number,
+  changes: readonly ArtifactChange[]
+): Set<string> =>
+  new Set(
+    changes
+      .filter((change) => change.by === "person" && change.seq > heard)
+      .map((change) => change.key)
   );
-};
 
 /**
  * Whether a change to a page's doc by `by` sends what the person wrote on

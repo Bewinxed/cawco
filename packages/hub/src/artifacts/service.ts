@@ -229,6 +229,7 @@ import {
   type ArtifactSessions,
   answeredWhole,
   answersUnheard,
+  heardSeq,
   mayWait,
   movedOn,
   needOf,
@@ -236,7 +237,9 @@ import {
   pendingOf,
   planHolds,
   sendsOnChange,
+  unheardKeys,
 } from "./needs";
+import { answersKept, answersReplaced, testedKeys } from "./overwrite";
 import {
   bytesHash,
   cardChanges,
@@ -1055,6 +1058,9 @@ const HELD_NEXT = artifactToolWords.heldAsNext;
 
 /** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
 const HANDED = "handed";
+
+/** The doc meta key of a held next version: its artifact's seq when it was forked ({@link holdNext}), after which the person's answers there are newer than it ({@link promote}). */
+const FORKED_AT = "forkedAt";
 
 /** The doc meta key a decision page's open views follow for its pieces' versions: the last piece moved and the version it stands at (service `versionMoved`, agent preview-overlay page.ts `mediaMoved`). */
 const MEDIA_AT = "mediaAt";
@@ -3011,9 +3017,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     docs.fork(row.id, next.id);
     // Nothing shows it: a canvas's writes are drawn on the headless screen (draw).
-    docs.transact(next.id, "hub", (doc) =>
-      doc.getMap("meta").set(HANDED, true)
-    );
+    docs.transact(next.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      meta.set(HANDED, true);
+      meta.set(FORKED_AT, row.seq);
+    });
     return { fresh: true, next };
   };
 
@@ -3340,6 +3348,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Held next version `next` merged into artifact `row`'s doc, the
+   * person's answers since its fork kept as he wrote them: a doc merge
+   * keeps whichever of two sets of one entry its client id ranks last,
+   * never the newer, so a maker's patch of an entry he answered after the
+   * fork would otherwise stand over his answer, unheard (overwrite.ts
+   * `answersKept`). The fork's own mark leaves with the merge.
+   */
+  const mergeKeepingAnswers = (row: ArtifactRow, next: ArtifactRow): void => {
+    const forkedAt = docs.doc(next.id).getMap("meta").get(FORKED_AT);
+    const since = unheardKeys(
+      typeof forkedAt === "number" ? forkedAt : 0,
+      db.changes(row.id, { by: "person" })
+    );
+    const his = stateOf(docs.doc(row.id));
+    docs.merge(next.id, row.id, "agent");
+    const kept = answersKept(his, stateOf(docs.doc(row.id)), since);
+    docs.transact(row.id, "hub", (doc) => {
+      doc.getMap("meta").delete(FORKED_AT);
+      const state = doc.getMap("state");
+      for (const [key, entry] of Object.entries(kept)) {
+        state.set(key, entry);
+      }
+    });
+    const keys = Object.keys(kept);
+    if (keys.length > 0) {
+      console.log(artifactToolWords.answersKeptAtMerge(row.id, keys));
+    }
+  };
+
+  /**
    * The parent opens what its maker changed: artifact `row`'s held next
    * version merged in (its doc's changes beside the person's since, its
    * files, its source and revision), then let go. The views on `row` hear
@@ -3381,7 +3419,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ? (docs.doc(next.id).getMap("meta").get("stage") as
           StageState | undefined)
       : undefined;
-    docs.merge(next.id, row.id, "agent");
+    mergeKeepingAnswers(row, next);
     // What serves it is the version's: its one write, which the preview
     // that serves its origin follows, and which lets the server it moved
     // off go once nothing shows it (server.ts `onSourceMoved`).
@@ -4002,16 +4040,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : {};
   };
 
+  /** Whether a read of `row` `since` a seq passes over an answer of the person's its session hadn't had: it shows only what changed after `since`. */
+  const skipsAnswers = (row: ArtifactRow, since: number | undefined) =>
+    since !== undefined &&
+    db
+      .changes(row.id, { after: heardSeq(row), by: "person" })
+      .some((change) => change.seq <= since);
+
   /**
    * A page or preview as the session reads it, which counts as its read
    * when `ownersRead`: its owner's. A maker's read leaves the owner's unread.
+   * It counts only for what it shows: a read `since` a seq past an answer of
+   * the person's the session hadn't had shows only what changed after, so
+   * it leaves the session's read where it was (needs.ts `answersUnheard`).
    */
   const read = (
     row: ArtifactRow,
     since?: number,
     ownersRead = true
   ): ArtifactRead => {
-    if (ownersRead) {
+    if (ownersRead && !skipsAnswers(row, since)) {
       db.update(row.id, { readSeq: row.seq });
     }
     const doc = docs.doc(row.id);
@@ -6749,6 +6797,52 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Refuses `instance`'s change of `row`'s state from `before` to `after`
+   * when it replaces an answer of the person's the session hasn't had
+   * (overwrite.ts `answersReplaced`): one he changed on the artifact after
+   * its last read or notice, counted only for a session whose read the
+   * page keeps ({@link readsForOwner}), else after none; on a held next
+   * version, his answers on the opened one. Its words name each answer.
+   */
+  const answersHad = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    change: {
+      after: Record<string, unknown>;
+      before: Record<string, unknown>;
+      tested: ReadonlySet<string>;
+    }
+  ): void => {
+    const live = (row.heldFor === null ? row : db.get(row.heldFor)) ?? row;
+    const owners = readsForOwner(instance, live);
+    const had = owners ? heardSeq(live) : 0;
+    const standing = stateOf(docs.doc(live.id));
+    const replaced = answersReplaced({
+      ...change,
+      standing,
+      unheard: unheardKeys(
+        had,
+        db.changes(live.id, { after: had, by: "person" })
+      ),
+    });
+    if (replaced.length === 0) {
+      return;
+    }
+    const said = replaced.map((key) => {
+      const his = standing[key] as ChoiceEntry;
+      return artifactToolWords.answerSaid(key, {
+        ...his,
+        note: noteText(his.note),
+      });
+    });
+    let how: "held" | "read" | "test" = owners ? "read" : "test";
+    if (live !== row) {
+      how = "held";
+    }
+    throw new ArtifactRefusal(409, artifactToolWords.answersStand(said, how));
+  };
+
+  /**
    * New HTML for page `row` (its revision moves and every open view morphs
    * to it, its state kept), or a JSON Patch (RFC 6902) over its `state`
    * applied as one transaction; its read after, as `ownersRead` says.
@@ -6808,6 +6902,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `Operation ${failed} of the patch failed: ${errors[failed]?.message ?? "it does not apply"}. Nothing was changed.`
       );
     }
+    answersHad(instance, row, {
+      before,
+      after,
+      tested: testedKeys(change.patch, before),
+    });
     const next = patchedEntries(
       before,
       after,

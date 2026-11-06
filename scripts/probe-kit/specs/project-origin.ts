@@ -523,12 +523,13 @@ const run = async (kit: Kit) => {
     const picked = await until(
       `${mode}: the pick on the hub`,
       () =>
-        fleet.api<{ state: Record<string, { options?: string[] }> }>(
-          hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+        // His view, never the session's read, which would count as its read of his pick.
+        fleet.api<{ choices: Record<string, { options?: string[] }> }>(
+          hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
             path: { id: later, artifact: page.id },
           })
         ),
-      (read) => (read.state.leave?.options ?? []).includes(option),
+      (read) => (read.choices.leave?.options ?? []).includes(option),
       15_000
     ).catch(() => undefined);
     kit.check(
@@ -537,14 +538,14 @@ const run = async (kit: Kit) => {
         leftOver === 0 &&
         tabbed.card &&
         tabbed.gone === "What this card showed is gone." &&
-        JSON.stringify(picked?.state.leave?.options) ===
+        JSON.stringify(picked?.choices.leave?.options) ===
           JSON.stringify([option]),
       JSON.stringify({
         deleted: deleteSaid,
         previewsLeft: leftOver,
         ...tabbed,
         pressed,
-        pick: picked?.state.leave ?? null,
+        pick: picked?.choices.leave ?? null,
       })
     );
     await tab.close();

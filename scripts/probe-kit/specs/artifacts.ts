@@ -30,7 +30,8 @@
  *
  * 7. Typing into `title` is in his view within 2 s as its `value`;
  *    picking a radio and an option is there as `options`; the session hears
- *    nothing of them.
+ *    nothing of them. 7b: the agent's patch of `size`, his answer it hasn't
+ *    had, is refused naming it, and his view still reads it.
  * 8. A dashboard reload shows all three from the doc on the page's
  *    DOMContentLoaded plus one frame.
  * 9. With `title` focused and holding typed text, artifact_update with new
@@ -196,6 +197,7 @@ const TOKENS = join(
   "../../../design/tokens/cawco.tokens.json"
 );
 const UPDATE = "mcp__cawco__artifact_update";
+const READ = "mcp__cawco__artifact_read";
 const PROMOTE = "mcp__cawco__artifact_promote";
 /** The commit in artifact_promote's answer. */
 const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/u;
@@ -408,6 +410,29 @@ interface View {
   choices: Record<string, { options: string[]; value: unknown }>;
   sentAt: string | null;
 }
+
+/**
+ * A session's own artifact_read of `artifact` through `call` (its
+ * `callIn`), the hub's read as JSON (`response_format: "detailed"`), or
+ * the tool's refusal thrown. What a leg reads of another session's
+ * artifact (an outline, a picture, a revision) is that session's read, so
+ * it reads it as that session: this spec waits for a responses notice, and
+ * a poll of the session's read route would count as a read no session made
+ * (scripts/probe-reads-check.ts).
+ */
+const readThrough = async <T>(
+  call: (tool: string, input: object) => Promise<string>,
+  artifact: string,
+  more: object = {}
+): Promise<T> => {
+  const text = await call(READ, { id: artifact, ...more });
+  if (calls.answered(lastMarker)?.failed) {
+    throw new Error(text.slice(-300));
+  }
+  return JSON.parse(
+    text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
+  ) as T;
+};
 
 /** The picked options the page marks, inside the panel's frame. */
 const picked = (page: Page): Promise<string[]> =>
@@ -870,24 +895,18 @@ const handChecks = async ({
     ],
   });
   const drawingId = drawing.match(ANSWERED_ID)?.[1];
+  const readDrawing = (artifact: string) =>
+    readThrough<{ outline: string; pictureAt: string | null }>(
+      callParent,
+      artifact
+    );
   const drawn = drawingId
     ? await until(
         "the handed drawing's picture, from its headless screen",
-        () =>
-          fleet.api<{ outline: string; pictureAt: string | null }>(
-            hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-              path: { id: parent, artifact: drawingId },
-            })
-          ),
+        () => readDrawing(drawingId),
         (read) => read.pictureAt !== null,
         30_000
-      ).catch(() =>
-        fleet.api<{ outline: string; pictureAt: string | null }>(
-          hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-            path: { id: parent, artifact: drawingId },
-          })
-        )
-      )
+      ).catch(() => readDrawing(drawingId))
     : null;
   const [ownWhileDrawn, drawingShown] = await Promise.all([
     shownOf(ownId),
@@ -1027,20 +1046,14 @@ const treeChecks = async ({
     id: drawingId,
     png: true,
   });
-  const readOnHub = await fleet.api<{ outline?: string; png?: string | null }>(
-    hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-      path: { id: sibling, artifact: drawingId },
-      query: { png: "true" },
-    })
-  );
   const listed = (await listOf(sibling)).find((one) => one.id === drawingId);
   kit.check(
     "T1: a sibling delegate reads the canvas handed to its parent, png and all, and its artifact_list has it as the parent's",
     read.includes("Handed box") &&
       !read.includes('"png":null') &&
-      (readOnHub.png?.length ?? 0) > 0 &&
+      read.includes('"png":"beside"') &&
       listed?.session === parent,
-    `read: ${read.slice(Math.max(0, read.indexOf("{")), read.indexOf("{") + 300)}; hub png ${readOnHub.png?.length ?? "none"} chars; listed ${JSON.stringify(listed ?? null)}`
+    `read: ${read.slice(Math.max(0, read.indexOf("{")), read.indexOf("{") + 300)}; listed ${JSON.stringify(listed ?? null)}`
   );
 
   // T2. A session outside the tree gets the same 404 as before.
@@ -1074,11 +1087,7 @@ const treeChecks = async ({
       },
     ],
   });
-  const after = await fleet.api<{ outline: string }>(
-    hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-      path: { id: parent, artifact: drawingId },
-    })
-  );
+  const after = await readThrough<{ outline: string }>(callParent, drawingId);
   kit.check(
     "T3: the sibling's artifact_update of the parent's canvas is refused, and its outline stays",
     shaped(artifactToolWords.othersArtifact).test(update) &&
@@ -1156,22 +1165,13 @@ const treeChecks = async ({
   );
 
   // T7. The parent's artifact_update of its delegate's page is still refused.
-  const pageRevision = (
-    await fleet.api<HeldRead>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-        path: { id: sibling, artifact: pageId },
-      })
-    )
-  ).revision;
+  const pageRevision = (await readThrough<HeldRead>(callSibling, pageId))
+    .revision;
   const parentUpdate = await callParent(UPDATE, {
     id: pageId,
     html: versionPage("parent"),
   });
-  const pageRead = await fleet.api<HeldRead>(
-    hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-      path: { id: sibling, artifact: pageId },
-    })
-  );
+  const pageRead = await readThrough<HeldRead>(callSibling, pageId);
   kit.check(
     "T7: the parent's artifact_update of its delegate's page is refused with the 403, and the page keeps its revision",
     shaped(artifactToolWords.othersArtifact).test(parentUpdate) &&
@@ -1254,12 +1254,7 @@ const heldChecks = async ({
   parent: string;
   shownOf: (id: string) => Promise<{ instanceId: string; shown: boolean }>;
 }) => {
-  const readOf = (id: string) =>
-    fleet.api<HeldRead>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-        path: { id: parent, artifact: id },
-      })
-    );
+  const readOf = (id: string) => readThrough<HeldRead>(callParent, id);
   const heldOf = (answer: string) => answer.match(HELD_ID)?.[1];
   const changedSends = (id: string) =>
     handedSends(id).filter((text) => text.includes("changed the"));
@@ -1322,11 +1317,10 @@ const heldChecks = async ({
     30_000
   ).catch(() => changedSends(pageId));
   await Bun.sleep(LISTEN_MS);
-  const [heldRead, nextRead, pageShown] = await Promise.all([
-    readOf(pageId),
-    pageNext ? readOf(pageNext) : Promise.resolve(null),
-    shownOf(pageId),
-  ]);
+  // One read at a time: each is a turn of the parent's.
+  const heldRead = await readOf(pageId);
+  const nextRead = pageNext ? await readOf(pageNext) : null;
+  const pageShown = await shownOf(pageId);
   kit.check(
     "H10: the delegate's new HTML for a page the parent's panel shows leaves the panel's page on its revision, waits as one next version, and tells the parent once",
     !!pageNext &&
@@ -1350,16 +1344,10 @@ const heldChecks = async ({
     (one) => one.id === pageId
   );
   const gone = pageNext
-    ? await fleet
-        .api<unknown>(
-          hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-            path: { id: parent, artifact: pageNext },
-          })
-        )
-        .then(
-          () => false,
-          () => true
-        )
+    ? await readOf(pageNext).then(
+        () => false,
+        () => true
+      )
     : false;
   kit.check(
     "H11: the parent's artifact_show moves its panel's page to the delegate's last version, and nothing waits after",
@@ -1389,10 +1377,8 @@ const heldChecks = async ({
       },
     ],
   });
-  const [liveCanvas, nextCanvas] = await Promise.all([
-    readOf(canvasId),
-    canvasNext ? readOf(canvasNext) : Promise.resolve(null),
-  ]);
+  const liveCanvas = await readOf(canvasId);
+  const nextCanvas = canvasNext ? await readOf(canvasNext) : null;
   await callParent("mcp__cawco__artifact_show", { id: canvasId });
   const openedCanvas = await readOf(canvasId);
   const openedRow = (await listedOf<Listed>(fleet, parent)).find(
@@ -1427,10 +1413,8 @@ const heldChecks = async ({
     (found) => found.length > 1,
     30_000
   ).catch(() => changedSends(pageId));
-  const [behindRead, pageNow] = await Promise.all([
-    readOf(pageId),
-    shownOf(pageId),
-  ]);
+  const behindRead = await readOf(pageId);
+  const pageNow = await shownOf(pageId);
   kit.check(
     "H13: the delegate's change to the page the parent opened, while the panel shows something else, is held too: its revision stays and the parent is told",
     !!heldOf(behind) &&
@@ -2112,9 +2096,14 @@ const promoteChecks = async ({
   await page.keyboard.press("Escape");
 
   // 15. A patch, then a second promote: a newer commit changing state.json.
+  // Its test op holds his pick as it stands, so it replaces it knowingly
+  // whether or not his marks' delivery has told the session yet.
   await callP(UPDATE, {
     id: keptId,
-    patch: [{ op: "replace", path: "/hero/options", value: ["a"] }],
+    patch: [
+      { op: "test", path: "/hero/options", value: ["b"] },
+      { op: "replace", path: "/hero/options", value: ["a"] },
+    ],
   });
   const second = await callP(PROMOTE, { id: keptId });
   const secondCommit = second.match(ANSWERED_COMMIT)?.[1];
@@ -2148,12 +2137,7 @@ const promoteChecks = async ({
   const pictured = sketchId
     ? await until(
         "the canvas's picture",
-        () =>
-          fleet.api<{ pictureAt?: string | null }>(
-            hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-              path: { id: inProject, artifact: sketchId },
-            })
-          ),
+        () => readThrough<{ pictureAt?: string | null }>(callP, sketchId),
         (answer) => !!answer.pictureAt,
         60_000
       ).then(
@@ -2493,6 +2477,39 @@ const entryOf = (answer: View, key: string) =>
   answer.choices[key] as View["choices"][string] | undefined;
 
 /**
+ * Check 7b: the agent's patch of `size`, which he picked (m) and the
+ * session has not had (no read of its own, no notice: the page's mood
+ * still asks him), is refused naming his pick, and his view still reads
+ * m (hub artifacts/overwrite.ts `answersReplaced`). Check 10's send then
+ * carries it.
+ */
+const unheardPatchChecks = async (
+  { kit, call }: Pick<OnSession, "call" | "kit">,
+  fieldsId: string,
+  readFields: () => Promise<View>
+) => {
+  const refused = await call(UPDATE, {
+    id: fieldsId,
+    patch: [{ op: "replace", path: "/size/options", value: ["l"] }],
+  });
+  const failed = calls.answered(lastMarker)?.failed === true;
+  const size = entryOf(await readFields(), "size")?.options.join();
+  kit.check(
+    "7b: the agent's patch of a field he answered that the session hasn't had is refused naming his answer, and his view still reads it",
+    failed &&
+      refused.includes(
+        artifactToolWords.answerSaid("size", {
+          note: null,
+          options: ["m"],
+          value: null,
+        })
+      ) &&
+      size === "m",
+    `failed ${failed}; ${refused.slice(0, 300)}; his view's size ${size}`
+  );
+};
+
+/**
  * The responses notices artifact `id` sent its session by itself (hub
  * artifacts `sendAnswered`), waited for past the person's quiet window;
  * none when none came.
@@ -2641,6 +2658,7 @@ const fieldChecks = async ({
     fieldsTold.length === 0,
     fieldsTold.map((one) => one.last.slice(0, 160)).join(" | ") || "nothing"
   );
+  await unheardPatchChecks({ kit, call }, fieldsId, readFields);
   const rpcBefore = await rpcSeen(page);
 
   // 8. A reload fills the fields from the doc by the first fieldFrame.
