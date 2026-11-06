@@ -94,15 +94,28 @@
   );
   /** The stop it stands at, by its place in `SHARES`. */
   let stop = $state(0);
-  // Each opening starts at half its room, or at the whole room for what
-  // wants it; a thread pushed into the standing sheet takes the whole room.
+  // Each opening starts at half its room. What wants the whole room (a
+  // thread) goes on to it at once, and a thread pushed into the standing
+  // sheet takes it too: vaul places an opening sheet at its first stop
+  // whatever stop is asked, and moves only on a change of stop, so the
+  // whole room is asked a tick after the opening, as a tap on the grabber
+  // asks it (`step`).
   $effect(() => {
-    if (open) {
-      const whole = tall;
-      untrack(() => {
-        stop = whole ? 1 : 0;
-      });
+    if (!open) {
+      return;
     }
+    const whole = tall;
+    untrack(() => {
+      if (!whole) {
+        stop = 0;
+        return;
+      }
+      if (stop !== 1) {
+        tick().then(() => {
+          stop = 1;
+        });
+      }
+    });
   });
   /** How much of the sheet stands below its room at its stop: what it holds is that much shorter. */
   const below = $derived(Math.round(room * (1 - (SHARES[stop] ?? 1))));

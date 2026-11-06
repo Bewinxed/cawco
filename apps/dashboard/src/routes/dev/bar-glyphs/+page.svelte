@@ -166,7 +166,7 @@
         </BarGlass>
       </div>
       <div
-        class="absolute start-space-6 top-c-head-room z-1 w-c-pin-card-w rounded-lg border border-border-control bg-surface-raised p-space-3 shadow-overlay"
+        class="absolute start-space-6 bottom-space-6 z-1 w-c-pin-card-w rounded-lg border border-border-control bg-surface-raised p-space-3 shadow-overlay"
         data-slot="glyph-card"
       >
         {@render cardBar(false)}

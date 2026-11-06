@@ -77,6 +77,7 @@
     "[&>input::-webkit-search-cancel-button]:appearance-none",
     className
   )}
+  data-look={look}
   data-slot="input-group"
   onclick={focusField}
   role="group"
