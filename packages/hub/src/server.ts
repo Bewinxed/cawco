@@ -26758,17 +26758,12 @@ export const createServer = (
         detach(githubWaits.drain(projectId), "drain a project's inbox");
       }
     },
-    // The project's conversation, started as any session is: in the mode
-    // its payload names (caw.ts `modeFor`), else the one you last
-    // chose for its harness on that machine (settleMode's fallback), or
-    // refused, saying so, when you never chose one there.
+    // The project's conversation, started as any session is, in the mode
+    // its payload names (caw.ts `startOf`: the project's, else the one you
+    // last chose for its harness on that machine), or refused, saying so,
+    // when it names none.
     spawn: async (machineId, payload) => {
-      await spawnSession(
-        machineId,
-        payload,
-        "project",
-        db.chosenMode(machineId, payload.harness ?? "claude")
-      );
+      await spawnSession(machineId, payload, "project");
     },
     // Turning Caw off stops what he started the way a forget stops a
     // project's sessions: each row confirmed as its machine ends it.

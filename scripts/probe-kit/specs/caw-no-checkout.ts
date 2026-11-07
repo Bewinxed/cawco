@@ -9,10 +9,13 @@
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model), the built dashboard, a project made with a name alone (its
- * folder on the hub, no checkout), in WebKit at Playwright's iPhone 13
+ * folder on the hub, no checkout), Caw on Claude Code and the fleet's
+ * Claude model, Accept edits the mode last chosen for Claude Code on the
+ * machine, and this browser's New Session form last left on OpenCode with
+ * its model, high effort and Plan; in WebKit at Playwright's iPhone 13
  * (390×664, the room Safari's toolbars leave; the kit's `phoneSafari`):
  *
- * 1. A failed start (the hub's place for the conversation refused, its own
+ * 1. A failed start (the hub's answer for how it starts refused, its own
  *    words), after a long link was pasted into the field: its line stands
  *    over the field, and no suggestion card, as much of it as the hero
  *    shows, stands under the composer, that line included. Read with the
@@ -20,12 +23,14 @@
  *    (Before: the hero kept room for the composer at rest only, so the
  *    grown field and the line stood over the cards.)
  * 2. The person's words sent from the hero start Caw's conversation: the
- *    project's row names a session, it runs where the hub says the
- *    project's conversation starts (its folder on the hub: caw.ts
- *    `placeFor`), the model is asked with the words, and no line says it
- *    could not start. (Before: the dashboard looked for a checkout of its
- *    own and refused, conversation.ts `noCheckout`.)
- * 3. No page error.
+ *    project's row names a session, it runs where the hub says (its folder
+ *    on the hub: caw.ts `startOf`), the model is asked with the words, and
+ *    no line says it could not start. (Before 424837c17: the dashboard
+ *    looked for a checkout of its own and refused.)
+ * 3. It runs on the project's harness and model, in the mode the hub's one
+ *    rule gives (the project's, else the one last chosen on the machine),
+ *    never the New Session form's. (Before: OpenCode, the form's.)
+ * 4. No page error.
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -33,7 +38,13 @@ import type { Page } from "playwright-core";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CAW_NO_MACHINE } from "../../../packages/core/src/project-conversation";
 import type { ProjectStarter } from "../../../packages/core/src/starters";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
 
@@ -181,11 +192,19 @@ const probe = async (kit: Kit) => {
   );
   const at = `${base}/project/${project.id}`;
   // The mode he last chose for Claude Code on the machine, as his New
-  // Session form writes it: a start names it (conversation.ts `mode`).
+  // Session form writes it: the hub's rule starts Caw on it (caw.ts
+  // `startOf`).
   fleet.write(
     "INSERT INTO chosen_modes (machine_id, harness, permission_mode, chosen_at) VALUES (?, 'claude', 'acceptEdits', ?)",
     MACHINE,
     Date.now()
+  );
+  // Caw on Claude Code and the fleet's Claude model: the project's choice.
+  await fleet.api(
+    hubRequest("PATCH /api/projects/:id/caw", {
+      path: { id: project.id },
+      body: { harness: "claude", model: MODEL.claude },
+    })
   );
 
   const page = await kit.page("phoneSafari", {
@@ -194,6 +213,19 @@ const probe = async (kit: Kit) => {
   });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  // The New Session form last left on another harness, model, effort and
+  // mode in this browser (spawnPrefs): none of it is Caw's.
+  await page.addInitScript((model) => {
+    localStorage.setItem(
+      "cawco-spawn-prefs",
+      JSON.stringify({
+        harness: "opencode",
+        model,
+        effort: "high",
+        permissionMode: "plan",
+      })
+    );
+  }, MODEL.opencode);
   // His suggestions, as the hub would have written them for Private office.
   await page.route(`**/api/projects/${project.id}/stages`, async (route) => {
     const answer = await route.fetch();
@@ -279,8 +311,14 @@ const probe = async (kit: Kit) => {
     )
     .catch(() => null);
   const session = named
-    ? fleet.query<{ cwd: string; project_id: string | null }>(
-        "SELECT cwd, project_id FROM instances WHERE id = ?",
+    ? fleet.query<{
+        cwd: string;
+        harness: string;
+        model: string | null;
+        permission_mode: string | null;
+        project_id: string | null;
+      }>(
+        "SELECT cwd, harness, model, permission_mode, project_id FROM instances WHERE id = ?",
         named
       )[0]
     : undefined;
@@ -291,7 +329,15 @@ const probe = async (kit: Kit) => {
       session.cwd === where.cwd &&
       session.project_id === project.id &&
       refused.every((one) => one.trim() === ""),
-    JSON.stringify({ named, cwd: session?.cwd, where, refused })
+    JSON.stringify({ named, session, where, refused })
+  );
+  kit.check(
+    `his conversation runs on the project's harness and model (claude, ${MODEL.claude}), not the New Session form's (opencode, ${MODEL.opencode}), in the mode last chosen on the machine (acceptEdits)`,
+    !!session &&
+      session.harness === "claude" &&
+      session.model === MODEL.claude &&
+      session.permission_mode === "acceptEdits",
+    JSON.stringify(session)
   );
   await until(
     "the model asked with his words",

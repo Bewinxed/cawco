@@ -13105,7 +13105,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiProjectsByIdCawPlace200"
+                  "$ref": "#/components/schemas/CawStart"
                 }
               }
             }
@@ -32340,21 +32340,6 @@
           "seen"
         ]
       },
-      "postApiProjectsByIdCawPlace200": {
-        "type": "object",
-        "properties": {
-          "cwd": {
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "cwd",
-          "machineId"
-        ]
-      },
       "getApiFleetCawMode200": {
         "type": "object",
         "properties": {
@@ -47297,6 +47282,37 @@
           "taskId",
           "taskTitle",
           "title"
+        ]
+      },
+      "CawStart": {
+        "description": "How every start of a project's conversation goes, the hub's start and the\nperson's alike (hub caw.ts `startOf`, `POST /api/projects/:id/caw/place`):\nwhere it runs, on the project's harness and model, in the project's mode\n(its own, its area's, the fleet's), else the one the person last chose for\nthat harness on that machine. A null mode is no mode: the start is refused\nwith the machine and harness to ask one for (core `ModeAsk`).",
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "model": {
+            "description": "Null: the harness's default model.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissionMode": {
+            "$ref": "#/components/schemas/PermissionMode"
+          }
+        },
+        "required": [
+          "cwd",
+          "harness",
+          "machineId",
+          "model"
         ]
       },
       "ProjectSpend": {

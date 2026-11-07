@@ -1,9 +1,9 @@
 /**
- * A new conversation in a project: a session where the hub says the
- * project's conversation starts (hub caw.ts `place`: its checkout online,
- * else its folder on the hub or a folder of its own), scoped to the
- * project, on the New Session form's last harness, model and effort, in
- * the mode last chosen for that harness on that machine. Its panel's New
+ * A new conversation in a project, started as every start of it is (hub
+ * caw.ts `startOf`, which the hub answers here): where its checkout is
+ * online, else its folder on the hub or a folder of its own, scoped to the
+ * project, on the project's harness and model, in the project's mode, else
+ * the one last chosen for that harness on that machine. Its panel's New
  * conversation and first words on its hero start one, and so does the
  * Routines tab's Ask Caw. The words go as its first prompt.
  */
@@ -12,8 +12,7 @@ import { detach } from "@cawco/core/detach";
 import { spawnWords } from "@cawco/core/words/spawn";
 import {
   answeredOr,
-  cawco,
-  conversationPlace,
+  conversationStart,
   drawFirstPrompt,
   type HeldSend,
   nameConversation,
@@ -32,13 +31,12 @@ import {
   parked,
   planAsks,
 } from "../spawn/parked.svelte";
-import { spawnPrefs } from "../spawnPrefs.svelte";
 
 /**
  * Starts it; its session's id. Throws the hub's refusal, or why it can't
- * start, in words. Its place is the hub's to say, the one rule every start
- * of the project's conversation takes (hub caw.ts `placeFor`), asked for
- * first: a project with no checkout still has one. Parked as the New Session form's starts are
+ * start, in words. How it starts is the hub's to say, the one rule every start of the project's
+ * conversation takes (hub caw.ts `startOf`), asked for first: a project
+ * with no checkout still has a place. Parked as the New Session form's starts are
  * (spawn/parked), marked as Caw's (`caw`), its session's id minted before it
  * is asked for: a reload while the hub answers finds the session on the
  * board and sends the first prompt the draft store kept, or says it did not
@@ -64,12 +62,10 @@ export async function startConversation(
   /** A start that failed: what was written to it while it started, oldest first. */
   withdrawn?: (held: HeldSend[]) => void
 ): Promise<string> {
-  const place = await conversationPlace(projectId);
-  const { harness, model, effort } = spawnPrefs;
-  const machine = cawco.machines.find(
-    (one) => one.machineId === place.machineId
-  );
-  const mode = machine?.chosenModes?.[harness] ?? spawnPrefs.permissionMode;
+  const place = await conversationStart(projectId);
+  const { harness } = place;
+  const model = place.model ?? "";
+  const mode = place.permissionMode;
   const id = newId();
   const instanceId = newId();
   beginStart({
@@ -89,9 +85,9 @@ export async function startConversation(
       prompt,
       extras,
       harness,
-      permissionMode: mode ?? null,
+      permissionMode: mode,
       model,
-      effort,
+      effort: null,
       projectId,
       summarizer: { harness, model: "" },
       asks: false,
@@ -123,7 +119,6 @@ export async function startConversation(
       harness,
       ...(mode ? { permissionMode: mode } : {}),
       ...(model ? { model } : {}),
-      ...(effort ? { effort } : {}),
       projectId,
     });
     const made = answeredOr(

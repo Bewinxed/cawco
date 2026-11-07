@@ -6,7 +6,12 @@
  */
 
 import type { SettingSource } from "./areas";
-import type { HarnessKind, OfferedMode, PlaceLfsRow } from "./harness";
+import type {
+  HarnessKind,
+  OfferedMode,
+  PermissionMode,
+  PlaceLfsRow,
+} from "./harness";
 import type { ItemEnd } from "./work-items";
 
 /**
@@ -18,6 +23,23 @@ import type { ItemEnd } from "./work-items";
  */
 export const CAW_NO_MACHINE =
   "No machine is online, so the project's conversation can't start. Bring one online and it can.";
+
+/**
+ * How every start of a project's conversation goes, the hub's start and the
+ * person's alike (hub caw.ts `startOf`, `POST /api/projects/:id/caw/place`):
+ * where it runs, on the project's harness and model, in the project's mode
+ * (its own, its area's, the fleet's), else the one the person last chose for
+ * that harness on that machine. A null mode is no mode: the start is refused
+ * with the machine and harness to ask one for (core `ModeAsk`).
+ */
+export interface CawStart {
+  cwd: string;
+  harness: HarnessKind;
+  machineId: string;
+  /** Null: the harness's default model. */
+  model: string | null;
+  permissionMode: PermissionMode | null;
+}
 
 /** A project's conversation, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface ProjectConversationView {

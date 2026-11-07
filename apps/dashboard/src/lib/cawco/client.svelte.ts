@@ -92,6 +92,7 @@ import type { PlaceProject } from "@cawco/core/place-nesting";
 import type { SessionPlan } from "@cawco/core/plan";
 import type {
   CawInitiated,
+  CawStart,
   DesignOfferState,
   LfsOfferState,
   OnCap,
@@ -7214,14 +7215,13 @@ export const configureCaw = async (
  * shows and his events reach. The answer's name stands on the row at once.
  */
 /**
- * Where the person's start of a project's conversation goes, as the hub
- * says it (hub caw.ts `place`): its checkout online, else its folder on the
- * hub or a folder of its own; refused, in words, while no machine is online.
+ * How the person's start of a project's conversation goes, as the hub says
+ * every start of it goes (hub caw.ts `startOf`): where, on the project's
+ * harness and model, in which mode; refused, in words, while no machine is
+ * online.
  */
-export const conversationPlace = (
-  projectId: string
-): Promise<{ machineId: string; cwd: string }> =>
-  askHub<{ machineId: string; cwd: string }>(
+export const conversationStart = (projectId: string): Promise<CawStart> =>
+  askHub<CawStart>(
     hubRequest("POST /api/projects/:id/caw/place", {
       path: { id: projectId },
     })

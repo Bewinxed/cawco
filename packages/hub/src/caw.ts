@@ -47,6 +47,7 @@ import {
   CAW_NO_MACHINE,
   type CawInitiated,
   type CawRunning,
+  type CawStart,
   CLAUDE_PROVIDER,
   type ConnectionView,
   CURATOR_DENIED_TOOLS,
@@ -502,6 +503,7 @@ export interface CawDeps {
     | "areas"
     | "cawMode"
     | "cawSpentSince"
+    | "chosenMode"
     | "getInstancesByIds"
     | "ingress"
     | "listProjects"
@@ -735,6 +737,32 @@ export const createCaw = ({
     undefined;
 
   /**
+   * How a start of the project's conversation goes, the one rule for the
+   * hub's starts and the person's (his panel's first words,
+   * project/conversation.ts on the dashboard; {@link CawStart}): where
+   * ({@link placeFor}), on the project's harness and model, in `mode` (the
+   * start's own, {@link modeFor}), else the one the person last chose for
+   * that harness on that machine. Refused, in the words the project's head
+   * says it, while no machine is online.
+   */
+  const startOf = async (
+    project: ReturnType<typeof projectOf>,
+    mode: OfferedMode | undefined
+  ): Promise<CawStart> => {
+    const place =
+      (await placeFor(project)) ??
+      refuse(409, problemOf(project) ?? CAW_NO_MACHINE);
+    const harness = project.cawHarness;
+    return {
+      machineId: place.machineId,
+      cwd: place.cwd,
+      harness,
+      model: project.cawModel ?? null,
+      permissionMode: mode ?? db.chosenMode(place.machineId, harness) ?? null,
+    };
+  };
+
+  /**
    * One message to the conversation's session ({@link Said}). One that
    * carries your words is yours (`human`), as a session's composer sends
    * it: it wakes the session stopped, and at its account's limit it is moved
@@ -793,18 +821,16 @@ export const createCaw = ({
     project: ReturnType<typeof projectOf>,
     start: Start
   ): Promise<{ conversation: InstanceRow; sent: string }> => {
-    const place =
-      (await placeFor(project)) ??
-      refuse(409, problemOf(project) ?? CAW_NO_MACHINE);
+    const how = await startOf(project, start.mode);
     const instanceId = crypto.randomUUID();
     startingIds.set(project.id, instanceId);
     try {
-      await spawn(place.machineId, {
+      await spawn(how.machineId, {
         instanceId,
-        cwd: place.cwd,
-        harness: project.cawHarness,
-        ...(project.cawModel ? { model: project.cawModel } : {}),
-        ...(start.mode ? { permissionMode: start.mode } : {}),
+        cwd: how.cwd,
+        harness: how.harness,
+        ...(how.model ? { model: how.model } : {}),
+        ...(how.permissionMode ? { permissionMode: how.permissionMode } : {}),
         ...(start.skills?.length ? { skills: [...start.skills] } : {}),
         projectId: project.id,
         title: "Caw",
@@ -1497,20 +1523,13 @@ export const createCaw = ({
     },
 
     /**
-     * Where the person's start of the project's conversation goes (his
-     * panel's first words, project/conversation.ts on the dashboard): the
-     * one place every start of it takes ({@link placeFor}), its checkout
-     * online, else its folder on the hub or a folder of its own. Refused, in
-     * the words the project's head says it, while no machine is online.
+     * How the person's start of the project's conversation goes (his
+     * panel's first words, project/conversation.ts on the dashboard): as
+     * every start of it does ({@link startOf}), in the project's mode.
      */
-    async place(
-      projectId: string
-    ): Promise<{ machineId: string; cwd: string }> {
+    start(projectId: string): Promise<CawStart> {
       const project = projectOf(projectId);
-      return (
-        (await placeFor(project)) ??
-        refuse(409, problemOf(project) ?? CAW_NO_MACHINE)
-      );
+      return startOf(project, modeFor(project, undefined));
     },
 
     /**
@@ -1942,11 +1961,12 @@ export const cawRoutes = (caw: Caw) =>
         }
       }
     )
-    // Where his panel starts the project's conversation (caw `place`): it
-    // may make the project's folder, so it is asked for, never read.
+    // How his panel starts the project's conversation (caw `start`): where,
+    // on what and in which mode. It may make the project's folder, so it is
+    // asked for, never read.
     .post("/api/projects/:id/caw/place", async ({ params }) => {
       try {
-        return await caw.place(params.id);
+        return await caw.start(params.id);
       } catch (error) {
         return answer(error);
       }
