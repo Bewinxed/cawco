@@ -22,6 +22,12 @@
  *   main a done attempt's task in ready was on the frontier.
  * - c. Jev failing (its route answers 500): the task stays in working,
  *   with a comment saying its work stays landed, not in a `you` stage.
+ * - d. Jev off and events on, its moves giving a session working → ready:
+ *   the project's conversation is woken to judge the lines and the task
+ *   stays in working; its move of the task back to
+ *   ready (the lead's verdict, dispatch.ts `leadSentBack`) counts the
+ *   attempt failed, so the task stands off the frontier. On main the
+ *   attempt still read done and the task was on the frontier.
  *
  *   bun scripts/probe-kit/run.ts unmet-back-to-todo
  */
@@ -266,7 +272,12 @@ const settled = async (
 };
 
 /** A task in working with a live attempt, filed and moved as the person does; its attempt finishes, and the task once the hub settled it. */
-const built = async (rig: Rig, title: string): Promise<TaskView> => {
+const built = async (
+  rig: Rig,
+  title: string,
+  /** Where the hub leaves it without a comment: read once its attempt has ended. */
+  judgedElsewhere = false
+): Promise<TaskView> => {
   const made = await rig.board(
     hubRequest("POST /api/projects/:id/tasks", {
       path: { id: rig.projectId },
@@ -297,6 +308,16 @@ const built = async (rig: Rig, title: string): Promise<TaskView> => {
     throw new Error(
       `${id}'s attempt could not finish: ${finished.status} ${finished.text}`
     );
+  }
+  if (judgedElsewhere) {
+    const deadline = Date.now() + 20_000;
+    let task = await read(rig, id);
+    while (task.attempts[0]?.state !== "done" && Date.now() < deadline) {
+      await Bun.sleep(100);
+      task = await read(rig, id);
+    }
+    await Bun.sleep(300);
+    return await read(rig, id);
   }
   return await settled(rig, id, "working", before);
 };
@@ -362,6 +383,67 @@ const legs = async (rig: Rig): Promise<void> => {
     "c: its comment says the work stays landed",
     cSaid.endsWith(stays),
     cSaid.slice(0, 400)
+  );
+
+  // (d) Jev off, events on: the lead judges, and its move back is its verdict.
+  // The code template gives a session no working → ready: these moves do.
+  const { templateText } = await import("../../../packages/hub/src/stages");
+  const code = templateText("code");
+  const withBack = code.replace(
+    "  working → done       session\n",
+    "  working → done       session\n  working → ready      session\n"
+  );
+  const written = await rig.board(
+    hubRequest("PUT /api/projects/:id/stages", {
+      path: { id: rig.projectId },
+      body: { content: withBack },
+    })
+  );
+  if (withBack === code || written.status >= 400) {
+    throw new Error(`the stages were not written: ${written.text}`);
+  }
+  rig.db.setTypesafeKey(null);
+  rig.db.setProjectCaw(rig.projectId, {
+    eventsOn: true,
+    conversationInstanceId: rig.parent,
+  });
+  const d = await built(rig, "Fix the tray chip tooltip", true);
+  kit.check(
+    "d: Jev off, events on: the task stays in working for its lead to judge",
+    d.stage === "working" && d.attempts[0]?.state === "done",
+    `${d.id} is in ${d.stage}, its attempt ${d.attempts[0]?.state}`
+  );
+  const lead: ToolSession = {
+    base: rig.base,
+    id: rig.parent,
+    credential: rig.identities.mint(rig.parent),
+  };
+  const back = await toolWords(lead, "task_update", {
+    id: d.id,
+    stage: "ready",
+    reason: "the tooltip line is not shown met",
+  });
+  await Bun.sleep(500);
+  const dBack = await read(rig, d.id);
+  const dView = (
+    await rig.board(
+      hubRequest("GET /api/projects/:id/dispatch", {
+        path: { id: rig.projectId },
+      })
+    )
+  ).json as DispatchView;
+  kit.check(
+    "d: the lead's move back to ready counts the attempt failed, and the task stands off the frontier",
+    !back.refused &&
+      dBack.stage === "ready" &&
+      dBack.lastAttemptFailed &&
+      !dView.frontier.includes(d.id),
+    JSON.stringify({
+      moved: back.text.slice(0, 160),
+      stage: dBack.stage,
+      failed: dBack.lastAttemptFailed,
+      frontier: dView.frontier,
+    })
   );
 };
 

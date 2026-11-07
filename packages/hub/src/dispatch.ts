@@ -157,7 +157,7 @@ import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
-import { waitingStageOf } from "./stages";
+import { moveProblem, waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
 import {
   BUDGET,
@@ -978,6 +978,33 @@ export const createDispatcher = ({
   };
 
   /**
+   * Refuses a session's start whose move of the task into `active` the
+   * project's moves do not give a session (stages.ts `moveProblem`, its own
+   * sentence): a start moves the task as its starter would. The person's
+   * starts and the hub's own (dispatch, a hook) are not a session's; a task
+   * already in `active` moves nowhere.
+   */
+  const refuseSessionMove = async (
+    projectId: string,
+    task: TaskView,
+    active: Stage | undefined
+  ): Promise<void> => {
+    if (!active || active.name === task.stage) {
+      return;
+    }
+    const problem = moveProblem(
+      await tasks.stages(projectId),
+      task.id,
+      task.stage,
+      active.name,
+      "session"
+    );
+    if (problem) {
+      refuse(409, problem);
+    }
+  };
+
+  /**
    * How an attempt at `task` lands: the task's `lands:`, else its delegate
    * type's, else the project's.
    */
@@ -1318,7 +1345,8 @@ export const createDispatcher = ({
    * one path. `stage` is the active stage a hook started it from; without
    * one the task moves to the stage it is active in, or the first of kind
    * `active`. Refused while the task has a live attempt, is done or dropped,
-   * or no checkout is online; a start the machine or the fleet turns down is
+   * a session's (no `origin`) when the project's moves do not let a session
+   * make that move, or no checkout is online; a start the machine or the fleet turns down is
    * remembered on the task until it changes.
    */
   const startAttempt = async (
@@ -1343,6 +1371,10 @@ export const createDispatcher = ({
       startable(projectId, task);
       const previous = retry ? retryable(projectId, task) : undefined;
       const active = await activeFor(projectId, task, stage);
+      // No origin: a session asked (task_start, task_retry, a delegate naming it).
+      if (origin === undefined) {
+        await refuseSessionMove(projectId, task, active);
+      }
       let started: WorkItemStart;
       try {
         started = await launch(project, task, parent, active, {
@@ -2202,6 +2234,47 @@ export const createDispatcher = ({
    * moved. A move takes back the start its task waited for in the stage it
    * left (a move into a `runs:` stage queues one again).
    */
+  /**
+   * The lead's verdict that a landed attempt it was woken to judge (Jev off,
+   * events on: {@link judgeCriteria}'s `conversation`) did not meet its
+   * acceptance criteria is its move of the task back to a todo stage. That
+   * move stamps the attempt unmet, as Jev's own verdict does, so the task
+   * counts it failed and stays off the frontier until task_retry. Told by:
+   * the project's conversation moving a task with acceptance criteria into
+   * a todo stage while its newest attempt is done, landed whole (no
+   * follow-up `error`) and not stamped yet.
+   */
+  const leadSentBack = async (
+    event: Extract<TaskEvent, { kind: "moved" }>
+  ): Promise<void> => {
+    const { actor, projectId, id, to } = event;
+    if (
+      actor.mover !== "session" ||
+      !actor.instanceId ||
+      actor.instanceId !== db.project(projectId)?.conversationInstanceId
+    ) {
+      return;
+    }
+    const [newest] = db
+      .projectAttempts(projectId)
+      .filter((item) => item.taskId === id);
+    if (newest?.state !== "done" || newest.error || newest.unmetAt) {
+      return;
+    }
+    const stages = await tasks.stages(projectId);
+    if (stages.stages.find((each) => each.name === to)?.kind !== "todo") {
+      return;
+    }
+    const task = await tasks.get(projectId, id);
+    if (criteriaOf(task.acceptance).length === 0) {
+      return;
+    }
+    db.markAttemptUnmet(newest.id);
+    console.log(
+      `[dispatch] ${id}: the project's conversation sent it back to ${to}; its attempt ${short(newest.id)} counts as unmet, and the task waits for task_retry.`
+    );
+  };
+
   const taskChanged = (event: TaskEvent): void => {
     if (event.kind === "moved") {
       db.dropQueuedTaskStart(event.projectId, event.id);
@@ -2212,7 +2285,14 @@ export const createDispatcher = ({
       (event.actor.mover !== "hub" || event.actor.tracker !== undefined)
     ) {
       const entered = event.kind === "moved" ? event.to : event.stage;
-      hooked({ ...event, to: entered })
+      // The lead's verdict is stamped before the project is looked at again.
+      (event.kind === "moved" ? leadSentBack(event) : Promise.resolve())
+        .catch((error: unknown) =>
+          console.warn(
+            `[dispatch] ${event.id} moved to ${entered}: ${failure(error).message}`
+          )
+        )
+        .then(() => hooked({ ...event, to: entered }))
         .catch((error: unknown) =>
           console.warn(
             `[dispatch] ${event.id} entered ${entered}: ${failure(error).message}`
