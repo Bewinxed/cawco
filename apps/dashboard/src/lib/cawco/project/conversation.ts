@@ -1,5 +1,7 @@
 /**
- * A new conversation in a project: a session in its checkout, scoped to the
+ * A new conversation in a project: a session where the hub says the
+ * project's conversation starts (hub caw.ts `place`: its checkout online,
+ * else its folder on the hub or a folder of its own), scoped to the
  * project, on the New Session form's last harness, model and effort, in
  * the mode last chosen for that harness on that machine. Its panel's New
  * conversation and first words on its hero start one, and so does the
@@ -7,11 +9,11 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import { conversationWords } from "@cawco/core/words/project-conversation";
 import { spawnWords } from "@cawco/core/words/spawn";
 import {
   answeredOr,
   cawco,
+  conversationPlace,
   drawFirstPrompt,
   type HeldSend,
   nameConversation,
@@ -22,7 +24,6 @@ import {
 import { continuationStageWords } from "../continue.svelte";
 import type { DraftContent } from "../draft-store";
 import { newId } from "../id";
-import { checkoutOf } from "../projects";
 import {
   askedFor,
   beginStart,
@@ -35,7 +36,9 @@ import { spawnPrefs } from "../spawnPrefs.svelte";
 
 /**
  * Starts it; its session's id. Throws the hub's refusal, or why it can't
- * start, in words. Parked as the New Session form's starts are
+ * start, in words. Its place is the hub's to say, the one rule every start
+ * of the project's conversation takes (hub caw.ts `placeFor`), asked for
+ * first: a project with no checkout still has one. Parked as the New Session form's starts are
  * (spawn/parked), marked as Caw's (`caw`), its session's id minted before it
  * is asked for: a reload while the hub answers finds the session on the
  * board and sends the first prompt the draft store kept, or says it did not
@@ -61,11 +64,7 @@ export async function startConversation(
   /** A start that failed: what was written to it while it started, oldest first. */
   withdrawn?: (held: HeldSend[]) => void
 ): Promise<string> {
-  const project = cawco.project(projectId);
-  const place = project ? checkoutOf(project) : undefined;
-  if (!place) {
-    throw new Error(conversationWords.noCheckout);
-  }
+  const place = await conversationPlace(projectId);
   const { harness, model, effort } = spawnPrefs;
   const machine = cawco.machines.find(
     (one) => one.machineId === place.machineId
@@ -85,8 +84,8 @@ export async function startConversation(
     },
     draft: {
       machineIds: [place.machineId],
-      baseCwd: place.path,
-      cwd: place.path,
+      baseCwd: place.cwd,
+      cwd: place.cwd,
       prompt,
       extras,
       harness,
@@ -98,7 +97,7 @@ export async function startConversation(
       asks: false,
       usedModel: model,
     },
-    prefill: { machineId: place.machineId, cwd: place.path, projectId },
+    prefill: { machineId: place.machineId, cwd: place.cwd, projectId },
     replacing: null,
     stage: continuationStageWords.starting,
   });
@@ -109,7 +108,7 @@ export async function startConversation(
   const commandId = newId();
   drawFirstPrompt(instanceId, commandId, prompt, extras, {
     machineId: place.machineId,
-    cwd: place.path,
+    cwd: place.cwd,
     harness,
   });
   drawn?.(instanceId);
@@ -118,7 +117,7 @@ export async function startConversation(
       firstCommandId: commandId,
       instanceId,
       machineId: place.machineId,
-      cwd: place.path,
+      cwd: place.cwd,
       prompt,
       extras,
       harness,

@@ -445,15 +445,24 @@
     });
   });
 
+  /** What the hero's composer stands over the pane's foot, in px, as it reports it (Composer `onfoot`); 0 until it has. */
+  let composerFoot = $state(0);
   /**
    * The composer has a place of its own at the panel's foot and the hero's
-   * room ends over it, as a docked conversation's does (SessionPane
-   * `reserved`), with no tray row: no conversation has delegates yet; with
-   * no machine for a conversation, the line that says so stands there
+   * room ends over it, so nothing in the hero stands behind it: no starter
+   * card under the field, no card's words under a failed start's line. The
+   * place is the composer as it stands now (its field grown round a pasted
+   * link, the line over it saying why a start failed, its attachments), as
+   * it reports it, and until it has (the server's paint, the frames before
+   * it mounts) its panel at rest (`c-composer-panel`). The hero is no
+   * transcript: its room follows the composer, and The Composer Layer
+   * Rule's layers (the menus, the recall wheel) are in no report. With no
+   * machine for a conversation, the line that says so stands there
    * instead.
    */
-  const reserved =
-    "calc(var(--space-4) + var(--safe-bottom) + var(--c-composer-panel) + var(--space-2))";
+  const reserved = $derived(
+    `calc(var(--space-4) + var(--safe-bottom) + ${composerFoot > 0 ? `${composerFoot}px` : "var(--c-composer-panel)"} + var(--space-2))`
+  );
 </script>
 
 <!-- Assistant and Preview: the switch in whichever bar heads the panel,
@@ -667,6 +676,9 @@
                   fleet={composerFleet}
                   agentName="Caw"
                   draft={lead.draft}
+                  onfoot={(foot) => {
+                    composerFoot = foot.stack;
+                  }}
                   onstop={() => undefined}
                   onsubmit={(text, extras) => {
                     start(text, extras);

@@ -2481,6 +2481,11 @@ export interface components {
         id: string | number;
       };
     };
+    "POST /api/projects/:id/caw/place": {
+      path: {
+        id: string | number;
+      };
+    };
     "POST /api/projects/:id/decisions/:name/send": {
       body: {
         text?: string;

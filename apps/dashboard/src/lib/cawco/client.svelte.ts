@@ -7213,6 +7213,20 @@ export const configureCaw = async (
  * now (hub caw.ts `name`): the one the project's row names, which his panel
  * shows and his events reach. The answer's name stands on the row at once.
  */
+/**
+ * Where the person's start of a project's conversation goes, as the hub
+ * says it (hub caw.ts `place`): its checkout online, else its folder on the
+ * hub or a folder of its own; refused, in words, while no machine is online.
+ */
+export const conversationPlace = (
+  projectId: string
+): Promise<{ machineId: string; cwd: string }> =>
+  askHub<{ machineId: string; cwd: string }>(
+    hubRequest("POST /api/projects/:id/caw/place", {
+      path: { id: projectId },
+    })
+  );
+
 export const nameConversation = async (
   projectId: string,
   instanceId: string

@@ -1497,6 +1497,23 @@ export const createCaw = ({
     },
 
     /**
+     * Where the person's start of the project's conversation goes (his
+     * panel's first words, project/conversation.ts on the dashboard): the
+     * one place every start of it takes ({@link placeFor}), its checkout
+     * online, else its folder on the hub or a folder of its own. Refused, in
+     * the words the project's head says it, while no machine is online.
+     */
+    async place(
+      projectId: string
+    ): Promise<{ machineId: string; cwd: string }> {
+      const project = projectOf(projectId);
+      return (
+        (await placeFor(project)) ??
+        refuse(409, problemOf(project) ?? CAW_NO_MACHINE)
+      );
+    },
+
+    /**
      * Session `instanceId` is the project's conversation now: one his panel
      * started in the project (its first words the person's, project/
      * conversation.ts on the dashboard), so his events, notes and panel are
@@ -1925,6 +1942,15 @@ export const cawRoutes = (caw: Caw) =>
         }
       }
     )
+    // Where his panel starts the project's conversation (caw `place`): it
+    // may make the project's folder, so it is asked for, never read.
+    .post("/api/projects/:id/caw/place", async ({ params }) => {
+      try {
+        return await caw.place(params.id);
+      } catch (error) {
+        return answer(error);
+      }
+    })
     // A conversation his panel started is the project's conversation now.
     .post(
       "/api/projects/:id/caw/conversation",

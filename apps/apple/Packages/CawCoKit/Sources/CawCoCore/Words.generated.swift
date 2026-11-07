@@ -2991,9 +2991,6 @@ public enum Words {
         /// The panel head's action: the conversation on show, as a tab.
         public static let openAsTab = "Open as a tab"
 
-        /// A new conversation with nowhere to run: the project has no checkout on a machine yet.
-        public static let noCheckout = "This project has no checkout on a machine yet, so a conversation can't start. Add one in Project details, then try again."
-
         /// A start of his conversation undone because its first message did not go (hub caw.ts `startConversation`): the project's `problem`, on its page and in his panel, `why` the hub's sentence.
         public static func firstSendRefused(why: String) -> String {
             "The project's conversation didn't start: its first message didn't go. \(why)"

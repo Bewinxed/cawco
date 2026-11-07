@@ -13086,6 +13086,83 @@
         }
       }
     },
+    "/api/projects/{id}/caw/place": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdCawPlace",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdCawPlace 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdCawPlace200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdCawPlace 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdCawPlace 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdCawPlace 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdCawPlace 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdCawPlace 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/caw/conversation": {
       "post": {
         "parameters": [
@@ -32261,6 +32338,21 @@
         },
         "required": [
           "seen"
+        ]
+      },
+      "postApiProjectsByIdCawPlace200": {
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cwd",
+          "machineId"
         ]
       },
       "getApiFleetCawMode200": {
