@@ -95,6 +95,7 @@ export type TokenColor =
   | "color.surface-raised"
   | "color.surface-recess"
   | "color.surface-recess-clear"
+  | "color.surface-raised-clear"
   | "color.mask-opaque"
   | "color.mask-opaque-a10"
   | "color.mask-opaque-a15"

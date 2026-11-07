@@ -15,10 +15,24 @@
    * the foot) it is solid that high, then dissolves over `--space-8`: rows
    * pass behind it as they pass behind the pill, and nothing stands over
    * words being read.
+   *
+   * `room` names the clearance where the pane names none in CSS (the peek's
+   * foot tray, its measured height), and `ground` the surface the rows stand
+   * on: the recess by default, the raised surface in a sheet.
    */
   import { fade } from "svelte/transition";
 
-  let { solid }: { solid?: string } = $props();
+  let {
+    solid,
+    room,
+    ground = "recess",
+  }: {
+    solid?: string;
+    /** The clearance of what stands at the foot, a CSS length. */
+    room?: string;
+    /** The surface the rows stand on. */
+    ground?: "recess" | "raised";
+  } = $props();
 </script>
 
 <div
@@ -28,9 +42,9 @@
   class="absolute inset-x-0 bottom-0 z-1 h-(--foot-fade-h) pointer-events-none bg-(image:--foot-fade-image) data-standing:bg-(image:--foot-fade-standing-image)"
   style:--fade-solid={solid ?? null}
   style:--foot-fade-h={solid === undefined
-    ? "var(--composer-clearance, var(--c-foot-fade))"
+    ? (room ?? "var(--composer-clearance, var(--c-foot-fade))")
     : `calc(${solid} + var(--space-8))`}
-  style:--foot-fade-image={"linear-gradient(to top, var(--surface-recess) 22%, var(--surface-recess-clear))"}
-  style:--foot-fade-standing-image={"linear-gradient(to top, var(--surface-recess) var(--fade-solid), var(--surface-recess-clear))"}
+  style:--foot-fade-image={`linear-gradient(to top, var(--surface-${ground}) 22%, var(--surface-${ground}-clear))`}
+  style:--foot-fade-standing-image={`linear-gradient(to top, var(--surface-${ground}) var(--fade-solid), var(--surface-${ground}-clear))`}
   transition:fade
 ></div>

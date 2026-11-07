@@ -115,6 +115,8 @@ public enum Palette {
     public static let surfaceRecess = Palette.named("surface-recess")
     /// The recess at alpha 0: the far stop of a fade into the recess (the transcript's foot fade, the suggestion row's floor), so the ramp keeps the recess's hue.
     public static let surfaceRecessClear = Palette.named("surface-recess-clear")
+    /// The raised surface at alpha 0: the far stop of a fade into it (the peek's foot fade under its tray), so the ramp keeps the surface's hue.
+    public static let surfaceRaisedClear = Palette.named("surface-raised-clear")
     /// An alpha mask's opaque stop. A mask reads alpha alone, so its colour never draws.
     public static let maskOpaque = Palette.named("mask-opaque")
     /// An alpha mask's stop at 10% (the phone tab strip's end fade).

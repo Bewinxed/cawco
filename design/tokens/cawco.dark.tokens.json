@@ -1433,6 +1433,19 @@
         }
       }
     },
+    "surface-raised-clear": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.248, 0.006, 70],
+        "alpha": 0
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-raised} l c h / 0)"
+        }
+      }
+    },
     "needs-ground": {
       "$type": "color",
       "$value": {

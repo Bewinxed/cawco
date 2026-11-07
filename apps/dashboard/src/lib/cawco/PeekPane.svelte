@@ -101,6 +101,7 @@
   import { cawOf, sessionStatus } from "./session-status";
   import { startFork } from "./spawn/new-session.svelte";
   import TaskRing from "./TaskRing.svelte";
+  import FootFade from "./transcript/FootFade.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
@@ -354,11 +355,12 @@
 </script>
 
 <!-- The plan's steps, opened upward from its row over what it said: capped
-     (`c-peek-steps-h`) and scrolled inside, opened on the step at work. -->
+     (`c-peek-steps-h`) and scrolled inside, opened on the step at work, each
+     edge with more past it fading out (the house edge fade). -->
 {#snippet steps()}
   <div
     data-slot="peek-plan"
-    class="relative min-h-0 overflow-y-auto overscroll-contain max-h-c-peek-steps-h pb-space-2"
+    class="kit-edge-fade-block fade-len-c-edge-fade-len relative min-h-0 overflow-y-auto overscroll-contain max-h-c-peek-steps-h pb-space-2"
     in:unfold
     out:unfold
     {@attach (box) => {
@@ -378,6 +380,82 @@
   class="relative flex min-h-0 flex-1 flex-col overflow-hidden timeline-scope-transcript-head"
   style:--peek-foot="calc({footH}px + var(--space-4))"
 >
+  <!-- The bar floats over what it said (The Title Bars Follow Liquid Glass
+       Rule; the peek's surface brief): the session's title by its project's
+       folder in the project's hue, then its machine's OS mark, the machine
+       named in its tooltip; no path. At the trailing edge Open, the
+       maximize symbol in its glass group, which dives, and Close in one of
+       its own. The title takes the right-click: Open, Fork, Stop, Close.
+       First in the document, so it is read and tabbed first and a trapped
+       sheet's focus lands on it; it stands over the tail by its layer. -->
+  <BarFloat tint="bg-surface-raised">
+    {#snippet leading()}
+      <ContextMenu.Root>
+        <ContextMenu.Trigger box="none">
+          <h2
+            class="pointer-events-auto mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-body font-medium"
+          >
+            {#if cwd}
+              <IconFolder
+                class="identity-ink size-icon-md shrink-0"
+                style="--identity-h: {folderPrefs.hue(cwd)}"
+              />
+            {/if}
+            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >{target.title}</span
+            >
+            {#if machine}
+              <span
+                data-box
+                class="inline-flex flex-none text-ink-muted"
+                aria-label={host}
+                role="img"
+                title={host}
+                ><OsMark class="size-space-4" os={machine.os} /></span
+              >
+            {/if}
+          </h2>
+        </ContextMenu.Trigger>
+        <ContextMenu.Content>
+          <ContextMenu.Item onSelect={() => goto(target.href)}>
+            <IconExternal />
+            <span>{peekWords.open}</span>
+          </ContextMenu.Item>
+          <ContextMenu.PendingItem
+            disabled={!(forkable && machine)}
+            icon={IconFork}
+            label="Fork"
+            pendingLabel="Forking…"
+            run={fork}
+          />
+          {#if running && row}
+            <ContextMenu.Item onSelect={() => stopOnRow(row.id, row.machineId)}>
+              <IconStop />
+              <span>{activity === "working" ? "Stop mid-turn" : "Stop"}</span>
+            </ContextMenu.Item>
+          {/if}
+          <ContextMenu.Separator />
+          <ContextMenu.Item onSelect={onclose}>
+            <IconClose />
+            <span>{peekWords.close}</span>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Root>
+    {/snippet}
+    {#snippet trailing()}
+      <BarGlass form="group">
+        <BarItem
+          href={target.href}
+          icon={IconMaximizeLinear}
+          label={peekWords.open}
+        />
+      </BarGlass>
+      <BarGlass form="group">
+        <BarItem icon={IconClose} label={peekWords.close} onclick={onclose} />
+      </BarGlass>
+    {/snippet}
+  </BarFloat>
+
   <!-- What it said runs the sheet's whole height, under the bar and the
        tray, and follows new turns and the stream: a peek is for the last
        thing said. Each session peeked opens at its own end; its foot keeps
@@ -458,6 +536,11 @@
       </div>
     </div>
   {/key}
+
+  <!-- The sheet's ground under the tray, as the bar has its scroll edge:
+       solid at the foot, clear where the tail's last line rests, so rows
+       leave under the tray's glass into the ground. -->
+  <FootFade ground="raised" room="var(--peek-foot)" />
 
   <!-- The foot tray: what is live floats over the end of what it said as
        one glass panel (the house float panel), where a session's composer
@@ -686,78 +769,4 @@
       reason={act?.fault?.reason}
     />
   </div>
-
-  <!-- The bar floats over what it said (The Title Bars Follow Liquid Glass
-       Rule; the peek's surface brief): the session's title by its project's
-       folder in the project's hue, then its machine's OS mark, the machine
-       named in its tooltip; no path. At the trailing edge Open, the
-       maximize symbol in its glass group, which dives, and Close in one of
-       its own. The title takes the right-click: Open, Fork, Stop, Close. -->
-  <BarFloat tint="bg-surface-raised">
-    {#snippet leading()}
-      <ContextMenu.Root>
-        <ContextMenu.Trigger box="none">
-          <h2
-            class="pointer-events-auto mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-body font-medium"
-          >
-            {#if cwd}
-              <IconFolder
-                class="identity-ink size-icon-md shrink-0"
-                style="--identity-h: {folderPrefs.hue(cwd)}"
-              />
-            {/if}
-            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{target.title}</span
-            >
-            {#if machine}
-              <span
-                data-box
-                class="inline-flex flex-none text-ink-muted"
-                aria-label={host}
-                role="img"
-                title={host}
-                ><OsMark class="size-space-4" os={machine.os} /></span
-              >
-            {/if}
-          </h2>
-        </ContextMenu.Trigger>
-        <ContextMenu.Content>
-          <ContextMenu.Item onSelect={() => goto(target.href)}>
-            <IconExternal />
-            <span>{peekWords.open}</span>
-          </ContextMenu.Item>
-          <ContextMenu.PendingItem
-            disabled={!(forkable && machine)}
-            icon={IconFork}
-            label="Fork"
-            pendingLabel="Forking…"
-            run={fork}
-          />
-          {#if running && row}
-            <ContextMenu.Item onSelect={() => stopOnRow(row.id, row.machineId)}>
-              <IconStop />
-              <span>{activity === "working" ? "Stop mid-turn" : "Stop"}</span>
-            </ContextMenu.Item>
-          {/if}
-          <ContextMenu.Separator />
-          <ContextMenu.Item onSelect={onclose}>
-            <IconClose />
-            <span>{peekWords.close}</span>
-          </ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu.Root>
-    {/snippet}
-    {#snippet trailing()}
-      <BarGlass form="group">
-        <BarItem
-          href={target.href}
-          icon={IconMaximizeLinear}
-          label={peekWords.open}
-        />
-      </BarGlass>
-      <BarGlass form="group">
-        <BarItem icon={IconClose} label={peekWords.close} onclick={onclose} />
-      </BarGlass>
-    {/snippet}
-  </BarFloat>
 </div>

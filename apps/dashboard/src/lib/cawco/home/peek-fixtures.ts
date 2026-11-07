@@ -45,7 +45,8 @@ export const PEEK_SCENES: readonly PeekScene[] = [
 ];
 
 /** The peeked session. */
-const PEEK_ID = "5e551011-0000-4000-8000-00000000peek";
+/** The peeked session in a scene: each scene its own, so a page can stand several at once. */
+const peekId = (scene: PeekScene): string => `peek-${scene}`;
 /** The conversation the desk has open beside the peek. */
 export const OPEN_ID = "f1";
 
@@ -212,7 +213,7 @@ function asksOf(scene: PeekScene, now: number): PendingPermission[] {
   const permission = {
     heard: now,
     input: { command: "ssh-keygen -t ed25519 -f ~/.ssh/deploy_obelisk -N ''" },
-    instanceId: PEEK_ID,
+    instanceId: peekId(scene),
     presentation: {
       asker: TITLE,
       changes: [],
@@ -370,7 +371,7 @@ function pulse(id: string, activity: SessionPulse["activity"]): void {
       at: Date.now(),
       busy: activity === "working",
       currentTool:
-        activity === "working" && id === PEEK_ID
+        activity === "working" && id.startsWith("peek-")
           ? {
               name: "Edit",
               glance: "apps/dashboard/src/routes/sign-in/+page.svelte",
@@ -403,22 +404,21 @@ function statusOf(scene: PeekScene): string {
   return scene === "unreachable" ? "unknown" : "running";
 }
 
-/**
- * Stands the scene in the store and the bench's hub, which takes an
- * answer to the permission as the hub would. Returns the peek's target
- * and the way to take it all down.
- */
-export function standPeek(scene: PeekScene): {
-  target: PeekTarget;
-  leave: () => void;
-} {
-  const now = Date.now();
-  const store = debug();
+/** The scenes standing now, each by its row; the fleet stands beside them. */
+const stood = new Map<PeekScene, { status: string }>();
+
+/** The fleet as the hub would list it: every scene's session, then the rest. */
+function adoptAll(now: number): void {
   const rows = [
-    { id: PEEK_ID, title: TITLE, status: statusOf(scene), cwd: CWD },
-    ...FLEET,
+    ...[...stood].map(([scene, one]) => ({
+      id: peekId(scene),
+      title: TITLE,
+      status: one.status,
+      cwd: CWD,
+    })),
+    ...(stood.size > 0 ? FLEET : []),
   ];
-  store.adoptInstances(
+  debug().adoptInstances(
     rows.map(
       (one, i) =>
         ({
@@ -428,7 +428,7 @@ export function standPeek(scene: PeekScene): {
           kind: "mainline",
           launchDir: "known",
           machineId: "obelisk",
-          sessionId: `sdk-${i}`,
+          sessionId: `sdk-${one.id}`,
           status: one.status,
           title: one.title,
           lastError: one.status === "error" ? FAILURE : null,
@@ -436,6 +436,66 @@ export function standPeek(scene: PeekScene): {
         }) as unknown as InstanceRow
     )
   );
+}
+
+let hubTimer: ReturnType<typeof setTimeout> | undefined;
+let onlineTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * The bench's hub, stood once for every scene: after the layout has asked
+ * for the hub (its onMount runs after the page's), it stands in for it and
+ * takes an answer to a permission as the hub would. The home has had its
+ * first read then (no online machine waits on its catalogues), so the
+ * machine comes online, unless a scene has it out of reach.
+ */
+function standHub(): void {
+  if (hubTimer !== undefined) {
+    return;
+  }
+  hubTimer = setTimeout(() => {
+    debug().standHub((id, kind, intent) => {
+      const peeked = debug().state.sessions[id];
+      if (kind !== "permission.answer" || !peeked) {
+        return;
+      }
+      const { requestId } = intent as { requestId: string };
+      peeked.pending = peeked.pending.filter(
+        (one) => one.requestId !== requestId
+      );
+      pulse(id, "working");
+    });
+    onlineTimer = setTimeout(() => {
+      const machine = cawco.machines.find((one) => one.machineId === "obelisk");
+      if (machine && !stood.has("unreachable")) {
+        machine.status = "online";
+      }
+    }, 300);
+  }, 0);
+}
+
+function leaveHub(): void {
+  clearTimeout(hubTimer);
+  clearTimeout(onlineTimer);
+  hubTimer = undefined;
+  onlineTimer = undefined;
+  debug().leaveHub();
+}
+
+/**
+ * Stands the scene in the store, its session under its own id beside the
+ * others standing, and the bench's hub. Returns the peek's target and the
+ * way to take the scene down; the last scene down takes the hub and the
+ * fleet with it.
+ */
+export function standPeek(scene: PeekScene): {
+  target: PeekTarget;
+  leave: () => void;
+} {
+  const now = Date.now();
+  const store = debug();
+  const id = peekId(scene);
+  stood.set(scene, { status: statusOf(scene) });
+  adoptAll(now);
   if (!cawco.machines.some((one) => one.machineId === "obelisk")) {
     cawco.machines.push({
       auth: "unknown",
@@ -452,7 +512,7 @@ export function standPeek(scene: PeekScene): {
     } as unknown as (typeof cawco.machines)[number]);
   }
 
-  const held = blankSession(PEEK_ID);
+  const held = blankSession(id);
   held.machineId = "obelisk";
   held.cwd = CWD;
   held.harness = "claude";
@@ -465,8 +525,8 @@ export function standPeek(scene: PeekScene): {
     ? [["system.init", "Session started"]]
     : said(scene);
   held.messages = turns.map(([type, content, metadata], n) => ({
-    id: `${PEEK_ID}-${n}`,
-    instanceId: PEEK_ID,
+    id: `${id}-${n}`,
+    instanceId: id,
     type,
     content: content || metadata?.toolName || "",
     timestamp: new Date(now - HOUR_MS + n * 2 * MINUTE_MS).toISOString(),
@@ -485,69 +545,43 @@ export function standPeek(scene: PeekScene): {
     held.streaming =
       "Adding the passkey button to the sign-in page: it shows only where the browser says a platform authenticator is there, and";
   }
-  store.state.sessions[PEEK_ID] = held;
+  store.state.sessions[id] = held;
 
-  const open = blankSession(OPEN_ID);
-  open.machineId = "obelisk";
-  open.cwd = CWD;
-  open.messages = OPEN.map(([type, content], n) => ({
-    id: `${OPEN_ID}-${n}`,
-    instanceId: OPEN_ID,
-    type,
-    content,
-    timestamp: new Date(now - 2 * HOUR_MS + n * 3 * MINUTE_MS).toISOString(),
-  })) as Message[];
-  open.initialized = true;
-  store.state.sessions[OPEN_ID] = open;
+  if (!store.state.sessions[OPEN_ID]) {
+    const open = blankSession(OPEN_ID);
+    open.machineId = "obelisk";
+    open.cwd = CWD;
+    open.messages = OPEN.map(([type, content], n) => ({
+      id: `${OPEN_ID}-${n}`,
+      instanceId: OPEN_ID,
+      type,
+      content,
+      timestamp: new Date(now - 2 * HOUR_MS + n * 3 * MINUTE_MS).toISOString(),
+    })) as Message[];
+    open.initialized = true;
+    store.state.sessions[OPEN_ID] = open;
+  }
   if (!(scene === "noplan" || tailless)) {
-    store.state.plans[PEEK_ID] = planOf(scene);
+    store.state.plans[id] = planOf(scene);
   }
 
-  pulse(PEEK_ID, activityOf(scene, held.pending.length > 0));
+  pulse(id, activityOf(scene, held.pending.length > 0));
   for (const one of FLEET.slice(0, 4)) {
     pulse(one.id, one.id === "f2" ? "blocked" : "working");
   }
-
-  let online: ReturnType<typeof setTimeout> | undefined;
-  // After the layout has asked for the hub (its onMount runs after the
-  // page's): the bench's hub stands in for it, and takes an answer.
-  const standing = setTimeout(() => {
-    store.standHub((_id, kind, intent) => {
-      if (kind === "permission.answer") {
-        const peeked = store.state.sessions[PEEK_ID];
-        const { requestId } = intent as { requestId: string };
-        if (peeked) {
-          peeked.pending = peeked.pending.filter(
-            (one) => one.requestId !== requestId
-          );
-        }
-        pulse(PEEK_ID, "working");
-      }
-    });
-    // The home has had its first read (no online machine waits on its
-    // catalogues): the machine is online from here, unless out of reach.
-    if (scene !== "unreachable") {
-      online = setTimeout(() => {
-        const machine = cawco.machines.find(
-          (one) => one.machineId === "obelisk"
-        );
-        if (machine) {
-          machine.status = "online";
-        }
-      }, 300);
-    }
-  }, 0);
+  standHub();
 
   return {
-    target: { href: `/session/${PEEK_ID}`, title: TITLE, viewId: PEEK_ID },
+    target: { href: `/session/${id}`, title: TITLE, viewId: id },
     leave: () => {
-      clearTimeout(standing);
-      clearTimeout(online);
-      store.leaveHub();
-      delete store.state.sessions[PEEK_ID];
-      delete store.state.sessions[OPEN_ID];
-      delete store.state.plans[PEEK_ID];
-      store.adoptInstances([]);
+      stood.delete(scene);
+      delete store.state.sessions[id];
+      delete store.state.plans[id];
+      if (stood.size === 0) {
+        leaveHub();
+        delete store.state.sessions[OPEN_ID];
+      }
+      adoptAll(Date.now());
     },
   };
 }

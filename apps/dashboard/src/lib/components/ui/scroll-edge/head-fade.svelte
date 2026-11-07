@@ -9,12 +9,15 @@
   the transcript's own layer, so the transcript's overlays stand above it and
   only its rows pass under.
 
-  A floating bar draws the same edge under its glass groups (BarFloat): its
-  band is the bar's height (`band`) and its colour the ground the surface's
-  content stands on (`tint`), so what scrolls under the bar blurs and fades
-  into that ground (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "the
-  content blurs and fades under the bar … in from the first scroll and absent
-  at rest").
+  A head floating over its content (a bar, BarFloat; a sheet's or a panel's
+  head) draws the same edge under it: `band` is the head's room and `tint`
+  the ground the content stands on. Under the room the ground is whole, so
+  nothing that scrolls there is drawn under the head's words; the blur and
+  the fade run over `--c-head-fade` below it, where the rows leave the room
+  (DESIGN.md, The Title Bars Follow Liquid Glass Rule; HIG, Toolbars: "use a
+  ScrollEdgeEffectStyle when necessary to distinguish the toolbar area from
+  the content area"). A ramp over the room itself left its midpoint, half
+  ground and a pixel of blur, under the title, and rows read through it.
 
   The blur is the app's progressive blur (progressive-blur.ts): its layers,
   their blurs and their slices are drawn from there. The colour is one layer
@@ -39,37 +42,52 @@
     band,
     tint = "bg-tab-sheet",
   }: {
-    /** The band's height, a CSS length: `--c-head-fade` under a tab strip, a bar's height under a floating bar. */
+    /** The room of the head floating over the content, a CSS length (a bar's height under a floating bar); none under a tab strip, where the edge is the ramp alone. */
     band?: string;
     /** The ground the rows dissolve into, a background class: the chosen tab's sheet by default. */
     tint?: string;
   } = $props();
 </script>
 
+<!-- Each layer clear while nothing is under it: at rest, and whenever the
+     transcript does not scroll (its timeline is inactive). The fade-in is on
+     each layer, never on a box round them (a backdrop root). -->
 <div
   data-slot="head-fade"
   aria-hidden="true"
-  class="absolute inset-x-0 top-0 z-1 h-(--band) pointer-events-none"
-  style:--band={band ?? "var(--c-head-fade)"}
+  class="absolute inset-x-0 top-0 z-1 h-(--edge) pointer-events-none"
+  style:--room={band ?? "0px"}
+  style:--edge="calc({band ?? '0px'} + var(--c-head-fade))"
 >
-  <!-- Each layer clear while nothing is under it: at rest, and whenever the
-       transcript does not scroll (its timeline is inactive). -->
-  {#each PROGRESSIVE_BLUR as layer, k (k)}
-    <!-- The layer's blur and its slice (progressive-blur.ts). -->
+  {#if band}
+    <!-- The head's room: the ground whole under it. -->
     <div
       data-slot="layer"
-      class="absolute inset-0 opacity-0 head-fade-scrub"
-      style="-webkit-backdrop-filter: {layerBlur(
-        layer
-      )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
+      class={[
+        "absolute inset-x-0 top-0 h-(--room) opacity-0 head-fade-scrub",
+        tint,
+      ]}
     ></div>
-  {/each}
-  <!-- The chosen tab's sheet, over the blur, on the ramp. -->
-  <div
-    data-slot="layer"
-    class={[
-      "absolute inset-0 opacity-0 mask-(--head-tint-ramp) head-fade-scrub",
-      tint,
-    ]}
-  ></div>
+  {/if}
+  <!-- Below the room, the rows going out of focus and into the ground. -->
+  <div data-slot="ramp" class="absolute inset-x-0 top-(--room) h-c-head-fade">
+    {#each PROGRESSIVE_BLUR as layer, k (k)}
+      <!-- The layer's blur and its slice (progressive-blur.ts). -->
+      <div
+        data-slot="layer"
+        class="absolute inset-0 opacity-0 head-fade-scrub"
+        style="-webkit-backdrop-filter: {layerBlur(
+          layer
+        )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
+      ></div>
+    {/each}
+    <!-- The ground, over the blur, on the ramp. -->
+    <div
+      data-slot="layer"
+      class={[
+        "absolute inset-0 opacity-0 mask-(--head-tint-ramp) head-fade-scrub",
+        tint,
+      ]}
+    ></div>
+  </div>
 </div>

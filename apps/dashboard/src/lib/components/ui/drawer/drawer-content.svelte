@@ -340,11 +340,13 @@
     <!-- The scroll edge effect under the head (HeadFade, as SideSurface
          draws it): what scrolls beneath the stack blurs and fades into the
          surface, from the first scroll, clear at rest. Held inside the
-         surface's edge and corners, which the box around it overhangs. -->
+         surface's edge and corners, which the box around it overhangs, and
+         as tall as the room and the fade below it. -->
     <div
       aria-hidden="true"
-      class="pointer-events-none absolute inset-x-[calc(--spacing(2)+1px)] top-[calc(--spacing(2)+1px)] z-1 h-(--sheet-room) overflow-clip rounded-t-[calc(var(--radius-lg)-1px)] group-data-[vaul-drawer-direction=bottom]/drawer-content:inset-x-0"
+      class="pointer-events-none absolute inset-x-[calc(--spacing(2)+1px)] top-[calc(--spacing(2)+1px)] z-1 h-(--sheet-edge) overflow-clip rounded-t-[calc(var(--radius-lg)-1px)] group-data-[vaul-drawer-direction=bottom]/drawer-content:inset-x-0"
       data-slot="drawer-head-fade"
+      style:--sheet-edge="calc(var(--sheet-room) + var(--c-head-fade))"
     >
       <HeadFade band="var(--sheet-room)" tint="bg-surface-raised" />
     </div>

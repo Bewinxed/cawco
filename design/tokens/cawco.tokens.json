@@ -656,6 +656,20 @@
         }
       }
     },
+    "surface-raised-clear": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.993, 0.004, 85],
+        "alpha": 0
+      },
+      "$description": "The raised surface at alpha 0: the far stop of a fade into it (the peek's foot fade under its tray), so the ramp keeps the surface's hue.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.surface-raised} l c h / 0)"
+        }
+      }
+    },
     "mask-opaque": {
       "$type": "color",
       "$value": {

@@ -124,6 +124,7 @@
   --color-surface-raised: var(--surface-raised);
   --color-surface-recess: var(--surface-recess);
   --color-surface-recess-clear: var(--surface-recess-clear);
+  --color-surface-raised-clear: var(--surface-raised-clear);
   --color-mask-opaque: var(--mask-opaque);
   --color-mask-opaque-a10: var(--mask-opaque-a10);
   --color-mask-opaque-a15: var(--mask-opaque-a15);
