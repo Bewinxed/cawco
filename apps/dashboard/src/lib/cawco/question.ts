@@ -32,3 +32,14 @@ export const questionDismissal: PermissionResult = {
   behavior: "deny",
   message: QUESTION_DISMISSED,
 };
+
+/**
+ * A question standing open on the page: its options, or the answer field a
+ * question with no options draws open in their place (Prompt.svelte).
+ */
+export const QUESTION_STANDING =
+  '[data-slot="option-group"], [data-open-answer]';
+
+/** Where a standing question takes the keys: its options' tab stop, or its open field. */
+export const QUESTION_KEYS =
+  '[data-slot="option-group"] [tabindex="0"], [data-open-answer]';

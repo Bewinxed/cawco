@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import { QUESTION_STANDING } from "../question";
+
   /**
    * An answer (or a dismissal) given from inside a question's card: the
    * card leaves, and the next ask's card takes the focus as it mounts, so
@@ -20,7 +22,7 @@
    */
   export function takeHandOff(): boolean {
     const nowhere =
-      !document.querySelector('[data-slot="option-group"]') &&
+      !document.querySelector(QUESTION_STANDING) &&
       (document.activeElement === null ||
         document.activeElement === document.body);
     const fresh = handOn && nowhere && Date.now() - handedAt < HAND_OFF_MS;
@@ -281,11 +283,17 @@
   const listed = (q: UserQuestion): boolean =>
     q.options.length > 3 || q.options.some((o) => !!o.description?.trim());
 
-  /** Focus to a question's tab stop: the option it last left from, or its first. */
+  /**
+   * Focus to a question's tab stop: the option it last left from, or its
+   * first; for a question with no options, its open field.
+   */
   async function focusQuestion(index: number): Promise<void> {
     await tick();
-    const group = card?.querySelectorAll('[data-slot="option-group"]')[index];
-    group?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
+    const stop = card?.querySelectorAll<HTMLElement>(QUESTION_STANDING)[index];
+    (stop?.matches("[data-open-answer]")
+      ? stop
+      : stop?.querySelector<HTMLElement>('[tabindex="0"]')
+    )?.focus();
   }
 
   // The ask before this one was answered from its card: this one takes the focus.
@@ -296,6 +304,22 @@
     }
   });
 
+  // A question with no options is answered in its field alone: once the
+  // card stands, the keys go to it, so the person just types. Only while
+  // nothing else holds them (the composer's own field lets go of them as
+  // it grows into the card), and only when it is the first question.
+  $effect(() => {
+    if (!(shown && questions?.[0]?.options.length === 0)) {
+      return;
+    }
+    untrack(() => {
+      const active = document.activeElement;
+      if (active === null || active === document.body) {
+        focusQuestion(0);
+      }
+    });
+  });
+
   // Answered from inside and gone with no card after it: the focus goes to
   // the next step standing on the page (`data-hand-off`, a setup element's
   // Review the draft), once a next card has had its moment to take it.
@@ -304,11 +328,7 @@
       const next = document.querySelector<HTMLElement>(
         "[data-hand-off] button"
       );
-      if (
-        handOn &&
-        next &&
-        !document.querySelector('[data-slot="option-group"]')
-      ) {
+      if (handOn && next && !document.querySelector(QUESTION_STANDING)) {
         handOn = false;
         next.focus();
       }
@@ -401,9 +421,8 @@
     return !!own && isSelected(q.question, own);
   };
 
-  /** The field's words become the answer, in place of what they were before. */
-  function writeOther(text: string): void {
-    const q = otherAt === null ? undefined : asked?.[otherAt];
+  /** The field's words become a question's answer, in place of what they were before. */
+  function writeOther(q: UserQuestion | undefined, text: string): void {
     if (!q) {
       return;
     }
@@ -427,7 +446,7 @@
     current = index;
     otherAt = index;
     // Back to words already written: they are the answer again.
-    writeOther(others[q.question] ?? "");
+    writeOther(q, others[q.question] ?? "");
     await tick();
     otherField?.focus();
   }
@@ -448,6 +467,16 @@
       otherAt = null;
       return;
     }
+    ownEnter(event);
+  }
+
+  /**
+   * Enter in a field of the reader's own words: the card's answer once
+   * every question has one, else on to the next question still unanswered.
+   * A question with no options keys its open field with this alone: it has
+   * no choices for Esc to hand the focus back to.
+   */
+  function ownEnter(event: KeyboardEvent): void {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
       return;
     }
@@ -566,6 +595,14 @@
   });
 
   let card = $state<HTMLElement | null>(null);
+
+  /** Focus leaving a question: the rail stays only while it goes on to another of the card's. */
+  function leaveQuestion(event: FocusEvent): void {
+    choosing =
+      event.relatedTarget instanceof Element &&
+      !!card?.contains(event.relatedTarget) &&
+      !!event.relatedTarget.closest(QUESTION_STANDING);
+  }
 
   /** Enter on an option: the card's answer, once every question has one. */
   function enter(): void {
@@ -807,7 +844,8 @@
             aria-label={askWords.yourAnswerTo(browserAsk.reason)}
             class="flex-1"
             disabled={!answerable}
-            oninput={(event) => writeOther(event.currentTarget.value)}
+            oninput={(event) =>
+              writeOther(asked?.[0], event.currentTarget.value)}
             onkeydown={otherKey}
             placeholder={askWords.yourAnswer}
             value={others[browserAsk.reason] ?? ""}
@@ -952,7 +990,27 @@
             >
           {/if}
         {/snippet}
-        <!-- One tab stop per question; focus in it makes it the one the
+        {#if own === 0}
+          <!-- A question with no options: its answer is the reader's own
+               words, so the field "Other" opens stands open in the
+               options' place, the question's one tab stop. -->
+          <Input
+            data-open-answer
+            aria-label={askWords.yourAnswerTo(q.question)}
+            class="mt-space-row mb-space-2"
+            disabled={!answerable}
+            onfocusin={() => {
+              current = qi;
+              choosing = true;
+            }}
+            onfocusout={leaveQuestion}
+            oninput={(event) => writeOther(q, event.currentTarget.value)}
+            onkeydown={ownEnter}
+            placeholder={askWords.yourAnswer}
+            value={others[q.question] ?? ""}
+          />
+        {:else}
+          <!-- One tab stop per question; focus in it makes it the one the
              digits answer, and the rail moves to it. The options are the
              kit's option group (ui/option-group: a row of option chips, or
              in the list form one full-width row per option, each sizing its
@@ -962,64 +1020,60 @@
              flush in a scroller that clips (the body), so each option's
              ring sits on its own border box (The One Ring Rule), as the
              kit's option draws it. The card only sets where it sits. -->
-        <OptionGroup
-          aria-labelledby="{claimId}-q{qi}"
-          class="mt-space-row mb-space-2"
-          layout={list ? "list" : "chips"}
-          multiple={q.multiSelect}
-          onenter={enter}
-          onfocusin={() => {
-            current = qi;
-            choosing = true;
-          }}
-          onfocusout={(event: FocusEvent) => {
-            choosing =
-              event.relatedTarget instanceof Element &&
-              !!card?.contains(event.relatedTarget) &&
-              !!event.relatedTarget.closest('[data-slot="option-group"]');
-          }}
-          bind:value={
-            () => pressedOf(q, qi),
-            (labels) =>
-              q.multiSelect
-                ? setMulti(qi, labels)
-                : setSingle(qi, labels.find((l) => l !== OTHER) ?? "")
-          }
-        >
-          {#each q.options as opt, i (opt.label)}
-            <OptionGroupItem
-              digit={i < 9 ? i + 1 : undefined}
-              value={opt.label}
-            >
-              {@render face(i + 1, opt.label, opt.description?.trim())}
-            </OptionGroupItem>
-          {/each}
-          <!-- The reader's own answer, written in the field it opens. -->
-          {#if own < 9}
-            <OptionGroupItem
-              digit={own + 1}
-              onclick={(event) => pressOther(event, qi)}
-              value={OTHER}
-            >
-              {@render face(own + 1, "Other")}
-            </OptionGroupItem>
-          {/if}
-        </OptionGroup>
-        {#if otherAt === qi}
-          <!-- The reader's own answer, a field under the choices it stands
+          <OptionGroup
+            aria-labelledby="{claimId}-q{qi}"
+            class="mt-space-row mb-space-2"
+            layout={list ? "list" : "chips"}
+            multiple={q.multiSelect}
+            onenter={enter}
+            onfocusin={() => {
+              current = qi;
+              choosing = true;
+            }}
+            onfocusout={leaveQuestion}
+            bind:value={
+              () => pressedOf(q, qi),
+              (labels) =>
+                q.multiSelect
+                  ? setMulti(qi, labels)
+                  : setSingle(qi, labels.find((l) => l !== OTHER) ?? "")
+            }
+          >
+            {#each q.options as opt, i (opt.label)}
+              <OptionGroupItem
+                digit={i < 9 ? i + 1 : undefined}
+                value={opt.label}
+              >
+                {@render face(i + 1, opt.label, opt.description?.trim())}
+              </OptionGroupItem>
+            {/each}
+            <!-- The reader's own answer, written in the field it opens. -->
+            {#if own < 9}
+              <OptionGroupItem
+                digit={own + 1}
+                onclick={(event) => pressOther(event, qi)}
+                value={OTHER}
+              >
+                {@render face(own + 1, "Other")}
+              </OptionGroupItem>
+            {/if}
+          </OptionGroup>
+          {#if otherAt === qi}
+            <!-- The reader's own answer, a field under the choices it stands
                in for, before the card's actions: the kit's field, on the
                step under the choices. -->
-          <Input
-            data-other
-            aria-label={askWords.yourAnswerTo(q.question)}
-            class="mb-space-2"
-            disabled={!answerable}
-            oninput={(event) => writeOther(event.currentTarget.value)}
-            onkeydown={otherKey}
-            placeholder={askWords.yourAnswer}
-            value={others[q.question] ?? ""}
-            bind:ref={otherField}
-          />
+            <Input
+              data-other
+              aria-label={askWords.yourAnswerTo(q.question)}
+              class="mb-space-2"
+              disabled={!answerable}
+              oninput={(event) => writeOther(q, event.currentTarget.value)}
+              onkeydown={otherKey}
+              placeholder={askWords.yourAnswer}
+              value={others[q.question] ?? ""}
+              bind:ref={otherField}
+            />
+          {/if}
         {/if}
       {/each}
     </div>

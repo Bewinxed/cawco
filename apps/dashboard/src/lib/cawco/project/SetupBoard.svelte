@@ -22,6 +22,7 @@
   } from "#lib/cawco/client.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
+  import { QUESTION_KEYS } from "#lib/cawco/question.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
@@ -101,11 +102,9 @@
 
   let questions = $state<HTMLElement>();
 
-  /** The first question's options on the board, where its keys go. */
+  /** The first question's tab stop on the board (its options, or its open field), where its keys go. */
   const firstOptions = (): HTMLElement | null =>
-    questions?.querySelector<HTMLElement>(
-      '[data-slot="option-group"] [tabindex="0"]'
-    ) ?? null;
+    questions?.querySelector<HTMLElement>(QUESTION_KEYS) ?? null;
 
   /** Answer Caw: on a desk the keys go to the first question on the board; on a phone his composer opens on them. */
   function answerCaw() {

@@ -54,6 +54,7 @@ import { minimizedAsks } from "../minimized-asks.svelte";
 import { dur } from "../motion/curves.svelte";
 import { msOf } from "../motion/time";
 import type { TaskSummary } from "../project-tasks";
+import { QUESTION_KEYS } from "../question";
 import { store, stored } from "../storage";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -252,7 +253,7 @@ export class CawLead {
     for (let tries = 0; tries < 90; tries += 1) {
       await new Promise((done) => requestAnimationFrame(done));
       const option = document.querySelector<HTMLElement>(
-        '[data-caw-panel] [data-slot="option-group"] [tabindex="0"]'
+        `[data-caw-panel] :is(${QUESTION_KEYS})`
       );
       // A card still folding back up is inert: the focus takes only once
       // it stands.

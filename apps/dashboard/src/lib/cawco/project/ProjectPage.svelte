@@ -114,6 +114,7 @@
     updateTask,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
+  import { QUESTION_KEYS } from "#lib/cawco/question.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
@@ -1755,7 +1756,7 @@
           setupPage?.artifactId
             ? document
                 .querySelector<HTMLElement>(
-                  '[data-slot="draft-bar"] button, [data-slot="setup-asks"] [data-slot="option-group"] [tabindex="0"]'
+                  `[data-slot="draft-bar"] button, [data-slot="setup-asks"] :is(${QUESTION_KEYS})`
                 )
                 ?.focus({ focusVisible: true } as FocusOptions)
             : lead.ask(setupWords.askSetupWords, "board"),
