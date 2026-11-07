@@ -37,7 +37,9 @@
    * short of it.
    *
    * Expanded over the whole split, the card meets its edges: no corner or
-   * shadow. The head keeps its place, so the control just pressed is still
+   * shadow; so does a bench of it shown in CawCo's own artifact panel (the
+   * overlay's `data-cawco-headed` on the page's root), which the panel's
+   * well holds. The head keeps its place, so the control just pressed is still
    * under the pointer to press back.
    */
   import { type Snippet, untrack } from "svelte";
@@ -580,7 +582,7 @@
   data-side-card={of}
   data-side-surface-expanded={expanded || undefined}
   aria-label={label}
-  class="group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-(--c-float-panel-r) bg-surface-raised shadow-drawer timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  class="group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-(--c-float-panel-r) bg-surface-raised shadow-drawer timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:shadow-none in-data-cawco-headed:rounded-none in-data-cawco-headed:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
   style:--side-room="var(--c-head-room)"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
