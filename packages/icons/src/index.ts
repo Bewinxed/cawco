@@ -235,6 +235,9 @@ export { default as IconToolSearch } from "~icons/solar/magnifer-bold-duotone";
  * a bar's glass of line glyphs: the owner's pin on the Comments sheet's bar).
  */
 export { default as IconSearch } from "~icons/solar/magnifer-linear";
+/** A browser's page drawn up on a phone, and back to its width (BrowserView), Solar's linear cut. */
+export { default as IconZoomInLinear } from "~icons/solar/magnifer-zoom-in-linear";
+export { default as IconZoomOutLinear } from "~icons/solar/magnifer-zoom-out-linear";
 export { default as IconMapPoint } from "~icons/solar/map-point-bold-duotone";
 export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMaximizeLinear } from "~icons/solar/maximize-linear";

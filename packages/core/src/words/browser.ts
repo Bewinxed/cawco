@@ -14,14 +14,17 @@ export const browserWords = {
   /** The head's address: who has control (its name, and More's line). */
   agentDriving: "The agent is driving",
   youHaveControl: "You have control",
-  /** The address's chip while you have control. */
-  private: "Private",
+  /** What holding the browser means, after "You have control" in the address's name and tooltip. */
+  privateLine: "What you do here doesn't reach the agent",
   /** The line under the stream for a machine with no container runtime. */
   localLine:
     "This machine shows one page at a time until a container runtime is installed.",
   /** The stream's floating control on a touch screen while you have control: the phone's keyboard, typing into the page. */
   showKeyboard: "Show keyboard",
   hideKeyboard: "Hide keyboard",
+  /** On a phone, the page drawn twice its size to read and tap, and back to the screen's width. */
+  zoomIn: "Zoom in on the page",
+  zoomOut: "Fit the page to the screen",
   /** The field the phone's keyboard types into, for a screen reader. */
   keyboardField: "Type into the browser",
   /** The head's buttons, and while they go. */

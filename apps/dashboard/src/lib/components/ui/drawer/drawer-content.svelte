@@ -54,9 +54,13 @@
   type DrawerContentLooks = VariantProps<typeof drawerContentVariants>;
 
   /** The bottom sheet's 100×6 grabber (DESIGN.md, Drawer), above its one
-      header; the kit dialog's sheet under the phone line wears it too. */
+      header; the kit dialog's sheet under the phone line wears it too. It is
+      a control (a press steps the sheet's stops), so it holds the kit's
+      non-text contrast against the sheet (`border-contrast`, 3:1 or more in
+      both schemes, WCAG 1.4.11): `neutral-2` on the raised sheet was about
+      1.05:1 and read as no control at all (the review of 7 November). */
   export const grabberVariants = tv({
-    base: "mx-auto mt-4 mb-3 h-c-grabber-h w-c-grabber-w shrink-0 rounded-pill bg-neutral-2",
+    base: "mx-auto mt-4 mb-3 h-c-grabber-h w-c-grabber-w shrink-0 rounded-pill bg-border-contrast",
   });
 </script>
 
