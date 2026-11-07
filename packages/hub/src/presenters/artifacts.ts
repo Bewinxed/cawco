@@ -295,6 +295,15 @@ const undrawnLines = (render: ReturnType<typeof renderSaid>): string[] => {
   ];
 };
 
+/** What a render found of the states themselves: stories that differ only by width, labels that say code, frames that look alike. */
+const findingLines = (render: ReturnType<typeof renderSaid>): string[] => [
+  ...(render.widthOnly ?? []).map(stageRenderWords.widthOnly),
+  ...(render.codeNamed ?? []).map((one) =>
+    stageRenderWords.codeNamed(one.story, one.word)
+  ),
+  ...(render.alike ?? []).map(stageRenderWords.alike),
+];
+
 /** A component canvas's read: its frames, stories, moves and the person's dials, each a line. */
 const componentLines = (read: ArtifactRead): string[] => {
   const extra = read as ArtifactRead & {
@@ -337,6 +346,7 @@ const componentLines = (read: ArtifactRead): string[] => {
                 `Stories with no name of their own: ${render.unnamed.join(", ")}.`,
               ]
             : []),
+          ...findingLines(render),
           ...(render.pageErrors?.length
             ? [
                 `The canvas page's errors: ${render.pageErrors.map(pageErrorWords).join("; ")}`,

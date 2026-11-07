@@ -6,7 +6,7 @@
  * it, and the refusal when the one state asked never drew. Each names the
  * read to make next, never the same read again.
  */
-import type { SectionUndrawn, SweepAt } from "../stage";
+import type { FramesAlike, SectionUndrawn, SweepAt } from "../stage";
 
 /** A read that draws one section alone: a state read of its first story. */
 const readAlone = (first: string | null): string =>
@@ -50,6 +50,15 @@ export const stageRenderWords = {
   /** The sections a browser was drawing as a read answered, past the read's wait for them (hub component.ts `drawingUnseen`). */
   drawing: (files: readonly string[]) =>
     `A browser is drawing ${files.join(", ")} now and has not posted ${files.length === 1 ? "it" : "them"}: ${files.length === 1 ? "its" : "their"} frames read unseen until it does, within seconds. Read again.`,
+  /** Stories that differ in nothing but their width (core `RenderReport.widthOnly`): one state, drawn at each width by the canvas's own presets. */
+  widthOnly: (stories: readonly string[]) =>
+    `${stories.join(", ")} differ in nothing but their width: they are one state. Keep one story and let the canvas draw it at each width the person picks; a piece with one production width names it once, on the meta's parameters.viewport.`,
+  /** A label holding a word of code (core `RenderReport.codeNamed`). */
+  codeNamed: (story: string, word: string) =>
+    `${story}'s label says ${word}, a word of code: write it as the sentence the person would say about the situation.`,
+  /** Frames that draw the same picture (core `framesAlike`). */
+  alike: (one: FramesAlike) =>
+    `${one.stories.join(", ")} draw the same picture at ${one.width} px: keep the one that helps the person judge, or make what tells them apart show.`,
   /** The page itself never loaded. */
   notLoaded: (seconds: number) =>
     `The canvas page did not load within ${seconds} s: its stage is up but did not serve it. Read the canvas without render to see its stage's state and errors.`,

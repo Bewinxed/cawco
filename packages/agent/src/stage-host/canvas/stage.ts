@@ -120,7 +120,7 @@ import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
-import { drew, firstWords, partsOf, readAnimation } from "./measure";
+import { drew, firstWords, lookOf, partsOf, readAnimation } from "./measure";
 import { nameOf, thingOf } from "./names";
 import { allClass } from "./pseudo";
 import {
@@ -563,7 +563,7 @@ function faultCard(
  * A story drawn in `body`, in `column`, read for the render report at
  * `box`: drawn, empty, or failed with why (its mount threw, its own width
  * is one the stage can't read, it drew at its body's floor); its first
- * words and the parts it is made of.
+ * words, the parts it is made of and, at rest, its look (`lookOf`).
  */
 function drawingRender(
   page: Page,
@@ -590,6 +590,9 @@ function drawingRender(
     said = page.atFloor(story, column.width, body) ?? undefined;
     drawnAs = said ? "failed" : "drawn";
   }
+  // Read at rest only: a forced state's frame is its rest's, the state put on.
+  const look =
+    drawnAs === "drawn" && column.interaction === "rest" ? lookOf(body) : null;
   return {
     story: story.name,
     label: story.label,
@@ -601,6 +604,7 @@ function drawingRender(
     box,
     text: firstWords(body),
     parts: partsOf(body, page.root),
+    ...(look ? { look } : {}),
     ...(said ? { error: said } : {}),
   };
 }

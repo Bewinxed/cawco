@@ -467,6 +467,15 @@ export interface FrameRender {
   form: string;
   interaction: Interaction;
   label: string | null;
+  /**
+   * What it draws, as a fingerprint of its elements, their attributes,
+   * words, form values, boxes and 2D canvases' pixels (agent canvas
+   * measure.ts `lookOf`): two rest frames of one width and scheme with the
+   * same look draw the same picture. Absent when its interaction is not
+   * rest, or it holds what such a reading can't see (a WebGL canvas, a
+   * video, a frame, a shadow root), so it is never said to match another.
+   */
+  look?: string;
   /** The component files whose elements it drew, each with its call site. */
   parts: PartUse[];
   scheme: Scheme;
@@ -515,6 +524,8 @@ export interface SectionRender {
 export interface RenderReport {
   at: string;
   by: "panel" | "stage";
+  /** Each story whose label holds a word of code (`isOpen`, `open_record`, a backticked span, an export's name), with that word. Optional on the wire, as `widthOnly`. */
+  codeNamed?: { story: string; word: string }[];
   /**
    * The states files a browser said it is drawing now (its sweep has not
    * reached them, or a read of them is under way): a section of them whose
@@ -526,6 +537,58 @@ export interface RenderReport {
   sections: SectionRender[];
   /** `File:Story` of each story with no doc comment: drawn by its export name alone. */
   unnamed: string[];
+  /**
+   * Stories of one states file that differ in nothing but their
+   * `parameters.viewport`, each group as `File:Story`s: a width the
+   * canvas's own presets draw, written as states. The stage reads it off
+   * the file; optional on the wire, for a stage from before it.
+   */
+  widthOnly?: string[][];
+}
+
+/** Rest frames of one states file that draw the same picture at one width and scheme: {@link framesAlike}. */
+export interface FramesAlike {
+  /** `File:Story` of each. */
+  stories: string[];
+  width: number;
+}
+
+/**
+ * The rest frames of `sections` that draw the same picture (each frame's
+ * `look`): per states file, width and scheme, the stories that share one.
+ * A group the light scheme already said is not said again for the dark.
+ */
+export function framesAlike(sections: readonly SectionRender[]): FramesAlike[] {
+  const found = new Map<string, FramesAlike>();
+  for (const section of sections) {
+    const byPlace = new Map<string, Map<string, Set<string>>>();
+    for (const frame of section.frames) {
+      if (
+        frame.interaction !== "rest" ||
+        frame.state !== "drawn" ||
+        !frame.look
+      ) {
+        continue;
+      }
+      const place = `${frame.width}/${frame.scheme}`;
+      const looks = byPlace.get(place) ?? new Map<string, Set<string>>();
+      looks.set(
+        frame.look,
+        (looks.get(frame.look) ?? new Set()).add(frame.story)
+      );
+      byPlace.set(place, looks);
+    }
+    for (const [place, looks] of byPlace) {
+      const width = Number.parseInt(place, 10);
+      for (const stories of looks.values()) {
+        if (stories.size > 1) {
+          const named = [...stories].map((story) => `${section.file}:${story}`);
+          found.set(`${width}|${named.join(",")}`, { stories: named, width });
+        }
+      }
+    }
+  }
+  return [...found.values()];
 }
 
 /** A section whose module the page could not load, with the browser's own error for it. */
@@ -549,8 +612,11 @@ export interface PostedReport extends PageReport {
 /** A section as its page drew it: the stage stamps its content hash as it keeps it ({@link SectionRender} `hash`), and when it was drawn as it answers it (`drawn`). */
 export type PageSection = Omit<SectionRender, "drawn" | "hash">;
 
-/** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}). */
-export interface PageReport extends Omit<RenderReport, "sections"> {
+/** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}), and none of what the stage reads off the states files (`widthOnly`, `codeNamed`). */
+export interface PageReport extends Omit<
+  RenderReport,
+  "sections" | "widthOnly" | "codeNamed"
+> {
   sections: PageSection[];
 }
 

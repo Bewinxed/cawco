@@ -4,6 +4,7 @@
  * elements came from, the computed-style delta a forced state makes, and the
  * animations a change fired, from `getAnimations()`.
  */
+import { fnv1a } from "@cawco/core/fnv1a";
 import {
   type AnimationRead,
   MODULES_PATH,
@@ -156,6 +157,122 @@ export function drew(body: HTMLElement): boolean {
 /** A body's first words, at most 80 characters, on one line. */
 export const firstWords = (body: HTMLElement): string =>
   (body.innerText ?? "").replaceAll(/\s+/gu, " ").trim().slice(0, 80);
+
+/** The most elements a frame's look reads; past it the frame has none. Ours: well past a whole settings page. */
+const LOOK_LIMIT = 6000;
+
+/** What a reading of the engine can't see the picture of: moving pictures, a page of its own. A 2D canvas is read by its pixels ({@link canvasPixels}). */
+const UNREAD_LOOK = "video, iframe, object, embed";
+/** The largest canvas whose pixels a look reads, px². Ours: a few avatars' worth, read in well under a frame. */
+const CANVAS_READ = 250_000;
+
+const SPACE_RUN = /\s+/gu;
+
+/** A long text as a short key: its length and two FNV-1a hashes of it, one seeded, so two looks match only when their texts do. */
+const hashed = (text: string): string =>
+  `${text.length.toString(36)}-${fnv1a(text).toString(36)}-${fnv1a(`~${text}`).toString(36)}`;
+
+/** An element's own words: its text nodes, white space run together. */
+const ownText = (el: Element): string =>
+  [...el.childNodes]
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => (node.textContent ?? "").replace(SPACE_RUN, " ").trim())
+    .join("|");
+
+/**
+ * A canvas's picture as a key: its 2D pixels' data URL, hashed. Null when
+ * it can't be read so (a WebGL or bitmap canvas, which `getContext("2d")`
+ * answers null for; a tainted one; one past {@link CANVAS_READ}).
+ */
+function canvasPixels(canvas: HTMLCanvasElement): string | null {
+  if (canvas.width * canvas.height > CANVAS_READ || !canvas.getContext("2d")) {
+    return null;
+  }
+  try {
+    return hashed(canvas.toDataURL());
+  } catch {
+    return null;
+  }
+}
+
+/** A form control's state its attributes don't carry: the value typed or set, checked, the option picked. */
+function controlState(el: Element): string {
+  if (el instanceof HTMLInputElement) {
+    return `${el.value}|${el.checked}|${el.indeterminate}`;
+  }
+  if (el instanceof HTMLTextAreaElement) {
+    return el.value;
+  }
+  return el instanceof HTMLSelectElement ? String(el.selectedIndex) : "";
+}
+
+/**
+ * A frame's look (core `FrameRender.look`): a fingerprint of every element
+ * of `body` (its tag, its attributes with each id written as its place
+ * among the frame's ids, so a mount's own ids match, its own words, a
+ * control's state, a 2D canvas's pixels, its scroll and its box in the
+ * frame's own px). Null when it holds what the engine can't read the
+ * picture of, or more elements than {@link LOOK_LIMIT}.
+ */
+export function lookOf(body: HTMLElement): string | null {
+  const elements = [...body.querySelectorAll("*")];
+  if (
+    elements.length > LOOK_LIMIT ||
+    body.querySelector(UNREAD_LOOK) ||
+    elements.some(
+      (el) =>
+        el.shadowRoot ||
+        (el.localName.includes("-") && customElements.get(el.localName))
+    )
+  ) {
+    return null;
+  }
+  const pixels = new Map<Element, string>();
+  for (const canvas of body.querySelectorAll("canvas")) {
+    const read = canvasPixels(canvas);
+    if (read === null) {
+      return null;
+    }
+    pixels.set(canvas, read);
+  }
+  const frame = body.getBoundingClientRect();
+  const scale = body.offsetWidth > 0 ? frame.width / body.offsetWidth : 0;
+  if (scale <= 0) {
+    return null;
+  }
+  const ids = new Map(
+    elements
+      .filter((el) => el.id)
+      .map((el, place) => [el.id, `#${place}`] as const)
+  );
+  const withIds = (value: string) =>
+    value
+      .split(" ")
+      .map((token) => ids.get(token) ?? token)
+      .join(" ");
+  const lineOf = (el: Element) => {
+    const box = el.getBoundingClientRect();
+    const attributes = [...el.attributes]
+      .map((one) => `${one.name}=${withIds(one.value)}`)
+      .sort()
+      .join(" ");
+    return [
+      el.localName,
+      attributes,
+      ownText(el),
+      controlState(el),
+      pixels.get(el) ?? "",
+      `${el.scrollTop},${el.scrollLeft}`,
+      // A box-less element (`display: contents`, `none`) paints nothing of its own; where the engine puts its empty box is no part of the picture.
+      box.width === 0 && box.height === 0
+        ? "-"
+        : [box.left - frame.left, box.top - frame.top, box.width, box.height]
+            .map((px) => Math.round(px / scale))
+            .join(","),
+    ].join("\u0001");
+  };
+  return hashed([body, ...elements].map(lineOf).join("\u0002"));
+}
 
 /** The properties a forced state's delta reads. Ours: what a hover, ring or press changes. */
 const WATCHED = [

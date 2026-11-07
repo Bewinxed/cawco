@@ -48,6 +48,8 @@ export interface StaticSheet {
   };
   /** Each story, its `component` its local name when it names its own. */
   stories: Story[];
+  /** Stories that differ in nothing but their `parameters.viewport`, each group by export name, in the file's order ({@link drawnApartFromWidth}). */
+  widthOnly: string[][];
 }
 
 /** Why a write was not made, in one sentence the person and the agent read. */
@@ -674,6 +676,39 @@ const BLANK_BETWEEN = /\n[ \t]*\n/u;
 /** A label's longest. Ours: a frame's caption, one line. */
 const LABEL_LIMIT = 160;
 
+/** The shapes of a word of code in a label: a backticked span, `snake_case`, `camelCase`, `key=value`, a call `name()`. */
+const CODE_WORDS = [
+  /`[^`]*[A-Za-z_][^`]*`/u,
+  /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/u,
+  /\b[a-z]{2,}(?:[A-Z][a-z0-9]+)+\b/u,
+  /\b\w+=[^\s=]/u,
+  /\b\w+\(\)/u,
+];
+/** An export name of two capitalised words or more (`NothingYet`), which a label saying it says in code. */
+const HUMPED = /^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+$/u;
+const NOT_A_NAME = /[^\w$]+/u;
+
+/**
+ * The first word of code label `label` holds (core `RenderReport`
+ * `codeNamed`): one of {@link CODE_WORDS}, or one of `names` (the file's
+ * story exports and the components it imports) of two words or more, said
+ * whole; null when it holds none. A brand's own capitals (`iPhone`,
+ * `macOS`, `GitHub`) are none of these.
+ */
+export function codeWordOf(
+  label: string,
+  names: readonly string[]
+): string | null {
+  for (const shape of CODE_WORDS) {
+    const found = label.match(shape)?.[0];
+    if (found) {
+      return found;
+    }
+  }
+  const words = new Set(label.split(NOT_A_NAME));
+  return names.find((name) => HUMPED.test(name) && words.has(name)) ?? null;
+}
+
 /** A form as read, or why the reader can't read it. */
 type FormRead = { form: Form | null } | { why: string };
 
@@ -885,7 +920,15 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       ...shownBy(reading, one),
     };
   };
+  const apart = new Map<string, string[]>();
+  for (const one of exports) {
+    const key = drawnApartFromWidth(reading, one, assigned.get(one.name));
+    if (key !== null) {
+      apart.set(key, [...(apart.get(key) ?? []), one.name]);
+    }
+  }
   return {
+    widthOnly: [...apart.values()].filter((names) => names.length > 1),
     imports: reading.imports,
     meta: {
       ...("why" in metaRead
@@ -909,6 +952,127 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       ...canvasOf(one),
     })),
   };
+}
+
+/** A value as JSON with its keys in order, so two equal values write one string. */
+const stable = (value: unknown): string =>
+  JSON.stringify(value, (_key, one: unknown) =>
+    one && typeof one === "object" && !Array.isArray(one)
+      ? Object.fromEntries(
+          Object.entries(one).toSorted(([a], [b]) => a.localeCompare(b))
+        )
+      : one
+  );
+
+/**
+ * An object's keys (the last of each), in name order, each as `key:value`
+ * by `read`: undefined leaves the key out, null makes the whole null.
+ */
+function keyedOf(
+  entries: readonly Entry[],
+  read: (key: string, one: Entry) => string | null | undefined
+): string[] | null {
+  const keys = new Map(entries.map((one) => [one.key, one] as const));
+  const said: string[] = [];
+  for (const [key, one] of [...keys].toSorted(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const value = read(key, one);
+    if (value === null) {
+      return null;
+    }
+    if (value !== undefined) {
+      said.push(`${key}:${value}`);
+    }
+  }
+  return said;
+}
+
+/**
+ * What a value draws, as one string two equal values share: an object's
+ * keys (spreads and local helpers followed, `drop` left out) each so, a
+ * literal its value, any other code its source where it reads none of a
+ * helper's names. Null when it reads one, or can't be followed: such a
+ * value is never said to equal another.
+ */
+function drawnOf(
+  reading: Reading,
+  at: Bound,
+  drop: ReadonlySet<string> = new Set(),
+  depth = 0
+): string | null {
+  const found = deref(at);
+  const expr = bare(found.node);
+  if (!expr || depth > MAX_DEPTH) {
+    return null;
+  }
+  const flat =
+    expr.type === "ObjectExpression" ||
+    expr.type === "Identifier" ||
+    expr.type === "CallExpression" ||
+    expr.type === "MemberExpression"
+      ? flatten(reading, found)
+      : null;
+  if (flat && !("why" in flat)) {
+    const said = keyedOf(flat.entries, (key, one) =>
+      drop.has(key)
+        ? undefined
+        : drawnOf(
+            reading,
+            { node: one.value, env: one.env },
+            new Set(),
+            depth + 1
+          )
+    );
+    return said === null ? null : `{${said.join(",")}}`;
+  }
+  const value = literal(expr, found.env);
+  if (value) {
+    return `=${stable(value.value)}`;
+  }
+  return found.env.size === 0 ? `\`${sourceOf(reading.text, expr)}` : null;
+}
+
+/**
+ * What story `story` draws apart from its width: every key its object
+ * builds but its CSF `name` (the name it is shown by), its `parameters`
+ * without `viewport`, and its `Story.x = …` assignments (`later`). Null for
+ * a function story, or one the reader can't follow whole.
+ */
+function drawnApartFromWidth(
+  reading: Reading,
+  story: Export,
+  later: Map<string, Node> | undefined
+): string | null {
+  if (
+    !story.init ||
+    story.init.type === "ArrowFunctionExpression" ||
+    story.init.type === "FunctionExpression"
+  ) {
+    return null;
+  }
+  const flat = flatten(reading, { node: story.init, env: NO_ENV });
+  if ("why" in flat) {
+    return null;
+  }
+  const said = keyedOf(flat.entries, (key, one) =>
+    key === "name"
+      ? undefined
+      : drawnOf(
+          reading,
+          { node: one.value, env: one.env },
+          key === "parameters" ? new Set(["viewport"]) : new Set()
+        )
+  );
+  if (said === null) {
+    return null;
+  }
+  for (const [key, node] of [...(later ?? [])].toSorted(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    said.push(`later ${key}:${sourceOf(reading.text, node)}`);
+  }
+  return said.join(";");
 }
 
 /**

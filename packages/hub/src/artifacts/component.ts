@@ -13,6 +13,7 @@ import {
   type CanvasEdge,
   type CanvasSpec,
   type FrameRender,
+  framesAlike,
   type Interaction,
   type PageError,
   type RenderReport,
@@ -143,7 +144,7 @@ export const drawingUnseen = (report: RenderReport): string[] =>
     )
     .map((section) => section.file);
 
-/** A render report as an answer says it: who drew, each section's frames (bounded; a state read's from that state, in its section), the unnamed stories, what failed, the sections a browser is still drawing, and the sections the read's render did not draw. */
+/** A render report as an answer says it: who drew, each section's frames (bounded; a state read's from that state, in its section), the unnamed stories, the stories that differ only by width, the labels that say code and the frames that look alike, what failed, the sections a browser is still drawing, and the sections the read's render did not draw. */
 export function renderSaid(
   report: RenderReport,
   undrawn: readonly SectionUndrawn[] = [],
@@ -151,6 +152,7 @@ export function renderSaid(
 ) {
   const { listed, cut } = framesListed(report, state);
   const drawing = drawingUnseen(report);
+  const alike = framesAlike(report.sections);
   return {
     by: report.by,
     at: report.at,
@@ -163,6 +165,9 @@ export function renderSaid(
     frames: listed.map(frameLine),
     ...(cut ? { cut } : {}),
     unnamed: report.unnamed,
+    ...(report.widthOnly?.length ? { widthOnly: report.widthOnly } : {}),
+    ...(report.codeNamed?.length ? { codeNamed: report.codeNamed } : {}),
+    ...(alike.length > 0 ? { alike } : {}),
     ...(report.page.errors.length > 0
       ? { pageErrors: report.page.errors }
       : {}),

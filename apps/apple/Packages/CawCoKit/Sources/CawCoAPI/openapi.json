@@ -42593,6 +42593,39 @@
                       "$ref": "#/components/schemas/PageError"
                     }
                   },
+                  "alike": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/FramesAlike"
+                    }
+                  },
+                  "codeNamed": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "story": {
+                          "type": "string"
+                        },
+                        "word": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "story",
+                        "word"
+                      ]
+                    }
+                  },
+                  "widthOnly": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
                   "unnamed": {
                     "type": "array",
                     "items": {
@@ -42942,6 +42975,26 @@
           "move",
           "post",
           "probe"
+        ]
+      },
+      "FramesAlike": {
+        "description": "Rest frames of one states file that draw the same picture at one width and scheme: {@link framesAlike}.",
+        "type": "object",
+        "properties": {
+          "stories": {
+            "description": "`File:Story` of each.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "stories",
+          "width"
         ]
       },
       "FrameState": {

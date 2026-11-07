@@ -116,6 +116,7 @@ import {
 import { parse as lex, init as lexerReady } from "es-module-lexer";
 import { propsOf } from "./docgen";
 import {
+  codeWordOf,
   readStoryFile,
   StoryRefusal,
   storyStatement,
@@ -1255,6 +1256,26 @@ function unloadedState(file: string): {
     : { state: "unseen" };
 }
 
+/** What states file `file` says that the report names (core `RenderReport`): its stories that differ only by width, and its labels that say a word of code. */
+function sheetFindings(
+  file: string,
+  read: ReturnType<typeof readStoryFile>
+): Required<Pick<RenderReport, "codeNamed" | "widthOnly">> {
+  const names = [
+    ...read.stories.map((one) => one.name),
+    ...read.imports.keys(),
+  ];
+  return {
+    widthOnly: read.widthOnly.map((group) =>
+      group.map((story) => `${file}:${story}`)
+    ),
+    codeNamed: read.stories.flatMap((one) => {
+      const word = one.label ? codeWordOf(one.label, names) : null;
+      return word ? [{ story: `${file}:${one.name}`, word }] : [];
+    }),
+  };
+}
+
 /**
  * The canvas of `files` as the stage knows it: each section's newest
  * report, its frames `unseen` when the file or a component it mounts
@@ -1264,6 +1285,8 @@ function unloadedState(file: string): {
 async function reportOf(files: string[]): Promise<RenderReport> {
   const sections: SectionRender[] = [];
   const unnamed: string[] = [];
+  const widthOnly: string[][] = [];
+  const codeNamed: { story: string; word: string }[] = [];
   let newest: {
     at: string;
     by: RenderReport["by"];
@@ -1289,6 +1312,9 @@ async function reportOf(files: string[]): Promise<RenderReport> {
         .filter((one) => !one.label)
         .map((one) => `${file}:${one.name}`)
     );
+    const said = sheetFindings(file, read);
+    widthOnly.push(...said.widthOnly);
+    codeNamed.push(...said.codeNamed);
     const hash = await contentHash(file);
     const kept = reports.get(file);
     if (kept && (!newest || kept.at > newest.at)) {
@@ -1336,6 +1362,8 @@ async function reportOf(files: string[]): Promise<RenderReport> {
     page: { errors: newest?.errors ?? [] },
     sections,
     unnamed,
+    widthOnly,
+    codeNamed,
     ...drawingOf(files),
   };
 }
