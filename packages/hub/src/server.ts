@@ -28149,6 +28149,7 @@ export const createServer = (
       runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
         what: "command",
       }),
+    boundary: (workspaceId) => workItems.workspaceRef(workspaceId),
     ownMachineId,
     folderChanged: (projectId) => {
       tasks.touched(projectId);
@@ -28377,7 +28378,8 @@ export const createServer = (
             });
       }),
     tree: (caller) => treeSessions(db, caller),
-    // Read inside the workspace's boundary, as its own sessions read it.
+    // Read inside the workspace's boundary, as its own sessions read it; a
+    // host-scope item's folder on the host, as its session reads it.
     workspaceText: async (workspaceId, path) => {
       const [workspace] = db.workspacesNamed(workspaceId);
       if (!workspace || workspace.state === "archived") {
@@ -28390,7 +28392,7 @@ export const createServer = (
         workspace.path,
         `cat -- ${quote(path)}`,
         WORKSPACE_READ_MS,
-        { id: workspace.id, path: workspace.path }
+        workItems.workspaceRef(workspace.id)
       );
       if (read.exitCode !== 0) {
         throw new Error(read.stderr.trim() || `cat exited ${read.exitCode}`);

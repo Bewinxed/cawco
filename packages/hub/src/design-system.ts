@@ -1150,6 +1150,12 @@ export const createDesignSystem = (deps: {
   designTask: (projectId: string, taskId: string) => Promise<boolean>;
   /** Whether a task is open: neither done nor dropped. */
   taskOpen: (projectId: string, taskId: string) => Promise<boolean>;
+  /**
+   * The boundary a command in workspace `workspaceId` runs inside, as every
+   * hub-run command's (work-items.ts `workspaceRef`): its own, or none for a
+   * host-scope item's folder, whose commands run on the host.
+   */
+  boundary: (workspaceId: string) => WorkspaceRef | undefined;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   park: (envelope: Envelope) => void;
   /**
@@ -1226,9 +1232,7 @@ export const createDesignSystem = (deps: {
       workspace.path,
       `${SAFE_GIT_SHELL}${UNCOMMITTED}`,
       COMMAND_MS,
-      isLive(attempt?.state ?? "done")
-        ? { id: workspace.id, path: workspace.path }
-        : undefined
+      isLive(attempt?.state ?? "done") ? deps.boundary(workspace.id) : undefined
     );
     if (read.exitCode !== 0) {
       return `CawCo couldn't read the builder's workspace (${(read.stderr || read.stdout).trim().split("\n").at(-1)}), so whether its design/ is committed is unknown. Try Approve again.`;
@@ -1253,14 +1257,17 @@ export const createDesignSystem = (deps: {
     // A work item's session works in its workspace's clone, read inside its
     // boundary; the project's system there is what its base branch holds on
     // origin, never its own commits.
+    // A host-scope item's folder is the machine's own, no clone: its
+    // repository is read and written on the host, as anyone's checkout is.
     const mine = workspaceOfSession(actor.id);
-    const workspace = mine && !mine.ended ? mine.workspace : undefined;
+    const workspace =
+      mine && !mine.ended && !mine.workspace.host ? mine.workspace : undefined;
     const top = await deps.run(
       actor.machineId,
       actor.cwd,
       `${SAFE_GIT_SHELL}git rev-parse --show-toplevel`,
       COMMAND_MS,
-      workspace && { id: workspace.id, path: workspace.path }
+      workspace && deps.boundary(workspace.id)
     );
     const root = top.stdout.trim();
     if (top.exitCode !== 0 || !root) {
@@ -1433,15 +1440,15 @@ export const createDesignSystem = (deps: {
       );
     }
     const own = workspaceOfSession(row.instanceId);
-    if (own?.workspace.path !== row.root) {
-      return { repo: { machineId: row.machineId, root: row.root } };
-    }
-    const { workspace } = own;
+    const boundary =
+      own?.workspace.path === row.root
+        ? deps.boundary(own.workspace.id)
+        : undefined;
     return {
       repo: {
         machineId: row.machineId,
         root: row.root,
-        workspace: { id: workspace.id, path: workspace.path },
+        ...(boundary ? { workspace: boundary } : {}),
       },
     };
   };

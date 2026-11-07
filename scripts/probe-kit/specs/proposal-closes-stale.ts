@@ -41,6 +41,10 @@
  *  (h) (f)'s session also had a memory proposal and a design proposal
  *      waiting: after the fold both name the session it went on in, and
  *      still do once the hub restarts.
+ *  (i) A host-scope delegate (no clone, no boundary) working in a
+ *      repository of its own writes a design system there with
+ *      design_write: it lands, run on the host as its session's commands
+ *      are, and the file is in the repository.
  *
  * Main fails (a): the proposal stands until Approve is pressed, nobody is
  * told; (b): Approve is refused with "Reject it" and the card stays; (c):
@@ -48,7 +52,7 @@
  *
  *   bun scripts/probe-kit/run.ts proposal-closes-stale
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { hubRequest } from "../../../packages/core/src/hub-request";
@@ -182,6 +186,7 @@ const run = async (kit: Kit): Promise<void> => {
   await proposalLegs(kit, fleet, base);
   await delegateLeg(kit, fleet);
   await foldLeg(kit, fleet, base);
+  await hostLeg(kit, fleet);
 };
 
 /** The project legs (a), (b) and (f) work in, once (a) made it. */
@@ -737,6 +742,77 @@ const delegateLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     "(c) a delegate stopped while its ask waits: the ask closes, and the session that started it is told CawCo closed it and why",
     gone && told.length > 0,
     JSON.stringify({ gone, told })
+  );
+};
+
+/** (i): the design guide a host-scope delegate writes. */
+const HOST_DESIGN = "# Host notes\n\nWritten from the host.\n";
+
+/** Leg (i): a host-scope delegate's design_write in its own repository lands. */
+const hostLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
+  const repo = join(fleet.sandbox, "host-repo");
+  await mkdir(repo, { recursive: true });
+  await writeFile(join(repo, "README.md"), "# Host repo\n");
+  for (const args of [
+    ["init", "-q"],
+    ["add", "README.md"],
+    ["commit", "-q", "-m", "Start"],
+  ]) {
+    const ran = Bun.spawnSync(
+      [
+        "git",
+        "-C",
+        repo,
+        "-c",
+        "user.name=probe",
+        "-c",
+        "user.email=probe@example.invalid",
+        ...args,
+      ],
+      { env: process.env }
+    );
+    if (ran.exitCode !== 0) {
+      throw new Error(`git ${args[0]}: ${ran.stderr.toString()}`);
+    }
+  }
+  const steward = await fleet.spawn("claude", "Host steward", fleet.repo, {
+    projectId: scouting.id,
+  });
+  const delegate = await fleet.api<{ instanceId: string }>(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: steward,
+        title: "Host designer",
+        prompt: `${SLOW}: work on.`,
+        harness: "claude",
+        model: MODEL.claude,
+        host: true,
+        cwd: repo,
+      },
+    })
+  );
+  await until(
+    "the host designer running",
+    () => fleet.instance(delegate.instanceId),
+    (row) => row?.status === "running",
+    180_000
+  );
+  const said = await toolWords(
+    {
+      base: fleet.base,
+      id: delegate.instanceId,
+      credential: await fleet.sessionCredential(delegate.instanceId),
+    },
+    "design_write",
+    { files: [{ path: "DESIGN.md", content: HOST_DESIGN }] }
+  );
+  const landed = await readFile(join(repo, "design", "DESIGN.md"), "utf8")
+    .then((text) => text === HOST_DESIGN)
+    .catch(() => false);
+  kit.check(
+    "(i) a host-scope delegate's design_write in its own repository lands there, run on the host",
+    landed,
+    JSON.stringify({ landed, said: said.text.slice(0, 300) })
   );
 };
 
