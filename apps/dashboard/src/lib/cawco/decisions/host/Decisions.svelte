@@ -120,9 +120,8 @@
   let scroller = $state<HTMLDivElement>();
   /**
    * A pictured page's column: as many options abreast as its room holds,
-   * each its picture at 1:1 in its well (`--well-in` each side, `--space-3`
-   * between them), inside the card's and the page's insets; the largest
-   * such step that fits, never under `--c-decision-page-max`; the room's
+   * each its picture at 1:1 (`--space-3` between them), inside the card's
+   * and the page's insets; the largest such step that fits, never under `--c-decision-page-max`; the room's
    * whole width where not one fits, so a picture wider than the room shows
    * as much of itself as it can, scrolling sideways in its well. Read from the
    * scroller's own room (its gutter kept, so a scrollbar coming never moves
@@ -141,13 +140,12 @@
       const px = (name: string) =>
         Number.parseFloat(style.getPropertyValue(name)) || 0;
       const gap = px("--space-3");
-      const pitch = story + 2 * px("--well-in");
       const insets = 2 * (px("--page-in") + px("--card-in"));
       const abreast = Math.floor(
-        (box.clientWidth - insets + gap) / (pitch + gap)
+        (box.clientWidth - insets + gap) / (story + gap)
       );
       const step =
-        abreast > 0 ? abreast * (pitch + gap) - gap + insets : box.clientWidth;
+        abreast > 0 ? abreast * (story + gap) - gap + insets : box.clientWidth;
       pageWidth = Math.max(px("--c-decision-page-max"), step);
     };
     read();

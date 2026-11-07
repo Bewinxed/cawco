@@ -876,7 +876,7 @@
       <iframe
         bind:this={frame}
         class={[
-          "block rounded-xs border-0 bg-surface-page transition-opacity duration-(--dur-fade) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
+          "block rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--dur-fade) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
           screenTall === null && "max-h-c-media-max-h",
           picture === undefined ? "w-full" : "flex-none",
           tall === null && screenTall === null && "aspect-16/10",
@@ -970,7 +970,7 @@
           <iframe
             bind:this={frame}
             class={[
-              "block w-full rounded-xs border-0 bg-surface-page transition-opacity duration-(--dur-fade)",
+              "block w-full rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--dur-fade)",
               tall === null &&
                 screenTall === null &&
                 (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),

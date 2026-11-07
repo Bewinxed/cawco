@@ -1215,17 +1215,16 @@
   );
 }
 /* A decision page's insets (decisions/host Decisions.svelte's root): the page's own and a card's
-   (21px and 18px at a desk, 14px each under a finger), a picture's well,
-   what a well reaches past to the screen's edges on a phone (`--bleed`),
+   (21px and 18px at a desk, 14px each under a finger),
+   what a piece of media reaches past to the screen's edges on a phone (`--bleed`),
    and the column's cap: the room's width up to `--c-decision-page-max`, until
    a pictured page sets its own (`--page-w`, set inline on the page), or the
-   room's whole width where a well fills its card (`data-fills`). The column
+   room's whole width where a piece fills its card (`data-fills`). The column
    and the foot's row both stand at `--column-w`, this one width, so their
    edges are one. */
 @utility decision-page-insets {
   --page-in: var(--space-6);
   --card-in: var(--space-5);
-  --well-in: calc(var(--space-3) + 1px);
   --bleed: calc(var(--page-in) + var(--card-in));
   --page-w: var(--c-decision-page-max);
   --column-w: var(--page-w);
@@ -1245,16 +1244,13 @@
   grid-template-rows: minmax(0, 1fr) auto;
 }
 /* Options with pictures: as many abreast as fit, each track exactly its
-   widest picture's own width in its well (`--story-w`, decisions/host
+   widest picture's own width (`--story-w`, decisions/host
    Decision.svelte), each at 1:1, packed from the row's start as the words
    are and the house gap between them, never stretched apart; a track never
    wider than the row, so a picture wider than it stands one to a row at the
-   row's full width and scrolls sideways in its well. */
+   row's full width and scrolls sideways in its place. */
 @utility grid-cols-fit-story {
-  grid-template-columns: repeat(
-    auto-fill,
-    min(100%, calc(var(--story-w) + 2 * var(--well-in)))
-  );
+  grid-template-columns: repeat(auto-fill, min(100%, var(--story-w)));
 }
 /* A card's options when every one carries pictures: one equal column each
    (`--options`, decisions/host Decision.svelte), so their pictures stand
@@ -1262,7 +1258,7 @@
 @utility grid-cols-options {
   grid-template-columns: repeat(var(--options), minmax(0, 1fr));
 }
-/* A picture's well in a Row (decisions/host Image.svelte): it asks the
+/* A picture in a Row (decisions/host Image.svelte): it asks the
    width that stands the Row's narrowest picture (`--ratio-min`, Row.svelte)
    at `--c-picture-min` with every picture at one height, and grows by its
    own width over its height (`--ratio`), so the Row's pictures share a line
@@ -1272,33 +1268,30 @@
 @utility picture-row {
   [data-axis="row"] > & {
     flex: var(--ratio) 1
-      calc(
-        var(--ratio) / var(--ratio-min, var(--ratio)) * var(--c-picture-min) +
-          2 * var(--well-in)
-      );
+      calc(var(--ratio) / var(--ratio-min, var(--ratio)) * var(--c-picture-min));
   }
   [data-axis="row"] > &:has([data-full]) {
     flex-basis: 100%;
   }
 }
-/* A picture's well hugging its picture (`--picture-w`, its real width,
-   decisions/host Well.svelte): the picture at 1:1 and the well's own
-   insets, never wider than what holds it, where a picture too wide for it
-   scrolls sideways in it; never narrower than its caption and action need
-   (its stage, `contain-inline-size`, asks no width of its own). No empty
-   well stands beside a picture. */
+/* A piece of media's box hugging its piece (`--picture-w`, its real width,
+   decisions/host Well.svelte): the piece at 1:1, never wider than what
+   holds it, where a piece too wide for it scrolls sideways in it; never
+   narrower than its caption and action need (its stage,
+   `contain-inline-size`, asks no width of its own). No empty room stands
+   beside a piece. */
 @utility well-hug {
-  inline-size: calc(var(--picture-w) + 2 * var(--well-in));
+  inline-size: var(--picture-w);
   min-inline-size: min-content;
   max-inline-size: 100%;
 }
-/* The same well on a phone, standing alone in its card: no inset, edge or
-   corner of its own, as wide as its story or the screen, whichever is less,
+/* The same box on a phone, standing alone in its card: as wide as its
+   story or the screen, whichever is less,
    centred over what holds it, so a story as wide as the screen reaches both
    its edges (the page's column is the screen's width under the phone's
    line). The screen is the page's scroller's room (`--page-room`,
    Decisions.svelte), never the window's `100vi`, which counts a
-   scrollbar's gutter: bled to it, a well stood the gutter's width past the
+   scrollbar's gutter: bled to it, a piece stood the gutter's width past the
    page and scrolled it sideways. */
 @utility well-bleed {
   inline-size: min(var(--picture-w), var(--page-room, 100vi));
@@ -1307,11 +1300,8 @@
     0px,
     (100% - min(var(--picture-w), var(--page-room, 100vi))) / 2
   );
-  padding-inline: 0;
-  border-inline-width: 0;
-  border-radius: 0;
 }
-/* A bled well's words on the page's text edge (`--bleed` from the screen's),
+/* A bled piece's words on the page's text edge (`--bleed` from the screen's),
    however far its picture reaches past them. */
 @utility well-bleed-words {
   padding-inline: max(

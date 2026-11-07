@@ -124,7 +124,7 @@
     <iframe
       bind:this={frame}
       class={[
-        "pointer-events-none block flex-none rounded-xs border-0",
+        "pointer-events-none block flex-none rounded-xs border-0 outline-1 -outline-offset-1 outline-image-outline",
         !shape && "absolute opacity-0",
       ]}
       onload={hello}

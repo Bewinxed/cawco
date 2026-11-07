@@ -54,15 +54,6 @@
 @source "../../../components/ui/select/";
 @source "../../../components/ui/input-group/";
 
-/* A Preview's well inset, each side (its 1px edge and --space-3): typed, so
-   the page reads it as one length (Decisions.svelte, a pictured page's
-   column; Decision.svelte, its options' pitch). */
-@property --well-in {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-
 @layer base {
   /* The page is its own document: it follows the reader's scheme until the
      overlay names the host's (`data-theme` and `color-scheme` on the root),
@@ -109,7 +100,7 @@
    each mapped onto the house's tokens and roles on its host's own hook. */
 @layer components {
   /* Pele's diagram (pele.run/theming: its variables, then its classes),
-     drawn straight on its well's ground with no panel of its own (The
+     drawn straight on its card's ground with no panel of its own (The
      Frame Recesses Rule): a node raised (The Frame Recesses Rule) with a
      control's edge and the 8px of an item inside a surface, its name in the
      label role in strong ink; an edge and its arrowhead 1px in muted ink,
@@ -117,7 +108,7 @@
      the label role, muted; a highlight strong ink, never coral (The Coral Is
      Where You Act Rule); weights never above 500 (The 500 Ceiling Rule). */
   [data-slot="diagram"] {
-    --pele-bg: var(--surface-well);
+    --pele-bg: var(--surface-raised);
     --pele-fg: var(--ink-strong);
     --pele-muted: var(--ink-muted);
     --pele-line: var(--ink-muted);
