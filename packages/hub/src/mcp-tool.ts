@@ -62,19 +62,14 @@ const responseFormat = () => z.enum(RESPONSE_FORMATS).optional();
  * takes off before a tool runs (delegation-mcp.ts `answer`). Claude Code
  * sends its tool_use id in `_meta` and pi its call id beside the arguments
  * (agent delegation.ts `callDelegationTool`), so neither adds a key.
+ *
+ * What a harness is shown never says `additionalProperties: false`: OpenCode's
+ * own `opencode.tool.input.repair` hook deletes every key such a schema does
+ * not name (anomalyco/opencode packages/core/src/plugin/tool-input-repair.ts:
+ * `if (!declared && schema.additionalProperties === false && !patterned &&
+ * !composed)`), and the refusal is said at the call, by the hub, either way.
  */
 export const STAMPED_KEY = "__cawco";
-
-/**
- * What a harness is shown admits the stamped key by `patternProperties`, not
- * by name, so no model reads it as a parameter. OpenCode's own
- * `opencode.tool.input.repair` hook deletes every key a schema with
- * `additionalProperties: false` does not name, unless the schema has
- * `patternProperties` (anomalyco/opencode packages/core/src/plugin/
- * tool-input-repair.ts: `if (!declared && schema.additionalProperties ===
- * false && !patterned && !composed)`), so the stamp survives it.
- */
-const STAMPED_PATTERN = { [`^${STAMPED_KEY}$`]: {} };
 
 export interface McpTool {
   annotations?: ToolAnnotations;
@@ -83,6 +78,8 @@ export interface McpTool {
   description: string;
   inputSchema: Record<string, unknown>;
   name: string;
+  /** Why `args` is not a call of this tool, in the words its call throws; undefined when it parses. */
+  refusal: (args: unknown) => string | undefined;
 }
 
 export interface ToolOptions<R, A> {
@@ -143,33 +140,37 @@ export function tool<T extends z.ZodRawShape, R, N extends string = string>(
     names.length > 0
       ? `${name} takes: ${names.join(", ")}.`
       : `${name} takes no arguments.`;
+  // A tool's own input error is its whole answer; any other, what was
+  // wrong, what it takes when a key was not one, then the shape.
+  const refusalOf = (error: z.ZodError): string => {
+    const unknown = error.issues.some(
+      (issue) => issue.code === "unrecognized_keys"
+    );
+    return (
+      options.inputError ??
+      [
+        z.prettifyError(error),
+        ...(unknown ? [takes] : []),
+        ...(options.inputHelp ? [options.inputHelp] : []),
+      ].join("\n")
+    );
+  };
   return {
     name,
     description,
-    inputSchema: {
-      ...(z.toJSONSchema(z.strictObject(shape), {
-        target: "draft-07",
-        io: "input",
-      }) as Record<string, unknown>),
-      patternProperties: STAMPED_PATTERN,
-    },
+    inputSchema: z.toJSONSchema(z.object(shape), {
+      target: "draft-07",
+      io: "input",
+    }) as Record<string, unknown>,
     ...(options.annotations ? { annotations: options.annotations } : {}),
+    refusal: (args) => {
+      const parsed = schema.safeParse(args);
+      return parsed.success ? undefined : refusalOf(parsed.error);
+    },
     call: async (args) => {
       const parsed = schema.safeParse(args);
       if (!parsed.success) {
-        // A tool's own input error is its whole answer; any other, what was
-        // wrong, what it takes when a key was not one, then the shape.
-        const unknown = parsed.error.issues.some(
-          (issue) => issue.code === "unrecognized_keys"
-        );
-        throw new Error(
-          options.inputError ??
-            [
-              z.prettifyError(parsed.error),
-              ...(unknown ? [takes] : []),
-              ...(options.inputHelp ? [options.inputHelp] : []),
-            ].join("\n")
-        );
+        throw new Error(refusalOf(parsed.error));
       }
       const {
         response_format: format,

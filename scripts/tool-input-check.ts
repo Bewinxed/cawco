@@ -7,10 +7,12 @@
  *    and every argument the tool takes; the key CawCo's OpenCode plugin
  *    stamps into a call (`STAMPED_KEY`) passes and never reaches the tool's
  *    run; a known key passes; a tool's own input error is its whole answer.
- * 2. Every tool a session is listed says so in the schema its harness reads:
- *    `additionalProperties: false`, the stamp admitted by
- *    `patternProperties` alone (OpenCode's input repair keeps every key of
- *    such a schema).
+ * 2. No listed tool's schema says `additionalProperties: false`: OpenCode's
+ *    input repair deletes every key such a schema does not name, the stamp
+ *    among them, so the refusal is the hub's, at the call.
+ * 3. An `admin_*` write with an argument it does not take, or one of the
+ *    wrong type, is refused at once with the tool's own refusal, and no ask
+ *    is recorded for the person; a good one is recorded.
  *
  *   bun scripts/tool-input-check.ts
  */
@@ -122,7 +124,18 @@ expect(
   `set_colour's refusal is not its own input error whole: ${JSON.stringify(ownRefusal)}`
 );
 
-const { listRoleTools } = await import("../packages/hub/src/role-budgets");
+expect(
+  plain.refusal({ colour: "red", shde: 2 }) ===
+    ("refused" in misspelt ? misspelt.refused : undefined),
+  "pick_colour's refusal() is not the words its call throws"
+);
+expect(
+  plain.refusal({ colour: "red", [STAMPED_KEY]: {} }) === undefined,
+  `pick_colour's refusal() refuses ${STAMPED_KEY}`
+);
+
+const { listRoleTools, standIn } =
+  await import("../packages/hub/src/role-budgets");
 const { createAsks } = await import("../packages/hub/src/asks");
 const listed = new Map<string, Record<string, unknown>>();
 for (const { tools } of listRoleTools()) {
@@ -133,19 +146,52 @@ for (const { tools } of listRoleTools()) {
 for (const one of createAsks({} as never).tools(undefined)) {
   listed.set(one.name, one.inputSchema);
 }
-const pattern = `^${STAMPED_KEY}$`;
-listed.set(plain.name, plain.inputSchema);
-listed.set(own.name, own.inputSchema);
 for (const [name, schema] of listed) {
-  const patterns = schema.patternProperties as
-    Record<string, unknown> | undefined;
-  const properties = (schema.properties ?? {}) as Record<string, unknown>;
   expect(
-    schema.additionalProperties === false &&
-      Object.keys(patterns ?? {}).join() === pattern &&
-      !(STAMPED_KEY in properties),
-    `${name}'s schema does not refuse unknown keys with ${STAMPED_KEY} admitted by pattern alone: ${JSON.stringify({ additionalProperties: schema.additionalProperties, patternProperties: patterns })}`
+    schema.additionalProperties !== false,
+    `${name}'s schema says additionalProperties: false, so OpenCode's input repair would delete ${STAMPED_KEY}`
   );
+}
+
+const asked: Record<string, unknown>[] = [];
+const ASKED = "Asked the person.";
+const { mcp, rows, close } = standIn({
+  credentialActor: () => rows.find((row) => row.id === "worker"),
+  askPerson: (_actor, _name, input) => {
+    asked.push(input);
+    return Promise.resolve(ASKED);
+  },
+});
+const WRITE = "admin_claude_settings_write";
+const adminCall = async (args: Record<string, unknown>) => {
+  const answer = await mcp.call(null, WRITE, args, "Bearer stand-in");
+  const text = answer.content
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n");
+  return { refused: !!answer.isError, text };
+};
+const good = { action: "put", name: "env", settings: {}, reason: "A check." };
+try {
+  const misspeltWrite = await adminCall({ ...good, setings: {} });
+  expect(
+    misspeltWrite.refused &&
+      misspeltWrite.text.includes('"setings"') &&
+      misspeltWrite.text.includes(`${WRITE} takes: action,`) &&
+      asked.length === 0,
+    `${WRITE} with "setings" was not refused at once, or an ask was recorded: ${JSON.stringify({ ...misspeltWrite, asked })}`
+  );
+  const mistyped = await adminCall({ ...good, name: 5 });
+  expect(
+    mistyped.refused && mistyped.text.includes("name") && asked.length === 0,
+    `${WRITE} with a number for name was not refused at once, or an ask was recorded: ${JSON.stringify({ ...mistyped, asked })}`
+  );
+  const recorded = await adminCall(good);
+  expect(
+    !recorded.refused && recorded.text === ASKED && asked.length === 1,
+    `${WRITE} with good arguments was not asked of the person: ${JSON.stringify({ ...recorded, asked })}`
+  );
+} finally {
+  close();
 }
 
 if (failures.length > 0) {
@@ -156,5 +202,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `tool-input-check: tool() refuses unknown keys, admits ${STAMPED_KEY}; ${listed.size} listed tools' schemas say so`
+  `tool-input-check: tool() refuses unknown keys, admits ${STAMPED_KEY}; ${listed.size} listed tools' schemas leave it to OpenCode; a bad admin write is refused before any ask`
 );

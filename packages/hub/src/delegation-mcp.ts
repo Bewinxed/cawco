@@ -680,6 +680,12 @@ export function createDelegationMcp(options: {
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
     }
+    // A call the tool would refuse is refused now, as any tool refuses it:
+    // never asked of the person, whose approval would run it only to fail.
+    const refused = entry.refusal(input);
+    if (refused !== undefined) {
+      throw new Error(refused);
+    }
     // A write that changes nothing (a connection's key, which only the
     // owner's CLI sets) is answered at once, asking nobody.
     const answered = answeredWithoutAsking(name, input);

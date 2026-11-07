@@ -28,6 +28,9 @@ import { createRelay } from "./relay";
 import { createRoutines } from "./routines";
 import type { Tasks } from "./tasks";
 
+/** What the delegation MCP is made with. */
+type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
+
 /**
  * Tokens a role's listed tool definitions may take: each is its size as
  * last measured when it was raised deliberately, plus a little room. A role
@@ -93,17 +96,13 @@ import type { Tasks } from "./tasks";
  * words cut from generate_image, artifact_read, todo_write, delegate and
  * artifact_create's `to`, so the room comes from words, not the budgets
  * (worker 29,820, delegate 11,142 measured).
- * 2026-11-07: every tool refuses an argument it does not take, and its
- * schema says so (`additionalProperties: false`, with the `__cawco` stamp
- * admitted by `patternProperties`, mcp-tool.ts `STAMPED_KEY`): about 15
- * tokens a tool (worker 31,772, delegate 11,804, curator 1,235 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_850,
-  delegate: 11_880,
+  worker: 29_900,
+  delegate: 11_200,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1280,
+  curator: 1200,
 };
 
 /**
@@ -178,6 +177,45 @@ export const unroutedTools = (): string[] => standUp().unrouted;
 
 /** One stood-up delegation MCP's listings and unrouted tools, read, never called. */
 const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
+  const { mcp, close } = standIn();
+  try {
+    const roles = SESSION_ROLES.map((role) => {
+      const listed = mcp.list(role);
+      if (!listed) {
+        throw new Error(`No measuring session for role ${role}.`);
+      }
+      // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
+      // Claude Code's to act on, never part of the definition it sends.
+      return {
+        role,
+        tools: listed.tools.map(({ _meta, ...tool }) => tool),
+      };
+    });
+    return { roles, unrouted: mcp.unrouted() };
+  } finally {
+    close();
+  }
+};
+
+/** What a stand-in's caller may set: who a credential names, and the person's ask. */
+export interface StandInCalls {
+  askPerson?: DelegationOptions["askPerson"];
+  credentialActor?: DelegationOptions["credentialActor"];
+}
+
+/**
+ * A delegation MCP stood up on a session of each role (its id the role's
+ * name, among `rows`), every dependency a stand-in that answers nothing. A
+ * check may set who a credential names and the person's ask, and call it;
+ * `close` ends its sweeps.
+ */
+export const standIn = (
+  calls: StandInCalls = {}
+): {
+  close: () => void;
+  mcp: ReturnType<typeof createDelegationMcp>;
+  rows: InstanceRow[];
+} => {
   const rows = SESSION_ROLES.map((role): InstanceRow => ({
     id: role,
     machineId: "machine",
@@ -211,7 +249,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
     spawn: () => Promise.reject(new Error("A budget read starts nothing")),
     deliver: () => Promise.reject(new Error("measuring")),
     handOff: () => Promise.reject(new Error("measuring")),
-    credentialActor: () => undefined,
+    credentialActor: calls.credentialActor ?? (() => undefined),
     knownCredential: () => false,
     toolListing: () => undefined,
     refreshTools: () => undefined,
@@ -219,7 +257,8 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
     // Only the definitions are read: nothing is called.
     tasks: {} as Tasks,
     projectFromSession: () => Promise.reject(new Error("measuring")),
-    askPerson: () => Promise.reject(new Error("measuring")),
+    askPerson:
+      calls.askPerson ?? (() => Promise.reject(new Error("measuring"))),
     personOwed: () => {
       throw new Error("Listing the tools asks nothing");
     },
@@ -380,21 +419,5 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         settle: () => undefined,
       }).tools(actor),
   });
-  try {
-    const roles = SESSION_ROLES.map((role) => {
-      const listed = mcp.list(role);
-      if (!listed) {
-        throw new Error(`No measuring session for role ${role}.`);
-      }
-      // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
-      // Claude Code's to act on, never part of the definition it sends.
-      return {
-        role,
-        tools: listed.tools.map(({ _meta, ...tool }) => tool),
-      };
-    });
-    return { roles, unrouted: mcp.unrouted() };
-  } finally {
-    lifetime.close();
-  }
+  return { mcp, rows, close: () => lifetime.close() };
 };
