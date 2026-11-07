@@ -157,6 +157,14 @@ export interface BlockMetadata {
   resultErrors?: string[];
   /** Images returned by the tool, as the hub's media references. */
   resultImages?: Array<{ mediaType: string; src: string }>;
+  /**
+   * The stored record a call's result came in (a Claude Code `tool_result`
+   * entry's uuid, a pi entry's id, an OpenCode message's id), which the
+   * call's own block never names otherwise: what a transcript index names a
+   * match in a tool's output by (find in a conversation), so the match opens
+   * at the very call it answered, however many calls ran beside it.
+   */
+  resultRecord?: string;
   resultSubtype?: string;
   /**
    * A project note that a session made a routine (ProjectNoteEvent

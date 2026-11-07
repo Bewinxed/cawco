@@ -17,6 +17,7 @@
    * list claims nothing (The Claim Of Nothing Rule).
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { unhandled } from "@cawco/core/unhandled";
   import { findInWords } from "@cawco/core/words/find-in";
   import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { untrack } from "svelte";
@@ -81,6 +82,29 @@
   /** The secrets the person showed, by key; the rest are drawn as dots (Find's "Hide secrets"). */
   const shown = new SvelteSet<string>();
 
+  /**
+   * Why the hub's places are missing, and whether asking again can help:
+   * a machine that did not answer or a refusal may answer next time; an
+   * agent too old for the read answers only once it is updated.
+   */
+  const fault = $derived.by((): { retries: boolean; words: string } | null => {
+    const { hub } = find;
+    switch (hub.kind) {
+      case "unreached":
+        return { retries: true, words: findInWords.unreached(hub.machine) };
+      case "outdated":
+        return { retries: false, words: findInWords.outdated(hub.machine) };
+      case "refused":
+        return { retries: true, words: findInWords.refused(hub.detail) };
+      case "answered":
+      case "asking":
+      case "idle":
+        return null;
+      default:
+        return unhandled("hub read", hub);
+    }
+  });
+
   /** Known to hold nothing: nothing loaded holds the words, and the hub said none or cannot be heard. */
   const nothing = $derived(
     find.words.trim() !== "" && find.all.length === 0 && !find.asking
@@ -139,13 +163,11 @@
       <EmptyState
         icon={IconSearch}
         inline={!narrow}
-        line={find.hub.kind === "unreached"
-          ? findInWords.unreached(find.hub.machine)
-          : undefined}
+        line={fault?.words}
         title={findInWords.nothingTitle(find.words.trim())}
       >
         {#snippet action()}
-          {#if find.hub.kind === "unreached"}
+          {#if fault?.retries}
             <Button onclick={() => find.retry()} size="sm" variant="outline"
               >{findInWords.retry}</Button
             >
@@ -183,21 +205,19 @@
         >
       {/each}
     </div>
-    {#if find.hub.kind === "unreached" || find.hub.kind === "refused"}
+    {#if fault}
       <p
         class="m-0 flex flex-none flex-wrap items-baseline gap-x-space-2 px-space-4 pb-space-2 type-meta text-ink-muted"
         role="status"
       >
-        <span
-          >{find.hub.kind === "unreached"
-            ? findInWords.unreached(find.hub.machine)
-            : findInWords.refused(find.hub.detail)}</span
-        >
-        <button
-          class="select-none border-none p-0 bg-transparent text-link-ink active:opacity-72"
-          onclick={() => find.retry()}
-          type="button">{findInWords.retry}</button
-        >
+        <span>{fault.words}</span>
+        {#if fault.retries}
+          <button
+            class="select-none border-none p-0 bg-transparent text-link-ink active:opacity-72"
+            onclick={() => find.retry()}
+            type="button">{findInWords.retry}</button
+          >
+        {/if}
       </p>
     {/if}
     {#if waiting}

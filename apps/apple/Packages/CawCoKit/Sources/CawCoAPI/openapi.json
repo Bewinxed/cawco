@@ -54032,6 +54032,10 @@
               ]
             }
           },
+          "resultRecord": {
+            "description": "The stored record a call's result came in (a Claude Code `tool_result`\nentry's uuid, a pi entry's id, an OpenCode message's id), which the\ncall's own block never names otherwise: what a transcript index names a\nmatch in a tool's output by (find in a conversation), so the match opens\nat the very call it answered, however many calls ran beside it.",
+            "type": "string"
+          },
           "resultSubtype": {
             "type": "string"
           },
@@ -56734,15 +56738,15 @@
         ]
       },
       "FindPlacesAnswer": {
-        "description": "`GET /api/find/places`' answer: every place, oldest first, and whether the machine holding them answered.",
+        "description": "`GET /api/find/places`' answer: every place, oldest first, and how the machine holding them took the read.",
         "type": "object",
         "properties": {
           "machine": {
-            "description": "The machine holding the conversation's transcript: when it did not answer, `places` is empty.",
+            "description": "The machine holding the conversation's transcript: unless it answered, `places` is empty.",
             "type": "object",
             "properties": {
-              "answered": {
-                "type": "boolean"
+              "heard": {
+                "$ref": "#/components/schemas/PlacesHeard"
               },
               "id": {
                 "type": "string"
@@ -56752,7 +56756,7 @@
               }
             },
             "required": [
-              "answered",
+              "heard",
               "id",
               "name"
             ]
@@ -56769,6 +56773,15 @@
           "places"
         ]
       },
+      "PlacesHeard": {
+        "description": "How the machine holding a conversation's transcript took the places read:\nit answered; it did not answer in time, or is not connected; or it\nanswered that it has no such read, its agent older than the hub's places\ncontrol (`transcriptPlaces`), which an update brings.",
+        "type": "string",
+        "enum": [
+          "answered",
+          "outdated",
+          "silent"
+        ]
+      },
       "FindPlace": {
         "description": "One place in a conversation where the words are (`GET /api/find/places`):\nevery place, never a conversation's best few, for the person's find in\nthat conversation to step through.",
         "type": "object",
@@ -56781,7 +56794,7 @@
             ]
           },
           "docId": {
-            "description": "The record to open at: for a tool's output, the record that called it,\nunder which a transcript draws the call and what it answered (its fold\nis opened once the transcript holds the record).",
+            "description": "The record to open at, the one holding the words: for a tool's output,\nthe record its result came in, which a transcript keeps on the call it\nanswered (`BlockMetadata.resultRecord`).",
             "type": "string"
           },
           "excerpt": {
@@ -56812,13 +56825,6 @@
             "description": "In the agent's reasoning, not what it said.",
             "type": "boolean"
           },
-          "tool": {
-            "description": "For a tool's output, the tool's name.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "whose": {
             "$ref": "#/components/schemas/FindPlaceWhose",
             "description": "Whose words: the person's, the agent's (said or thought), what its tools returned, a delegate's report."
@@ -56829,7 +56835,6 @@
           "docId",
           "excerpt",
           "thinking",
-          "tool",
           "whose"
         ]
       },

@@ -356,6 +356,7 @@ import {
   PLAN_ORIGIN,
   type PlacementPreview,
   type PlacementStrategy,
+  type PlacesHeard,
   PREVIEW_FOLDERS,
   PREVIEW_WEIGHT,
   PROJECT_NOTE,
@@ -812,7 +813,7 @@ import { type AttemptAsk, createDispatcher, dispatchRoutes } from "./dispatch";
 import { createExternalItems } from "./external-items";
 import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_PLACES_QUERY, FIND_QUERY } from "./find";
-import { isPlaces, PLACES_LIMIT, placesForScreens } from "./find-places";
+import { PLACES_LIMIT, placesForScreens, placesHeard } from "./find-places";
 import { forScreens } from "./find-secrets";
 import { createFindTool } from "./find-tool";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
@@ -34394,11 +34395,11 @@ export const createServer = (
             return status(404, `no session ${query.session}`);
           }
           const named = (
-            answered: boolean,
+            took: PlacesHeard,
             places: FindPlace[] = []
           ): FindPlacesAnswer => ({
             machine: {
-              answered,
+              heard: took,
               id: row.machineId,
               name: machineName(row.machineId),
             },
@@ -34409,7 +34410,7 @@ export const createServer = (
           );
           const words = query.q.trim();
           if (sessions.length === 0 || words === "") {
-            return named(true);
+            return named("answered");
           }
           const answer = await readStoppable(
             row.machineId,
@@ -34427,16 +34428,13 @@ export const createServer = (
               signal: request.signal,
             }
           );
-          const result =
-            answer?.kind === "answered" && answer.value.ok
-              ? answer.value.result
-              : null;
-          if (!isPlaces(result)) {
-            return named(false);
+          const heard = placesHeard(answer);
+          if (heard.heard !== "answered") {
+            return named(heard.heard);
           }
           return named(
-            true,
-            await placesForScreens(result, db.findSettings.hideSecrets())
+            "answered",
+            await placesForScreens(heard.places, db.findSettings.hideSecrets())
           );
         }
       )

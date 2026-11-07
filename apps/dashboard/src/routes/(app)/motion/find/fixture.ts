@@ -173,6 +173,9 @@ export const OTHER: Said[] = [
 /** The stored record the `n`th thing said is drawn from, as the hub's index names it. */
 export const recordOf = (id: string, n: number): string => `${id}-record-${n}`;
 
+/** The stored record a tool's result came in, apart from its call's (Claude Code stores each on its own). */
+export const resultOf = (id: string, n: number): string => `${id}-result-${n}`;
+
 /** The words `s` is found in: a tool's output, a report's headline and body. */
 export function wordsOf(s: Said): string {
   switch (s.k) {
@@ -222,6 +225,7 @@ export function history(id: string, said: Said[]): Message[] {
           toolName: s.name,
           toolInput: s.input,
           toolResult: s.out,
+          resultRecord: resultOf(id, n),
           toolStatus: "success",
         },
       } as Message;

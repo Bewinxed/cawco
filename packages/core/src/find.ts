@@ -179,8 +179,6 @@ export interface TranscriptPlacesQuery {
 /** One place a machine's index answers a {@link TranscriptPlacesQuery} with. */
 export interface TranscriptPlace {
   author: TranscriptAuthor;
-  /** For words in what a tool answered: the record that called it, and the tools it called, space-joined. */
-  calledBy: { docId: string; tools: string } | null;
   /** Which of the record's columns holds the words. */
   column: "output" | "text" | "thinking";
   docId: string;
@@ -259,9 +257,9 @@ export interface FindPlace {
   /** When it was said, ms epoch; null when the transcript kept no time. */
   at: number | null;
   /**
-   * The record to open at: for a tool's output, the record that called it,
-   * under which a transcript draws the call and what it answered (its fold
-   * is opened once the transcript holds the record).
+   * The record to open at, the one holding the words: for a tool's output,
+   * the record its result came in, which a transcript keeps on the call it
+   * answered (`BlockMetadata.resultRecord`).
    */
   docId: string;
   /** The words round the match, terms between 「 and 」. */
@@ -273,16 +271,22 @@ export interface FindPlace {
   secrets?: SecretSpan[];
   /** In the agent's reasoning, not what it said. */
   thinking: boolean;
-  /** For a tool's output, the tool's name. */
-  tool: string | null;
   /** Whose words: the person's, the agent's (said or thought), what its tools returned, a delegate's report. */
   whose: "me" | "agent" | "tools" | "delegates";
 }
 
-/** `GET /api/find/places`' answer: every place, oldest first, and whether the machine holding them answered. */
+/**
+ * How the machine holding a conversation's transcript took the places read:
+ * it answered; it did not answer in time, or is not connected; or it
+ * answered that it has no such read, its agent older than the hub's places
+ * control (`transcriptPlaces`), which an update brings.
+ */
+export type PlacesHeard = "answered" | "silent" | "outdated";
+
+/** `GET /api/find/places`' answer: every place, oldest first, and how the machine holding them took the read. */
 export interface FindPlacesAnswer {
-  /** The machine holding the conversation's transcript: when it did not answer, `places` is empty. */
-  machine: { answered: boolean; id: string; name: string };
+  /** The machine holding the conversation's transcript: unless it answered, `places` is empty. */
+  machine: { heard: PlacesHeard; id: string; name: string };
   places: FindPlace[];
 }
 

@@ -44,6 +44,9 @@ export const findInWords = {
   nothingTitle: (words: string) => `No matches for “${words}”`,
   everywhere: "Find in every session",
   /** The machine holding the transcript did not answer: only the messages loaded were searched. */
+  /** The machine's agent is older than the conversation's whole search: only the messages loaded were searched. */
+  outdated: (machine: string) =>
+    `${machine} needs an update to search this whole conversation, so only the messages already here were searched.`,
   unreached: (machine: string) =>
     `${machine} didn't answer, so only the messages already here were searched.`,
   /** The hub refused the find: its own sentence, then what came of it. */

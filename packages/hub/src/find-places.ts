@@ -7,8 +7,19 @@
  * What a harness or CawCo put under the person's role (a notice, a hook's
  * output) is no one's words here, and is left out.
  */
-import type { FindPlace, SecretSpan, TranscriptPlace } from "@cawco/core/find";
+import type { Bounded } from "@cawco/core/bounded";
+import type {
+  FindPlace,
+  PlacesHeard,
+  SecretSpan,
+  TranscriptPlace,
+} from "@cawco/core/find";
 import { unmarked } from "@cawco/core/find-match";
+import type { ControlResultFrame } from "@cawco/core/frames";
+import {
+  CONTROL_TRANSCRIPT_PLACES,
+  unknownControlWords,
+} from "@cawco/core/harness";
 import { secretRangesOf } from "./secret-filter";
 
 /** The most places one find in a conversation answers with (agent search/index.ts `MAX_PLACES` holds it too). */
@@ -38,17 +49,16 @@ function placeOf(place: TranscriptPlace): FindPlace[] {
   return [
     {
       at: Number.isNaN(at) ? null : at,
-      docId: output && place.calledBy ? place.calledBy.docId : place.docId,
+      docId: place.docId,
       excerpt: place.excerpt,
       thinking: place.column === "thinking",
-      tool: output ? (place.calledBy?.tools.split(" ")[0] ?? null) : null,
       whose,
     },
   ];
 }
 
 /** Whether `value` reads as a machine's places answer: a list of places. */
-export const isPlaces = (value: unknown): value is TranscriptPlace[] =>
+const isPlaces = (value: unknown): value is TranscriptPlace[] =>
   Array.isArray(value) &&
   value.every(
     (each) =>
@@ -57,6 +67,30 @@ export const isPlaces = (value: unknown): value is TranscriptPlace[] =>
       typeof (each as TranscriptPlace).docId === "string" &&
       typeof (each as TranscriptPlace).excerpt === "string"
   );
+
+/**
+ * How the machine took the places read (core `PlacesHeard`), and its places
+ * when it answered: an agent from before the read was added says it has no
+ * such function (core `unknownControlWords`), which is told apart from a
+ * machine that did not answer, since waiting brings nothing and an update
+ * does. `null`: the asker let the read go.
+ */
+export function placesHeard(
+  answer: Bounded<ControlResultFrame> | null
+):
+  | { heard: "answered"; places: TranscriptPlace[] }
+  | { heard: Exclude<PlacesHeard, "answered"> } {
+  if (answer?.kind !== "answered") {
+    return { heard: "silent" };
+  }
+  const { value } = answer;
+  if (value.ok && isPlaces(value.result)) {
+    return { heard: "answered", places: value.result };
+  }
+  return value.error?.includes(unknownControlWords(CONTROL_TRANSCRIPT_PLACES))
+    ? { heard: "outdated" }
+    : { heard: "silent" };
+}
 
 /**
  * The machine's places as the screens read them, oldest first; while

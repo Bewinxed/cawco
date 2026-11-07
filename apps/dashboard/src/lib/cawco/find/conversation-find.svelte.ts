@@ -19,6 +19,7 @@
  *   absent while its machine is not heard).
  */
 import type { FindPlace, FindPlacesAnswer } from "@cawco/core/find";
+import { unhandled } from "@cawco/core/unhandled";
 import { findInWords } from "@cawco/core/words/find-in";
 import type { Component } from "svelte";
 import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
@@ -58,8 +59,9 @@ export interface Place {
   live: boolean;
   /**
    * The transcript record it is in, as the hub's index names it (a block's
-   * stored entry, `sdkUuid`; for a tool's output, the record that called
-   * it): how a place the hub found is known again once its turn is loaded.
+   * stored entry, `sdkUuid`; for a tool's output, the record its result
+   * came in, `resultRecord`): how a place the hub found is known again once
+   * its turn is loaded.
    */
   record: string;
   /** Who said it, or what returned it. */
@@ -75,6 +77,8 @@ export type HubRead =
   | { kind: "asking" }
   | { kind: "answered"; places: FindPlace[] }
   | { kind: "unreached"; machine: string }
+  /** The machine's agent is older than the places read: an update brings it. */
+  | { kind: "outdated"; machine: string }
   | { kind: "refused"; detail: string };
 
 /** What reads the hub: the engine's session-scoped find, or a bench's fixture. */
@@ -223,7 +227,8 @@ function placesHeld(
             ? `call:${message.toolCallId ?? message.id}`
             : message.id,
         live: false,
-        record: message.sdkUuid ?? message.id,
+        // A call's output is in the record its result came in.
+        record: message.metadata?.resultRecord ?? message.sdkUuid ?? message.id,
         title: said.title,
         whose: said.whose,
         word: said.word,
@@ -239,7 +244,8 @@ function placeFound(place: FindPlace, n: number, agent: string): Place {
     agent: { glyph: IconAgent, title: agent },
     tools: {
       glyph: IconToolTerminal,
-      title: findInWords.toolOutput(place.tool ?? findInWords.tool),
+      // The tool is named once its turn is loaded and its call is read.
+      title: findInWords.toolOutput(findInWords.tool),
     },
     delegates: {
       glyph: IconReport,
@@ -483,14 +489,25 @@ export class ConversationFind {
     if (read === null || abort.signal.aborted) {
       return;
     }
-    if (!read.ok) {
+    if (read.ok) {
+      const { heard, name } = read.value.machine;
+      switch (heard) {
+        case "answered":
+          this.hub = { kind: "answered", places: read.value.places };
+          break;
+        case "outdated":
+          this.hub = { kind: "outdated", machine: name };
+          break;
+        case "silent":
+          this.hub = { kind: "unreached", machine: name };
+          break;
+        default:
+          unhandled("places heard", heard);
+      }
+    } else {
       this.hub = read.unreached
         ? { kind: "unreached", machine: this.#machine() }
         : { kind: "refused", detail: read.detail };
-    } else if (read.value.machine.answered) {
-      this.hub = { kind: "answered", places: read.value.places };
-    } else {
-      this.hub = { kind: "unreached", machine: read.value.machine.name };
     }
     if (this.at === null) {
       this.#first();

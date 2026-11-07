@@ -55,9 +55,15 @@ export function carryOpenAt(from: string, to: string): void {
   }
 }
 
-/** Whether `message` is the record `docId`: its id, or the stored entry's (a send's row carries the hub's id). */
+/**
+ * Whether `message` is the record `docId`: its id, the stored entry's (a
+ * send's row carries the hub's id), or, for a call, the record its result
+ * came in (`resultRecord`): where an index finds the words of its output.
+ */
 const isRecord = (message: Message, docId: string): boolean =>
-  message.id === docId || message.sdkUuid === docId;
+  message.id === docId ||
+  message.sdkUuid === docId ||
+  message.metadata?.resultRecord === docId;
 
 /** The messages a row draws, the records it is the place of. */
 function recordsOf(row: Row): Message[] {
@@ -92,13 +98,34 @@ export const rowHolding = (rows: readonly Row[], docId: string): number =>
     recordsOf(row).some((message) => isRecord(message, docId))
   );
 
+/** Whether `message`'s words (what it said, thought, or its call answered) hold any of `terms`, case aside. */
+function holds(message: Message, terms: readonly string[]): boolean {
+  const words = [
+    message.content,
+    message.metadata?.toolResult ?? "",
+    message.metadata?.reportHeadline ?? "",
+  ]
+    .join("\n")
+    .toLowerCase();
+  return terms.some((term) => term && words.includes(term.toLowerCase()));
+}
+
 /**
  * The record `at` names among those `row` draws: what a seek finds its drawn
  * part by (its `data-message`, the record's own id, whichever id `at` is)
- * and opens the fold of. None for a time, or a row that does not hold it.
+ * and opens the fold of. One stored record can draw several parts (a
+ * message's reasoning and its words; an OpenCode message's calls): with
+ * `terms`, the part whose words hold them. None for a time, or a row that
+ * does not hold it.
  */
-export const recordIn = (row: Row, at: string): Message | undefined =>
-  recordsOf(row).find((message) => isRecord(message, at));
+export function recordIn(
+  row: Row,
+  at: string,
+  terms: readonly string[] = []
+): Message | undefined {
+  const named = recordsOf(row).filter((message) => isRecord(message, at));
+  return named.find((message) => holds(message, terms)) ?? named[0];
+}
 
 /** A date and time by its shape, as no record id is. */
 const MOMENT = /^\d{4}-\d{2}-\d{2}T/u;

@@ -94,6 +94,8 @@ export interface ToolResult {
   launch?: boolean;
   /** The answer payload of an `AskUserQuestion`, normalised by the harness adapter. */
   questionResult?: UserQuestionResult;
+  /** The stored record the result came in (its frame's uuid), when it has one: the call's `resultRecord`. */
+  record?: string;
   result: string;
   structuredContent?: Record<string, unknown>;
   toolId: string;
@@ -852,6 +854,7 @@ export function mapFrame(
         const { text: resultBody, images } = resultParts(block.content);
         mapping.toolResults.push({
           toolId: block.tool_use_id,
+          ...(uuid ? { record: uuid } : {}),
           result: subagentAnswer(resultBody),
           ...(subagentLaunch(resultBody) ? { launch: true } : {}),
           ...(images ? { images } : {}),
@@ -1988,6 +1991,7 @@ export function applyToolResult(
     structuredContent,
     questionResult,
     cutBy,
+    record,
   }: ToolResult
 ): TranscriptBlock | null {
   // `tool.handoff` is a tool call too — it just renders as a receipt. Matching
@@ -2021,6 +2025,7 @@ export function applyToolResult(
       ? { toolDiff: structuredContent.diff }
       : {}),
     ...(images ? { resultImages: images } : {}),
+    ...(record ? { resultRecord: record } : {}),
     toolStatus: isError ? "error" : "success",
     ...(cutBy ? { toolCut: cutBy } : {}),
     ...(questionResult ? { toolUseResult: questionResult } : {}),

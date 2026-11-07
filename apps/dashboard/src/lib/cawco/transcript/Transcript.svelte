@@ -2900,7 +2900,7 @@
     if (!(row && drawn && resume && "at" in resume)) {
       return null;
     }
-    const message = recordIn(row, resume.at);
+    const message = recordIn(row, resume.at, resume.terms);
     const part =
       message?.id === undefined
         ? null
@@ -4773,7 +4773,9 @@
       const row = drawn
         ? listing.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
         : null;
-      const message = drawn ? recordIn(drawn, current.docId) : undefined;
+      const message = drawn
+        ? recordIn(drawn, current.docId, [words])
+        : undefined;
       within =
         (message &&
           row?.querySelector(`[data-message="${CSS.escape(message.id)}"]`)) ??

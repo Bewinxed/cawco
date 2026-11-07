@@ -12,6 +12,8 @@
    * - `nothing`: words nothing in the conversation holds.
    * - `unreached`: the machine holding the transcript did not answer; the
    *   places in the turns loaded stand, the machine named, with Retry.
+   * - `outdated`: its agent is older than the places read: the same, saying
+   *   an update brings the rest, no Retry.
    * - `live`: a turn being written says the words: one more place, breathing.
    * - `closed`: find closed at the place found, its wash kept, and Back
    *   where you were in Jump to latest's place.
@@ -19,7 +21,11 @@
    * `&in=caw`: the conversation in Caw's panel, docked beside the project
    * page, where the places are the composer's layer at every width.
    */
-  import type { FindPlace, FindPlacesAnswer } from "@cawco/core/find";
+  import type {
+    FindPlace,
+    FindPlacesAnswer,
+    PlacesHeard,
+  } from "@cawco/core/find";
   import type { SessionPulse } from "@cawco/core/protocol";
   import { onMount, untrack } from "svelte";
   import { blankSession } from "#lib/cawco/client.svelte.js";
@@ -51,12 +57,30 @@
   } from "#lib/icons.js";
   import { page } from "$app/state";
   import { benchClick, benchDebug, benchLeaf } from "../tab-bench";
-  import { history, OTHER, recordOf, SAID, whenOf, wordsOf } from "./fixture";
+  import {
+    history,
+    OTHER,
+    recordOf,
+    resultOf,
+    SAID,
+    whenOf,
+    wordsOf,
+  } from "./fixture";
 
-  type State = "finding" | "nothing" | "unreached" | "live" | "closed";
+  type State =
+    "finding" | "nothing" | "unreached" | "outdated" | "live" | "closed";
   const findState = (page.url.searchParams.get("state") ?? "finding") as State;
   const inCaw = page.url.searchParams.get("in") === "caw";
   const WORDS = findState === "nothing" ? "ETIMEDOUT" : "ECONNRESET";
+  /** How the machine took the places read, by the state drawn. */
+  const HEARD: Record<State, PlacesHeard> = {
+    finding: "answered",
+    nothing: "answered",
+    unreached: "silent",
+    outdated: "outdated",
+    live: "answered",
+    closed: "answered",
+  };
 
   const ids = [
     "f1d0c0de-0000-4000-8000-000000000001",
@@ -100,7 +124,7 @@
     ok: true,
     value: {
       machine: {
-        answered: findState !== "unreached",
+        heard: HEARD[findState],
         id: "obelisk",
         name: "obelisk",
       },
@@ -123,10 +147,9 @@
         return [
           {
             at: whenOf(s),
-            docId: recordOf(MAIN, n),
+            docId: s.k === "tool" ? resultOf(MAIN, n) : recordOf(MAIN, n),
             excerpt: `${text.slice(Math.max(0, at - 40), at)}「${WORDS}」${text.slice(at + WORDS.length, at + WORDS.length + 40)}`,
             thinking: s.k === "thinking",
-            tool: s.k === "tool" ? s.name : null,
             whose: WHOSE[s.k],
           },
         ];

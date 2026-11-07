@@ -208,6 +208,15 @@ export const MachineNotAnswering = {
   },
 };
 
+/** The machine runs an older CawCo: the places in the turns loaded, and no Retry. */
+export const MachineNeedsUpdate = {
+  args: {
+    find: standing(RELAY.slice(2, 7), {
+      hub: { kind: "outdated", machine: "obelisk" },
+    }),
+  },
+};
+
 /** The machine didn't answer, and nothing loaded says the words either. */
 export const NothingLoadedAndNoAnswer = {
   args: {

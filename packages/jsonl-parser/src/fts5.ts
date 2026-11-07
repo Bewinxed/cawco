@@ -282,12 +282,6 @@ export interface PlacesOptions {
 /** One place `places` answers. */
 export interface IndexedPlace {
   author: DocAuthor;
-  /**
-   * For words in what a tool answered: the record that called the tool (the
-   * nearest record of the conversation before it that called one), which a
-   * transcript draws the call and its output under; null elsewhere.
-   */
-  calledBy: { docId: string; tools: string } | null;
   /** Which of its columns holds the words. */
   column: "output" | "text" | "thinking";
   docId: string;
@@ -295,9 +289,6 @@ export interface IndexedPlace {
   excerpt: string;
   timestamp: string | null;
 }
-
-/** How far before a tool's answer its call is sought, ms: a call answered later than this names no call. Our own call. */
-const CALL_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * How many characters of a place's words stand before its match and after
@@ -1637,7 +1628,12 @@ export class TranscriptIndex {
    * first, its own words and never a subagent's (a sidechain). Each is cut
    * round where the words stand in it, the column that holds them as they
    * were typed first (what was said, then thought, then what a tool
-   * answered), and a tool's answer names the record that called it.
+   * answered). A tool's answer is named by its own record (a Claude Code
+   * `tool_result` entry, a pi result entry, the OpenCode message holding
+   * the call): the transcript a dashboard reads keeps which call each
+   * result answered, by the call's own id, so it opens the place at that
+   * very call (core transcript-rules `applyToolResult`, `resultRecord`),
+   * however many calls ran beside it and however long it took to answer.
    */
   places(options: PlacesOptions): IndexedPlace[] {
     return section("search index: places", () => this.#placesNow(options));
@@ -1652,7 +1648,7 @@ export class TranscriptIndex {
     const phrase = `"${words.join(" ")}"${prefix ? "*" : ""}`;
     const rows = this.db
       .prepare(
-        `SELECT d.doc_id, d.session, a.value AS author, d.ts, d.text, d.thinking, d.output
+        `SELECT d.doc_id, a.value AS author, d.ts, d.text, d.thinking, d.output
          FROM docs_fts f
          JOIN docs d ON d.id = f.rowid
          JOIN strings a ON a.id = d.author
@@ -1666,19 +1662,12 @@ export class TranscriptIndex {
       author: DocAuthor;
       doc_id: string;
       output: string | null;
-      session: number;
       text: string;
       thinking: string | null;
       ts: string | null;
     }[];
     const needle = options.words.trim().replace(SPACES, " ").toLowerCase();
     const first = words[0]?.toLowerCase() ?? "";
-    const callOf = this.db.query(
-      `SELECT doc_id, tools FROM docs INDEXED BY docs_key
-       WHERE coalesce(ts, '') <= ?1 AND coalesce(ts, '') >= ?2
-         AND session = ?3 AND sidechain = 0 AND tools IS NOT NULL AND doc_id != ?4
-       ORDER BY coalesce(ts, '') DESC LIMIT 1`,
-    );
     return rows.flatMap((row): IndexedPlace[] => {
       const columns = [
         ["text", row.text],
@@ -1706,19 +1695,9 @@ export class TranscriptIndex {
       if (!found?.column) {
         return [];
       }
-      let calledBy: IndexedPlace["calledBy"] = null;
-      if (found.name === "output" && row.ts) {
-        const since = new Date(Date.parse(row.ts) - CALL_WINDOW_MS).toISOString();
-        const call = callOf.get(row.ts, since, row.session, row.doc_id) as {
-          doc_id: string;
-          tools: string;
-        } | null;
-        calledBy = call ? { docId: call.doc_id, tools: call.tools } : null;
-      }
       return [
         {
           author: row.author,
-          calledBy,
           column: found.name,
           docId: row.doc_id,
           excerpt: placeExcerpt(found.column, found.at, found.length),

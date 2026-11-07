@@ -158,6 +158,7 @@ typeOverrides:
     PinResolvedBy: OpenEnums.PinResolvedBy
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
+    PlacesHeard: OpenEnums.PlacesHeard
     PlanEditKind: OpenEnums.PlanEditKind
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
