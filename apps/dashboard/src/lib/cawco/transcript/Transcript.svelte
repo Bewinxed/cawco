@@ -2781,7 +2781,10 @@
   /**
    * The band of the view the reader sees, px down from the scroller's top:
    * under the bar floating over its top (`headRoom`, the strip's padding)
-   * and above the foot the composer stands over (`rooms`).
+   * and above the foot the composer stands over (`rooms`), and above what
+   * grows out of the composer while find stands (its field on the pill's
+   * top, its places as the composer's layer), which stand over the
+   * transcript without moving it (find/conversation-find).
    */
   function band(): { top: number; bottom: number } {
     if (!scroller) {
@@ -2790,11 +2793,26 @@
     const top = headStrip
       ? Number.parseFloat(getComputedStyle(headStrip).paddingTop)
       : 0;
-    return {
-      top: Number.isFinite(top) ? top : 0,
-      bottom: scroller.clientHeight - rooms.foot,
-    };
+    let bottom = scroller.clientHeight - rooms.foot;
+    if (findHere.open) {
+      const view = scroller.getBoundingClientRect();
+      const dock = document.querySelector<HTMLElement>(
+        `[data-slot="dock"][data-find-view="${CSS.escape(session.instanceId)}"]`
+      );
+      for (const over of dock?.querySelectorAll<HTMLElement>(
+        '[data-slot="cin"], [data-slot="find-layer"]'
+      ) ?? []) {
+        const box = over.getBoundingClientRect();
+        if (box.height > 0 && box.left < view.right && box.right > view.left) {
+          bottom = Math.min(bottom, box.top - view.top - FIND_GAP);
+        }
+      }
+    }
+    return { top: Number.isFinite(top) ? top : 0, bottom };
   }
+
+  /** How far above what find grows out of the composer the band ends, px: a line's air. Our own call. */
+  const FIND_GAP = 24;
 
   /**
    * THE WORDS SOUGHT END UP IN VIEW, NOT JUST THEIR ROW. How far into the
@@ -3144,7 +3162,6 @@
       findHere.sought = null;
       if (!back) {
         findHere.arrived();
-        keepFoundClear();
       }
     }
     marked = found ? null : { key: renderedRows[index].key, state: "on" };
@@ -4705,76 +4722,12 @@
     })
   );
 
-  /**
-   * Until when, after a step's seek lands, its words are kept clear of the
-   * composer: the rows round them still measure (a fold just opened, a
-   * row mounted above), so they are read again each frame till then. Our
-   * own call: about the seek's own settling (`SEEK_FRAMES`).
-   */
-  let clearUntil = 0;
-  const CLEAR_MS = 600;
   $effect(() => {
     // The live turn's place is the conversation's tail, being written.
     if (findHere.stepped > 0 && untrack(() => findHere.current?.live)) {
       untrack(jump);
     }
   });
-
-  /** A step's seek landed: its words are kept clear of the composer a moment, read each frame. */
-  function keepFoundClear(): void {
-    clearUntil = performance.now() + CLEAR_MS;
-    const frame = () => {
-      markWords();
-      if (performance.now() < clearUntil) {
-        requestAnimationFrame(frame);
-      }
-    };
-    requestAnimationFrame(frame);
-  }
-
-  /** The room the words read in: the scroller less what stands over its foot (the composer, find's layer). */
-  function readRoom(view: DOMRect): { top: number; bottom: number } {
-    let bottom = view.bottom - rooms.foot;
-    const dock = document.querySelector<HTMLElement>(
-      `[data-slot="dock"][data-find-view="${CSS.escape(session.instanceId)}"]`
-    );
-    for (const over of dock?.querySelectorAll<HTMLElement>(
-      '[data-slot="cin"], [data-slot="find-layer"]'
-    ) ?? []) {
-      const box = over.getBoundingClientRect();
-      if (box.height > 0 && box.left < view.right && box.right > view.left) {
-        bottom = Math.min(bottom, box.top - 24);
-      }
-    }
-    return { top: view.top + 48, bottom };
-  }
-
-  /**
-   * The words stepped to stand clear of the composer and find's layer: the
-   * seek centres the place's row, and a tall row (a test run's output) can
-   * leave its words under the composer. For a moment after each step's seek
-   * lands, while the rows round them settle, inside the transcript's own
-   * scroller.
-   */
-  function clearOfFind(word: Range): void {
-    if (
-      !scroller ||
-      performance.now() > clearUntil ||
-      seeking !== null ||
-      openAt.has(session.instanceId)
-    ) {
-      return;
-    }
-    const box = word.getBoundingClientRect();
-    const room = readRoom(scroller.getBoundingClientRect());
-    if (box.top >= room.top && box.bottom <= room.bottom) {
-      return;
-    }
-    scroller.scrollBy({
-      top: box.top - (room.top + (room.bottom - room.top) * 0.4),
-      behavior: "instant",
-    });
-  }
 
   /** Read the drawn rows for the words and mark them: every place washed, the one stepped to solid. */
   function markWords(): void {
@@ -4789,14 +4742,14 @@
       within = listing.querySelector('[data-slot="live"]');
     } else if (current?.docId) {
       const index = rowHolding(renderedRows, current.docId);
-      const row =
-        index >= 0
-          ? listing.querySelector(
-              `[data-row="${CSS.escape(renderedRows[index].key)}"]`
-            )
-          : null;
+      const drawn = renderedRows[index];
+      const row = drawn
+        ? listing.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
+        : null;
+      const message = drawn ? recordIn(drawn, current.docId) : undefined;
       within =
-        row?.querySelector(`[data-message="${CSS.escape(current.docId)}"]`) ??
+        (message &&
+          row?.querySelector(`[data-message="${CSS.escape(message.id)}"]`)) ??
         row;
     }
     const all = rangesOf(listing, words);
@@ -4807,9 +4760,6 @@
       // Find closed here: the place keeps its wash until the reader moves on.
       markFind(session.instanceId, solid ? [solid] : [], null);
       return;
-    }
-    if (solid) {
-      clearOfFind(solid);
     }
     markFind(
       session.instanceId,

@@ -3223,6 +3223,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/FindPlaceWhose`.
+    public enum FindPlaceWhose: OpenEnum {
+        case agent
+        case delegates
+        case me
+        case tools
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "agent": self = .agent
+            case "delegates": self = .delegates
+            case "me": self = .me
+            case "tools": self = .tools
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .agent: "agent"
+            case .delegates: "delegates"
+            case .me: "me"
+            case .tools: "tools"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.agent, .delegates, .me, .tools]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/FleetConvergeState`.
     public enum FleetConvergeState: OpenEnum {
         case failed

@@ -45,8 +45,8 @@
   } from "#lib/components/ui/bar-glass/index.js";
   import {
     IconClose,
-    IconListRows,
-    IconMoveTab,
+    IconListRowsLinear,
+    IconMoveTabLinear,
     IconPlus,
   } from "#lib/icons.js";
   import { page } from "$app/state";
@@ -203,9 +203,9 @@
         <BarFloat tint="bg-surface-recess">
           {#snippet trailing()}
             <BarGlass form="group">
-              <BarItem icon={IconListRows} label="Session details" />
+              <BarItem icon={IconListRowsLinear} label="Session details" />
               <BarItem icon={IconPlus} label="New conversation" />
-              <BarItem icon={IconMoveTab} label="Open as a tab" />
+              <BarItem icon={IconMoveTabLinear} label="Open as a tab" />
             </BarGlass>
             <BarGlass form="group">
               <BarItem icon={IconClose} label="Hide Caw" />

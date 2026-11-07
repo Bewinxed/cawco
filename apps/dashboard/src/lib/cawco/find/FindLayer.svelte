@@ -12,11 +12,10 @@
    * tray's shelf opening takes it, and it folds.
    */
   import { findInWords } from "@cawco/core/words/find-in";
-  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { popOut } from "../motion/pop.svelte";
-  import { composerLayerOf } from "../transcript/composer-layer.svelte";
+  import { holdComposerLayer } from "../transcript/composer-layer.svelte";
   import type { ConversationFind } from "./conversation-find.svelte";
   import FindPlaces from "./FindPlaces.svelte";
 
@@ -41,20 +40,13 @@
     }
   };
 
-  const owner = Symbol("find");
-  const layer = $derived(composerLayerOf(find.viewId));
-  $effect.pre(() => {
-    const held = layer;
-    untrack(() => held.take(owner));
-    return () => held.drop(owner);
-  });
-  $effect(() => {
-    if (!layer.holds(owner)) {
-      untrack(() => {
-        find.listOpen = false;
-      });
+  holdComposerLayer(
+    () => find.viewId,
+    "find",
+    () => {
+      find.listOpen = false;
     }
-  });
+  );
 </script>
 
 <!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on

@@ -31,7 +31,6 @@ import {
 } from "#lib/icons.js";
 import { cawco } from "../client.svelte";
 import { cawOf } from "../session-status";
-import { disclosureAt } from "../transcript/disclosure.svelte";
 import { askOpenAt } from "../transcript/open-at.svelte";
 import { speakerName } from "../transcript/speaker";
 import type { Message } from "../types";
@@ -48,8 +47,6 @@ export type WhoseFilter = "all" | Whose;
 export interface Place {
   /** When it was said, ms; null when nothing kept the time. */
   at: number | null;
-  /** The tool call or report whose fold it is in, by its disclosure id; null for words said in the open. */
-  call: string | null;
   /** The record to open at. */
   docId: string;
   /** Its words around the match, matched runs strong. */
@@ -117,7 +114,6 @@ function excerptOf(text: string, at: number, length: number): Run[] {
 }
 
 interface Said {
-  call: string | null;
   glyph: Component;
   text: string;
   title: string;
@@ -130,7 +126,6 @@ function saidIn(message: Message, agent: string): Said | null {
   switch (message.type) {
     case "user":
       return {
-        call: null,
         glyph: IconUser,
         text: message.content,
         title: findInWords.me,
@@ -139,7 +134,6 @@ function saidIn(message: Message, agent: string): Said | null {
       };
     case "assistant":
       return {
-        call: null,
         glyph: IconAgent,
         text: message.content,
         title: agent,
@@ -148,7 +142,6 @@ function saidIn(message: Message, agent: string): Said | null {
       };
     case "thinking":
       return {
-        call: message.id,
         glyph: IconStars,
         text: message.content || (message.metadata?.thinking ?? ""),
         title: agent,
@@ -164,7 +157,6 @@ function saidIn(message: Message, agent: string): Said | null {
         message.metadata?.toolStatus ?? "success"
       );
       return {
-        call: String(message.toolCallId ?? message.id),
         glyph: call.icon,
         text: message.metadata?.toolResult ?? "",
         title: findInWords.toolOutput(
@@ -177,7 +169,6 @@ function saidIn(message: Message, agent: string): Said | null {
     case "user.peer": {
       const headline = message.metadata?.reportHeadline;
       return {
-        call: String(message.toolCallId ?? message.id),
         glyph: IconReport,
         text: headline ? `${headline}\n${message.content}` : message.content,
         title: message.metadata?.peerName ?? findInWords.report,
@@ -224,13 +215,12 @@ function placesHeld(
     return [
       {
         at: Number.isNaN(stamp) ? null : stamp,
-        call: said.call,
         docId: message.id,
         excerpt: excerptOf(said.text, at, needle.length),
         glyph: said.glyph,
         key:
-          said.whose === "tools" && said.call
-            ? `call:${said.call}`
+          message.type === "tool.use"
+            ? `call:${message.toolCallId ?? message.id}`
             : message.id,
         live: false,
         record: message.sdkUuid ?? message.id,
@@ -260,9 +250,6 @@ function placeFound(place: FindPlace, n: number, agent: string): Place {
   const key = `found:${place.docId}:${n}`;
   return {
     at: place.at,
-    // Its fold is opened once its turn is loaded and the transcript's own
-    // place stands for it (`arrived`).
-    call: null,
     docId: place.docId,
     excerpt: excerptParts(place.excerpt, place.secrets, (i) => `${key}|${i}`),
     glyph: place.thinking ? IconStars : face.glyph,
@@ -350,7 +337,6 @@ export class ConversationFind {
     if (at >= 0) {
       held.push({
         at: Date.now(),
-        call: null,
         docId: "",
         excerpt: excerptOf(streaming, at, needle.length),
         glyph: IconAgent,
@@ -570,12 +556,11 @@ export class ConversationFind {
       this.stepped += 1;
       return;
     }
-    if (place.call) {
-      disclosureAt(this.viewId, place.call).set(true);
-    }
     this.stepped += 1;
     this.sought = { back: false, docId: place.docId };
-    askOpenAt(this.viewId, place.docId);
+    // The seek brings the words themselves into the room the reader sees,
+    // opening the fold they are in (Transcript `seekInto`).
+    askOpenAt(this.viewId, place.docId, [this.words.trim()]);
   }
 
   /**
@@ -599,8 +584,7 @@ export class ConversationFind {
 
   /**
    * The transcript arrived at the place stepped to: a place the hub found
-   * is the transcript's own now that its turn is loaded, and its fold (a
-   * tool's output, reasoning, a report) opens.
+   * is the transcript's own now that its turn is loaded.
    */
   arrived(): void {
     const place = this.current;
@@ -608,9 +592,6 @@ export class ConversationFind {
       return;
     }
     this.at = place.key;
-    if (place.call) {
-      disclosureAt(this.viewId, place.call).set(true);
-    }
   }
 
   /** The reader moved on from the place find closed at: its wash goes. */

@@ -310,6 +310,7 @@
      * Hold): its own button, in the controls' row.
      */
     also?: Snippet;
+    /**
      * The conversation's find (find/conversation-find): while it stands
      * open, its field grows on the pill's top over the message, which stays
      * where it is; closed, the caret goes back to the message. None where

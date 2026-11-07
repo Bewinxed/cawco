@@ -24411,6 +24411,62 @@
         }
       }
     },
+    "/api/find/places": {
+      "get": {
+        "parameters": [
+          {
+            "name": "session",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiFindPlaces",
+        "responses": {
+          "200": {
+            "description": "getApiFindPlaces 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindPlacesAnswer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiFindPlaces 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiFindPlaces 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/find/settings": {
       "get": {
         "operationId": "getApiFindSettings",
@@ -56677,6 +56733,106 @@
           "task"
         ]
       },
+      "FindPlacesAnswer": {
+        "description": "`GET /api/find/places`' answer: every place, oldest first, and whether the machine holding them answered.",
+        "type": "object",
+        "properties": {
+          "machine": {
+            "description": "The machine holding the conversation's transcript: when it did not answer, `places` is empty.",
+            "type": "object",
+            "properties": {
+              "answered": {
+                "type": "boolean"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "answered",
+              "id",
+              "name"
+            ]
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindPlace"
+            }
+          }
+        },
+        "required": [
+          "machine",
+          "places"
+        ]
+      },
+      "FindPlace": {
+        "description": "One place in a conversation where the words are (`GET /api/find/places`):\nevery place, never a conversation's best few, for the person's find in\nthat conversation to step through.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When it was said, ms epoch; null when the transcript kept no time.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "docId": {
+            "description": "The record to open at: for a tool's output, the record that called it,\nunder which a transcript draws the call and what it answered (its fold\nis opened once the transcript holds the record).",
+            "type": "string"
+          },
+          "excerpt": {
+            "description": "The words round the match, terms between 「 and 」.",
+            "type": "string"
+          },
+          "secrets": {
+            "description": "The secrets its excerpt holds, in the excerpt's words with its 「 」\nmarks left out: present only while \"Hide secrets in Find\" is on.",
+            "type": "array",
+            "items": {
+              "description": "Where a secret stands in a text: its first character's index and the one\nafter its last, as the hub's secret filter recognises one (hub\nsecret-filter.ts).",
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "title": "start"
+                },
+                {
+                  "type": "number",
+                  "title": "end"
+                }
+              ]
+            }
+          },
+          "thinking": {
+            "description": "In the agent's reasoning, not what it said.",
+            "type": "boolean"
+          },
+          "tool": {
+            "description": "For a tool's output, the tool's name.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "whose": {
+            "$ref": "#/components/schemas/FindPlaceWhose",
+            "description": "Whose words: the person's, the agent's (said or thought), what its tools returned, a delegate's report."
+          }
+        },
+        "required": [
+          "at",
+          "docId",
+          "excerpt",
+          "thinking",
+          "tool",
+          "whose"
+        ]
+      },
       "FindSettings": {
         "description": "`GET /api/find/settings`: the person's Find settings, the same on every screen.",
         "type": "object",
@@ -67163,6 +67319,15 @@
           "delegate",
           "session",
           "spin-off"
+        ]
+      },
+      "FindPlaceWhose": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "delegates",
+          "me",
+          "tools"
         ]
       },
       "FleetDecidesCaw": {

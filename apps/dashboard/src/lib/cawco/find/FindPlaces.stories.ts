@@ -48,7 +48,6 @@ function place(
   };
   return {
     at: NOW - minutes * MINUTE_MS,
-    call: null,
     docId: key,
     excerpt: [
       { matched: false, text: before },
