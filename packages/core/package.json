@@ -43,6 +43,7 @@
     "./release-key": "./src/release-key.ts",
     "./binary-updates": "./src/binary-updates.ts",
     "./clock": "./src/clock.ts",
+    "./awake-time": "./src/awake-time.ts",
     "./breath": "./src/breath.ts",
     "./binary-distribution": "./src/binary-distribution.ts",
     "./resumable-download": "./src/resumable-download.ts",

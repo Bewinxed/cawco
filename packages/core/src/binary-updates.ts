@@ -212,18 +212,35 @@ export const UPDATE_TRIAL_MS = 180_000;
  */
 export const HUB_SILENT_TRIALS = 3;
 
-/** What a rollback of `version` writes of it: failed, and how many trials of it in a row the hub's silence ended. */
+/**
+ * Why a trial was rolled back, as the failed-version rule reads it: the
+ * build's own fault (`own`), the hub's silence (`hub-silent`), or the hub's
+ * silence after this machine slept during the trial (`slept`). A sleep is
+ * no trial of the build: the network comes back after the wake, not with
+ * it, so the hub's silence then says nothing of the build or of the hub.
+ */
+export type RollbackCause = "own" | "hub-silent" | "slept";
+
+/**
+ * What a rollback of `version` writes of it: failed, and how many trials of
+ * it in a row the hub's silence ended. A trial lost to sleep counts toward
+ * none: the build is taken up again as after a silent one, and the count
+ * stays as it stood.
+ */
 export function rolledBack(
   before: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
   version: string,
-  hubSilent: boolean
+  cause: RollbackCause
 ): Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials"> {
-  if (!hubSilent) {
+  if (cause === "own") {
     return { failedVersion: version, hubSilentTrials: undefined };
   }
   const earlier =
     before.failedVersion === version ? (before.hubSilentTrials ?? 0) : 0;
-  return { failedVersion: version, hubSilentTrials: earlier + 1 };
+  return {
+    failedVersion: version,
+    hubSilentTrials: cause === "slept" ? earlier : earlier + 1,
+  };
 }
 
 /** Whether `version` failed and auto-update does not take it up again by itself ({@link HUB_SILENT_TRIALS}). */

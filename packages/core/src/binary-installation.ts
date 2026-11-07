@@ -134,6 +134,13 @@ const TrialMarkerSchema = z.object({
   /** How many resumed helpers in a row failed to decide it (cli binary-apply.ts `RESUME_TRIES` ends it). */
   resumesFailed: z.number().int().nonnegative().optional(),
   role: BinaryInstallationSchema.shape.role,
+  /**
+   * How long this machine slept during the trial, in milliseconds (core
+   * awake-time.ts): each sleep moved `decideBy` out by its length. A rollback
+   * on the hub's silence after any sleep is no trial of the build's at all
+   * (core binary-updates.ts `rolledBack`).
+   */
+  sleptMs: z.number().nonnegative().optional(),
   /** Unix seconds: units started after this run the trial build. */
   swappedAt: z.number(),
   version: z.string(),

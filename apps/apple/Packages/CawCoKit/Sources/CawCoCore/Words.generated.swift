@@ -2197,6 +2197,20 @@ public enum Words {
             "the hub didn't answer, so \(version) is installed again once it does"
         }
 
+        /// A rollback on the hub's silence after this machine slept through part of the trial (core binary-updates.ts `RollbackCause` `slept`): no try of the build, so none is counted.
+        public static func sleptThroughTrial(version: String, minutes: Int) -> String {
+            "this computer slept for \(minutes) min during the trial and the hub didn't answer after it woke, which doesn't count against \(version); it's installed again once the hub answers"
+        }
+
+        /// What still runs from a build an attempt waits for (agent binary-update.ts `runsFrom`), in its log line.
+        public static let runsFromAgent = "this agent, which runs it"
+
+        public static let runsFromCurrentKeeper = "its session keeper, the machine's current one"
+
+        public static let runsFromLinkedKeeper = "its session keeper, which the keeper link names"
+
+        public static let runsFromRetiringKeeper = "its retiring session keeper"
+
         /// The same, once `tries` trials in a row ended so: the build is failed for good.
         public static func hubSilentTooOften(version: String, tries: Int) -> String {
             "the hub didn't answer through \(tries) tries of \(version), so it isn't installed again by itself"

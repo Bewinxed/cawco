@@ -67,6 +67,7 @@ import {
   type KeeperName,
   keeperEndpoints,
   keeperService,
+  machineEndpoint,
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
@@ -461,6 +462,56 @@ async function recordFailure(version: string, error: string): Promise<void> {
 }
 
 /**
+ * What still runs from `version`'s folder, in words, or nothing: this agent,
+ * the current session keeper, or a retiring one (its endpoint beside the
+ * machine's, `machine`). A folder a running process was started from is
+ * never staged over, so an attempt at such a build waits until it is gone
+ * (`#takeUp`): after a rollback, the rolled-back build's keeper retires
+ * beside the one rolled back to, and an attempt refused for it as a failure
+ * wrote "This version is one that is already running" over the rollback's
+ * cause (the Mac, 2026-11-07).
+ */
+export async function runsFrom(
+  version: string,
+  machine: string = machineEndpoint()
+): Promise<string | undefined> {
+  if (version === runtimeVersion) {
+    return updatesWords.runsFromAgent;
+  }
+  const keepers = await keeperEndpoints(machine);
+  const found = keepers.find(({ keeper }) => keeper.version === version);
+  if (found) {
+    return found.current
+      ? updatesWords.runsFromCurrentKeeper
+      : updatesWords.runsFromRetiringKeeper;
+  }
+  if (version === (await readKeeperVersion())) {
+    return updatesWords.runsFromLinkedKeeper;
+  }
+  return undefined;
+}
+
+/** The build an attempt is staging or applying, while it does: live work that keeps this computer awake (awake.ts). */
+let updating: string | undefined;
+
+/** `work`, an attempt at `version`, with the update said to be running while it runs. */
+const whileUpdating = async (
+  version: string,
+  work: () => Promise<void>
+): Promise<void> => {
+  updating = version;
+  try {
+    await work();
+  } finally {
+    updating = undefined;
+  }
+};
+
+/** The update this agent is staging or applying, in the words awake.ts says it by. */
+export const updateRunning = (): string[] =>
+  updating ? [`the update to ${updating}`] : [];
+
+/**
  * The update helper (`cawco binary-apply`, given `args`), as a job of the
  * service manager so it outlives the restarts it performs. It is this build,
  * by its own folder, never through `current`, which the helper moves.
@@ -498,6 +549,8 @@ export class BinaryUpdater {
   /** The build the hub offered on the last pass, and whether it is newer than the running one; unset while a pass has read no offer. */
   #offered: { newer: boolean; version: string } | undefined;
   #running: Promise<void> | undefined;
+  /** The build an attempt last waited on and what still runs from it ({@link runsFrom}), said once. */
+  #deferredFor: string | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #trialTimer: ReturnType<typeof setInterval> | undefined;
   /** When this updater was made: no helper an agent before this one launched is younger. */
@@ -1419,10 +1472,15 @@ export class BinaryUpdater {
     if (!attempt || waiting) {
       return;
     }
+    if (await this.#waitsForRunning(version)) {
+      return;
+    }
     this.#flags.fresh = false;
     try {
-      await this.#stage(release, installation);
-      await this.#apply(release);
+      await whileUpdating(version, async () => {
+        await this.#stage(release, installation);
+        await this.#apply(release);
+      });
     } catch (error) {
       if (error instanceof HubUnreachable) {
         await this.#waitForHubCut();
@@ -1432,6 +1490,29 @@ export class BinaryUpdater {
       await recordFailure(version, said);
       throw new AttemptFailed(said, { cause: error });
     }
+  }
+
+  /**
+   * Whether an attempt at `version` waits for what still runs from it
+   * ({@link runsFrom}): a build a process runs from is never staged over.
+   * After a rollback that is the rolled-back build's own retiring keeper,
+   * which the watch removes once it holds nothing (#retireKeepers). The wait
+   * is said once and recorded nowhere: the rollback's cause stays what the
+   * state says, and no retry delay is spent on it.
+   */
+  async #waitsForRunning(version: string): Promise<boolean> {
+    const runs = await runsFrom(version);
+    if (!runs) {
+      this.#deferredFor = undefined;
+      return false;
+    }
+    if (this.#deferredFor !== `${version} ${runs}`) {
+      this.#deferredFor = `${version} ${runs}`;
+      console.info(
+        `[update] ${version} is tried again once ${runs} is gone; nothing failed`
+      );
+    }
+    return true;
   }
 
   /**
@@ -1520,17 +1601,6 @@ export class BinaryUpdater {
     const { manifest } = release;
     if (this.#staged === manifest.version && this.#state.phase === "ready") {
       return;
-    }
-    if (
-      manifest.version === runtimeVersion ||
-      manifest.version === (await readKeeperVersion()) ||
-      (await keeperEndpoints()).some(
-        ({ keeper }) => keeper.version === manifest.version
-      )
-    ) {
-      // A folder a running process was started from is never touched: this
-      // agent's, and every keeper's, the current one and each retiring one.
-      throw new Error("This version is one that is already running");
     }
     const target = `${process.platform}-${process.arch}`;
     const artifact = manifest.artifacts.find((row) => row.target === target);

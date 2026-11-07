@@ -10,6 +10,7 @@
     "./claude-settings": "./src/claude-settings.ts",
     "./config": "./src/config.ts",
     "./discovery": "./src/discovery.ts",
+    "./awake-hold": "./src/awake-hold.ts",
     "./keeper-jobs": "./src/keeper-jobs.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
     "./pi-mcp-list": "./src/harnesses/pi-mcp-list.ts",

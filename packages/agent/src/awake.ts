@@ -10,6 +10,9 @@
  *  - a run a session's processes are working on past its turn (a probe kit
  *    run, a typecheck or a release left running in its shell), as the leak
  *    watch reads the sessions' processes (leak-watch.ts `runsWorking`).
+ *  - an update this agent stages and hands to its helper (binary-update.ts
+ *    `updateRunning`); the helper holds the machine itself from the swap to
+ *    the trial's verdict (cli binary-apply.ts, through awake-hold.ts).
  *
  * Once none is left the hold goes, and the OS's own sleep settings apply
  * again. Only idle sleep is held: the person can still sleep the machine or
@@ -47,12 +50,13 @@
  * someone woke it.
  */
 import { spawn } from "node:child_process";
-import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
-import { findProgram } from "@cawco/core/workspace-needs";
+import { type Pid, spawnedPid } from "@cawco/core/signal";
+import { endGroup, holdCommand } from "./awake-hold";
+import { updateRunning } from "./binary-update";
 import { workspacesWithCommands } from "./boundary";
 import { commandsRunning } from "./hub-command";
 import { runsWorking } from "./leak-watch";
-import { resolveBin, toolEnv } from "./tools";
+import { toolEnv } from "./tools";
 
 /**
  * How often live work is looked at. Our call: the shortest idle sleep macOS
@@ -60,9 +64,6 @@ import { resolveBin, toolEnv } from "./tools";
  * comes well inside it.
  */
 const LOOK_MS = 10_000;
-
-/** The most of the work's words logind's listing carries; the log line has them whole. */
-const WHY_MAX = 200;
 
 /** The most of a refusing hold's stderr its line quotes. */
 const STDERR_KEPT = 2000;
@@ -73,50 +74,6 @@ interface Hold {
   leader: Pid;
   since: number;
 }
-
-/** The argv that holds idle sleep off while `why` runs, or why this machine has none. */
-const holdCommand = (why: string): string[] | { none: string } => {
-  if (process.platform === "darwin") {
-    const caffeinate = findProgram("caffeinate");
-    return caffeinate
-      ? [caffeinate, "-i", "-w", String(process.pid)]
-      : { none: "caffeinate is not on CawCo's PATH" };
-  }
-  if (process.platform === "linux") {
-    const inhibit = resolveBin("systemd-inhibit");
-    const tail = resolveBin("tail");
-    if (!(inhibit && tail)) {
-      return {
-        none: `${inhibit ? "tail" : "systemd-inhibit"} is not on this agent's PATH`,
-      };
-    }
-    const plasma = resolveBin("kde-inhibit");
-    return [
-      inhibit,
-      "--what=idle:sleep",
-      "--mode=block-weak",
-      "--who=CawCo",
-      `--why=${why.length > WHY_MAX ? `${why.slice(0, WHY_MAX - 1)}…` : why}`,
-      ...(plasma ? [plasma, "--power"] : []),
-      tail,
-      `--pid=${process.pid}`,
-      "-f",
-      "/dev/null",
-    ];
-  }
-  return { none: `${process.platform} has neither caffeinate nor logind` };
-};
-
-/** Ends a hold's whole process group. */
-const endGroup = (leader: Pid): void => {
-  try {
-    signalGroup(leader, "SIGTERM");
-  } catch (error) {
-    console.warn(
-      `[awake] the hold ${leader} could not be ended: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-};
 
 /** Words for a list, at most `shown` of it named. */
 const named = (items: readonly string[], shown = 3): string =>
@@ -159,11 +116,12 @@ export const keepAwakeWhileWorking = (
           ]
         : []),
       ...runs.map((run) => `the run ${run}`),
+      ...updateRunning(),
     ];
   };
 
   const take = (why: string): void => {
-    const argv = holdCommand(why);
+    const argv = holdCommand(why, process.pid);
     if (!Array.isArray(argv)) {
       refused = argv.none;
       console.warn(

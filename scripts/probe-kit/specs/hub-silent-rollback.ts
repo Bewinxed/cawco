@@ -25,6 +25,11 @@
  *     fails it for good; a rollback for the build's own fault fails it for
  *     good at once, after any number of silent ones, and a state written
  *     before the rule (a `failedVersion` alone) stays failed for good.
+ * (c) A trial lost to sleep (`RollbackCause` `slept`: the hub's silence
+ *     after the machine slept during the trial, the Mac's five rollbacks of
+ *     2026-11-07) counts toward none of the `HUB_SILENT_TRIALS`: any number
+ *     of them leave the build to be taken up again, and the count of silent
+ *     trials before them stands as it was.
  *
  *   bun scripts/probe-kit/run.ts hub-silent-rollback
  */
@@ -138,7 +143,7 @@ const spec: Spec = {
     }
 
     // (b) The incident's machine: one rollback for the hub's silence.
-    let state: Failed = rolledBack({}, VERSION, true);
+    let state: Failed = rolledBack({}, VERSION, "hub-silent");
     check(
       "(b) rolled back once for the hub's silence: taken up again once the hub answers",
       state.failedVersion === VERSION && !failedForGood(state, VERSION),
@@ -146,7 +151,7 @@ const spec: Spec = {
     );
     const trials: boolean[] = [failedForGood(state, VERSION)];
     for (let n = 2; n <= HUB_SILENT_TRIALS; n += 1) {
-      state = rolledBack(state, VERSION, true);
+      state = rolledBack(state, VERSION, "hub-silent");
       trials.push(failedForGood(state, VERSION));
     }
     check(
@@ -155,16 +160,16 @@ const spec: Spec = {
       `failed for good after each: ${trials.join(", ")}`
     );
 
-    const own = rolledBack({}, VERSION, false);
+    const own = rolledBack({}, VERSION, "own");
     check(
       "(b) rolled back for the build's own fault: failed for good at once",
       failedForGood(own, VERSION) && own.hubSilentTrials === undefined,
       JSON.stringify(own)
     );
     const ownAfterSilent = rolledBack(
-      rolledBack({}, VERSION, true),
+      rolledBack({}, VERSION, "hub-silent"),
       VERSION,
-      false
+      "own"
     );
     check(
       "(b) the build's own fault after a silent rollback: failed for good",
@@ -174,12 +179,40 @@ const spec: Spec = {
     const otherBuild = rolledBack(
       { failedVersion: "0.0.1-test.6687", hubSilentTrials: 2 },
       VERSION,
-      true
+      "hub-silent"
     );
     check(
       "(b) another build's silent rollbacks do not count toward this one's",
       otherBuild.hubSilentTrials === 1 && !failedForGood(otherBuild, VERSION),
       JSON.stringify(otherBuild)
+    );
+    // (c) The Mac's evening: five trials, every one lost to sleep.
+    let slept: Failed = {};
+    const afterEach: boolean[] = [];
+    for (let n = 1; n <= HUB_SILENT_TRIALS + 2; n += 1) {
+      slept = rolledBack(slept, VERSION, "slept");
+      afterEach.push(failedForGood(slept, VERSION));
+    }
+    check(
+      `(c) ${HUB_SILENT_TRIALS + 2} trials in a row lost to sleep: none counts, the build is taken up again`,
+      afterEach.every((v) => !v) &&
+        slept.failedVersion === VERSION &&
+        slept.hubSilentTrials === 0,
+      `${JSON.stringify(slept)}; failed for good after each: ${afterEach.join(", ")}`
+    );
+    const twoSilentThenSlept = rolledBack(
+      rolledBack(rolledBack({}, VERSION, "hub-silent"), VERSION, "hub-silent"),
+      VERSION,
+      "slept"
+    );
+    const thenSilent = rolledBack(twoSilentThenSlept, VERSION, "hub-silent");
+    check(
+      "(c) two silent trials, then one lost to sleep: still two; the next silent one is the third, and fails it for good",
+      twoSilentThenSlept.hubSilentTrials === 2 &&
+        !failedForGood(twoSilentThenSlept, VERSION) &&
+        thenSilent.hubSilentTrials === HUB_SILENT_TRIALS &&
+        failedForGood(thenSilent, VERSION),
+      `${JSON.stringify(twoSilentThenSlept)} then ${JSON.stringify(thenSilent)}`
     );
     check(
       "(b) a failed version written before the rule stays failed for good; a newer build is not held by it",

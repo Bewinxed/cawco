@@ -39,9 +39,11 @@ import {
   symlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { holdAwake } from "@cawco/agent/awake-hold";
 import { type KeeperJob, keeperJob } from "@cawco/agent/keeper-jobs";
 import { forgetPins, runBinaryPins } from "@cawco/agent/pin-record";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
+import { AwakeTime } from "@cawco/core/awake-time";
 import { type HealthProblem, probeHealth } from "@cawco/core/binary-health";
 import {
   binaryRoot,
@@ -68,6 +70,7 @@ import {
 import {
   type BinaryUpdateState,
   failedForGood,
+  type RollbackCause,
   rolledBack,
   UPDATE_TRIAL_MS,
 } from "@cawco/core/binary-updates";
@@ -122,6 +125,14 @@ const SERVICE_TIMEOUT_MS = 120_000;
 const TRIAL_WINDOW_S = timerMs(UPDATE_TRIAL_MS) / 1000;
 /** How long the build must stay healthy, unbroken by its own fault, to be confirmed: a minute (the hub's silence pauses it, `TrialWatch`). */
 export const CONFIRM_MS = timerMs(60_000);
+/**
+ * How long the hub is given after this machine wakes before any answer
+ * counts against the build: the trial's deadline stands at least this far
+ * past the wake. Ours: the network comes back seconds after a wake (on
+ * 2026-11-07 the Mac's first probe, 1 s after each wake, found no answer),
+ * and a tailnet's path to its hub is set up again within a minute.
+ */
+export const WAKE_GRACE_MS = timerMs(60_000);
 
 const lockPath = lockFilePath;
 const note = (line: string) =>
@@ -279,6 +290,11 @@ export async function applyBinary(
     console.log("update: another update helper is running; nothing to do");
     return;
   }
+  // From the swap to the verdict the machine stays up: a trial judges the
+  // build, never the machine's sleep (`TrialWatch` reads what sleep it does).
+  const release = keeperOnly
+    ? () => undefined
+    : await holdAwake(`the trial of ${version}`, say);
   try {
     await say(`start ${version} keeperOnly=${keeperOnly}`);
     await recordApply({ kind: "start", keeperOnly, version });
@@ -298,6 +314,7 @@ export async function applyBinary(
       error: back ? `${message(error)}; ${back}` : message(error),
     });
   } finally {
+    release();
     await rm(lockPath(), { force: true });
   }
 }
@@ -328,6 +345,7 @@ export async function resumeBinary(): Promise<void> {
     console.log("update: another update helper is running; nothing to do");
     return;
   }
+  const release = await holdAwake(`the trial of ${found.version}`, say);
   try {
     // Read again under the lock: the helper that held it may have decided meanwhile.
     const trial = await readTrial();
@@ -343,6 +361,7 @@ export async function resumeBinary(): Promise<void> {
     await say(`resume failed ${message(error)}`);
     await countFailedResume(message(error));
   } finally {
+    release();
     await rm(lockPath(), { force: true });
   }
 }
@@ -772,6 +791,7 @@ async function applyBuild(version: string): Promise<void> {
 async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
   let trial = start;
   if (!trial.decision) {
+    const awake = new AwakeTime().start();
     if (resumed) {
       trial = {
         ...trial,
@@ -782,7 +802,7 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
       };
       await writeJsonAtomic(trialPath(), trial);
     }
-    const problem = await settle(trial);
+    const problem = await settle(trial, awake).finally(() => awake.stop());
     trial = (await readTrial()) ?? trial;
     trial = problem
       ? {
@@ -795,7 +815,7 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
     await writeJsonAtomic(trialPath(), trial);
     await say(
       problem
-        ? `decide ${trial.version}: roll back (${problem.said})${problem.hubSilent ? "; the hub's silence, not the build's" : ""}`
+        ? `decide ${trial.version}: roll back (${problem.said})${causeWords(rollbackCause(trial), trial)}`
         : `decide ${trial.version}: confirm`
     );
   }
@@ -812,8 +832,11 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
  * A keeper that cannot start is no verdict on the build: the keeper before
  * stays the machine's, untouched, and the state says so.
  */
-async function settle(start: TrialMarker): Promise<HealthProblem | undefined> {
-  const up = await verify(start, 0);
+async function settle(
+  start: TrialMarker,
+  awake: AwakeTime
+): Promise<HealthProblem | undefined> {
+  const up = await verify(start, 0, awake);
   if (up) {
     return up;
   }
@@ -845,8 +868,34 @@ async function settle(start: TrialMarker): Promise<HealthProblem | undefined> {
     });
     await say(`installed ${trial.version}; the trial goes on to its verdict`);
   }
-  return verify(trial, CONFIRM_MS);
+  return verify(trial, CONFIRM_MS, awake);
 }
+
+/**
+ * What decided a rollback, for the failed-version rule (core
+ * binary-updates.ts `rolledBack`): the hub's silence after this machine
+ * slept during the trial is the sleep's, not the hub's or the build's.
+ */
+export const rollbackCause = (trial: TrialMarker): RollbackCause => {
+  if (!trial.hubSilent) {
+    return "own";
+  }
+  return (trial.sleptMs ?? 0) > 0 ? "slept" : "hub-silent";
+};
+
+/** The decide line's words on what a rollback's cause makes of it. */
+const causeWords = (cause: RollbackCause, trial: TrialMarker): string => {
+  switch (cause) {
+    case "own":
+      return "";
+    case "hub-silent":
+      return "; the hub's silence, not the build's";
+    case "slept":
+      return `; the hub's silence after this machine slept ${secondsOf(trial.sleptMs ?? 0)}s of the trial, not the build's, and no try of it`;
+    default:
+      unhandled("rollback cause", cause);
+  }
+};
 
 /**
  * Whether the trial build is healthy (see probeHealth, with the agent holding
@@ -860,10 +909,17 @@ async function settle(start: TrialMarker): Promise<HealthProblem | undefined> {
  * it does not), each migration that moves the deadline, and the verdict with
  * its time and attempt count. A rollback's reason is then in the log of the
  * unit that decided it, not only in the update state.
+ *
+ * ITS CLOCK IS THIS MACHINE'S AWAKE TIME (`awake`, core awake-time.ts). A
+ * sleep read before an answer is weighed moves the deadline out by its
+ * length, and to at least {@link WAKE_GRACE_MS} past the wake, so the probes
+ * the network was not back for count against nothing; the hold counts awake
+ * time only. The sleep is written on the trial (`sleptMs`) and said.
  */
 export async function verify(
   start: TrialMarker,
-  holdMs: number
+  holdMs: number,
+  awake: AwakeTime
 ): Promise<HealthProblem | undefined> {
   const installation = await readInstallation();
   if (!installation) {
@@ -873,7 +929,7 @@ export async function verify(
     };
   }
   const id = await machineId();
-  const watch = new TrialWatch(start, holdMs);
+  const watch = new TrialWatch(start, holdMs, awake);
   await say(
     `verify ${start.version}: probing ${installation.hubUrl} every 1s; ${holdMs ? `healthy for ${holdMs / 1000}s confirms` : "waiting for it to answer"}, not healthy at ${new Date((start.decideBy ?? 0) * 1000).toISOString()} rolls back`
   );
@@ -907,8 +963,11 @@ const TIMING = / (?:after|in) \d+ms/gu;
 /** One verification's running account: the trial as it stands, the streak, and what was last said. */
 class TrialWatch {
   trial: TrialMarker;
+  readonly #awake: AwakeTime;
   readonly #holdMs: number;
-  readonly #started = Date.now();
+  readonly #started: number;
+  /** The clock's sleep this watch has moved the deadline for. */
+  #sleptSeen: number;
   #attempts = 0;
   /**
    * The healthy streak: how long it has held, when the last healthy answer
@@ -923,13 +982,46 @@ class TrialWatch {
   #lastSaid: { at: number; problem: string } | undefined;
   #migrating = false;
 
-  constructor(trial: TrialMarker, holdMs: number) {
+  constructor(trial: TrialMarker, holdMs: number, awake: AwakeTime) {
     this.trial = trial;
     this.#holdMs = holdMs;
+    this.#awake = awake;
+    this.#started = awake.awakeNow();
+    this.#sleptSeen = awake.sleptMs;
   }
 
+  /** Awake time since this verification began. */
   #elapsed(): string {
-    return `${((Date.now() - this.#started) / 1000).toFixed(1)}s`;
+    return `${((this.#awake.awakeNow() - this.#started) / 1000).toFixed(1)}s`;
+  }
+
+  /**
+   * A sleep of `ms` just read: the deadline moves out by it, and to at least
+   * {@link WAKE_GRACE_MS} past now, and the trial says how long it slept. A
+   * healthy streak is paused: its next healthy answer goes on from where it
+   * stood, the sleep counted neither way.
+   */
+  async #slept(ms: number): Promise<void> {
+    const nowS = this.#awake.now() / 1000;
+    const decideBy = Math.ceil(
+      Math.max(
+        (this.trial.decideBy ?? nowS) + ms / 1000,
+        nowS + WAKE_GRACE_MS / 1000
+      )
+    );
+    this.trial = {
+      ...this.trial,
+      decideBy,
+      sleptMs: (this.trial.sleptMs ?? 0) + ms,
+    };
+    await writeJsonAtomic(trialPath(), this.trial);
+    if (this.#streak) {
+      this.#streak.paused = true;
+    }
+    this.#lastSaid = undefined;
+    await say(
+      `verify ${this.trial.version}: this machine slept ${secondsOf(ms)}s at ${this.#elapsed()} of awake time; the deadline moves to ${new Date(decideBy * 1000).toISOString()}, the hub given ${WAKE_GRACE_MS / 1000}s after the wake`
+    );
   }
 
   /** A running migration moves the deadline; one past its cap is the answer. */
@@ -946,10 +1038,10 @@ class TrialWatch {
     if (!running) {
       return undefined;
     }
-    if (Date.now() > this.#started + MIGRATION_CAP_MS) {
+    if (this.#awake.awakeNow() > this.#started + MIGRATION_CAP_MS) {
       return "The hub's migration did not end in 30 minutes";
     }
-    const decideBy = Math.floor(Date.now() / 1000) + TRIAL_WINDOW_S;
+    const decideBy = Math.floor(this.#awake.now() / 1000) + TRIAL_WINDOW_S;
     if (decideBy - (this.trial.decideBy ?? 0) >= 10) {
       this.trial = { ...this.trial, decideBy };
       await writeJsonAtomic(trialPath(), this.trial);
@@ -958,10 +1050,18 @@ class TrialWatch {
   }
 
   /** One probe's answer, weighed: done with the problem that decides it, or done healthy, or not done. */
-  weigh(
+  async weigh(
     problem: HealthProblem | undefined
   ): Promise<{ done: boolean; problem?: HealthProblem }> {
     this.#attempts += 1;
+    // Read before the answer: one that came in just after a wake was asked
+    // of a network that was not back yet. The beat may have read it first.
+    this.#awake.look();
+    const slept = this.#awake.sleptMs - this.#sleptSeen;
+    if (slept > 0) {
+      this.#sleptSeen = this.#awake.sleptMs;
+      await this.#slept(slept);
+    }
     return problem ? this.#unhealthy(problem) : this.#healthy();
   }
 
@@ -981,7 +1081,7 @@ class TrialWatch {
     // Past the deadline the hub's silence decides as it always has: a
     // rollback that is no verdict on the build (core binary-updates.ts
     // `HUB_SILENT_TRIALS`).
-    if (Date.now() / 1000 > (this.trial.decideBy ?? 0)) {
+    if (this.#awake.now() / 1000 > (this.trial.decideBy ?? 0)) {
       await say(
         `verify ${version}: not healthy at its deadline, ${this.#elapsed()} after ${this.#attempts} attempts: ${problem.said}`
       );
@@ -992,9 +1092,9 @@ class TrialWatch {
     if (
       !said ||
       said.problem !== gist ||
-      Date.now() - said.at >= VERIFY_REPEAT_MS
+      this.#awake.awakeNow() - said.at >= VERIFY_REPEAT_MS
     ) {
-      this.#lastSaid = { at: Date.now(), problem: gist };
+      this.#lastSaid = { at: this.#awake.awakeNow(), problem: gist };
       await say(
         `verify ${version}: attempt ${this.#attempts} at ${this.#elapsed()}: ${problem.said}`
       );
@@ -1004,7 +1104,7 @@ class TrialWatch {
 
   async #healthy(): Promise<{ done: boolean }> {
     const { version } = this.trial;
-    const now = Date.now();
+    const now = this.#awake.awakeNow();
     const streak = this.#streak;
     if (streak === undefined) {
       this.#streak = { heldMs: 0, lastAt: now, paused: false };
@@ -1119,10 +1219,11 @@ async function rollBack(start: TrialMarker): Promise<void> {
     );
   }
   const manifest = await readStaged(trial.version).catch(() => undefined);
+  const cause = rollbackCause(trial);
   const failed = rolledBack(
     (await readUpdateState()) ?? {},
     trial.version,
-    trial.hubSilent === true
+    cause
   );
   await writeState({
     phase: "failed-rolled-back",
@@ -1133,7 +1234,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
     ...(manifest ? { channel: manifest.channel, notes: manifest.notes } : {}),
     error: [
       trial.reason ?? "The new build did not become healthy",
-      hubSilentWords(failed, trial.version),
+      rollbackWords(cause, failed, trial),
       pinsBack,
     ]
       .filter(Boolean)
@@ -1145,18 +1246,28 @@ async function rollBack(start: TrialMarker): Promise<void> {
   await prune();
 }
 
-/** What a rollback the hub's silence decided says of the build's next try ({@link rolledBack}); nothing for the build's own fault. */
-function hubSilentWords(
+/** What a rollback the hub's silence decided says of the build's next try ({@link rolledBack}), and one a sleep lost that it slept; nothing for the build's own fault. */
+function rollbackWords(
+  cause: RollbackCause,
   failed: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
-  version: string
+  trial: TrialMarker
 ): string | undefined {
-  const tries = failed.hubSilentTrials;
-  if (tries === undefined) {
-    return undefined;
+  const { version } = trial;
+  switch (cause) {
+    case "own":
+      return undefined;
+    case "slept":
+      return updatesWords.sleptThroughTrial(
+        version,
+        Math.max(1, Math.round((trial.sleptMs ?? 0) / 60_000))
+      );
+    case "hub-silent":
+      return failedForGood(failed, version)
+        ? updatesWords.hubSilentTooOften(version, failed.hubSilentTrials ?? 0)
+        : updatesWords.triedAgainOnceHubAnswers(version);
+    default:
+      unhandled("rollback cause", cause);
   }
-  return failedForGood(failed, version)
-    ? updatesWords.hubSilentTooOften(version, tries)
-    : updatesWords.triedAgainOnceHubAnswers(version);
 }
 
 /**
