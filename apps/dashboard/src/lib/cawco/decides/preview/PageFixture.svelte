@@ -1,8 +1,7 @@
 <script lang="ts">
   /**
    * Who decides whole, on the real state (WhoDecides) holding the hub's
-   * records and the latest questions agents asked: the team, the kinds'
-   * cards, and whatever stands open. The writes stay here: a hand-over, a
+   * records: the team, the kinds' cards, and whatever stands open. The writes stay here: a hand-over, a
    * save, a picture, a kind added or removed change what the page holds and
    * nothing reaches the hub. Each prop sets the situation it stands in.
    */
@@ -19,12 +18,12 @@
   import { HUB_UNREACHABLE } from "#lib/cawco/hub-read.js";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { WhoDecides } from "../decides.svelte";
-  import type { FleetOffer, RecentCall } from "../decides-client";
+  import type { FleetOffer } from "../decides-client";
   import { drawPopoversInPlace, holdsPanels } from "../in-place";
   import { KindAdd } from "../kinds.svelte";
   import { type Draft, NEW } from "../setup.svelte";
   import WhoDecidesPage from "../WhoDecidesPage.svelte";
-  import { calls as fleetCalls, records } from "./calls";
+  import { records } from "./member-records";
   import { added, fleetRoutes } from "./records";
   import { harnesses, skills, types } from "./setup-records";
 
@@ -44,8 +43,6 @@
     project = null,
     offers = harnesses,
     read = "read",
-    recent = "read",
-    calls = fleetCalls,
     problems = [],
     open = null,
     draft = {},
@@ -66,8 +63,6 @@
     project?: string | null;
     offers?: FleetOffer["harnesses"];
     read?: "read" | "reading" | "failed";
-    recent?: "read" | "reading" | "failed";
-    calls?: RecentCall[];
     /** decides.md's problems, when it doesn't read. */
     problems?: string[];
     /** Whose card stands open: a member's id, or "new" for Add an agent. */
@@ -143,23 +138,6 @@
         },
         table,
         types,
-      };
-    }
-    if (recent === "failed") {
-      who.recent = {
-        state: "failed",
-        reason: decidesWords.recentUnread(HUB_UNREACHABLE),
-      };
-    } else if (recent === "reading") {
-      who.recent = { state: "reading" };
-    } else {
-      // A project's page reads its own project's questions only, as the hub answers it.
-      who.recent = {
-        state: "read",
-        calls:
-          project === null
-            ? calls
-            : calls.filter((call) => call.projectId === "cawco-dev"),
       };
     }
     if (project !== null) {
@@ -336,7 +314,6 @@
     who.moveTo = null;
     return Promise.resolve();
   };
-  who.loadRecent = () => Promise.resolve();
   who.load = () => Promise.resolve();
 
   untrack(() => {
@@ -349,6 +326,7 @@
       add.example = addingKind.example;
       add.tried = addingKind.tried ?? false;
       who.kindAdd = add;
+      who.kindsOpen = true;
     }
     if (renaming !== null) {
       who.startRename(renaming);

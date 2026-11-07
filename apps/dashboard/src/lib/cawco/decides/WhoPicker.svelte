@@ -13,7 +13,7 @@
    * (Hung). Each member is a row (its face, its name, what it runs on, a
    * tick on who answers now) in bits-ui's radio group, the arrows moving
    * through them and a press, Enter or Space picking; under them a
-   * consequence line and what else is done to the kind. In a states file's
+   * what else is done to the kind. In a states file's
    * frame it draws in place.
    */
   import type { Kind, Member } from "@cawco/core/decides";
@@ -34,7 +34,6 @@
     fleetChoice,
     runsOn,
     onpick,
-    note = null,
     actions = [],
     trigger,
   }: {
@@ -48,8 +47,6 @@
     fleetChoice: string | null;
     runsOn: (member: Member) => string | null;
     onpick: (member: string) => void;
-    /** What stays where it is if he picks, under the members. */
-    note?: string | null;
     /** What else is done to the kind, under the members. */
     actions?: PickerAction[];
     trigger: Snippet<[Record<string, unknown>]>;
@@ -75,14 +72,6 @@
       >
     {/if}
   </span>
-{/snippet}
-
-{#snippet noteLine()}
-  {#if note}
-    <p class="px-space-2 py-space-1 type-meta text-ink-muted text-pretty">
-      {note}
-    </p>
-  {/if}
 {/snippet}
 
 <Hung
@@ -123,7 +112,6 @@
       </RadioGroup.Item>
     {/each}
   </RadioGroup.Root>
-  {@render noteLine()}
   {#if actions.length > 0}
     <div
       class="mt-space-1 flex flex-col gap-px border-border-hairline border-t pt-space-1"

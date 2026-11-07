@@ -1,23 +1,23 @@
 <script lang="ts">
   /**
    * Who decides on its state (WhoDecides): who answers each kind of choice
-   * an agent can't make alone. The team stands first as a row of chips,
-   * each opening its member's card; under it each kind is a card, its face
-   * trailing (who answers it, pressed to hand it over) and the latest
-   * questions agents asked of it under its name. Add a kind closes the
-   * grid. No figure stands here: a member's figures are in its card.
+   * an agent can't make alone, and nothing else. The team stands first as a
+   * row of chips, each opening its member's card (its settings and
+   * figures), Add an agent last; under it each kind is a card holding its
+   * name and the face of who answers it, pressed to change who; Add a kind
+   * closes the grid at a kind card's size.
    *
-   * On a project's page the crumbs lead (the fleet, then the project, its
-   * Decisions trailing), and a kind the project set itself carries the
-   * folder; a decides.md that doesn't read is said over the cards, every
-   * kind his until it does. A read that failed stands with the hub's words
-   * and Try again; while it reads, the page's own shape stands in skeletons.
+   * A failure stands only while it is true: on a project's page a
+   * decides.md that can't be read is said over the cards (every face is
+   * then You), with the way to the file; a member that can't run wears the
+   * attention dot on its face, why in its card; a page that couldn't be
+   * read is the house's page fault. While it reads, the page's own shape
+   * stands in skeletons. On a project's page the crumbs lead.
    */
   import { decidesWords } from "@cawco/core/words/decides";
   import RegionFault from "#lib/cawco/fault/RegionFault.svelte";
   import { animatedCaw } from "#lib/cawco/home/FaultCaw.svelte";
   import { folderFileHref } from "#lib/cawco/project-tasks.js";
-  import RowFault from "#lib/cawco/RowFault.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import type { WhoDecides } from "./decides.svelte";
@@ -49,10 +49,6 @@
       ? ""
       : `/project/${encodeURIComponent(who.projectId)}`
   );
-  const waitingHref = (projectId: string | null) =>
-    projectId === null
-      ? "/session"
-      : `/project/${encodeURIComponent(projectId)}?view=decisions`;
 </script>
 
 <Tooltip.Provider>
@@ -106,11 +102,11 @@
         {/each}
       </div>
       <div
-        class="grid grid-cols-(--kind-cols) gap-space-3"
+        class="grid auto-rows-fr grid-cols-(--kind-cols) gap-space-3"
         style:--kind-cols={"repeat(auto-fill, minmax(min(100%, var(--c-roster-card-min)), 1fr))"}
       >
         {#each [0, 1, 2, 3, 4, 5] as at (at)}
-          <Skeleton height="board" radius="card" />
+          <Skeleton height="row" radius="card" />
         {/each}
       </div>
     {:else}
@@ -130,15 +126,12 @@
           >
         </div>
       {/if}
-      {#if who.recent.state === "failed"}
-        <RowFault again={() => who.loadRecent()} reason={who.recent.reason} />
-      {/if}
       <div
-        class="grid grid-cols-(--kind-cols) gap-space-3"
+        class="grid auto-rows-fr grid-cols-(--kind-cols) gap-space-3"
         style:--kind-cols={"repeat(auto-fill, minmax(min(100%, var(--c-roster-card-min)), 1fr))"}
       >
         {#each who.kinds as kind (kind.id)}
-          <KindCard {facts} {kind} {named} {project} {waitingHref} {who} />
+          <KindCard {facts} {kind} {named} {project} {who} />
         {/each}
         <NewKindCard {who} />
       </div>

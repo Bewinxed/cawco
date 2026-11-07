@@ -52,11 +52,6 @@ export interface HarnessOffer {
 }
 
 export interface DecidesDeps {
-  /** Card `card` of page `artifactId`: its question and the labels of the options picked (none: still open); undefined when the page or card is gone. */
-  readonly card: (
-    artifactId: string,
-    card: string
-  ) => { picked: string[]; question: string } | undefined;
   /** Project `projectId`'s Caw: his conversations' cost since `since`, how many he has had, and his newest turn (ms epoch). */
   readonly cawRecord: (
     projectId: string,
@@ -95,9 +90,6 @@ export interface DecidesDeps {
     row: { id: string; projectId: string | null };
   }[];
 }
-
-/** How many routed cards the latest questions are read from, newest first. */
-const RECENT_READ = 120;
 
 /** A refusal in Who decides' words, with its status. */
 class DecidesRefusal extends Error {
@@ -682,42 +674,6 @@ export const decidesRoutes = (deps: DecidesDeps) => {
                 row.workItemId ? deps.live(row.workItemId) : row.signed === null
               ).length,
               spendUsd: deps.spend(record.instances, month),
-            };
-          })
-      )
-      // The newest questions the hub routed, each with who it went to, its
-      // kind, its pick's words (none while open) and whether he picked
-      // again after the member: Who decides draws each kind and each member
-      // by the questions agents really asked. Read on a project's page, that
-      // project's pages; else every page.
-      .get(
-        "/api/decides/recent",
-        { query: t.Object({ project: t.Optional(t.String()) }) },
-        ({ query }) =>
-          answered(() => {
-            if (query.project !== undefined) {
-              known(query.project);
-            }
-            return {
-              calls: db.recent(query.project, RECENT_READ).flatMap((row) => {
-                const card = deps.card(row.artifactId, row.card);
-                if (!card) {
-                  return [];
-                }
-                return [
-                  {
-                    artifactId: row.artifactId,
-                    card: row.card,
-                    kind: row.kind,
-                    member: row.route,
-                    projectId: row.projectId,
-                    question: card.question,
-                    picked: card.picked,
-                    takenBack: row.takenBackAt !== null,
-                    at: row.createdAt.toISOString(),
-                  },
-                ];
-              }),
             };
           })
       )

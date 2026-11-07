@@ -355,9 +355,11 @@ const CONTAINERS = {
   "decisions-520px": "520px",
   leaf: "620px",
   setup: "640px",
-  // A member's settings (decides/MemberSetup): under it, each folded row's
-  // label stands over its value (build spec §3.3, "under 560px").
-  "member-setup": "35rem",
+  // A kind's card on Who decides (decides/KindCard): under it the face of
+  // who answers drops under the kind's name, where the name would keep under
+  // a hundred pixels beside a long member's face (glyph, gaps and a face of
+  // about 170px).
+  "kind-card": "18rem",
   // A decision card's media side by side once its body holds two at a
   // readable width each (decisions/host Decision.svelte).
   "media-split": "640px",

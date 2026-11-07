@@ -1431,10 +1431,6 @@
     --c-roster-row-min: 17rem;
     /* A member's face on its card, and how far its name and facts stand in. */
     --c-roster-face: 3rem;
-    /* A member's settings and Add a member, in the popover hung from its card: their greatest width. */
-    --c-member-setup-max-w: 52rem;
-    /* Kinds of choice, in the popover hung from Who decides' head: its greatest width. */
-    --c-kinds-max-w: 44rem;
     /* One of Caw's poses, or an identity hue, as a tile in a member's picture picker. */
     --c-pose-tile: 4rem;
     /* A member's settings: the column each folded row's label stands in. */

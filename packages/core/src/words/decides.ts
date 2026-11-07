@@ -192,8 +192,6 @@ export const decidesWords = {
   decisionTrigger: (page: string) => `a decision card on ${page} is yours`,
 
   // ── The page's words: the roster, its tiles and the hand-over ───────────
-  /** A kind a project routes itself, on its card. */
-  ownTag: "Set here",
   /** A project's own kind, its way back. */
   giveBack: "Follow the fleet",
   /** The member the fleet names for this kind, at the end of its row. */
@@ -238,73 +236,13 @@ export const decidesWords = {
   /** A kind's face chip, as its control is named. */
   answeredBy: (kind: string, member: string) =>
     `${kind}: ${member} answers. Change who answers`,
-  /** A kind's More, as its control is named. */
-  kindMore: (kind: string) => `More for ${kind}`,
   renameItem: "Rename",
   removeItem: "Remove kind",
-  /**
-   * What an agent might ask under each built-in kind, drawn muted on a
-   * kind no agent has asked of yet, each with who it would go to.
-   */
-  kindSamples: {
-    look: [
-      "Call the new tab Decisions or Choices?",
-      "Should the empty board show Caw's sketch or one line of text?",
-    ],
-    behaviour: [
-      "When a run fails twice, retry once more or stop?",
-      "Does closing the sheet keep a half-written reply?",
-    ],
-    scope: [
-      "Leave dark mode out of this release?",
-      "The brief asks for CSV and PDF export. Ship CSV first?",
-    ],
-    approach: [
-      "Keep drafts in the database or in the browser?",
-      "One query per page, or one cached list for all of them?",
-    ],
-    rules: [
-      "Turn off the line-length rule for generated files?",
-      "Skip the screenshot check? This change only moves a comment.",
-    ],
-    tools: [
-      "Dates as ISO strings or as timestamps?",
-      "Move to Svelte 6 now, or stay on 5 for this release?",
-    ],
-  } as Record<string, readonly string[]>,
-  /** Under a sample question: who it would go to. */
-  wouldGo: (member: string | null) =>
-    member === null ? "Comes to you" : `Goes to ${member}`,
-  /** A kind's hand-over list, while questions of it wait on who answers it now. */
-  waitingStay: (count: number, member: string) =>
-    `${count} waiting ${count === 1 ? "stays" : "stay"} with ${member}`,
-  /** Under an open question another member holds. */
-  deciding: (member: string) => `${member} is deciding`,
-  /** A pick's maker, as a screen reader hears it before the pick. */
-  pickedBy: (member: string) => `${member} picked`,
-  /** A question still waiting on him: its link to the card. */
-  waitingOnYou: "Waiting on you",
-  /** The latest questions could not be read. */
-  recentUnread: (reason: string) =>
-    `The latest questions didn't load: ${reason}`,
-  /** A member's card: what it runs on, as its chip's control is named. */
-  changeRuns: (name: string, runs: string) =>
-    `What ${name} runs on: ${runs}. Change`,
   /** A member's card: its standing instructions, as their control is named. */
   changeInstructions: (name: string) =>
     `Change ${name}'s standing instructions`,
   /** A member's card: its record, as a screen reader names it. */
   recordLabel: (name: string) => `${name}'s record`,
-  /** A question he picked again after the member. */
-  pickedAgain: "You picked again",
-  /** A question in a member's record still waiting. */
-  waiting: "Waiting",
-  /** A member's card: the kinds that come to it, as a screen reader names them. */
-  kindsOf: (name: string) => `What comes to ${name}`,
-  /** A member's card when no kind goes to it. */
-  answersNothing: "Nothing comes to it yet",
-  /** A member that can't run, on the kinds it answers: the way to its card. */
-  fixMember: (name: string) => `Change ${name}`,
   /** A member that can't run, in its card: where machines join. */
   joinMachine: "Join a machine",
   /** A member's setting chips, as their controls are named. */

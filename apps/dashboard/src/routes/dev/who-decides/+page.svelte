@@ -17,9 +17,7 @@
     DidntLoad,
     FileDoesntRead,
     HandingScopeOver,
-    NobodyAskedYet,
     ProjectHandedKindsOver,
-    QuestionsStillLoading,
     RemovingAKind,
     YourFleet,
   } from "#lib/cawco/decides/WhoDecides.stories.js";
@@ -35,14 +33,12 @@
     AdvisorsCard,
     AddingAnAgent,
     AddingWithNothingFilledIn,
-    NobodyAskedYet,
     ProjectHandedKindsOver,
     CawsCard,
     AgentCantRun,
     AddingAKind,
     RemovingAKind,
     DidntLoad,
-    QuestionsStillLoading,
     FileDoesntRead,
   };
   const story = $derived(

@@ -8481,31 +8481,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       };
     },
 
-    /** Card `card` of decision page `artifactId`: its question and the labels picked (none while open); undefined when either is gone (Who decides' latest questions). */
-    cardRead: (
-      artifactId: string,
-      card: string
-    ): { picked: string[]; question: string } | undefined => {
-      const row = db.get(artifactId);
-      const program = row ? programOf(row) : undefined;
-      if (!(row && program !== undefined)) {
-        return;
-      }
-      const found = readKept(program).cards.find((one) => one.id === card);
-      if (!found) {
-        return;
-      }
-      const entry = stateOf(docs.doc(row.id))[card];
-      const picked = pickMade(found, entry) ? (entry?.options ?? []) : [];
-      return {
-        question: found.question,
-        picked: picked.flatMap((id) => {
-          const option = found.options.find((one) => one.id === id);
-          return option ? [option.label] : [];
-        }),
-      };
-    },
-
     /** The open decision pages' cards filed under kind `kind` with no pick yet, by page (Who decides' kinds). */
     waitingUnder: (
       kind: string

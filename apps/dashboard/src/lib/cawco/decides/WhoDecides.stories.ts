@@ -1,10 +1,9 @@
 /**
  * Who decides, in the situations he meets it: his fleet as it stands, a
- * kind being handed over, a member's card with its record, an agent being
- * added, a project that handed kinds over, and the page when something is
- * new, missing or failed. Each draws the whole page.
+ * kind being handed to someone else, a member's card, an agent or a kind
+ * being added, a project that set kinds of its own, and the page when
+ * something fails. Each draws the whole page.
  */
-import { BUILT_IN, BUILT_IN_MEMBERS } from "@cawco/core/decides";
 import PageFixture from "./preview/PageFixture.svelte";
 import { added, fleetRoutes } from "./preview/records";
 import { harnessesNoOpenCode } from "./preview/setup-records";
@@ -14,7 +13,7 @@ export default {
   component: PageFixture,
 };
 
-/** His fleet as it stands: who answers each kind, and what agents asked of it lately. */
+/** His fleet as it stands: who answers each kind of choice. */
 export const YourFleet = {
   name: "Your fleet as it stands",
 };
@@ -43,17 +42,7 @@ export const AddingWithNothingFilledIn = {
   args: { open: "new", tried: true },
 };
 
-/** A brand-new fleet: the six kinds, and no agent has asked anything yet. */
-export const NobodyAskedYet = {
-  name: "Nobody's asked anything yet",
-  args: {
-    members: BUILT_IN_MEMBERS.map((id) => BUILT_IN[id]),
-    routes: fleetRoutes,
-    calls: [],
-  },
-};
-
-/** Cawco-Dev sends look and scope elsewhere than the fleet does: the folder marks them. */
+/** Cawco-Dev sends look and scope elsewhere than the fleet does. */
 export const ProjectHandedKindsOver = {
   name: "Cawco-Dev handed two kinds over",
   args: {
@@ -82,7 +71,7 @@ export const AgentCantRun = {
   },
 };
 
-/** Add a kind pressed and half typed: it stands where it will be. */
+/** Add a kind pressed and half typed: its fields hang from the tile. */
 export const AddingAKind = {
   name: "Adding a kind",
   args: {
@@ -103,12 +92,6 @@ export const RemovingAKind = {
 export const DidntLoad = {
   name: "Who decides didn't load",
   args: { read: "failed" },
-};
-
-/** The fleet read, its latest questions still on their way. */
-export const QuestionsStillLoading = {
-  name: "The questions are still loading",
-  args: { recent: "reading" },
 };
 
 /** Cawco-Dev's decides.md has a line the hub can't read: every kind is his until it does. */

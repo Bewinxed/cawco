@@ -5,9 +5,8 @@
    * its picture) and name; for an agent what it runs on as three setting
    * chips, why it can't run where it can't, its standing instructions as
    * its own words (pressed to edit, its skills folded under them) and its
-   * two switches; Caw's lead switch on a project's page; the kinds that
-   * come to it; and its record: this month's figures and the questions it
-   * was asked, each with its pick. Its body scrolls under one text edge;
+   * two switches; Caw's lead switch on a project's page; and its figures
+   * this month, each linking to where it lives. Its body scrolls under one text edge;
    * Save and Cancel stand in its foot only once something changed, and an
    * agent he added can be removed, asked in the card.
    */
@@ -23,12 +22,10 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { IconChevronDown, IconUndoLinear } from "#lib/icons.js";
-  import { formatAgeShort } from "#lib/utils/time.js";
+  import { IconChevronDown } from "#lib/icons.js";
   import type { WhoDecides } from "./decides.svelte";
   import { readRecord } from "./decides-client";
   import { showFirstProblem } from "./first-problem";
-  import { kindGlyph } from "./kind-glyph";
   import MemberFace from "./MemberFace.svelte";
   import MemberRecord from "./MemberRecord.svelte";
   import PicturePicker from "./PicturePicker.svelte";
@@ -107,8 +104,6 @@
       : blocked;
     return own.charAt(0).toUpperCase() + own.slice(1);
   });
-  const holds = $derived(member ? who.holds(member.id) : []);
-  const calls = $derived(member ? who.callsOfMember(member.id) : []);
   const removeAsked = $derived(who.asker.pending?.at === `remove:${setup.key}`);
   const footFault = $derived(
     setup.fault && setup.fault.row === null ? setup.fault.reason : null
@@ -381,26 +376,6 @@
     {/if}
 
     {#if member && !adding}
-      {#if holds.length > 0}
-        <ul
-          aria-label={decidesWords.kindsOf(member.name)}
-          class="m-0 flex list-none flex-wrap gap-x-space-3 gap-y-space-1 p-0"
-        >
-          {#each holds as kind (kind.id)}
-            {@const Glyph = kindGlyph(kind.id)}
-            <li
-              class="mark-line flex items-center gap-space-1 type-label text-ink-muted"
-            >
-              <Glyph aria-hidden="true" class="size-icon-sm text-ink-muted" />
-              <span>{kind.name}</span>
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <p class="type-meta text-ink-muted text-pretty">
-          {decidesWords.answersNothing}
-        </p>
-      {/if}
       <section
         aria-label={decidesWords.recordLabel(member.name)}
         class="flex min-w-0 flex-col gap-space-2 border-border-hairline border-t pt-space-3"
@@ -412,41 +387,6 @@
             projectId={who.projectId}
             read={who.record.read}
           />
-        {/if}
-        {#if calls.length > 0}
-          <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
-            {#each calls as call (`${call.artifactId}#${call.card}`)}
-              <li class="flex min-w-0 flex-col gap-px">
-                <p class="line-clamp-2 type-body text-pretty text-ink-strong">
-                  {call.question}
-                </p>
-                <p
-                  class="mark-line flex min-w-0 items-center gap-space-1 type-meta text-ink-muted"
-                >
-                  {#if call.takenBack}
-                    <IconUndoLinear
-                      aria-hidden="true"
-                      class="size-icon-sm flex-none text-status-attn-glyph"
-                    />
-                    <span class="flex-none text-status-attn-ink"
-                      >{decidesWords.pickedAgain}</span
-                    >
-                    <span aria-hidden="true">·</span>
-                  {/if}
-                  <span
-                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                    >{call.picked.length === 0
-                      ? decidesWords.waiting
-                      : call.picked.join(", ")}</span
-                  >
-                  <span aria-hidden="true">·</span>
-                  <span class="flex-none tabular-nums"
-                    >{formatAgeShort(Date.parse(call.at), now)}</span
-                  >
-                </p>
-              </li>
-            {/each}
-          </ul>
         {/if}
       </section>
     {/if}
