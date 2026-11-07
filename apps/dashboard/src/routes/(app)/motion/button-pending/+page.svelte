@@ -6,7 +6,8 @@
    * (pending-content), read by the `button-pending` spec. A label-only
    * button cycles through rest, pending and done on
    * `window.__buttonBench` (`start`, then `stop`, the work ending well);
-   * the icon cases stand still; and every label-only call site that gives
+   * the icon cases stand still (the `icon-wide` pair a preview's empty-state
+   * Try again, at rest and pending, read by `button-pending-inset`); and every label-only call site that gives
    * a literal `pendingLabel` stands at rest, for its width. Each button is
    * a specimen of its own (`data-specimen`), standing for its call site's
    * screen, so the rendered checks' coral count reads each apart.
@@ -54,6 +55,25 @@
     label="Save"
     pending
     pendingLabel="Saving…"
+  />
+  <Button
+    data-specimen
+    data-case="icon-wide-rest"
+    icon={IconRefresh}
+    label={commonWords.tryAgain}
+    pendingLabel="Trying again…"
+    size="sm"
+    variant="outline"
+  />
+  <Button
+    data-specimen
+    data-case="icon-wide-pending"
+    icon={IconRefresh}
+    label={commonWords.tryAgain}
+    pending
+    pendingLabel="Trying again…"
+    size="sm"
+    variant="outline"
   />
 </div>
 <div class="flex flex-wrap items-box-start gap-space-4 p-space-7">

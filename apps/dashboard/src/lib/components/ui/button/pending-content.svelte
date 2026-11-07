@@ -24,8 +24,9 @@
    * icon at rest, the spinner while the work runs, a drawn check when it
    * ends well, cross-fading in one cell) and the label, which beside a rest
    * icon cross-fades to `pendingLabel` and back in a cell as wide as the
-   * wider of the two, all on one clock (--dur-morph, ease-out), so the
-   * button keeps its width. A button with no rest icon keeps no slot: what
+   * wider of the two, each centred in it, the slot beside the one drawn,
+   * all on one clock (--dur-morph, ease-out), so the button keeps its width
+   * and its inset is even at both ends in every state. A button with no rest icon keeps no slot: what
    * the slot shows stands over its label's start while the words fade out,
    * and its pending wording is its name alone, never drawn, so its label's
    * cell is the label's own and stands at the button's centre. The kit
@@ -46,6 +47,7 @@
    */
   import type { Component, Snippet } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
@@ -122,6 +124,40 @@
   );
 
   /**
+   * Beside a rest icon both wordings stand centred in their one cell, as
+   * wide as the wider; the slot stands beside the one drawn, half the
+   * cell's slack in from its start, so the icon and the words drawn sit
+   * centred in the button with one inset at both ends, at rest and while
+   * pending. The slot crosses on the label's clock (--dur-morph, ease-out).
+   */
+  let restWidth = $state(0);
+  let pendingWidth = $state(0);
+  const measureRest = frameSize<HTMLElement>((node) => {
+    restWidth = node.getBoundingClientRect().width;
+  });
+  const measurePending = frameSize<HTMLElement>((node) => {
+    pendingWidth = node.getBoundingClientRect().width;
+  });
+  const slack = $derived(
+    (Math.max(restWidth, pendingWidth) - (pending ? pendingWidth : restWidth)) /
+      2
+  );
+  /**
+   * The slot moves only once both wordings were measured: the first
+   * measure places it, it does not slide there as the button mounts.
+   */
+  let placed = $state(false);
+  $effect(() => {
+    if (placed || restWidth === 0 || pendingWidth === 0) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      placed = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
+  /**
    * The ring stands in the slot: some of the work is done and it is still
    * running, or it ended failed and holds where it got to.
    */
@@ -188,9 +224,11 @@
      good (no width and no gap) and draws what it shows over its label's
      start while the label fades, so its width never changes. -->
 <span
+  style:--btn-words-slack={swapsLabel && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--dur-morph)] data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--dur-morph)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) data-placed:transition-[translate] data-placed:duration-(--dur-morph) data-placed:ease-out motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
   data-over={Icon === undefined || undefined}
+  data-placed={placed || undefined}
 >
   {#if Icon}
     <span data-active={phase === "idle" && !ringShown}
@@ -265,12 +303,14 @@
         >
       {:else if swapsLabel}
         <!-- The wording that steps out goes soft (DESIGN.md, Buttons: Pending). -->
-        <span class="inline-grid justify-items-start" data-slot="words"
+        <span class="inline-grid justify-items-center" data-slot="words"
           ><span
+            {@attach measureRest}
             aria-hidden={pending || undefined}
             class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
             data-active={!pending}><MorphText text={label} /></span
           ><span
+            {@attach measurePending}
             aria-hidden={!pending || undefined}
             class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
             data-active={pending}>{pendingLabel}</span
