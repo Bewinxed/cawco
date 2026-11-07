@@ -38,7 +38,8 @@
  *   project, its conversation among them), `action` (an approved action) or
  *   `routine`. A move is allowed when a line covers it and the stage it goes
  *   to has no `by:` naming someone else. A file without `moves` lets you and
- *   a session make any move.
+ *   a session make any move, and the routine move a task held by a stage's
+ *   `after:` or `until:` on to the next stage that is not dropped.
  * - **A stage of kind `you` holds by its kind**, whatever the moves say: a
  *   task in it waits for you. Only your own move, an approved action, the
  *   stage's own routine (its `after:` or `until:`) or the hub takes it to a
@@ -77,6 +78,7 @@ import type {
   StageView,
 } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { stageWords } from "@cawco/core/words/stages";
 
 export interface Stages {
   moves: StageMove[];
@@ -348,6 +350,20 @@ const checkMoves = (reader: Reader, lines: Map<StageMove, string>): void => {
 };
 
 /**
+ * The routine's moves in a stages.md with no moves section: from each stage
+ * whose `after:` or `until:` holds a task, on to the next stage that is not
+ * dropped, the one place its hook can mean (waits.ts takes a task where the
+ * routine's one move goes). A held stage with none after it gives none.
+ */
+const heldOn = (stages: Stage[]): StageMove[] =>
+  stages.flatMap((stage, at) => {
+    const next = stages.slice(at + 1).find((later) => later.kind !== "dropped");
+    return (stage.hooks.after || stage.hooks.until) && next
+      ? [{ from: stage.name, to: next.name, who: ["routine" as const] }]
+      : [];
+  });
+
+/**
  * Reads stages.md: its stages, moves and views, or every problem it has,
  * each a sentence naming its line.
  */
@@ -433,10 +449,14 @@ export const readStages = (content: string): StagesReading => {
       stages: reader.stages,
       // No moves section: you and a session make any move, except that a
       // stage of kind `you` still holds by its kind (`youStageLets`), so a
-      // session only sends a task in it back.
+      // session only sends a task in it back; and the routine moves a task
+      // on from each stage that holds it (`heldOn`).
       moves: reader.hasMoves
         ? reader.moves
-        : [{ from: "*", to: "*", who: ["you", "session"] }],
+        : [
+            { from: "*", to: "*", who: ["you", "session"] },
+            ...heldOn(reader.stages),
+          ],
       views: reader.views,
     },
   };
@@ -644,6 +664,33 @@ export const startProblem = (
 };
 
 /**
+ * Why `who` may not take `task` out of `from`, a stage of kind `you`, to
+ * `to` ({@link youStageLets}): it waits for the person, so only they, an
+ * approved action or the stage's own routine take it on or drop it. Names
+ * the stages `who` can send it back to; `refused` is what was refused, a
+ * move unless said. Undefined when the stage's kind lets it.
+ */
+export const heldProblem = (
+  stages: Stages,
+  task: string,
+  from: string,
+  to: string,
+  who: Mover,
+  refused = stageWords.move(from, to)
+): string | undefined => {
+  if (youStageLets(stages, from, to, who)) {
+    return;
+  }
+  const open = movesFrom(stages, from, who);
+  return stageWords.held(
+    task,
+    refused,
+    from,
+    stageWords.instead(moverPhrase(who), open.length > 0 ? listed(open) : "")
+  );
+};
+
+/**
  * Why `who` may not move `task` from `from` to `to`, naming the moves they
  * can make instead; undefined when the move is allowed.
  */
@@ -658,18 +705,14 @@ export const moveProblem = (
   if (!target) {
     return unknownStage(stages, to);
   }
-  const held = !youStageLets(stages, from, to, who);
-  if (!held && mayEnter(target, who) && covers(stages, from, to, who)) {
+  const held = heldProblem(stages, task, from, to, who);
+  if (held) {
+    return held;
+  }
+  if (mayEnter(target, who) && covers(stages, from, to, who)) {
     return;
   }
   const open = movesFrom(stages, from, who);
-  if (held) {
-    const back =
-      open.length > 0
-        ? `${moverPhrase(who)} can send it back to ${listed(open)}, or ask the person to move it.`
-        : `${moverPhrase(who)} cannot move it anywhere; ask the person to move it.`;
-    return `${task} cannot go from ${from} to ${to}: it waits for the person in ${from}, and only their own move, an approved action or ${from}'s own routine takes it on or drops it. From ${from}, ${back}`;
-  }
   const why = mayEnter(target, who)
     ? `${moverPhrase(who)} may not make that move`
     : `only ${moverPhrase(target.hooks.by as Mover)} moves a task to ${to}`;

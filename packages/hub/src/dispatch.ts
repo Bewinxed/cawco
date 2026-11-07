@@ -135,6 +135,7 @@ import type {
   TaskSummary,
   WaitWitness,
 } from "@cawco/core/task-views";
+import { stageWords } from "@cawco/core/words/stages";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WorkBudget } from "./db/schema";
@@ -156,7 +157,7 @@ import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
-import { waitingStageOf } from "./stages";
+import { heldProblem, waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
 import {
   BUDGET,
@@ -976,6 +977,32 @@ export const createDispatcher = ({
   };
 
   /**
+   * Refuses a start that is not the person's at a task waiting for them (a
+   * stage of kind `you`) when it would move the task past them, into an
+   * active stage after its own (stages.ts `heldProblem`): they move it on.
+   */
+  const refuseHeld = async (
+    projectId: string,
+    task: TaskView,
+    active: Stage | undefined
+  ): Promise<void> => {
+    if (!active || task.kind !== "you") {
+      return;
+    }
+    const held = heldProblem(
+      await tasks.stages(projectId),
+      task.id,
+      task.stage,
+      active.name,
+      "session",
+      stageWords.start(active.name)
+    );
+    if (held) {
+      refuse(409, held);
+    }
+  };
+
+  /**
    * How an attempt at `task` lands: the task's `lands:`, else its delegate
    * type's, else the project's.
    */
@@ -1316,7 +1343,8 @@ export const createDispatcher = ({
    * one path. `stage` is the active stage a hook started it from; without
    * one the task moves to the stage it is active in, or the first of kind
    * `active`. Refused while the task has a live attempt, is done or dropped,
-   * or no checkout is online; a start the machine or the fleet turns down is
+   * waits for the person in a stage before that active one and the start is
+   * not theirs, or no checkout is online; a start the machine or the fleet turns down is
    * remembered on the task until it changes.
    */
   const startAttempt = async (
@@ -1341,6 +1369,9 @@ export const createDispatcher = ({
       startable(projectId, task);
       const previous = retry ? retryable(projectId, task) : undefined;
       const active = await activeFor(projectId, task, stage);
+      if (origin !== "you") {
+        await refuseHeld(projectId, task, active);
+      }
       let started: WorkItemStart;
       try {
         started = await launch(project, task, parent, active, {

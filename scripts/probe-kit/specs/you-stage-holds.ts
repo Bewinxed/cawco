@@ -24,12 +24,20 @@
  *   `approved`.
  * - d. The stage's own routine (waits.ts, `after: 1m`) moves a task on from
  *   a `you` stage whose moves give the routine that move, where a session's
- *   same move under `* → *  you, session` is refused. A project with no
- *   moves section gives a routine no move at all, before this and after.
+ *   same move under `* → *  you, session` is refused.
  * - e. A stages.md written from the code template as it was until now (its
  *   `review → done  session` line) still reads as the code template
  *   (`isCodeTemplate`), as today's does, and today's names the code
  *   template by its moves (`templateOf`).
+ * - f. A project whose active stage comes after its `you` stage (brief,
+ *   review, build): a session's `task_start` at a task in review is refused
+ *   with the same sentence, the task left in review (dispatch.ts
+ *   `startAttempt`); his own start (the board's) is not held by the stage.
+ *   On main the session's start went on to look for a machine.
+ * - g. An own-shaped project with no moves section whose `you` stage holds
+ *   a task `after: 1m` and whose waiting stage holds it `until: post_at`:
+ *   the routine moves it on from each to the next stage (stages.ts
+ *   `heldOn`). On main the routine had no move, and it stayed.
  *
  *   bun scripts/probe-kit/run.ts you-stage-holds
  */
@@ -43,6 +51,7 @@ import {
   hubRequest,
 } from "../../../packages/core/src/hub-request";
 import { machinePath } from "../../../packages/core/src/machine-path";
+import { stageWords } from "../../../packages/core/src/words/stages";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
@@ -73,6 +82,26 @@ moves
 ---
 `;
 
+/** An active stage after the `you` one: what an attempt start would move a task to. */
+const LATE = `---
+brief       todo
+review      you
+build       active
+shipped     done
+dropped     dropped
+---
+`;
+
+/** Stage lines only, two of them holding a task until a routine moves it on. */
+const HOOKED = `---
+inbox       todo
+your-call   you       after: 1m
+scheduled   waiting   until: post_at
+sent        done
+dropped     dropped
+---
+`;
+
 interface Answer {
   status: number;
   text: string;
@@ -84,6 +113,12 @@ interface Rig {
   /** A board call, as the person. */
   board: (request: HubRequest) => Promise<Answer>;
   db: Db;
+  /** A `task_update` of `id`'s own fields as the project's session. */
+  fields: (
+    projectId: string,
+    id: string,
+    fields: Record<string, string>
+  ) => Promise<{ refused: boolean; text: string }>;
   kit: Kit;
   /** A `task_update` of `id` to `stage` as the project's session; its answer's words. */
   session: (
@@ -91,6 +126,11 @@ interface Rig {
     id: string,
     stage: string,
     reason?: string
+  ) => Promise<{ refused: boolean; text: string }>;
+  /** A `task_start` of `id` as the project's session. */
+  start: (
+    projectId: string,
+    id: string
   ) => Promise<{ refused: boolean; text: string }>;
 }
 
@@ -126,20 +166,28 @@ const run = async (
   const base = serve((request) => hub.handle(request));
   /** Each project's session: the hub, its id and its credential. */
   const sessions = new Map<string, ToolSession>();
+  const sessionOf = (projectId: string): ToolSession => {
+    const one = sessions.get(projectId);
+    if (!one) {
+      throw new Error(`no session in ${projectId}`);
+    }
+    return one;
+  };
   const rig: Rig = {
     db,
     kit,
     board: (request) =>
       handle(new Request(`http://127.0.0.1${request.path}`, hubInit(request))),
     session: (projectId, id, stage, reason) => {
-      const one = sessions.get(projectId);
-      if (!one) {
-        throw new Error(`no session in ${projectId}`);
-      }
+      const one = sessionOf(projectId);
       return reason
         ? toolWords(one, "task_update", { id, stage, reason })
         : toolWords(one, "task_update", { id, stage });
     },
+    start: (projectId, id) =>
+      toolWords(sessionOf(projectId), "task_start", { id }),
+    fields: (projectId, id, fields) =>
+      toolWords(sessionOf(projectId), "task_update", { id, fields }),
   };
 
   /** A project with a session working in it, its stages as `stages` writes them (none: the code template). */
@@ -225,6 +273,46 @@ const run = async (
     return { status: moved.status, text: moved.text, reason: last?.reason };
   };
 
+  /**
+   * The routine as the hub runs it (waits.ts) over the hub's database and
+   * folders, for one project, its clock a few minutes on so a minute's hold
+   * is over: where `taskId` is once it reached `to` (or gave up), and the
+   * move that took it there.
+   */
+  const routineRun = async (projectId: string, taskId: string, to: string) => {
+    const { createWaits } = await import("../../../packages/hub/src/waits");
+    const waits = createWaits({
+      lifetime,
+      tasks: await routineTasks(db),
+      projectIds: () => [projectId],
+    });
+    const { now } = Date;
+    Date.now = () => now() + 5 * 60_000;
+    let moved = "";
+    try {
+      waits.start();
+      for (let tries = 0; tries < 100 && moved !== to; tries += 1) {
+        await Bun.sleep(100);
+        moved = await stageOf(projectId, taskId);
+      }
+    } finally {
+      Date.now = now;
+    }
+    const history = JSON.parse(
+      (
+        await rig.board(
+          hubRequest("GET /api/projects/:id/tasks/:taskId/history", {
+            path: { id: projectId, taskId },
+          })
+        )
+      ).text
+    ) as TaskHistory;
+    return {
+      moved,
+      event: history.events.findLast((event) => event.stage?.to === to),
+    };
+  };
+
   // (a) An own-shaped project with no moves section.
   const own = await project("Private office probe", OWN);
   const ownTask = await file(own, "Draft the quarterly letter");
@@ -239,14 +327,20 @@ const run = async (
     !into.refused && (await stageOf(own, ownTask)) === "your-call",
     into.text
   );
-  const held = (from: string, to: string, open: string) =>
-    `cannot go from ${from} to ${to}: it waits for the person in ${from}, and only their own move, an approved action or ${from}'s own routine takes it on or drops it. From ${from}, a session can send it back to ${open}, or ask the person to move it.`;
+  /** The hub's refusal of a session's move of `task` from `from` to `to`, naming `open` to send it back to. */
+  const held = (task: string, from: string, to: string, open: string) =>
+    stageWords.held(
+      task,
+      stageWords.move(from, to),
+      from,
+      stageWords.instead("a session", open)
+    );
   for (const to of ["scheduled", "sent"]) {
     const on = await rig.session(own, ownTask, to);
     check(
       `a: no moves section: a session moving it on to ${to} is refused, naming where it can send it back`,
       on.refused &&
-        on.text.includes(held("your-call", to, "inbox or drafting")) &&
+        on.text.includes(held(ownTask, "your-call", to, "inbox or drafting")) &&
         (await stageOf(own, ownTask)) === "your-call",
       on.text
     );
@@ -255,7 +349,9 @@ const run = async (
   check(
     "a: no moves section: a session dropping it is refused",
     drop.refused &&
-      drop.text.includes(held("your-call", "dropped", "inbox or drafting")) &&
+      drop.text.includes(
+        held(ownTask, "your-call", "dropped", "inbox or drafting")
+      ) &&
       (await stageOf(own, ownTask)) === "your-call",
     drop.text
   );
@@ -287,7 +383,9 @@ const run = async (
   check(
     "b: code template: a session's review → done is refused, naming where it can send it back",
     done.refused &&
-      done.text.includes(held("review", "done", "ready or working")) &&
+      done.text.includes(
+        held(codeTask, "review", "done", "ready or working")
+      ) &&
       (await stageOf(code, codeTask)) === "review",
     done.text
   );
@@ -295,7 +393,9 @@ const run = async (
   check(
     "b: code template: a session's review → dropped is refused",
     codeDrop.refused &&
-      codeDrop.text.includes(held("review", "dropped", "ready or working")) &&
+      codeDrop.text.includes(
+        held(codeTask, "review", "dropped", "ready or working")
+      ) &&
       (await stageOf(code, codeTask)) === "review",
     codeDrop.text
   );
@@ -328,46 +428,15 @@ const run = async (
   check(
     "d: under * → * you, session, a session's your-call → sent is refused",
     sessionOn.refused &&
-      sessionOn.text.includes(held("your-call", "sent", "inbox")) &&
+      sessionOn.text.includes(held(timedTask, "your-call", "sent", "inbox")) &&
       (await stageOf(timed, timedTask)) === "your-call",
     sessionOn.text
   );
-  // The routine as the hub runs it (waits.ts), over the hub's database and
-  // folders, its clock a few minutes on so the minute's hold is over.
-  const { createWaits } = await import("../../../packages/hub/src/waits");
-  const tasks = await routineTasks(db);
-  const waits = createWaits({
-    lifetime,
-    tasks,
-    projectIds: () => [timed],
-  });
-  const { now } = Date;
-  Date.now = () => now() + 5 * 60_000;
-  let moved = "";
-  try {
-    waits.start();
-    for (let tries = 0; tries < 100 && moved !== "sent"; tries += 1) {
-      await Bun.sleep(100);
-      moved = await stageOf(timed, timedTask);
-    }
-  } finally {
-    Date.now = now;
-  }
-  const routineMove = (
-    JSON.parse(
-      (
-        await rig.board(
-          hubRequest("GET /api/projects/:id/tasks/:taskId/history", {
-            path: { id: timed, taskId: timedTask },
-          })
-        )
-      ).text
-    ) as TaskHistory
-  ).events.findLast((event) => event.stage?.to === "sent");
+  const timedRun = await routineRun(timed, timedTask, "sent");
   check(
     "d: the stage's own routine (after: 1m) moves it on to sent",
-    moved === "sent" && routineMove?.actor.mover === "routine",
-    JSON.stringify({ moved, routineMove })
+    timedRun.moved === "sent" && timedRun.event?.actor.mover === "routine",
+    JSON.stringify(timedRun)
   );
 
   // (e) The code template, now and as it was until now, is still the code template.
@@ -387,6 +456,59 @@ const run = async (
       "template" in named &&
       named.template === "code",
     JSON.stringify({ until: isCodeTemplate(until), named })
+  );
+
+  // (f) A session's attempt start does not carry a task past its `you` stage.
+  const late = await project("Late build probe", LATE);
+  const lateTask = await file(late, "Build the picked landing page");
+  await rig.session(late, lateTask, "review");
+  const start = await rig.start(late, lateTask);
+  check(
+    "f: an attempt a session starts at a task in review, its active stage after it, is refused, naming where it can send it back",
+    start.refused &&
+      start.text.includes(
+        stageWords.held(
+          lateTask,
+          stageWords.start("build"),
+          "review",
+          stageWords.instead("a session", "brief")
+        )
+      ) &&
+      (await stageOf(late, lateTask)) === "review",
+    start.text
+  );
+  const hisStart = await rig.board(
+    hubRequest("POST /api/projects/:id/tasks/:taskId/attempts", {
+      path: { id: late, taskId: lateTask },
+      body: { parentInstanceId: sessionOf(late).id },
+    })
+  );
+  check(
+    "f: his own start at it is not held by its stage (here refused only for want of a machine)",
+    !hisStart.text.includes(stageWords.waits("review")),
+    `${hisStart.status} ${hisStart.text}`
+  );
+
+  // (g) With no moves section, each stage's hook moves a task on to the next stage.
+  const hooked = await project("Hooked probe", HOOKED);
+  const hookedTask = await file(hooked, "Post the launch note");
+  await rig.session(hooked, hookedTask, "your-call");
+  const afterRun = await routineRun(hooked, hookedTask, "scheduled");
+  check(
+    "g: no moves section: Your call's after: 1m moves it on to scheduled, as the routine",
+    afterRun.moved === "scheduled" && afterRun.event?.actor.mover === "routine",
+    JSON.stringify(afterRun)
+  );
+  const dated = await rig.fields(hooked, hookedTask, {
+    post_at: "2026-01-01T09:00:00Z",
+  });
+  const untilRun = await routineRun(hooked, hookedTask, "sent");
+  check(
+    "g: no moves section: scheduled's until: post_at, passed, moves it on to sent, as the routine",
+    !dated.refused &&
+      untilRun.moved === "sent" &&
+      untilRun.event?.actor.mover === "routine",
+    JSON.stringify({ dated: dated.text.slice(0, 120), ...untilRun })
   );
 };
 

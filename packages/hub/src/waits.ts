@@ -13,7 +13,9 @@
  * - **Where to.** The stage the project's moves let a `routine` take it to
  *   from there: the only one, or, where several are open, the only one that
  *   names `routine` alone (outreach's `contacted → lost  routine` beside
- *   `contacted → replied  routine, lead, session`). Anything else moves
+ *   `contacted → replied  routine, lead, session`); a stages.md with no
+ *   moves section gives it one, on to the next stage that is not dropped
+ *   (stages.ts `heldOn`). Anything else moves
  *   nothing and is said once in the log: the stages' moves bind the routine
  *   as they bind anyone (tasks.ts `move`, mover `routine`).
  */
