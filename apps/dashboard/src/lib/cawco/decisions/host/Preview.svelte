@@ -27,7 +27,9 @@
   until its app has mounted (core `EMBED_DRAWN`), and shown once its frame
   has loaded and its app shows something (that same word: a dev server's
   app mounts seconds after its frame's load), its wait saying so until then,
-  or, past `DRAW_MS`, that it showed nothing. A
+  or, `DRAW_MS` past its load and the last file its server sent it (core
+  `EMBED_ARRIVING`: a cold dev server still compiling is still opening),
+  that it showed nothing. A
   component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
@@ -79,6 +81,7 @@
     CANVAS_EMBED_SEEN,
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
+    EMBED_ARRIVING,
     EMBED_DRAWN,
     EMBEDDED,
     type EmbedShape,
@@ -250,6 +253,14 @@
     // never the frame's empty page.
     if (type === EMBEDDED) {
       appDrawn = false;
+      arrived += screen ? 1 : 0;
+      return true;
+    }
+    // Its server still sends what the page loads (a cold dev server
+    // compiling its modules as they are asked for): still opening, so its
+    // clock starts again ({@link DRAW_MS}).
+    if (type === EMBED_ARRIVING) {
+      arrived += screen ? 1 : 0;
       return true;
     }
     // A whole screen's app has mounted (its overlay saw it show something of its own): the page's turn is the next screen's.
@@ -384,6 +395,12 @@
    * while, and so did every reload of it once its first document had drawn.
    */
   let appDrawn = $state(false);
+  /**
+   * Each word that its screen is still arriving: a new document in its frame
+   * (core `EMBEDDED`), or a file it loads come from its server (core
+   * `EMBED_ARRIVING`). Its {@link DRAW_MS} runs from the last.
+   */
+  let arrived = $state(0);
   /** The frame stood unseen under its wait (its skeleton), so its showing is the skeleton's reveal. */
   let underWait = false;
   /**
@@ -573,12 +590,21 @@
    * past any page's evaluation, short of a wait nobody reads as loading. A
    * frame that says neither (a page that isn't the canvas, an import that
    * never settles) is otherwise an empty box for good. A whole screen has
-   * as long from its frame's load to show something ({@link appDrawn}).
+   * as long to show something ({@link appDrawn}) from its frame's load, and
+   * again from each new document in it and each file its server sent it
+   * since ({@link arrived}): a dev server woken from sleep answers the
+   * document at once and compiles the app's modules as the page asks for
+   * them, which on a cold start (its install, its dependencies bundled, its
+   * reload once they are) passes 30 s, and the Preview said the page
+   * "showed nothing" while it was still arriving (owner, 2026-11-07). So it
+   * says so only of a page that showed nothing for 30 s with nothing more
+   * coming; until then it is opening.
    */
   const DRAW_MS = 30_000;
   /** Its draw's clock runs: a canvas told to draw, or a screen whose frame loaded, its box in the view ({@link seen}). */
   const awaited = $derived(seen && (screen ? drawn : told));
   $effect(() => {
+    track(arrived);
     if (!awaited || shaped || failed) {
       return;
     }

@@ -96,6 +96,21 @@ export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 export const EMBED_DRAWN = "cawco:embed-drawn";
 
 /**
+ * A whole screen framed by another page that shows nothing of its own yet
+ * while its server is still sending it the code and files it loads (a
+ * script, a module, a style sheet, a font, a picture: never its own data
+ * calls, a `fetch` or an XHR): the message its overlay posts to the page
+ * holding it, `{ type }`, at most once a second while they arrive, until
+ * {@link EMBED_DRAWN}. A dev server woken from sleep answers the document at
+ * once and compiles the app's modules as the page asks for them, for tens
+ * of seconds on a cold start; its Preview counts its 30 s for a page that
+ * shows nothing from the last of these, so a page still arriving is still
+ * opening, never one that "showed nothing" (dashboard decisions host
+ * Preview.svelte `DRAW_MS`).
+ */
+export const EMBED_ARRIVING = "cawco:embed-arriving";
+
+/**
  * A framed page's overlay is there: the message it posts to the page holding
  * it, `{ type }`, carrying nothing, as each document of the frame starts and
  * before anything else it says ({@link EMBED_DRAWN} among them). A Preview

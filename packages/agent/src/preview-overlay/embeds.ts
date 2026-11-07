@@ -34,7 +34,7 @@ import type {
   PinnedElement,
 } from "@cawco/core/comments";
 import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/frames";
-import { EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
+import { EMBED_ARRIVING, EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
 import { thrownBeforeLoad } from "./faults";
 import {
   contentBox,
@@ -378,11 +378,13 @@ export function tellBroken(): void {
  * its place rather than a blank frame.
  */
 function tellDrawn(own: (node: Node) => boolean): void {
+  const arriving = tellArriving();
   const start = () => {
     const tell = () => {
       if (!(document.body && showsAny(own))) {
         return false;
       }
+      arriving();
       window.parent.postMessage({ type: EMBED_DRAWN }, "*");
       return true;
     };
@@ -408,6 +410,55 @@ function tellDrawn(own: (node: Node) => boolean): void {
   } else {
     addEventListener("load", start, { once: true });
   }
+}
+
+/** How often at most the page holding this one hears that its files still arrive (core `EMBED_ARRIVING`). Ours: the Preview's clock counts in tens of seconds. */
+const ARRIVING_MS = 1000;
+/** The resources a page asks of its own will at run time (its data calls): what keeps arriving for an app that polls, never its code. */
+const DATA_CALLS = new Set(["fetch", "xmlhttprequest", "beacon"]);
+
+/**
+ * Tells the page holding this one, at most once per {@link ARRIVING_MS},
+ * that a file this document loads (its scripts and modules, its styles, its
+ * fonts and pictures) arrived from its server (core `EMBED_ARRIVING`): a
+ * cold dev server answers the document at once and compiles each module as
+ * it is asked for, so a page that shows nothing yet is still arriving, and
+ * its Preview waits. Its own data calls ({@link DATA_CALLS}) say nothing:
+ * an app that polls and stays empty is empty. Read off the browser's own
+ * resource timeline, the ones before this ran included; the call it
+ * answers ends the telling, once the page shows something.
+ */
+function tellArriving(): () => void {
+  let last = 0;
+  let owed: ReturnType<typeof setTimeout> | undefined;
+  const say = () => {
+    owed = undefined;
+    last = Date.now();
+    window.parent.postMessage({ type: EMBED_ARRIVING }, "*");
+  };
+  const watcher = new PerformanceObserver((list) => {
+    const arrived = list
+      .getEntries()
+      .some(
+        (entry) =>
+          !DATA_CALLS.has((entry as PerformanceResourceTiming).initiatorType)
+      );
+    if (!arrived || owed !== undefined) {
+      return;
+    }
+    const wait = last + ARRIVING_MS - Date.now();
+    if (wait <= 0) {
+      say();
+    } else {
+      owed = setTimeout(say, wait);
+    }
+  });
+  watcher.observe({ type: "resource", buffered: true });
+  return () => {
+    watcher.disconnect();
+    clearTimeout(owed);
+    owed = undefined;
+  };
 }
 
 /** What the page's overlay gives the bridge (page.ts). */

@@ -50,6 +50,7 @@ import {
 } from "./preview-bridge";
 import {
   networkOf,
+  StageRefusal,
   sourceUp,
   sourceViewer,
   sourceWakes,
@@ -762,8 +763,14 @@ async function start(
       return null;
     } catch (error) {
       previewFailed("agent listener", instanceId, causeOf(error));
-      return error instanceof WorkspaceNotHere
-        ? downResponse("gone", 410)
+      if (error instanceof WorkspaceNotHere) {
+        return downResponse("gone", 410);
+      }
+      // The server itself didn't start (its install, its port held, its
+      // command ended or never listened): its hop is the server's, in the
+      // stage's own words, never the way to it.
+      return error instanceof StageRefusal
+        ? downResponse("server", 502, causeOf(error))
         : downResponse("reach", 502, causeOf(error));
     }
   };

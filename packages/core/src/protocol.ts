@@ -1704,7 +1704,9 @@ export const PREVIEW_DOWNS = [
  * proxy's own page names it in a `<meta name="cawco-preview-down">` (core
  * `preview-proxy` `downResponse`), so the pane beside the conversation can
  * draw what happened instead of the proxy's page. `server`: the dev server
- * on the session's machine is not answering its port. `machine`: the
+ * on the session's machine is not answering its port, or the server CawCo
+ * runs for it (a sheet's stage, a served preview's command) didn't start,
+ * the stage's words for why in {@link PREVIEW_WHY_META}. `machine`: the
  * machine's preview listener is not answering the hub, or the machine is
  * away. `workspace`: the port is a workspace's, and no boundary of that
  * workspace runs, so nothing in its network can answer. `reach`: the
@@ -1727,7 +1729,7 @@ export const PREVIEW_DOWNS = [
  */
 export type PreviewDown = (typeof PREVIEW_DOWNS)[number];
 export const PREVIEW_DOWN_META = "cawco-preview-down";
-/** The machine's own words for a `reach` failure, on the proxy's page beside {@link PREVIEW_DOWN_META}. */
+/** The machine's own words for a `reach` or `server` failure, on the proxy's page beside {@link PREVIEW_DOWN_META}. */
 export const PREVIEW_WHY_META = "cawco-preview-why";
 
 /**
