@@ -3784,6 +3784,10 @@
         return !pins.some((pin) => !pin.resolvedAt);
     }
   });
+  /** The Comments sheet holds a line or two, or its thread is being placed again (ThreadSheet `short`). */
+  const railShort = $derived(
+    (railEmpty && !threadPushed) || (threadPushed && placingThread)
+  );
   /** Back, in the sheet: the list again, the thread gone at once (no card goes back into a pill). */
   function backToList() {
     closeCard();
@@ -5160,7 +5164,11 @@
          closes. A thread opened while it stands opens in it, over the list,
          Back leading (HIG, Sheets: "Display only one sheet at a time"); it
          stands aside while a composer or a place picker stands, and comes
-         back as it was. -->
+         back as it was. In the phone's preview sheet (`sheet`) its room is
+         the panel's card under its head, itself a share of the screen, and
+         half of it held the bar and the lists' tabs alone: there it opens
+         at its whole room, the comments under its bar, and a drag takes it
+         to half. -->
     <ThreadSheet
       label={threadPushed && cardPin
         ? `Comment ${cardPin.number}`
@@ -5173,7 +5181,8 @@
       }}
       onmoved={() => sayCovered?.()}
       open={railSheetOpen}
-      short={(railEmpty && !threadPushed) || (threadPushed && placingThread)}
+      short={railShort}
+      tall={sheet && !railShort}
       bind:surface={railSurface}
     >
       {#if threadPushed && cardPin && kit && replyDraft}

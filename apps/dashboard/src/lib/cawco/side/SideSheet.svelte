@@ -829,9 +829,15 @@
       trapFocus={false}
       bind:ref={drawer}
     >
+      <!-- One surface: the ground of the card it holds (SideSurface's well,
+           the page's frame), so the grabber's strip and the card under it
+           read as the sheet itself. On the raised surface the card's well
+           stood inside it as a second sheet the page's ground, its own
+           corners rounded under the grabber (The Frame Recesses Rule: no
+           card in a card). -->
       <div
         data-slot="sheet"
-        class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-raised shadow-drawer"
+        class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-well shadow-drawer"
         style:--sheet-hidden="{hidden}px"
         {@attach land(() => share, { mode: "clip" })}
       >

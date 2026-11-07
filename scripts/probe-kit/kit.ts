@@ -91,6 +91,8 @@ export const VIEWS = {
   /** An iPad mini's portrait: the journeys' tablet. */
   tabletPortrait: { width: 768, height: 1024, touch: true },
   phone: { width: 390, height: 844, touch: true },
+  /** Playwright's iPhone 13 device: 390 wide, its 664 the room Safari's toolbars leave. */
+  phoneSafari: { width: 390, height: 664, touch: true },
   /** A touch tablet's portrait, an iPad Air's 820: a finger, whatever the width (comment-card-sizing). */
   tablet820: { width: 820, height: 1180, touch: true },
   /** A desk's window drawn as narrow as that tablet: a mouse. */

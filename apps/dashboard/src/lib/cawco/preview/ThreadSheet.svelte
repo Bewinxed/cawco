@@ -165,11 +165,17 @@
    * the whole room the sheet is the screen and its own bar stands where the
    * head was, the head gone under it; between, the two bars never overlap.
    * The sheet stands over the head (its host's `z-3`).
+   *
+   * In the phone's preview sheet (SideSheet's `data-preview-sheet`) the
+   * panel is itself a sheet, its grabber over its head: the room starts
+   * under the head (the host's `top`), and the head, never covered, stays.
+   * Covering it there stood the panel's grabber and the sheet's own one
+   * pill on pill over the sheet's bar.
    */
   $effect(() => {
     const at = host;
     const card = at?.closest<HTMLElement>('[data-slot="side-card"]');
-    if (!(open && at && card)) {
+    if (!(open && at && card) || card.closest("[data-preview-sheet]")) {
       return;
     }
     // The head's own height: its room, as laid out.
@@ -209,7 +215,7 @@
 
 <div
   bind:this={host}
-  class="pointer-events-none absolute inset-x-0 top-0 z-3 bottom-(--keyboard-lift,0px) overflow-clip"
+  class="pointer-events-none absolute inset-x-0 top-0 z-3 bottom-(--keyboard-lift,0px) overflow-clip in-data-preview-sheet:top-(--side-room)"
   data-slot="thread-sheet-host"
   onanimationend={watchRest}
   onanimationstart={watchRest}
@@ -286,8 +292,17 @@
           }}
           preventCycle
         />
+        <!-- Clipped, never a scroller: what it holds scrolls in its own
+             (the rail's rows, a thread's entries), each holding its scroll
+             (`overscroll-contain`). A finger's touch-action is read from its
+             element up to the nearest scroller (Pointer Events, "Determining
+             supported touch behavior"), and as one (`overflow-x: hidden`
+             makes `overflow-y` auto) this box handed every pan on the
+             Comments sheet's bar and lists back to the browser, past vaul's
+             `touch-action: none` on the sheet: with nothing of the sheet's
+             to scroll there, the pan went on to the transcript behind. -->
         <div
-          class="kit-edge-fade-block flex min-h-0 min-w-0 flex-1 flex-col gap-space-2 overflow-x-hidden px-space-3 pt-space-2 pb-(--sheet-pb)"
+          class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-2 overflow-clip px-space-3 pt-space-2 pb-(--sheet-pb)"
           data-slot="thread-sheet-body"
         >
           {@render children()}

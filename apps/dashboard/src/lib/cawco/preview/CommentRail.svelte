@@ -53,8 +53,9 @@
    */
   import { commentWords as said } from "@cawco/core/words/comments";
   import { type Snippet, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import {
@@ -226,6 +227,28 @@
   let searching = $state(false);
   /** The floating stack's height over the rows, px (its bar, the lists and what opens under them): the rows' top padding. */
   let headHeight = $state(0);
+  /**
+   * The rows fit their box: nothing in them to scroll. In the sheet a
+   * finger's pan there is then no one's (`touch-action: none`): left to the
+   * browser, a list too short to scroll handed it on past the sheet, to the
+   * transcript behind the panel. A list that runs past its box scrolls
+   * under the finger and holds its scroll (`overscroll-contain`).
+   */
+  let rowsFit = $state(true);
+  const rowsRun: Attachment<HTMLElement> = (node) => {
+    const read = () => {
+      rowsFit = node.scrollHeight <= node.clientHeight;
+    };
+    const sized = frameObserver(read);
+    sized.observe(node);
+    const rows = new MutationObserver(() => sized.request());
+    rows.observe(node, { characterData: true, childList: true, subtree: true });
+    read();
+    return () => {
+      sized.disconnect();
+      rows.disconnect();
+    };
+  };
   let searchButton = $state<HTMLElement | null>(null);
   /** `/` from the pane, or Search: the bar becomes the field, and it takes the keyboard. */
   export function focusSearch() {
@@ -1103,7 +1126,9 @@
        Beside the page). -->
   <div
     data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain pt-(--rail-head) scroll-timeline-transcript-head no-scrollbar kit-edge-fade-block"
+    data-fits={(layout === "sheet" && rowsFit) || undefined}
+    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain pt-(--rail-head) scroll-timeline-transcript-head no-scrollbar kit-edge-fade-block data-fits:touch-none"
+    {@attach rowsRun}
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}
