@@ -40,6 +40,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
+import {
+  type AttemptResult,
+  REVIEW_ROUNDS_MAX,
+} from "../../../packages/core/src/deliverables";
 import { CONTROL_HOST_OUTPUTS } from "../../../packages/core/src/harness";
 import {
   fetchHub,
@@ -48,6 +52,7 @@ import {
   hubRequest,
 } from "../../../packages/core/src/hub-request";
 import { machinePath } from "../../../packages/core/src/machine-path";
+import { HOUR_MS, MINUTE_MS } from "../../../packages/core/src/time";
 import { reviewWords } from "../../../packages/core/src/words/review";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { TaskView } from "../../../packages/hub/src/tasks";
@@ -99,6 +104,29 @@ skills: [review-attempt]
 lands: none
 ---
 Review an attempt at the task against its acceptance lines and hand in the verdict.
+`;
+
+/** The code template until review became the reviewer's stage: review was the person's. */
+const YOURS_REVIEW = `---
+ready      todo
+working    active
+review     you
+done       done
+dropped    dropped
+moves
+  * → *                you
+  ready → working      session
+  ready → review       session
+  ready → done         session
+  working → review     session
+  working → done       session
+  review → working     session
+  review → ready       session
+  * → dropped          session
+views
+  board      by stage
+  table      by rank
+---
 `;
 
 const ACCEPTANCE = [
@@ -245,7 +273,8 @@ const attempt = (
   rig: Rig,
   taskId: string,
   type: string,
-  title: string
+  title: string,
+  ended?: { at: Date; taskResult?: AttemptResult }
 ): ToolSession & { workItemId: string } => {
   const workItemId = crypto.randomUUID();
   const workspaceId = crypto.randomUUID();
@@ -262,8 +291,9 @@ const attempt = (
     path: rig.checkout,
     branch: `ws/${workspaceId.slice(0, 8)}`,
     createdByInstanceId: rig.parent,
-    createdAt: new Date(),
+    createdAt: ended?.at ?? new Date(),
     host: true,
+    ...(ended ? { state: "archived" as const } : {}),
   });
   rig.db.createWorkItem({
     id: workItemId,
@@ -274,11 +304,17 @@ const attempt = (
     title,
     type,
     harness: "claude",
-    createdAt: new Date(),
+    createdAt: ended?.at ?? new Date(),
     projectId: rig.projectId,
     taskId,
     lands: "none",
-    state: "running",
+    ...(ended
+      ? {
+          state: "done" as const,
+          endedAt: ended.at,
+          ...(ended.taskResult ? { taskResult: ended.taskResult } : {}),
+        }
+      : { state: "running" as const }),
   });
   return {
     base: rig.base,
@@ -529,6 +565,126 @@ const legs = async (rig: Rig): Promise<void> => {
       waits: dYou.waits.map((wait) => `${wait.kind} ${wait.label}`),
       comment: dYou.comments.at(-1)?.text.slice(0, 200),
     })
+  );
+
+  // (e) A task the template's old review held for the person: once its
+  // review stage runs the reviewer, its reviewer is started for it.
+  await rekinded(rig);
+
+  // (f) Past REVIEW_ROUNDS_MAX rounds ending unmet, an unmet verdict asks the person.
+  const f = await built(rig, "Fix the tray chip spacing");
+  const old = Date.now() - HOUR_MS;
+  for (let round = 0; round < REVIEW_ROUNDS_MAX; round += 1) {
+    attempt(rig, f.id, "reviewer", `Review ${f.id}, round ${round + 1}`, {
+      at: new Date(old + round * MINUTE_MS),
+      taskResult: {
+        summary: "Line 2 is unmet.",
+        check: [],
+        artifacts: [],
+        at: old + round * MINUTE_MS,
+        verdict: [
+          { line: 1, verdict: "met", evidence: "TrayChip.svelte:41" },
+          { line: 2, verdict: "unmet", evidence: "the label still clips" },
+        ],
+      },
+    });
+  }
+  const reviewerF = reviewerOf(rig, f.id);
+  await toolWords(reviewerF, "task_result", {
+    summary: "Line 2 is still unmet.",
+    verdict: [
+      { line: 1, verdict: "met", evidence: "TrayChip.svelte:41 wraps the row" },
+      { line: 2, verdict: "unmet", evidence: "the label still clips at 390" },
+    ],
+  });
+  await toolWords(reviewerF, "finish_item", {
+    headline: "Line 2 is unmet again.",
+    summary: "The label still clips.",
+  });
+  const fYou = await leaves(rig, f.id, "review");
+  const bounded = fYou.comments.at(-1)?.text ?? "";
+  kit.check(
+    `f: past ${REVIEW_ROUNDS_MAX} unmet rounds, an unmet verdict sends it to your-call, waiting on one card asking whether to keep going`,
+    fYou.stage === "your-call" &&
+      fYou.waits.filter((wait) => wait.kind === "card").length === 1 &&
+      fYou.waits.some(
+        (wait) =>
+          wait.kind === "card" &&
+          wait.label ===
+            reviewWords.keepGoing(f.title, REVIEW_ROUNDS_MAX, "").question
+      ),
+    JSON.stringify({
+      stage: fYou.stage,
+      waits: fYou.waits.map((wait) => `${wait.kind} ${wait.label}`),
+    })
+  );
+  kit.check(
+    "f: its comment says what is still unmet, and no next attempt waits to start",
+    bounded.includes("the label still clips at 390") &&
+      bounded.startsWith(reviewWords.bounded(REVIEW_ROUNDS_MAX, "").trim()) &&
+      rig.db
+        .queuedTaskStarts(rig.projectId)
+        .every((row) => row.taskId !== f.id),
+    bounded.slice(0, 300)
+  );
+};
+
+/**
+ * (e) A project on the code template as it was, review the person's (kind
+ * `you`), a delivered task waiting there; the project runs its one live
+ * attempt already. The person writes the new shape (review runs the
+ * reviewer): the hub starts the task's reviewer, which waits in review for
+ * a slot, reporting to whoever its last attempt reported to.
+ */
+const rekinded = async (rig: Rig): Promise<void> => {
+  const projectId = crypto.randomUUID();
+  rig.db.createProject({
+    id: projectId,
+    name: "Old code probe",
+    checkout: { machineId: B, path: rig.checkout },
+    remote: null,
+  });
+  rig.db.setProjectDispatch(projectId, { maxAttempts: 1 });
+  const { writeFolderFile } =
+    await import("../../../packages/hub/src/project-folder");
+  await writeFolderFile(projectId, "stages.md", YOURS_REVIEW, {
+    author: { name: "probe" },
+  });
+  await writeFolderFile(projectId, "delegates/reviewer.md", REVIEWER, {
+    author: { name: "probe" },
+  });
+  const shell: Rig = { ...rig, projectId };
+  const old: Rig = {
+    ...shell,
+    parent: openSession(shell, { title: "Old code probe's orchestrator" }),
+  };
+  const file = async (title: string, stage: string): Promise<string> => {
+    const made = await rig.board(
+      hubRequest("POST /api/projects/:id/tasks", {
+        path: { id: projectId },
+        body: { title, stage },
+      })
+    );
+    return (made.json as { id: string }).id;
+  };
+  const held = await file("Type the hub's callers", "ready");
+  attempt(old, held, "medium", "Type the hub's callers");
+  const waiting = await file("Fix the tray chip glow", "review");
+  attempt(old, waiting, "medium", "Fix the tray chip glow", {
+    at: new Date(Date.now() - 10 * MINUTE_MS),
+  });
+  const written = await rig.board(
+    hubRequest("PUT /api/projects/:id/stages", {
+      path: { id: projectId },
+      body: { content: STAGES },
+    })
+  );
+  const queued = await queuedIn(old, waiting);
+  const now = await read(old, waiting);
+  rig.kit.check(
+    "e: a task waiting in a review stage that now runs a reviewer gets its reviewer, waiting in review for a slot",
+    written.status < 400 && queued === "review" && now.stage === "review",
+    `${written.status}; ${waiting} in ${now.stage}, queued in ${queued}`
   );
 };
 

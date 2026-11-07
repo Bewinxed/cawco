@@ -30,6 +30,30 @@ export const reviewWords = {
   /** The to-do an unmet line becomes. */
   todo: (line: number, criterion: string, evidence: string): string =>
     `Make line ${line} true: ${criterion} (${evidence})`,
+  /**
+   * The card a task takes to the person once `rounds` review rounds ended
+   * unmet and the next did too (hub dispatch.ts `REVIEW_ROUNDS_MAX`):
+   * what is still unmet, and whether to keep going.
+   */
+  keepGoing: (task: string, rounds: number, lines: string) => ({
+    title: `Keep going on “${task}”?`,
+    ask: `Say whether “${task}” gets another round`,
+    question: `“${task}” went through ${rounds} review rounds and is still unmet. Keep going?`,
+    why: `Still unmet after round ${rounds + 1}:\n${lines}`,
+    go: {
+      label: "Keep going",
+      gets: "It goes back to working for another attempt, the unmet lines as its to-dos, and its reviewer judges it again.",
+      costs: "Another attempt and review, which may end unmet again.",
+    },
+    stop: {
+      label: "Stop here",
+      gets: "It stays with you, to rescope, split or drop.",
+      costs: "The unmet lines stay unmet until someone takes them up.",
+    },
+  }),
+  /** The comment a task takes to the person with that card. */
+  bounded: (rounds: number, lines: string): string =>
+    `Its review rounds ended unmet ${rounds} times and this one did too, so it waits for you, asking whether to keep going. Still unmet, now to-dos:\n\n${lines}`,
   /** A verdict from an attempt that does not review its task. */
   notReviewer:
     "`verdict` is a reviewer's: this attempt does not review its task in the project's review stage. Leave it out.",

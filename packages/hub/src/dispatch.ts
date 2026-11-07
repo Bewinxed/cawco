@@ -120,7 +120,13 @@
  *   ticked; a line that is the owner's by Who decides → the first `you`
  *   stage, waiting on its card; else an unmet line → back to working with
  *   each unmet line a to-do, the hub starting its next attempt
- *   ({@link settleReview}). The owner sees only the `you` kind.
+ *   ({@link settleReview}); past `REVIEW_ROUNDS_MAX` rounds ending unmet,
+ *   the next unmet verdict goes to the `you` stage instead, with one card
+ *   asking whether to keep going. A task a review stage holds with nothing
+ *   on it (a stage re-kinded under it) gets its reviewer the same way, at
+ *   the hub's start and when the project's stages change, no more than
+ *   `REVIEW_SWEEP_MAX` at once ({@link reviewStranded}). The owner sees
+ *   only the `you` kind.
  *
  * It wakes on events only: a work item ending, a task changing, a setting
  * changing, a machine with a checkout coming online. A slow timer looks
@@ -134,12 +140,14 @@ import {
   type LandsMode,
   markdownLink,
   POST_OUTPUT_RULE,
+  REVIEW_ROUNDS_MAX,
   type StageKind,
   sessionLink,
   type TaskMover,
   taskLink,
   todoLink,
   type VerdictLine,
+  waitHandle,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import type {
@@ -198,6 +206,14 @@ import { capitalized, type WorkAsk, type WorkPlace } from "./work-place";
 
 /** What the dispatcher needs of the hub. */
 export interface DispatchDeps {
+  /**
+   * Puts a decision page to the person as session `instanceId`'s
+   * (artifacts service `create`, `does: pick`): its picks go to that session.
+   */
+  readonly askCard: (
+    instanceId: string,
+    page: { ask: string; name: string; program: string; title: string }
+  ) => Promise<{ id: string }>;
   /**
    * The fleet's briefing guidance the session that wrote an attempt's
    * brief (a `delegate` naming the task) has yet to read for the delegate
@@ -378,6 +394,18 @@ const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
 
 const NO_LEAD =
   "Turn the project's events on so its conversation takes the report, name a session of the project that orchestrates, or start it with task_start from one.";
+
+/**
+ * The most tasks one look gives reviewers at once when a review stage holds
+ * them with nothing on them (`reviewStranded`): past it, none start and the
+ * hub names them, so a re-kinded stage never fans out a fleet of reviewers.
+ */
+const REVIEW_SWEEP_MAX = 10;
+
+/** The card a task past its review rounds asks the person on. */
+const KEEP_GOING = "keep-going";
+/** The most of a task's title that card's page names. */
+const CARD_TITLE_TASK = 48;
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
@@ -892,6 +920,7 @@ const failure = (
 type AttemptLanding = Extract<StageKind, "done" | "todo" | "you">;
 
 export const createDispatcher = ({
+  askCard,
   briefing,
   context,
   db,
@@ -2130,7 +2159,7 @@ export const createDispatcher = ({
       projectId,
       task,
       review,
-      item,
+      item.parentInstanceId,
       `It went to ${review.name}, which runs ${review.hooks.runs}`
     );
   };
@@ -2186,6 +2215,14 @@ export const createDispatcher = ({
       await toOwner(projectId, task, item, you, { owner, unmet, criteria });
       return;
     }
+    if (
+      unmet.length > 0 &&
+      you &&
+      unmetRounds(projectId, task.id, review, item.id) >= REVIEW_ROUNDS_MAX
+    ) {
+      await keepGoing(projectId, task, item, you, { unmet, criteria });
+      return;
+    }
     if (unmet.length > 0) {
       await backToWork(projectId, task, item, stages, review, {
         unmet,
@@ -2211,6 +2248,86 @@ export const createDispatcher = ({
       undefined,
       { tickCriteria: criteria.length > 0 && closes.kind === "done" }
     );
+  };
+
+  /**
+   * The review rounds before `itemId` at `taskId` that ended unmet: its
+   * reviewer's attempts (they ran the type `review` runs) that ended done
+   * with an unmet line and none of the owner's, so they sent it back to
+   * work.
+   */
+  const unmetRounds = (
+    projectId: string,
+    taskId: string,
+    review: Stage,
+    itemId: string
+  ): number =>
+    db.projectAttempts(projectId).filter((attempt) => {
+      const verdict = attempt.taskResult?.verdict ?? [];
+      return (
+        attempt.taskId === taskId &&
+        attempt.id !== itemId &&
+        attempt.state === "done" &&
+        attempt.type === review.hooks.runs &&
+        verdict.some((line) => line.verdict === "unmet") &&
+        !verdict.some((line) => line.verdict === "owner")
+      );
+    }).length;
+
+  /**
+   * A task past {@link REVIEW_ROUNDS_MAX} review rounds ending unmet, unmet
+   * again: it goes to stage `you`, not back to work, waiting on one card
+   * that says what is still unmet and asks whether to keep going. The card
+   * is the session's that the reviewer reported to, which hears his answer.
+   */
+  const keepGoing = async (
+    projectId: string,
+    task: TaskView,
+    item: WorkItemRow,
+    you: Stage,
+    lines: { criteria: string[]; unmet: VerdictLine[] }
+  ): Promise<void> => {
+    const listed = verdictLines(lines.unmet, lines.criteria);
+    const why = reviewerActor(
+      item,
+      `found lines unmet past ${REVIEW_ROUNDS_MAX} review rounds`
+    );
+    // A page's title holds 80 characters (artifact_create `title`).
+    const titled =
+      task.title.length > CARD_TITLE_TASK
+        ? `${task.title.slice(0, CARD_TITLE_TASK - 1).trimEnd()}…`
+        : task.title;
+    const words = reviewWords.keepGoing(titled, REVIEW_ROUNDS_MAX, listed);
+    const q = JSON.stringify;
+    const program = [
+      `root = Decisions(${q(words.title)}, [card])`,
+      `card = Decision(${q(KEEP_GOING)}, ${q(words.question)}, [go, stop], ${q(words.why)}, [], [], false, null, "scope")`,
+      `go = Option("go", ${q(words.go.label)}, ${q(words.go.gets)}, false, [], ${q(words.go.costs)})`,
+      `stop = Option("stop", ${q(words.stop.label)}, ${q(words.stop.gets)}, true, [], ${q(words.stop.costs)})`,
+    ].join("\n");
+    const page = await askCard(item.parentInstanceId, {
+      name: `keep-going-${task.id}`,
+      title: words.title,
+      ask: words.ask,
+      program,
+    });
+    await tasks.link(
+      projectId,
+      task.id,
+      {
+        waitsOn: [
+          waitHandle({ kind: "card", artifactId: page.id, card: KEEP_GOING }),
+        ],
+      },
+      why
+    );
+    await tasks.comment(
+      projectId,
+      task.id,
+      reviewWords.bounded(REVIEW_ROUNDS_MAX, listed),
+      why
+    );
+    await tasks.move(projectId, task.id, you.name, why);
   };
 
   /**
@@ -2295,38 +2412,35 @@ export const createDispatcher = ({
       projectId,
       task,
       working,
-      item,
+      item.parentInstanceId,
       `Its reviewer sent it back to ${working.name}`
     );
   };
 
   /**
-   * The hub's start of an attempt at `task` in active stage `stage` after
-   * attempt `item` ended: its reviewer, or its next attempt once its reviewer
-   * sent it back. It reports to the session `item` reported to when that
-   * can take reports, else the project's conversation; it waits for a slot
+   * The hub's start of an attempt at `task` in active stage `stage`: its
+   * reviewer after an attempt ended or as its review stage holds it with
+   * nothing on it ({@link reviewStranded}), or its next attempt once its
+   * reviewer sent it back. It reports to the session `reportsTo` (the one
+   * the last attempt reported to) when that can take reports, else the
+   * project's conversation; it waits for a slot
    * while the project runs `max_attempts` already (`queued_task_starts`,
    * whatever the stage runs); and one that cannot start sends the task on to
    * its todo stage ({@link nobodyOn}), as nothing works on it.
    */
   const startAfter = async (
     projectId: string,
-    task: TaskView,
+    task: Pick<TaskView, "id">,
     stage: Stage,
-    item: WorkItemRow,
+    reportsTo: string | null,
     how: string
   ): Promise<void> => {
     const project = projectOf(projectId);
     const current = await tasks.get(projectId, task.id);
-    if (current.liveAttempt) {
+    if (current.liveAttempt || starting.has(keyOf(projectId, task.id))) {
       return;
     }
-    const parent = await hookParent(
-      project,
-      current,
-      item.parentInstanceId,
-      how
-    );
+    const parent = await hookParent(project, current, reportsTo, how);
     let failed = parent ? undefined : "no session can take its report";
     if (parent && liveIn(projectId) >= project.maxAttempts) {
       db.queueTaskStart({
@@ -2362,6 +2476,88 @@ export const createDispatcher = ({
         `its attempt in ${stage.name} did not start (${failed})`
       );
     }
+  };
+
+  /** {@link reviewStranded}'s tasks in one project: in its review stage, nothing live, starting or queued. */
+  const strandedIn = async (
+    projectId: string
+  ): Promise<{ projectId: string; review: Stage; task: TaskSummary }[]> => {
+    const review = db.project(projectId)
+      ? await tasks.reviewStage(projectId)
+      : undefined;
+    if (!review) {
+      return [];
+    }
+    const queued = new Set(
+      db.queuedTaskStarts(projectId).map((row) => row.taskId)
+    );
+    const { tasks: all } = await tasks.list(projectId);
+    return all
+      .filter(
+        (task) =>
+          task.stage === review.name &&
+          !task.liveAttempt &&
+          !queued.has(task.id) &&
+          !starting.has(keyOf(projectId, task.id))
+      )
+      .map((task) => ({ projectId, review, task }));
+  };
+
+  /**
+   * The tasks a review stage holds with nothing on it (no live or starting
+   * attempt, no start waiting for a slot): a stage that became the review
+   * stage after they entered it (the code template's review was the
+   * person's, of kind `you`), where nothing starts by itself, a `runs:` hook
+   * firing only on entry. Each gets its reviewer ({@link startAfter}),
+   * reporting to whoever its last attempt reported to, under
+   * `max_attempts`. Read across `projectIds` first: more than
+   * {@link REVIEW_SWEEP_MAX} at once start none, and the hub says which. It
+   * runs at the hub's start (a template it ships may have re-kinded a
+   * stage) and when a project's stages or folder change.
+   */
+  const reviewStranded = async (projectIds: string[]): Promise<void> => {
+    const found = (
+      await Promise.all(projectIds.map((projectId) => strandedIn(projectId)))
+    ).flat();
+    if (found.length === 0) {
+      return;
+    }
+    const listed = found
+      .map((one) => `${projectOf(one.projectId).name} ${one.task.id}`)
+      .join(", ");
+    if (found.length > REVIEW_SWEEP_MAX) {
+      console.warn(
+        `[dispatch] ${found.length} tasks sit in a review stage with nothing on them, more than ${REVIEW_SWEEP_MAX}, so no reviewer starts for them; move them on, or back to be worked: ${listed}`
+      );
+      return;
+    }
+    console.log(
+      `[dispatch] ${found.length} ${found.length === 1 ? "task sits" : "tasks sit"} in a review stage with nothing on ${found.length === 1 ? "it" : "them"}; each gets its reviewer: ${listed}`
+    );
+    for (const { projectId, review, task } of found) {
+      const [last] = db
+        .projectAttempts(projectId)
+        .filter((item) => item.taskId === task.id);
+      await startAfter(
+        projectId,
+        task,
+        review,
+        last?.parentInstanceId ?? null,
+        `It sits in ${review.name}, which runs ${review.hooks.runs}`
+      );
+    }
+  };
+
+  /** {@link reviewStranded}, off the step that asked; a failure is said, never thrown. */
+  const sweepReviews = (projectIds: string[]): void => {
+    detach(
+      reviewStranded(projectIds).catch((error: unknown) =>
+        console.warn(
+          `[dispatch] tasks in a review stage were not looked at: ${failure(error).message}`
+        )
+      ),
+      "review stage sweep"
+    );
   };
 
   /**
@@ -2609,6 +2805,10 @@ export const createDispatcher = ({
     if (event.kind === "moved") {
       db.dropQueuedTaskStart(event.projectId, event.id);
     }
+    // Its stages or folder changed: a stage may have become its review stage.
+    if (event.kind === "changed" && !event.id) {
+      sweepReviews([event.projectId]);
+    }
     // The hub's own moves start nothing; one a tracker brings is a person's.
     if (
       event.kind !== "changed" &&
@@ -2790,6 +2990,8 @@ export const createDispatcher = ({
         return;
       }
       watching = true;
+      // A template the hub ships may have re-kinded a project's review stage.
+      sweepReviews(db.listProjects().map((project) => project.id));
       lifetime.every(SAFETY_MS, () => {
         for (const project of db.listProjects()) {
           if (

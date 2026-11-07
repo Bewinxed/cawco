@@ -192,6 +192,13 @@ export interface VerdictLine {
 }
 
 export const VERDICT_KINDS = ["met", "unmet", "owner"] as const;
+
+/**
+ * The review rounds ending unmet one task goes through before the next
+ * unmet verdict sends it to the person with a card asking whether to keep
+ * going, not back to working (hub dispatch.ts `settleReview`).
+ */
+export const REVIEW_ROUNDS_MAX = 3;
 export type VerdictKind = (typeof VERDICT_KINDS)[number];
 
 /**

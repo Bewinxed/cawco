@@ -26953,6 +26953,9 @@ export const createServer = (
     tell: async (projectId, event) => (await caw.tell(projectId, event)).woke,
   });
   const dispatcher = createDispatcher({
+    // A card the hub puts to the person, as the session that hears its picks.
+    askCard: (instanceId, page) =>
+      artifacts.create(instanceId, { kind: "page", does: "pick", ...page }),
     // A brief a session wrote waits for the fleet's guidance, as a delegate's does.
     briefing: (request) => workItems.briefing(request),
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
