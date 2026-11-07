@@ -239,11 +239,11 @@ spacing:
 
 # Design System: CawCo
 
-**The token source is `design/tokens/cawco.resolver.json`** (W3C DTCG 2025.10, checked against the DTCG schemas on every build): its base set `cawco.tokens.json`, with the dark scheme, a coarse pointer and the compact density as modifier files. It is the one place a visual value is defined. `bun run tokens` in `apps/dashboard` builds it into `src/lib/tokens/tokens.css` (every colour that differs by scheme a `light-dark()`), the Tailwind theme `theme.css` (one utility per token, so `text-sm`, `ease-in` or `bg-red-500` names nothing) and the native apps' `Tokens.xcassets` and `Tokens.swift`. `bun run variants` writes `variants.css`. To change a value, edit the JSON and rebuild.
+**The token source is `design/tokens/cawco.resolver.json`** (W3C DTCG 2025.10): its base set `cawco.tokens.json`, with the dark scheme, a coarse pointer and the compact density as modifier files. It is the one place a visual value is defined. `bun run tokens` in `apps/dashboard` builds it into `src/lib/tokens/tokens.css` (every colour that differs by scheme a `light-dark()`), the Tailwind theme `theme.css` (one utility per token, so `text-sm`, `ease-in` or `bg-red-500` names nothing) and the native apps' `Tokens.xcassets` and `Tokens.swift`. `bun run variants` writes `variants.css`.
 
-The frontmatter restates the shipped colours for tools that read DESIGN.md; where it and the JSON disagree, the JSON wins.
+Where the frontmatter's colours and the JSON disagree, the JSON wins.
 
-This file holds what spans screens: the principles, what the tokens mean, and the recipes of the kit's controls. It changes when the owner picks a change to the system. A decision about one screen lives in that screen's surface brief, under `apps/dashboard/.impeccable/surfaces/` (`impeccable surface-brief read <file>` finds the one for a file), and the Projects features are specified in their PRD (`.design-foundations/plans/2026-10-06-projects.md`). A rule here names its tokens and components; the code holds every measurement.
+This file holds what spans screens: the principles, what the tokens mean, and the recipes of the kit's controls. It changes when the owner picks a change to the system. A decision about one screen lives in that screen's surface brief, under `apps/dashboard/.impeccable/surfaces/` (`impeccable surface-brief read <file>` finds the one for a file). A rule here names its tokens and components; the code holds every measurement.
 
 ## Overview
 
@@ -251,7 +251,7 @@ This file holds what spans screens: the principles, what the tokens mean, and th
 
 CawCo is a board an operator glances at between other work, to answer one question: does anything need me right now? It reads like a departure board: rows hold still, numbers line up, and a quiet row means a healthy row.
 
-The surface is warm paper by day and roost-dark at night, low in chroma. Colour is spent on five things only: the coral action, status, identity marks, the focus ring, and data past a threshold. Depth is a recessed frame holding raised content. Neither scheme is the original: every colour token picks its side through `light-dark()`, and a design is drawn and checked in both.
+The surface is warm paper by day and roost-dark at night, low in chroma. Colour is spent on five things only: the coral action, status, identity marks, the focus ring, and data past a threshold. Depth is a recessed frame holding raised content. Neither scheme is the original: every colour token picks its side through `light-dark()`.
 
 **Key Characteristics:**
 - A coral action on warm paper; colour elsewhere only where it carries meaning.
@@ -278,7 +278,7 @@ Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the
 
 **The Fast Exit Rule.** Exits are shorter than entrances, and a thing leaves the way it came: in over `--dur-pop` or `--dur-panel`, out over `--dur-exit`; a grown surface in over `--dur-grow`, out over `--dur-grow-exit`. Nothing outlasts `--dur-panel` but a message lifted between its bubble and the field (`--dur-lift`), a grown surface and the two picked recipes; ambient loops are not beats.
 
-**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling `--tip-rise` toward its trigger, and leaves at once.
+**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side; every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception (Tooltip).
 
 **The One Object Rule.** What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A flight runs `--dur-panel` on the drawer curve as a transform or a clip from the source's box, the source hidden meanwhile so the screen never shows two. A surface that closes on running work travels into the place that work is parked.
 
@@ -300,7 +300,7 @@ Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the
 - **One press brings it back**, exactly where it was; a finished job opens on its outcome.
 - **A failure is told and recoverable**, in the error formula with a way on, until acted on; a toast never carries one.
 
-**The Show Don't Tell Rule.** A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, outcomes as marks in their status colours. Words are for what has no shape, and a stack of label-and-value rows is a sign something should be drawn.
+**The Show Don't Tell Rule.** A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, outcomes as marks in their status colours. Words are for what has no shape.
 
 **Live work breathes.** Anything still running pulses its opacity on `--breath` down to `--breath-floor` (the lowest at which every breather's ink holds 3:1), through the shared `breath` keyframes, on one wall clock (`@cawco/core/breath`) so every live mark breathes in step. Nothing that has finished moves.
 
@@ -310,7 +310,7 @@ Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the
 
 **The Reduced Motion Rule.** Motion is opt-in: every travelling transition sits under `prefers-reduced-motion: no-preference`, and script asks `motionOk`. With reduced motion, fades still run and everything that travels lands; loops stop. Reduced motion means stillness, never an instant swap: what changed still fades.
 
-**The House Helper Rule.** Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half (`cawco/motion/`, `cawco/spawn/NsPopoverGroup.svelte`, `components/ui/fluid-tabs`, under `apps/dashboard/src/lib`). A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.
+**The House Helper Rule.** Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half. A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.
 
 ### Sound and touch
 
@@ -318,7 +318,7 @@ Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the
 
 ## Colors
 
-Warm low-chroma paper and roost neutrals, one coral that means "you act here", and four other hues reserved for status. Every pair the token-contrast check measures (`bun scripts/token-contrast-check.ts --table`) holds its floor in both schemes.
+Every pair the token-contrast check measures (`bun scripts/token-contrast-check.ts --table`) holds its floor in both schemes.
 
 ### Primary: the coral action
 - **Coral Action** (`action-solid`, `action-hover`, `on-action`): the one action colour. A primary button, Send/Stop, checked controls and the reader's own row mark fill with `action-surface`, a top-highlight gradient; its white label holds 4.5:1 on every stop.
@@ -326,7 +326,7 @@ Warm low-chroma paper and roost neutrals, one coral that means "you act here", a
 - **Brand ink and wash** (`brand-ink`, `link-ink`, `brand-wash`, `brand-ink-strong`): links, an active filter chip, peer accents.
 - **Selected** (`selected-bg`, `selected-ink`, `selected-icon`): a warm apricot wash with coral ink for the selected row.
 - **Chosen option** (`chip-chosen-bg`, `chip-chosen-ink`) and **focus** (`focus-ring`, `selection`).
-- **Ink-solid** (`ink-solid`, `on-ink`): tooltips and inverted tiles, ink in both schemes, never coral.
+- **Ink-solid** (`ink-solid`, `on-ink`): ink in both schemes (The Ink Stays Ink Rule).
 - **Spark, paper and crow ink** (`spark`, `paper`, `crow-ink`): the wordmark, the mascot and brand art only, never product chrome but the app icon and the tab icon's tile.
 
 ### Tertiary: status
@@ -362,7 +362,7 @@ Four functional hues, each with a 3 / 9 / 11 step: info, warning, success and er
 
 **The Ink Stays Ink Rule.** Tooltips and inverted tiles are `ink-solid` with `on-ink`. They are never coral.
 
-**The Idle Has No Fill Rule.** An idle session carries no chip. A quiet row means a healthy row, so rest is drawn as nothing.
+**The Idle Has No Fill Rule.** An idle session carries no chip: rest is drawn as nothing.
 
 **The No Indigo Rule.** Indigo is never a brand, action or accent hue. Identity hues span the wheel for telling things apart and are never promoted to a brand role.
 
@@ -372,7 +372,7 @@ Four functional hues, each with a 3 / 9 / 11 step: info, warning, success and er
 
 **UI font:** Figtree Variable at 400 and 500 only. **Mono font:** JetBrains Mono Variable, ligatures off. **Wordmark font:** Nunito Variable (`--font-wordmark`), "Caw&Co" at weight 1000, exempt from the 500 ceiling. **Display font:** Fredoka 600, brand display only (marketing, a brand moment in an empty state), never product chrome. Every face is the repository's own file, served by `packages/core/src/house-faces.ts`, and the product's faces are inlined so the first paint never swaps fonts.
 
-**Character:** Figtree's round forms sit near the wordmark and stay crisp at 12 to 13px in dense rows. JetBrains Mono has a tall x-height and a clear 0/O and 1/l/I in diffs; it sets large, so code runs at 12px. Ligatures are off for every code, path and ID run.
+**Character:** Figtree's round forms sit near the wordmark and stay crisp at 12 to 13px in dense rows. JetBrains Mono has a tall x-height and a clear 0/O and 1/l/I in diffs; it sets large, so code runs at 12px.
 
 ### Hierarchy
 - **Meta** (400, 12px): timestamps, counts, units, hints.
@@ -389,7 +389,7 @@ The dense roles keep one size at every width; they are already the smallest that
 ### Named Rules
 **The 500 Ceiling Rule.** No product text goes above 500. Emphasis is a step from 400 to 500 or an ink step, never bold.
 
-**The Role, Not Size Rule.** Text takes a role by what it does: names, headings, column heads and badges are label; sentences are body; timestamps, counts, units and hints are meta. Nobody picks a size and finds a role for it.
+**The Role, Not Size Rule.** Text takes a role by what it does, as Hierarchy lists them; nobody picks a size and finds a role for it.
 
 **The Tabular Figure Rule.** A figure that changes carries `.num` and is set in tabular numerals, so a ticking value never moves its neighbours; tables are tabular by default.
 
@@ -426,7 +426,7 @@ The shell is a resizable rail (228px by default, the reader's own width wins), a
 
 ## Elevation & Depth
 
-Depth is tonal first and shadowed second. The frame (the app field, dialog tray, header band, segmented groove) recesses; content (cards, rows, menus, the dialog body, a thumb) sits raised on it. Shadows are warm ink tints: by day the ink at low alpha, at night the deepest surface at high alpha plus a 1px inner ring of ink (`night-ring`). Every shadow token adapts through `light-dark()`; none is keyed on the theme class.
+Depth is tonal first and shadowed second. The frame (the app field, dialog tray, header band, segmented groove) recesses; content (cards, rows, menus, the dialog body, a thumb) sits raised on it. Shadows are warm ink tints: by day the ink at low alpha, at night the deepest surface at high alpha, ringed (The Night Ring Rule). Every shadow token adapts through `light-dark()`; none is keyed on the theme class.
 
 ### Shadow Vocabulary
 - **Tile** (`shadow-tile`): cards, machine tiles, icon tiles.
@@ -490,7 +490,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 
 ### Inputs and fields
 - **Style:** `c-btn-h` tall, `radius-md`, raised surface, `border-control` edge, `shadow-xs`, body text in `ink-strong`, muted placeholder, the coral caret (`brand-solid`).
-- **Focus:** the caret, and the field's own edge stepping to `border-control-strong` while its text has focus (`field-edge`, The Caret Rule). An invalid field keeps its error edge; a disabled one fades to 50%.
+- **Focus:** The Caret Rule. An invalid field keeps its error edge; a disabled one fades to 50%.
 - **Textarea:** grows a line at a time and scrolls past its ceiling.
 - **Field frame:** a frame round a borderless editor with its own controls beside it (a search with an icon, a path with Browse, a prompt with its chips) is the field: its edge steps while the text inside has focus, not while a chip or button does.
 - **Select trigger:** the input's look with a sort-vertical glyph.
@@ -521,7 +521,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Folder tabs:** fluid-tabs' folder variant on `surface-shelf` (Shapes, Folder tabs).
 
 ### Tooltip
-Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, `radius-sm`, with a rotated square arrow. It fades in over `--dur-fade` settling `--tip-rise` toward its trigger and leaves at once (The Enter Rule names it the one exception).
+`ink-solid` fill and arrow, `on-ink` text (The Ink Stays Ink Rule), meta role, `radius-sm`, with a rotated square arrow. It fades in over `--dur-fade` settling `--tip-rise` toward its trigger and leaves at once, the one exception to The Enter Rule.
 
 ### Asking in the page
 The one way to ask before doing (`AskHere.svelte`, `ask-here.svelte.ts`). The question unfolds in the page's flow under the control that asked it, indented to its row's title: a raised tile holding the title in label, the consequence in meta, then Cancel (ghost) and the verb (destructive, or the grant's shield). It takes the focus on Cancel. The verb stays pending until its work ends; a refusal stays under the question in the refuser's words, and only work that went closes it. An action that reaches several things names them inside the question, read live.
@@ -535,7 +535,7 @@ For the rare holds The Open Page Rule allows; no confirmation is a dialog.
 **The Hold-To-Select Rule.** A press that starts in a text field is never captured by a drawer or gesture round it, so iOS hold-to-select and Paste reach the field. A held press on a context-menu trigger suppresses the platform callout.
 
 ### Toast
-The floating surface over sonner, body type. It enters from `--pop-rise` on its edge's side and leaves toward it; under a finger it tracks 1:1 and flicks away. On a desk toasts sit in the content area's bottom-right, never over the rail; on a phone at the top under the bar, clear of the composer. A toast never paints over navigation and never carries a failure.
+The floating surface over sonner, body type. It enters from `--pop-rise` on its edge's side and leaves toward it; under a finger it tracks 1:1 and flicks away. On a desk toasts sit in the content area's bottom-right, never over the rail; on a phone at the top under the bar, clear of the composer. A toast never paints over navigation.
 
 ### Alert
 A compact tinted row, never a slab: `radius-md`, body type, an optional glyph spanning title and description. Variants: default (recess), destructive, warning, success and info (each its status pair). No border.
@@ -554,8 +554,8 @@ A compact tinted row, never a slab: `radius-md`, body type, an optional glyph sp
 **The Real Wait Rule.** Nothing stands in for a wait until it has lasted `--dur-wait-grace`. Caw, once he appears, finishes his enter before what arrives lands, then fades out from the drawing he is on (assets/mascot/README.md, Contract).
 
 ### Status displays
-- **Session status:** a Solar duotone glyph alone, no circle round it, one per state (`workspace/session-status.ts`); then the word in label, tinted live, attn or fail where it applies. The Working glyph breathes.
-- **Live dot** (`ui/live-dot`): work in progress is never a line of words alone. Words that say what is running stand beside the live dot, a `status-dot-size` circle in `status-live-glyph` that breathes, on the mark line; where something already marks the wait (a spinner, Caw, a step's glyph) it needs none. Where a speaker is at work, the dot stands on its mark's top-end corner, cut round by `status-dot-cut`, and the words go. One breath everywhere: every live dot is on the shared breath.
+- **Session status:** a Solar duotone glyph alone, no circle round it, one per state (`workspace/session-status.ts`); then the word in label, tinted live, attn or fail where it applies.
+- **Live dot** (`ui/live-dot`): work in progress is never a line of words alone. Words that say what is running stand beside the live dot, a `status-dot-size` circle in `status-live-glyph` that breathes, on the mark line; where something already marks the wait (a spinner, Caw, a step's glyph) it needs none. Where a speaker is at work, the dot stands on its mark's top-end corner, cut round by `status-dot-cut`, and the words go.
 - **Task ring:** wound from the top as a clock is read, in `currentColor`. With no plan it turns an arc on the loop; with a plan the arc eases to the share done; finished, it becomes a check. Nothing planned and nothing running draws nothing.
 
 ### Identity marks and tiles
@@ -582,13 +582,19 @@ A compact tinted row, never a slab: `radius-md`, body type, an optional glyph sp
 **Hover only where it exists.** Hover sits under `(hover: hover)`, so a tap never leaves a stuck hover.
 
 ### Answering a permission
-**The Peer Rule.** Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card `transcript/Prompt.svelte`, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They are the same size (`sm`, with a 44×44 hit area on every pointer), the same label type, the same `surface-recess` fill and `border-button-outline` edge, in `ink-strong`, reading apart by glyph, word and place, never by hue; no status fill or ink touches either, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.
+**The Peer Rule.** Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They share one size (`sm`, a 44×44 hit area on every pointer), label type, `surface-recess` fill, `border-button-outline` edge and `ink-strong`, reading apart by glyph, word and place, never by hue, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.
 
 **The Consequential Grant Rule.** A standing grant ("Always allow … for …") is wider than the request, so it is kept apart: under a break and a hairline, after a sentence saying what it would allow, in the warning tint with warning ink, a shield glyph and a real edge, the most salient control on the card on purpose. Above the answer row the card says who asks, what will happen and to what, and the change itself, open (the diff, scrolling inside). Nothing is behind a disclosure: a grant is made on what it changes.
 
 ## Voice
 
 The words the product shows live in `packages/core/src/words/**`, their one source, and are written to these rules.
+
+**The Screen Is Not The Record Rule.** A screen is designed from the person's job and the moment they're in, never laid out as its data model: its hierarchy says what matters and what they'll act on, what they rarely touch waits until it's needed, and the thing reads as itself, as well-made products show their objects. A form, a table and labelled prose are one failure, the record on screen:
+- **Every field gets a label** and a value, a control or a sentence.
+- **The fields come in the model's order**, all exposed at once.
+- **Words do the design's work.** This is **narration**: labelled sections describing the thing ("What it does", "How it works", "Knows", "Decides", "Runs on", "About", "Purpose"), or a sentence explaining how the screen or the thing behaves. A part that needs a sentence to say what it is is redesigned until it doesn't, never traded for fields. `scripts/narration-check.ts` refuses a narrating label.
+- **Source**, the owner, 2026-11-07: "you keep telling the story through wrods on the ui instead of letting the UI speak, which is cheating"; "stop throwing controls as this is a sign-up form or an excel table, we are desgining actual UI/UX here"; "i didn't mean a spreadsheet literally, you need to understand and extrapolate and excersise abstract thinking when interpreting what i mean".
 
 **The Should It Exist Rule.** Before a string is phrased, it earns its place on the screen (the `clean-copy` skill). Walk it down in order and cut at the first that fires: a thing the person would never have wondered about, unprompted, goes, since naming it plants the question; a caption that restates its label, field or value goes; a line that rules out a failure, defends a choice or remembers a fixed bug goes (the fix is the fix). Cut whole clauses; when nothing is left, the element goes with its words, its empty hint prop and its `<p>` too.
 
@@ -627,12 +633,11 @@ A string needed only in a rare state stands in that state, not on the page at re
 - **Do** keep one coral act per view, and say status by glyph and word before hue.
 - **Do** carry shared objects across a change and take the house helper for each motion.
 - **Do** shape each flow by The Stay In Context Rule and open it in the page.
-- **Do** put a decision about one screen in that screen's surface brief, and a change to the system here.
 
 ### Don't:
 - **Don't** use coral for a status, a status hue for an action or decoration, or indigo anywhere.
 - **Don't** set text above 500, on `brand-solid`, or under 16px in a field on a coarse pointer.
 - **Don't** use an ease-in curve, animate a keyboard action, or let an exit outlast its entrance.
 - **Don't** tell a failure in a toast, or lose work a surface started.
-- **Don't** ship copy that fails The Should It Exist Rule.
+- **Don't** ship copy that fails The Should It Exist Rule, or a screen laid out as its record.
 - **Don't** use a `group-has-*` utility in the dashboard: one such rule makes every element put into the page restyle the whole rail. Style from a state the component sets on itself or its group (`group-data-*`), or a sibling.

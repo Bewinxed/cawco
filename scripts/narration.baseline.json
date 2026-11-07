@@ -1,0 +1,30 @@
+{
+  "apps/dashboard/src/lib/cawco/config/editors/HookEditor.svelte": {
+    "What it runs": 1,
+    "Where it applies": 1
+  },
+  "apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte": {
+    "Where it applies": 1
+  },
+  "packages/core/src/words/accounts.ts": {
+    "How it shows": 1
+  },
+  "packages/core/src/words/decides.ts": {
+    "Decides": 1,
+    "Knows": 1,
+    "Runs on": 1,
+    "What he does": 1,
+    "What it does": 1,
+    "What it does with a decision": 1
+  },
+  "packages/core/src/words/delegate-types.ts": {
+    "What it can reach": 1,
+    "What it runs on": 1
+  },
+  "packages/core/src/words/mcp.ts": {
+    "Where it applies": 1
+  },
+  "packages/core/src/words/spawn.ts": {
+    "What the new session opens on": 1
+  }
+}

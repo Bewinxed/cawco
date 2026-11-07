@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-07T01:00:00.000Z",
+  "generatedAt": "2026-11-07T12:00:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -3263,7 +3263,7 @@
   ],
   "narrative": {
     "northStar": "The Quiet Ledger, re-skinned for Caw&Co",
-    "overview": "CawCo is a board an operator glances at between other work, to answer one question: does anything need me right now? It reads like a departure board: rows hold still, numbers line up, and a quiet row means a healthy row.\n\nThe surface is warm paper by day and roost-dark at night, low in chroma. Colour is spent on five things only: the coral action, status, identity marks, the focus ring, and data past a threshold. Depth is a recessed frame holding raised content. Neither scheme is the original: every colour token picks its side through `light-dark()`, and a design is drawn and checked in both.",
+    "overview": "CawCo is a board an operator glances at between other work, to answer one question: does anything need me right now? It reads like a departure board: rows hold still, numbers line up, and a quiet row means a healthy row.\n\nThe surface is warm paper by day and roost-dark at night, low in chroma. Colour is spent on five things only: the coral action, status, identity marks, the focus ring, and data past a threshold. Depth is a recessed frame holding raised content. Neither scheme is the original: every colour token picks its side through `light-dark()`.",
     "keyCharacteristics": [
       "A coral action on warm paper; colour elsewhere only where it carries meaning.",
       "The frame recesses; content sits raised on it.",
@@ -3290,7 +3290,7 @@
       },
       {
         "name": "The Enter Rule",
-        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling `--tip-rise` toward its trigger, and leaves at once.",
+        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side; every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception (Tooltip).",
         "section": "overview"
       },
       {
@@ -3325,7 +3325,7 @@
       },
       {
         "name": "The Show Don't Tell Rule",
-        "body": "A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, outcomes as marks in their status colours. Words are for what has no shape, and a stack of label-and-value rows is a sign something should be drawn.",
+        "body": "A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, outcomes as marks in their status colours. Words are for what has no shape.",
         "section": "overview"
       },
       {
@@ -3345,7 +3345,7 @@
       },
       {
         "name": "The House Helper Rule",
-        "body": "Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half (`cawco/motion/`, `cawco/spawn/NsPopoverGroup.svelte`, `components/ui/fluid-tabs`, under `apps/dashboard/src/lib`). A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.",
+        "body": "Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half. A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.",
         "section": "overview"
       },
       {
@@ -3380,7 +3380,7 @@
       },
       {
         "name": "The Idle Has No Fill Rule",
-        "body": "An idle session carries no chip. A quiet row means a healthy row, so rest is drawn as nothing.",
+        "body": "An idle session carries no chip: rest is drawn as nothing.",
         "section": "colors"
       },
       {
@@ -3400,7 +3400,7 @@
       },
       {
         "name": "The Role, Not Size Rule",
-        "body": "Text takes a role by what it does: names, headings, column heads and badges are label; sentences are body; timestamps, counts, units and hints are meta. Nobody picks a size and finds a role for it.",
+        "body": "Text takes a role by what it does, as Hierarchy lists them; nobody picks a size and finds a role for it.",
         "section": "typography"
       },
       {
@@ -3535,13 +3535,18 @@
       },
       {
         "name": "The Peer Rule",
-        "body": "Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card `transcript/Prompt.svelte`, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They are the same size (`sm`, with a 44×44 hit area on every pointer), the same label type, the same `surface-recess` fill and `border-button-outline` edge, in `ink-strong`, reading apart by glyph, word and place, never by hue; no status fill or ink touches either, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.",
+        "body": "Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They share one size (`sm`, a 44×44 hit area on every pointer), label type, `surface-recess` fill, `border-button-outline` edge and `ink-strong`, reading apart by glyph, word and place, never by hue, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.",
         "section": "components"
       },
       {
         "name": "The Consequential Grant Rule",
         "body": "A standing grant (\"Always allow … for …\") is wider than the request, so it is kept apart: under a break and a hairline, after a sentence saying what it would allow, in the warning tint with warning ink, a shield glyph and a real edge, the most salient control on the card on purpose. Above the answer row the card says who asks, what will happen and to what, and the change itself, open (the diff, scrolling inside). Nothing is behind a disclosure: a grant is made on what it changes.",
         "section": "components"
+      },
+      {
+        "name": "The Screen Is Not The Record Rule",
+        "body": "A screen is designed from the person's job and the moment they're in, never laid out as its data model: its hierarchy says what matters and what they'll act on, what they rarely touch waits until it's needed, and the thing reads as itself, as well-made products show their objects. A form, a table and labelled prose are one failure, the record on screen:",
+        "section": "voice"
       },
       {
         "name": "The Should It Exist Rule",
@@ -3554,15 +3559,14 @@
       "Do check every change in both schemes, at 1440 and 390.",
       "Do keep one coral act per view, and say status by glyph and word before hue.",
       "Do carry shared objects across a change and take the house helper for each motion.",
-      "Do shape each flow by The Stay In Context Rule and open it in the page.",
-      "Do put a decision about one screen in that screen's surface brief, and a change to the system here."
+      "Do shape each flow by The Stay In Context Rule and open it in the page."
     ],
     "donts": [
       "Don't use coral for a status, a status hue for an action or decoration, or indigo anywhere.",
       "Don't set text above 500, on `brand-solid`, or under 16px in a field on a coarse pointer.",
       "Don't use an ease-in curve, animate a keyboard action, or let an exit outlast its entrance.",
       "Don't tell a failure in a toast, or lose work a surface started.",
-      "Don't ship copy that fails The Should It Exist Rule.",
+      "Don't ship copy that fails The Should It Exist Rule, or a screen laid out as its record.",
       "Don't use a `group-has-*` utility in the dashboard: one such rule makes every element put into the page restyle the whole rail. Style from a state the component sets on itself or its group (`group-data-*`), or a sibling."
     ]
   }
