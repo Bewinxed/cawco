@@ -27,9 +27,10 @@
   until its app has mounted (core `EMBED_DRAWN`), and shown once its frame
   has loaded and its app shows something (that same word: a dev server's
   app mounts seconds after its frame's load), its wait saying so until then,
-  or, `DRAW_MS` past its load and the last file its server sent it (core
-  `EMBED_ARRIVING`: a cold dev server still compiling is still opening),
-  that it showed nothing. A
+  or, `DRAW_MS` past its load, the last file its server sent it (core
+  `EMBED_ARRIVING`) and the last second its server held a request of it
+  (core `previewHeld`): a cold dev server still compiling, or holding the
+  page's modules or data, is still opening, that it showed nothing. A
   component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
@@ -66,6 +67,7 @@
     askHubReach,
     PREVIEW_REACH_PATH,
     type PreviewWays,
+    previewHeld,
     previewsNeedWords,
     previewUnreachedWords,
     probePreview,
@@ -596,9 +598,14 @@
    * document at once and compiles the app's modules as the page asks for
    * them, which on a cold start (its install, its dependencies bundled, its
    * reload once they are) passes 30 s, and the Preview said the page
-   * "showed nothing" while it was still arriving (owner, 2026-11-07). So it
-   * says so only of a page that showed nothing for 30 s with nothing more
-   * coming; until then it is opening.
+   * "showed nothing" while it was still arriving (owner, 2026-11-07). Its
+   * server may also hold what the page asked for, with nothing arriving: a
+   * cold Vite holds every module that imports a dependency until it has
+   * scanned and bundled them, and a route waits on its data; so its clock
+   * starts again too each second the server holds a request of the page
+   * (core `previewHeld`, the machine's listener's word). So it says so only
+   * of a page that showed nothing for 30 s with nothing more coming and
+   * nothing held; until then it is opening.
    */
   const DRAW_MS = 30_000;
   /** Its draw's clock runs: a canvas told to draw, or a screen whose frame loaded, its box in the view ({@link seen}). */
@@ -616,6 +623,29 @@
       );
     }, DRAW_MS);
     return () => clearTimeout(late);
+  });
+  // While a screen's clock runs, its server is asked each second whether it
+  // still holds a request of the page ({@link DRAW_MS}).
+  $effect(() => {
+    const embed = held?.embed;
+    if (!(embed && screen && awaited) || shaped || failed) {
+      return;
+    }
+    const { origin } = new URL(embed);
+    let gone = false;
+    const ask = async () => {
+      if ((await previewHeld(origin)) && !gone) {
+        arrived += 1;
+      }
+      if (!gone) {
+        next = setTimeout(ask, PING_MS);
+      }
+    };
+    let next = setTimeout(ask, PING_MS);
+    return () => {
+      gone = true;
+      clearTimeout(next);
+    };
   });
   $effect(() => {
     const embed = held?.embed;

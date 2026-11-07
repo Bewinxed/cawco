@@ -47,6 +47,46 @@ export const PAGE_SILENT_MS = 3000;
 export const PREVIEW_PING_HEADER = "x-cawco-ping";
 
 /**
+ * On the ping's answer that the origin serves: how long, ms, its server has
+ * held the oldest request of the page it has not yet answered (the
+ * machine's listener counts each request from when it came until its
+ * answer's head, agent preview.ts `heldRequests`); absent when it holds
+ * none. A dev server woken from sleep answers the document at once, then
+ * holds the app's modules while it scans and bundles its dependencies, and
+ * a route's data while it makes it: the page shows nothing meanwhile, and
+ * is still opening (dashboard decisions host Preview.svelte `DRAW_MS`).
+ */
+export const PREVIEW_HELD_HEADER = "x-cawco-held-ms";
+
+/**
+ * How long a request must have been held for the page to count as still
+ * being made: past any answer a server makes at once (an app's data it
+ * polls), short of a step of a cold start. Ours.
+ */
+const PREVIEW_HELD_MS = 1000;
+
+/**
+ * Whether the server behind preview origin `origin` holds a request of its
+ * page past {@link PREVIEW_HELD_MS} now, as its ping says. A ping that
+ * fails or says nothing is no: the page's own wait decides then.
+ */
+export async function previewHeld(origin: string): Promise<boolean> {
+  const read = await readWithin(PROBE_ANSWER_MS, (signal) =>
+    fetch(`${origin}${PREVIEW_PING_PATH}`, {
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+      signal,
+    })
+  ).catch(() => null);
+  if (read?.kind !== "answered") {
+    return false;
+  }
+  await read.value.body?.cancel();
+  return Number(read.value.headers.get(PREVIEW_HELD_HEADER)) >= PREVIEW_HELD_MS;
+}
+
+/**
  * The hub's answer to {@link PREVIEW_PING_PATH} when its listener for the
  * origin stands but what serves the page doesn't answer it (its machine
  * offline, its machine's listener silent, its workspace not running): a 200

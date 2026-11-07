@@ -52,6 +52,7 @@ import {
 } from "@cawco/core/preview-proxy";
 import {
   type HubReach,
+  PREVIEW_HELD_HEADER,
   PREVIEW_PING_HEADER,
   PREVIEW_REACH_PATH,
   type PreviewPingDown,
@@ -566,15 +567,19 @@ const HOP = "hub listener";
 /** What every answer to the dashboard's probe carries: readable to any page, never kept, marked the hub's own. */
 const PING_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-expose-headers": PREVIEW_PING_HEADER,
+  "access-control-expose-headers": `${PREVIEW_PING_HEADER}, ${PREVIEW_HELD_HEADER}`,
   "cache-control": "no-store",
   [PREVIEW_PING_HEADER]: "1",
 } as const;
 
-/** The dashboard's probe: answered to any page, with no credentials, so the pane learns the origin is reachable. */
-const ping = (): Response =>
+/** The dashboard's probe: answered to any page, with no credentials, so the pane learns the origin is reachable; with how long its server has held the page's oldest request, as its machine's listener said it (core `PREVIEW_HELD_HEADER`). */
+const ping = (held?: string | null): Response =>
   new Response("ok", {
-    headers: { ...PING_HEADERS, "content-type": "text/plain" },
+    headers: {
+      ...PING_HEADERS,
+      "content-type": "text/plain",
+      ...(held ? { [PREVIEW_HELD_HEADER]: held } : {}),
+    },
   });
 
 /**
@@ -660,7 +665,7 @@ async function pingSession(
     }
     if (read.value.ok) {
       await read.value.body?.cancel();
-      return ping();
+      return ping(read.value.headers.get(PREVIEW_HELD_HEADER));
     }
     // The listener answered as a load would be met: the down page it names,
     // in the machine's words, else the hop's (the pane adds the stop).

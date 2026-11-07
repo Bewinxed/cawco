@@ -36,6 +36,7 @@ import {
   versionAssets,
   versionedFile,
 } from "@cawco/core/preview-proxy";
+import { PREVIEW_HELD_HEADER } from "@cawco/core/preview-reach";
 import type { ServingPreview, SourceKey } from "@cawco/core/preview-upstream";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
@@ -700,6 +701,45 @@ export function startPreview(options: {
   return inTurn(options.instanceId, () => start(options));
 }
 
+/**
+ * The requests a preview's listener holds, each from when it came until its
+ * answer's head: how long the oldest has waited, which its ping says (core
+ * `PREVIEW_HELD_HEADER`). A dev server still making the page (holding a cold
+ * app's modules while it scans and bundles its dependencies, a route's data)
+ * holds them; a page it answers at once holds none.
+ */
+function heldRequests() {
+  const waiting = new Set<{ at: number }>();
+  return {
+    async during<T>(serve: () => Promise<T>): Promise<T> {
+      const one = { at: Date.now() };
+      waiting.add(one);
+      try {
+        return await serve();
+      } finally {
+        waiting.delete(one);
+      }
+    },
+    /** How long the oldest held request has waited, ms; 0 when none is held. */
+    oldest(): number {
+      let first = Number.POSITIVE_INFINITY;
+      for (const one of waiting) {
+        first = Math.min(first, one.at);
+      }
+      return Number.isFinite(first) ? Date.now() - first : 0;
+    },
+  };
+}
+
+/** The ping's answer that the way to the server stands, with how long the server has held the page's oldest request (core `PREVIEW_HELD_HEADER`), `held` ms. */
+const servesNow = (held: number): Response =>
+  new Response("ok", {
+    headers: {
+      "cache-control": "no-store",
+      ...(held > 0 ? { [PREVIEW_HELD_HEADER]: String(held) } : {}),
+    },
+  });
+
 async function start(
   options: Parameters<typeof startPreview>[0]
 ): Promise<{ port: number }> {
@@ -783,8 +823,9 @@ async function start(
    * as `staged` answers its load); any other
    * port needs its workspace running and its server answering on it.
    */
+  const holding = heldRequests();
   const pinged = async (): Promise<Response> => {
-    const ok = new Response("ok", { headers: { "cache-control": "no-store" } });
+    const ok = servesNow(holding.oldest());
     if (!("port" in source)) {
       return ok;
     }
@@ -828,260 +869,269 @@ async function start(
       return downResponse("server", 502, unanswered(source, error));
     }
   };
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
+  async function relayed(
+    request: Request,
+    server: Server<PreviewSocket>
+  ): Promise<Response | undefined> {
+    // `/__cawco/*` (the overlay among it) is the hub listener's own and
+    // never reaches here, but the ping, which the hub relays to learn this
+    // listener answers (hub preview.ts `pingSession`).
+    const url = new URL(request.url);
+    // The hub's relay alone, before anything here acts on the request or
+    // tells the app it comes from its own localhost: a request straight to
+    // this port (it binds 0.0.0.0 so the hub can reach it) would pass the
+    // hub's lock and every dev server's same-origin check.
+    const given = Buffer.from(request.headers.get(RELAY_HEADER) ?? "");
+    if (
+      given.length !== relayToken.length ||
+      !timingSafeEqual(given, relayToken)
+    ) {
+      previewFailed(
+        "agent listener",
+        instanceId,
+        `refused a request to ${url.pathname} that its hub didn't relay`
+      );
+      return notRelayed();
+    }
+    if (url.pathname === PREVIEW_PING_PATH) {
+      return await pinged();
+    }
+    let response: Response;
+    /** A folder's file at its folder's key: kept for good. */
+    let versioned: string | null = null;
+    if ("port" in source) {
+      const route = machineRoute(url.pathname);
+      if (route) {
+        previewFailed(
+          "agent listener",
+          instanceId,
+          `refused /${route}: it opens a file or a program on this machine`
+        );
+        return refusal(route);
+      }
+      const headers = proxyHeaders(request.headers);
+      // The relay's credential is this listener's, never the app's.
+      headers.delete(RELAY_HEADER);
+      // A hub the app passes it on to records no origin of it (core
+      // `dashboardOriginOf`): the page's is the address given just below.
+      headers.set(PREVIEW_RELAYED_HEADER, "1");
+      headers.set("host", `localhost:${source.port}`);
+      for (const name of FORWARDING_HEADERS) {
+        headers.delete(name);
+      }
+      if (headers.has("origin")) {
+        headers.set("origin", `http://localhost:${source.port}`);
+      }
+      // The page's own Referer names the preview origin: the dev server
+      // hears it as its own address, as it does the Host and Origin.
+      const referer = headers.get("referer");
+      if (referer) {
+        try {
+          const ref = new URL(referer);
+          headers.set(
+            "referer",
+            `http://localhost:${source.port}${ref.pathname}${ref.search}`
+          );
+        } catch {
+          headers.delete("referer");
+        }
+      }
+      headers.set("accept-encoding", "identity");
+      // A socket into a stage that isn't live is refused at once, its
+      // wake started and not waited on: held, it held every socket of
+      // the tab to the same address (core `notUpYet`).
+      if (asksUpgrade(request) && !sourceUp(source)) {
+        staged(request).catch(() => undefined);
+        return notUpYet();
+      }
+      // A page's request waits on the stage's wake and the server's first answer.
+      heldWhileServed(server, request);
+      const asleep = await staged(request);
+      if (asleep) {
+        return asleep;
+      }
+      let upstream: Awaited<ReturnType<typeof upstreamOf>>;
+      try {
+        upstream = await upstreamOf(instanceId, source);
+      } catch (error) {
+        if (error instanceof WorkspaceDown) {
+          previewFailed(
+            "agent listener",
+            instanceId,
+            `workspace ${source.workspace} has no boundary running`
+          );
+          return downResponse("workspace", 503);
+        }
+        // The bridge into the workspace's network did not open.
+        previewFailed("bridge", instanceId, causeOf(error));
+        return downResponse("reach", 502, causeOf(error));
+      }
+      const at = `${url.pathname}${url.search}`;
+      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        const ws =
+          upstream === "host"
+            ? `ws://127.0.0.1:${source.port}${at}`
+            : `ws+unix://${upstream.unix}:${at}`;
+        return upgradePreview(request, server, ws, headers, {
+          hop: "agent listener",
+          instanceId,
+          // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
+          ...((source.stage || source.serve) && source.workspace
+            ? { viewer: () => sourceViewer(source) }
+            : {}),
+        })
+          ? undefined
+          : new Response("WebSocket upgrade failed", { status: 400 });
+      }
+      try {
+        response = await fetch(
+          upstream === "host"
+            ? `http://127.0.0.1:${source.port}${at}`
+            : `http://localhost:${source.port}${at}`,
+          {
+            method: request.method,
+            headers,
+            body: request.body,
+            redirect: "manual",
+            ...(upstream === "host" ? {} : { unix: upstream.unix }),
+          }
+        );
+      } catch (error) {
+        // Nothing answered: the workspace closed under it, or its server is down.
+        const network = networkOf(source);
+        if (network !== undefined && (await workspaceGone(network))) {
+          previewFailed(
+            "agent listener",
+            instanceId,
+            `workspace ${source.workspace} closed under it`
+          );
+          await closeBridge(instanceId);
+          return downResponse("workspace", 503);
+        }
+        const why = unanswered(source, error);
+        previewFailed("agent listener", instanceId, why);
+        return downResponse("server", 502, why);
+      }
+    } else {
+      // A file at its folder's key (core `versionAssets`), or the page's own address.
+      versioned = versionedFile(url.pathname);
+      const asked = versioned ?? url.pathname;
+      const filePath = resolve(
+        source.dir,
+        `.${decodeURIComponent(asked === "/" ? "/index.html" : asked)}`
+      );
+      /** A file the folder doesn't serve: a document's load is answered with CawCo's own page (core `errorPageResponse`). */
+      const missing = (status: 403 | 404, text: string) =>
+        loadsDocument(request)
+          ? errorPageResponse(status, text)
+          : new Response(text, { status });
+      let actual: string;
+      try {
+        actual = await realpath(filePath);
+      } catch {
+        return missing(404, "Not found");
+      }
+      const path = relative(source.dir, actual);
+      if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) {
+        return missing(403, "Forbidden");
+      }
+      if (!(await stat(actual)).isFile()) {
+        return missing(404, "Not found");
+      }
+      // A file at its folder's key never changes its bytes, so it is kept
+      // for good (core `IMMUTABLE`, longer than any TTL a CDN would set);
+      // the page's own address is what is on disk now.
+      response = new Response(Bun.file(actual), {
+        headers: {
+          "cache-control": versioned === null ? "no-store" : IMMUTABLE,
+        },
+      });
+    }
+    const headers = decodedHeaders(response.headers);
+    for (const name of [
+      "x-frame-options",
+      "content-security-policy",
+      "content-security-policy-report-only",
+    ]) {
+      headers.delete(name);
+    }
+    // What the server said of its caching, as far as it is safe (core
+    // `previewCache`): no CDN stands between this hop and the hub, so the
+    // hub's listener for host-mode names is where `no-cache` becomes
+    // `no-store`.
+    cachePreview(headers, response.status, true);
+    if ("port" in source) {
+      // The preview's own port answered (every refusal of this listener returned above).
+      headers.set(PREVIEW_SERVED_HEADER, "1");
+      const location = headers.get("location");
+      if (location) {
+        // A redirect back to the app itself, under any loopback name, has
+        // to stay inside the proxy: the browser's loopback is not this one.
+        const target = new URL(location, `http://localhost:${source.port}/`);
+        if (
+          LOOPBACK.has(target.hostname) &&
+          Number(target.port || 80) === source.port
+        ) {
+          headers.set(
+            "location",
+            `${target.pathname}${target.search}${target.hash}`
+          );
+        }
+      }
+    }
+    const html =
+      !!headers.get("content-type")?.startsWith("text/html") &&
+      request.method !== "HEAD" &&
+      !!response.body;
+    const page = html ? await response.text() : null;
+    // A document's load its server answered with an error status and
+    // nothing the browser can draw (no body, or one that isn't HTML): the
+    // browser would draw its own broken-frame face, with no words, so
+    // CawCo's own page names it in its place (core `PreviewDown`
+    // `error`). An HTML error page (SvelteKit's 404, a dev server's error
+    // overlay) is the page being built, served as any page with its
+    // overlay; a page's own fetches and modules keep their answers.
+    if (response.status >= 400 && loadsDocument(request) && !page?.trim()) {
+      const failed = errorPageResponse(
+        response.status,
+        page ?? (await response.text())
+      );
+      if ("port" in source) {
+        failed.headers.set(PREVIEW_SERVED_HEADER, "1");
+      }
+      return failed;
+    }
+    let body: ReadableStream<Uint8Array> | string | null = response.body;
+    if (page !== null) {
+      body = injectOverlay(page);
+      if ("dir" in source && versioned === null) {
+        // The folder's page: its own files at the folder's key, kept.
+        body = versionAssets(
+          body,
+          await folderKey(source.dir),
+          "/",
+          url.pathname
+        );
+      }
+      headers.delete("content-length");
+      headers.delete("content-encoding");
+    }
+    return new Response(request.method === "HEAD" ? null : body, {
+      status: response.status,
+      headers,
+    });
+  }
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
     port: 0,
     websocket: listenerSocket,
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
-    async fetch(request, server) {
-      // `/__cawco/*` (the overlay among it) is the hub listener's own and
-      // never reaches here, but the ping, which the hub relays to learn this
-      // listener answers (hub preview.ts `pingSession`).
-      const url = new URL(request.url);
-      // The hub's relay alone, before anything here acts on the request or
-      // tells the app it comes from its own localhost: a request straight to
-      // this port (it binds 0.0.0.0 so the hub can reach it) would pass the
-      // hub's lock and every dev server's same-origin check.
-      const given = Buffer.from(request.headers.get(RELAY_HEADER) ?? "");
-      if (
-        given.length !== relayToken.length ||
-        !timingSafeEqual(given, relayToken)
-      ) {
-        previewFailed(
-          "agent listener",
-          instanceId,
-          `refused a request to ${url.pathname} that its hub didn't relay`
-        );
-        return notRelayed();
-      }
-      if (url.pathname === PREVIEW_PING_PATH) {
-        return await pinged();
-      }
-      let response: Response;
-      /** A folder's file at its folder's key: kept for good. */
-      let versioned: string | null = null;
-      if ("port" in source) {
-        const route = machineRoute(url.pathname);
-        if (route) {
-          previewFailed(
-            "agent listener",
-            instanceId,
-            `refused /${route}: it opens a file or a program on this machine`
-          );
-          return refusal(route);
-        }
-        const headers = proxyHeaders(request.headers);
-        // The relay's credential is this listener's, never the app's.
-        headers.delete(RELAY_HEADER);
-        // A hub the app passes it on to records no origin of it (core
-        // `dashboardOriginOf`): the page's is the address given just below.
-        headers.set(PREVIEW_RELAYED_HEADER, "1");
-        headers.set("host", `localhost:${source.port}`);
-        for (const name of FORWARDING_HEADERS) {
-          headers.delete(name);
-        }
-        if (headers.has("origin")) {
-          headers.set("origin", `http://localhost:${source.port}`);
-        }
-        // The page's own Referer names the preview origin: the dev server
-        // hears it as its own address, as it does the Host and Origin.
-        const referer = headers.get("referer");
-        if (referer) {
-          try {
-            const ref = new URL(referer);
-            headers.set(
-              "referer",
-              `http://localhost:${source.port}${ref.pathname}${ref.search}`
-            );
-          } catch {
-            headers.delete("referer");
-          }
-        }
-        headers.set("accept-encoding", "identity");
-        // A socket into a stage that isn't live is refused at once, its
-        // wake started and not waited on: held, it held every socket of
-        // the tab to the same address (core `notUpYet`).
-        if (asksUpgrade(request) && !sourceUp(source)) {
-          staged(request).catch(() => undefined);
-          return notUpYet();
-        }
-        // A page's request waits on the stage's wake and the server's first answer.
-        heldWhileServed(server, request);
-        const asleep = await staged(request);
-        if (asleep) {
-          return asleep;
-        }
-        let upstream: Awaited<ReturnType<typeof upstreamOf>>;
-        try {
-          upstream = await upstreamOf(instanceId, source);
-        } catch (error) {
-          if (error instanceof WorkspaceDown) {
-            previewFailed(
-              "agent listener",
-              instanceId,
-              `workspace ${source.workspace} has no boundary running`
-            );
-            return downResponse("workspace", 503);
-          }
-          // The bridge into the workspace's network did not open.
-          previewFailed("bridge", instanceId, causeOf(error));
-          return downResponse("reach", 502, causeOf(error));
-        }
-        const at = `${url.pathname}${url.search}`;
-        if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-          const ws =
-            upstream === "host"
-              ? `ws://127.0.0.1:${source.port}${at}`
-              : `ws+unix://${upstream.unix}:${at}`;
-          return upgradePreview(request, server, ws, headers, {
-            hop: "agent listener",
-            instanceId,
-            // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
-            ...((source.stage || source.serve) && source.workspace
-              ? { viewer: () => sourceViewer(source) }
-              : {}),
-          })
-            ? undefined
-            : new Response("WebSocket upgrade failed", { status: 400 });
-        }
-        try {
-          response = await fetch(
-            upstream === "host"
-              ? `http://127.0.0.1:${source.port}${at}`
-              : `http://localhost:${source.port}${at}`,
-            {
-              method: request.method,
-              headers,
-              body: request.body,
-              redirect: "manual",
-              ...(upstream === "host" ? {} : { unix: upstream.unix }),
-            }
-          );
-        } catch (error) {
-          // Nothing answered: the workspace closed under it, or its server is down.
-          const network = networkOf(source);
-          if (network !== undefined && (await workspaceGone(network))) {
-            previewFailed(
-              "agent listener",
-              instanceId,
-              `workspace ${source.workspace} closed under it`
-            );
-            await closeBridge(instanceId);
-            return downResponse("workspace", 503);
-          }
-          const why = unanswered(source, error);
-          previewFailed("agent listener", instanceId, why);
-          return downResponse("server", 502, why);
-        }
-      } else {
-        // A file at its folder's key (core `versionAssets`), or the page's own address.
-        versioned = versionedFile(url.pathname);
-        const asked = versioned ?? url.pathname;
-        const filePath = resolve(
-          source.dir,
-          `.${decodeURIComponent(asked === "/" ? "/index.html" : asked)}`
-        );
-        /** A file the folder doesn't serve: a document's load is answered with CawCo's own page (core `errorPageResponse`). */
-        const missing = (status: 403 | 404, text: string) =>
-          loadsDocument(request)
-            ? errorPageResponse(status, text)
-            : new Response(text, { status });
-        let actual: string;
-        try {
-          actual = await realpath(filePath);
-        } catch {
-          return missing(404, "Not found");
-        }
-        const path = relative(source.dir, actual);
-        if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) {
-          return missing(403, "Forbidden");
-        }
-        if (!(await stat(actual)).isFile()) {
-          return missing(404, "Not found");
-        }
-        // A file at its folder's key never changes its bytes, so it is kept
-        // for good (core `IMMUTABLE`, longer than any TTL a CDN would set);
-        // the page's own address is what is on disk now.
-        response = new Response(Bun.file(actual), {
-          headers: {
-            "cache-control": versioned === null ? "no-store" : IMMUTABLE,
-          },
-        });
-      }
-      const headers = decodedHeaders(response.headers);
-      for (const name of [
-        "x-frame-options",
-        "content-security-policy",
-        "content-security-policy-report-only",
-      ]) {
-        headers.delete(name);
-      }
-      // What the server said of its caching, as far as it is safe (core
-      // `previewCache`): no CDN stands between this hop and the hub, so the
-      // hub's listener for host-mode names is where `no-cache` becomes
-      // `no-store`.
-      cachePreview(headers, response.status, true);
-      if ("port" in source) {
-        // The preview's own port answered (every refusal of this listener returned above).
-        headers.set(PREVIEW_SERVED_HEADER, "1");
-        const location = headers.get("location");
-        if (location) {
-          // A redirect back to the app itself, under any loopback name, has
-          // to stay inside the proxy: the browser's loopback is not this one.
-          const target = new URL(location, `http://localhost:${source.port}/`);
-          if (
-            LOOPBACK.has(target.hostname) &&
-            Number(target.port || 80) === source.port
-          ) {
-            headers.set(
-              "location",
-              `${target.pathname}${target.search}${target.hash}`
-            );
-          }
-        }
-      }
-      const html =
-        !!headers.get("content-type")?.startsWith("text/html") &&
-        request.method !== "HEAD" &&
-        !!response.body;
-      const page = html ? await response.text() : null;
-      // A document's load its server answered with an error status and
-      // nothing the browser can draw (no body, or one that isn't HTML): the
-      // browser would draw its own broken-frame face, with no words, so
-      // CawCo's own page names it in its place (core `PreviewDown`
-      // `error`). An HTML error page (SvelteKit's 404, a dev server's error
-      // overlay) is the page being built, served as any page with its
-      // overlay; a page's own fetches and modules keep their answers.
-      if (response.status >= 400 && loadsDocument(request) && !page?.trim()) {
-        const failed = errorPageResponse(
-          response.status,
-          page ?? (await response.text())
-        );
-        if ("port" in source) {
-          failed.headers.set(PREVIEW_SERVED_HEADER, "1");
-        }
-        return failed;
-      }
-      let body: ReadableStream<Uint8Array> | string | null = response.body;
-      if (page !== null) {
-        body = injectOverlay(page);
-        if ("dir" in source && versioned === null) {
-          // The folder's page: its own files at the folder's key, kept.
-          body = versionAssets(
-            body,
-            await folderKey(source.dir),
-            "/",
-            url.pathname
-          );
-        }
-        headers.delete("content-length");
-        headers.delete("content-encoding");
-      }
-      return new Response(request.method === "HEAD" ? null : body, {
-        status: response.status,
-        headers,
-      });
-    },
+    // Each request but the ping is held from here until its answer's head:
+    // the ping says how long the oldest has waited ({@link pinged}).
+    fetch: (request, server) =>
+      new URL(request.url).pathname === PREVIEW_PING_PATH
+        ? relayed(request, server)
+        : holding.during(() => relayed(request, server)),
     // Anything else that threw while serving the preview.
     error(error) {
       const why = `the agent's listener failed serving it: ${causeOf(error)}`;

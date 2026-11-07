@@ -9,8 +9,11 @@
  * listens, and then compiles the app's modules one by one as the page asks
  * for them: SvelteKit's document loads its app by a dynamic `import()`,
  * which the frame's `load` does not wait for, so the Preview's 30 s ran
- * from that load while the modules were still arriving. One live server
- * here plays both starts, each a preview artifact of a session:
+ * from that load while the modules were still arriving; and a cold Vite
+ * holds every module that imports a dependency until it has scanned and
+ * bundled them, so nothing arrives at all for that while (owner, 2026-11-07
+ * again, on the dashboard's own dev server, with the first fix). One live
+ * server plays each start, each a preview artifact of a session:
  *
  * - `/cold`: its document at once, its app a chain of modules each
  *   answered {@link STEP_MS} after it is asked (a cold compile), the last
@@ -29,8 +32,15 @@
  *   while the late page is still held: the panel's frame draws its heading
  *   with no down notice and no "didn't load" state at any read;
  * - (3) a page that loads, asks its server for data every second and shows
- *   nothing (`/empty`) still says it showed nothing within 30 s: its own
- *   data calls are no page arriving.
+ *   nothing (`/empty`) still says it showed nothing within 30 s: data its
+ *   server answers at once is no page arriving;
+ * - (4) a page whose server holds what it asks after its load, past 30 s
+ *   with nothing arriving meanwhile, each on a decision page of its own,
+ *   says Opening… until it draws, with no fault: `/held`, whose app module
+ *   the server holds (Vite holding a cold app's modules while it scans and
+ *   bundles its dependencies), and `/data`, whose data fetch the server
+ *   holds (a route waiting on its data). Both are held from before leg (2)
+ *   until leg (3)'s notice stands.
  *
  *   bun scripts/probe-kit/run.ts preview-cold-start
  */
@@ -49,6 +59,10 @@ const MODULES = 15;
 const COLD = "/cold";
 const LATE = "/late";
 const EMPTY = "/empty";
+const HELD = "/held";
+const DATA = "/data";
+const HELD_HEADING = "Find in a conversation, held module";
+const DATA_HEADING = "Find in a conversation, held data";
 const COLD_HEADING = "Find in a conversation, compiled";
 const LATE_HEADING = "Find in a conversation, started late";
 /** How long both may take to draw: past the slowest start with room. */
@@ -71,50 +85,68 @@ const js = (code: string) =>
     },
   });
 
-/** The live server: a cold page whose modules compile slowly, and a page whose document comes late. */
-const serve = (lateHeld: Promise<void>) =>
-  Bun.serve({
+/** The app's root, empty until `script` mounts something in it. */
+const shell = (title: string, script: string) =>
+  html(title, `<div id="app"></div><script type="module">${script}</script>`);
+/** A module that mounts `heading` in the app's root. */
+const mounts = (heading: string) =>
+  js(`document.getElementById("app").innerHTML = "<h1>${heading}</h1>";`);
+
+/** The live server's pages and files, by path: a cold page whose modules compile slowly, a page whose document comes late, an empty page that polls, and pages whose module or data the server holds. */
+const routes = (
+  lateHeld: Promise<void>,
+  held: Promise<void>
+): Record<string, () => Promise<Response> | Response> => ({
+  // SvelteKit's dev document: its app by a dynamic import, which the
+  // frame's load does not wait for; an empty root until it mounts.
+  [COLD]: () => shell("Cold", `import("/mod/0.js")`),
+  [EMPTY]: () => shell("Empty", `setInterval(() => fetch("/poll"), 1000)`),
+  "/poll": () => Response.json([]),
+  [HELD]: () => shell("Held", `import("/held/app.js")`),
+  "/held/app.js": async () => {
+    await held;
+    return mounts(HELD_HEADING);
+  },
+  [DATA]: () =>
+    shell(
+      "Data",
+      `const said = await (await fetch("/data.json")).json(); document.getElementById("app").innerHTML = "<h1>" + said.heading + "</h1>";`
+    ),
+  "/data.json": async () => {
+    await held;
+    return Response.json({ heading: DATA_HEADING });
+  },
+  [LATE]: async () => {
+    await lateHeld;
+    return html("Late", `<h1>${LATE_HEADING}</h1>`);
+  },
+});
+
+/** A module of the cold page's app, answered {@link STEP_MS} after it is asked. */
+const coldModule = async (index: number) => {
+  await Bun.sleep(STEP_MS);
+  return index + 1 < MODULES
+    ? js(`import "/mod/${index + 1}.js";`)
+    : mounts(COLD_HEADING);
+};
+
+/** The live server. */
+const serve = (lateHeld: Promise<void>, held: Promise<void>) => {
+  const pages = routes(lateHeld, held);
+  return Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     idleTimeout: 0,
-    fetch: async (request) => {
+    fetch: (request) => {
       const { pathname } = new URL(request.url);
-      if (pathname === COLD) {
-        // SvelteKit's dev document: its app by a dynamic import, which the
-        // frame's load does not wait for; an empty root until it mounts.
-        return html(
-          "Cold",
-          `<div id="app"></div><script type="module">import("/mod/0.js")</script>`
-        );
-      }
       const at = MODULE.exec(pathname);
       if (at) {
-        const index = Number(at[1]);
-        await Bun.sleep(STEP_MS);
-        return js(
-          index + 1 < MODULES
-            ? `import "/mod/${index + 1}.js";`
-            : `document.getElementById("app").innerHTML = "<h1>${COLD_HEADING}</h1>";`
-        );
+        return coldModule(Number(at[1]));
       }
-      if (pathname === EMPTY) {
-        return html(
-          "Empty",
-          `<div id="app"></div><script type="module">setInterval(() => fetch("/poll"), 1000)</script>`
-        );
-      }
-      if (pathname === "/poll") {
-        return new Response("[]", {
-          headers: { "content-type": "application/json" },
-        });
-      }
-      if (pathname === LATE) {
-        await lateHeld;
-        return html("Late", `<h1>${LATE_HEADING}</h1>`);
-      }
-      return new Response(null, { status: 404 });
+      return pages[pathname]?.() ?? new Response(null, { status: 404 });
     },
   });
+};
 
 /** A preview artifact of session `session` on `port`, at `path`. */
 const previewOf = (
@@ -179,7 +211,8 @@ const decisionRead = async (page: Page, id: string) => {
     .catch(() => null)) ?? { causes: [] as string[], waits: [] as string[] };
   const headings: string[] = [];
   for (const one of page.frames()) {
-    if (one.url().includes(COLD) || one.url().includes(LATE)) {
+    const { pathname } = new URL(one.url(), "http://x");
+    if ([COLD, LATE, HELD, DATA].includes(pathname)) {
       const words = await one
         .locator("h1")
         .first()
@@ -211,13 +244,83 @@ const tabRead = async (page: Page) => {
   return { notice, heading };
 };
 
+/** Leg (4)'s pages: what of each its server holds, and the heading it draws once answered. */
+const HELD_PAGES = [
+  {
+    path: HELD,
+    name: "held",
+    caption: "Held module",
+    held: "app module",
+    heading: HELD_HEADING,
+  },
+  {
+    path: DATA,
+    name: "data",
+    caption: "Held data",
+    held: "data fetch",
+    heading: DATA_HEADING,
+  },
+] as const;
+
+/** A decision page of its own with a Preview of `one`, opened in a browser of its own. */
+const openHeld = async (
+  kit: Kit,
+  fleet: KitFleet,
+  base: string,
+  port: number,
+  one: (typeof HELD_PAGES)[number]
+) => {
+  const at = await fleet.spawn("claude", `Pick ${one.name}`, fleet.repo);
+  const art = await previewOf(fleet, at, port, one.path, one.name);
+  await fleet.api<{ id: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: at },
+      body: {
+        kind: "page",
+        does: "pick",
+        title: `Probe ${one.name} page`,
+        ask: "Pick one option on each card",
+        name: `pick-${one.name}`,
+        program: `root = Decisions("Pick the page", [which])
+which = Decision("which", "Which page ships?", [e, k], "Both are in the app.", [], [], false, null, "behaviour")
+e = Option("e", "${one.caption}", "Its server holds what it asks.", true, [a], "Nothing new.")
+k = Option("k", "Keep", "As it is.", false, [], "Nothing new.")
+a = Preview("${art.id}", "${one.caption}")`,
+      },
+    })
+  );
+  const page = await kit.page("desk", { oneProcess: true });
+  await tabAt(page, at);
+  await page.goto(`${base}/session/${at}`).catch(() => undefined);
+  return { ...one, page, session: at, opened: Date.now() };
+};
+
+/** Reads a held page's decision page every half second until its Preview draws its heading: every fault said meanwhile, and the last read. */
+const drawnOnce = async (one: Awaited<ReturnType<typeof openHeld>>) => {
+  const from = Date.now();
+  const faults = new Set<string>();
+  let read = await decisionRead(one.page, one.session);
+  while (Date.now() - from < DRAWN_MS) {
+    read = await decisionRead(one.page, one.session);
+    for (const cause of read.causes) {
+      faults.add(cause);
+    }
+    if (read.headings.includes(one.heading)) {
+      break;
+    }
+    await Bun.sleep(500);
+  }
+  return { read, faults: [...faults] };
+};
+
 const spec: Spec = {
   group: "Previews, pages and comments",
   name: "preview-cold-start",
   run: async (kit: Kit) => {
     const { check } = kit;
     const release = Promise.withResolvers<void>();
-    const app = serve(release.promise);
+    const releaseHeld = Promise.withResolvers<void>();
+    const app = serve(release.promise, releaseHeld.promise);
     const port = Number(app.port);
     const fleet = await kit.fleet(respond);
     fleet.launch("sessiond");
@@ -286,6 +389,11 @@ b = Preview("${late.id}", "Started late")`,
       read.headings.includes(COLD_HEADING)
     );
     const coldAfter = Date.now() - opened;
+
+    // (4) Opened now: a page whose module, and one whose data, its server holds until leg (3)'s notice stands.
+    const heldPages = await Promise.all(
+      HELD_PAGES.map((one) => openHeld(kit, fleet, base, port, one))
+    );
 
     // (2) The cold page's own tab, the late page still held on the decision page: drawn in the panel with no notice.
     const tab = await kit.page("desk");
@@ -378,6 +486,21 @@ a = Preview("${empty.id}", "Empty page")`,
       JSON.stringify({ ...blankRead, afterMs: Date.now() - blankFrom })
     );
     await blankPage.context().close();
+
+    // (4) Its server answers what it held: each page draws, with no fault at any read.
+    const heldFor = heldPages.map((one) => Date.now() - one.opened);
+    releaseHeld.resolve();
+    for (const one of heldPages) {
+      const drew = await drawnOnce(one);
+      check(
+        `(4) a decision page's Preview of a page whose ${one.held} its server held past 30 s after its load draws it once answered, with no fault`,
+        drew.read.headings.includes(one.heading) &&
+          drew.faults.length === 0 &&
+          heldFor.every((ms) => ms > 60_000),
+        JSON.stringify({ heldForMs: heldFor, ...drew })
+      );
+      await one.page.context().close();
+    }
     app.stop(true);
   },
 };
