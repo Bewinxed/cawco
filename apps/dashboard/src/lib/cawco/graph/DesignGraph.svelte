@@ -1081,6 +1081,38 @@
   const atHead = $derived(stopAt === 0);
   /** How much of the surface the drawer stands over at its stop, px: the stage ends at its top. */
   const cover = $derived(snap ? Number.parseFloat(snap) : 0);
+  /** The stage's pane, the stage and its head with it. */
+  let stageHold = $state<HTMLElement | null>(null);
+  /**
+   * The drawer stands over the whole stage (its whole stop: up to the foot
+   * of the panel head's room, the stage closed to no height under it): the
+   * stage is inert, so the keyboard and a screen reader reach what the eye
+   * does, never its head's glass clipped away under the drawer. The way
+   * back is the pointer's: the grabber, to the head stop, where the stage
+   * and its room switch stand again.
+   */
+  const stageCovered = $derived(
+    !desk &&
+      drawerShown &&
+      cover > 0 &&
+      cover >= Math.round(layerHeight - headFoot)
+  );
+  // Focus inside the stage as the drawer covers it goes to the drawer's
+  // head (its grabber), before the stage turns inert: an inert focus falls
+  // to the body.
+  $effect.pre(() => {
+    if (!stageCovered) {
+      return;
+    }
+    untrack(() => {
+      const held = document.activeElement;
+      if (stageHold && held && stageHold.contains(held)) {
+        drawerNode
+          ?.querySelector<HTMLElement>('[data-slot="drawer-grabber"]')
+          ?.focus();
+      }
+    });
+  });
   /** The grabber steps the drawer to its next stop, and from the last back to its head (HIG, Sheets: a tap on the grabber cycles its detents). */
   const nextStop = () => {
     stopAt = SNAPS.length > 0 ? (stopAt + 1) % SNAPS.length : 0;
@@ -1791,6 +1823,8 @@
               "flex min-h-0 min-w-0 flex-1 flex-col py-(--border-width) ps-(--border-width)",
               beside ? "pe-space-2" : "pe-(--border-width)",
             ]}
+            bind:this={stageHold}
+            inert={stageCovered}
           >
             <StagePane
               bind:need={stageNeed}
