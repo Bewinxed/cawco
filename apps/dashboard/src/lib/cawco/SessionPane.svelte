@@ -30,6 +30,7 @@
    * the pane draws none of its own and leaves its scroll timeline to the
    * panel.
    */
+  import { sideWords } from "@cawco/core/words/side";
   import { type Snippet, untrack } from "svelte";
   import {
     crossIn,
@@ -76,6 +77,8 @@
   import { cleanDetail } from "./command-detail";
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
+  import { findIn } from "./find/conversation-find.svelte";
+  import FindPlaces from "./find/FindPlaces.svelte";
   import { frameSize } from "./frame-observer";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
@@ -99,6 +102,7 @@
   import { planAsked } from "./reference-things.svelte";
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
+  import SideSurface from "./side/SideSurface.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
@@ -1294,6 +1298,15 @@
       : null
   );
 
+  /** This conversation's find: its field on the composer, its places beside (find/conversation-find). */
+  const find = $derived(findIn(viewId));
+  /**
+   * Find's places are the composer's layer where the side surface is a
+   * sheet (a phone, a desk pane under the drawer line) or there is none
+   * (docked, in Caw's panel); the side panel's Find otherwise.
+   */
+  const findNarrow = $derived(!!docked || drawer !== false);
+
   /**
    * This conversation, as its group's composer sees it. Read through getters,
    * so the composer follows the session live while it is in front.
@@ -1314,6 +1327,12 @@
     },
     get faultAgain() {
       return faultAgain;
+    },
+    get find() {
+      return find;
+    },
+    get findNarrow() {
+      return findNarrow;
     },
     get commands() {
       return commands;
@@ -1426,6 +1445,20 @@
   {/if}
 {/snippet}
 
+<!-- Find's places in the side panel, on a desk (SideSplit): the card's bar
+     holds the switch while another surface is open, and Close, which closes
+     find. -->
+{#snippet findSurface(switcher: Snippet | undefined)}
+  <SideSurface
+    label={sideWords.find}
+    onclose={() => find.close()}
+    recessed={false}
+    {switcher}
+  >
+    <FindPlaces {find} />
+  </SideSurface>
+{/snippet}
+
 <!-- The quiet one: an offer, standing on the composer's tray row. A parked
      ask is not drawn here: the composer grows into it (`ask`). -->
 {#snippet offer()}
@@ -1507,6 +1540,8 @@
     busy={session?.busy ?? false}
     {commands}
     {draft}
+    {find}
+    {findNarrow}
     mentionsFrom={viewId}
     onfoot={(foot) => {
       parkedRoom = foot.parked;
@@ -1660,6 +1695,7 @@
 
 <div
   data-slot="pane"
+  data-find-view={viewId}
   class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-surface-recess"
   {@attach measurePane}
 >
@@ -1671,6 +1707,9 @@
     {:else}
       <SideSplit
         {active}
+        find={findSurface}
+        findOpen={find.open}
+        onfindclose={() => find.close()}
         phone={drawer}
         task={besideStages ? besideSurface : undefined}
         taskOpen={!!beside}

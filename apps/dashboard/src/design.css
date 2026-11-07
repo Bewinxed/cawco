@@ -2311,3 +2311,17 @@
     --nest-cut-b: 9999px;
   }
 }
+
+/* Find in a conversation's marks (find/find-marks.ts): every place the
+   words are in washed, the one stepped to on the coral where you act, its
+   words in the ink that stands on it (DESIGN.md, The White On Coral Rule).
+   Drawn by the CSS Custom Highlight API, so no row's text is wrapped. */
+@layer base {
+  ::highlight(find-place) {
+    background-color: var(--brand-wash);
+  }
+  ::highlight(find-current) {
+    background-color: var(--action-solid);
+    color: var(--on-action);
+  }
+}

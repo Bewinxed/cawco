@@ -81,6 +81,8 @@
   import { devNote } from "../dev-debug";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
+  import { findIn } from "../find/conversation-find.svelte";
+  import { markFind, rangesOf } from "../find/find-marks";
   import {
     type FrameObserver,
     frameObserver,
@@ -3134,12 +3136,18 @@
       announcement = unfoundWords;
       return;
     }
-    marked = { key: renderedRows[index].key, state: "on" };
+    // Find's own seek marks the words, not the row, and its place is said
+    // by its count (find/FindLine).
+    const found = findHere.sought === docId;
+    findHere.sought = found ? null : findHere.sought;
+    marked = found ? null : { key: renderedRows[index].key, state: "on" };
     // The record opened at is the place now, as a reader's scroll to it is.
     keptPlace = placeAt(lastTop);
     // The finder's own words for the key that brought the reader here
     // ("↵ open at that line", docs/tom/find-and-mention-chosen.md).
-    announcement = "Opened at that line.";
+    if (!found) {
+      announcement = "Opened at that line.";
+    }
     if (scroller) {
       const distance = tailTop(scroller) - scroller.scrollTop;
       farFromLatest = distance > FAR_FROM_LATEST * scroller.clientHeight;
@@ -4672,7 +4680,192 @@
     }
   }
 
-  const showLatest = $derived(landed && farFromLatest && rows.length > 0);
+  // ── Find in this conversation ───────────────────────────────────────────
+  // (find/conversation-find): the words marked where they are drawn, the
+  // place stepped to brought clear of the composer, and the way back to
+  // where the conversation was read as find opened.
+
+  const findHere = $derived(findIn(session.instanceId));
+
+  // Where the conversation is read: its tail, or the record at the view's top.
+  $effect(() =>
+    findHere.readFrom(() => {
+      if (atBottom) {
+        return { tail: true };
+      }
+      const place = placeAt(lastTop);
+      return place ? { tail: false, docId: place.block } : { tail: true };
+    })
+  );
+
+  /** The step whose words have not yet been brought clear of the composer. */
+  let clearFor = 0;
+  $effect(() => {
+    clearFor = findHere.stepped;
+    // The live turn's place is the conversation's tail, being written.
+    if (clearFor > 0 && untrack(() => findHere.current?.live)) {
+      untrack(jump);
+    }
+  });
+
+  /** The room the words read in: the scroller less what stands over its foot (the composer, find's layer). */
+  function readRoom(view: DOMRect): { top: number; bottom: number } {
+    let bottom = view.bottom - rooms.foot;
+    const dock = document.querySelector<HTMLElement>(
+      `[data-slot="dock"][data-find-view="${CSS.escape(session.instanceId)}"]`
+    );
+    for (const over of dock?.querySelectorAll<HTMLElement>(
+      '[data-slot="cin"], [data-slot="find-layer"]'
+    ) ?? []) {
+      const box = over.getBoundingClientRect();
+      if (box.height > 0 && box.left < view.right && box.right > view.left) {
+        bottom = Math.min(bottom, box.top - 24);
+      }
+    }
+    return { top: view.top + 48, bottom };
+  }
+
+  /**
+   * The words stepped to stand clear of the composer and find's layer: the
+   * seek centres the place's row, and a tall row (a test run's output) can
+   * leave its words under the composer. Once per step, after the seek has
+   * landed, inside the transcript's own scroller.
+   */
+  function clearOfFind(word: Range): void {
+    if (
+      !scroller ||
+      clearFor === 0 ||
+      seeking !== null ||
+      openAt.has(session.instanceId)
+    ) {
+      return;
+    }
+    clearFor = 0;
+    const box = word.getBoundingClientRect();
+    const room = readRoom(scroller.getBoundingClientRect());
+    if (box.top >= room.top && box.bottom <= room.bottom) {
+      return;
+    }
+    scroller.scrollBy({
+      top: box.top - (room.top + (room.bottom - room.top) * 0.4),
+      behavior: "instant",
+    });
+  }
+
+  /** Read the drawn rows for the words and mark them: every place washed, the one stepped to solid. */
+  function markWords(): void {
+    const words = findHere.words.trim();
+    if (!(listing && words && (findHere.open || findHere.landed))) {
+      markFind(session.instanceId, [], null);
+      return;
+    }
+    const { current } = findHere;
+    let within: Element | null = null;
+    if (current?.live) {
+      within = listing.querySelector('[data-slot="live"]');
+    } else if (current?.docId) {
+      const index = rowHolding(renderedRows, current.docId);
+      const row =
+        index >= 0
+          ? listing.querySelector(
+              `[data-row="${CSS.escape(renderedRows[index].key)}"]`
+            )
+          : null;
+      within =
+        row?.querySelector(`[data-message="${CSS.escape(current.docId)}"]`) ??
+        row;
+    }
+    const all = rangesOf(listing, words);
+    const solid =
+      (within && all.find((range) => within.contains(range.startContainer))) ??
+      null;
+    if (!findHere.open) {
+      // Find closed here: the place keeps its wash until the reader moves on.
+      markFind(session.instanceId, solid ? [solid] : [], null);
+      return;
+    }
+    if (solid) {
+      clearOfFind(solid);
+    }
+    markFind(
+      session.instanceId,
+      all.filter((range) => range !== solid),
+      solid
+    );
+  }
+
+  // Marked once a frame at most while find stands, as rows mount and the
+  // live turn is written, never inside the mutation that asked.
+  $effect(() => {
+    const root = listing;
+    if (!(root && (findHere.open || findHere.landed))) {
+      markFind(session.instanceId, [], null);
+      return;
+    }
+    track(findHere.words, findHere.at, findHere.open, renderedRows);
+    let frame = 0;
+    const schedule = () => {
+      frame ||= requestAnimationFrame(() => {
+        frame = 0;
+        markWords();
+      });
+    };
+    schedule();
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  });
+  $effect(() => () => markFind(session.instanceId, [], null));
+
+  /** The reader moves on from the place find closed at (a wheel, a touch, a scroll key): its wash goes, and the way back with it. */
+  function movedOn(event: Event): void {
+    if (
+      findHere.landed &&
+      (event.type !== "keydown" || SCROLL_KEYS.has((event as KeyboardEvent).key))
+    ) {
+      findHere.leave();
+    }
+  }
+
+  $effect(() => {
+    const node = scroller;
+    if (!(node && findHere.landed)) {
+      return;
+    }
+    node.addEventListener("wheel", movedOn, { passive: true });
+    node.addEventListener("touchstart", movedOn, { passive: true });
+    node.addEventListener("keydown", movedOn);
+    return () => {
+      node.removeEventListener("wheel", movedOn);
+      node.removeEventListener("touchstart", movedOn);
+      node.removeEventListener("keydown", movedOn);
+    };
+  });
+
+  /** Back where you were: to the record read as find opened, or the tail. */
+  function backWhereYouWere(): void {
+    if (findHere.back().tail) {
+      jump();
+    }
+  }
+
+  const showBack = $derived(
+    findHere.landed && findHere.reading !== null && rows.length > 0
+  );
+  const showLatest = $derived(
+    landed &&
+      farFromLatest &&
+      rows.length > 0 &&
+      !findHere.open &&
+      !showBack
+  );
 
   // ── The live region ─────────────────────────────────────────────────────
   // The scroll container is NOT the live region. virtua mounts and unmounts
@@ -5266,12 +5459,14 @@
         {unfoundWords}
       </p>
     {/if}
-    {#if catching || showLatest}
+    {#if catching || showLatest || showBack}
       <div class="flex justify-center items-box-end gap-space-2">
         {#if catching}
           <CatchUp />
         {/if}
-        {#if showLatest}
+        {#if showBack}
+          <Latest back onjump={backWhereYouWere} />
+        {:else if showLatest}
           <Latest onjump={jump} />
         {/if}
       </div>

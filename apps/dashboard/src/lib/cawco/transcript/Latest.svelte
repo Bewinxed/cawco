@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { findInWords } from "@cawco/core/words/find-in";
   /**
    * The way back to the newest row, while the reader is scrolled away from it.
    * The transcript never moves under someone reading history — new rows land
@@ -8,7 +9,17 @@
   import { rise } from "#lib/cawco/motion/curves.svelte.js";
   import { IconArrowDownDuotone as IconArrowDown } from "#lib/icons.js";
 
-  let { onjump }: { onjump: () => void } = $props();
+  let {
+    onjump,
+    back = false,
+  }: {
+    onjump: () => void;
+    /**
+     * Find closed at a place (find/conversation-find): in its place, the way
+     * back to where the conversation was read as find opened.
+     */
+    back?: boolean;
+  } = $props();
 </script>
 
 <!-- The small button's height: where it rests is measured from it. -->
@@ -19,5 +30,5 @@
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  <IconArrowDown class="size-icon-md" /><span>Jump to latest</span>
+  <IconArrowDown class="size-icon-md" /><span>{back ? findInWords.back : "Jump to latest"}</span>
 </button>

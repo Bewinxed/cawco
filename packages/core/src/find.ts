@@ -224,6 +224,39 @@ export interface FindMoment {
 }
 
 /**
+ * One place in a conversation where the words are (`GET /api/find/places`):
+ * every place, never a conversation's best few, for the person's find in
+ * that conversation to step through.
+ */
+export interface FindPlace {
+  /** When it was said, ms epoch; null when the transcript kept no time. */
+  at: number | null;
+  /**
+   * The tool call whose output holds the words, by its call id, for its fold
+   * to open; a delegate's report, by its record. Null for words said in the
+   * open.
+   */
+  call: string | null;
+  /** The record to open at: for a tool's output, the record that called it. */
+  docId: string;
+  /** The words round the match, terms between 「 and 」. */
+  excerpt: string;
+  /** In the agent's reasoning, not what it said. */
+  thinking: boolean;
+  /** For a tool's output, the tool's name. */
+  tool: string | null;
+  /** Whose words: the person's, the agent's (said or thought), what its tools returned, a delegate's report. */
+  whose: "me" | "agent" | "tools" | "delegates";
+}
+
+/** `GET /api/find/places`' answer: every place, oldest first, and whether the machine holding them answered. */
+export interface FindPlacesAnswer {
+  /** The machine holding the conversation's transcript: when it did not answer, `places` is empty. */
+  machine: { answered: boolean; id: string; name: string };
+  places: FindPlace[];
+}
+
+/**
  * Where a secret stands in a text: its first character's index and the one
  * after its last, as the hub's secret filter recognises one (hub
  * secret-filter.ts).

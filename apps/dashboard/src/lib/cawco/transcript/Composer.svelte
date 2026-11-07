@@ -121,6 +121,9 @@
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import { felt } from "../feel.svelte";
+  import type { ConversationFind } from "../find/conversation-find.svelte";
+  import FindLayer from "../find/FindLayer.svelte";
+  import FindLine from "../find/FindLine.svelte";
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
   import { newId } from "../id";
@@ -175,6 +178,8 @@
     action,
     flush = false,
     fleet,
+    find,
+    findNarrow = false,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -305,6 +310,14 @@
      * Hold): its own button, in the controls' row.
      */
     also?: Snippet;
+     * The conversation's find (find/conversation-find): while it stands
+     * open, its field grows on the pill's top over the message, which stays
+     * where it is; closed, the caret goes back to the message. None where
+     * the composer writes to no conversation.
+     */
+    find?: ConversationFind;
+    /** The places are the composer's layer (narrow), not the side panel's. */
+    findNarrow?: boolean;
     /**
      * What the send glyph does here, as its label and its tooltip
      * ("Comment", "Reply"): where what is written does not go to the agent
@@ -1507,6 +1520,12 @@
     if (event.key === "Escape" && canvasUp) {
       event.preventDefault();
       room?.fold();
+      return;
+    }
+    // Escape in the message closes find too, the caret staying where it is.
+    if (event.key === "Escape" && find?.open) {
+      event.preventDefault();
+      find.close();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -2811,6 +2830,17 @@
   let drawnAsk = $state<ComposerAsk | null>(null);
   /** The composer is an ask, from its growth until its fold has landed. */
   const askOpen = $derived(!!drawnAsk);
+  /** Find stands open on this composer's conversation: its field is on the pill's top. */
+  const finding = $derived(!!find?.open);
+  // Find closed: the caret goes back to the message, as it was left.
+  let messageAsked = untrack(() => find?.messageAsked ?? 0);
+  $effect(() => {
+    const asked = find?.messageAsked ?? 0;
+    if (asked !== messageAsked) {
+      messageAsked = asked;
+      untrack(() => field?.focus());
+    }
+  });
   /** Grown, or growing, into an ask: what stands over the pill steps aside. */
   let askRaised = $state(false);
   /** Whether what stands in the shape is up. */
@@ -3228,6 +3258,7 @@
      owns the safe-area inset. -->
 <div
   data-slot="dock"
+  data-find-view={find?.viewId}
   data-asking={askRaised || undefined}
   data-drawing={canvasUp || undefined}
   data-minimized={minimized || undefined}
@@ -3468,6 +3499,11 @@
         bind:this={canvasSlot}
       ></div>
     {/if}
+    {#if find && finding && findNarrow && find.listOpen}
+      <!-- Narrow, find's places rise out of the composer as its layer, as
+           the plan does, over the transcript's foot. -->
+      <FindLayer {find} />
+    {/if}
     <!-- The row of attachments is one block above the field, the canvas's
          chip leading it. -->
     <AttachmentChips
@@ -3684,7 +3720,7 @@
         data-asking={askOpen || undefined}
         data-grown={!!edit || askOpen || canvasUp || undefined}
         data-hint-back={!!hintBack || undefined}
-        data-lead={!!lead || !!also || undefined}
+        data-lead={!!lead || !!also || finding || undefined}
         data-recalling={!!recall || undefined}
         data-settling={(!!recall && !wheeling) || undefined}
         data-wheeling={wheeling || undefined}
@@ -3768,6 +3804,20 @@
           </div>
         {/if}
 
+        {#if find && finding}
+          <!-- The find field, grown on the pill's top: its own line, a
+               hairline under it, the message's line where it was. It
+               unfolds as the composer's other rows grow (`unfold`): a press
+               plays it, a key lands it (motion/keyed). -->
+          <div
+            data-slot="find"
+            class="basis-full min-w-0 group-data-asking/dock:invisible"
+            inert={askOpen}
+            transition:unfold
+          >
+            <FindLine {find} narrow={findNarrow} />
+          </div>
+        {/if}
         {#if lead}
           <!-- What the words are about, its own row across the pill above
                the field, at the field's inset: the pill's top padding over
@@ -3987,6 +4037,7 @@
               {draft}
               ghost={!!action}
               ondraw={room && recallOf ? () => room.open() : undefined}
+              onfind={find ? () => find.show() : undefined}
             />
           {/if}
           {@render also?.()}

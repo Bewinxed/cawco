@@ -13,4 +13,6 @@ export const sideWords = {
   plan: "Plan",
   preview: "Preview",
   task: "Task",
+  /** Find's places, while find stands open in the conversation. */
+  find: "Find",
 };

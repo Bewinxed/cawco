@@ -131,6 +131,7 @@
         aria-hidden="true">{ago}</span
       >
     {/if}
+    {#if row.state.word || row.meta.length > 0}
     <span
       data-slot="meta"
       class="row-start-2 col-start-2 col-end-4 line-clamp-2 type-meta leading-icon-md text-ink-muted group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md"
@@ -145,6 +146,7 @@
         <span class="px-space-1">·</span>{word}
       {/each}
     </span>
+    {/if}
     {#if row.reason}
       <span
         data-slot="reason"

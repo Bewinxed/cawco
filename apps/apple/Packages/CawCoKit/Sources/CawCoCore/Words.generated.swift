@@ -1734,6 +1734,9 @@ public enum Words {
         public static let preview = "Preview"
 
         public static let task = "Task"
+
+        /// Find's places, while find stands open in the conversation.
+        public static let find = "Find"
     }
 
     public enum Artifacts {

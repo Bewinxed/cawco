@@ -109,6 +109,7 @@
     "./words/image-generation": "./src/words/image-generation.ts",
     "./words/image-settings": "./src/words/image-settings.ts",
     "./words/search": "./src/words/search.ts",
+    "./words/find-in": "./src/words/find-in.ts",
     "./words/gate": "./src/words/gate.ts",
     "./words/turns": "./src/words/turns.ts",
     "./turn-cuts": "./src/turn-cuts.ts",

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { findInWords } from "@cawco/core/words/find-in";
   /**
    * Attach: a press opens the system's picker (files, and on a phone its
    * photos and camera), and what is picked joins the draft
@@ -18,14 +19,26 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { IconArtifactCanvas, IconPaperclip, IconPlus } from "#lib/icons.js";
+  import {
+    IconArtifactCanvas,
+    IconPaperclip,
+    IconPlus,
+    IconSearch,
+  } from "#lib/icons.js";
   import type { ComposerDraft } from "./composer-draft.svelte";
 
   let {
     draft,
     ondraw,
+    onfind,
     ghost = false,
-  }: { draft: ComposerDraft; ondraw?: () => void; ghost?: boolean } = $props();
+  }: {
+    draft: ComposerDraft;
+    ondraw?: () => void;
+    /** Find in this conversation: the way in for a pointer and a finger (Command-F's). */
+    onfind?: () => void;
+    ghost?: boolean;
+  } = $props();
 
   let input = $state<HTMLInputElement>();
 
@@ -69,11 +82,11 @@
     title="Attach a file or image"
     variant="ghost"
   />
-{:else if ondraw}
+{:else if ondraw || onfind}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
       data-att-btn
-      aria-label="Attach or draw"
+      aria-label={ondraw ? "Attach, draw or find" : "Attach or find"}
       class="flex-none"
       look="attach"
     >
@@ -84,11 +97,20 @@
         <IconPaperclip />
         <span>Files and photos</span>
       </DropdownMenu.Item>
-      <DropdownMenu.Item onSelect={ondraw}>
-        <IconArtifactCanvas />
-        <span>Draw</span>
-        <DropdownMenu.Shortcut>⌘⇧D</DropdownMenu.Shortcut>
-      </DropdownMenu.Item>
+      {#if ondraw}
+        <DropdownMenu.Item onSelect={ondraw}>
+          <IconArtifactCanvas />
+          <span>Draw</span>
+          <DropdownMenu.Shortcut>⌘⇧D</DropdownMenu.Shortcut>
+        </DropdownMenu.Item>
+      {/if}
+      {#if onfind}
+        <DropdownMenu.Item onSelect={onfind}>
+          <IconSearch />
+          <span>{findInWords.menuItem}</span>
+          <DropdownMenu.Shortcut>⌘F</DropdownMenu.Shortcut>
+        </DropdownMenu.Item>
+      {/if}
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {:else}

@@ -53,6 +53,7 @@
   import FilesItem from "./files/FilesItem.svelte";
   import FilesSheet from "./files/FilesSheet.svelte";
   import { files, filesCount, followFiles } from "./files/files.svelte";
+  import { findIn } from "./find/conversation-find.svelte";
   import { firstRender } from "./first-render.svelte";
   import GlassCard from "./GlassCard.svelte";
   import HubBand from "./HubBand.svelte";
@@ -62,6 +63,7 @@
   import { guardDrops } from "./internal-drag";
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
+  import { landKey } from "./motion/keyed.svelte";
   import NeedsCaw from "./NeedsCaw.svelte";
   import Overlays from "./Overlays.svelte";
   import { hold } from "./page-marks";
@@ -73,6 +75,7 @@
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
   import { floor } from "./visible-viewport.svelte";
+  import { composerBindings } from "./workspace/composer-dock.svelte";
   import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { projectOfTab, tabOfPath } from "./workspace/tabs";
@@ -361,6 +364,39 @@
   $effect(() => shellShortcutsAre(act));
 
   /**
+   * Command-F finds in the conversation the keyboard is in (its pane or its
+   * composer, `data-find-view`), else the one in front; with none, the
+   * browser's own find. Pressed again, it closes find. A key: what it opens
+   * lands at once (motion/keyed). Never forwarded from an artifact's page,
+   * whose own find it is.
+   */
+  function findKey(event: KeyboardEvent): boolean {
+    if (
+      !(event.metaKey || event.ctrlKey) ||
+      event.shiftKey ||
+      event.altKey ||
+      event.key.toLowerCase() !== "f" ||
+      event.defaultPrevented ||
+      !onSession
+    ) {
+      return false;
+    }
+    const at =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement.closest<HTMLElement>("[data-find-view]")
+            ?.dataset.findView
+        : undefined;
+    const viewId = at ?? workspace.activeTab;
+    if (!(viewId && (at || composerBindings.has(viewId)))) {
+      return false;
+    }
+    event.preventDefault();
+    landKey();
+    findIn(viewId).toggle();
+    return true;
+  }
+
+  /**
    * A shell combo (each one a ⌘ or Ctrl chord) is the shell's from anywhere,
    * a text field included, as an artifact's page leaves it (preview-overlay
    * page.ts): the field gets first claim, and one it handled
@@ -378,6 +414,9 @@
     ) {
       event.preventDefault();
       fullSize.exit();
+      return;
+    }
+    if (findKey(event)) {
       return;
     }
     const name = shellShortcutOf(event);

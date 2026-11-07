@@ -35,7 +35,7 @@
   import SideSheet from "./SideSheet.svelte";
   import Split from "./Split.svelte";
 
-  type Shown = "preview" | "task";
+  type Shown = "preview" | "task" | "find";
 
   let {
     viewId,
@@ -44,6 +44,9 @@
     phone,
     taskOpen = false,
     task,
+    findOpen = false,
+    find,
+    onfindclose,
     share = $bindable(0),
     children,
   }: {
@@ -67,6 +70,16 @@
     taskOpen?: boolean;
     /** The task's card, handed the switch while another surface is open too. */
     task?: Snippet<[Snippet | undefined]>;
+    /**
+     * Find stands open in the conversation (find/conversation-find): its
+     * places stand here on a desk, in front while it is open, gone as it
+     * closes; narrow they are the composer's layer, never a sheet.
+     */
+    findOpen?: boolean;
+    /** The places' card, handed the switch while another surface is open too. */
+    find?: Snippet<[Snippet | undefined]>;
+    /** Find's card closed (its Close, a failed card's Close): find closes. */
+    onfindclose?: () => void;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
     /** The transcript's side. */
@@ -81,11 +94,13 @@
 
   const previewOpen = $derived(cawco.previews[viewId]?.state === "open");
   const taskShown = $derived(taskOpen && !!task && phone === false);
-  const open = $derived(previewOpen || taskShown);
+  const findShown = $derived(findOpen && !!find && phone === false);
+  const open = $derived(previewOpen || taskShown || findShown);
   /** What is open, in the switch's order. */
   const opened = $derived<Shown[]>([
     ...(previewOpen ? (["preview"] as const) : []),
     ...(taskShown ? (["task"] as const) : []),
+    ...(findShown ? (["find"] as const) : []),
   ]);
   let tab = $state<Shown>("preview");
   /** The one on show: the one chosen while it is open, else the newest there is. */
@@ -100,6 +115,20 @@
       tab = "preview";
     }
     previewWas = now;
+  });
+  // Find comes to the front as it opens, and hands the front back to what
+  // stood there as it closes.
+  let findWas = untrack(() => findShown);
+  let beforeFind: Shown = "preview";
+  $effect(() => {
+    const now = findShown;
+    if (now && !findWas) {
+      beforeFind = untrack(() => tab);
+      tab = "find";
+    } else if (!now && findWas && untrack(() => tab) === "find") {
+      tab = beforeFind;
+    }
+    findWas = now;
   });
   let taskWas = untrack(() => taskShown);
   $effect(() => {
@@ -143,6 +172,7 @@
   const LABEL: Record<Shown, string> = {
     preview: sideWords.preview,
     task: sideWords.task,
+    find: sideWords.find,
   };
 
   /** What a failed card's head names (FailedSurface): the artifact, or the task's id where no switch says Task. */
@@ -150,12 +180,23 @@
     if (what === "task") {
       return;
     }
+    if (what === "find") {
+      return;
+    }
     const preview = cawco.previews[viewId];
     return preview?.artifact?.title ?? preview?.title;
   }
   /** A failed card's Close: what was on show goes, as its own Close puts it away. */
-  const closeFailed = (what: Shown) =>
-    what === "task" ? putAway(viewId) : closePreview(viewId);
+  function closeFailed(what: Shown) {
+    switch (what) {
+      case "task":
+        return putAway(viewId);
+      case "find":
+        return onfindclose?.();
+      case "preview":
+        return closePreview(viewId);
+    }
+  }
 </script>
 
 <!-- The switch, while more than one has something to show. -->
@@ -177,7 +218,9 @@
 
 {#snippet surface()}
   {@const switched = opened.length > 1 ? switcher : undefined}
-  {#if shown === "task" && taskShown && task}
+  {#if shown === "find" && findShown && find}
+    {@render find(switched)}
+  {:else if shown === "task" && taskShown && task}
     {@render task(switched)}
   {:else if previewOpen}
     <PreviewPane
