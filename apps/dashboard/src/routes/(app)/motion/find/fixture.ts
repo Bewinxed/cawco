@@ -84,8 +84,14 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     k: "tool",
     at: 112,
     name: "Edit",
-    input: { file_path: "packages/hub/src/relay.ts" },
-    out: "ok",
+    input: {
+      file_path: "packages/hub/src/relay.ts",
+      old_string:
+        '  if (code === "ECONNRESET" || code === "EPIPE") return fatal(code);\n  return retry(code);',
+      new_string:
+        '  // A reset after sleep is the network dropping every socket, not a\n  // refusal: the relay asks again.\n  if (code === "EPIPE") return fatal(code);\n  return retry(code);',
+    },
+    out: "The file packages/hub/src/relay.ts has been updated.",
   },
   {
     k: "tool",

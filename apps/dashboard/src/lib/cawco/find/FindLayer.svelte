@@ -1,25 +1,35 @@
 <script lang="ts">
   /**
-   * Find's places as the composer's layer, at every width: the kit's
-   * floating surface rising out of the composer over the transcript's foot,
-   * across the composer's width, as the plan does (PlanPane), so the find
-   * field and its places are one thing grown out of the composer. It is
-   * opened and folded from the find field's place. Nothing it does moves
-   * the transcript (the composer's brief, The Composer Layer Rule); the
-   * words stepped to land above it (Transcript `band`).
+   * Find's places, grown out of the composer at every width: the pill's own
+   * material and edge continued up from its top, across its width, with no
+   * seam between them (the pill squares its top corners while they stand,
+   * Composer `data-places`), so the find field and its places read as one
+   * thing. It is opened and folded from the find field's place. It stands
+   * over the transcript's foot without moving it (the composer's brief, The
+   * Composer Layer Rule); the transcript's foot grows by it (Composer
+   * `onfoot`), so the words stepped to land above it, at the conversation's
+   * end too.
    *
    * It holds its pane's composer layer while it stands: the plan or the
    * tray's shelf opening takes it, and it folds.
    */
   import { findInWords } from "@cawco/core/words/find-in";
   import type { Attachment } from "svelte/attachments";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
-  import { popOut } from "../motion/pop.svelte";
+  import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
+  import { frameSize } from "../frame-observer";
+  import { unfold } from "../motion/fold.svelte";
   import { holdComposerLayer } from "../transcript/composer-layer.svelte";
   import type { ConversationFind } from "./conversation-find.svelte";
   import FindPlaces from "./FindPlaces.svelte";
 
-  let { find }: { find: ConversationFind } = $props();
+  let {
+    find,
+    onheight,
+  }: {
+    find: ConversationFind;
+    /** Its drawn height, as it unfolds and changes, and 0 as it goes: what the transcript's foot grows by. */
+    onheight?: (px: number) => void;
+  } = $props();
 
   /**
    * How tall it may stand: at most the room over the composer to the dock's
@@ -27,17 +37,27 @@
    * stays readable above it. Our own call, from the shaping frames.
    */
   const room: Attachment<HTMLElement> = (node) => {
-    const column = node.offsetParent;
+    const pill = node.offsetParent;
     const dock = node.closest('[data-slot="dock"]');
-    if (column && dock) {
+    if (pill && dock) {
       const over =
-        column.getBoundingClientRect().top - dock.getBoundingClientRect().top;
+        pill.getBoundingClientRect().top - dock.getBoundingClientRect().top;
       const most = Math.max(0, over - 16);
       node.style.setProperty(
         "--find-room",
         `${Math.min(most, Math.max(200, over * 0.55))}px`
       );
     }
+  };
+
+  const measured: Attachment<HTMLElement> = (node) => {
+    const stop = frameSize((box: HTMLElement) => {
+      onheight?.(box.offsetHeight);
+    })(node);
+    return () => {
+      stop?.();
+      onheight?.(0);
+    };
   };
 
   holdComposerLayer(
@@ -49,21 +69,20 @@
   );
 </script>
 
-<!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
-     one transition, from the composer's top) and leaves by `popOut` back
-     down into it. -->
+<!-- It unfolds up out of the pill's top and folds back into it (`unfold`):
+     a press plays it, a key lands it (motion/keyed). Under the pill's own
+     edge (z 1 to the form's 2), so the pill's top hairline is the one line
+     between them. -->
 <section
   data-slot="find-layer"
   aria-label={findInWords.places}
-  class={floatingSurface({
+  class={dockShellVariants({
     class:
-      "absolute start-0 end-0 bottom-(--find-foot) z-3 flex flex-col max-h-(--find-room) p-0 overflow-clip origin-bottom pointer-events-auto",
+      "absolute start-0 end-0 bottom-full z-1 flex flex-col max-h-(--find-room) p-0 overflow-clip rounded-b-none border-b-0 pointer-events-auto",
   })}
-  data-side="top"
-  data-state="open"
-  style:--find-foot="calc(100% + var(--space-2))"
   {@attach room}
-  out:popOut|global={{ side: "top" }}
+  {@attach measured}
+  transition:unfold
 >
   <FindPlaces {find} />
 </section>

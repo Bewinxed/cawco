@@ -366,7 +366,10 @@
   $effect(() => {
     onfoot?.({
       stack: standing,
-      parked: standing - panel - lift,
+      // What find grows out of the composer stands over the foot too: its
+      // line on the pill and its places over it, so the transcript's end
+      // reads above them.
+      parked: standing - panel - lift + (finding ? findLineH + findLayerH : 0),
     });
   });
   /** The field (MentionField's editable box), and the MentionField, whose caret is in the draft's offsets. */
@@ -2830,6 +2833,9 @@
   const askOpen = $derived(!!drawnAsk);
   /** Find stands open on this composer's conversation: its field is on the pill's top. */
   const finding = $derived(!!find?.open);
+  /** The find line's drawn height on the pill, and the places' over it: what the transcript's foot grows by while find stands. */
+  let findLineH = $state(0);
+  let findLayerH = $state(0);
   // Find closed: the caret goes back to the message, as it was left.
   let messageAsked = untrack(() => find?.messageAsked ?? 0);
   $effect(() => {
@@ -3497,11 +3503,6 @@
         bind:this={canvasSlot}
       ></div>
     {/if}
-    {#if find && finding && find.listOpen}
-      <!-- Find's places rise out of the composer as its layer, at every
-           width, as the plan does, over the transcript's foot. -->
-      <FindLayer {find} />
-    {/if}
     <!-- The row of attachments is one block above the field, the canvas's
          chip leading it. -->
     <AttachmentChips
@@ -3594,6 +3595,16 @@
       class="relative pointer-events-auto"
       bind:this={shell}
     >
+      {#if find && finding && find.listOpen}
+        <!-- Find's places grow out of the pill's top, at every width, over
+             the transcript's foot. -->
+        <FindLayer
+          {find}
+          onheight={(px) => {
+            findLayerH = px;
+          }}
+        />
+      {/if}
       {#if fleet && recall && shell && fieldWrap}
         <fleet.RecallWheel
           deck={deckAt}
@@ -3719,6 +3730,7 @@
         data-grown={!!edit || askOpen || canvasUp || undefined}
         data-hint-back={!!hintBack || undefined}
         data-lead={!!lead || !!also || finding || undefined}
+        data-places={(finding && find?.listOpen) || undefined}
         data-recalling={!!recall || undefined}
         data-settling={(!!recall && !wheeling) || undefined}
         data-wheeling={wheeling || undefined}
@@ -3728,7 +3740,7 @@
         aria-label={FIELD_LABEL}
         class={dockShellVariants({
           class:
-            "group/cin relative z-2 py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none not-focus-within:touch-none not-focus-within:touch-callout-none",
+            "group/cin relative z-2 data-places:rounded-t-none py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none not-focus-within:touch-none not-focus-within:touch-callout-none",
         })}
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
@@ -3812,6 +3824,9 @@
             class="basis-full min-w-0 group-data-asking/dock:invisible"
             inert={askOpen}
             transition:unfold
+            {@attach frameSize((node: HTMLElement) => {
+              findLineH = node.offsetHeight;
+            })}
           >
             <FindLine {find} />
           </div>

@@ -181,7 +181,13 @@
             >
           {:else}
             <Button
-              onclick={() => barGlass.jumpWith(find.words.trim())}
+              onclick={() => {
+                // Handed to Jump: this conversation's find closes, so one
+                // find stands at a time.
+                const words = find.words.trim();
+                find.close();
+                barGlass.jumpWith(words);
+              }}
               size="sm"
               variant="outline">{findInWords.everywhere}</Button
             >

@@ -98,6 +98,9 @@ const SETTLE_MS = 180;
 const LEAD = 32;
 const TAIL = 96;
 
+/** A headline already ending its sentence. */
+const SENTENCE_END = /[.!?…:]$/u;
+
 /** `text` cut round its first `words` (case aside), the match marked as the engine marks it. */
 function excerptOf(text: string, at: number, length: number): Run[] {
   const from = Math.max(0, at - LEAD);
@@ -173,7 +176,11 @@ function saidIn(message: Message, agent: string): Said | null {
       const headline = message.metadata?.reportHeadline;
       return {
         glyph: IconReport,
-        text: headline ? `${headline}\n${message.content}` : message.content,
+        // The headline a sentence of its own before the body, as the
+        // report's card reads them.
+        text: headline
+          ? `${headline}${SENTENCE_END.test(headline) ? "" : "."} ${message.content}`
+          : message.content,
         // As the transcript's report line names it (Peer).
         title: findInWords.reportFrom(
           message.metadata?.peerName ?? findInWords.report
@@ -305,6 +312,8 @@ export class ConversationFind {
    * and the place is said by the count).
    */
   sought: { back: boolean; docId: string } | null = null;
+  /** The step count as find last opened: a later step moved the conversation. */
+  #openedAt = 0;
   /** The place stepped to, by whose words and its record, for when its key changes as its turn loads. */
   #atRecord = $state<string | null>(null);
 
@@ -436,9 +445,15 @@ export class ConversationFind {
       this.reading = this.landed ? this.reading : this.#reading();
       this.open = true;
       this.landed = false;
+      this.#openedAt = this.stepped;
       this.listOpen = true;
       if (this.words) {
         this.#askHub();
+      }
+      // Find opens again at the place it stood at: it is stepped to, so the
+      // place the count names is the one the conversation shows.
+      if (this.current) {
+        this.goTo(this.current);
       }
     }
     this.focusAsked += 1;
@@ -449,8 +464,9 @@ export class ConversationFind {
     if (!this.open) {
       return;
     }
-    // Read before find closes: closed, it holds no places.
-    this.landed = this.current !== null;
+    // Read before find closes: closed, it holds no places. Only a find that
+    // moved the conversation leaves a place to come back from.
+    this.landed = this.stepped !== this.#openedAt && this.current !== null;
     this.open = false;
     this.#abort?.abort();
     clearTimeout(this.#settle);
@@ -470,6 +486,7 @@ export class ConversationFind {
   type(words: string): void {
     this.words = words;
     this.at = null;
+    this.#atRecord = null;
     clearTimeout(this.#settle);
     this.#abort?.abort();
     if (!words.trim()) {
@@ -633,6 +650,7 @@ export type PlacesView = Pick<
   | "all"
   | "asking"
   | "at"
+  | "close"
   | "counts"
   | "filter"
   | "hub"

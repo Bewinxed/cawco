@@ -305,6 +305,11 @@ const KEYFRAMES: Record<string, string> = {
  */
 const CONTAINERS = {
   "field-group": "28rem",
+  // Find's line on the composer (find/FindLine): its field beside the place
+  // and its four controls (a composer control's 34px each, the place's
+  // words) once a field of about half its width fits; under it the
+  // controls stand on a row of their own under the field.
+  "find-line": "26rem",
   details: "30rem",
   // The design graph's Animation timeline: its rows' words beside their bars
   // once the names' column (a name and its chips, 12rem) and a lane of

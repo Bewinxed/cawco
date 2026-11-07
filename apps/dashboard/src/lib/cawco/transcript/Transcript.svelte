@@ -4764,24 +4764,37 @@
       return;
     }
     const { current } = findHere;
-    let within: Element | null = null;
-    if (current?.live) {
-      within = listing.querySelector('[data-slot="live"]');
-    } else if (current?.docId) {
-      const index = rowHolding(renderedRows, current.docId);
-      const drawn = renderedRows[index];
+    /** Where a place is drawn: its record's own part of its row, else the row; the live turn's row for the live place. */
+    const drawnAt = (place: {
+      docId: string;
+      live: boolean;
+    }): Element | null => {
+      if (place.live) {
+        return listing?.querySelector('[data-slot="live"]') ?? null;
+      }
+      const drawn = renderedRows[rowHolding(renderedRows, place.docId)];
       const row = drawn
-        ? listing.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
+        ? listing?.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
         : null;
-      const message = drawn
-        ? recordIn(drawn, current.docId, [words])
-        : undefined;
-      within =
+      const message = drawn ? recordIn(drawn, place.docId, [words]) : undefined;
+      return (
         (message &&
           row?.querySelector(`[data-message="${CSS.escape(message.id)}"]`)) ??
-        row;
-    }
-    const all = rangesOf(listing, words);
+        row ??
+        null
+      );
+    };
+    const within = current ? drawnAt(current) : null;
+    // Whose words the places keep reaches the transcript: with a filter
+    // pressed, only the places it keeps are washed.
+    const kept =
+      findHere.whose === "all"
+        ? null
+        : findHere.places.flatMap((place) => drawnAt(place) ?? []);
+    const all = rangesOf(listing, words).filter(
+      (range) =>
+        kept === null || kept.some((at) => at.contains(range.startContainer))
+    );
     const solid =
       (within && all.find((range) => within.contains(range.startContainer))) ??
       null;
@@ -4805,7 +4818,13 @@
       markFind(session.instanceId, [], null);
       return;
     }
-    track(findHere.words, findHere.at, findHere.open, renderedRows);
+    track(
+      findHere.words,
+      findHere.at,
+      findHere.open,
+      findHere.whose,
+      renderedRows
+    );
     let frame = 0;
     const schedule = () => {
       frame ||= requestAnimationFrame(() => {
@@ -5422,9 +5441,10 @@
        until it has appended, and — scrolled away from the tail — the way back.
        Where it rests, up from the scroller's foot, is the pane's to say
        (`--latest-inset`): a docked conversation's just over its composer's
-       own place; elsewhere it stands at the top of the composer's clearance
-       (the foot room less the composer's own dock gap, where the last row
-       ends at the tail), and over what rises past it (`--parked-room`):
+       own place; elsewhere it stands a step (`space-2`) over the top of the
+       composer's clearance (the foot room less the composer's own dock gap,
+       where the last row ends at the tail), so it never sits flush on the
+       composer, and over what rises past it (`--parked-room`):
        never under an ask. A sticky box's inset is measured from the
        scrollport's foot, so the foot room is counted once. Over the pane's
        foot fade (FootFade), which only the rows pass under. A column hung
@@ -5435,7 +5455,7 @@
     class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight}px"
-    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px)))"}
+    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--space-2) + var(--parked-room, 0px)))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}

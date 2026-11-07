@@ -166,6 +166,7 @@ function standing(
     all,
     asking: hub.kind === "asking",
     at,
+    close: () => undefined,
     counts,
     filter: () => undefined,
     hub,
