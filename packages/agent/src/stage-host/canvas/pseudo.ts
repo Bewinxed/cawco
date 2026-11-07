@@ -35,6 +35,8 @@ const EXCLUDED_PSEUDO_ELEMENT_PATTERNS = [
 ];
 
 const PREFIX = "cawco-";
+/** The class an element carries to stand in a state itself (`.cawco-focus`). */
+export const stateClass = (state: PseudoState): string => `${PREFIX}${state}`;
 /** The class a frame's body carries to force a state on everything in it. */
 export const allClass = (state: PseudoState): string => `${PREFIX}${state}-all`;
 
@@ -223,7 +225,7 @@ function rewriteRule(rule: CSSStyleRule, into: Rewrite): string | null {
     const one = [selector];
     const asClass = replacePseudoStates(
       selector,
-      (state) => `.${PREFIX}${state}`,
+      (state) => `.${stateClass(state)}`,
       found
     );
     if (asClass !== selector) {

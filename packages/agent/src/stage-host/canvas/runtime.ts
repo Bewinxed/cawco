@@ -72,6 +72,7 @@ import {
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { shellWords } from "@cawco/core/words/shell";
+import { holdFocusInFrame } from "./held-focus";
 import {
   deltaOf,
   firedBetween,
@@ -662,6 +663,7 @@ function dialSetOf(
 }
 
 export function boot(options: BootOptions): void {
+  holdFocusInFrame();
   holdWhileAway();
   const { adapter, root } = options;
   const params = new URLSearchParams(location.search);
