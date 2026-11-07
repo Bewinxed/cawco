@@ -5,7 +5,6 @@
  * §3.8). Said by the hub and the dashboard only: the app draws none of it,
  * so it is not written into it (scripts/words-swift.ts).
  */
-import type { RouteWhere } from "../decides";
 import { andList } from "./helpers";
 
 /** A removed member's kinds, coming back to him. */
@@ -81,15 +80,8 @@ export const decidesWords = {
   noKind: "A card with no kind",
 
   // ── Where a card goes, said to the session that wrote it ────────────────
-  /** Where a card's route was read: "on this project", "in this fleet", or a project's setup page, whose cards are his whatever the table says. */
-  here: (where: RouteWhere) =>
-    ({
-      project: "on this project",
-      fleet: "in this fleet",
-      setup: "on the project's setup page",
-    })[where],
-  /** A card picked before its route was read. */
-  decidedAlready: "decided already.",
+  /** "on this project" or "in this fleet". */
+  here: (project: boolean) => (project ? "on this project" : "in this fleet"),
   /** A kind that is the person's. */
   routedYou: (kind: string, here: string) =>
     `${kind} is his ${here}: the card waits on him.`,
