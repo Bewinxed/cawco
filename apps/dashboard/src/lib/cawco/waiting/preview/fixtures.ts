@@ -105,7 +105,6 @@ const PARKED: WaitingAsk[] = [
     from: {
       id: "s-land",
       title: "Land the title bars",
-      ended: false,
     },
   },
   {
@@ -121,7 +120,6 @@ const PARKED: WaitingAsk[] = [
     from: {
       id: "s-rail",
       title: "Design the Comments rail and sheet whole",
-      ended: false,
     },
   },
 ];
@@ -156,50 +154,14 @@ const DELEGATE: SessionQuestion[] = [
   },
 ];
 
-/** Answered, and the agent has not taken it up yet. */
-const ANSWERED: SessionQuestion[] = [
-  card(
-    "count-badge",
-    "Does a tab's count stand in the tab's status pair?",
-    BARS,
-    {
-      state: "answered",
-      answer: {
-        at: "2026-11-05T14:52:00Z",
-        by: "pick",
-        said: "Beside the glyph, on its top trailing corner",
-      },
-    }
-  ),
-  {
-    key: "pin:p3",
-    kind: "pin",
-    words: "Is the sheet's grabber too faint on the dark ground?",
-    state: "answered",
-    answer: {
-      at: "2026-11-05T15:10:00Z",
-      by: "reply",
-      said: "Yes, give it the hairline's ink",
-    },
-    stop: { pin: 3 },
-    artifact: RAIL,
-    session: {
-      id: "s-rail",
-      title: "Design the Comments rail and sheet whole",
-      ended: false,
-    },
-  },
-];
-
 /** The rows of each state, as the list draws them. */
 export const STATES: Record<
-  "none" | "one" | "several" | "answered" | "delegate" | "all",
+  "none" | "one" | "several" | "delegate" | "all",
   WaitingRow[]
 > = {
   none: [],
   one: waitingRows(ONE_PAGE, []),
   several: waitingRows(SEVERAL, [...ASK, ...PARKED]),
-  answered: waitingRows(ANSWERED, []),
   delegate: waitingRows([...ONE_PAGE, ...DELEGATE], []),
-  all: waitingRows([...SEVERAL, ...DELEGATE, ...ANSWERED], [...ASK, ...PARKED]),
+  all: waitingRows([...SEVERAL, ...DELEGATE], [...ASK, ...PARKED]),
 };

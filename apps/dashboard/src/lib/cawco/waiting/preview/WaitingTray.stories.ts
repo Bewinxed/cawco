@@ -68,19 +68,7 @@ export const SeveralPhone = {
   parameters: { viewport: 390 },
 };
 
-/** One answered, not yet taken up by the agent: "1 answered" (desk). */
-export const AnsweredDesk = {
-  args: { rows: STATES.answered },
-  parameters: { viewport: 1440 },
-};
-
-/** One answered, not yet taken up (phone). */
-export const AnsweredPhone = {
-  args: { rows: STATES.answered, height: 780 },
-  parameters: { viewport: 390 },
-};
-
-/** A delegate's questions under this session, one from a delegate that ended (desk). */
+/** A delegate's questions under this session, one from a delegate that ended, which reads the same (desk). */
 export const DelegateDesk = {
   args: { rows: STATES.delegate },
   parameters: { viewport: 1440 },

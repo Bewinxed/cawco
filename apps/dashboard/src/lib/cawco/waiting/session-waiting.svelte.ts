@@ -26,13 +26,7 @@ import { cawco } from "../client.svelte";
 import { failureClause, hubFetch, hubRefusal } from "../hub-read";
 import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
 import { refusals } from "../refusals.svelte";
-import {
-  isAsk,
-  type WaitingAsk,
-  type WaitingRow,
-  waitingCounts,
-  waitingRows,
-} from "./rows";
+import { isAsk, type WaitingAsk, type WaitingRow, waitingRows } from "./rows";
 
 export interface SessionWaitingInput {
   /** The asks its tree's turns are parked on, as rows read them. */
@@ -55,7 +49,6 @@ export class SessionWaiting {
   readonly rows = $derived.by((): WaitingRow[] =>
     waitingRows(this.questions ?? [], this.#input.asks())
   );
-  readonly counts = $derived(waitingCounts(this.rows));
   readonly #input: SessionWaitingInput;
   #reading: AbortController | null = null;
 

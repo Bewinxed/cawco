@@ -11,9 +11,9 @@ export const andList = (names: readonly string[]): string =>
     : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
 /**
- * How many need whom: "1 needs you", "3 need Claude Code", and with what
- * they are, "6 tasks need you", "1 more needs you". Every count of what
- * needs someone says it through this, so its verb agrees once.
+ * How many need whom: "1 needs you", and with what they are, "6 tasks
+ * need you". Every count of what needs someone says it through this, so
+ * its verb agrees once.
  */
 export const needs = (n: number, who: string, what = ""): string =>
   `${n}${what === "" ? "" : ` ${what}`} ${n === 1 ? "needs" : "need"} ${who}`;

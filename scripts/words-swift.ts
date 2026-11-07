@@ -280,7 +280,7 @@ const HELPERS: Record<string, string> = {
     "    }",
   ].join("\n"),
   needs: [
-    '    /// "1 needs you", "3 need Claude Code", "6 tasks need you": how many need whom.',
+    '    /// "1 needs you", "6 tasks need you": how many need whom.',
     '    public static func needs(_ n: Int, _ who: String, _ what: String = "") -> String {',
     '        "\\(n)\\(what.isEmpty ? "" : " " + what) \\(n == 1 ? "needs" : "need") \\(who)"',
     "    }",

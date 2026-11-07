@@ -62,7 +62,7 @@
     IconSearch,
     IconServerLinear,
   } from "#lib/icons.js";
-  import { isAsk, type WaitingRow, waitingCounts } from "../rows";
+  import { isAsk, type WaitingRow } from "../rows";
   import WaitingCard from "../WaitingCard.svelte";
   import WaitingChip from "../WaitingChip.svelte";
   import FixtureTray from "./FixtureTray.svelte";
@@ -108,7 +108,6 @@
   const nothing = () => undefined;
   const fleet = { ...composerFleet, DelegateTray: FixtureTray };
   const draft = new ComposerDraft();
-  const agent = $derived(caw ? "Caw" : "Claude Code");
   const phone = new MediaQuery("(width < 640px)");
 
   /** The asks answered here: their rows and the question's bar go, as the hub takes them. */
@@ -118,7 +117,6 @@
   const live = $derived(
     rows.filter((row) => !(isAsk(row) && taken.has(row.requestId)))
   );
-  const counts = $derived(waitingCounts(live));
 
   /** A row pressed: where the pane sends it (session-waiting.svelte.ts `open`). */
   function onopen(row: WaitingRow): void {
@@ -206,17 +204,14 @@
 
 {#snippet trailing()}
   <WaitingChip
-    {agent}
-    answered={counts.answered}
     onopen={() => {
       shown = !shown;
     }}
-    open={counts.open}
+    open={live.length}
     {shown}
   />
   {#if shown && live.length > 0}
     <WaitingCard
-      {agent}
       onclose={() => {
         shown = false;
       }}
@@ -284,9 +279,10 @@
       {placement}
       subtitle={row.words}
       title={row.artifact.title}
-      float
     >
-      <div class="size-full overflow-y-auto overscroll-contain no-scrollbar">
+      <div
+        class="size-full overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head no-scrollbar"
+      >
         {#if row.artifact.id === "a-bars"}
           <img
             alt={row.artifact.title}
@@ -373,7 +369,7 @@
             <TabsList aria-label="Sessions">
               <TabItem label="Continue CawCo open tasks" value="this">
                 {#snippet lead()}
-                  {#if counts.open > 0}
+                  {#if live.length > 0}
                     <IconNeedsYou
                       aria-hidden="true"
                       class="size-icon-md text-status-attn-glyph"

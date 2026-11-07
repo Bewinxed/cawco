@@ -1073,7 +1073,7 @@
           ? first.question || first.header
           : row.request.presentation.summary,
         from: row.under
-          ? { ended: false, id: row.under.instanceId, title: row.under.asker }
+          ? { id: row.under.instanceId, title: row.under.asker }
           : null,
       };
     }),
@@ -1091,7 +1091,7 @@
               kind: "connect",
               requestId: row.request.requestId,
               summary: askWords.connect(row.request.connectAsk.server),
-              from: { ended: false, id: row.instanceId, title: row.asker },
+              from: { id: row.instanceId, title: row.asker },
             },
           ]
         : []
@@ -1386,17 +1386,14 @@
 
 {#snippet planRing()}
   <WaitingChip
-    agent={agentName}
-    answered={waitList.counts.answered}
     onopen={() => {
       waitList.shown = !waitList.shown;
     }}
-    open={waitList.counts.open}
+    open={waitList.rows.length}
     shown={waitList.shown}
   />
   {#if waitList.shown}
     <WaitingCard
-      agent={agentName}
       again={waitList.again}
       failure={waitList.failure}
       faultOf={waitList.faultOf}

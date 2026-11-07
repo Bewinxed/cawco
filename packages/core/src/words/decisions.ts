@@ -135,7 +135,7 @@ export const decisionsWords = {
     `The decision pages for ${project} could not be read: ${problem}`,
   retry: "Retry",
   /** The list's groups, by a page's standing: waiting on picks, sent, decided. */
-  needsYou: "Needs you",
+  needsYou: commonWords.needsYou,
   /** Needs you's line when no page waits on picks. */
   nothingWaits: "Nothing waits on you.",
   /** A page's cards still unpicked, on its row: `2 open`. */
