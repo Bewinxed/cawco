@@ -1671,7 +1671,7 @@ export const createCaw = ({
               by: "event",
               kind: "task-move",
               trigger: `${taskLink(projectId, waiting.id, waiting.title)} moved to ${waiting.stage}, a stage that waits for the person`,
-              text: `It moved there by ${event.actor.mover === "session" ? event.actor.author.name : `the ${event.actor.mover}`}${"reason" in event && event.reason ? `: ${event.reason}` : ""}.`,
+              text: `It moved there by ${event.actor.mover === "session" ? event.actor.author.name : `the ${event.actor.mover}`}${"reason" in event && event.reason ? `: ${event.reason}` : ""}. It waits for the person: you do not move it on or drop it, even when they tell you to in chat. Send it back to a stage before it, or ask them and leave the move to them.`,
             });
           }
         })
