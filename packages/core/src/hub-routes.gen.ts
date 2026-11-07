@@ -5148,6 +5148,7 @@ export interface components {
       response_format?: "concise" | "detailed";
       /** @description apple, linux or a hostname. */
       runs_on?: string;
+      /** @description A todo or you stage; default the first todo one. An active stage is refused: a start is task_start. */
       stage?: string;
       /** @description Verb first. */
       title: string;

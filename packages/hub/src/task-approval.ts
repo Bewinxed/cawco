@@ -57,7 +57,7 @@ const approvalText = (
   const { id, from, to, reason } = approval;
   return [
     `[CawCo] The owner approved ${id} “${title}”, ${filer}: it moved from ${from} to ${to}.${reason ? ` The owner's reason: ${reason}` : ""}`,
-    `Read its result with task_read("${id}"). What happens to it now is yours to decide and do: post or schedule it with action_propose (task: "${id}"), merge it, move it on or close it with task_update, or file the next task with task_create.`,
+    `Read its result with task_read("${id}"). Carrying out what they approved is yours: post or schedule it with action_propose (task: "${id}"), merge it, move it on or close it with task_update. Work past it that nobody asked for is a proposal: one ask (blocks false, options Do it and Not now), and their Do it is the word to file it.`,
   ].join("\n\n");
 };
 

@@ -1951,7 +1951,8 @@ export const createTasks = (store: TaskStore) => {
   // merge, an adoption) stands as written, so a rebuilt or merged index
   // leaves every task where it is. One written straight into the folder
   // starts where a plain create could start it: a stage startProblem
-  // refuses (`by: action`, one that is not a stage, none) is adopted at the
+  // refuses (`by: action`, one that is not a stage, none, and for a
+  // session's write any stage but a todo or you one) is adopted at the
   // first stage, with a note naming who wrote it.
 
   /** The indexed row, when `content` says another stage than it holds. */

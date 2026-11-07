@@ -449,7 +449,12 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("What must be true when done, a markdown list."),
         todos: lines("Top-level to-dos."),
-        stage: z.string().optional(),
+        stage: z
+          .string()
+          .optional()
+          .describe(
+            "A todo or you stage; default the first todo one. An active stage is refused: a start is task_start."
+          ),
         type: z.string().optional().describe("The delegate type to run it."),
         waits_on: z
           .array(z.string())

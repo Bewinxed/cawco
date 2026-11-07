@@ -648,7 +648,13 @@ const unknownStage = (stages: Stages, name: string): string =>
     "and"
   )}.`;
 
-/** Why `who` may not put a new task in `stage`, or undefined when they may. */
+/**
+ * Why `who` may not put a new task in `stage`, or undefined when they may.
+ * A session files one only in a stage of kind todo or you, where it waits:
+ * entering an active stage is a start (task_start, a delegate naming the
+ * task, dispatch or the person makes it), and a waiting, done or dropped
+ * stage carries it past its start.
+ */
 export const startProblem = (
   stages: Stages,
   stage: string,
@@ -657,6 +663,17 @@ export const startProblem = (
   const to = stageNamed(stages, stage);
   if (!to) {
     return unknownStage(stages, stage);
+  }
+  if (who === "session" && to.kind !== "todo" && to.kind !== "you") {
+    return stageWords.filed(
+      stage,
+      to.kind,
+      listed(
+        stages.stages
+          .filter((each) => each.kind === "todo" || each.kind === "you")
+          .map((each) => each.name)
+      )
+    );
   }
   if (!mayEnter(to, who)) {
     return `Only ${moverPhrase(to.hooks.by as Mover)} moves a task to ${stage}.`;

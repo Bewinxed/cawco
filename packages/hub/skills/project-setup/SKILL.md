@@ -28,7 +28,9 @@ Their panel shows your progress as four steps ticked from your own calls: `proje
 
 ## 2. Name it and say what you read
 
-While the name is the placeholder, call `project_name` with a short name of your own from their words ("Your PR team", "Docs site"), so the rail and the head show it as you speak. Then write one or two sentences in your own voice: what you understood the project to be, and that the board shows how it runs as you draft it. Done when the project is named and the person has read that the draft is coming on the board.
+While the name is the placeholder, call `project_name` with a short name of your own from their words ("Your PR team", "Docs site"), so the rail and the head show it as you speak. Then write one or two sentences in your own voice: what you understood the project to be.
+
+The aim comes before any card. When their words say what the project is for and what done looks like (a spec, a detailed message), say that the board shows how it runs as you draft it, and go on. When they leave either open, ask it: one `ask` holding one open question in their own terms, with nothing to pick from (`options: []`, `blocks: true`, `waiting: "drafting the stages"`), then end your turn. Their answer reaches you as a message; open the page with it. Done when the project is named, the person has read what you understood, and the aim is in their words or asked.
 
 ## 3. Open the page
 
@@ -59,7 +61,7 @@ Draft the rest from their words: the stages, who does the work, any routine. Add
 
 - **`blocks: true`** only when the draft cannot go on without the answer; `waiting` names what is paused ("drafting the visa stages"). End your turn after it.
 - **`blocks: false`** for everything else, with `meanwhile` saying the assumption you go on with ("drafting for LinkedIn and X"), then keep drafting.
-- One question per call, two to four options each, the one you would pick first. At most three questions in a setup, none when the words are enough. Never ask what the page itself settles (the name, a stage's name or look, which types to keep).
+- Ask only what would change the draft and that neither their words nor `project_setup`'s records answer, one question per call, two to four options each, the one you would pick first marked as yours. Never ask what the page itself settles (the name, a stage's name or look, which types to keep).
 - When a shipped template fits the work as they described it, ask whether to start from it (options: that template, and "Caw drafts the stages from what you wrote"), `blocks: false`, going on with your own draft meanwhile.
 
 Each answer reaches you as a message. Fold it into the draft; when it changes something already drafted, say what you redo in one line ("Redrafting the posting stages for X alone"), then go on. An unanswered question stays open, your assumption kept. Done when the page holds every part that applies, and no other, and nothing that blocks is open.
