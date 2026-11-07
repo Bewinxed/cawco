@@ -227,7 +227,7 @@ export interface AsksDeps {
 }
 
 /** Why a session's ask goes unanswered when it ends. */
-const ENDED_WHY = "its session ended before you answered";
+const ENDED_WHY = "its session ended before anyone answered";
 
 /** Why a permit goes when its session's next process asks the same call itself. */
 const ASKED_AGAIN_WHY = "its session asked the same call again";

@@ -438,7 +438,11 @@ import {
   withReminder,
   workWords,
 } from "@cawco/core";
-import { FULL_SEND_ANSWER, PROJECT_SETTINGS } from "@cawco/core/asks";
+import {
+  ASK_ORIGIN,
+  FULL_SEND_ANSWER,
+  PROJECT_SETTINGS,
+} from "@cawco/core/asks";
 import { readTrial } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
@@ -960,7 +964,7 @@ import {
   folderFileNames,
   guardFolderFile,
   listFolder,
-  onFolderDeletes,
+  onFolderCommits,
   projectFolderRoutes,
   projectRoot,
   readFolderFile,
@@ -3853,7 +3857,7 @@ export const createServer = (
     park: (envelope) => parkForPerson(envelope),
     settle: (id, outcome) => {
       if ("cut" in outcome) {
-        pending.resolve(id, "cancelled");
+        pending.resolve(id, "cancelled", { closed: outcome.cut });
       } else {
         pending.resolve(id, "answered", { answer: outcome.answer });
       }
@@ -4250,7 +4254,13 @@ export const createServer = (
     }
     // A delegate's parent hears how its ask ended; of one no screen was
     // shown, nobody was told.
-    delegateWaits.ended(parked, outcome, answer, why === undefined);
+    delegateWaits.ended(
+      parked,
+      outcome,
+      answer,
+      why === undefined,
+      said?.closed
+    );
     registry.broadcast({
       verb: "frames",
       machineId: parked.machineId,
@@ -15650,9 +15660,9 @@ export const createServer = (
    * `sourceGone`). Keeping a program drops the built page, and the page
    * stays.
    */
-  onFolderDeletes((projectId, paths) => {
+  onFolderCommits((projectId, { deleted }) => {
     const names = new Set(
-      paths.flatMap((path) => {
+      deleted.flatMap((path) => {
         const name = PAGE_SOURCE.exec(path)?.[1];
         return name ? [name] : [];
       })
@@ -26464,9 +26474,34 @@ export const createServer = (
       lead?.notice(projectId, note);
     },
     park: (envelope) => parkForPerson(envelope),
-    settle: (requestId) => {
-      pending.resolve(requestId);
+    settle: (requestId, closed) => {
+      if (closed === undefined) {
+        pending.resolve(requestId);
+      } else {
+        pending.resolve(requestId, "cancelled", { closed });
+      }
     },
+    // The proposing session, as it is now; one that can never act again
+    // is told nothing.
+    tell: (instanceId, text, line) => {
+      const now = db.instanceIdOf(instanceId);
+      if (endedForGood(now)) {
+        return false;
+      }
+      tellSession(now, text, { name: ASK_ORIGIN, line });
+      return true;
+    },
+  });
+  // A commit to a project's folder: the open proposals on the files it
+  // changed are checked again, and one that no longer applies closes then.
+  onFolderCommits((projectId, { written, deleted }) => {
+    detach(
+      projectMemory.folderCommitted(
+        projectId,
+        new Set([...written, ...deleted])
+      ),
+      "memory proposals on the files a commit changed"
+    );
   });
   // Open proposals are the person's asks again as the hub starts.
   // Read by the boot's sweep of the asks push took (below), which waits on it.

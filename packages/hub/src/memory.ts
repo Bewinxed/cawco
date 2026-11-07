@@ -1734,8 +1734,18 @@ export interface MemoryDeps {
   readonly notice: (projectId: string, note: ProjectNote) => void;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   readonly park: (envelope: Envelope) => void;
-  /** Takes a settled ask off the pending ledger. */
-  readonly settle: (requestId: string) => void;
+  /**
+   * Takes a settled ask off the pending ledger: answered, or (`closed`, a
+   * sentence with no stop) closed by the hub because it no longer applies.
+   */
+  readonly settle: (requestId: string, closed?: string) => void;
+  /**
+   * Says `text` to the session `instanceId` (a former id is the session it
+   * is part of now), under the ask's origin, which wakes it as an answer
+   * does, its transcript reading `line`; false when that session can never
+   * act again, and nothing is said.
+   */
+  readonly tell: (instanceId: string, text: string, line: string) => boolean;
   readonly watch: TurnWatch;
 }
 
@@ -1746,10 +1756,15 @@ export const createMemory = ({
   notice,
   park,
   settle,
+  tell,
   watch,
 }: MemoryDeps) => {
   /** Open proposals, by id: the project each is in. */
   const open = new Map<string, string>();
+  /** Proposals the person's answer is being carried out for: no other path closes them meanwhile. */
+  const answering = new Set<string>();
+  /** Proposals being closed ({@link closeStale}): each closes once. */
+  const closing = new Set<string>();
 
   const projectOf = (projectId: string): ProjectRow =>
     db.project(projectId) ??
@@ -2874,6 +2889,115 @@ export const createMemory = ({
     (await notesIn(projectId, ARCHIVE_DIR)).find((each) => each.id === id);
 
   /**
+   * THE RULE FOR A PROPOSAL THAT NO LONGER APPLIES: each file it changes,
+   * merged into the file as it is now (three ways from the file as it
+   * stood when proposed, `before`): its writes, or the first file whose
+   * change and the file's own overlap, `stale`. Approving reads it, and so
+   * does every commit that changes one of its files ({@link folderCommitted}).
+   */
+  const mergedNow = async (
+    proposal: Proposal
+  ): Promise<
+    { writes: { content: string; path: string }[] } | { stale: string }
+  > => {
+    const writes: { content: string; path: string }[] = [];
+    for (const file of proposal.files) {
+      const now = await fileOr(proposal.projectId, file.path);
+      const next =
+        now === file.before
+          ? file.content
+          : await mergeThree(now, file.before, file.content);
+      if (next === undefined) {
+        return { stale: file.path };
+      }
+      writes.push({ path: file.path, content: next });
+    }
+    return { writes };
+  };
+
+  /** {@link mergedNow}'s writes; a proposal that no longer applies throws, saying why. */
+  const writesNow = async (
+    proposal: Proposal
+  ): Promise<{ content: string; path: string }[]> => {
+    const merged = await mergedNow(proposal);
+    if ("stale" in merged) {
+      throw new Error(askWords.proposalClosed(merged.stale));
+    }
+    return merged.writes;
+  };
+
+  /**
+   * A proposal that no longer applies to `path`, closed by the hub: its
+   * file goes in a commit whose message keeps why, its notes stay in the
+   * inbox to be cited again, it leaves every screen with why, and the
+   * session that proposed it is told (under the ask's origin, waking it) so
+   * it can propose again from the file as it is now. Answers whether that
+   * session was told.
+   */
+  const closeStale = async (
+    proposal: Proposal,
+    path: string
+  ): Promise<boolean> => {
+    const { projectId } = proposal;
+    if (closing.has(proposal.id)) {
+      return false;
+    }
+    closing.add(proposal.id);
+    const why = askWords.proposalClosed(path);
+    try {
+      await changeFolderFiles(
+        projectId,
+        { writes: [], deletes: [`${PROPOSALS_DIR}/${proposal.id}.json`] },
+        { author: HUB, message: `memory: ${proposal.id} closed: ${why}` }
+      );
+      open.delete(proposal.id);
+    } finally {
+      closing.delete(proposal.id);
+    }
+    folderChanged(projectId);
+    settle(proposal.id, why);
+    const told = proposal.session
+      ? tell(
+          proposal.session,
+          askWords.proposalClosedTold(proposal.id, path),
+          askWords.proposalClosedLine(path)
+        )
+      : false;
+    console.log(
+      `[memory] ${projectId}: ${proposal.id} closed, ${why}; ${told ? `${proposal.session} told` : "no session to tell"}`
+    );
+    return told;
+  };
+
+  /**
+   * A commit changed `paths` in `projectId`'s folder: every open proposal
+   * that changes one of them and no longer applies is closed
+   * ({@link closeStale}), at the change and not when the person presses.
+   * One being answered is the answer's to settle.
+   */
+  const folderCommitted = async (
+    projectId: string,
+    paths: ReadonlySet<string>
+  ): Promise<void> => {
+    const touched = (await proposalsOf(projectId)).filter(
+      (proposal) =>
+        open.get(proposal.id) === projectId &&
+        !answering.has(proposal.id) &&
+        proposal.files.some((file) => paths.has(file.path))
+    );
+    for (const proposal of touched) {
+      const merged = await mergedNow(proposal);
+      if (
+        "stale" in merged &&
+        open.has(proposal.id) &&
+        !answering.has(proposal.id)
+      ) {
+        await closeStale(proposal, merged.stale);
+      }
+    }
+  };
+
+  /**
    * The change, each file merged into the file as it is now, committed as
    * `author` (the person approving, or Caw writing) in one commit with a
    * withdrawn note's move; its notes archived as applied; a kept proposal's
@@ -2885,25 +3009,7 @@ export const createMemory = ({
     kept: boolean
   ): Promise<string> => {
     const { projectId } = proposal;
-    const writes = await Promise.all(
-      proposal.files.map(async (file) => {
-        const now = await fileOr(projectId, file.path);
-        // What it was proposed against: the file as it stood then.
-        const next =
-          now === file.before
-            ? file.content
-            : await mergeThree(now, file.before, file.content);
-        if (next === undefined) {
-          throw new Error(
-            askWords.proposalStale(
-              file.path,
-              file.path.startsWith(DELEGATES_DIR) ? "Caw" : "the curator"
-            )
-          );
-        }
-        return { path: file.path, content: next };
-      })
-    );
+    const writes = await writesNow(proposal);
     const deletes: string[] = [];
     if (proposal.withdraws) {
       const gone = await noteNamed(projectId, proposal.withdraws);
@@ -3559,7 +3665,13 @@ export const createMemory = ({
         try {
           await convertOneFileProposals(project);
           for (const proposal of await proposalsOf(project.id)) {
-            parkProposal(proposal);
+            // The folder may have changed while no hub watched it.
+            const merged = await mergedNow(proposal);
+            if ("stale" in merged) {
+              await closeStale(proposal, merged.stale);
+            } else {
+              parkProposal(proposal);
+            }
           }
         } catch (error) {
           console.warn(
@@ -3568,6 +3680,48 @@ export const createMemory = ({
         }
       })
     );
+  };
+
+  /**
+   * The person's answer to the open proposal `requestId`, carried out
+   * (`answer`): approved, applied as they left it, or closed when it no
+   * longer applies; rejected, its notes archived. The project's
+   * conversation keeps the answer as a note.
+   */
+  const answerOpen = async (
+    projectId: string,
+    requestId: string,
+    result: PermissionResult
+  ): Promise<void> => {
+    const proposal = await proposalFile(projectId, requestId);
+    if (proposal) {
+      const approved = result.behavior === "allow";
+      let sha = "";
+      if (approved) {
+        const asked = asApproved(proposal, result);
+        const merged = await mergedNow(asked);
+        if ("stale" in merged) {
+          const told = await closeStale(proposal, merged.stale);
+          const closed = askWords.proposalClosedOnAnswer(merged.stale);
+          throw new Error(
+            told ? `${closed} ${askWords.proposerTold(proposal.by)}` : closed
+          );
+        }
+        sha = await apply(asked, YOU, true);
+      } else {
+        await reject(proposal, result.message.trim());
+      }
+      notice(
+        projectId,
+        answeredNote(
+          proposal.files.map((file) => file.path),
+          approved ? sha : null,
+          result
+        )
+      );
+    }
+    open.delete(requestId);
+    settle(requestId);
   };
 
   return {
@@ -3588,36 +3742,31 @@ export const createMemory = ({
     owns: (requestId: string): boolean => open.has(requestId),
 
     /**
+     * A commit changed `paths` in `projectId`'s folder: the open proposals
+     * it left no longer applying close ({@link folderCommitted}).
+     */
+    folderCommitted,
+
+    /**
      * The person's answer to a proposal: approved, it applies as they left
-     * it ({@link asApproved}); rejected, its notes are archived. Either way the ask leaves the ledger once done; a
-     * proposal that no longer applies throws, and its ask stays.
+     * it ({@link asApproved}); rejected, its notes are archived. Either way
+     * the ask leaves the ledger once done. Approved as its file changed in
+     * the same moment (an edit not committed yet, a commit landing with the
+     * press), it no longer applies: the hub closes it then, as it would
+     * have at the change ({@link closeStale}), and the answer is refused
+     * saying so.
      */
     async answer(requestId: string, result: PermissionResult): Promise<void> {
       const projectId = open.get(requestId);
-      if (!projectId) {
+      if (!projectId || answering.has(requestId)) {
         throw new Error("That proposal is no longer waiting.");
       }
-      const proposal = await proposalFile(projectId, requestId);
-      if (proposal) {
-        const approved = result.behavior === "allow";
-        let sha = "";
-        if (approved) {
-          sha = await apply(asApproved(proposal, result), YOU, true);
-        } else {
-          await reject(proposal, result.message.trim());
-        }
-        // The project's conversation keeps your answer as a note.
-        notice(
-          projectId,
-          answeredNote(
-            proposal.files.map((file) => file.path),
-            approved ? sha : null,
-            result
-          )
-        );
+      answering.add(requestId);
+      try {
+        await answerOpen(projectId, requestId, result);
+      } finally {
+        answering.delete(requestId);
       }
-      open.delete(requestId);
-      settle(requestId);
     },
 
     /**

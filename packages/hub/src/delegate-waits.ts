@@ -73,8 +73,14 @@ const PERSON_ONLY = [
 export type NoticeMark =
   "waits" | "persons-now" | "ended" | "handed-back" | "ended-with-hub";
 
-/** How an ask left the ledger. */
-type AskEnd = { kind: "answered"; answer?: AskAnswer } | { kind: "withdrawn" };
+/** How an ask left the ledger; `closed`: why the hub closed it, when it no longer applied. */
+type AskEnd =
+  | { kind: "answered"; answer?: AskAnswer }
+  | { kind: "withdrawn"; closed: string | undefined };
+
+/** How a withdrawn ask reads: closed by the hub, with why, or withdrawn. */
+const withdrawnHow = (closed: string | undefined): string =>
+  closed ? delegateWaitWords.closed(closed) : delegateWaitWords.withdrawn;
 
 export interface DelegateWaitsDeps {
   /** The name a session's answer carries (`AnswerFrom.name`). */
@@ -205,7 +211,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
   /** How `end` reads, for the ask `ask`. */
   const howOf = (ask: Envelope, end: AskEnd): string => {
     if (end.kind === "withdrawn") {
-      return delegateWaitWords.withdrawn;
+      return withdrawnHow(end.closed);
     }
     const { answer } = end;
     const { browserAsk, connectAsk, requestKind } = payloadOf(ask);
@@ -297,13 +303,15 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
      * `ask` left the pending ledger, answered (with what won and where, when
      * the hub knows) or cancelled: its asker's parent hears how, unless the
      * parent answered it itself. `shown` is false for an ask no screen was
-     * shown, which nobody was told of.
+     * shown, which nobody was told of. `closed`: why the hub closed it
+     * because it no longer applied, which the parent hears with it.
      */
     ended(
       ask: Envelope,
       outcome: "answered" | "cancelled",
       answer: AskAnswer | undefined,
-      shown: boolean
+      shown: boolean,
+      closed?: string
     ): void {
       const asker = askerOf(ask);
       const pair = asker && shown ? pairOf(asker.id) : undefined;
@@ -313,7 +321,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const end: AskEnd =
         outcome === "answered"
           ? { kind: "answered", ...(answer ? { answer } : {}) }
-          : { kind: "withdrawn" };
+          : { kind: "withdrawn", closed };
       if (
         answer?.via === "session" &&
         answer.name === deps.answererName(pair.parent)

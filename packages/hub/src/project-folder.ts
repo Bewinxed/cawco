@@ -277,31 +277,41 @@ export const folderPath = (raw: string): string => {
   return parts.join("/");
 };
 
-/** Who hears the files a commit took out of a project's folder (`onFolderDeletes`). */
-const deleteListeners = new Set<(projectId: string, paths: string[]) => void>();
+/** What one commit changed in a project's folder: the files it wrote, and the files it took out. */
+export interface FolderCommitted {
+  deleted: string[];
+  written: string[];
+}
+
+/** Who hears what each commit changed in a project's folder (`onFolderCommits`). */
+const commitListeners = new Set<
+  (projectId: string, change: FolderCommitted) => void
+>();
 
 /**
- * Hears every file a commit takes out of a project's folder, a move's
- * source included, once the commit stands and the folder's turn is over:
- * what lives as long as a file there (a project's page, server.ts) goes
- * with it. Answers what stops hearing.
+ * Hears every commit to a project's folder, once it stands and the folder's
+ * turn is over: the files it wrote (a move's destination included) and the
+ * files it took out (a move's source included). What lives as long as a
+ * file there (a project's page, server.ts) goes with it; what was made
+ * against a file (a memory proposal, memory.ts) is checked again. Answers
+ * what stops hearing.
  */
-export const onFolderDeletes = (
-  listener: (projectId: string, paths: string[]) => void
+export const onFolderCommits = (
+  listener: (projectId: string, change: FolderCommitted) => void
 ): (() => void) => {
-  deleteListeners.add(listener);
+  commitListeners.add(listener);
   return () => {
-    deleteListeners.delete(listener);
+    commitListeners.delete(listener);
   };
 };
 
-/** Tells each listener the files a commit took out. */
-const tellDeleted = (projectId: string, paths: string[]): void => {
-  if (paths.length === 0) {
+/** Tells each listener what a commit changed; a commit that changed nothing is told to none. */
+const tellCommitted = (projectId: string, change: FolderCommitted): void => {
+  if (change.written.length + change.deleted.length === 0) {
     return;
   }
-  for (const listener of deleteListeners) {
-    listener(projectId, paths);
+  for (const listener of commitListeners) {
+    listener(projectId, change);
   }
 };
 
@@ -1068,7 +1078,7 @@ export const writeFolderFile = async (
   guarded(rel, bytes);
   const asked = askedMessage(options.message);
   const root = projectRoot(projectId);
-  return await inTurn(projectId, async () => {
+  const written = await inTurn(projectId, async () => {
     await prepare(projectId, root);
     const { abs, there: before } = await fileToWrite(root, rel);
     const message = asked ?? `${before ? "Update" : "Add"} ${rel}`;
@@ -1102,6 +1112,11 @@ export const writeFolderFile = async (
       throw putBack(error, rel);
     }
   });
+  tellCommitted(projectId, {
+    written: written.changed ? [rel] : [],
+    deleted: [],
+  });
+  return written;
 };
 
 /** Several files written together, as {@link writeFolderFiles} landed them. */
@@ -1325,7 +1340,10 @@ export const changeFolderFiles = async (
         : error;
     }
   });
-  tellDeleted(projectId, deletes);
+  tellCommitted(projectId, {
+    written: changed.changed ? [...written] : [],
+    deleted: deletes,
+  });
   return changed;
 };
 
@@ -1388,7 +1406,7 @@ export const deleteFolderFile = async (
       throw putBack(error, rel);
     }
   });
-  tellDeleted(projectId, [rel]);
+  tellCommitted(projectId, { written: [], deleted: [rel] });
   return done;
 };
 
@@ -1448,9 +1466,12 @@ export const moveFolderFile = async (
       throw putBack(error, `${from} and ${to}`);
     }
   });
-  if (from !== to) {
-    tellDeleted(projectId, [from]);
-  }
+  tellCommitted(
+    projectId,
+    from === to
+      ? { written: moved.changed ? [to] : [], deleted: [] }
+      : { written: [to], deleted: [from] }
+  );
   return moved;
 };
 

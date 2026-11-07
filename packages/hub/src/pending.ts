@@ -74,6 +74,12 @@ interface Settlement {
   /** An answered ask: what won and where it came from. */
   answer?: AskAnswer;
   /**
+   * A shown ask the hub closed on its own because it no longer applies (its
+   * session ended for good, a proposal's file changed under it): why, a
+   * sentence with no stop, said to whoever hears it end.
+   */
+  closed?: string;
+  /**
    * A cancellation the hub can explain: an ask it could not show anyone
    * (`askRefusal` in server.ts).
    */

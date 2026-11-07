@@ -304,6 +304,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         notice: () => undefined,
         park: () => undefined,
         settle: () => undefined,
+        tell: () => false,
         watch: createTurnWatch({
           fleetHosts: () => [],
           get: () => undefined,

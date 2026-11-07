@@ -1209,9 +1209,29 @@ public enum Words {
         /// Not now, refused on its way: what refused it goes after.
         public static let cantSendAnswer = "Couldn't send that answer."
 
-        /// A proposal to a project file the file outgrew before it was approved (hub memory.ts `apply`): said after "Couldn't send that answer.", with Deny still there to reject it.
-        public static func proposalStale(path: String, proposer: String) -> String {
-            "\(path) changed since this was proposed, and the proposal no longer applies to it. Reject it; \(proposer) proposes again from what the file says now."
+        /// Why the hub closed a proposal to a project file on its own (hub memory.ts `closeStale`): the file changed under it, so it no longer applies. Kept in the closing commit's message, and said to whoever hears the ask end.
+        public static func proposalClosed(path: String) -> String {
+            "\(path) changed after it was proposed, and the proposal no longer applies to it"
+        }
+
+        /// What the proposing session reads when its proposal closed so: under the ask's origin, which wakes it as an answer does.
+        public static func proposalClosedTold(id: String, path: String) -> String {
+            "Your proposal \(id) is closed: \(path) changed after you proposed it, and the proposal no longer applies to it. Nothing was written, and it no longer waits on the person. Read \(path) as it is now; if the change is still wanted, propose it again from that."
+        }
+
+        /// The line the person reads of that notice in the proposing session's transcript, where the closed card stood.
+        public static func proposalClosedLine(path: String) -> String {
+            "Proposal closed: \(path) changed under it"
+        }
+
+        /// Approve pressed on a proposal whose file changed in the moment before (an edit not yet committed, or a commit landing with the press): the hub closes it then, said after "Couldn't send that answer." as the card leaves.
+        public static func proposalClosedOnAnswer(path: String) -> String {
+            "\(path) changed since this was proposed, so the proposal no longer applied and CawCo closed it."
+        }
+
+        /// Said after {@link proposalClosedOnAnswer} when its proposing session was told.
+        public static func proposerTold(proposer: String) -> String {
+            "\(proposer) was told, to propose again from what the file says now."
         }
 
         /// While the session's machine is offline.

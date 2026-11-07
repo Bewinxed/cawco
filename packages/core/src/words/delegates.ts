@@ -104,6 +104,13 @@ export const delegateWaitWords = {
     `the person handed its browser back${origin ? ` on ${origin}` : ""}, and your delegate goes on.`,
   connected: "the person signed the hub in, and your delegate goes on.",
   withdrawn: "it was withdrawn before anyone answered it.",
+  /**
+   * An ask the hub closed on its own because it no longer applied (`why`:
+   * the hub's reason, a sentence with no stop): what the parent weighs in
+   * deciding whether to ask or propose again from where things stand now.
+   */
+  closed: (why: string) =>
+    `CawCo closed it before anyone answered, as it no longer applies: ${why}.`,
   /** An ask whose call ended with the hub that held it, told as the next hub starts. */
   endedWithHub:
     "it ended with a hub restart, and your delegate's call was refused; nobody answered it.",
