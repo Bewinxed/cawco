@@ -5,15 +5,16 @@
    * as PreviewPane builds it (the address in the centre, Open in new tab in
    * the glass, Take over or Hand back trailing, Close), and the real
    * BrowserView under it, its stream from this page instead of the hub:
-   * a stand-in for neko (`WebSocket` answered here, the video carried over
-   * a WebRTC loopback in the page from a canvas the page draws), the agent's
-   * page drawn as Northwind's billing settings. The bench reaches no hub.
+   * a stand-in for neko (`WebSocket` answered here, and its peer a stand-in
+   * too, handing the video the stream of a canvas the page draws: no WebRTC
+   * runs, so any browser draws it with no flags), the agent's page drawn as
+   * Northwind's billing settings. The bench reaches no hub.
    *
    * `?state=`: `live` (the agent driving, the page at its top; the
    * default), `scrolled` (the page scrolled down its invoices), `starting`
    * (the browser waking), `building` (its image, step 3 of 7), `connecting`
-   * (live, the stream not yet in), `mine` (the person holds it: Private,
-   * Hand back, and under a finger Show keyboard), `unreachable` (the agent
+   * (live, the stream not yet in), `mine` (the person holds it: the
+   * pointer in the address, Hand back, and under a finger Show keyboard), `unreachable` (the agent
    * opened an address that fails: the browser's own error page),
    * `lost` (the view's link closed), `failed` (the browser didn't start),
    * `away` (its machine isn't connected), `local` (a machine with no
@@ -46,6 +47,11 @@
     event: z.string(),
     payload: z.record(z.string(), z.unknown()).default({}),
   });
+
+  /** neko's offer and the view's answer as the stand-ins say them: a video section each, none rejected. */
+  const OFFER =
+    "v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\n";
+  const ANSWER = OFFER;
 
   const W = 1280;
   const H = 800;
@@ -184,7 +190,7 @@
   }
 
   // The hub's view socket, answered here: neko's signaling for a container
-  // browser, the stream carried over a WebRTC loopback from a canvas.
+  // browser, its peer a stand-in that hands the video a canvas's stream.
   if (typeof window !== "undefined") {
     const canvas = document.createElement("canvas");
     canvas.width = W;
@@ -203,7 +209,6 @@
       onmessage: ((event: MessageEvent) => void) | null = null;
       onclose: ((event: CloseEvent) => void) | null = null;
       onopen: (() => void) | null = null;
-      #peer: RTCPeerConnection | null = null;
       readonly url: string;
       constructor(url: string) {
         super();
@@ -264,46 +269,69 @@
           }
           return;
         }
-        const { event, payload } = Signal.parse(JSON.parse(data));
+        const { event } = Signal.parse(JSON.parse(data));
         if (event === "signal/request") {
-          this.#offer();
-        } else if (event === "signal/answer") {
-          this.#peer
-            ?.setRemoteDescription({
-              type: "answer",
-              sdp: String(payload.sdp),
-            })
-            .catch(() => undefined);
-        } else if (event === "signal/candidate") {
-          this.#peer
-            ?.addIceCandidate(payload as RTCIceCandidateInit)
-            .catch(() => undefined);
+          // neko offers its peer; the stand-in peer answers it (BenchPeer).
+          this.#say("signal/provide", { sdp: OFFER });
         }
-      }
-      async #offer() {
-        const peer = new RTCPeerConnection();
-        this.#peer = peer;
-        for (const track of stream.getVideoTracks()) {
-          peer.addTrack(track, stream);
-        }
-        const data = peer.createDataChannel("data");
-        data.onmessage = () => {
-          // A wheel moves the page under the person's hand.
-          scroll = Math.min(800, scroll + 120);
-        };
-        peer.onicecandidate = (found) => {
-          if (found.candidate) {
-            this.#say("signal/candidate", found.candidate.toJSON());
-          }
-        };
-        await peer.setLocalDescription(await peer.createOffer());
-        this.#say("signal/provide", { sdp: peer.localDescription?.sdp });
       }
       close() {
         this.readyState = 3;
-        this.#peer?.close();
       }
     }
+    /**
+     * The view's peer, a stand-in for the browser's RTCPeerConnection: as
+     * the offer lands it hands the video the canvas's stream (`ontrack`),
+     * opens its input channel (a wheel or a press moves the page) and says
+     * it connected, as a peer does once its media flows.
+     */
+    class BenchPeer {
+      connectionState: RTCPeerConnectionState = "new";
+      localDescription: RTCSessionDescriptionInit | null = null;
+      remoteDescription: RTCSessionDescriptionInit | null = null;
+      onicecandidate: ((event: unknown) => void) | null = null;
+      ontrack:
+        | ((event: { track: MediaStreamTrack; streams: MediaStream[] }) => void)
+        | null = null;
+      ondatachannel: ((event: { channel: unknown }) => void) | null = null;
+      onconnectionstatechange: (() => void) | null = null;
+      setRemoteDescription(described: RTCSessionDescriptionInit) {
+        this.remoteDescription = described;
+        setTimeout(() => {
+          const [track] = stream.getVideoTracks();
+          if (track) {
+            this.ontrack?.({ track, streams: [stream] });
+          }
+          this.ondatachannel?.({
+            channel: {
+              binaryType: "arraybuffer",
+              readyState: "open",
+              send: () => {
+                // A wheel moves the page under the person's hand.
+                scroll = Math.min(800, scroll + 120);
+              },
+            },
+          });
+          this.connectionState = "connected";
+          this.onconnectionstatechange?.();
+        });
+        return Promise.resolve();
+      }
+      createAnswer() {
+        return Promise.resolve({ type: "answer" as const, sdp: ANSWER });
+      }
+      setLocalDescription(described: RTCSessionDescriptionInit) {
+        this.localDescription = described;
+        return Promise.resolve();
+      }
+      addIceCandidate() {
+        return Promise.resolve();
+      }
+      close() {
+        this.connectionState = "closed";
+      }
+    }
+    window.RTCPeerConnection = BenchPeer as unknown as typeof RTCPeerConnection;
     // Only the view's socket: the dev server's own (Vite's) stays the browser's.
     const Real = window.WebSocket;
     window.WebSocket = new Proxy(Real, {
@@ -346,7 +374,12 @@
 {/snippet}
 
 <Tooltip.Provider>
-  <div class="flex h-dvh bg-surface-recess p-space-2 *:flex-1 max-phone:p-0">
+  <!-- Shown in CawCo's own artifact panel (the overlay's `data-cawco-headed`),
+     the card fills the frame edge to edge: the panel's well holds it, with no
+     page round it. -->
+  <div
+    class="flex h-dvh bg-surface-recess p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+  >
     <SideSurface
       items={[
         ...(shows.control

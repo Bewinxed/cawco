@@ -437,12 +437,14 @@
   </div>
 {/snippet}
 
+<!-- Shown in CawCo's own artifact panel (the overlay's `data-cawco-headed`),
+     the card fills the frame edge to edge. -->
 <!-- In the artifact panel as a person meets it: the panel's card and its
      floating head (SideSurface), beside the page on a desk and a sheet's
      on a phone, the graph under the head as PreviewPane hosts it. -->
 <TooltipProvider>
   <div
-    class="flex h-dvh min-h-0 bg-surface-page p-space-2 *:flex-1 max-phone:p-0"
+    class="flex h-dvh min-h-0 bg-surface-page p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
   >
     <SideSurface
       label="Preview"
