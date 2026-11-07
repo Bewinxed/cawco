@@ -450,7 +450,7 @@ const designLeg = async (
   );
 };
 
-/** The repository's own design system, committed, so a change to it is a proposal. */
+/** The repository's own design system, committed and pushed to its origin, so a change to it is a proposal. */
 export const commitDesign = async (repo: string): Promise<void> => {
   const git = (...args: string[]) => {
     const ran = Bun.spawnSync(
@@ -478,6 +478,10 @@ export const commitDesign = async (repo: string): Promise<void> => {
   await writeFile(join(repo, "design", "DESIGN.md"), DESIGN);
   git("add", "design");
   git("commit", "-q", "-m", "The repository's design system");
+  // On origin's default branch too: a workspace is cut from there (agent
+  // workspace.ts `cutClone`), and the project's system is the one on its
+  // base branch on origin (design-system.ts `placeOf`).
+  git("push", "-q", "origin", "HEAD");
 };
 
 /**

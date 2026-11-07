@@ -6,7 +6,10 @@
  * clone (design-system.ts `propose`), and is stopped, its work item ended:
  * nothing would land a commit in that clone any more, so the proposal
  * closes (design-system.ts `itemGone`), and the session that started the
- * delegate is told CawCo closed it and why (delegate-waits.ts).
+ * delegate is told CawCo closed it and why (delegate-waits.ts); its row
+ * leaves Needs you. The design system is committed and pushed to the
+ * repository's origin first: a workspace is cut from origin's default
+ * branch, and the project's system is the one on its base branch there.
  *
  * Main fails it: the proposal stands, and Approve is refused with "Deny it".
  *
@@ -23,7 +26,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import { type Kit, open, type Spec } from "../kit";
 import {
   commitDesign,
   leaves,
@@ -50,6 +53,7 @@ const run = async (kit: Kit): Promise<void> => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
+  const base = await fleet.dashboard();
   await fleet.api(
     hubRequest("POST /api/projects", {
       body: {
@@ -111,8 +115,29 @@ const run = async (kit: Kit): Promise<void> => {
     );
     return;
   }
+  // The person's view of it: its row in Needs you, by what it asks.
+  const summary = (
+    (await pendingNow(fleet)).find(
+      (one) => one.requestId === proposal.requestId
+    ) as { payload?: { presentation?: { summary?: string } } } | undefined
+  )?.payload?.presentation?.summary;
+  const needs = await kit.page("desk");
+  await open(needs, `${base}/`, "body");
+  const needsRow = summary ? needs.getByText(summary).first() : undefined;
+  const shown = needsRow
+    ? await needsRow
+        .waitFor({ timeout: 30_000 })
+        .then(() => true)
+        .catch(() => false)
+    : false;
   await fleet.stopSession(delegate.instanceId);
   const gone = await leaves(fleet, proposal.requestId);
+  const rowGone = needsRow
+    ? await needsRow
+        .waitFor({ state: "detached", timeout: 30_000 })
+        .then(() => true)
+        .catch(() => false)
+    : false;
   const told = await sentTo(
     fleet,
     steward,
@@ -126,9 +151,9 @@ const run = async (kit: Kit): Promise<void> => {
     )
   );
   kit.check(
-    "a delegate's design proposal in its own repository, its work item ended: the proposal closes, and the session that started the delegate is told CawCo closed it and why",
-    gone && told.length > 0,
-    JSON.stringify({ gone, told })
+    "a delegate's design proposal in its workspace's clone, its work item ended: the proposal closes (off the ledger, its row gone from Needs you), and the session that started the delegate is told CawCo closed it and why (the delegate itself ended, so it is told nothing)",
+    shown && gone && rowGone && told.length > 0,
+    JSON.stringify({ summary, shown, gone, rowGone, told })
   );
 };
 
