@@ -684,6 +684,7 @@ moves
   ready → done         session
   working → review     session
   working → done       session
+  working → ready      session
   review → working     session
   review → ready       session
   review → done        session
@@ -707,6 +708,7 @@ moves
   plan → make          session
   plan → review        session
   make → review        session
+  make → plan          session
   review → make        session
   review → plan        session
   scheduled → live     session, action
@@ -729,6 +731,7 @@ moves
   source → extract     session
   source → review      session
   extract → review     session
+  extract → source     session
   review → extract     session
   review → source      session
   * → dropped          session
@@ -750,6 +753,7 @@ moves
   idea → draft         session
   idea → review        session
   draft → review       session
+  draft → idea         session
   review → draft       session
   review → idea        session
   scheduled → posted   session, action
@@ -777,6 +781,7 @@ moves
   contacted → lost       routine
   replied → meeting      session
   replied → lost         session
+  replied → prospect     session
   meeting → prospect     session
 views
   board      by stage
@@ -798,7 +803,9 @@ moves
   topic → brief          session
   topic → review         session
   brief → draft          session
+  brief → topic          session
   draft → review         session
+  draft → topic          session
   review → draft         session
   review → topic         session
   approved → published   session, action
@@ -823,10 +830,12 @@ moves
   brief → explore      session
   brief → review       session
   explore → review     session
+  explore → brief      session
   review → explore     session
   review → brief       session
   picked → build       session
   build → shipped      session
+  build → brief        session
   * → dropped          session
 views
   board      by stage
@@ -912,12 +921,15 @@ export const ruledStages = (stages: Stages, review: boolean): Stages =>
     : stages;
 
 /**
- * The code template's block before review became a project's choice: every
- * task waited for your review, and only you moved one to done. A stages.md
- * that reads as this (or as today's code template) is the template the
- * project was made with, not one of its own (`isCodeTemplate`).
+ * The code template's blocks as they were. Before review became a project's
+ * choice: every task waited for your review, and only you moved one to
+ * done. Then, until a session could send a task from working back to
+ * ready: no `working → ready  session`. A stages.md that reads as either
+ * (or as today's code template) is the template the project was made with,
+ * not one of its own (`isCodeTemplate`).
  */
-const FORMER_CODE = `---
+const FORMER_CODE = [
+  `---
 ready      todo
 working    active
 review     you
@@ -935,7 +947,30 @@ views
   board      by stage
   table      by rank
 ---
-`;
+`,
+  `---
+ready      todo
+working    active
+review     you
+done       done
+dropped    dropped
+moves
+  * → *                you
+  ready → working      session
+  ready → review       session
+  ready → done         session
+  working → review     session
+  working → done       session
+  review → working     session
+  review → ready       session
+  review → done        session
+  * → dropped          session
+views
+  board      by stage
+  table      by rank
+---
+`,
+];
 
 /** Stages as one comparable line each: moves and their movers in any order are the same rules. */
 const shapeOf = (stages: Stages): string =>
@@ -951,7 +986,7 @@ const shapeOf = (stages: Stages): string =>
 
 /**
  * Whether a stages.md says nothing the code template (as it is, or as it
- * was before review became a choice) does not: the same stages, moves and
+ * was: {@link FORMER_CODE}) does not: the same stages, moves and
  * views, whatever its notes. Such a file is dropped, and the project reads
  * the hub's code template.
  */
@@ -961,10 +996,12 @@ export const isCodeTemplate = (content: string): boolean => {
     return false;
   }
   const shape = shapeOf(reading.stages);
-  const former = readStages(FORMER_CODE);
   return (
     shape === shapeOf(templateStages("code")) ||
-    (former.ok && shape === shapeOf(former.stages))
+    FORMER_CODE.some((block) => {
+      const former = readStages(block);
+      return former.ok && shape === shapeOf(former.stages);
+    })
   );
 };
 

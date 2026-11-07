@@ -22,12 +22,17 @@
  *   main a done attempt's task in ready was on the frontier.
  * - c. Jev failing (its route answers 500): the task stays in working,
  *   with a comment saying its work stays landed, not in a `you` stage.
- * - d. Jev off and events on, its moves giving a session working → ready:
- *   the project's conversation is woken to judge the lines and the task
- *   stays in working; its move of the task back to
- *   ready (the lead's verdict, dispatch.ts `leadSentBack`) counts the
+ * - d. Jev off and events on, on the code template as the hub has it (a
+ *   session sends a task from working back to ready): the project's
+ *   conversation is woken to judge the lines and the task stays in
+ *   working; its move of the task back to ready (the lead's verdict, dispatch.ts `leadSentBack`) counts the
  *   attempt failed, so the task stands off the frontier. On main the
- *   attempt still read done and the task was on the frontier.
+ *   attempt still read done and the task was on the frontier, and the code
+ *   template gave a session no working → ready, so the lead's move was refused.
+ * - e. A project whose stages.md is the code template as it was before
+ *   working → ready still reads as the code template (stages.ts
+ *   `isCodeTemplate`): the hub drops the copy as it catches the project up,
+ *   and the project reads today's template.
  *
  *   bun scripts/probe-kit/run.ts unmet-back-to-todo
  */
@@ -386,22 +391,7 @@ const legs = async (rig: Rig): Promise<void> => {
   );
 
   // (d) Jev off, events on: the lead judges, and its move back is its verdict.
-  // The code template gives a session no working → ready: these moves do.
-  const { templateText } = await import("../../../packages/hub/src/stages");
-  const code = templateText("code");
-  const withBack = code.replace(
-    "  working → done       session\n",
-    "  working → done       session\n  working → ready      session\n"
-  );
-  const written = await rig.board(
-    hubRequest("PUT /api/projects/:id/stages", {
-      path: { id: rig.projectId },
-      body: { content: withBack },
-    })
-  );
-  if (withBack === code || written.status >= 400) {
-    throw new Error(`the stages were not written: ${written.text}`);
-  }
+  // The project reads the code template as the hub has it, nothing added.
   rig.db.setTypesafeKey(null);
   rig.db.setProjectCaw(rig.projectId, {
     eventsOn: true,
@@ -443,6 +433,67 @@ const legs = async (rig: Rig): Promise<void> => {
       stage: dBack.stage,
       failed: dBack.lastAttemptFailed,
       frontier: dView.frontier,
+    })
+  );
+
+  // (e) A project made on the code template before working → ready.
+  const { isCodeTemplate, templateText } =
+    await import("../../../packages/hub/src/stages");
+  const today = templateText("code");
+  const before = today.replace("  working → ready      session\n", "");
+  const old = crypto.randomUUID();
+  rig.db.createProject({
+    id: old,
+    name: "Old code probe",
+    checkout: { machineId: B, path: rig.checkout },
+    remote: null,
+  });
+  const { writeFolderFile } =
+    await import("../../../packages/hub/src/project-folder");
+  await writeFolderFile(old, "stages.md", before, {
+    author: { name: "probe" },
+  });
+  const { createTasks } = await import("../../../packages/hub/src/tasks");
+  const engine = createTasks({
+    project: (id) => rig.db.project(id),
+    machines: () => rig.db.listAgents(),
+    projectIds: () => rig.db.listProjects().map((one) => one.id),
+    index: rig.db.taskIndex,
+    waiters: rig.db.taskWaiters,
+    put: rig.db.putTaskIndex,
+    drop: rig.db.dropTaskIndex,
+    links: () => [],
+    carried: () => [],
+    linked: () => [],
+    starters: () => [],
+    setTemplate: (id, template) => rig.db.setProjectTemplate(id, template),
+    attempts: rig.db.projectAttempts,
+    commentSaid: rig.db.taskCommentSaid,
+    noteComment: rig.db.noteTaskComment,
+    saveResult: () => undefined,
+    resolvesType: () => false,
+    waitWorld: () => ({}) as never,
+    waitReader: () => ({}) as never,
+  });
+  await engine.catchUp(old);
+  const oldStages = (
+    await rig.board(
+      hubRequest("GET /api/projects/:id/stages", { path: { id: old } })
+    )
+  ).json as { moves: { from: string; to: string }[]; source: string };
+  kit.check(
+    "e: a stages.md written from the code template before working → ready reads as the code template, and the project then reads today's, working → ready in it",
+    before !== today &&
+      isCodeTemplate(before) &&
+      oldStages.source === "template" &&
+      rig.db.project(old)?.template === "code" &&
+      oldStages.moves.some(
+        (move) => move.from === "working" && move.to === "ready"
+      ),
+    JSON.stringify({
+      reads: isCodeTemplate(before),
+      source: oldStages.source,
+      template: rig.db.project(old)?.template,
     })
   );
 };
