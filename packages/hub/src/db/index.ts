@@ -94,6 +94,7 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
+import { stripPrivate } from "@cawco/core/private-mark";
 import { ownIdentity } from "@cawco/core/process-identity";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
@@ -158,6 +159,7 @@ import {
   dropGraphPlaces,
   GRAPH_PLACES_MIGRATION_WHEN,
 } from "./drop-graph-places";
+import { type FactRowsDb, factRowsDb } from "./fact-rows";
 import { type FindDb, findDb } from "./find";
 import { type ForgetDb, forgetDb } from "./forget";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
@@ -999,6 +1001,9 @@ export interface DbShape {
     id: string,
     intent: SessionEndIntent
   ) => typeof instances.$inferSelect | undefined;
+  /** What the find engine reads (find.ts), and when the person last looked at each session. */
+  /** A forgotten fact's words in any table (fact-rows.ts). */
+  readonly factRows: FactRowsDb;
   /**
    * The agent reported the session dead: what killed it, kept for late
    * readers, and its kind when what failed typed it (core `LastErrorKind`).
@@ -1008,7 +1013,6 @@ export interface DbShape {
     error: string,
     kind?: LastErrorKind
   ) => void;
-  /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
   /** The person's Find settings (find-secrets.ts): "Hide secrets in Find", on until they turn it off. */
   readonly findSettings: {
@@ -9804,7 +9808,16 @@ const make = async (path: string): Promise<DbShape> => {
     },
     createWorkItem: ({ owns, ...item }) =>
       db.transaction((tx) => {
-        const row = tx.insert(workItems).values(item).returning().get();
+        // Words marked private are never stored (core private-mark.ts).
+        const row = tx
+          .insert(workItems)
+          .values({
+            ...item,
+            brief: stripPrivate(item.brief),
+            title: stripPrivate(item.title),
+          })
+          .returning()
+          .get();
         const owned = [...new Set(owns ?? [])];
         if (owned.length > 0) {
           tx.insert(workItemGlobs)
@@ -10482,6 +10495,7 @@ const make = async (path: string): Promise<DbShape> => {
     taskLinks: taskLinksOf,
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db, dropArtifacts, sourceMoved, artifactsWritten),
+    factRows: factRowsDb(db.$client),
     find: findDb(db),
     findSettings: {
       hideSecrets: () =>

@@ -28,7 +28,18 @@
  *   `CREDENTIAL_PATTERNS` caught in notes before this filter, which neither
  *   rule above does when the value is all lower case. The value is cut, the
  *   key kept.
+ * - **A private mark**: `<private>…</private>` (core private-mark.ts), tags
+ *   and all, where words that carry one are read back (a transcript the
+ *   harness keeps); where the hub stores words it strips them before.
+ * - **A forgotten fact**: words the person forgot (forget-fact.ts), as the
+ *   hub holds them: each fact's word count and a salted hash of its words
+ *   ({@link ForgottenFact}), never the words. A run of that many words
+ *   whose hash matches is cut, so a machine whose index still holds the
+ *   fact (not connected at the forget, or its transcripts read again) never
+ *   answers with it.
  */
+import { createHash } from "node:crypto";
+import { privateRanges } from "@cawco/core/private-mark";
 import { lintSource } from "@secretlint/core";
 import { creator as recommended } from "@secretlint/secretlint-rule-preset-recommend";
 
@@ -119,6 +130,73 @@ const mergedRanges = (
   return merged;
 };
 
+/** A fact the person forgot, as the hub keeps it: never its words (db `forgotten_facts`). */
+export interface ForgottenFact {
+  /** sha256 of `salt` and the fact's words ({@link factWords}), hex. */
+  hash: string;
+  salt: string;
+  /** How many words it is. */
+  words: number;
+}
+
+/** The facts forgotten so far, as the hub reads them (forget-fact.ts sets the reader at its start). */
+let forgottenFacts: () => readonly ForgottenFact[] = () => [];
+
+/** Where the filter reads the forgotten facts from: the hub's table, once it is open. */
+export const readForgottenFrom = (
+  read: () => readonly ForgottenFact[]
+): void => {
+  forgottenFacts = read;
+};
+
+/** A word as a forgotten fact is matched: its wrapping off, in lower case. */
+const factWord = (raw: string): string =>
+  raw.replace(WRAP_START, "").replace(WRAP_END, "").toLowerCase();
+
+/** The words of `text` as a forgotten fact is matched, each with where it stands. */
+const wordsWithPlaces = (text: string) =>
+  [...text.matchAll(WORD)].map((match) => ({
+    word: factWord(match[0]),
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+
+/** A fact's words, as {@link ForgottenFact.hash} hashes them: one space apart. */
+export const factWords = (text: string): string[] =>
+  wordsWithPlaces(text)
+    .map((each) => each.word)
+    .filter(Boolean);
+
+/** {@link ForgottenFact.hash} of `words` under `salt` (hex: no space in it). */
+export const factHash = (salt: string, words: readonly string[]): string =>
+  createHash("sha256")
+    .update(`${salt} ${words.join(" ")}`)
+    .digest("hex");
+
+/** Every run of words in `text` that is a forgotten fact. */
+const forgottenRanges = (text: string): Range[] => {
+  const facts = forgottenFacts();
+  if (facts.length === 0) {
+    return [];
+  }
+  const words = wordsWithPlaces(text);
+  return facts.flatMap((fact) => {
+    const found: Range[] = [];
+    for (let at = 0; at + fact.words <= words.length; at += 1) {
+      const run = words.slice(at, at + fact.words);
+      if (
+        factHash(
+          fact.salt,
+          run.map((each) => each.word)
+        ) === fact.hash
+      ) {
+        found.push([run[0]?.start ?? 0, run.at(-1)?.end ?? 0]);
+      }
+    }
+    return found;
+  });
+};
+
 /**
  * Where every secret found (module header) stands in `text`, in order,
  * overlapping finds as one: the one recognizer both the agent's redaction
@@ -135,6 +213,8 @@ export const secretRanges = async (
       ...(await shapedCredentials(text)),
       ...typedCredentials(text),
       ...setCredentials(text),
+      ...privateRanges(text),
+      ...forgottenRanges(text),
     ].filter(([start, end]) => end > start)
   );
 };

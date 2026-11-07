@@ -1852,6 +1852,75 @@ export class TranscriptIndex {
     return forget();
   }
 
+  /**
+   * A fact the person forgot (hub forget-fact.ts): every document whose
+   * words, thinking, tools or tool output hold `text`, letter for letter,
+   * has it written `[redacted]` there, its full-text entry taken out and put
+   * back with the new words, so no search finds it and no moment shows it.
+   * Freed pages are overwritten as they are freed (`secure_delete`, and
+   * FTS5's own `secure-delete` where this SQLite has it), and the WAL is
+   * emptied after. `dry`: only counted. Synchronous, one transaction: run it
+   * between syncs, never inside one. Answers how many documents held it.
+   */
+  forgetText(text: string, dry = false): number {
+    const held = this.db
+      .prepare(
+        `SELECT id, text, thinking, tools, output FROM docs
+         WHERE instr(text, ?1) > 0 OR instr(coalesce(thinking, ''), ?1) > 0
+            OR instr(coalesce(tools, ''), ?1) > 0 OR instr(coalesce(output, ''), ?1) > 0`,
+      )
+      .all(text) as {
+      id: number;
+      output: string | null;
+      text: string;
+      thinking: string | null;
+      tools: string | null;
+    }[];
+    if (dry || held.length === 0) {
+      return held.length;
+    }
+    const cut = <T extends string | null>(value: T): T =>
+      (value === null ? value : value.replaceAll(text, "[redacted]")) as T;
+    this.db.exec("PRAGMA secure_delete = ON");
+    const ftsSecure = this.#ftsSecureDelete(1);
+    try {
+      this.db.transaction(() => {
+        const out = this.db.prepare(
+          "INSERT INTO docs_fts(docs_fts, rowid, text, thinking, tools, output) VALUES ('delete', ?, ?, ?, ?, ?)",
+        );
+        const put = this.db.prepare(
+          "UPDATE docs SET text = ?, thinking = ?, tools = ?, output = ? WHERE id = ?",
+        );
+        const back = this.db.prepare(
+          "INSERT INTO docs_fts(rowid, text, thinking, tools, output) VALUES (?, ?, ?, ?, ?)",
+        );
+        for (const row of held) {
+          out.run(row.id, row.text, row.thinking, row.tools, row.output);
+          const now = [cut(row.text), cut(row.thinking), cut(row.tools), cut(row.output)] as const;
+          put.run(...now, row.id);
+          back.run(row.id, ...now);
+        }
+      })();
+    } finally {
+      if (ftsSecure) {
+        this.#ftsSecureDelete(0);
+      }
+      this.db.exec("PRAGMA secure_delete = OFF");
+    }
+    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    return held.length;
+  }
+
+  /** FTS5's `secure-delete` set to `on`; false where this SQLite predates it (3.42). */
+  #ftsSecureDelete(on: 0 | 1): boolean {
+    try {
+      this.db.query("INSERT INTO docs_fts(docs_fts, rank) VALUES ('secure-delete', ?)").run(on);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Document count in the index. */
   count(): number {
     return (this.db.prepare("SELECT count(*) AS c FROM docs").get() as { c: number }).c;

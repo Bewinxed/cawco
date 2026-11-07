@@ -173,6 +173,23 @@ export class TranscriptSearchService {
     );
   }
 
+  /**
+   * A fact the person forgot (hub forget-fact.ts): its words written
+   * `[redacted]` in every indexed document that holds them, once the sync in
+   * flight, if any, has ended. `dry`: only counted. Answers how many
+   * documents held them.
+   */
+  async forgetText(text: string, dry: boolean): Promise<number> {
+    await this.#syncing?.catch(() => undefined);
+    const held = await this.#writer.work("forgetText", { text, dry });
+    if (!dry) {
+      console.info(
+        `[search] a forgotten fact: ${held} indexed document${held === 1 ? "" : "s"} rewritten without it`
+      );
+    }
+    return held;
+  }
+
   /** Start the background sync loop. First sync is kicked off immediately. */
   start(): void {
     // Fire-and-forget initial sync — must not block startup.

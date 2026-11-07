@@ -2308,7 +2308,7 @@ export const CONTROL_REPO_ROOT = "repoRoot";
  * project-delete.ts), the hub having held it to the project's own recorded
  * places first: a checkout or folder of the project (`place`), or a carry
  * one of its workspaces left (`carry`, which must stand in the machine's
- * carries dir). The machine refuses a path that is not absolute, its root,
+ * carries dir); or a carry the person lets go (hub forget-fact.ts). The machine refuses a path that is not absolute, its root,
  * its home or a folder holding it, or anything in CawCo's own dirs; a link
  * goes as the link. Args `[RemoveFolder]`; answers {@link FolderRemoved}.
  * Machine-scoped; only the hub sends it.
@@ -2321,6 +2321,24 @@ export interface RemoveFolder {
 /** What {@link CONTROL_REMOVE_FOLDER} answers: false when nothing stood there. */
 export interface FolderRemoved {
   removed: boolean;
+}
+
+/**
+ * A fact the person forgot (hub forget-fact.ts) taken out of this machine's
+ * transcript index: its words written `[redacted]` in every indexed
+ * document holding them, letter for letter (agent search/index.ts
+ * `forgetText`); `dry` only counts them. The harness's own transcripts on
+ * the machine are not touched. Args `[ForgetTranscriptText]`; answers
+ * {@link TranscriptTextForgotten}. Machine-scoped; only the hub sends it.
+ */
+export const CONTROL_FORGET_TRANSCRIPT_TEXT = "forgetTranscriptText";
+export interface ForgetTranscriptText {
+  dry: boolean;
+  text: string;
+}
+/** What {@link CONTROL_FORGET_TRANSCRIPT_TEXT} answers: how many indexed documents held the words. */
+export interface TranscriptTextForgotten {
+  documents: number;
 }
 
 /**

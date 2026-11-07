@@ -24,11 +24,17 @@
  * Every git call runs with the hub's own identity (`-c user.name/user.email`,
  * never written to any config) and without the machine's global or system git
  * config, so an operator's signing key, hooks or aliases never reach it.
+ *
+ * Words marked private (`<private>…</private>`, core private-mark.ts) never
+ * reach the folder: every text written and every commit message is stored
+ * without them ({@link storedBytes}). A fact the person forgets leaves the
+ * folder's whole history ({@link forgetInFolderHistory}).
  */
 import type { Stats } from "node:fs";
 import {
   lstat,
   mkdir,
+  mkdtemp,
   readdir,
   readFile,
   realpath,
@@ -37,16 +43,19 @@ import {
   rmdir,
   stat,
   unlink,
+  writeFile,
 } from "node:fs/promises";
-import { devNull } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths";
+import { stripPrivate } from "@cawco/core/private-mark";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { forgetFactWords } from "@cawco/core/words/forget-fact";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, status, t } from "elysia";
 
@@ -464,9 +473,14 @@ const signature = (author: FolderAuthor): string => {
   return `${name || YOU.name} <${email}>`;
 };
 
-/** The commit message a caller asked for, trimmed; undefined for none, so the hub names the change. */
+/** What a write stores: a text without its private spans, bytes as they are. */
+const storedBytes = (content: string | Uint8Array): Uint8Array =>
+  typeof content === "string" ? Buffer.from(stripPrivate(content)) : content;
+
+/** The commit message a caller asked for, without its private spans, trimmed; undefined for none, so the hub names the change. */
 const askedMessage = (message: string | undefined): string | undefined => {
-  const trimmed = message?.trim();
+  const trimmed =
+    message === undefined ? undefined : stripPrivate(message).trim();
   if (trimmed && trimmed.length > MESSAGE_LIMIT) {
     throw new FolderRefusal(
       400,
@@ -1068,7 +1082,7 @@ export const writeFolderFile = async (
   if (!rel) {
     throw new FolderRefusal(400, "Name a file to write, like tasks/T-1.md.");
   }
-  const bytes = typeof content === "string" ? Buffer.from(content) : content;
+  const bytes = storedBytes(content);
   if (bytes.byteLength > FOLDER_FILE_LIMIT) {
     throw new FolderRefusal(
       413,
@@ -1140,7 +1154,7 @@ const toWrite = (
         "Name each file to write, like assets/a.md."
       );
     }
-    const bytes = typeof content === "string" ? Buffer.from(content) : content;
+    const bytes = storedBytes(content);
     if (bytes.byteLength > FOLDER_FILE_LIMIT) {
       throw new FolderRefusal(
         413,
@@ -1445,9 +1459,7 @@ export const moveFolderFile = async (
       await putFile(
         root,
         to,
-        options.content === undefined
-          ? bytes
-          : Buffer.from(options.content, "utf8"),
+        options.content === undefined ? bytes : storedBytes(options.content),
         before
       );
       before.set(source, bytes);
@@ -1949,6 +1961,229 @@ export const folderUncommitted = async (
   }
   return paths;
 };
+
+/** Where a fact's words stand in a project folder's history (forget-fact.ts). */
+export interface FolderMentions {
+  /** Each commit that added or took out a file holding them, with those files. */
+  commits: { paths: string[]; sha: string; subject: string }[];
+  /** The files that hold them now, committed. */
+  files: string[];
+  /** Each commit whose message holds them: its subject, and the trailers that do (`CawCo-Reason`). */
+  messages: { sha: string; subject: string; trailers: string[] }[];
+  /** Files changed and not committed: what a history rewrite would throw away. */
+  uncommitted: string[];
+}
+
+/** The forms the words take in a file: as given, and inside a JSON string. */
+const textForms = (text: string): string[] => [
+  ...new Set([text, JSON.stringify(text).slice(1, -1)]),
+];
+
+/**
+ * Where `text` stands in project `projectId`'s folder, in every commit of
+ * every ref: the messages (a task's close reason is its commit's
+ * `CawCo-Reason` trailer, task-history.ts), the commits whose files gained
+ * or lost it, the files that hold it now, and what is not committed.
+ */
+export const folderMentions = async (
+  projectId: string,
+  text: string
+): Promise<FolderMentions> => {
+  const root = await forReading(projectId);
+  const forms = textForms(text);
+  const messages = (
+    await git(root, [
+      "log",
+      "--all",
+      "--fixed-strings",
+      ...forms.map((form) => `--grep=${form}`),
+      `--format=${RECORD}%H${FIELD}%s${FIELD}%(trailers:only,unfold,separator=%x1d)`,
+    ])
+  )
+    .split(RECORD)
+    .filter((record) => record.trim())
+    .map((record) => {
+      const [sha = "", subject = "", trailers = ""] = record
+        .trim()
+        .split(FIELD);
+      return {
+        sha,
+        subject,
+        trailers: Object.entries(trailersOf(trailers))
+          .filter(([, value]) => forms.some((form) => value?.includes(form)))
+          .map(([key]) => key),
+      };
+    });
+  const commits = new Map<
+    string,
+    { paths: string[]; sha: string; subject: string }
+  >();
+  for (const form of forms) {
+    const out = await git(root, [
+      "log",
+      "--all",
+      `-S${form}`,
+      "--name-only",
+      `--format=${RECORD}%H${FIELD}%s`,
+    ]);
+    for (const record of out.split(RECORD).filter((one) => one.trim())) {
+      const [header = "", ...paths] = record.trim().split("\n");
+      const [sha = "", subject = ""] = header.split(FIELD);
+      const known = commits.get(sha) ?? { sha, subject, paths: [] };
+      known.paths = [...new Set([...known.paths, ...paths.filter(Boolean)])];
+      commits.set(sha, known);
+    }
+  }
+  const grep = await run(root, [
+    "grep",
+    "-l",
+    "-I",
+    "--fixed-strings",
+    ...forms.flatMap((form) => ["-e", form]),
+    "HEAD",
+  ]);
+  if (grep.code > 1) {
+    throw new FolderRefusal(
+      500,
+      `git grep failed in the project folder: ${grep.stderr.trim()}`
+    );
+  }
+  return {
+    messages,
+    commits: [...commits.values()],
+    files: grep.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.replace(HEAD_PREFIX, "")),
+    uncommitted: [...(await folderUncommitted(projectId, ""))],
+  };
+};
+
+const HEAD_PREFIX = /^HEAD:/u;
+
+/** How long a history rewrite may take, ms: the whole folder is read and written again. */
+const REWRITE_TIMEOUT_MS = 10 * 60_000;
+
+/** {@link SAFE_GIT_FLAGS}' `-c` settings, as the environment hands them to every git a tool runs. */
+const safeGitConfig = (): Record<string, string> => {
+  const settings = SAFE_GIT_FLAGS.flatMap((flag, index) =>
+    flag === "-c" ? [SAFE_GIT_FLAGS[index + 1] ?? ""] : []
+  ).filter((setting) => setting.includes("="));
+  return {
+    GIT_CONFIG_COUNT: String(settings.length),
+    ...Object.fromEntries(
+      settings.flatMap((setting, index) => {
+        const at = setting.indexOf("=");
+        return [
+          [`GIT_CONFIG_KEY_${index}`, setting.slice(0, at)],
+          [`GIT_CONFIG_VALUE_${index}`, setting.slice(at + 1)],
+        ];
+      })
+    ),
+  };
+};
+
+/** Why a folder's history was not rewritten: the tool is missing, or work would be lost. */
+export class HistoryKept extends FolderRefusal {}
+
+/**
+ * `text` taken out of every commit of project `projectId`'s folder, every
+ * file in every commit and every message, each written `[redacted]`, by git
+ * filter-repo as published (git's own manual: "Please use an alternative
+ * history filtering tool such as git filter-repo",
+ * https://git-scm.com/docs/git-filter-branch), in its sensitive-data mode
+ * with nothing to fetch (the folder has no remote): it expires the reflogs
+ * and prunes the old objects, so nothing in `.git` holds the words. Every
+ * commit from the first that held them gets a new id. Refused when
+ * filter-repo is not on the hub's machine ({@link HistoryKept}), or when
+ * files are changed and not committed, which the rewrite's reset would
+ * throw away. In the project's turn, so no commit lands meanwhile. Answers
+ * what still mentions it afterwards (none, when it went whole).
+ */
+export const forgetInFolderHistory = async (
+  projectId: string,
+  text: string
+): Promise<FolderMentions> => {
+  const tool = Bun.which("git-filter-repo", { PATH: process.env.PATH ?? "" });
+  if (!tool) {
+    throw new HistoryKept(503, forgetFactWords.filterRepoMissing);
+  }
+  const root = projectRoot(projectId);
+  await inTurn(projectId, async () => {
+    await prepare(projectId, root);
+    const dirty = await folderUncommittedIn(root);
+    if (dirty.length > 0) {
+      throw new HistoryKept(409, forgetFactWords.uncommitted(dirty));
+    }
+    const scratch = await mkdtemp(join(tmpdir(), "cawco-forget-"));
+    const expressions = join(scratch, "expressions");
+    try {
+      // `literal:` so the words are never read as a pattern; the last `==>`
+      // on a line is the replacement's, so words holding one stay whole.
+      await writeFile(
+        expressions,
+        textForms(text)
+          .map((form) => `literal:${form}==>[redacted]\n`)
+          .join(""),
+        { mode: 0o600 }
+      );
+      const ran = await readWithin(REWRITE_TIMEOUT_MS, (signal) =>
+        runCaptured(
+          [
+            tool,
+            "--force",
+            "--sensitive-data-removal",
+            "--no-fetch",
+            "--quiet",
+            "--replace-text",
+            expressions,
+            "--replace-message",
+            expressions,
+          ],
+          {
+            cwd: root,
+            env: {
+              ...gitEnv(),
+              ...safeGitConfig(),
+            },
+            signal,
+          }
+        )
+      );
+      if (ran.kind !== "answered") {
+        throw new FolderRefusal(
+          504,
+          `git filter-repo did not finish within ${secondsOf(REWRITE_TIMEOUT_MS)} s in the project folder.`
+        );
+      }
+      if (ran.value.code !== 0) {
+        const said = ran.value.stderr.trim().split("\n").at(-1);
+        throw new FolderRefusal(
+          500,
+          `git filter-repo failed in the project folder: ${said || `exit ${ran.value.code}`}.`
+        );
+      }
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+  tellCommitted(projectId, { written: [], deleted: [] });
+  return folderMentions(projectId, text);
+};
+
+/** Files changed and not committed under `root`, read without the project's turn. */
+const folderUncommittedIn = async (root: string): Promise<string[]> =>
+  (
+    await git(root, [
+      "--no-optional-locks",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+    ])
+  )
+    .split("\n")
+    .filter((line) => line.length > 3)
+    .map((line) => line.slice(3));
 
 /** Whether the project's folder has been made: a project never written to has none. */
 export const hasProjectFolder = (projectId: string): Promise<boolean> =>

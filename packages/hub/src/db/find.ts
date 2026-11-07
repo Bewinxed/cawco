@@ -10,9 +10,11 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { ForgottenFact } from "../secret-filter";
 import {
   artifactChanges,
   artifacts,
+  forgottenFacts,
   instanceConversations,
   instances,
   projectTaskLabels,
@@ -98,6 +100,13 @@ export interface FindDb {
   /** Every artifact: what it is, whose, and whether the person changed any of its keys. */
   readonly artifacts: () => FindArtifactRow[];
   /**
+   * The person forgot a fact (forget-fact.ts): kept as the secret filter
+   * matches it (secret-filter.ts `ForgottenFact`), never its words.
+   */
+  readonly forgetFact: (fact: ForgottenFact) => void;
+  /** Every fact the person forgot, as {@link forgetFact} kept it. */
+  readonly forgottenFacts: () => ForgottenFact[];
+  /**
    * Every conversation the hub made for its own use that holds no one's own
    * words, as `machineId:sessionId` (find.ts `purgedKey`): a continuation's
    * summariser (kind `summariser`), its prompt the hub's and its answer a
@@ -149,6 +158,20 @@ const findable = () =>
 const ID_PREFIX = /^[0-9a-f-]+$/u;
 
 export const findDb = (db: BunSQLiteDatabase): FindDb => ({
+  forgetFact: (fact) => {
+    db.insert(forgottenFacts)
+      .values({ id: crypto.randomUUID(), ...fact, forgottenAt: new Date() })
+      .run();
+  },
+  forgottenFacts: () =>
+    db
+      .select({
+        salt: forgottenFacts.salt,
+        hash: forgottenFacts.hash,
+        words: forgottenFacts.words,
+      })
+      .from(forgottenFacts)
+      .all(),
   purge: (machineId, sessionIds) => {
     if (sessionIds.length === 0) {
       return;
