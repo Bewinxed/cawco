@@ -8044,7 +8044,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       artifactId: string,
       card: string
     ):
-      | { asked: boolean; page: string; question: string; value: string | null }
+      | {
+          asked: boolean;
+          page: string;
+          picked: readonly string[];
+          question: string;
+          value: string | null;
+        }
       | undefined => {
       const page = db.get(artifactId);
       if (!page) {
@@ -8064,6 +8070,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         page: page.name,
         question: asked?.card?.question ?? card,
         asked: !!asked,
+        picked: picked && entry ? entry.options : [],
         value,
       };
     },
@@ -8085,9 +8092,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /** The cards page `artifactId` asks, by id. */
-    waitCards: (artifactId: string): string[] => {
+    waitCards: (
+      artifactId: string
+    ): { id: string; options: readonly string[] }[] => {
       const page = db.get(artifactId);
-      return page ? choicesAsked(page).map((choice) => choice.id) : [];
+      return page
+        ? choicesAsked(page).map((choice) => ({
+            id: choice.id,
+            options: choice.card?.options.map((option) => option.id) ?? [],
+          }))
+        : [];
     },
 
     /**

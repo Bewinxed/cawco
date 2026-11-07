@@ -521,9 +521,9 @@ export const awayNotesOf = (
 
 const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 
-/** While the person is away nothing new starts: what nobody asked for goes to them as an ask. */
+/** While the person is away nothing new starts: what nobody asked for goes to them as a proposal card its task waits on. */
 export const AWAY_STARTS_NOTHING =
-  "Start nothing new while they are away: something worth doing that nobody asked for is an ask (blocks false, do it or not now), which reaches their phone, and the work waits for their answer.";
+  "Start nothing new while they are away: something worth doing that nobody asked for is a proposal, a scope card (Do it, Not now) with its task waiting on the card's Do it; the card reaches their phone and the task waits for it.";
 
 /** The away rule: how a turn ends, the one thing that reaches the person, and that nothing new starts. */
 const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last call. Only a question or a choice reaches them, by ask or a decision card. ${AWAY_STARTS_NOTHING}`;

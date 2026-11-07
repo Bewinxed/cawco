@@ -189,7 +189,7 @@ const namesTasks = (task: TaskView): boolean =>
 
 /** What a wait names, as every task tool takes it: the one grammar task-waits.ts reads. */
 const WAIT_TARGETS =
-  "tsk-12, a card <page>#<card>, a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde)";
+  "tsk-12, a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that option, another leaves it held), a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde)";
 const landsParameter = () =>
   z
     .enum(LANDS_MODES)
@@ -564,7 +564,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_link",
-      "Link a task. waits_on: the hub holds it until every target settles (a task done, a card picked, a pin resolved, a pull request merged, a run green, a session's work finished), then dispatch may start it. part_of: it becomes a part of that whole and inherits every wait of it; the whole closes when its last part is done. duplicate_of: it closes as a duplicate and every wait on it moves to the survivor. remove: the named links come out. Refuses a cycle, naming its path. Answers what it waits on and unblocks.",
+      "Link a task. waits_on: the hub holds it until every target settles (a task done, a card picked or picked as named, a pin resolved, a pull request merged, a run green, a session's work finished), then dispatch may start it. part_of: it becomes a part of that whole and inherits every wait of it; the whole closes when its last part is done. duplicate_of: it closes as a duplicate and every wait on it moves to the survivor. remove: the named links come out. Refuses a cycle, naming its path. Answers what it waits on and unblocks.",
       {
         task: taskRef(),
         waits_on: z

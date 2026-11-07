@@ -8,6 +8,7 @@
  * | ------- | ------------------------------------------------- | ------------------------------- |
  * | task    | `tsk-12` (`#12`, `12`)                            | `12`                            |
  * | card    | `<page>#<card>`, the page by name, handle or id   | `<artifact id>#<card>`          |
+ * | card    | `<page>#<card>=<option>`: only that pick settles it | `<artifact id>#<card>=<option>` |
  * | pin     | `<page>/<number>`                                 | `<artifact id>/<number>`        |
  * | pr      | `https://github.com/<owner>/<repo>/pull/<n>`      | the same                        |
  * | run     | `https://github.com/<owner>/<repo>/actions/runs/<n>` | the same                     |
@@ -22,7 +23,13 @@ export type WaitKind = "task" | "card" | "pin" | "pr" | "run" | "session";
 
 export type WaitTarget =
   | { kind: "task"; id: string }
-  | { kind: "card"; artifactId: string; card: string }
+  | {
+      kind: "card";
+      artifactId: string;
+      card: string;
+      /** The one option whose pick settles it; any pick when absent. */
+      option?: string;
+    }
   | { kind: "pin"; artifactId: string; number: number }
   | { kind: "pr"; number: number; repo: string; url: string }
   | { kind: "run"; id: string; repo: string; url: string }
@@ -30,7 +37,7 @@ export type WaitTarget =
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const TASK = /^(?:tsk-|#)?(\d{1,9})$/iu;
-const CARD = new RegExp(`^(${UUID})#([^#\\s]+)$`, "iu");
+const CARD = new RegExp(`^(${UUID})#([^#=\\s]+)(?:=([^#=\\s]+))?$`, "iu");
 const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "iu");
 const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
 const RUN =
@@ -94,6 +101,7 @@ export const waitTarget = (handle: string): WaitTarget | undefined => {
       kind: "card",
       artifactId: (card[1] as string).toLowerCase(),
       card: card[2] as string,
+      ...(card[3] ? { option: card[3] } : {}),
     };
   }
   const session = SESSION.exec(kept);
@@ -112,7 +120,7 @@ export const waitHandle = (target: WaitTarget): string => {
     case "task":
       return target.id;
     case "card":
-      return `${target.artifactId}#${target.card}`;
+      return `${target.artifactId}#${target.card}${target.option ? `=${target.option}` : ""}`;
     case "pin":
       return `${target.artifactId}/${target.number}`;
     case "pr":

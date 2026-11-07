@@ -10,11 +10,16 @@
  * through the board's routes, in a project shaped as Private office was
  * (inbox, drafting `runs: writer`, Your call, sent, dropped):
  *
- * - a. A proposal that outlives the turn: the session's page asks one card
- *   (Do it, Not now) and its task_create in inbox waits on that card. The
- *   task is not ready until he picks; his pick of Do it makes it ready.
+ * - a. A proposal that outlives the turn: the session's page asks a card
+ *   (Do it, Not now) and its task_create in inbox waits on that card's Do it
+ *   (`<page>#<card>=do`). The task is not ready until he picks; his pick of
+ *   Do it makes it ready.
  * - b. The away line a session reads at the head of each turn tells it to
- *   start nothing new and to ask instead.
+ *   start nothing new and to put it as a proposal card instead.
+ * - c. His Not now on a proposal's card leaves its task held, flagged, never
+ *   ready: a wait on one option settles on that option alone.
+ * - d. A wait on an option the card does not offer is refused, naming the
+ *   card's options.
  *
  *   bun scripts/probe-kit/run.ts filed-not-started
  */
@@ -42,6 +47,7 @@ const MACHINE = "probe-filed-machine";
 const PRESENCE = "probe-presence-f11e";
 const PAGE = "proposals";
 const CARD = "follow-up";
+const OTHER = "outreach";
 const TASK_ID = /tsk-\d+/u;
 
 /** Private office's shape: an active stage that runs a writer as a task enters it. */
@@ -55,10 +61,13 @@ dropped     dropped
 `;
 
 /** One proposal, as Caw puts it to the person: do it, or not now. */
-const PROGRAM = `root = Decisions("Proposals", [card])
-card = Decision("${CARD}", "Draft follow-ups to the three leads the scan found?", [yes, no], "The scan found three warm leads nobody asked to contact.", [], [], false, null, "scope")
+const PROGRAM = `root = Decisions("Proposals", [card, other])
+card = Decision("follow-up", "Draft follow-ups to the three leads the scan found?", [yes, no], "The scan found three warm leads nobody asked to contact.", [], [], false, null, "scope")
 yes = Option("do", "Do it", "The writer drafts three follow-ups for your call.", true, [], "About an hour of the writer.")
-no = Option("not-now", "Not now", "Nothing is drafted.", false, [], "The leads may go cold.")`;
+no = Option("not-now", "Not now", "Nothing is drafted.", false, [], "The leads may go cold.")
+other = Decision("outreach", "Write to the two agencies the scan listed?", [yes2, no2], "Nobody asked to contact agencies.", [], [], false, null, "scope")
+yes2 = Option("do", "Do it", "The writer drafts two intro emails.", false, [], "Half an hour of the writer.")
+no2 = Option("not-now", "Not now", "Nothing is written.", true, [], "None.")`;
 
 interface Answer {
   json: unknown;
@@ -202,8 +211,13 @@ const run = async (
   }
   const proposal = await create({
     title: "Draft follow-ups to the three warm leads",
-    waits_on: [`${PAGE}#${CARD}`],
+    waits_on: [`${PAGE}#${CARD}=do`],
   });
+  const declined = await create({
+    title: "Write to the two agencies",
+    waits_on: [`${PAGE}#${OTHER}=do`],
+  });
+  const declinedId = idIn(declined.text);
   const proposalId = idIn(proposal.text);
   const held = proposalId ? await read(proposalId) : undefined;
   check(
@@ -221,6 +235,7 @@ const run = async (
         text: "Go ahead.",
         writes: writesOf(db.artifacts.updates(pageId), {
           [CARD]: his(["do"]),
+          [OTHER]: his(["not-now"]),
         }),
       },
     })
@@ -232,10 +247,33 @@ const run = async (
     `${picked.status} ${picked.text.slice(0, 200)}; ready ${ready?.ready}`
   );
 
+  // (c) His Not now leaves the other proposal held, flagged.
+  const kept = declinedId ? await read(declinedId) : undefined;
+  const flag = kept?.waits[0]?.flag ?? null;
+  check(
+    "c: his Not now leaves that proposal held and flagged, not ready",
+    !declined.refused &&
+      kept?.stage === "inbox" &&
+      kept.ready === false &&
+      flag?.includes("not-now") === true,
+    `${declined.text.slice(0, 200)}; ready ${kept?.ready}; flag ${flag}`
+  );
+
+  // (d) An option the card does not offer.
+  const unknown = await create({
+    title: "Chase the leads by phone",
+    waits_on: [`${PAGE}#${CARD}=maybe`],
+  });
+  check(
+    "d: a wait on an option the card lacks is refused, naming its options",
+    unknown.refused && unknown.text.includes("do, not-now"),
+    unknown.text
+  );
+
   // (b) The away line.
   const away = presenceLine({ kind: "away", since: "09:00" });
   check(
-    "b: the away line says to start nothing new and to ask instead",
+    "b: the away line says to start nothing new and to put it as a proposal card",
     away.includes(AWAY_STARTS_NOTHING),
     away
   );

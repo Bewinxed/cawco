@@ -5,7 +5,7 @@
  * | Target  | Settled when                                       | Flagged, still unsettled, when |
  * | ------- | -------------------------------------------------- | ------------------------------ |
  * | task    | in a done stage; a duplicate follows its survivor  | the project has no such task   |
- * | card    | answered                                           | its page is deleted            |
+ * | card    | answered; with `=<option>`, answered that option   | its page is deleted; answered another option |
  * | pin     | resolved                                           | its page or pin is gone        |
  * | pr      | merged                                             | closed unmerged                |
  * | run     | green                                              | red                            |
@@ -42,12 +42,18 @@ export type GitHubWaitState =
 
 /** What the resolver reads of the hub, each answer the thing's own state now. */
 export interface WaitWorld {
-  /** Card `card` of page `artifactId`: its question, whether the page asks it, the pick it holds (null: none); undefined once the page is deleted. */
+  /** Card `card` of page `artifactId`: its question, whether the page asks it, the pick it holds (null: none) and the options picked in it; undefined once the page is deleted. */
   readonly card: (
     artifactId: string,
     card: string
   ) =>
-    | { asked: boolean; page: string; question: string; value: string | null }
+    | {
+        asked: boolean;
+        page: string;
+        picked: readonly string[];
+        question: string;
+        value: string | null;
+      }
     | undefined;
   /** A pull request's state and title as its link row holds them; a run's as the project's poller last read them. */
   readonly github: (target: Extract<WaitTarget, { kind: "pr" | "run" }>) => {
@@ -165,7 +171,12 @@ const GITHUB_FLAG: Partial<Record<GitHubWaitState, string>> = {
   red: taskLinkWords.runFailed,
 };
 
-/** A card target: settled once answered, flagged once its page is deleted or asks it no more. */
+/**
+ * A card target: settled once answered, flagged once its page is deleted or
+ * asks it no more. One that names an option settles only on that option's
+ * pick, and is flagged on any other: a proposal's task waits on its Do it,
+ * and a Not now leaves it held, never ready.
+ */
 const cardState = (
   target: Extract<WaitTarget, { kind: "card" }>,
   world: WaitWorld
@@ -184,6 +195,16 @@ const cardState = (
     return flagged(
       { ...named, state: "missing" },
       `is no longer asked on ${card.page}`
+    );
+  }
+  if (
+    target.option &&
+    card.value !== null &&
+    !card.picked.includes(target.option)
+  ) {
+    return flagged(
+      { ...named, state: "answered otherwise" },
+      `was picked “${card.value}”, not “${target.option}”`
     );
   }
   return {
@@ -332,8 +353,10 @@ export const unsettledFirst = <T extends { settled: boolean }>(
 
 /** What reading a written wait asks of the hub; each refusal said in words. */
 export interface WaitReader {
-  /** The cards page `artifactId` asks. */
-  readonly cards: (artifactId: string) => string[];
+  /** The cards page `artifactId` asks, each with its options' ids (none for a page that is not a program). */
+  readonly cards: (
+    artifactId: string
+  ) => { id: string; options: readonly string[] }[];
   /** Why the project cannot wait on a pull request or run (no GitHub connection), or nothing when it can. */
   readonly githubRefusal: () => string | undefined;
   /** The page a name, handle or id names, by its whole id and name; a refusal in words when it names none. */
@@ -416,22 +439,33 @@ const readLink = (said: string, reader: WaitReader): WaitTarget => {
     : github;
 };
 
-/** `<page>#<card>` as a card the page asks; else a session handle (`cockpit#5a167bde`). */
+/** `<page>#<card>` or `<page>#<card>=<option>` as a card the page asks; else a session handle (`cockpit#5a167bde`). */
 const readCard = (
   said: string,
   hash: number,
   reader: WaitReader
 ): WaitTarget => {
   const page = reader.page(said.slice(0, hash));
-  const card = said.slice(hash + 1);
+  const [card = "", option, ...rest] = said.slice(hash + 1).split("=");
   if (typeof page === "string") {
-    return HANDLE_HEX.test(card) ? sessionWait(said, reader) : refuseWait(page);
+    return HANDLE_HEX.test(card) && option === undefined
+      ? sessionWait(said, reader)
+      : refuseWait(page);
   }
   const cards = reader.cards(page.id);
-  return cards.includes(card)
-    ? { kind: "card", artifactId: page.id, card }
+  const asked = cards.find((one) => one.id === card);
+  if (!asked) {
+    return refuseWait(
+      `${page.name} asks no card “${card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`
+    );
+  }
+  if (option === undefined) {
+    return { kind: "card", artifactId: page.id, card };
+  }
+  return option && rest.length === 0 && asked.options.includes(option)
+    ? { kind: "card", artifactId: page.id, card, option }
     : refuseWait(
-        `${page.name} asks no card “${card}”. Its cards: ${cards.join(", ") || "none"}.`
+        `The card “${card}” on ${page.name} has no option “${option}”. Its options: ${asked.options.join(", ") || "none"}.`
       );
 };
 

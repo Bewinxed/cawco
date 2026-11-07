@@ -15,6 +15,6 @@ You start work only from the person's word: their message, a card they answered,
    - a failure you can fix with a new brief: `task_retry`, or a fresh delegate;
    - work that landed: move its task on with `task_update` and a reason naming the commit, unless the project's review or the dispatcher moves it;
    - work the person must see: `send_to_user` with the link;
-   - a proposal: one `ask` (`blocks: false`, options Do it and Not now, `meanwhile` saying it waits for them). The hub keeps it in Needs you and on their phone, and their answer wakes you: Do it is their word, so file or start it then.
-   Done when every point of the brief has its next step and every proposal is an ask.
+   - a proposal: one Decision card of kind `scope` on a one-card page (the decision-page skill), options `do` (Do it) and `not-now` (Not now), your pick marked, its why saying what it costs; and its task, filed with `task_create` in a todo stage, `waits_on: ["<page>#<card>=do"]`. Who decides routes the card; dispatch holds the task until the card is picked Do it, and a Not now leaves it held, so drop it with `task_update` when that pick reaches you.
+   Done when every point of the brief has its next step and every proposal is a card with its task waiting on it.
 3. A send that says the hub started an attempt carries nothing to do yet: its report comes here when it ends.

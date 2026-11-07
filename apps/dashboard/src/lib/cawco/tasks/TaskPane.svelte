@@ -144,8 +144,12 @@
     if (!name) {
       return null;
     }
+    // A wait on one option of the card keeps `=<option>` after its handle.
+    const handle = `${artifactId}#${card}`;
     const wait = task?.waits.find(
-      (one) => one.kind === "card" && one.target === `${artifactId}#${card}`
+      (one) =>
+        one.kind === "card" &&
+        (one.target === handle || one.target.startsWith(`${handle}=`))
     );
     return {
       href: `/project/${encodeURIComponent(projectId)}?view=decisions&page=${encodeURIComponent(name)}#${encodeURIComponent(card)}`,

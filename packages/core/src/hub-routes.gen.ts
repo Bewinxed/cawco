@@ -5160,7 +5160,7 @@ export interface components {
       todos?: string[];
       /** @description The delegate type to run it. */
       type?: string;
-      /** @description What holds it until settled: tsk-12, a card <page>#<card>, a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde). */
+      /** @description What holds it until settled: tsk-12, a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that option, another leaves it held), a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde). */
       waits_on?: string[];
     };
     "tool task_link": {
@@ -5174,7 +5174,7 @@ export interface components {
       response_format?: "concise" | "detailed";
       /** @description A task id, like tsk-12: what ends its link, cawco:task/<project>/tsk-12. */
       task: string;
-      /** @description Targets to wait on: tsk-12, a card <page>#<card>, a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde). */
+      /** @description Targets to wait on: tsk-12, a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that option, another leaves it held), a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde). */
       waits_on?: string[];
     };
     "tool task_read": {
@@ -5295,7 +5295,7 @@ export interface components {
         priority?: "high" | "medium" | "low";
         /** @enum {string} */
         status: "pending" | "in_progress" | "completed";
-        /** @description What it waits on: tsk-12, a card <page>#<card>, a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde); '' for none. */
+        /** @description What it waits on: tsk-12, a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that option, another leaves it held), a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde); '' for none. */
         waitsOn?: string;
       }[];
       /** @description Default: your work item's. */
