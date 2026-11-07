@@ -32671,6 +32671,7 @@ export const createServer = (
             const state = db.workItem(id)?.state;
             return state === "starting" || state === "running";
           },
+          card: (artifactId, card) => artifacts.cardRead(artifactId, card),
           waitingUnder: (kind) => artifacts.waitingUnder(kind),
           refile: async (artifactId, program, cards, from, to) => {
             const row = db.artifacts.get(artifactId);

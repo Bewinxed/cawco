@@ -192,15 +192,6 @@ export const decidesWords = {
   decisionTrigger: (page: string) => `a decision card on ${page} is yours`,
 
   // ── The page's words: the roster, its tiles and the hand-over ───────────
-  /** A member's card with no kind. */
-  holdsNothing: (project: string) => `Holds nothing in ${project}.`,
-  /** A kind's tile, as its control is named. */
-  handOverKind: (kind: string) => `Hand over ${kind}`,
-  /** The tile's press, in its tooltip. */
-  handOver: "Hand over",
-  /** A kind following the fleet, in its scope glyph's tooltip. */
-  followsFleetTip: (subject: string) =>
-    `Follows the fleet, which sends it to ${subject}`,
   /** A kind this project set itself, in its scope glyph's tooltip. */
   ownTip: (project: string, subject: string) =>
     `${project}'s own. The fleet sends it to ${subject}`,
@@ -211,8 +202,6 @@ export const decidesWords = {
     `Hand ${kind.toLowerCase()} to, for choices raised from now on`,
   /** The member the fleet names for this kind, at the end of its row. */
   fleetsChoice: "Fleet's choice",
-  /** A member's card with no kind, on the fleet's page. */
-  holdsNothingFleet: "Holds nothing in your fleet.",
   /** A hand-over the hub is writing, said to a screen reader. */
   handing: (kind: string, member: string) => `Handing ${kind} to ${member}…`,
   /** A put-back the hub is writing, said to a screen reader. */
@@ -233,19 +222,6 @@ export const decidesWords = {
   decisions: "Decisions",
   /** The project page's title. */
   title: (project: string) => `Who decides in ${project}`,
-  /** The lede, every kind following the fleet. */
-  follows: (project: string) =>
-    `${project} follows the fleet on every kind of choice.`,
-  /** The lede, with kinds it handed over itself. */
-  except: (project: string, count: number) =>
-    `${project} follows the fleet, except for ${count} ${count === 1 ? "kind" : "kinds"} it handed over.`,
-  /** The lede's way back for every kind it handed over. */
-  putAllBack: (count: number) =>
-    count === 1 ? "Put it back" : "Put them all back",
-  /** The legend: a kind following the fleet. */
-  followsFleet: "Follows the fleet",
-  /** The legend: a kind this project set itself. */
-  own: (project: string) => `${project}'s own`,
   /** Who decides could not be read. */
   unread: (reason: string) => `Who decides didn't load: ${reason}`,
   /** An agent member's facts line: "Claude Code · Opus 5.5 · high effort". */
@@ -254,34 +230,45 @@ export const decidesWords = {
       ? `${harness} · ${model} · ${effort} effort`
       : `${harness} · ${model}`,
 
+  // ── The page: the team, the kinds' cards ────────────────────────────────
+  /** The team row, as a screen reader names it. */
+  teamLabel: "Who decides",
+  /** The team row's last chip, and a new agent's card while unnamed. */
+  addAgent: "Add an agent",
+  /** A new agent's card: its press. */
+  addAgentAct: "Add agent",
+  /** A kind's face chip, as its control is named. */
+  answeredBy: (kind: string, member: string) =>
+    `${kind}: ${member} answers. Change who`,
+  /** A kind's More, as its control is named. */
+  kindMore: (kind: string) => `More for ${kind}`,
+  renameItem: "Rename",
+  removeItem: "Remove kind",
+  /** A kind no agent has asked of yet. */
+  noQuestionsYet: "No questions yet",
+  /** A question still waiting on him: its link to the card. */
+  waitingOnYou: "Waiting on you",
+  /** The latest questions could not be read. */
+  recentUnread: (reason: string) =>
+    `The latest questions didn't load: ${reason}`,
+  /** A member's card: what it runs on, as its chip's control is named. */
+  changeRuns: (name: string, runs: string) =>
+    `What ${name} runs on: ${runs}. Change`,
+  /** A member's card: its standing instructions, as their control is named. */
+  changeInstructions: (name: string) =>
+    `Change ${name}'s standing instructions`,
+  /** A member's card: its record, as a screen reader names it. */
+  recordLabel: (name: string) => `${name}'s record`,
+  /** A question he picked again after the member. */
+  pickedAgain: "You picked again",
+  /** A question in a member's record still waiting. */
+  waiting: "Waiting",
+
   // ── A member's settings, and Add a member ───────────────────────────────
-  /** A card's pencil, as its control is named. */
-  edit: (name: string) => `Change ${name}'s settings`,
   /** A card whose settings were closed before saving, on its facts line. */
   unsaved: "Unsaved changes",
   /** The add card, with a new member's draft closed before adding. */
   resume: (name: string) => (name ? `Resume ${name}` : "Resume the new member"),
-  /** The add card's title, and the settings' head while adding. */
-  addMember: "Add a member",
-  /** Under it: what can be added now. */
-  addMemberNote:
-    "An agent that runs on your fleet. People and channels come with a Slack or email connection.",
-  /** The settings' close button. */
-  closeSetup: (name: string) => `Close ${name}'s settings`,
-  /** The settings' line under the name, by who it is. */
-  headBuiltIn: "Built in",
-  headAgent: "Your agent",
-  headLead: (project: string) => `Lead of ${project}`,
-  headPractice:
-    "Built in · Picks what established practice does and names at least one source.",
-  /** Caw's on the fleet's page: his harness and model are each project's. */
-  headCawFleet: "Built in · Leads each project he's switched on in",
-  /** The kinds of member Add a member offers. */
-  memberTypes: {
-    agent: { name: "An agent", note: "Runs on your fleet" },
-    person: { name: "A person", note: "Needs a Slack or email connection" },
-    channel: { name: "A channel", note: "Needs a Slack or email connection" },
-  },
   /** The row labels, in their order. */
   rows: {
     does: "What it does",
@@ -293,20 +280,10 @@ export const decidesWords = {
     hear: "How you hear",
     record: "Record",
   },
-  /** A folded row's way back in. */
-  change: "Change",
-  changeRow: (row: string) => `Change ${row.toLowerCase()}`,
   nameLabel: "Name",
   namePlaceholder: "Release checker",
-  jobLabel: "What it does with a decision",
-  jobPlaceholder: "Checks the changelog and the build, then picks.",
   /** An added member's name, which can't change. */
   nameKept: "Its name is its delegate type's, so it stays.",
-  /** Caw's status, under his job. */
-  cawNow: (status: string) => `Now: ${status}`,
-  /** Caw's Runs on, on the fleet's page. */
-  cawRunsFleet:
-    "His harness and model are each project's: change them on its Who decides.",
   harnessLabel: "Harness",
   modelLabel: "Model",
   effortLabel: "Effort",
@@ -331,27 +308,13 @@ export const decidesWords = {
   },
   delegatesLabel: "May start delegates of its own",
   skillsLabel: "Skills",
+  /** The skills it may use, folded under its instructions. */
+  skillsPicked: (count: number) =>
+    `${count} ${count === 1 ? "skill" : "skills"}`,
   noSkills: "The fleet has no skills yet: add them in Configure › Skills.",
-  /** No skill picked, in a folded row. */
-  noSkillsPicked: "No skills",
   instructionsLabel: "Standing instructions",
-  instructionsHint: "What it reads before every decision.",
   instructionsPlaceholder:
     "Read the changelog and the last build's checks. Pick the option that ships safely, and say which check decided it.",
-  /** A folded Knows row: how many skills and the instructions' first line. */
-  knowsLine: (skills: number, instructions: string) =>
-    `${skills === 0 ? "No skills" : `${skills} ${skills === 1 ? "skill" : "skills"}`} · ${instructions || "No standing instructions"}`,
-  /** Caw's Knows. */
-  cawInstructions: (project: string) =>
-    `His instructions are ${project}'s AGENTS.md`,
-  cawSkills: "Change his skills in Configure › Skills",
-  /** Decides' hint; on a project's page its second sentence follows. */
-  decidesHint: "For choices raised from now on.",
-  decidesHintProject: "A kind you clear goes back to the fleet's choice.",
-  /** A kind another member holds now, beside it. */
-  nowHeld: (name: string) => `now ${name}`,
-  /** A folded Decides row that holds nothing. */
-  decidesNothing: "No kind yet",
   /** How you hear, its two ways. */
   hears: {
     each: {
@@ -363,19 +326,10 @@ export const decidesWords = {
       note: "Read them together in Decisions",
     },
   },
-  hearHint: "Every answer is signed with its name either way.",
-  answersIn: "Answers appear in Decisions",
-  /** The foot. */
-  fromNowOn: "Changes apply to choices raised from now on.",
-  toFix: (count: number) =>
-    count === 1 ? "One thing to fix." : `${count} things to fix.`,
   cancel: "Cancel",
   save: "Save",
   saving: "Saving…",
-  continue: "Continue",
-  addMemberAct: "Add member",
   addingMember: "Adding…",
-  openType: "Open in Delegate types",
   /** Removing a member he added. */
   remove: "Remove member",
   removing: "Removing…",
@@ -393,23 +347,10 @@ export const decidesWords = {
               : `The ${waiting} waiting on it stay with it until answered.`,
           ]),
     ].join(" "),
-  /** Kinds named in a line: "Look and words, Scope and Approach". */
-  kindsList: (names: readonly string[]) => andList(names),
   /** The setup's commit on a project's decides.md. */
   setupCommit: (name: string) => `${name}'s kinds changed`,
 
   // ── Kinds of choice ─────────────────────────────────────────────────────
-  /** The head's button, and the popover's head. */
-  kindsHead: "Kinds of choice",
-  /** The button's count, as a screen reader hears it after the name. */
-  kindsCount: (count: number) => `${count} ${count === 1 ? "kind" : "kinds"}`,
-  /** A kind half added and closed before adding, beside the button. */
-  kindUnsaved: "Unsaved kind",
-  closeKinds: "Close Kinds of choice",
-  kindsIntro:
-    "Agents file every choice under one of these kinds, by the examples under its name. Beside each is who decides it across the fleet.",
-  /** The key for the pen glyph a kind he added wears. */
-  addedKey: "A kind you added",
   addKind: "Add a kind",
   /** Add a kind's steps, in their order. */
   kindSteps: {
@@ -423,13 +364,9 @@ export const decidesWords = {
   kindExampleMissing: "Say what agents file under it, as a few examples.",
   addKindAct: "Add kind",
   addingKind: "Adding…",
-  /** A kind's row: who decides it, as a screen reader hears it. */
-  whoAcrossFleet: (member: string) =>
-    `Who decides it across the fleet: ${member}`,
   rename: (name: string) => `Rename ${name}`,
   renameDone: "Done",
   renaming: "Saving…",
-  removeKind: (name: string) => `Remove ${name}`,
   removeKindAsk: (name: string) => `Remove ${name}?`,
   /** What waits under a kind being removed, and the projects it waits in. */
   waitingUnder: (count: number, projects: readonly string[]) => {

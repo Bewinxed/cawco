@@ -109,6 +109,15 @@ export interface DecidesDb {
   ) => void;
   /** Each card's row, replacing that card's last. */
   readonly putSettlings: (rows: CardSettlingRow[]) => void;
+  /**
+   * The newest cards the hub routed, on pages that still stand, newest
+   * first, at most `limit`: project `projectId`'s pages, or every page when
+   * it is undefined (Who decides' latest questions).
+   */
+  readonly recent: (
+    projectId: string | undefined,
+    limit: number
+  ) => (CardSettlingRow & { projectId: string | null })[];
   /** The member's record. */
   readonly record: (memberId: string) => MemberRecord;
   /** A kind gone: its row, its fleet route; answers the open cards' rows filed under it. */
@@ -352,6 +361,20 @@ export const decidesDb = (
         .orderBy(sql`${cardSettlings.createdAt} desc`)
         .all()
         .map(({ row }) => row),
+    recent: (projectId, limit) =>
+      db
+        .select({ row: cardSettlings, projectId: artifacts.projectId })
+        .from(cardSettlings)
+        .innerJoin(artifacts, eq(artifacts.id, cardSettlings.artifactId))
+        .where(
+          projectId === undefined
+            ? undefined
+            : eq(artifacts.projectId, projectId)
+        )
+        .orderBy(sql`${cardSettlings.createdAt} desc`)
+        .limit(limit)
+        .all()
+        .map(({ row, projectId: project }) => ({ ...row, projectId: project })),
     putSettlings: (rows) => {
       db.transaction((tx) => {
         for (const row of rows) {

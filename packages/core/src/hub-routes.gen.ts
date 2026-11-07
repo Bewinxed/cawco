@@ -425,6 +425,11 @@ export interface components {
         artifactId: string | number;
       };
     };
+    "GET /api/decides/recent": {
+      query?: {
+        project?: string;
+      };
+    };
     "GET /api/delegate-events": {
       query?: {
         before?: number | string;

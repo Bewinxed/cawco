@@ -28,8 +28,10 @@ import {
   addMember,
   type FleetOffer,
   type MemberRecord,
+  type RecentCall,
   readFleet,
   readProject,
+  readRecent,
   readRecord,
   readTypes,
   readWaiting,
@@ -89,6 +91,15 @@ export type RecordRead =
   | { state: "failed"; reason: string }
   | { state: "read"; record: MemberRecord };
 
+/** The newest questions agents asked, as the page reads them. */
+export type RecentRead =
+  | { state: "reading" }
+  | { state: "failed"; reason: string }
+  | { state: "read"; calls: RecentCall[] };
+
+/** How many questions a kind's card shows. */
+const KIND_CALLS = 2;
+
 /** A write the hub refused: what it moved, its words, and the way to ask again. */
 export interface Fault {
   again: () => Promise<boolean>;
@@ -130,6 +141,8 @@ export class WhoDecides {
   } | null>(null);
   /** The kind a removed kind's choices go to, picked in its question. */
   moveTo = $state<string | null>(null);
+  /** The newest questions agents asked, each kind's and each member's drawn from them. */
+  recent = $state<RecentRead>({ state: "reading" });
 
   constructor(projectId: string | null) {
     this.projectId = projectId;
@@ -139,6 +152,7 @@ export class WhoDecides {
 
   async load(): Promise<void> {
     this.read = { state: "reading" };
+    this.loadRecent();
     try {
       await this.#refresh();
     } catch (error) {
@@ -148,6 +162,31 @@ export class WhoDecides {
       };
     }
   }
+
+  /** Reads the newest questions; a failure stands in each card with Try again. */
+  loadRecent = async (): Promise<void> => {
+    this.recent = { state: "reading" };
+    this.recent = await readRecent(this.projectId)
+      .then(({ calls }): RecentRead => ({ state: "read", calls }))
+      .catch((error): RecentRead => ({
+        state: "failed",
+        reason: decidesWords.recentUnread(failureWords(error)),
+      }));
+  };
+
+  /** Kind `kind`'s newest questions, at most {@link KIND_CALLS}. */
+  callsOfKind = (kind: string): RecentCall[] =>
+    this.recent.state === "read"
+      ? this.recent.calls
+          .filter((call) => call.kind === kind)
+          .slice(0, KIND_CALLS)
+      : [];
+
+  /** The questions member `member` was asked, newest first. */
+  callsOfMember = (member: string): RecentCall[] =>
+    this.recent.state === "read"
+      ? this.recent.calls.filter((call) => call.member === member)
+      : [];
 
   readonly members = $derived(
     this.read.state === "read" ? this.read.fleet.members : []

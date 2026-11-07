@@ -224,12 +224,12 @@ export const kindById = (id: string): Kind =>
 export const callsOf = (kind: string) =>
   calls.filter((one) => one.kind === kind);
 
-/** Calls of each kind this month. */
-export const perKind: Record<string, number> = {
-  look: 18,
-  behaviour: 19,
-  scope: 12,
-  approach: 14,
-  rules: 9,
-  tools: 41,
+/** Each agent member's standing instructions, as it reads them before every call. */
+export const instructions: Record<string, string> = {
+  advisor:
+    "Read the brief, the code it touches and DESIGN.md before you pick. Prefer the option that changes the fewest files when two meet the brief equally, and name the file or the line that decided it. Cite a source for any claim about a library's behaviour.",
+  "design-reviewer":
+    "Hold every screen to DESIGN.md and the surface brief. Judge at 1440 and 390, in both schemes.",
+  practice:
+    "Pick what the maintained tool or the platform does by default, and name at least one source.",
 };

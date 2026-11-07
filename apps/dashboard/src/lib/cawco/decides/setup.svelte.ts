@@ -159,13 +159,6 @@ export const rowsFor = (member: Member | null, project: boolean): RowId[] => {
   }
 };
 
-/** A row holds only what is: nothing in it can change here. */
-export const readOnly = (row: RowId, member: Member | null): boolean =>
-  (row === "does" && member !== null && member.type !== "agent") ||
-  (row === "knows" && member?.type === "caw") ||
-  row === "lead" ||
-  row === "record";
-
 /** The first identity hue no member wears, else the first. */
 const freeHue = (members: Member[]): number =>
   [1, 2, 3, 4, 5, 6, 7, 8].find(

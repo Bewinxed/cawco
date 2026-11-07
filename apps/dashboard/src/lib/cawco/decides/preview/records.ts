@@ -1,38 +1,17 @@
 /**
  * His Who decides as the hub answers it (`GET /api/decides`, 2026-10-31): the
- * five built-in members and the six kinds, nothing added, every project
- * following the fleet. Cawco-Dev's facts lines are what its Caw and the
- * Advisor's and Common practice's delegate types run on. `added` is a fleet
- * with agents and a person added, for the hand-over with many members.
+ * fleet's routes, every project following them, and `added`, the five
+ * built-in members with the agents and a person he added.
  */
 import {
   BUILT_IN,
   BUILT_IN_MEMBERS,
   DEFAULT_ROUTES,
-  KIND_SEED,
   type Member,
 } from "@cawco/core/decides";
-import { decidesWords } from "@cawco/core/words/decides";
-import type { Facts } from "../decides.svelte";
 
-export const project = "Cawco-Dev";
-export const members = BUILT_IN_MEMBERS.map((id) => BUILT_IN[id]);
-export const kinds = KIND_SEED;
+const members = BUILT_IN_MEMBERS.map((id) => BUILT_IN[id]);
 export const fleetRoutes: Record<string, string> = { ...DEFAULT_ROUTES };
-export const facts: Record<string, Facts> = {
-  caw: {
-    attention: false,
-    text: decidesWords.leads("Claude Code · Opus 5.5", project),
-  },
-  advisor: {
-    attention: false,
-    text: decidesWords.runsOn("Claude Code", "Fable 5.1", "high"),
-  },
-  practice: {
-    attention: false,
-    text: decidesWords.runsOn("Claude Code", "Sonnet 5.5", "medium"),
-  },
-};
 
 const agent = (id: string, name: string, job: string, hue: number): Member => ({
   id,
@@ -82,24 +61,3 @@ export const added: Member[] = [
     delegateType: null,
   },
 ];
-
-export const addedFacts: Record<string, Facts> = {
-  ...facts,
-  "design-reviewer": {
-    attention: false,
-    text: decidesWords.runsOn("Claude Code", "Opus 5.5", "high"),
-  },
-  "release-checker": {
-    attention: true,
-    text: decidesWords.cantRun("Release checker", "OpenCode"),
-  },
-  "copy-editor": {
-    attention: false,
-    text: decidesWords.runsOn("pi", "GPT-5.5", null),
-  },
-  "security-reviewer": {
-    attention: false,
-    text: decidesWords.runsOn("Claude Code", "Opus 5.5", "max"),
-  },
-  mira: { attention: true, text: decidesWords.unreachable("Mira") },
-};

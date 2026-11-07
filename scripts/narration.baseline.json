@@ -14,8 +14,7 @@
     "Knows": 1,
     "Runs on": 1,
     "What he does": 1,
-    "What it does": 1,
-    "What it does with a decision": 1
+    "What it does": 1
   },
   "packages/core/src/words/delegate-types.ts": {
     "What it can reach": 1,

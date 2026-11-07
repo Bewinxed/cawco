@@ -170,3 +170,30 @@ export const readRecord = (
       ...(projectId === null ? {} : { query: { project: projectId } }),
     })
   );
+
+/** One question the hub routed (hub `GET /api/decides/recent`): the card, its kind, who it went to, its pick's words. */
+export interface RecentCall {
+  artifactId: string;
+  /** When the hub routed it, ISO. */
+  at: string;
+  card: string;
+  kind: string | null;
+  /** The member it went to. */
+  member: string;
+  /** The picked options' labels; empty while it waits. */
+  picked: string[];
+  projectId: string | null;
+  question: string;
+  /** He picked again after the member's answer. */
+  takenBack: boolean;
+}
+
+/** The newest questions the hub routed, newest first: project `projectId`'s, or every project's. */
+export const readRecent = (
+  projectId: string | null
+): Promise<{ calls: RecentCall[] }> =>
+  send(
+    hubRequest("GET /api/decides/recent", {
+      ...(projectId === null ? {} : { query: { project: projectId } }),
+    })
+  );

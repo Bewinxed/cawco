@@ -5,13 +5,14 @@
   import { IconTick } from "#lib/icons.js";
   import { members, runsOn } from "./fixtures";
 
-  let { current }: { current: string } = $props();
+  let { current, end = false }: { current: string; end?: boolean } = $props();
 </script>
 
 <div
   class={[
     floatingSurface(),
-    "absolute top-full left-0 z-10 mt-space-1 flex w-c-pop-w flex-col gap-px",
+    "absolute top-full z-10 mt-space-1 flex w-c-pop-w flex-col gap-px",
+    end ? "right-0" : "left-0",
   ]}
 >
   {#each members as member (member.id)}
