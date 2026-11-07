@@ -68,8 +68,8 @@ export const forgetFactWords = {
   keyColumn: (table: string, column: string, count: number) =>
     `${table}.${column}: ${plural(count, "row")} where it is part of a row's key, which is not rewritten.`,
   historyKept: (project: string, why: string) => `${project}: ${why}`,
-  filterRepoMissing:
-    "git filter-repo is not installed on the hub's machine, so the project folder's history still holds it. Install it there (https://github.com/newren/git-filter-repo/blob/main/INSTALL.md), then forget it again.",
+  python3Missing:
+    "python3 is not installed on the hub's machine, and the tool that rewrites the project folder's history runs on it, so the history still holds it. Install python3 there, then forget it again.",
   uncommitted: (paths: readonly string[]) =>
     `${paths.join(", ")} ${paths.length === 1 ? "is" : "are"} changed and not committed in the project folder, so its history was not rewritten: commit or undo ${paths.length === 1 ? "it" : "them"} first.`,
   newIds:

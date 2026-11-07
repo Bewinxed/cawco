@@ -146,6 +146,8 @@ export default {
         "scripts/border-width-check.ts",
         // scripts/check.ts:570
         "scripts/patched-dependencies-check.ts",
+        // scripts/check.ts, beside patched-dependencies-check.ts (`--check`)
+        "scripts/git-filter-repo.ts",
         // scripts/check.ts:571
         "scripts/design-sidecar-check.ts",
         // scripts/check.ts:621

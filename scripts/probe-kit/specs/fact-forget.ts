@@ -11,8 +11,9 @@
  * the hub's own socket, answering a carry's removal with the agent's own
  * `removeFolder` (held to its floor) and the index's forget with a real
  * transcript index (jsonl-parser fts5.ts) synced from a planted Claude
- * transcript. git filter-repo as published is put on the PATH first (uv,
- * into the scratch folder) when the machine has none.
+ * transcript. Every git-filter-repo is taken off the PATH first: the
+ * history rewrite is the copy CawCo carries (hub filter-repo.ts), run by
+ * python3, as on a hub with none installed.
  *
  * - a. `<private>` never stored: a task filed and moved by the person with
  *   a private span in its title and close reason, a session's memory note
@@ -132,39 +133,22 @@ const wholeHistory = (root: string): Promise<string> =>
   git(root, ["log", "--all", "-p", "--format=%B"]);
 
 /**
- * git filter-repo on the PATH: the machine's own, else the release
- * published on PyPI put into the scratch folder by uv (the hub runs it from
- * the PATH, as published). Undefined, with why, when neither can be had.
+ * The PATH with no git-filter-repo on it: every dir holding one dropped, so
+ * the history rewrite can only be the copy CawCo carries (hub
+ * filter-repo.ts), run by python3. Answers what is wrong, when python3 is
+ * missing or a git-filter-repo is still found.
  */
-const filterRepo = async (scratch: string): Promise<string | undefined> => {
-  if (Bun.which("git-filter-repo", { PATH: process.env.PATH ?? "" })) {
-    return;
+const withoutFilterRepo = (): string | undefined => {
+  process.env.PATH = (process.env.PATH ?? "")
+    .split(":")
+    .filter((dir) => !(dir && Bun.which("git-filter-repo", { PATH: dir })))
+    .join(":");
+  if (Bun.which("git-filter-repo", { PATH: process.env.PATH })) {
+    return "a git-filter-repo is still on the PATH";
   }
-  const uv = Bun.which("uv");
-  if (!uv) {
-    return "git filter-repo is not on the PATH, and uv is not here to fetch it";
-  }
-  const bin = join(scratch, "uv-bin");
-  const installed = Bun.spawn(
-    [uv, "tool", "install", "--quiet", "git-filter-repo"],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
-      env: {
-        ...process.env,
-        UV_TOOL_DIR: join(scratch, "uv-tools"),
-        UV_TOOL_BIN_DIR: bin,
-      },
-    }
-  );
-  const said = await new Response(installed.stderr).text();
-  if ((await installed.exited) !== 0) {
-    return `uv could not install git-filter-repo: ${said.trim()}`;
-  }
-  process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
-  return Bun.which("git-filter-repo", { PATH: process.env.PATH ?? "" })
+  return Bun.which("python3", { PATH: process.env.PATH })
     ? undefined
-    : "git-filter-repo was installed but is not on the PATH";
+    : "python3 is not on the PATH, and the carried git filter-repo runs on it";
 };
 
 /** One Claude transcript line. */
@@ -704,6 +688,17 @@ const forgetLeg = async (rig: Rig, projectId: string): Promise<void> => {
     planned
   );
   check(
+    "c. the dry run says the folder's history will be rewritten, with no git-filter-repo on the PATH: no line says it is kept",
+    plan !== undefined &&
+      !plan.stays.some(
+        (line) =>
+          line.includes(forgetFactWords.python3Missing) ||
+          line.startsWith("Private office probe:")
+      ) &&
+      !Bun.which("git-filter-repo", { PATH: process.env.PATH ?? "" }),
+    JSON.stringify(plan?.stays ?? [])
+  );
+  check(
     "c. the dry run names what stays (each harness's own transcripts) and changes nothing",
     (plan?.stays ?? []).includes(forgetFactWords.harnessTranscripts) &&
       (await wholeHistory(root)).includes(FACT) &&
@@ -742,6 +737,15 @@ const forgetLeg = async (rig: Rig, projectId: string): Promise<void> => {
       report.stays.includes(forgetFactWords.harnessTranscripts) &&
       report.stays.includes(forgetFactWords.newIds),
     `${done.status} ${report ? `${placesOf(report)}\nstays: ${report.stays.join(" / ")}` : done.text}`
+  );
+  const rewritten = await wholeHistory(root);
+  check(
+    "c. the git filter-repo CawCo carries rewrote the folder's history, run by python3 with no git-filter-repo on the PATH",
+    done.status === 200 &&
+      !Bun.which("git-filter-repo", { PATH: process.env.PATH ?? "" }) &&
+      !rewritten.includes(FACT) &&
+      rewritten.includes("[redacted]"),
+    `${done.status} ${process.env.PATH ?? ""}`
   );
   await afterForget(rig, projectId, planted);
 };
@@ -802,7 +806,7 @@ export default {
   group: "The hub and machines",
   name: "fact-forget",
   ownProcess:
-    "its in-process hub (hub-in-process.ts) reads CAWCO_DB_PATH and HOME once, as the hub's modules load, and the folder's git reads the PATH filter-repo is put on once",
+    "its in-process hub (hub-in-process.ts) reads CAWCO_DB_PATH and HOME once, as the hub's modules load, and the PATH it finds python3 on once (core workspace-needs.ts), with every git-filter-repo taken off it first",
   run: async (kit: Kit) => {
     const scratch = await mkdtemp(
       join(process.env.TMPDIR ?? tmpdir(), "fact-forget-")
@@ -810,13 +814,13 @@ export default {
     let socket: WebSocket | undefined;
     let index: TranscriptIndex | undefined;
     try {
-      const missing = await filterRepo(scratch);
+      const wrong = withoutFilterRepo();
       kit.check(
-        "git filter-repo is on the PATH the hub runs it from",
-        !missing,
-        missing ?? ""
+        "no git-filter-repo is on the PATH the hub runs with, and python3 is",
+        !wrong,
+        wrong ?? process.env.PATH ?? ""
       );
-      if (missing) {
+      if (wrong) {
         return;
       }
       const dbPath = join(scratch, "hub", "hub.db");

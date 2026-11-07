@@ -246,6 +246,12 @@ export async function prepareAssets(options: {
   const shared: [string, string][] = [
     ...(await filesUnder(join(ROOT, "packages/hub/drizzle"), "drizzle")),
     ...(await filesUnder(join(ROOT, "packages/hub/skills"), "skills")),
+    // git filter-repo's pinned release, run by python3 as a project folder's
+    // forget rewrites its history (hub filter-repo.ts).
+    ...(await filesUnder(
+      join(ROOT, "packages/hub/vendor/git-filter-repo"),
+      "git-filter-repo"
+    )),
     ...(await filesUnder(
       join(ROOT, "apps/dashboard/build/client"),
       "dashboard/client"

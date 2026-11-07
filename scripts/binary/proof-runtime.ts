@@ -15,6 +15,11 @@ import { runtimeTree } from "../../packages/core/src/runtime";
 import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
 import { REPORT_PATH, type RenderReport } from "../../packages/core/src/stage";
 import { unhandled } from "../../packages/core/src/unhandled";
+import {
+  FILTER_REPO,
+  filterRepoDir,
+  sha256Of,
+} from "../../packages/hub/src/filter-repo";
 import { parseMany } from "../../packages/jsonl-parser/src/pool";
 import { welcomed } from "../lib/keeper-dial";
 
@@ -108,6 +113,16 @@ if (verb === "proof-stack") {
     console.log(`live hub unreachable: ${error}`);
   }
   console.log(`no bun, node or git; standalone runtime ${Bun.version}`);
+  const carried = join(filterRepoDir(), "git-filter-repo");
+  const sum = await sha256Of(carried);
+  if (sum !== FILTER_REPO.files["git-filter-repo"]) {
+    throw new Error(
+      `The published git filter-repo ${carried} has sha256 ${sum}, not ${FILTER_REPO.version}'s`
+    );
+  }
+  console.log(
+    `git filter-repo ${FILTER_REPO.version} published at ${carried}, the pinned release's`
+  );
 } else if (verb === "proof-fixture") {
   const dir = runtimeTree("drizzle");
   const journal = JSON.parse(

@@ -66,6 +66,7 @@ export function embeddedFile(name: string): string {
 const RUNTIME_TREES = new Set([
   "dashboard",
   "drizzle",
+  "git-filter-repo",
   "photon-node",
   "pi",
   "playwright-core",

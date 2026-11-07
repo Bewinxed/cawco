@@ -15,9 +15,9 @@
  *   `knowledge/` line stating it or resting on those notes alone, gone in
  *   one commit), then its whole history, every file and message (a task's
  *   close reason is its commit's `CawCo-Reason` trailer, task-history.ts),
- *   rewritten by git filter-repo with the words `[redacted]`. A folder with
- *   work not committed, or a hub without filter-repo, keeps its history,
- *   said so.
+ *   rewritten by git filter-repo (the copy CawCo carries, filter-repo.ts)
+ *   with the words `[redacted]`. A folder with work not committed, or a hub
+ *   without python3 to run filter-repo on, keeps its history, said so.
  * - **Carries, by lineage**: a workspace whose work items held the words (a
  *   brief, a report) made its carry from that work; the carry is removed on
  *   its machine (core `CONTROL_REMOVE_FOLDER`, held there to the carries
@@ -54,6 +54,7 @@ import {
   type TranscriptTextForgotten,
 } from "@cawco/core";
 import { forgetFactWords as words } from "@cawco/core/words/forget-fact";
+import { findProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
 import type { DbShape, WorkspaceRow } from "./db";
 import type { Memory } from "./memory";
@@ -178,8 +179,8 @@ const memoryPlaces = (
 
 /** Why a folder's history would be kept, as a dry run reads it; undefined when it would be rewritten. */
 const historyKeptBy = (found: FolderMentions): string | undefined => {
-  if (!Bun.which("git-filter-repo", { PATH: process.env.PATH ?? "" })) {
-    return words.filterRepoMissing;
+  if (!findProgram("python3")) {
+    return words.python3Missing;
   }
   return found.uncommitted.length > 0
     ? words.uncommitted(found.uncommitted)

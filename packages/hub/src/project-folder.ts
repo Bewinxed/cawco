@@ -58,6 +58,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { forgetFactWords } from "@cawco/core/words/forget-fact";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, status, t } from "elysia";
+import { filterRepoCommand } from "./filter-repo";
 
 /**
  * Where every project's folder lives: `projects/` beside the database, by
@@ -2089,13 +2090,14 @@ export class HistoryKept extends FolderRefusal {}
 /**
  * `text` taken out of every commit of project `projectId`'s folder, every
  * file in every commit and every message, each written `[redacted]`, by git
- * filter-repo as published (git's own manual: "Please use an alternative
- * history filtering tool such as git filter-repo",
- * https://git-scm.com/docs/git-filter-branch), in its sensitive-data mode
+ * filter-repo as published, the copy every CawCo carries (filter-repo.ts;
+ * git's own manual: "Please use an alternative history filtering tool such
+ * as git filter-repo", https://git-scm.com/docs/git-filter-branch), in its
+ * sensitive-data mode
  * with nothing to fetch (the folder has no remote): it expires the reflogs
  * and prunes the old objects, so nothing in `.git` holds the words. Every
  * commit from the first that held them gets a new id. Refused when
- * filter-repo is not on the hub's machine ({@link HistoryKept}), or when
+ * python3, which runs it, is not on the hub's machine ({@link HistoryKept}), or when
  * files are changed and not committed, which the rewrite's reset would
  * throw away. In the project's turn, so no commit lands meanwhile. Answers
  * what still mentions it afterwards (none, when it went whole).
@@ -2104,9 +2106,9 @@ export const forgetInFolderHistory = async (
   projectId: string,
   text: string
 ): Promise<FolderMentions> => {
-  const tool = Bun.which("git-filter-repo", { PATH: process.env.PATH ?? "" });
+  const tool = await filterRepoCommand();
   if (!tool) {
-    throw new HistoryKept(503, forgetFactWords.filterRepoMissing);
+    throw new HistoryKept(503, forgetFactWords.python3Missing);
   }
   const root = projectRoot(projectId);
   await inTurn(projectId, async () => {
@@ -2130,7 +2132,7 @@ export const forgetInFolderHistory = async (
       const ran = await readWithin(REWRITE_TIMEOUT_MS, (signal) =>
         runCaptured(
           [
-            tool,
+            ...tool,
             "--force",
             "--sensitive-data-removal",
             "--no-fetch",
