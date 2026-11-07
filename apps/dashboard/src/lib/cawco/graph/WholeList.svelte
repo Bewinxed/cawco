@@ -52,7 +52,7 @@
 
 <section
   data-slot="whole-list"
-  class="kit-edge-fade-block grid min-h-0 min-w-0 flex-1 content-start gap-space-5 overflow-y-auto overscroll-contain"
+  class="kit-edge-fade-block grid min-h-0 min-w-0 flex-1 content-start gap-space-5 overflow-y-auto overscroll-contain pt-(--face-top,0px) scroll-timeline-transcript-head"
   aria-label={words.wholeMap(review.name)}
   {@attach openOnKept}
 >

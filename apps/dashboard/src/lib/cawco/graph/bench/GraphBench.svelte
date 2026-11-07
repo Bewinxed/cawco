@@ -13,11 +13,20 @@
    */
   import type { CanvasSpec, SheetOnPage, Story } from "@cawco/core/stage";
   import {
+    type DifferenceRead,
+    STAGE_COMPARE,
     STAGE_DIALS,
+    STAGE_PAUSE,
+    STAGE_PLAY,
     STAGE_REACH,
+    STAGE_SEEK,
+    type StageCompare,
     type StageDials,
+    type StagePlay,
     type StageReach,
+    type StageSeek,
   } from "@cawco/core/stage-graph";
+  import { graphWords } from "@cawco/core/words/graph";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
@@ -33,6 +42,7 @@
     type GraphDial,
   } from "../dials";
   import { StageLink } from "../stage-link.svelte";
+  import { moveInto } from "./moves";
 
   let {
     dials = [],
@@ -141,14 +151,123 @@
   let dark = $state(false);
   /** The dials as the graph last set them on the drawing. */
   let set = $state<DialValues>({});
+  /** Compare as the graph asked it: the state compared with, and which of the two the stage shows. */
+  let compared = $state<StageCompare | null>(null);
+  /** The move the last reach played, as the page reads it: the Animation face's clips. */
+  let move = $state<ReturnType<typeof moveInto>>(null);
+  /** The stand-in's clock: where the move stands, and the frame that runs it while it plays. */
+  let clock = 0;
+  let playing = 0;
+  const tell = (t: number, on: boolean) => {
+    link.heardTime({
+      at: performance.now(),
+      length: move?.length ?? 0,
+      playing: on,
+      t,
+    });
+  };
+  const stop = () => {
+    cancelAnimationFrame(playing);
+    playing = 0;
+  };
+  /** The move played from `from` ms to its end, the page its clock, telling the time as it starts and ends. */
+  const play = (asked: StagePlay) => {
+    stop();
+    const length = move?.length ?? 0;
+    if (asked.still || length === 0) {
+      clock = length;
+      tell(clock, false);
+      return;
+    }
+    const began = performance.now() - asked.from;
+    tell(asked.from, true);
+    const tick = (now: number) => {
+      clock = Math.min(length, now - began);
+      if (clock >= length) {
+        playing = 0;
+        tell(length, false);
+        return;
+      }
+      playing = requestAnimationFrame(tick);
+    };
+    playing = requestAnimationFrame(tick);
+  };
+
+  /** What the form calls each of its draft's values, as the page names the part that shows it. */
+  const PARTS: Record<string, string> = {
+    name: "Field “Name”",
+    prompt: "Field “What each run does”",
+    cron: "Menu “When”",
+    delegateType: "Field “Delegate type”",
+    target: "Menu “Each run starts”",
+  };
+  /** A story's values the form shows, by part: its draft's own, one level down. */
+  const valuesOf = (name: string): Map<string, string> => {
+    const args = stories.find((each) => each.name === name)?.args ?? {};
+    const draft = (args.draft ?? {}) as Record<string, unknown>;
+    return new Map(
+      Object.entries(PARTS).map(([key, part]) => {
+        const value = draft[key];
+        const words =
+          value === undefined || value === null ? "" : String(value);
+        return [part, words.length > 48 ? `${words.slice(0, 47)}…` : words];
+      })
+    );
+  };
+  /** The values that differ, as the page names a changed one (core words/graph.ts). */
+  const differencesOf = (kept: string, against: string): DifferenceRead[] => {
+    const one = valuesOf(kept);
+    const two = valuesOf(against);
+    return [...one]
+      .filter(([part, value]) => value !== two.get(part))
+      .map(([part, value]) => ({
+        box: { x: 0, y: 0, w: 0, h: 0 },
+        kind: "changed" as const,
+        line: graphWords.changed(part, value, two.get(part) ?? ""),
+        radius: "0px",
+      }));
+  };
+
   const link = new StageLink((message: object) => {
     const said = message as { type: string };
     if (said.type === STAGE_REACH) {
       const reach = message as StageReach & { type: string };
       standing = reach.to.story;
+      stop();
+      move =
+        reach.play && reach.from
+          ? moveInto(reach.from.story, reach.to.story)
+          : null;
       requestAnimationFrame(() => {
-        link.reached = { ask: reach.ask, move: null, on: reach.to };
+        link.reached = { ask: reach.ask, move, on: reach.to };
+        if (move) {
+          clock = move.length;
+          tell(clock, false);
+        }
       });
+    } else if (said.type === STAGE_COMPARE) {
+      const asked = message as StageCompare & { type: string };
+      compared = asked.against ? asked : null;
+      if (asked.against) {
+        const found = differencesOf(standing, asked.against.story);
+        requestAnimationFrame(() => {
+          link.heardDifferences({
+            ask: asked.ask,
+            beside: false,
+            found,
+            same: found.length === 0,
+          });
+        });
+      }
+    } else if (said.type === STAGE_PLAY) {
+      play(message as StagePlay & { type: string });
+    } else if (said.type === STAGE_PAUSE) {
+      stop();
+      tell(clock, false);
+    } else if (said.type === STAGE_SEEK) {
+      stop();
+      clock = (message as StageSeek & { type: string }).t;
+      tell(clock, false);
     } else if (said.type === "cawco:canvas-view") {
       const { view } = message as {
         view: { widths: number[] | null; scheme: "light" | "dark" };
@@ -160,7 +279,16 @@
     }
   });
 
-  const story = $derived(stories.find((one) => one.name === standing));
+  /** The story drawn: the kept one, or the one compared with while Compare's flip shows it in its place. */
+  const story = $derived(
+    stories.find(
+      (one) =>
+        one.name ===
+        (compared?.show === "compared" && compared.against
+          ? compared.against.story
+          : standing)
+    )
+  );
   /** The story's own width, its viewport; the desk's when it names none. */
   const own = $derived(story?.form?.width ?? 1440);
   /** The arg dials as set: the form's props over its story's. */
@@ -258,10 +386,12 @@
 </script>
 
 {#snippet frame()}
-  <!-- The stand-in stage page: its gutter, the drawing at its width. -->
+  <!-- The stand-in stage page: its gutter, the drawing at its width, its top
+       clearing the stage's floating head (`--stage-room`), as the stage page
+       pads its own by the room the graph tells it. -->
   <div
     class={[
-      "h-full min-h-0 overflow-auto bg-surface-page p-space-5",
+      "h-full min-h-0 overflow-auto bg-surface-page p-space-5 scroll-timeline-transcript-head",
       dark ? "scheme-dark" : "scheme-light",
     ]}
     {@attach frameSize((node: HTMLElement) => {
@@ -269,6 +399,7 @@
       gutter = 2 * Number.parseFloat(getComputedStyle(node).paddingInlineStart);
     })}
   >
+    <div aria-hidden="true" class="h-(--stage-room,0px)"></div>
     <!-- The box the drawing stands in is its size after its scale, so a
          scaled drawing leaves no 1:1 box behind to scroll across. -->
     <div

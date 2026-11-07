@@ -75,6 +75,9 @@
  * 25. bar-room, a bare section under a bar: the head in flow over a
  *     `section` with no head of its own, its list starting at the head's
  *     foot: the bar claims a row, named.
+ * 26. bar-room, a panel's floating head under a bar: the same card, its
+ *     panel's own head a bar floating over the panel's list (the design
+ *     graph's stage head over its page): that head heads it, no finding.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
@@ -294,6 +297,11 @@ const CASES: Record<string, Case> = {
     rule: "bar-room",
     want: "none",
     html: `${BASE}${CARD}<section class="card" aria-label="Preview"><header class="float" data-slot="side-head"><h2>Routine form</h2></header><div class="list under" style="display: flex; overflow: clip"><section aria-label="Stage" style="display: flex; flex-direction: column; flex: 1"><h3>Just opened</h3><div class="list">${ROWS}</div></section></div></section>`,
+  },
+  "a panel's floating head under a bar": {
+    rule: "bar-room",
+    want: "none",
+    html: `${BASE}${CARD}<section class="card" aria-label="Preview"><header class="float" data-slot="side-head"><h2>Routine form</h2></header><div class="list under" style="display: flex; overflow: clip"><section aria-label="Stage" style="position: relative; display: flex; flex-direction: column; flex: 1"><header class="float"><h3>Just opened</h3></header><div class="list under">${ROWS}</div></section></div></section>`,
   },
   "a bare section under a bar": {
     rule: "bar-room",

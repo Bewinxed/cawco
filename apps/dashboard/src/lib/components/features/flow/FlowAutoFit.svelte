@@ -24,7 +24,7 @@
   import { useSvelteFlow } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { FIT } from "./fit";
+  import { FIT, fitPadding } from "./fit";
   import { onCanvasResize } from "./resized.svelte";
 
   let {
@@ -33,6 +33,7 @@
     layout,
     minZoom,
     focus,
+    insets = { top: 0, bottom: 0 },
   }: {
     nodeCount: number;
     held?: boolean;
@@ -41,6 +42,8 @@
     minZoom?: number;
     /** Where a fit held at `minZoom` centres, in the flow's own coordinates; null: the whole's middle. */
     focus?: () => { x: number; y: number } | null;
+    /** What floats over the canvas's top and foot, px (a head, a group of tools): the fit and the focus stand clear of it. */
+    insets?: { top: number; bottom: number };
   } = $props();
   const { fitView, getZoom, setCenter } = useSvelteFlow();
   /** A fit held at `minZoom` (the whole too big for it): centred on the focus instead. */
@@ -48,11 +51,16 @@
     await fitted;
     const at = focus?.();
     if (at && minZoom !== undefined && getZoom() <= minZoom + 0.001) {
-      await setCenter(at.x, at.y, { zoom: minZoom, duration });
+      // The middle of the room clear of what floats over the canvas.
+      const shift = (insets.top - insets.bottom) / 2 / minZoom;
+      await setCenter(at.x, at.y - shift, { zoom: minZoom, duration });
     }
   };
   const frame = () => ({
     ...FIT,
+    ...(insets.top > 0 || insets.bottom > 0
+      ? { padding: fitPadding(insets) }
+      : {}),
     ...(minZoom === undefined ? {} : { minZoom }),
   });
 

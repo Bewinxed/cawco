@@ -61,8 +61,13 @@ export const graphWords = {
   /** A states file with one state and no machine, said once. */
   oneState: "This component has one state.",
 
-  /** Compare: a switch that stays on until he turns it off. */
-  compare: "Compare with previous state",
+  /**
+   * Compare: a switch that stays on until he turns it off, named for the
+   * state it compares with (model.ts `previousOf`: the one the move into
+   * the kept state starts from, else the one before it, else the first
+   * state's next), so the first state's Compare never says "previous".
+   */
+  compare: (state: string) => `Compare with ${state}`,
   comparedWith: (state: string) => `Compared with ${state}`,
   /** Compare's flip: the compared state shown in the kept one's place; its tooltip, and its words while shown. */
   showCompared: (state: string) => `Show ${state} in its place`,

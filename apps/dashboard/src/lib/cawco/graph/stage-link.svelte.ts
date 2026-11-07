@@ -19,6 +19,7 @@ import {
   STAGE_RETIME,
   STAGE_REVEAL,
   STAGE_RING,
+  STAGE_ROOM,
   STAGE_SEEK,
   type StageCompare,
   type StageDials,
@@ -29,6 +30,7 @@ import {
   type StageReach,
   type StageReached,
   type StageReveal,
+  type StageRoom,
   type StageTime,
   type StateRef,
   storyOf,
@@ -135,6 +137,12 @@ export class StageLink {
     if (this.comparing && said.ask === this.comparing.ask) {
       this.differences = said;
     }
+  }
+
+  /** The room the stage's floating head takes over the page's top, px. */
+  room(px: number): void {
+    const message: StageRoom & { type: string } = { type: STAGE_ROOM, px };
+    this.#post(message);
   }
 
   /** The dials as set on the drawing, the whole set by name. */

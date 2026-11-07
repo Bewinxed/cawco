@@ -5,36 +5,44 @@
    * browser's stream, drawn here from the hub's socket (browser-stream.ts),
    * never a page of its own, standing under the panel's floating head as
    * any page not CawCo's own does (its layout is not ours to push down).
-   * No band claims a row over it: the page's origin and who has control
-   * stand in the head's centre (PreviewPane's address, the Private chip
-   * while you hold it) beside Take over or Hand back; the local browser's
-   * line, on a machine with no container runtime, stands under the stream.
+   * No band claims a row over it: while the browser is live, where it is
+   * and who drives stand in the head after its title (BrowserAddress) and,
+   * on a phone's sheet (`addressAtFoot`), float at the stream's foot; Take
+   * over stands in the head only while the stream is drawn here
+   * (`viewing`). The local browser's line, on a machine with no container
+   * runtime, stands under the stream.
    * No comments and no ink: nothing the person sees here reaches an agent
    * (§5.11, "Private").
    *
-   * The well's states: starting (the browser woken, its image built), live
-   * (the agent driving, the person watching), you have control (the
-   * person's pointer, keys and paste go to the browser; on a touch screen
-   * Show keyboard, floating at the stream's foot, raises the phone's keyboard, its typing read
-   * from a field of the view's own, keyboard-sink.ts), and each failure in
-   * the error formula with its way out: the machine away, the browser that
-   * didn't start, the view's link lost or refused, the stream that found no
-   * way here (the stream relay's settings), a codec this browser can't play.
+   * The well's states: waiting (the browser waking, its image building,
+   * its stream connecting), drawn as the preview's cover draws a wait, a
+   * skeleton of the page to come over its live line; live (the agent
+   * driving, the person watching); you have control (the person's pointer,
+   * keys and paste go to the browser; on a touch screen Show keyboard,
+   * floating at the stream's foot, raises the phone's keyboard, its typing
+   * read from a field of the view's own, keyboard-sink.ts); and each
+   * failure as the house's region fault draws one, Caw over its headline
+   * and line, its way out leading: the machine away, the browser that
+   * didn't start, the view's link lost or refused, the stream that found
+   * no way here (the stream relay's settings), a codec this browser can't
+   * play.
    */
   import { browserWords } from "@cawco/core/words/browser";
   import { commonWords } from "@cawco/core/words/common";
-  import { shellWords } from "@cawco/core/words/shell";
   import { untrack } from "svelte";
   import { track } from "#lib/cawco/track.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
-  import { IconAlert, IconKeyboardLinear, IconRefresh } from "#lib/icons.js";
+  import { IconKeyboardLinear, IconRefresh } from "#lib/icons.js";
+  import FaultDetails from "../fault/FaultDetails.svelte";
+  import ShowDetails from "../fault/ShowDetails.svelte";
+  import { animatedCaw } from "../home/FaultCaw.svelte";
   import { newId } from "../id";
   import { appear } from "../motion/curves.svelte";
   import { store, stored } from "../storage";
+  import BrowserAddress from "./BrowserAddress.svelte";
   import { startFromPanel, takeOverFromPanel } from "./browser-acts";
   import {
     type BrowserStream,
@@ -43,6 +51,7 @@
     type StreamState,
     streamUrl,
   } from "./browser-stream";
+  import CoverState from "./CoverState.svelte";
   import {
     SINK_AT_SPACE,
     SINK_MOST,
@@ -56,9 +65,15 @@
     artifactId,
     browser,
     machine,
+    addressAtFoot = false,
+    viewing = $bindable(false),
   }: {
     instanceId: string;
     artifactId: string;
+    /** The address floats at the stream's foot (a phone's sheet, whose head has no room for it); else the head holds it. */
+    addressAtFoot?: boolean;
+    /** The stream is drawn here: there is a page to take over (PreviewPane's Take over). */
+    viewing?: boolean;
     /** The browser as the hub lists it; null until its machine reported it. */
     browser: ListedBrowser | null;
     /** The session's machine: its name, and whether the hub reaches it. */
@@ -66,6 +81,8 @@
   } = $props();
 
   const detailsId = $props.id();
+  /** Caw's side on the failure, px: a panel's (RegionFault's `panel` room). */
+  const CAW_SIZE = 136;
   const sinkId = `${detailsId}-keys`;
 
   /** The view's name for itself on the hub (its `?token`): one neko session per tab and artifact, kept through a reload. */
@@ -105,7 +122,7 @@
   let sinkFocused = $state(false);
   /** What the sink held when its typing was last sent. */
   let sent = SINK_PAD;
-  /** A finger, not a cursor: Show keyboard stands in the band. */
+  /** A finger, not a cursor: Show keyboard floats at the stream's foot. */
   const coarse = new IsCoarsePointer();
   let details = $state(false);
   /** A start or a control hand-off the hub refused, in its words. */
@@ -259,6 +276,11 @@
       y: clamp((event.clientY - top) / scale, size.height),
     };
   }
+
+  // The head offers Take over only while there is a page to take.
+  $effect(() => {
+    viewing = live && streamState.kind === "live";
+  });
 
   /** Input goes to the browser only while the person holds it and the stream stands. */
   const driving = $derived(mine && streamState.kind === "live");
@@ -592,15 +614,18 @@
         }}></textarea>
     {/if}
     {#if shown?.kind === "wait"}
-      <p
-        class="mark-line absolute inset-x-0 top-0 m-0 flex items-start gap-space-2 p-space-5 text-ink-muted type-meta animate-wait-grace-in"
+      <!-- A wait as the preview's cover draws one (The Real Wait Rule):
+           unseen for the grace, then the screen to come as a skeleton and,
+           under it, the live mark and what it waits on. -->
+      <div
+        class="absolute inset-0 flex flex-col justify-center p-space-5 bg-surface-recess animate-wait-grace-in"
         data-slot="browser-wait"
         role="status"
       >
-        <span class="mark-cell"><LiveDot /></span><span class="min-w-0"
-          >{shown.line}</span
-        >
-      </p>
+        <!-- The screen to come, at a screen's 16:10 (Skeleton `screen`). -->
+        <Skeleton class="w-full" height="screen" radius="card" />
+        <CoverState waiting={{ line: shown.line }} />
+      </div>
     {/if}
     {#if refusal}
       <p
@@ -610,28 +635,42 @@
       >
         {refusal}
       </p>
-    {:else if driving && coarse.current}
-      <!-- Show keyboard, a bare symbol in a glass of its own floating at the
-           stream's trailing foot, as a remote screen's keyboard key floats
-           over it (Screens, Jump Desktop): no band claims a row for it. Held
-           off the focus, so a press that hides the keyboard doesn't first
-           take the focus from the sink (noVNC's keepVirtualKeyboard). -->
-      <div class="absolute end-space-3 bottom-space-3 z-1 flex">
-        <BarGlass form="group">
-          <BarItem
-            icon={IconKeyboardLinear}
-            label={keyboardUp
-              ? browserWords.hideKeyboard
-              : browserWords.showKeyboard}
-            onclick={toggleKeyboard}
-            pressed={keyboardUp}
-            props={{
-              "aria-controls": sinkId,
-              "data-slot": "browser-keyboard",
-              onmousedown: (event: MouseEvent) => event.preventDefault(),
-            }}
-          />
-        </BarGlass>
+    {:else if driving || (addressAtFoot && live)}
+      <!-- The stream's foot, floating over it as glass (no band claims a
+           row): on a phone the address, where a phone's browser keeps it,
+           and while the person drives under a finger Show keyboard, a
+           remote screen's keyboard key (Screens, Jump Desktop). Show
+           keyboard is held off the focus, so a press that hides the
+           keyboard doesn't first take the focus from the sink (noVNC's
+           keepVirtualKeyboard). -->
+      <div
+        class="pointer-events-none absolute inset-x-space-3 bottom-space-3 z-1 flex items-end gap-space-2 *:pointer-events-auto"
+        data-slot="browser-foot"
+      >
+        {#if addressAtFoot && live}
+          <div class="flex min-w-0">
+            <BrowserAddress {mine} origin={browser?.origin ?? null} />
+          </div>
+        {/if}
+        {#if driving && coarse.current}
+          <div class="ms-auto flex flex-none">
+            <BarGlass form="group">
+              <BarItem
+                icon={IconKeyboardLinear}
+                label={keyboardUp
+                  ? browserWords.hideKeyboard
+                  : browserWords.showKeyboard}
+                onclick={toggleKeyboard}
+                pressed={keyboardUp}
+                props={{
+                  "aria-controls": sinkId,
+                  "data-slot": "browser-keyboard",
+                  onmousedown: (event: MouseEvent) => event.preventDefault(),
+                }}
+              />
+            </BarGlass>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -640,65 +679,58 @@
        as the panel's other failures do. -->
   {#if shown?.kind === "fail"}
     {@const failed = shown}
+    <!-- A failure as the house's region fault draws one (RegionFault): Caw
+         on the axis, the largest thing, over one headline and one line;
+         under them the one way out leads on the coral, the others quiet
+         under it, Show details last. It runs to the card's top under the
+         head and takes its room on its own scroller. -->
     <div
-      class="absolute inset-0 z-1 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      class="absolute inset-0 z-1 grid place-items-center overflow-y-auto overscroll-contain px-space-5 pt-(--side-room,0px) pb-space-5 bg-surface-well max-phone:px-space-3"
       data-slot="browser-down"
       role="alert"
       transition:appear
     >
-      <EmptyState icon={IconAlert} title={failed.title}>
-        {#snippet line()}
+      <div class="flex w-full max-w-c-panel-w min-w-0 flex-col items-center">
+        <div class="mb-space-4 flex-none" data-slot="browser-down-caw">
+          {@render animatedCaw({ again: false, head: false, size: CAW_SIZE })}
+        </div>
+        <h2 class="m-0 text-center text-balance text-ink-strong type-title">
+          {failed.title}
+        </h2>
+        <p
+          class="m-0 mt-space-1 text-center text-pretty text-ink-muted type-body wrap-anywhere"
+        >
           {failed.line}
-        {/snippet}
-        {#snippet action()}
-          <div class="flex flex-wrap items-center gap-space-2">
-            {#if failed.again}
-              <Button
-                icon={IconRefresh}
-                label={commonWords.tryAgain}
-                onclick={tryAgain}
-                pending={starting}
-                pendingLabel={browserWords.tryingAgain}
-                size="sm"
-                variant="outline"
-              />
-            {/if}
-            {#if failed.relay}
-              <Button
-                href="/config/browsers"
-                label={browserWords.relaySettings}
-                pad="none"
-                size="sm"
-                variant="link"
-              />
-            {/if}
-            {#if failed.details}
-              <Button
-                aria-controls={detailsId}
-                aria-expanded={details}
-                data-details
-                label={details
-                  ? shellWords.hideDetails
-                  : shellWords.showDetails}
-                onclick={() => {
-                  details = !details;
-                }}
-                size="sm"
-                variant="ghost"
-              />
-            {/if}
-          </div>
-          {#if failed.details && details}
-            <p
-              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
-              data-slot="details"
-              id={detailsId}
-            >
-              {failed.details}
-            </p>
+        </p>
+        <div class="mt-space-5 flex flex-col items-center gap-space-2">
+          {#if failed.again}
+            <Button
+              data-lead
+              icon={IconRefresh}
+              label={commonWords.tryAgain}
+              onclick={tryAgain}
+              pending={starting}
+              pendingLabel={browserWords.tryingAgain}
+            />
           {/if}
-        {/snippet}
-      </EmptyState>
+          {#if failed.relay}
+            <Button
+              href="/config/browsers"
+              label={browserWords.relaySettings}
+              pad="none"
+              variant={failed.again ? "link" : undefined}
+            />
+          {/if}
+          {#if failed.details}
+            <ShowDetails controls={detailsId} bind:shown={details} />
+          {/if}
+        </div>
+        {#if failed.details && details}
+          <div class="mt-space-3 w-full min-w-0">
+            <FaultDetails details={failed.details} id={detailsId} />
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
   {#if host === "local"}

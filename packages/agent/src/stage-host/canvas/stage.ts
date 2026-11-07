@@ -96,6 +96,7 @@ import {
   STAGE_REACH,
   STAGE_REACHED,
   STAGE_REVEAL,
+  STAGE_ROOM,
   STAGE_TIME,
   type StageCompare,
   type StageDialsWritten,
@@ -112,6 +113,7 @@ import {
   stageDialsOf,
   stageReachOf,
   stageRevealOf,
+  stageRoomOf,
   storyOf,
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
@@ -169,6 +171,8 @@ const ROW_GAP = 24;
 const GUTTER = "--space-4";
 /** The gutter the page keeps beside the drawing now (page-style.ts): {@link GUTTER}'s, or less where the window lacks the room. */
 const STAGE_GUTTER_VAR = "--stage-gutter";
+/** The room the stage's floating head takes over the page's top (page-style.ts), px as the panel said it. */
+const STAGE_ROOM_VAR = "--stage-room";
 /** The gap between the kept drawing and the compared one where the two stand side by side. */
 const BESIDE_GAP = "--space-6";
 /**
@@ -753,6 +757,14 @@ export function bootStage(page: Page): Mode {
    */
   const framed = window.top !== window;
   document.documentElement.classList.add("cawco-stage-page");
+  // The scroll edge effect under the panel's floating head shows once the
+  // page has scrolled: clear at rest (page-style.ts).
+  const edge = () =>
+    document.documentElement.classList.toggle(
+      "cawco-stage-scrolled",
+      scrollY > 0
+    );
+  addEventListener("scroll", edge, { passive: true });
   const canvas = document.getElementById("cawco-canvas") as HTMLElement;
   canvas.classList.add("cawco-stage");
   /** The one drawing: the live instance of the state the panel keeps. */
@@ -1829,6 +1841,18 @@ export function bootStage(page: Page): Mode {
     }
   }
 
+  // The stage's floating head (the design graph's StagePane): the room it
+  // takes over the page's top, which the column pads its top by.
+  addEventListener(STAGE_ROOM, (event) => {
+    const said = stageRoomOf((event as CustomEvent<unknown>).detail);
+    if (said) {
+      document.documentElement.style.setProperty(
+        STAGE_ROOM_VAR,
+        `${said.px}px`
+      );
+    }
+  });
+
   addEventListener(STAGE_DIALS, (event) => {
     const asking = stageDialsOf((event as CustomEvent<unknown>).detail);
     if (asking) {
@@ -2339,7 +2363,12 @@ export function bootStage(page: Page): Mode {
           w: Math.max(0, Math.ceil(frame.offsetWidth - windowRoom())),
           h: Math.max(
             0,
-            Math.ceil(frame.offsetHeight + 2 * tokenPx(GUTTER) - windowHeight())
+            Math.ceil(
+              frame.offsetHeight +
+                2 * tokenPx(GUTTER) +
+                tokenPx(STAGE_ROOM_VAR) -
+                windowHeight()
+            )
           ),
         }
       : null;

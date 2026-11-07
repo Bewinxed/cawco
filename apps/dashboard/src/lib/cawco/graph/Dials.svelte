@@ -170,13 +170,15 @@
          finger its foot holds the last row's touch areas too (The 44 Touch
          Rule's `::after` reaches past a switch), so nothing scrolls short. -->
     <div
-      class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto p-space-1 coarse:pb-space-4"
+      class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto p-space-1 scroll-timeline-transcript-head coarse:pb-space-4"
       data-slot="dials-rows"
     >
       <!-- One grid for every section, so each control starts on one edge
            whatever its heading; each section a subgrid of it, each control
            its own subgrid row, its name beside it, rows a step apart as a
            panel's are. -->
+      <!-- Under a floating head the rows clear it at rest (`--face-top`). -->
+      <div aria-hidden="true" class="h-(--face-top,0px)"></div>
       <div
         class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
         data-slot="dials-grid"

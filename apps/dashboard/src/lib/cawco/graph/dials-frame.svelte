@@ -7,6 +7,7 @@
    */
   import { graphWords as words } from "@cawco/core/words/graph";
   import type { ComponentProps } from "svelte";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import {
     IconListRows,
     IconPlay,
@@ -39,12 +40,16 @@
 
 <div class="bg-surface-page p-space-5">
   <div
-    class="flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
+    class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile timeline-scope-transcript-head"
+    style:--face-top="var(--c-head-room)"
     style:--frame-h={`${height}px`}
     style:--frame-w={`${width}px`}
   >
+    <!-- The room's head floats over the face as the graph's does: the rows
+         run up beneath it, clear it at rest and fade under it. -->
+    <HeadFade band="var(--face-top)" tint="bg-surface-raised" />
     <div
-      class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
+      class="absolute inset-x-0 top-0 z-2 flex h-c-head-room min-w-0 items-center ps-space-4 pe-space-2"
     >
       <!-- At a phone drawer's width the faces' switch draws the shown face's
            name and the others' glyphs, as the graph's drawer does. -->
@@ -56,7 +61,7 @@
         value="dials"
       />
     </div>
-    <div class="flex min-h-0 min-w-0 flex-1 flex-col p-space-4">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col px-space-4 pb-space-4">
       <Dials {...face} />
     </div>
   </div>

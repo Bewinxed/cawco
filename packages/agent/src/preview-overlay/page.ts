@@ -55,6 +55,7 @@ import {
   STAGE_RETIME,
   STAGE_REVEAL,
   STAGE_RING,
+  STAGE_ROOM,
   STAGE_SEEK,
   STAGE_TIME,
   stageCompareOf,
@@ -66,6 +67,7 @@ import {
   stageRetimeOf,
   stageRevealOf,
   stageRingOf,
+  stageRoomOf,
   stageSeekOf,
 } from "@cawco/core/stage-graph";
 import {
@@ -3614,6 +3616,13 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       const dials = stageDialsOf(message);
       if (dials) {
         dispatchEvent(new CustomEvent(STAGE_DIALS, { detail: dials }));
+      }
+    },
+    // The stage's floating head: the room it takes over the page's top.
+    [STAGE_ROOM]: (message) => {
+      const room = stageRoomOf(message);
+      if (room) {
+        dispatchEvent(new CustomEvent(STAGE_ROOM, { detail: room }));
       }
     },
     "cawco:theme": (message) => takeTheme(message.theme),

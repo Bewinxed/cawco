@@ -53,6 +53,8 @@
           "pointer-events-none px-[clamp(var(--space-1),calc(var(--space-2)_-_var(--tight,0px)_*_1000),var(--space-2))] text-meta tabular-nums",
         /** A count standing in its row (a filter's, a section's faults): at least square, its figures in the meta role and tabular widths, centred. */
         tally: "min-w-icon-lg px-space-1 text-meta tabular-nums",
+        /** A chip inside a capsule (a browser's address): its ends the capsule's, round. */
+        capsule: "rounded-pill",
         /**
          * A control's count, the usual notification badge on its glyph's
          * top trailing corner (HIG, Tab bars: "a badge — a red oval

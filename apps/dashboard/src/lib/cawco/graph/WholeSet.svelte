@@ -58,7 +58,7 @@
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
-  import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
+  import { FIT, fitPadding, ZOOM } from "#lib/components/features/flow/fit.js";
   import { theme } from "#lib/theme.svelte.js";
   import { browser } from "$app/env";
   import { layoutWhole } from "./layout";
@@ -80,6 +80,7 @@
     onpress,
     onmove,
     narrow = false,
+    top: headRoom = 0,
   }: {
     review: Review;
     kept: string;
@@ -89,7 +90,20 @@
     onmove: (from: string, to: string) => void;
     /** A pane under 640px: the map is a list (DESIGN.md, Map mode; WholeList). */
     narrow?: boolean;
+    /** What floats over the map's top, px (the room's head): the fit stands clear of it. */
+    top?: number;
   } = $props();
+  /**
+   * What floats over the map, px: the room's head at its top, and at its
+   * foot the zoom tools' glass with its inset (a control's height and the
+   * page's step round it). The fit and the kept card stand clear of both,
+   * and what the map holds past either edge fades out under them, as a
+   * list fades under a floating bar.
+   */
+  const insets = $derived({
+    top: headRoom,
+    bottom: browser ? numberOf("--c-btn-h") + 2 * numberOf("--space-4") : 0,
+  });
 
   const nodeTypes = { state: StateNode, machine: MachineNode };
   const edgeTypes = { route: RouteEdge };
@@ -396,6 +410,10 @@
         data-fade-left={past.left || undefined}
         data-fade-right={past.right || undefined}
         data-fade-top={past.top || undefined}
+        style:--fade-top={past.top && insets.top > 0
+          ? `${insets.top}px`
+          : undefined}
+        style:--fade-bottom={past.bottom ? `${insets.bottom}px` : undefined}
       >
         <SvelteFlow
           aria-label={words.wholeMap(review.name)}
@@ -404,7 +422,11 @@
           elementsSelectable={false}
           {edgeTypes}
           fitView
-          fitViewOptions={{ ...FIT, minZoom: READABLE }}
+          fitViewOptions={{
+            ...FIT,
+            padding: fitPadding(insets),
+            minZoom: READABLE,
+          }}
           {...ZOOM}
           nodesConnectable={false}
           nodesDraggable={false}
@@ -433,6 +455,7 @@
             bind:this={fit}
             focus={keptMiddle}
             {held}
+            {insets}
             minZoom={READABLE}
             layout={placed}
             nodeCount={nodes.length}
