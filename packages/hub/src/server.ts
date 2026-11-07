@@ -18657,22 +18657,14 @@ export const createServer = (
   };
 
   /**
-   * Whether a continuation of `sourceId` ends its source's process: one
-   * anything but the person asked for is folded into one session
-   * ({@link foldContinued}), and a source whose work item goes on is
-   * retired ({@link retireContinued}). A person's Continue of anything else
-   * leaves the source running.
+   * Whether a continuation of `sourceId` ends its source's process: every
+   * one does while it runs. One anything but the person asked for is folded
+   * into one session ({@link foldContinued}); the person's own Continue
+   * retires its source ({@link retireContinued}).
    */
-  const endsSource = (
-    sourceId: string,
-    askedBy: ContinuationAsker
-  ): boolean => {
+  const endsSource = (sourceId: string): boolean => {
     const [row] = db.getInstancesByIds([sourceId]);
-    return (
-      !!row &&
-      !["stopped", "discarded"].includes(row.status) &&
-      (askedBy.kind !== "person" || !!row.workItemId)
-    );
+    return !!row && !["stopped", "discarded"].includes(row.status);
   };
 
   /**
@@ -18745,14 +18737,13 @@ export const createServer = (
 
   /**
    * The work in flight a continuation of `sourceId` must wait for: none when
-   * it leaves the source running ({@link endsSource}) or nothing is held;
+   * its source no longer runs ({@link endsSource}) or nothing is held;
    * a refusal in its machine's words when the machine could not say.
    */
   const inFlightFor = async (
-    sourceId: string,
-    asker: ContinuationAsker
+    sourceId: string
   ): Promise<{ work?: WorkInFlight } | { refusal: string }> => {
-    if (!endsSource(sourceId, asker)) {
+    if (!endsSource(sourceId)) {
       return {};
     }
     try {
@@ -19446,9 +19437,9 @@ export const createServer = (
   /**
    * The person's own Continue: a separate session. Its item and its live
    * work move to it in one transaction ({@link DbShape.atomically}); then
-   * the source of an item points onward to it ({@link retireContinued}),
-   * the opening goes, and what the source was owed goes behind it
-   * ({@link releaseOne}).
+   * the source, holding an item or not, points onward to it and its process
+   * ends ({@link retireContinued}), the opening goes, and what the source
+   * was owed goes behind it ({@link releaseOne}).
    */
   const separateSession = (
     job: ContinuationRow,
@@ -19459,9 +19450,7 @@ export const createServer = (
       carryItem(job, source);
       return db.adoptChildren(from, job.targetInstanceId);
     });
-    if (source?.workItemId) {
-      retireContinued(source.id, job.targetInstanceId);
-    }
+    retireContinued(from, job.targetInstanceId);
     saidAdopted(from, job.targetInstanceId, adopted);
     sendOpening(job, "peer");
     releaseOwed({ instanceId: from });
@@ -19650,10 +19639,10 @@ export const createServer = (
   };
 
   /**
-   * A session whose work item the person's own Continue moved to `to` (a
-   * separate session; anything else's continuation is folded into one,
-   * {@link foldContinued}) never runs again (the item's workspace has one
-   * session from here): its row names `to`
+   * A session the person's own Continue went on in `to` (a separate
+   * session; anything else's continuation is folded into one,
+   * {@link foldContinued}) never runs again (its work item's workspace, when
+   * it held one, has one session from here): its row names `to`
    * ({@link InstanceRow.continuedInto}), so core `relaunchOf` refuses every
    * wake of it (a send's, a revive's, a relaunch on another account) and
    * every send to it goes to `to` ({@link toContinuation}); its at-limit
@@ -19675,7 +19664,7 @@ export const createServer = (
     owedMoves.delete(from);
     const live = !["stopped", "discarded"].includes(row.status);
     console.info(
-      `[continuation] ${sessionName(row)} (${from.slice(0, 8)}) was continued in ${to.slice(0, 8)}, which carries its work item on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${to.slice(0, 8)}.`
+      `[continuation] ${sessionName(row)} (${from.slice(0, 8)}) was continued in ${to.slice(0, 8)}, which carries its work on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${to.slice(0, 8)}.`
     );
     if (live) {
       endSession(from, "stop", {
@@ -19738,7 +19727,7 @@ export const createServer = (
       (id) => db.getInstancesByIds([id])[0]
     );
     console.log(
-      `[continuation] The new session${target ? ` ${sessionName(target)}` : ""} takes on ${source ? sessionName(source) : "its source"}'s live work: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s). Their reports go to it from now on.`
+      `[continuation] The new session${target ? ` ${sessionName(target)}` : ""} takes on ${source ? sessionName(source) : "its source"}'s live work: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s), ${adopted.artifacts} artifact(s). Their reports, and what is said on its artifacts, go to it from now on.`
     );
     const machines = new Set(
       db
@@ -31523,7 +31512,7 @@ export const createServer = (
       if (refusal) {
         return refusal;
       }
-      const inFlight = await inFlightFor(row.id, asker);
+      const inFlight = await inFlightFor(row.id);
       if ("refusal" in inFlight) {
         return inFlight.refusal;
       }
@@ -33247,7 +33236,7 @@ export const createServer = (
           }
           // What the source's process holds that ending it would lose: the
           // job waits for it, and the caller hears so at once.
-          const inFlight = await inFlightFor(params.id, asker);
+          const inFlight = await inFlightFor(params.id);
           if ("refusal" in inFlight) {
             release();
             return status(422, inFlight.refusal);

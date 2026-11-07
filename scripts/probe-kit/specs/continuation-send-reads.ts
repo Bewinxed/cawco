@@ -17,7 +17,8 @@
  * throws and the hub's log names `continuations.prepared`.
  *
  * (a) The scene stands: the job is open and its `prepared` that large.
- * (b) {@link SENDS} sends to the source are each read by its session, and
+ * (b) {@link SENDS} sends to the new session (the source never runs again:
+ *     server.ts `retireContinued`) are each read by it, and
  *     `/api/continuations` answers with the job open.
  * (c) The hub's log never names `continuations.prepared` meanwhile: no read
  *     of it was made.
@@ -77,6 +78,7 @@ const continueFromAsks = (fleet: KitFleet, source: string) =>
     );
     return (await response.json().catch(() => ({}))) as {
       continuationId?: string;
+      targetInstanceId?: string;
     };
   });
 
@@ -114,11 +116,10 @@ export default {
 
     const source = await turnTaken(fleet, "send-reads source");
     const continued = await continueFromAsks(fleet, source);
-    const jobId =
-      continued.kind === "answered"
-        ? continued.value.continuationId
-        : undefined;
-    if (!jobId) {
+    const job = continued.kind === "answered" ? continued.value : undefined;
+    const jobId = job?.continuationId;
+    const target = job?.targetInstanceId;
+    if (!(jobId && target)) {
       throw new Error(
         `the continue was not taken: ${JSON.stringify(continued)}`
       );
@@ -159,8 +160,8 @@ export default {
     const mark = await fleet.logMark("hub");
     const reads: string[] = [];
     for (let at = 0; at < SENDS; at += 1) {
-      const send = await fleet.send(source, `Say ok, ${at + 1}.`);
-      const read = await readOf(fleet, source, send)
+      const send = await fleet.send(target, `Say ok, ${at + 1}.`);
+      const read = await readOf(fleet, target, send)
         .then(() => "read")
         .catch((error: Error) => error.message);
       reads.push(read);
@@ -170,7 +171,7 @@ export default {
       .then((jobs) => jobs.find((one) => one.id === jobId)?.stage)
       .catch((error: Error) => error.message);
     check(
-      `b: ${SENDS} sends to the source are each read, and /api/continuations lists the job open`,
+      `b: ${SENDS} sends to the new session are each read, and /api/continuations lists the job open`,
       reads.every((read) => read === "read") && listed === "summarising",
       `sends ${JSON.stringify(reads)}; listed ${listed}`
     );

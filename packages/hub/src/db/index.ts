@@ -593,6 +593,8 @@ interface FoldedSession {
 
 /** What a continuation's new session took on from the session it continues ({@link DbShape.adoptChildren}). */
 interface AdoptedChildren {
+  /** Its artifacts, by the session that holds or made them. */
+  artifacts: number;
   asks: number;
   items: number;
   queuedItems: number;
@@ -726,8 +728,11 @@ export interface DbShape {
    * its live items, become `to`'s; so do its live work items, every item of
    * those sessions, and every item of a group not yet reported that one of
    * them is in (the group reports once, to one parent); its queued delegates
-   * and queued task starts; and the asks of the moved delegates still
-   * waiting on an answer. What `from` delegated and is over stays its own.
+   * and queued task starts; the asks of the moved delegates still
+   * waiting on an answer; and its artifacts, as the session that holds them
+   * and as their maker (the columns a fold moves, `FOLD_MOVED`), so every
+   * comment, pick and wake on one reaches `to`. What `from` delegated and is
+   * over stays its own.
    */
   readonly adoptChildren: (from: string, to: string) => AdoptedChildren;
   /** The machine's fleet generation and the fingerprint of what it was to hold at it (hub fleet-sync.ts); generation 0 for a machine never sent one. */
@@ -6249,7 +6254,26 @@ const make = async (path: string): Promise<DbShape> => {
             .where(pendingAsks)
             .run();
         }
+        const held = tx
+          .update(artifacts)
+          .set({ instanceId: to })
+          .where(eq(artifacts.instanceId, from))
+          .returning({ id: artifacts.id })
+          .all();
+        const made = tx
+          .update(artifacts)
+          .set({ madeBy: to })
+          .where(eq(artifacts.madeBy, from))
+          .returning({ id: artifacts.id })
+          .all();
+        const carriedArtifacts = new Set(
+          [...held, ...made].map((row) => row.id)
+        ).size;
+        if (carriedArtifacts > 0) {
+          artifactsWritten();
+        }
         return {
+          artifacts: carriedArtifacts,
           sessions,
           items: moved.length,
           queuedItems,
