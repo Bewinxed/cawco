@@ -6,10 +6,11 @@ FROM ghcr.io/m1k1o/neko/chromium:3.2.0
 # Chromium's DevTools listens on loopback alone in a headful build, so socat
 # carries the container's 9222 to it (the port is published on the host's
 # 127.0.0.1 only, for the agent's gate). The X server's mouse driver is the
-# desktop's pointer (xorg.conf).
+# desktop's pointer (xorg.conf). ibus-gtk3 is Chromium's input method
+# (chromium.conf's GTK_IM_MODULE), its module alone, with no ibus daemon.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse; \
+    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse ibus-gtk3; \
     apt-get clean -y; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 

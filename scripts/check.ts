@@ -592,6 +592,7 @@ const gated: Gated[] = [
   bun("scripts/tool-answer-check.ts", [...DASH, ...PKG, "scripts/"]),
   bun("scripts/icon-imports-check.ts", ALL_FILES),
   bun("scripts/docker-client-check.ts", PKG),
+  bun("scripts/browser-image-check.ts", ["packages/agent/browser/"]),
   bun("scripts/fixed-ports-check.ts", PKG),
   bun("scripts/border-width-check.ts", [
     ...DASH,

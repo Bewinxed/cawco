@@ -138,6 +138,8 @@ export default {
         "scripts/icon-imports-check.ts",
         // scripts/check.ts:560
         "scripts/docker-client-check.ts",
+        // scripts/check.ts, beside docker-client-check.ts
+        "scripts/browser-image-check.ts",
         // scripts/check.ts:561
         "scripts/fixed-ports-check.ts",
         // scripts/check.ts:562

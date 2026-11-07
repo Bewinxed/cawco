@@ -145,6 +145,29 @@ const keysymOf = (key: string): number | undefined => {
   return point <= LATIN1_LAST ? point : UNICODE_KEYSYM + point;
 };
 
+/**
+ * Whether a key of neko's keymap (its US layout) types `point`: printable
+ * ASCII. Any other character goes as GTK's Unicode entry, never as its own
+ * keysym. neko types a keysym no key has by putting it on a spare key and
+ * pressing that key at once (neko 3.2.0 server/pkg/xorg/xorg.c `XKey`,
+ * `XkbAddKeyKeysym`). Chromium's own keymap never hears of the new key: it
+ * turns XKB on and selects no XkbMapNotify, so the X server sends it no
+ * MappingNotify (xorg-server xkb/xkbEvents.c `XkbSendLegacyMapNotify`). Its
+ * character comes from GTK's input method alone, whose keymap catches up on
+ * GTK's own X connection, and a press handled before it did typed nothing:
+ * é and 🙂 lost in 3 of 10 runs on the image's Chromium 155.
+ */
+const onLayout = (point: number): boolean => point >= 0x20 && point <= 0x7e;
+
+/** A UTF-16 surrogate standing alone: no character, so nothing to enter. */
+const loneSurrogate = (point: number): boolean =>
+  point >= 0xd8_00 && point <= 0xdf_ff;
+
+/** A key pressed for a shortcut, not to type: Ctrl, Meta or Alt held (AltGr, which types, aside). */
+const shortcut = (event: KeyboardEvent): boolean =>
+  (event.ctrlKey || event.metaKey || event.altKey) &&
+  !event.getModifierState("AltGraph");
+
 /** The ctrl key pressed with V: the paste comes as the browser's own paste event, with the person's text. */
 const pastes = (event: KeyboardEvent): boolean =>
   (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v";
@@ -381,6 +404,79 @@ export const nekoStream = (
   };
   open();
 
+  const press = (keysym: number, down: boolean) =>
+    input(down ? NEKO_OP.keyDown : NEKO_OP.keyUp, [4, keysym]);
+  const tap = (keysym: number) => {
+    press(keysym, true);
+    press(keysym, false);
+  };
+  const shift = KEYSYMS.Shift as number;
+  const control = KEYSYMS.Control as number;
+  const enter = KEYSYMS.Enter as number;
+
+  /**
+   * A character no key of neko's layout has, as GTK's Unicode entry:
+   * Ctrl+Shift+U, the code point's hex digits, then Return, which commits
+   * it. Every key is on the layout, so neko remaps nothing, and all of it
+   * goes in order on the one data channel. The image's Chromium runs ibus's
+   * GTK module with no ibus daemon (packages/agent/browser/chromium.conf's
+   * GTK_IM_MODULE), which hands the keys to GTK's simple input method and
+   * shows Chromium none of its preedit, so Chromium keeps U and the digits
+   * from the page; the Return that commits reaches it as a "Process"
+   * keydown (229, Chromium input_method_auralinux.cc
+   * `DispatchImeFilteredKeyPressEvent`) where Space's would be a Space, and
+   * then the character. GTK keeps Ctrl's and Shift's releases inside the
+   * entry, so both are pressed and released again after it and the page's
+   * keys stand released; Shift is left down when the person holds it
+   * (`holdShift`).
+   */
+  const unicodeEntry = (point: number, holdShift: boolean) => {
+    press(control, true);
+    press(shift, true);
+    tap(keysymOf("U") as number);
+    press(shift, false);
+    press(control, false);
+    for (const digit of point.toString(16)) {
+      tap(keysymOf(digit) as number);
+    }
+    tap(enter);
+    press(shift, true);
+    if (!holdShift) {
+      press(shift, false);
+    }
+    tap(control);
+  };
+
+  /** One character the keyboard field typed: a newline as Enter, a key of the layout as its keysym (a capital with Shift), any other as GTK's Unicode entry. */
+  const typeChar = (char: string) => {
+    if (char === "\n") {
+      tap(enter);
+      return;
+    }
+    const point = char.codePointAt(0) as number;
+    if (loneSurrogate(point)) {
+      console.warn(
+        `[cawco] browser keyboard: a lone surrogate (U+${point.toString(16).toUpperCase()}) is no character to type; dropped.`
+      );
+      return;
+    }
+    if (!onLayout(point)) {
+      unicodeEntry(point, false);
+      return;
+    }
+    // neko finds a keysym's key under the modifiers held now, and puts one
+    // no key has on a spare key whose second level is its capital: a
+    // capital typed without Shift lands as its small letter.
+    const capital = char !== char.toLowerCase();
+    if (capital) {
+      press(shift, true);
+    }
+    tap(point);
+    if (capital) {
+      press(shift, false);
+    }
+  };
+
   return {
     close: () => {
       closed = true;
@@ -431,48 +527,35 @@ export const nekoStream = (
       if (down && pastes(event)) {
         return;
       }
+      // A character off the layout, typed rather than pressed for a
+      // shortcut, is entered on its press; its release sends nothing.
+      const point =
+        [...event.key].length === 1 ? event.key.codePointAt(0) : undefined;
+      if (point !== undefined && !onLayout(point) && !shortcut(event)) {
+        if (down) {
+          unicodeEntry(point, event.shiftKey);
+        }
+        return;
+      }
       const keysym = keysymOf(event.key);
       if (keysym !== undefined) {
-        input(down ? NEKO_OP.keyDown : NEKO_OP.keyUp, [4, keysym]);
+        press(keysym, down);
       }
     },
     type: ({ back, text }) => {
-      const tap = (keysym: number) => {
-        input(NEKO_OP.keyDown, [4, keysym]);
-        input(NEKO_OP.keyUp, [4, keysym]);
-      };
-      const shift = KEYSYMS.Shift as number;
       for (let n = 0; n < back; n += 1) {
         tap(KEYSYMS.Backspace as number);
       }
       for (const char of text) {
-        const keysym = char === "\n" ? KEYSYMS.Enter : keysymOf(char);
-        if (keysym === undefined) {
-          continue;
-        }
-        // neko finds a keysym's key under the modifiers held now, and puts
-        // one no key has on a spare key whose second level is its capital
-        // (neko 3.2.0 server/pkg/xorg/xorg.c `XKey`, `XkbAddKeyKeysym`): a
-        // capital typed without Shift lands as its small letter.
-        const capital = char !== char.toLowerCase();
-        if (capital) {
-          input(NEKO_OP.keyDown, [4, shift]);
-        }
-        tap(keysym);
-        if (capital) {
-          input(NEKO_OP.keyUp, [4, shift]);
-        }
+        typeChar(char);
       }
     },
     paste: (text) => {
       // The person's clipboard into the browser's, then its paste keystroke.
       send("clipboard/set", { text });
-      const v = keysymOf("v") as number;
-      const control = KEYSYMS.Control as number;
-      input(NEKO_OP.keyDown, [4, control]);
-      input(NEKO_OP.keyDown, [4, v]);
-      input(NEKO_OP.keyUp, [4, v]);
-      input(NEKO_OP.keyUp, [4, control]);
+      press(control, true);
+      tap(keysymOf("v") as number);
+      press(control, false);
     },
   };
 };

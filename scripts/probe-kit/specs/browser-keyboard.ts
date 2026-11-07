@@ -26,7 +26,9 @@
  *    text, a Backspace, a Return, "teh" by key, the field's "teh" replaced
  *    by "the " as autocorrect replaces a word, then "ж€" and "🙂" as the
  *    keyboard's inserted text. The page's textarea reads
- *    `Héll\nthe ж€🙂` and counted one Enter;
+ *    `Héll\nthe ж€🙂` and counted one Enter; its keydowns hold no U, no
+ *    digit and one Space at most, and no Ctrl+Shift+U shortcut fired (on
+ *    the container host "é", "ж€" and "🙂" go as GTK's Unicode entry);
  * 5. with a keyboard covering 300px of the well's foot (its
  *    `--keyboard-lift`), the view stands above it and the picture inside it;
  * 6. a second tap in the stream keeps the keyboard field focused;
@@ -66,10 +68,16 @@ const LIVE_WITHIN_MS = 15 * 60_000;
 
 const respond = (_request: Seen): Reply => ({ everyMs: 5, words: ["ok"] });
 
-/** The remote page: one textarea at its top left, its Enter presses counted on the window. */
+/**
+ * The remote page: one textarea at its top left, its Enter presses counted
+ * on the window, every keydown's key kept in order, and a shortcut on
+ * Ctrl+Shift+U (by its key or its code) counted.
+ */
 const FIELD_PAGE = `data:text/html,${encodeURIComponent(
-  "<title>field</title><body style=margin:0><textarea id=f style='position:fixed;left:0;top:0;width:1280px;height:400px;font-size:40px'></textarea><script>window.enters=0;f.addEventListener('keydown',e=>{if(e.key==='Enter')window.enters++})</script>"
+  "<title>field</title><body style=margin:0><textarea id=f style='position:fixed;left:0;top:0;width:1280px;height:400px;font-size:40px'></textarea><script>window.enters=0;window.keys=[];window.shortcuts=0;f.addEventListener('keydown',e=>{keys.push(e.key);if(e.key==='Enter')window.enters++;if(e.ctrlKey&&e.shiftKey&&(e.key==='U'||e.key==='u'||e.code==='KeyU'))window.shortcuts++})</script>"
 )}`;
+/** A key of GTK's Unicode entry (U, a hex digit) that would have reached the page. */
+const ENTRY_KEY = /^[uU0-9]$/u;
 /** Where the textarea is tapped, in the page's own CSS pixels. */
 const FIELD_AT = { x: 300, y: 120 };
 
@@ -148,12 +156,18 @@ const PAGE_SAYS = `JSON.stringify({
   visible: document.visibilityState,
   focus: document.hasFocus(),
   field: typeof f === "object" && f instanceof HTMLTextAreaElement
-    ? { value: f.value, focused: document.activeElement === f, enters: window.enters }
+    ? { value: f.value, focused: document.activeElement === f, enters: window.enters, keys: window.keys, shortcuts: window.shortcuts }
     : null,
 })`;
 
 interface PageSays {
-  field: { enters: number; focused: boolean; value: string } | null;
+  field: {
+    enters: number;
+    focused: boolean;
+    keys: string[];
+    shortcuts: number;
+    value: string;
+  } | null;
   focus: boolean;
   title: string;
   url: string;
@@ -663,6 +677,19 @@ export async function typeIntoTakeover(
     `the page's textarea reads ${JSON.stringify(typed.value)} (${JSON.stringify(want)}), with ${typed.enters} Enter press(es) (1)`,
     typed.value === want && typed.enters === 1,
     JSON.stringify(typed)
+  );
+  // A character off neko's layout goes as GTK's Unicode entry on the
+  // container host (browser-stream.ts `unicodeEntry`): the page gets the
+  // character and never the entry's keys. The typing presses no U, no digit
+  // and one Space ("the "), on either host.
+  const leaked = (typed.keys ?? []).filter((pressed) =>
+    ENTRY_KEY.test(pressed)
+  );
+  const spaces = (typed.keys ?? []).filter((pressed) => pressed === " ").length;
+  kit.check(
+    `the page's keydowns hold no U or digit (${JSON.stringify(leaked)}), at most one Space (${spaces}), and no Ctrl+Shift+U shortcut fired (${typed.shortcuts})`,
+    leaked.length === 0 && spaces <= 1 && typed.shortcuts === 0,
+    JSON.stringify(typed.keys)
   );
   if (!(typed.value === want && typed.enters === 1)) {
     await keepEvidence(kit, remote, page, "typed");
