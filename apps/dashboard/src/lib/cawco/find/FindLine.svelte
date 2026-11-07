@@ -4,9 +4,9 @@
    * (conversation-find.svelte.ts): the words, the place ("3 of 9"),
    * Previous, Next and Close, on its own line over the message being
    * written, which stays where it is. Enter and Shift-Enter step; Escape
-   * closes. Narrow (a phone, Caw's panel, a desk pane under the drawer
-   * line) the place is a control that opens the places over the
-   * conversation as the composer's layer.
+   * closes. The place is a control that opens and folds the places,
+   * which rise out of the composer as its layer (FindLayer). Every control
+   * on it takes the pill's contour, as Attach and Send do (`inset`).
    *
    * The composer unfolds it (`unfold`) as it grows its other rows: a press
    * plays it, a key lands it (The Frequency Rule, motion/keyed).
@@ -22,22 +22,18 @@
   } from "#lib/icons.js";
   import type { ConversationFind } from "./conversation-find.svelte";
 
-  let {
-    find,
-    narrow = false,
-  }: {
-    find: ConversationFind;
-    /** The places are the composer's layer, opened from the place. */
-    narrow?: boolean;
-  } = $props();
+  let { find }: { find: ConversationFind } = $props();
 
   let field = $state<HTMLInputElement | null>(null);
 
   // Command-F and Attach's Find hand the field the focus, its words chosen.
   $effect(() => {
     if (find.focusAsked > 0 && field) {
+      // The caret at the words' end, not the words chosen: chosen, they
+      // would wear the selection's coral, which reads as a match marked.
+      // Command-F in the field chooses them (`onkeydown`).
       field.focus();
-      field.select();
+      field.setSelectionRange(field.value.length, field.value.length);
     }
   });
 
@@ -103,30 +99,27 @@
     value={find.words}
     bind:this={field}
   />
-  {#if narrow}
-    <!-- Narrow, the place opens the places over the conversation. -->
-    <Button
-      aria-expanded={find.listOpen}
-      aria-label={`${spoken}, ${find.listOpen ? findInWords.hidePlaces : findInWords.showPlaces}`}
-      disabled={total === 0}
-      onclick={() => {
-        find.listOpen = !find.listOpen;
-      }}
-      size="sm"
-      variant="ghost"><span class="num">{count}</span></Button
-    >
-  {:else if count}
-    <output
-      class="num flex-none px-space-2 type-label text-ink-muted tabular-nums"
-      aria-live="polite">{count}</output
-    >
-  {/if}
+  <!-- The place, which opens and folds the places rising out of the
+       composer. -->
+  <Button
+    aria-expanded={find.listOpen}
+    aria-label={`${spoken}, ${find.listOpen ? findInWords.hidePlaces : findInWords.showPlaces}`}
+    disabled={find.words.trim() === ""}
+    figures="tabular"
+    onclick={() => {
+      find.listOpen = !find.listOpen;
+    }}
+    shape="inset"
+    size="composer"
+    variant="ghost"><span class="num">{count}</span></Button
+  >
   <Button
     aria-label={findInWords.previous}
     class="flex-none"
     disabled={total === 0}
     icon={IconChevronUp}
     onclick={() => find.step(-1)}
+    shape="inset"
     size="icon-composer"
     title={findInWords.previous}
     variant="ghost"
@@ -137,6 +130,7 @@
     disabled={total === 0}
     icon={IconChevronDown}
     onclick={() => find.step(1)}
+    shape="inset"
     size="icon-composer"
     title={findInWords.next}
     variant="ghost"
@@ -147,6 +141,7 @@
     class="flex-none"
     icon={IconClose}
     onclick={() => find.close()}
+    shape="inset"
     size="icon-composer"
     title={commonWords.close}
     variant="ghost"

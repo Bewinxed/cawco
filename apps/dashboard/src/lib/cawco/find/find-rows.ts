@@ -85,6 +85,12 @@ export interface Row {
   at: number | null;
   /** The glyph breathes (live work, DESIGN.md "Live work breathes"). */
   breathes: boolean;
+  /**
+   * When it was said, as the transcript's turns say it (a clock time), in
+   * place of an age: a place find found in a conversation, which the
+   * reader holds beside the turn it points at.
+   */
+  clock?: string;
   glyph: Component;
   /** Stable across answers, so a row that stays is the same row. */
   key: string;

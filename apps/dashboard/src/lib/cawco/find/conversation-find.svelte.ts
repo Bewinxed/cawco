@@ -1,13 +1,12 @@
 /**
  * FIND IN A CONVERSATION. Command-F, or Find in Attach's menu, grows the
- * composer a find field on its top; every place the words are in stands
- * beside the conversation (a desk: the side panel's Find; narrow: the
- * composer's layer), and each step seeks the place, opens the fold it is
- * in and marks the words (Transcript, find-marks.ts).
+ * composer a find field on its top, and every place the words are in
+ * rises out of the composer as its layer (FindLayer), at every width; each
+ * step seeks the place, opens the fold it is in and marks the words
+ * (Transcript, find-marks.ts).
  *
  * One record per conversation, by its view id, so the composer (lent by
- * the pane's group, PaneLeaf), the side panel (SideSplit) and the
- * transcript read the same find.
+ * the pane's group, PaneLeaf) and the transcript read the same find.
  *
  * The places come from two reads, put together oldest first:
  * - the turns the transcript holds now, read here at once, the live turn
@@ -25,8 +24,8 @@ import type { Component } from "svelte";
 import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
 import {
   IconAgent,
+  IconCpu,
   IconReport,
-  IconStars,
   IconToolTerminal,
   IconUser,
 } from "#lib/icons.js";
@@ -145,15 +144,17 @@ function saidIn(message: Message, agent: string): Said | null {
         word: "",
       };
     case "thinking":
+      // As the transcript names it: its fold's glyph and word.
       return {
-        glyph: IconStars,
+        glyph: IconCpu,
         text: message.content || (message.metadata?.thinking ?? ""),
-        title: agent,
+        title: findInWords.reasoning,
         whose: "agent",
         word: "",
       };
     case "tool.use": {
-      // The call as its row in the transcript reads it: its glyph and its sentence.
+      // The call as its row in the transcript reads it: its glyph, its
+      // sentence, and what it acted on.
       const call = describeTool(
         message.metadata?.toolName,
         message.metadata?.toolInput,
@@ -163,11 +164,9 @@ function saidIn(message: Message, agent: string): Said | null {
       return {
         glyph: call.icon,
         text: message.metadata?.toolResult ?? "",
-        title: findInWords.toolOutput(
-          message.metadata?.toolName ?? findInWords.tool
-        ),
+        title: call.label,
         whose: "tools",
-        word: call.label,
+        word: call.object ?? "",
       };
     }
     case "user.peer": {
@@ -175,7 +174,10 @@ function saidIn(message: Message, agent: string): Said | null {
       return {
         glyph: IconReport,
         text: headline ? `${headline}\n${message.content}` : message.content,
-        title: message.metadata?.peerName ?? findInWords.report,
+        // As the transcript's report line names it (Peer).
+        title: findInWords.reportFrom(
+          message.metadata?.peerName ?? findInWords.report
+        ),
         whose: "delegates",
         word: "",
       };
@@ -249,16 +251,18 @@ function placeFound(place: FindPlace, n: number, agent: string): Place {
     },
     delegates: {
       glyph: IconReport,
-      title: findInWords.report,
+      title: findInWords.reportFrom(findInWords.report),
     },
   };
-  const face = FACE[place.whose];
+  const face = place.thinking
+    ? { glyph: IconCpu, title: findInWords.reasoning }
+    : FACE[place.whose];
   const key = `found:${place.docId}:${n}`;
   return {
     at: place.at,
     docId: place.docId,
     excerpt: excerptParts(place.excerpt, place.secrets, (i) => `${key}|${i}`),
-    glyph: place.thinking ? IconStars : face.glyph,
+    glyph: face.glyph,
     key,
     live: false,
     record: place.docId,
@@ -315,6 +319,11 @@ export class ConversationFind {
     this.viewId = viewId;
     this.#ask = ask;
     this.#agent = agent;
+  }
+
+  /** The agent answering in this conversation, by name: the whose-words filter's word for its words. */
+  get agent(): string {
+    return this.#agent();
   }
 
   /** The transcript says where it is being read, for Back where you were. */
@@ -551,12 +560,12 @@ export class ConversationFind {
     this.goTo(this.places[next]);
   }
 
-  /** A place picked from the list: stepped to, and narrow the list folds so it reads whole. */
-  pick(key: string, narrow: boolean): void {
+  /** A place picked from the list: stepped to, and, `fold`, the list folds so it reads whole. */
+  pick(key: string, fold: boolean): void {
     const place = this.places.find((each) => each.key === key);
     if (place) {
       this.goTo(place);
-      if (narrow) {
+      if (fold) {
         this.listOpen = false;
       }
     }
@@ -620,6 +629,7 @@ export class ConversationFind {
 /** What the places list reads of a find, and asks of it (FindPlaces): a find, or a states file's fixture. */
 export type PlacesView = Pick<
   ConversationFind,
+  | "agent"
   | "all"
   | "asking"
   | "at"
@@ -648,11 +658,23 @@ export function askPlacesWith(ask: AskPlaces): void {
   asker = ask;
 }
 
-/** The find of the conversation shown as `viewId`. */
+/**
+ * The find of the conversation shown as `viewId`. Made in an effect root
+ * of its own, never in the component that first asks for it: its derived
+ * places, counts and filter would otherwise belong to that component's
+ * effect, and once that one unmounted (a tab switched, the composer handed
+ * to another pane) they would answer their last value for good, a filter
+ * pressed and the list unchanged. It stands as long as the page does, as
+ * each pane's composer layer does (composer-layer.svelte.ts).
+ */
 export function findIn(viewId: string): ConversationFind {
-  let find = finds.get(viewId);
-  if (!find) {
-    find = new ConversationFind(
+  const held = finds.get(viewId);
+  if (held) {
+    return held;
+  }
+  const made: { find?: ConversationFind } = {};
+  $effect.root(() => {
+    made.find = new ConversationFind(
       viewId,
       (id, words, signal) => asker(id, words, signal),
       () =>
@@ -660,7 +682,11 @@ export function findIn(viewId: string): ConversationFind {
           ? speakerName(cawco.session(viewId)?.harness)
           : "Caw"
     );
-    finds.set(viewId, find);
+  });
+  const { find } = made;
+  if (!find) {
+    throw new Error(`find for ${viewId} was not made`);
   }
+  finds.set(viewId, find);
   return find;
 }

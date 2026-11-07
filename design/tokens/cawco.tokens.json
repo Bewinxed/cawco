@@ -4393,12 +4393,20 @@
         "value": 720,
         "unit": "px"
       },
-      "$description": "The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (the panel's no-machine line).",
+      "$description": "The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (the panel's no-machine line). Below its widest it is the transcript's column, between the transcript's inline padding (space-7 at its start, space-6 at its end, the ledger signature), so a row's edge never shows past the composer's; its inline-start margin (c-composer-nudge) stands it on that column.",
       "$extensions": {
         "dev.cawco": {
-          "css": "min(720px, calc(100% - 50px))"
+          "css": "min(720px, calc(100% - var(--space-7) - var(--space-6)))"
         }
       }
+    },
+    "c-composer-nudge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "The composer column's inline-start margin on a desk: the difference of the transcript's inline paddings (space-7, 25, at its start; space-6, 21, at its end), so the composer, centred in the dock, stands on the transcript's column."
     },
     "c-suggest-chip": {
       "$type": "dimension",

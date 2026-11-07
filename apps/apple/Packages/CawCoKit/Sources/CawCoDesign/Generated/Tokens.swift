@@ -707,9 +707,11 @@ public enum Size {
     public static let cComposerPanel: Double = 50
     /// New project's field at its widest: the session Composer under "What are we working on?", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it).
     public static let cNewProjectFieldW: Double = 570
-    /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (the panel's no-machine line).
+    /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (the panel's no-machine line). Below its widest it is the transcript's column, between the transcript's inline padding (space-7 at its start, space-6 at its end, the ledger signature), so a row's edge never shows past the composer's; its inline-start margin (c-composer-nudge) stands it on that column.
     /// At most this, in points: on the web the least of it and a share of its container (min).
     public static let cComposerW: Double = 720
+    /// The composer column's inline-start margin on a desk: the difference of the transcript's inline paddings (space-7, 25, at its start; space-6, 21, at its end), so the composer, centred in the dock, stands on the transcript's column.
+    public static let cComposerNudge: Double = 4
     /// A suggestion chip: its Tab key cap, padding and border.
     public static let cSuggestChip: Double = 30
     public static let cSuggestRow: Double = 52

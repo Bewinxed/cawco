@@ -179,7 +179,6 @@
     flush = false,
     fleet,
     find,
-    findNarrow = false,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -317,8 +316,6 @@
      * the composer writes to no conversation.
      */
     find?: ConversationFind;
-    /** The places are the composer's layer (narrow), not the side panel's. */
-    findNarrow?: boolean;
     /**
      * What the send glyph does here, as its label and its tooltip
      * ("Comment", "Reply"): where what is written does not go to the agent
@@ -3302,7 +3299,7 @@
          the desktop's step off the panel. -->
     <div
       data-slot="prompts"
-      class="grow shrink basis-0 min-h-0 w-c-composer-w flex flex-col justify-end pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
+      class="grow shrink basis-0 min-h-0 w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col justify-end pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
       inert={askRaised}
       bind:this={offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
@@ -3347,7 +3344,7 @@
        the positioned box the suggestion chips stand on. -->
   <div
     data-slot="lift"
-    class="relative flex-none w-c-composer-w pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
+    class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     inert={askRaised}
     {@attach measureLift}
   >
@@ -3481,7 +3478,7 @@
        the canvas's box, do not. -->
   <div
     data-slot="composer"
-    class="relative flex-none w-c-composer-w flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
+    class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     bind:this={column}
     {@attach measurePanel}
     in:rise
@@ -3500,9 +3497,9 @@
         bind:this={canvasSlot}
       ></div>
     {/if}
-    {#if find && finding && findNarrow && find.listOpen}
-      <!-- Narrow, find's places rise out of the composer as its layer, as
-           the plan does, over the transcript's foot. -->
+    {#if find && finding && find.listOpen}
+      <!-- Find's places rise out of the composer as its layer, at every
+           width, as the plan does, over the transcript's foot. -->
       <FindLayer {find} />
     {/if}
     <!-- The row of attachments is one block above the field, the canvas's
@@ -3816,7 +3813,7 @@
             inert={askOpen}
             transition:unfold
           >
-            <FindLine {find} narrow={findNarrow} />
+            <FindLine {find} />
           </div>
         {/if}
         {#if lead}

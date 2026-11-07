@@ -5,11 +5,9 @@
    * oldest first, the one stepped to chosen. Made of Jump's parts: its
    * who-said chips, its row (FindRow), its ghost and pill (highlight).
    *
-   * On a desk it is the conversation's side panel's Find (SideSplit), its
-   * top padded by the room the card's floating head takes (`--side-room`,
-   * SideSurface), so its filters stand clear of it; narrow
-   * it is the composer's layer (Composer), and a place picked folds it so
-   * the place reads whole.
+   * It is the composer's layer (FindLayer), at every width. Where it is a
+   * phone's or a narrow panel's width (`compact`), its rows wrap as Jump's
+   * phone rows do, and a place picked folds it so the place reads whole.
    *
    * Nothing found says so, with Jump's way to every session; a machine that
    * did not answer is named, with Retry, over the places in the turns
@@ -28,6 +26,8 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconSearch } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
+  import { frameSize } from "../frame-observer";
+  import { TURN_CLOCK } from "../turn/clock";
   import type {
     Place,
     PlacesView,
@@ -38,16 +38,11 @@
 
   let {
     find,
-    narrow = false,
   }: {
     find: PlacesView;
-    /** The composer's layer: a pick folds it. */
-    narrow?: boolean;
   } = $props();
 
-  const agent = $derived(
-    find.all.find((place) => place.whose === "agent")?.title ?? "Agent"
-  );
+  const agent = $derived(find.agent);
   const FILTERS = $derived<{ value: WhoseFilter; label: string }[]>([
     { value: "all", label: findInWords.all },
     { value: "me", label: findInWords.me },
@@ -66,6 +61,8 @@
       .join("");
     return {
       at: place.at,
+      // The time as the turn it points at shows it.
+      clock: place.at === null ? undefined : TURN_CLOCK.format(place.at),
       breathes: place.live,
       glyph: place.glyph,
       key: place.key,
@@ -119,7 +116,7 @@
     if (!(key && list)) {
       return;
     }
-    // After the frame the list is laid out in: opened again (narrow), its
+    // After the frame the list is laid out in: opened again, its
     // height is set by then.
     const frame = requestAnimationFrame(() =>
       untrack(() => {
@@ -144,6 +141,14 @@
     }
   }
 
+  /**
+   * The width under which the places are a phone's (a phone, Caw's panel):
+   * rows wrap, and a pick folds the list. Jump's phone sheet's own line
+   * (Finder) and ours.
+   */
+  const COMPACT_PX = 480;
+  let compact = $state(false);
+
   let now = $state(Date.now());
   $effect(() => {
     const clock = setInterval(() => {
@@ -155,14 +160,17 @@
 
 <div
   data-slot="find-places"
-  data-narrow={narrow || undefined}
-  class="group/places flex min-h-0 flex-auto flex-col pt-(--side-room)"
+  data-compact={compact || undefined}
+  class="group/places flex min-h-0 flex-auto flex-col"
+  {@attach frameSize((node: HTMLElement) => {
+    compact = node.offsetWidth < COMPACT_PX;
+  })}
 >
   {#if nothing}
-    <div class="px-space-4 py-space-6 group-data-narrow/places:py-space-4">
+    <div class="px-space-4 py-space-6 group-data-compact/places:py-space-4">
       <EmptyState
         icon={IconSearch}
-        inline={!narrow}
+        inline={!compact}
         line={fault?.words}
         title={findInWords.nothingTitle(find.words.trim())}
       >
@@ -246,9 +254,9 @@
             active={row.key === find.at}
             id={`place-${find.viewId}-${row.key}`}
             {now}
-            onpick={() => find.pick(row.key, narrow)}
+            onpick={() => find.pick(row.key, compact)}
             onsecret={(key) => shown.add(key)}
-            phone={narrow}
+            phone={compact}
             {row}
             {shown}
           />

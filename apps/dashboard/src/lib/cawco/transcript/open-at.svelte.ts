@@ -207,8 +207,10 @@ export function matchBox(
     const range = document.createRange();
     range.setStart(node, found.index);
     range.setEnd(node, found.index + found[0].length);
-    if (range.getClientRects().length === 0) {
-      // Not drawn (a hidden copy, a closed fold's): the next one may be.
+    if (range.getClientRects().length === 0 || clippedAway(range, root)) {
+      // Not drawn (a hidden copy, a closed fold's), or drawn where a box
+      // that does not scroll cuts it off (a folded reasoning's one-line
+      // glimpse): the next one may be, and the fold is opened for it.
       continue;
     }
     for (
@@ -226,6 +228,39 @@ export function matchBox(
     return range.getBoundingClientRect();
   }
   return null;
+}
+
+/**
+ * Whether `range` is cut off where it stands, inside `root`, by a box that
+ * clips its content and never scrolls it into view (a glimpse running past
+ * its edge): a range a box scrolls to is not, since {@link matchBox}
+ * scrolls the box to it.
+ */
+function clippedAway(range: Range, root: Element): boolean {
+  const drawn = range.getBoundingClientRect();
+  for (
+    let box = range.startContainer.parentElement;
+    box && box !== root && root.contains(box);
+    box = box.parentElement
+  ) {
+    const style = getComputedStyle(box);
+    const clips = [style.overflowX, style.overflowY].some(
+      (overflow) => overflow === "hidden" || overflow === "clip"
+    );
+    if (!clips) {
+      continue;
+    }
+    const room = box.getBoundingClientRect();
+    if (
+      drawn.left < room.left - 1 ||
+      drawn.right > room.right + 1 ||
+      drawn.top < room.top - 1 ||
+      drawn.bottom > room.bottom + 1
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Whether `box` scrolls its own content up and down. */

@@ -19,7 +19,7 @@
     children,
   }: {
     /** What stood in the card. */
-    what: "preview" | "task" | "find";
+    what: "preview" | "task";
     /** What the pane's head named: the artifact's title; a task's head names none (TaskPane). */
     title?: string;
     /** The switch, while more than one has something to show. */
@@ -47,8 +47,8 @@
 <SideSurface
   {closeFailed}
   {closing}
-  label={sideWords[what]}
-  of={what === "find" ? undefined : what}
+  label={what === "task" ? sideWords.task : sideWords.preview}
+  of={what}
   onclose={close}
   recessed={what === "preview"}
   {switcher}

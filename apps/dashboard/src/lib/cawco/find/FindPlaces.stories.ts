@@ -1,15 +1,17 @@
 /**
  * The places find found in a conversation (Component Story Format 3, live
- * components): the side panel's Find on a desk, the composer's layer
- * narrow, mounted from this file and the real FindPlaces.svelte. Each
+ * components): the composer's layer at every width, mounted from this
+ * file and the real FindPlaces.svelte, its rows named as the transcript
+ * names the turns they point at. Each
  * story hands it a find as the conversation's would stand (PlacesView):
  * the relay conversation that printed ECONNRESET after the Mac slept.
  */
 import { MINUTE_MS } from "@cawco/core/time";
 import {
   IconAgent,
+  IconCpu,
   IconReport,
-  IconStars,
+  IconToolSearch,
   IconToolTerminal,
   IconUser,
 } from "#lib/icons.js";
@@ -43,8 +45,8 @@ function place(
   const TITLE = {
     me: "You",
     agent: "Claude Code",
-    tools: "Bash output",
-    delegates: "Probe the phone's network switch",
+    tools: "Run the relay's sleep test",
+    delegates: "Report from Probe the phone's network switch",
   };
   return {
     at: NOW - minutes * MINUTE_MS,
@@ -78,7 +80,7 @@ const RELAY: Place[] = [
     181,
     "The relay sorts socket errors into fatal and transient. An ",
     " landing in the fatal bucket would explain…",
-    { glyph: IconStars }
+    { glyph: IconCpu, title: "Reasoning" }
   ),
   place(
     "p3",
@@ -86,7 +88,7 @@ const RELAY: Place[] = [
     134,
     "…elay > reconnects after the host sleeps [5003.17ms] Error: read ",
     " at TCP.onStreamRead…",
-    { word: "Run the relay's sleep test" }
+    { word: "bun test packages/hub/test/relay.test.ts -t 'sleep'" }
   ),
   place(
     "p4",
@@ -94,7 +96,7 @@ const RELAY: Place[] = [
     128,
     '"packages/hub/src/relay.ts:212: if (code === "',
     '" || code === "EPIPE") return fatal(code);',
-    { title: "Grep output", word: "fatal" }
+    { glyph: IconToolSearch, title: "Searched", word: "/fatal/ relay.ts" }
   ),
   place(
     "p5",
@@ -116,7 +118,10 @@ const RELAY: Place[] = [
     79,
     "✓ relay > retries after the network changes [1042.88ms] reset (",
     ") → retry in 1.0 s → open",
-    { word: "Run the network change test" }
+    {
+      title: "Run the network change test",
+      word: "bun test packages/hub/test/relay.test.ts -t 'network change'",
+    }
   ),
   place(
     "p8",
@@ -157,6 +162,7 @@ function standing(
     counts[each.whose] += 1;
   }
   return {
+    agent: "Claude Code",
     all,
     asking: hub.kind === "asking",
     at,
@@ -175,7 +181,7 @@ function standing(
 export default {
   title: "Find/Places",
   component: FindPlaces,
-  args: { find: standing(RELAY), narrow: false },
+  args: { find: standing(RELAY) },
 };
 
 /** Nine places found, the third, inside a test run's output, stepped to. */
@@ -186,9 +192,9 @@ export const ToolsOnly = {
   args: { find: standing(RELAY, { whose: "tools" }) },
 };
 
-/** Rising out of the composer on a phone or in Caw's panel. */
-export const OverTheComposer = {
-  args: { narrow: true },
+/** On a phone or in Caw's panel: the rows wrap, the match kept in view. */
+export const OnAPhone = {
+  args: {},
   parameters: { viewport: "phone" },
 };
 

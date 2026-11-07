@@ -40,7 +40,6 @@ export const regionFaultWords = {
     composer: { what: "the composer", kept: "Your draft is kept." },
     preview: { what: "the preview", kept: "Its page and comments are safe." },
     task: { what: "this task", kept: "The task is safe." },
-    find: { what: "the places found" },
     comment: { what: "this comment" },
     decision: { what: "this decision" },
     view: { what: "this view" },

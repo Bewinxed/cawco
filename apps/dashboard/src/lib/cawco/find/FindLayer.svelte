@@ -1,12 +1,12 @@
 <script lang="ts">
   /**
-   * Find's places as the composer's layer, narrow (a phone, Caw's panel, a
-   * desk pane under the drawer line): the kit's floating surface rising out
-   * of the composer over the transcript's foot, across the composer's
-   * width, as the plan does (PlanPane). It is opened and folded from the
-   * find field's place, and a place picked folds it so the place reads
-   * whole above the composer. Nothing it does moves the transcript (the
-   * composer's brief, The Composer Layer Rule).
+   * Find's places as the composer's layer, at every width: the kit's
+   * floating surface rising out of the composer over the transcript's foot,
+   * across the composer's width, as the plan does (PlanPane), so the find
+   * field and its places are one thing grown out of the composer. It is
+   * opened and folded from the find field's place. Nothing it does moves
+   * the transcript (the composer's brief, The Composer Layer Rule); the
+   * words stepped to land above it (Transcript `band`).
    *
    * It holds its pane's composer layer while it stands: the plan or the
    * tray's shelf opening takes it, and it folds.
@@ -65,5 +65,5 @@
   {@attach room}
   out:popOut|global={{ side: "top" }}
 >
-  <FindPlaces {find} narrow />
+  <FindPlaces {find} />
 </section>

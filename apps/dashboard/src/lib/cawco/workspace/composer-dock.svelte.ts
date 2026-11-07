@@ -33,8 +33,6 @@ export interface ComposerBinding {
   readonly faultAgain?: () => unknown;
   /** The conversation's find: its field grows on the composer while it is open (Composer `find`). */
   readonly find?: ConversationFind;
-  /** Find's places are the composer's layer, not the side panel's (Composer `findNarrow`). */
-  readonly findNarrow?: boolean;
   /** The conversation `@` names others from (Composer `mentionsFrom`); null names nothing. */
   readonly mentionsFrom: string | null;
   /** What the composer stands over the transcript's foot (Composer `ComposerFoot`). */
@@ -81,7 +79,6 @@ export const composerOf = (binding: ComposerBinding) => ({
   draft: binding.draft,
   faultAgain: binding.faultAgain,
   find: binding.find,
-  findNarrow: binding.findNarrow,
   mentionsFrom: binding.mentionsFrom,
   onfoot: binding.onfoot,
   onmenu: binding.onmenu,

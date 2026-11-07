@@ -1,17 +1,3 @@
-<script lang="ts" module>
-  /**
-   * The turn's clock, one formatter for every row: `toLocaleTimeString`
-   * builds the locale's formatter afresh on each call, and a row's speaker
-   * line is drawn as the row mounts — a whole page of them as a pane is
-   * shown or read back.
-   */
-  const CLOCK = new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-</script>
-
 <script lang="ts">
   /**
    * The role label leading every turn — a mark (the reader's 17px in the
@@ -27,6 +13,7 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconAgent, IconUser } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
+  import { TURN_CLOCK } from "./clock";
   import { useVoice } from "./voice";
 
   let {
@@ -105,7 +92,9 @@
     if (!validAt) {
       return "";
     }
-    return shown ? formatAgeShort(validAt.getTime()) : CLOCK.format(validAt);
+    return shown
+      ? formatAgeShort(validAt.getTime())
+      : TURN_CLOCK.format(validAt);
   });
 </script>
 

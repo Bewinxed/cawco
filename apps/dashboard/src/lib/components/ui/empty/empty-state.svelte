@@ -135,8 +135,10 @@
         class="max-w-c-measure-short type-meta font-medium tracking-title text-ink-strong text-balance"
         data-slot="empty-title">{title}</span
       >
-      <span aria-hidden="true">·</span>
-      <span data-slot="empty-line">{@render why()}</span>
+      {#if line}
+        <span aria-hidden="true">·</span>
+        <span data-slot="empty-line">{@render why()}</span>
+      {/if}
     </p>
   {:else}
     <!-- The title in the title role, the why in muted body, each at the

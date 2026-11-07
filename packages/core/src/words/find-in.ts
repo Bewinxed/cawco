@@ -38,6 +38,10 @@ export const findInWords = {
   tool: "Tool",
   /** A delegate's report whose delegate has no name. */
   report: "Delegate",
+  /** A report's place, as the transcript's report line names it (Peer). */
+  reportFrom: (delegate: string) => `Report from ${delegate}`,
+  /** A place in the agent's reasoning, as the transcript's fold names it (Thinking). */
+  reasoning: "Reasoning",
   /** A live turn saying the words as it is written. */
   writing: "Writing…",
   /** Nothing in the conversation holds the words (DESIGN.md Voice, no results). */

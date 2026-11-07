@@ -1,3 +1,8 @@
+<script lang="ts" module>
+  /** The address the bench last seeded its conversation and find for. */
+  let seededFor: string | null = null;
+</script>
+
 <script lang="ts">
   /**
    * FIND IN A CONVERSATION, as built (dev bench): the real PaneTabs over
@@ -7,8 +12,8 @@
    * asked of a fixture in the hub's place. `?state=` draws find's states:
    *
    * - `finding`: Command-F has grown the composer its find field; the
-   *   places stand in the side panel (narrow: the composer's layer), the
-   *   third, inside a folded Bash output, stepped to.
+   *   places rise out of the composer as its layer, the third, inside a
+   *   folded Bash output, stepped to.
    * - `nothing`: words nothing in the conversation holds.
    * - `unreached`: the machine holding the transcript did not answer; the
    *   places in the turns loaded stand, the machine named, with Retry.
@@ -96,7 +101,14 @@
 
   const debug = benchDebug();
   const now = Date.now();
-  for (const id of ids) {
+  /**
+   * The bench seeds its conversation and opens find once per address: the
+   * shell mounts the page again now and then (it reads no hub), and a
+   * second seeding undid what a reader had done on it.
+   */
+  const seeded = seededFor === page.url.search;
+  seededFor = page.url.search;
+  for (const id of seeded ? [] : ids) {
     const session = blankSession(id);
     session.machineId = "bench";
     session.cwd = "/home/bewinxed/cockpit";
@@ -175,6 +187,16 @@
     // The bar's own crumb ("Bench") stands where the bench draws its tabs.
     const crumb = document.querySelector<HTMLElement>('[data-slot="crumb"]');
     crumb?.setAttribute("hidden", "");
+    if (seeded) {
+      return () => {
+        band?.removeAttribute("hidden");
+        crumb?.removeAttribute("hidden");
+      };
+    }
+    // A find another address left standing starts over.
+    find.close();
+    find.leave();
+    find.whose = "all";
     if (findState === "live") {
       const session = debug.state.sessions[MAIN];
       session.busy = true;
@@ -201,11 +223,6 @@
       clearTimeout(opening);
       band?.removeAttribute("hidden");
       crumb?.removeAttribute("hidden");
-      find.close();
-      find.leave();
-      for (const id of ids) {
-        delete debug.state.sessions[id];
-      }
     };
   });
 </script>

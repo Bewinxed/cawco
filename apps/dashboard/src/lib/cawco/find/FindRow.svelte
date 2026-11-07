@@ -59,7 +59,7 @@
     onsecret?: (key: string) => void;
   } = $props();
 
-  const ago = $derived(age(row.at, now));
+  const ago = $derived(row.clock ?? age(row.at, now));
 </script>
 
 <div
