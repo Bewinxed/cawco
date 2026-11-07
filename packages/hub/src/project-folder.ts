@@ -1507,6 +1507,30 @@ export const folderHistory = async (
 };
 
 /**
+ * The newest commit that changed `rawPath`, with the value of the trailer
+ * `trailer` it carries ("" for none): what a proposal kept as a file was
+ * made against, and by whom (views.ts drafts). Undefined for a path no
+ * commit changed.
+ */
+export const lastCommitOf = async (
+  projectId: string,
+  rawPath: string,
+  trailer: string
+): Promise<{ sha: string; trailer: string } | undefined> => {
+  const rel = folderPath(rawPath);
+  const root = await forReading(projectId);
+  const out = await git(root, [
+    "log",
+    "-1",
+    `--format=%H%x1f%(trailers:key=${trailer},valueonly)`,
+    "--",
+    rel,
+  ]);
+  const [sha = "", value = ""] = out.trim().split("\x1f");
+  return sha ? { sha, trailer: value.trim() } : undefined;
+};
+
+/**
  * Every commit of a project's folder whose message holds `line` (a trailer,
  * like `CawCo-Change: merge`), newest first, with the paths each wrote.
  * Read for a project that has a folder: a read makes one where none is.

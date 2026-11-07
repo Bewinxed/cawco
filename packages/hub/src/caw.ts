@@ -1159,6 +1159,8 @@ export const createCaw = ({
    */
   const draftView = async (
     projectId: string,
+    /** The drafting session: told if its draft no longer applies (views.ts). */
+    session: string,
     /** Whose draft it is, by the name the board gives the session (labels.ts `boardTitle`). */
     by: string,
     input: {
@@ -1177,7 +1179,7 @@ export const createCaw = ({
       );
     }
     const drafted = await folderCall(() =>
-      views.draft(projectId, input.name, input.source, { name: by })
+      views.draft(projectId, input.name, input.source, { name: by }, session)
     );
     const proposed = input.page
       ? blocks.propose(
@@ -1811,7 +1813,7 @@ export const createCaw = ({
           async (input) => {
             const projectId = ours();
             const by = boardTitle(me());
-            const drafted = await draftView(projectId, by, input);
+            const drafted = await draftView(projectId, me().id, by, input);
             api.notice(projectId, {
               title: `View · ${by} drafted “${drafted.view}”`,
               event: { kind: "view", name: drafted.view },

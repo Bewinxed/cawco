@@ -61,7 +61,9 @@ import {
   type PermissionResult,
   type WorkspaceRef,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { askWords } from "@cawco/core/words/asks";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { DesignProposalFile } from "./db/schema";
@@ -78,6 +80,7 @@ import {
   writeFolderFiles,
   YOU,
 } from "./project-folder";
+import { appliesNow } from "./proposal-base";
 import { isLive } from "./work-items";
 
 const DESIGN_DIR = "design";
@@ -250,6 +253,12 @@ export interface DesignStore {
 }
 
 export interface DesignFile {
+  /**
+   * A proposal's: what design/ held of the file when it was proposed, in
+   * the file's own encoding ("" for a file it makes), the base the one
+   * rule merges from (proposal-base.ts).
+   */
+  before?: string;
   content: string;
   encoding?: "utf8" | "base64";
   path: string;
@@ -581,6 +590,76 @@ const drawn = (bytes: Uint8Array | null): string => {
   return text.length > PREVIEW_CHARS
     ? `${text.slice(0, PREVIEW_CHARS)}\n… (cut here)\n`
     : text;
+};
+
+/** A file's path in design/, as a store reads it. */
+const inDesign = (path: string): string => {
+  const named = designPath(path);
+  return "problem" in named ? path : named.path;
+};
+
+/** Bytes in the encoding a design file carries: its text, or base64; "" for no file. */
+const carried = (
+  bytes: Uint8Array | null | undefined,
+  encoding: DesignFile["encoding"]
+): string => {
+  if (!bytes) {
+    return "";
+  }
+  return encoding === "base64"
+    ? Buffer.from(bytes).toString("base64")
+    : decoder.decode(bytes);
+};
+
+/** Each file with what design/ holds of it now, the base it is proposed against. */
+const basedOn = async (
+  store: DesignStore,
+  files: DesignFile[]
+): Promise<DesignFile[]> => {
+  const now = await store.read(files.map((file) => inDesign(file.path)));
+  return files.map((file) => ({
+    ...file,
+    before: carried(now.get(inDesign(file.path)), file.encoding),
+  }));
+};
+
+/**
+ * Whether a proposal's files still apply to design/ in `store` (the one
+ * rule, proposal-base.ts): the files to write, each its change merged into
+ * the file as it is now, or the first path it no longer applies to.
+ * Undefined for a proposal kept without its bases.
+ */
+const appliesAt = async (
+  store: DesignStore,
+  files: DesignFile[]
+): Promise<{ files: DesignFile[] } | { stale: string } | undefined> => {
+  if (files.some((file) => file.before === undefined)) {
+    return;
+  }
+  const encodings = new Map(
+    files.map((file) => [inDesign(file.path), file.encoding] as const)
+  );
+  const applies = await appliesNow(
+    files.map((file) => ({
+      path: inDesign(file.path),
+      before: file.before ?? "",
+      content: file.content,
+    })),
+    async (path) =>
+      carried((await store.read([path])).get(path), encodings.get(path))
+  );
+  if ("stale" in applies) {
+    return applies;
+  }
+  const merged = new Map(
+    applies.writes.map((write) => [write.path, write.content] as const)
+  );
+  return {
+    files: files.map((file) => ({
+      ...file,
+      content: merged.get(inDesign(file.path)) ?? file.content,
+    })),
+  };
 };
 
 /**
@@ -1073,13 +1152,24 @@ export const createDesignSystem = (deps: {
   taskOpen: (projectId: string, taskId: string) => Promise<boolean>;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   park: (envelope: Envelope) => void;
-  /** Takes a settled ask off the pending ledger. */
-  settle: (requestId: string) => void;
+  /**
+   * Takes a settled ask off the pending ledger: answered, or (`closed`, a
+   * sentence with no stop) closed by the hub because it no longer applies.
+   */
+  settle: (requestId: string, closed?: string) => void;
   /** A word from the hub to a session (work-items.ts `tellSession`). */
   tell: (instanceId: string, content: string) => void;
+  /**
+   * Tells a proposal's session that it closed, as a memory proposal's is
+   * told (server.ts `tellProposer`): under the ask's origin, its transcript
+   * reading `line`; false when that session can never act again.
+   */
+  tellClosed: (instanceId: string, text: string, line: string) => boolean;
 }) => {
   /** Open proposals, by id. */
   const open = new Set<string>();
+  /** Proposals the person's answer is being carried out for: nothing else closes them meanwhile. */
+  const answering = new Set<string>();
   /**
    * Why your approval of a design task waits: its newest attempt's
    * workspace, while it stands, or the project's folder on the hub holds
@@ -1294,10 +1384,8 @@ export const createDesignSystem = (deps: {
         `Nothing was written. why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`
       );
     }
-    const preview = await previewDesign(
-      storeAt(projectId, place, actor.id, boardTitle(actor)),
-      files
-    );
+    const store = storeAt(projectId, place, actor.id, boardTitle(actor));
+    const preview = await previewDesign(store, files);
     if (preview.length === 0) {
       throw new Error(
         "Nothing was written: design/ already holds exactly that."
@@ -1310,7 +1398,7 @@ export const createDesignSystem = (deps: {
       machineId: place.repo?.machineId ?? null,
       root: place.repo?.root ?? null,
       why,
-      files,
+      files: await basedOn(store, files),
       preview,
       toolUseId: toolUseId ?? null,
       createdAt: new Date(),
@@ -1363,9 +1451,88 @@ export const createDesignSystem = (deps: {
     };
   };
 
-  /** Approve: written through design_write where it was proposed, and committed. Answers the commit. */
-  const apply = async (row: DesignProposalRow): Promise<string> => {
-    const place = placeOfProposal(row);
+  /**
+   * A proposal that no longer applies, closed by the hub: it leaves the
+   * record and every screen with why, and its session is told so it can
+   * propose again from design/ as it is now. `path`: the file it no longer
+   * applies to; none for one kept without its bases. Answers whether its
+   * session was told.
+   */
+  const closeStale = (row: DesignProposalRow, path?: string): boolean => {
+    const at = path ? `${DESIGN_DIR}/${path}` : undefined;
+    const why = at ? askWords.proposalClosed(at) : askWords.proposalUnbased;
+    deps.db.designChecks.dropProposal(row.id);
+    open.delete(row.id);
+    deps.settle(row.id, why);
+    const told = deps.tellClosed(
+      row.instanceId,
+      at
+        ? askWords.proposalClosedTold(row.id, at)
+        : askWords.proposalUnbasedTold(row.id),
+      at ? askWords.proposalClosedLine(at) : askWords.proposalUnbasedLine
+    );
+    console.log(
+      `[design] ${row.projectId}: ${row.id} closed, ${why}; ${told ? `${row.instanceId} told` : "no session to tell"}`
+    );
+    return told;
+  };
+
+  /**
+   * The open proposals `which` names, read again against design/ where
+   * each was proposed: one that no longer applies closes
+   * ({@link closeStale}). One whose place can't be read now (its machine
+   * offline) is read at its Approve; one being answered is the answer's.
+   */
+  const recheck = async (
+    which: (row: DesignProposalRow) => boolean
+  ): Promise<void> => {
+    const rows = deps.db.designChecks
+      .proposals()
+      .filter(
+        (row) => open.has(row.id) && !answering.has(row.id) && which(row)
+      );
+    for (const row of rows) {
+      let applies: Awaited<ReturnType<typeof appliesAt>>;
+      try {
+        applies = await appliesAt(
+          storeAt(
+            row.projectId,
+            placeOfProposal(row),
+            row.instanceId,
+            YOU.name
+          ),
+          row.files
+        );
+      } catch {
+        continue;
+      }
+      if (
+        applies &&
+        "stale" in applies &&
+        open.has(row.id) &&
+        !answering.has(row.id)
+      ) {
+        closeStale(row, applies.stale);
+      }
+    }
+  };
+
+  /** The open proposals at a repository's root, read again after the hub wrote design/ there. */
+  const recheckAt = (place: ProposalPlace): Promise<void> => {
+    const { repo } = place;
+    return repo
+      ? recheck(
+          (row) => row.machineId === repo.machineId && row.root === repo.root
+        )
+      : Promise.resolve();
+  };
+
+  /** Approve: `files` written through design_write where it was proposed, and committed. Answers the commit. */
+  const apply = async (
+    row: DesignProposalRow,
+    place: ProposalPlace,
+    files: DesignFile[]
+  ): Promise<string> => {
     const message = `design: ${row.why}\n\nProposal: ${row.id}`;
     const store = storeAt(
       row.projectId,
@@ -1374,8 +1541,64 @@ export const createDesignSystem = (deps: {
       YOU.name,
       message
     );
-    await writeDesign(store, row.files);
+    await writeDesign(store, files);
     return await store.commit(message);
+  };
+
+  /**
+   * The person's Approve, carried out: the proposal read against design/
+   * as it is now (the one rule); still applying, it is written there, its
+   * changes merged into the files; no longer applying (a change no commit
+   * carried, or one landing with the press), it closes then and the answer
+   * is refused saying so.
+   */
+  const approve = async (row: DesignProposalRow): Promise<string> => {
+    const place = placeOfProposal(row);
+    const applies = await appliesAt(
+      storeAt(row.projectId, place, row.instanceId, YOU.name),
+      row.files
+    );
+    if (!applies || "stale" in applies) {
+      const path = applies?.stale;
+      const told = closeStale(row, path);
+      const closed = path
+        ? askWords.proposalClosedOnAnswer(`${DESIGN_DIR}/${path}`)
+        : `${askWords.proposalUnbased}.`;
+      const [proposer] = deps.db.getInstancesByIds([row.instanceId]);
+      throw new Error(
+        told && proposer
+          ? `${closed} ${askWords.proposerTold(boardTitle(proposer))}`
+          : closed
+      );
+    }
+    const sha = await apply(row, place, applies.files);
+    await recheckAt(place);
+    return sha;
+  };
+
+  /** Its session told how the person answered `row`: approved and committed as `sha`, or denied. */
+  const answered = (
+    row: DesignProposalRow,
+    denied: Extract<PermissionResult, { behavior: "deny" }> | null,
+    sha: string
+  ): void => {
+    const files = row.preview.map((file) => file.path).join(", ");
+    if (denied) {
+      const reason = denied.message.trim();
+      deps.tell(
+        row.instanceId,
+        `The person declined your design proposal ${row.id} (${files})${reason ? `: “${reason}”` : ""}. design/ is as it was; nothing was written.`
+      );
+    } else {
+      console.log(
+        `[design] ${row.projectId}: ${row.id} approved, committed as ${sha.slice(0, 9)}`
+      );
+      deps.tell(
+        row.instanceId,
+        `The person approved your design proposal ${row.id} (${files}): it is written and committed as ${sha.slice(0, 9)} in ${row.root ?? "the project's folder"}.`
+      );
+    }
+    deps.db.designChecks.dropProposal(row.id);
   };
 
   return {
@@ -1399,46 +1622,61 @@ export const createDesignSystem = (deps: {
       if (await store.theirs()) {
         return propose(actor, projectId, place, files, why, toolUseId);
       }
-      return writeDesign(store, files);
+      const written = await writeDesign(store, files);
+      await recheckAt(place);
+      return written;
     },
+
+    /**
+     * A commit changed `paths` in `projectId`'s folder: its open proposals
+     * on design/ there that it left no longer applying close.
+     */
+    folderCommitted: (
+      projectId: string,
+      paths: ReadonlySet<string>
+    ): Promise<void> =>
+      recheck(
+        (row) =>
+          row.projectId === projectId &&
+          !row.machineId &&
+          row.files.some((file) =>
+            paths.has(`${DESIGN_DIR}/${inDesign(file.path)}`)
+          )
+      ),
 
     /** Whether `requestId` is a design proposal waiting on the person. */
     owns: (requestId: string): boolean => open.has(requestId),
 
     /**
      * The person's answer: approved, it is written and committed where it
-     * was proposed; denied, design/ stays as it was. Either way its session
-     * is told and the ask leaves the ledger; a write that fails throws, and
-     * its ask stays.
+     * was proposed, if it still applies ({@link approve}); denied, design/
+     * stays as it was. Either way its session is told and the ask leaves
+     * the ledger; a write that fails throws, and its ask stays.
      */
     async answer(requestId: string, result: PermissionResult): Promise<void> {
       const row = deps.db.designChecks.proposal(requestId);
       if (row) {
-        const files = row.preview.map((file) => file.path).join(", ");
-        if (result.behavior === "allow") {
-          // A write that fails leaves the ask parked; its reason is said here
-          // and to the person's answer.
-          const sha = await apply(row).catch((error: unknown) => {
-            console.warn(
-              `[design] ${row.projectId}: ${row.id} was approved and not written: ${error instanceof Error ? error.message : String(error)}`
-            );
-            throw error;
-          });
-          console.log(
-            `[design] ${row.projectId}: ${row.id} approved, committed as ${sha.slice(0, 9)}`
-          );
-          deps.tell(
-            row.instanceId,
-            `The person approved your design proposal ${row.id} (${files}): it is written and committed as ${sha.slice(0, 9)} in ${row.root ?? "the project's folder"}.`
-          );
-        } else {
-          const reason = result.message.trim();
-          deps.tell(
-            row.instanceId,
-            `The person declined your design proposal ${row.id} (${files})${reason ? `: “${reason}”` : ""}. design/ is as it was; nothing was written.`
-          );
+        if (answering.has(row.id)) {
+          throw new Error("That proposal is being answered already.");
         }
-        deps.db.designChecks.dropProposal(row.id);
+        answering.add(row.id);
+        try {
+          if (result.behavior === "allow") {
+            // A write that fails leaves the ask parked; its reason is said
+            // here and to the person's answer.
+            const sha = await approve(row).catch((error: unknown) => {
+              console.warn(
+                `[design] ${row.projectId}: ${row.id} was approved and not written: ${error instanceof Error ? error.message : String(error)}`
+              );
+              throw error;
+            });
+            answered(row, null, sha);
+          } else {
+            answered(row, result, "");
+          }
+        } finally {
+          answering.delete(row.id);
+        }
       }
       open.delete(requestId);
       deps.settle(requestId);
@@ -1447,8 +1685,17 @@ export const createDesignSystem = (deps: {
     /** Every open proposal, parked again as the hub starts: the person's asks outlive it. */
     start: (): void => {
       for (const row of deps.db.designChecks.proposals()) {
-        park(row);
+        if (row.files.some((file) => file.before === undefined)) {
+          closeStale(row);
+        } else {
+          park(row);
+        }
       }
+      // design/ may have changed while no hub watched it.
+      detach(
+        recheck(() => true),
+        "design proposals read again as the hub starts"
+      );
     },
   };
 };

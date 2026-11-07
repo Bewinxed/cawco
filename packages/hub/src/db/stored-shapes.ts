@@ -59,6 +59,7 @@ import type {
   Proposal as ProposalType,
 } from "../memory";
 import type { MoveState as MoveStateType } from "../moves";
+import type { ProposedFile as ProposedFileType } from "../proposal-base";
 import type {
   ConnectionAppSecret as ConnectionAppSecretType,
   ConnectionSecret as ConnectionSecretType,
@@ -493,8 +494,14 @@ const InstallsRecordShape = declared(
 export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
   InstallsRecordShape;
 
-const ProposalFileShape = declared(
+const ProposedFileShape = declared(
   z.object({ before: z.string(), content: z.string(), path: z.string() }),
+  "ProposedFile",
+  "packages/hub/src/proposal-base.ts"
+);
+
+const ProposalFileShape = declared(
+  ProposedFileShape,
   "ProposalFile",
   "packages/hub/src/memory.ts"
 );
@@ -590,6 +597,7 @@ prove<
     Same<z.output<typeof WorkLandingShape>, WorkLandingType>,
     Same<z.output<typeof WorkspaceFromShape>, WorkspaceFromType>,
     Same<z.output<typeof InstallsRecordShape>, InstallsRecordType>,
+    Same<z.output<typeof ProposedFileShape>, ProposedFileType>,
     Same<z.output<typeof ProposalFileShape>, ProposalFileType>,
     Same<z.output<typeof ProposalShape>, ProposalType>,
   ]

@@ -26,6 +26,17 @@
  *      own (roles.ts: no folder_write, memory_propose or admin write), so
  *      its ask is a question.
  *
+ *  (d) A session proposes a new file in the person's design system
+ *      (design-system.ts `propose`), and the person then writes that file
+ *      first: with nothing pressed, the proposal closes, the file stays
+ *      theirs, and the session is sent why.
+ *  (e) (b)'s refused Approve is said on the proposing session's page: its
+ *      card stood there, though its ask is parked under the proposal.
+ *  (f) A session with an approval waiting is continued by another session
+ *      (`continue_session`), so it goes on as one session in its
+ *      continuation: the approval is parked again under the session it went
+ *      on in, and its card is drawn on that session's page.
+ *
  * Main fails (a): the proposal stands until Approve is pressed, nobody is
  * told; (b): Approve is refused with "Reject it" and the card stays; (c):
  * the parent hears only that the ask was withdrawn.
@@ -36,6 +47,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { hubRequest } from "../../../packages/core/src/hub-request";
+import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { toolWords } from "../../lib/tool-call";
@@ -162,6 +174,7 @@ const run = async (kit: Kit): Promise<void> => {
   const base = await fleet.dashboard();
   await proposalLegs(kit, fleet, base);
   await delegateLeg(kit, fleet);
+  await foldLeg(kit, fleet, base);
 };
 
 /** Legs (a) and (b): proposals to delegates/scout.md whose file changed under them. */
@@ -309,6 +322,235 @@ const proposalLegs = async (
       cardGoneAtPress,
       said,
       toldAtPress,
+    })
+  );
+  // (e) The press's own answer was refused, its card gone: said over the
+  // composer of the session the card stood in, not the proposal's.
+  const refusal = await page
+    .getByText(askWords.proposalClosedOnAnswer(PATH))
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  kit.check(
+    "(e) the refused Approve is said in the proposing session's page, where its card stood",
+    refusal,
+    JSON.stringify({ refusal })
+  );
+  await designLeg(kit, fleet, base, project.id);
+};
+
+/** The person's design system, a reference the session proposes, and the one the person writes there first. */
+const DESIGN = "# Scouting\n\nThe field guide.\n";
+const DESIGN_PROPOSED = "# Field notes\n\nThe proposal's notes.\n";
+const DESIGN_THEIRS = "# Field notes\n\nThe person's notes.\n";
+const DESIGN_PATH = "design/references/field-notes.md";
+
+/** Leg (d): a design proposal whose file the person changes closes on its own. */
+const designLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  base: string,
+  projectId: string
+): Promise<void> => {
+  const put = (path: string, content: string) =>
+    fleet.api(
+      hubRequest("PUT /api/projects/:id/folder/file", {
+        path: { id: projectId },
+        body: { path, content },
+      })
+    );
+  await put(
+    "design/manifest.json",
+    `${JSON.stringify({ sources: {}, files: {} })}\n`
+  );
+  await put("design/DESIGN.md", DESIGN);
+  const folder = join(fleet.sandbox, "hub", "projects", projectId);
+  const designer = await fleet.spawn("claude", "Designer", folder, {
+    projectId,
+  });
+  const before = new Set((await pendingNow(fleet)).map((one) => one.requestId));
+  const said = await toolWords(
+    {
+      base: fleet.base,
+      id: designer,
+      credential: await fleet.sessionCredential(designer),
+    },
+    "design_write",
+    {
+      files: [{ path: "references/field-notes.md", content: DESIGN_PROPOSED }],
+      why: "The probe's change to the field guide",
+    }
+  );
+  const proposal = await until(
+    "the design proposal parked",
+    async () =>
+      (await pendingNow(fleet)).find(
+        (one) => one.requestId?.startsWith("dp-") && !before.has(one.requestId)
+      ),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  if (!proposal?.requestId) {
+    kit.check(
+      "(d) the designer's design_write is a proposal waiting on the person",
+      false,
+      said.text.slice(0, 300)
+    );
+    return;
+  }
+  const page = await kit.page("desk");
+  await open(page, `${base}/session/${designer}`, APPROVE);
+  await put(DESIGN_PATH, DESIGN_THEIRS);
+  const gone = await leaves(fleet, proposal.requestId);
+  const cardGone = await page
+    .locator(DENY)
+    .waitFor({ state: "detached", timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  const told = await sentTo(
+    fleet,
+    designer,
+    askWords.proposalClosedTold(proposal.requestId, DESIGN_PATH)
+  );
+  const line = await page
+    .getByText(askWords.proposalClosedLine(DESIGN_PATH), { exact: true })
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  const file = (
+    await fleet.api<{ content: string }>(
+      hubRequest("GET /api/projects/:id/folder/file", {
+        path: { id: projectId },
+        query: { path: DESIGN_PATH },
+      })
+    )
+  ).content;
+  kit.check(
+    "(d) the person wrote design/references/field-notes.md under a design proposal of it: with nothing pressed it closes (off the ledger, its card off the page), the file stays the person's, and the designer is sent why, its transcript saying so",
+    gone && cardGone && file === DESIGN_THEIRS && told.includes("ask") && line,
+    JSON.stringify({ gone, cardGone, file, told, line })
+  );
+};
+
+/**
+ * Leg (f): a session's approval, the session folded into its continuation:
+ * the ask is parked again under the session it went on in, and its card is
+ * drawn there.
+ */
+const foldLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  base: string
+): Promise<void> => {
+  const source = await fleet.spawn("claude", "Folded source", fleet.repo);
+  const opened = await fleet.send(source, "Say ok.");
+  await until(
+    "the source's turn read and ended",
+    () => ({ send: fleet.sendRow(opened), row: fleet.instance(source) }),
+    ({ send, row }) => send?.state === "read" && !row?.turn_open_at,
+    180_000
+  );
+  const said = await toolWords(
+    {
+      base: fleet.base,
+      id: source,
+      credential: await fleet.sessionCredential(source),
+    },
+    "admin_rules_write",
+    {
+      action: "create",
+      name: "probe-fold-ask",
+      enabled: false,
+      pattern: "probe-fold-ask",
+      reply: "Nothing to do.",
+      reason: "The proposal-closes-stale probe's folded ask.",
+    }
+  );
+  const ask = await until(
+    "the source's approval waiting on the person",
+    async () =>
+      (await pendingNow(fleet)).find(
+        (one) => one.instanceId === source && one.requestId?.startsWith("ask_")
+      ),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  if (!ask?.requestId) {
+    kit.check(
+      "(f) the source's admin_rules_write waits on the person",
+      false,
+      said.text.slice(0, 300)
+    );
+    return;
+  }
+  const caller = await fleet.spawn("claude", "Continuing caller", fleet.repo);
+  const known = new Set(
+    (
+      await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
+    ).map((one) => one.id)
+  );
+  const continued = await toolWords(
+    {
+      base: fleet.base,
+      id: caller,
+      credential: await fleet.sessionCredential(caller),
+    },
+    "continue_session",
+    {
+      session: source,
+      from: "asks",
+      target_harness: "claude",
+      target_model: MODEL.claude,
+    },
+    { timeoutMs: 300_000 }
+  );
+  const job = await until(
+    "the continuation started",
+    async () =>
+      (
+        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
+      ).find((one) => !known.has(one.id)),
+    (one) => one !== undefined && ["started", "failed"].includes(one.stage),
+    240_000
+  ).catch(() => undefined);
+  if (job?.stage !== "started") {
+    kit.check(
+      "(f) the source's continuation starts, one session with it",
+      false,
+      `${JSON.stringify(job)} ${continued.text.slice(0, 300)}`
+    );
+    return;
+  }
+  const parkedUnder = await until(
+    "the ask parked under the session it went on in",
+    async () =>
+      (await pendingNow(fleet)).find((one) => one.requestId === ask.requestId)
+        ?.instanceId,
+    (id) => id === job.targetInstanceId,
+    30_000
+  ).catch(
+    async () =>
+      (await pendingNow(fleet)).find((one) => one.requestId === ask.requestId)
+        ?.instanceId
+  );
+  const page = await kit.page("desk");
+  await open(page, `${base}/session/${job.targetInstanceId}`, "body");
+  const drawn = await page
+    .locator(APPROVE)
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  kit.check(
+    "(f) a session folded into its continuation: its open approval is parked under the session it went on in, and its card is drawn on that session's page",
+    parkedUnder === job.targetInstanceId && drawn,
+    JSON.stringify({
+      parkedUnder,
+      target: job.targetInstanceId,
+      source,
+      drawn,
     })
   );
 };

@@ -905,6 +905,7 @@ import { watchPairingRequests } from "./pairing-requests";
 import {
   type AnswerFrom,
   answerPermission,
+  askEnvelope,
   onPermissionAnswer,
   outlivesSession,
   type PendingShape,
@@ -19586,6 +19587,16 @@ export const createServer = (
     owedMoves.delete(from);
     saidCompactionFolded(source, plan, to);
     forgetPending(from, UNREAD.stopped, false, "all");
+    // The asks the hub owns went with its rows (db `foldContinued`): each
+    // is parked again under the session it goes on in, its machine with
+    // it, so its card is drawn there and its former one goes.
+    const [target] = db.getInstancesByIds([to]);
+    for (const ask of target ? db.asks.openOf(to) : []) {
+      const parked = pending.get(ask.id);
+      if (target && parked && parked.instanceId !== to) {
+        parkForPerson(askEnvelope(ask, target));
+      }
+    }
     if (folded && folded.ending.length > 0) {
       lifecycle.oweEndSession(from, "delete");
     }
@@ -26444,6 +26455,9 @@ export const createServer = (
     db,
     projectName: (id) => db.project(id)?.name,
     tasks,
+    tellClosed: (instanceId, text, line) =>
+      tellProposer(instanceId, text, line),
+    unproposed: (projectId, view) => blocks.discarded(projectId, view),
   });
   // Pages are blocks (blocks.ts): each project page's arrangement, and the
   // views placed on it; every dashboard showing the project reads it again.
@@ -26460,6 +26474,24 @@ export const createServer = (
   });
   // A project's memory (memory.ts): the agents' inbox, its curator's
   // proposals as your asks, and "Make a note" into AGENTS.md.
+  /**
+   * A proposal's session told that its proposal closed (proposal-base.ts):
+   * the session as it is now (a former id is the one it went on in), under
+   * the ask's origin, which wakes it as an answer does, its transcript
+   * reading `line`. One that can never act again is told nothing: false.
+   */
+  const tellProposer = (
+    instanceId: string,
+    text: string,
+    line: string
+  ): boolean => {
+    const now = db.instanceIdOf(instanceId);
+    if (endedForGood(now)) {
+      return false;
+    }
+    tellSession(now, text, { name: ASK_ORIGIN, line });
+    return true;
+  };
   const projectMemory = createMemory({
     db,
     watch: memoryWatch,
@@ -26481,27 +26513,7 @@ export const createServer = (
         pending.resolve(requestId, "cancelled", { closed });
       }
     },
-    // The proposing session, as it is now; one that can never act again
-    // is told nothing.
-    tell: (instanceId, text, line) => {
-      const now = db.instanceIdOf(instanceId);
-      if (endedForGood(now)) {
-        return false;
-      }
-      tellSession(now, text, { name: ASK_ORIGIN, line });
-      return true;
-    },
-  });
-  // A commit to a project's folder: the open proposals on the files it
-  // changed are checked again, and one that no longer applies closes then.
-  onFolderCommits((projectId, { written, deleted }) => {
-    detach(
-      projectMemory.folderCommitted(
-        projectId,
-        new Set([...written, ...deleted])
-      ),
-      "memory proposals on the files a commit changed"
-    );
+    tell: (instanceId, text, line) => tellProposer(instanceId, text, line),
   });
   // Open proposals are the person's asks again as the hub starts.
   // Read by the boot's sweep of the asks push took (below), which waits on it.
@@ -28147,12 +28159,36 @@ export const createServer = (
     // An agent's change to a system its project had is the person's ask,
     // as a memory proposal is, answered below with the rest.
     park: (envelope) => parkForPerson(envelope),
-    settle: (requestId) => {
-      pending.resolve(requestId);
+    settle: (requestId, closed) => {
+      if (closed === undefined) {
+        pending.resolve(requestId);
+      } else {
+        pending.resolve(requestId, "cancelled", { closed });
+      }
     },
     tell: (instanceId, content) => workItems.tellSession(instanceId, content),
+    tellClosed: (instanceId, text, line) =>
+      tellProposer(instanceId, text, line),
   });
   designApproval = designSystem.approvalRefusal;
+  // A commit to a project's folder: the open proposals on the files it
+  // changed (memory and delegate types, design/) are read again, and one
+  // that no longer applies closes then.
+  onFolderCommits((projectId, { written, deleted }) => {
+    const paths = new Set([...written, ...deleted]);
+    detach(
+      projectMemory.folderCommitted(projectId, paths),
+      "memory proposals on the files a commit changed"
+    );
+    detach(
+      designSystem.folderCommitted(projectId, paths),
+      "design proposals on the files a commit changed"
+    );
+    detach(
+      views.folderCommitted(projectId, paths),
+      "drafts of the kept views a commit changed"
+    );
+  });
   offBoot.push(() => designSystem.start());
   // Design work in a project with a design system is judged by a verifier
   // session before it reaches review (design-verify.ts).

@@ -1234,6 +1234,15 @@ public enum Words {
             "\(proposer) was told, to propose again from what the file says now."
         }
 
+        /// A design proposal kept by a hub from before proposals kept what they were proposed against: closed as the hub starts, since whether it still applies can't be told. Its why, what its session reads, and its line.
+        public static let proposalUnbased = "it was made before CawCo kept what a proposal is made against, so whether it still applies can't be told"
+
+        public static func proposalUnbasedTold(id: String) -> String {
+            "Your design proposal \(id) is closed: it was made before CawCo kept what a proposal is made against, so whether it still applies can't be told. Nothing was written, and it no longer waits on the person. If the change is still wanted, propose it again."
+        }
+
+        public static let proposalUnbasedLine = "Proposal closed: made before CawCo kept its base"
+
         /// While the session's machine is offline.
         public static let connectOffline = "Machine offline — can't connect yet."
 

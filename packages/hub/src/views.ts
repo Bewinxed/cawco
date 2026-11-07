@@ -42,21 +42,27 @@ import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { unrecognizedKeys } from "@cawco/core/unrecognized-keys";
 import { viewToolInput } from "@cawco/core/views-library";
+import { askWords } from "@cawco/core/words/asks";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { Elysia, t } from "elysia";
 import type { Blocks } from "./blocks";
 import type { DbShape } from "./db";
+import { fileOr } from "./memory";
 import { checkView, readView } from "./openui";
 import {
+  changeFolderFiles,
   deleteFolderFile,
   type FolderAuthor,
   FolderRefusal,
+  lastCommitOf,
   listFolder,
   moveFolderFile,
   readFolderFile,
+  readFolderFileAt,
   refused,
   writeFolderFile,
 } from "./project-folder";
+import { type Applies, appliesNow } from "./proposal-base";
 import { nextRunsOf, slotLabel } from "./routines";
 import type { Tasks } from "./tasks";
 
@@ -112,15 +118,36 @@ export type ViewTaskRow = TaskSummary & { dates: Record<string, number> };
 
 const draftPath = (name: string) => `${DRAFTS}/${name}${EXT}`;
 const keptPath = (name: string) => `${KEPT}/${name}${EXT}`;
+/** The trailer a draft's commit names its drafting session by. */
+const SESSION_TRAILER = "Session";
 
 export interface ViewsDeps {
   readonly db: Pick<DbShape, "ingress" | "projectSpendByType" | "routines">;
   /** A project's name, or undefined when the hub keeps no such project. */
   readonly projectName: (projectId: string) => string | undefined;
   readonly tasks: Pick<Tasks, "list" | "stages">;
+  /**
+   * Tells a draft's session that it closed, as every proposal's is told
+   * (server.ts `tellProposer`); false when that session can never act again.
+   */
+  readonly tellClosed: (
+    instanceId: string,
+    text: string,
+    line: string
+  ) => boolean;
+  /** A closed draft's proposed block, if it stood on a page, goes with it (blocks.ts `discarded`). */
+  readonly unproposed: (projectId: string, view: string) => void;
 }
 
-export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
+export const createViews = ({
+  db,
+  projectName,
+  tasks,
+  tellClosed,
+  unproposed,
+}: ViewsDeps) => {
+  /** Drafts being kept (`project\0name`): nothing else closes them meanwhile. */
+  const keeping = new Set<string>();
   const known = (projectId: string): string =>
     projectName(projectId) ??
     (() => {
@@ -325,6 +352,68 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
     }
   };
 
+  /**
+   * Whether the draft `name` (its text `source`) still applies to the kept
+   * view it changes (the one rule, proposal-base.ts): its base is the kept
+   * view as the draft's own commit found it ("" for a new view), and the
+   * session that drafted it is that commit's trailer ("" for none).
+   */
+  const draftApplies = async (
+    projectId: string,
+    name: string,
+    source: string
+  ): Promise<{ applies: Applies; session: string }> => {
+    const last = await lastCommitOf(
+      projectId,
+      draftPath(name),
+      SESSION_TRAILER
+    );
+    const before = last
+      ? ((await readFolderFileAt(projectId, last.sha, keptPath(name))) ?? "")
+      : "";
+    return {
+      applies: await appliesNow(
+        [{ path: keptPath(name), before, content: source }],
+        (path) => fileOr(projectId, path)
+      ),
+      session: last?.trailer ?? "",
+    };
+  };
+
+  /**
+   * A draft that no longer applies to its kept view, closed by the hub: its
+   * file goes in a commit saying why, a proposed block it stood as goes
+   * with it, and the session that drafted it is told so it can draft again
+   * from the view as it is now.
+   */
+  const closeDraft = async (
+    projectId: string,
+    name: string,
+    session: string
+  ): Promise<void> => {
+    const path = keptPath(name);
+    const why = askWords.proposalClosed(path);
+    await changeFolderFiles(
+      projectId,
+      { writes: [], deletes: [draftPath(name)] },
+      {
+        author: { name: "CawCo hub" },
+        message: `views: the draft ${name} closed: ${why}`,
+      }
+    );
+    unproposed(projectId, name);
+    const told = session
+      ? tellClosed(
+          session,
+          askWords.proposalClosedTold(draftPath(name), path),
+          askWords.proposalClosedLine(path)
+        )
+      : false;
+    console.log(
+      `[views] ${projectId}: the draft ${name} closed, ${why}; ${told ? `${session} told` : "no session to tell"}`
+    );
+  };
+
   return {
     /** Every view of the project: kept ones, then drafts, each in name order. */
     async list(projectId: string): Promise<ProjectView[]> {
@@ -363,35 +452,106 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
     /** Where a kept view's file is. */
     fileOf: keptPath,
 
-    /** Caw's draft (`view_draft`), checked, then written as a commit by `author`. */
+    /**
+     * Caw's draft (`view_draft`), checked, then written as a commit by
+     * `author` naming the drafting `session`: the commit is what the draft
+     * is proposed against ({@link draftApplies}).
+     */
     async draft(
       projectId: string,
       rawName: string,
       raw: string,
-      author: FolderAuthor
+      author: FolderAuthor,
+      session: string
     ): Promise<ProjectView> {
       known(projectId);
       const name = nameOf(rawName);
       const { source, dropped } = checkView(raw);
       await writeFolderFile(projectId, draftPath(name), source, {
         author,
-        message: dropped.length
-          ? `Draft the view ${name}, which drops ${dropped.join(", ")}`
-          : `Draft the view ${name}`,
+        message: `${
+          dropped.length
+            ? `Draft the view ${name}, which drops ${dropped.join(", ")}`
+            : `Draft the view ${name}`
+        }\n\n${SESSION_TRAILER}: ${session}`,
       });
       return { name, draft: true, source, dropped };
     },
 
-    /** Keeps a draft: checked again, then moved to `views/<name>.oui` as one commit, yours. */
+    /**
+     * Keeps a draft: checked again and read against the view as it is now
+     * (the one rule, {@link draftApplies}); still applying, moved to
+     * `views/<name>.oui` with its change merged in, as one commit, yours. No
+     * longer applying (a change no commit carried, or one landing with the
+     * press), it closes then ({@link closeDraft}) and Keep is refused
+     * saying so.
+     */
     async keep(projectId: string, rawName: string): Promise<ProjectView> {
       known(projectId);
       const name = nameOf(rawName);
-      const draft = await readOne(projectId, name, true);
-      const { source, dropped } = checkView(draft.source);
-      await moveFolderFile(projectId, draftPath(name), keptPath(name), {
-        message: `Keep the view ${name}`,
-      });
-      return { name, draft: false, source, dropped };
+      const key = `${projectId}\0${name}`;
+      if (keeping.has(key)) {
+        throw new FolderRefusal(
+          409,
+          `The draft ${name} is being kept already.`
+        );
+      }
+      keeping.add(key);
+      try {
+        const draft = await readOne(projectId, name, true);
+        const { dropped } = checkView(draft.source);
+        const { applies, session } = await draftApplies(
+          projectId,
+          name,
+          draft.source
+        );
+        if ("stale" in applies) {
+          await closeDraft(projectId, name, session);
+          throw new FolderRefusal(
+            409,
+            askWords.proposalClosedOnAnswer(keptPath(name))
+          );
+        }
+        const source = applies.writes[0]?.content ?? draft.source;
+        await moveFolderFile(projectId, draftPath(name), keptPath(name), {
+          message: `Keep the view ${name}`,
+          content: source,
+        });
+        return { name, draft: false, source, dropped };
+      } finally {
+        keeping.delete(key);
+      }
+    },
+
+    /**
+     * A commit changed `paths` in `projectId`'s folder: every draft of a
+     * change to a kept view it touched is read again, and one that no
+     * longer applies closes ({@link closeDraft}).
+     */
+    async folderCommitted(
+      projectId: string,
+      paths: ReadonlySet<string>
+    ): Promise<void> {
+      const drafts = (await filesIn(projectId, DRAFTS)).filter(
+        (name) =>
+          paths.has(keptPath(name)) && !keeping.has(`${projectId}\0${name}`)
+      );
+      for (const name of drafts) {
+        const draft = await readOne(projectId, name, true).catch(
+          () => undefined
+        );
+        if (!draft) {
+          continue;
+        }
+        const { applies, session } = await draftApplies(
+          projectId,
+          name,
+          draft.source
+        );
+        if ("stale" in applies && !keeping.has(`${projectId}\0${name}`)) {
+          await closeDraft(projectId, name, session);
+        }
+      }
     },
 
     /** Discards a draft: its file is deleted as a commit, yours. */

@@ -3841,6 +3841,20 @@ function handleFrame(frame: FramePayload): void {
   switch (frame.kind) {
     case "permission_request": {
       const { routedTo } = frame as { routedTo?: "parent" };
+      // An ask is parked in one session: one the hub parked again under
+      // another (its session folded into the one it went on in) leaves
+      // the session it stood in.
+      for (const other of Object.values(state.sessions)) {
+        if (
+          other !== target &&
+          other.pending.some((p) => p.requestId === frame.requestId)
+        ) {
+          other.pending = other.pending.filter(
+            (p) => p.requestId !== frame.requestId
+          );
+          trackWorking(other);
+        }
+      }
       const existing = target.pending.find(
         (p) => p.requestId === frame.requestId
       );
@@ -3982,8 +3996,15 @@ const streamHost: StreamHost = {
     // answer.`) against the very command id it holds. It only does so while it
     // is still on screen: answering removes the request from `pending`, so an
     // answer that fails after the card has gone has no inline surface at all
-    // and is said over the session's composer.
-    if (record.kind === "permission.answer" && answerCardStillParked(record)) {
+    // and is said over the composer of the session the card was drawn in:
+    // its own, or, for an ask parked under a proposal of its (a memory or
+    // design proposal, `originInstanceId`), the session that proposed it.
+    if (record.kind === "permission.answer") {
+      const surface = answerSurfaces.get(record.commandId);
+      if (answerCardStillParked(record)) {
+        return;
+      }
+      sayCommandFault(record, surface?.origin ?? record.sessionId);
       return;
     }
     // Kept for its session (refusals.svelte.ts): a model, effort or mode
@@ -4180,17 +4201,21 @@ function rememberControlAsk(
   controlAsks.set(commandId, { arg, machineId });
 }
 
-function sayCommandFault(record: CommandRecord): void {
+function sayCommandFault(
+  record: CommandRecord,
+  /** The session whose composer says it: the command's own, unless its card stood in another's. */
+  sessionId = record.sessionId
+): void {
   const asked = controlAsks.get(record.commandId);
   controlAsks.delete(record.commandId);
-  refusals.set(commandKey(record.sessionId, record.kind), {
+  refusals.set(commandKey(sessionId, record.kind), {
     reason: failureNotice(record),
     asked: {
       at: Date.now(),
       arg: asked?.arg,
       kind: record.kind,
       machineId:
-        asked?.machineId ?? instanceIndex.byId.get(record.sessionId)?.machineId,
+        asked?.machineId ?? instanceIndex.byId.get(sessionId)?.machineId,
     } satisfies CommandAsked,
   });
 }
@@ -4231,7 +4256,12 @@ function markUnreached(record: CommandRecord): void {
  */
 const answerSurfaces = new Map<
   string,
-  { instanceId: string; requestId: string }
+  {
+    instanceId: string;
+    /** The session a proposal's card is drawn in (`originInstanceId`), when it is not `instanceId`. */
+    origin?: string;
+    requestId: string;
+  }
 >();
 
 /**
@@ -4254,7 +4284,14 @@ function rememberAnswerSurface(
       answers.delete(asked);
     }
   }
-  answerSurfaces.set(commandId, { instanceId, requestId });
+  const origin = state.sessions[instanceId]?.pending.find(
+    (parked) => parked.requestId === requestId
+  )?.originInstanceId;
+  answerSurfaces.set(commandId, {
+    instanceId,
+    requestId,
+    ...(origin ? { origin } : {}),
+  });
 }
 
 /**

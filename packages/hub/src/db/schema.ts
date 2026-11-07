@@ -4288,10 +4288,16 @@ export const designProposals = sqliteTable("design_proposals", {
   machineId: text("machine_id"),
   root: text("root"),
   why: text("why").notNull(),
-  /** The `design_write` call's files, written again whole on Approve. */
+  /**
+   * The `design_write` call's files, written on Approve, each with what it
+   * was proposed against (`before`, in its own encoding; "" for a file it
+   * makes): the base the one rule merges from (proposal-base.ts). A row
+   * kept before bases were has none.
+   */
   files: storedJson(
     z.array(
       z.object({
+        before: z.string().optional(),
         content: z.string(),
         encoding: z.enum(["utf8", "base64"]).optional(),
         path: z.string(),

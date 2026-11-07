@@ -94,9 +94,6 @@
  * - **What past sessions said** is `find` (find-tool.ts), the dashboard's
  *   Find, over every machine's transcripts: no store of its own here.
  */
-import { mkdtemp, rm } from "node:fs/promises";
-import { devNull, tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   DELEGATE_TYPE_PROPOSAL_TOOL,
   type Envelope,
@@ -109,8 +106,7 @@ import {
   type ProjectNote,
 } from "@cawco/core";
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
-import { GIT_LOCALE } from "@cawco/core/safe-git";
-import { parseRecord, writeStateFile } from "@cawco/core/state-file";
+import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
@@ -177,6 +173,7 @@ import {
   writeFolderFile,
   YOU,
 } from "./project-folder";
+import { type Applies, appliesNow, type ProposedFile } from "./proposal-base";
 import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
@@ -794,14 +791,8 @@ const notesIn = async (projectId: string, dir: string): Promise<Note[]> => {
   return read.filter((note) => note !== undefined);
 };
 
-/** One file a proposal changes. */
-export interface ProposalFile {
-  /** The file as it stood then: the diff's left side, and the base an approval merges from; "" for a new file. */
-  before: string;
-  /** The file's whole proposed text. */
-  content: string;
-  path: string;
-}
+/** One file a proposal changes (proposal-base.ts). */
+export type ProposalFile = ProposedFile;
 
 /** A proposal as `memory/proposals/<id>.json` keeps it. */
 export interface Proposal {
@@ -959,45 +950,6 @@ const proposable = (raw: string): string => {
     400,
     `${raw} is not a memory file: propose AGENTS.md or knowledge/<topic>.md.`
   );
-};
-
-/**
- * `now` with what `proposed` changed from `base` merged in (git merge-file);
- * undefined when the two changes overlap.
- */
-const mergeThree = async (
-  now: string,
-  base: string,
-  proposed: string
-): Promise<string | undefined> => {
-  const dir = await mkdtemp(join(tmpdir(), "cawco-memory-"));
-  try {
-    const [ours, theirs, from] = ["now", "proposed", "base"].map((name) =>
-      join(dir, name)
-    );
-    await Promise.all([
-      writeStateFile(ours, now),
-      writeStateFile(theirs, proposed),
-      writeStateFile(from, base),
-    ]);
-    const child = Bun.spawn(["git", "merge-file", "-p", ours, from, theirs], {
-      env: {
-        PATH: process.env.PATH ?? "",
-        ...GIT_LOCALE,
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: devNull,
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [merged, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return code === 0 ? merged : undefined;
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
 };
 
 /** AGENTS.md with `text` added as a line of its `## Notes` section, made when it has none. */
@@ -2889,31 +2841,12 @@ export const createMemory = ({
     (await notesIn(projectId, ARCHIVE_DIR)).find((each) => each.id === id);
 
   /**
-   * THE RULE FOR A PROPOSAL THAT NO LONGER APPLIES: each file it changes,
-   * merged into the file as it is now (three ways from the file as it
-   * stood when proposed, `before`): its writes, or the first file whose
-   * change and the file's own overlap, `stale`. Approving reads it, and so
-   * does every commit that changes one of its files ({@link folderCommitted}).
+   * Whether a proposal still applies to its files as they are now: the one
+   * rule for every proposal kind (proposal-base.ts). Approving reads it, and
+   * so does every commit that changes one of its files ({@link folderCommitted}).
    */
-  const mergedNow = async (
-    proposal: Proposal
-  ): Promise<
-    { writes: { content: string; path: string }[] } | { stale: string }
-  > => {
-    const writes: { content: string; path: string }[] = [];
-    for (const file of proposal.files) {
-      const now = await fileOr(proposal.projectId, file.path);
-      const next =
-        now === file.before
-          ? file.content
-          : await mergeThree(now, file.before, file.content);
-      if (next === undefined) {
-        return { stale: file.path };
-      }
-      writes.push({ path: file.path, content: next });
-    }
-    return { writes };
-  };
+  const mergedNow = (proposal: Proposal): Promise<Applies> =>
+    appliesNow(proposal.files, (path) => fileOr(proposal.projectId, path));
 
   /** {@link mergedNow}'s writes; a proposal that no longer applies throws, saying why. */
   const writesNow = async (
