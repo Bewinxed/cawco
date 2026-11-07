@@ -24,7 +24,7 @@ Under "Motion grammar" (DESIGN.md line 264); rule at line 279.
 
 Under "Motion grammar" (DESIGN.md line 264); rule at line 281.
 
-**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side; every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception (Tooltip).
+**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling `--tip-rise` toward its trigger, and leaves at once.
 
 ## The One Object Rule
 
@@ -74,7 +74,7 @@ Under "Motion grammar" (DESIGN.md line 264); rule at line 297.
 
 Under "Motion grammar" (DESIGN.md line 264); rule at line 303.
 
-**The Show Don't Tell Rule.** A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, outcomes as marks in their status colours. Words are for what has no shape.
+**The Show Don't Tell Rule.** A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, outcomes as marks in their status colours. Words are for what has no shape; a screen is designed as UI, never as a spreadsheet of its record.
 
 ## The One Loop Rule
 
@@ -98,7 +98,7 @@ Under "Motion grammar" (DESIGN.md line 264); rule at line 311.
 
 Under "Motion grammar" (DESIGN.md line 264); rule at line 313.
 
-**The House Helper Rule.** Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half. A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.
+**The House Helper Rule.** Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half (`cawco/motion/`, `cawco/spawn/NsPopoverGroup.svelte`, `components/ui/fluid-tabs`, under `apps/dashboard/src/lib`). A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.
 
 ## The Quiet Feel Rule
 
@@ -140,7 +140,7 @@ Under "Named Rules" (DESIGN.md line 356); rule at line 363.
 
 Under "Named Rules" (DESIGN.md line 356); rule at line 365.
 
-**The Idle Has No Fill Rule.** An idle session carries no chip: rest is drawn as nothing.
+**The Idle Has No Fill Rule.** An idle session carries no chip. A quiet row means a healthy row, so rest is drawn as nothing.
 
 ## The No Indigo Rule
 
@@ -164,7 +164,7 @@ Under "Named Rules" (DESIGN.md line 389); rule at line 390.
 
 Under "Named Rules" (DESIGN.md line 389); rule at line 392.
 
-**The Role, Not Size Rule.** Text takes a role by what it does, as Hierarchy lists them; nobody picks a size and finds a role for it.
+**The Role, Not Size Rule.** Text takes a role by what it does: names, headings, column heads and badges are label; sentences are body; timestamps, counts, units and hints are meta. Nobody picks a size and finds a role for it.
 
 ## The Tabular Figure Rule
 
@@ -334,7 +334,7 @@ Under "Focus and hit areas" (DESIGN.md line 573); rule at line 580.
 
 Under "Answering a permission" (DESIGN.md line 584); rule at line 585.
 
-**The Peer Rule.** Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They share one size (`sm`, a 44×44 hit area on every pointer), label type, `surface-recess` fill, `border-button-outline` edge and `ink-strong`, reading apart by glyph, word and place, never by hue, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.
+**The Peer Rule.** Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card `transcript/Prompt.svelte`, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They are the same size (`sm`, with a 44×44 hit area on every pointer), the same label type, the same `surface-recess` fill and `border-button-outline` edge, in `ink-strong`, reading apart by glyph, word and place, never by hue; no status fill or ink touches either, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.
 
 ## The Consequential Grant Rule
 
@@ -342,18 +342,8 @@ Under "Answering a permission" (DESIGN.md line 584); rule at line 587.
 
 **The Consequential Grant Rule.** A standing grant ("Always allow … for …") is wider than the request, so it is kept apart: under a break and a hairline, after a sentence saying what it would allow, in the warning tint with warning ink, a shield glyph and a real edge, the most salient control on the card on purpose. Above the answer row the card says who asks, what will happen and to what, and the change itself, open (the diff, scrolling inside). Nothing is behind a disclosure: a grant is made on what it changes.
 
-## The Screen Is Not The Record Rule
-
-Under "Voice" (DESIGN.md line 589); rule at line 593.
-
-**The Screen Is Not The Record Rule.** A screen is designed from the person's job and the moment they're in, never laid out as its data model: its hierarchy says what matters and what they'll act on, what they rarely touch waits until it's needed, and the thing reads as itself, as well-made products show their objects. A form, a table and labelled prose are one failure, the record on screen:
-- **Every field gets a label** and a value, a control or a sentence.
-- **The fields come in the model's order**, all exposed at once.
-- **Words do the design's work.** This is **narration**: labelled sections describing the thing ("What it does", "How it works", "Knows", "Decides", "Runs on", "About", "Purpose"), or a sentence explaining how the screen or the thing behaves. A part that needs a sentence to say what it is is redesigned until it doesn't, never traded for fields. `scripts/narration-check.ts` refuses a narrating label.
-- **Source**, the owner, 2026-11-07: "you keep telling the story through wrods on the ui instead of letting the UI speak, which is cheating"; "stop throwing controls as this is a sign-up form or an excel table, we are desgining actual UI/UX here"; "i didn't mean a spreadsheet literally, you need to understand and extrapolate and excersise abstract thinking when interpreting what i mean".
-
 ## The Should It Exist Rule
 
-Under "Voice" (DESIGN.md line 589); rule at line 599.
+Under "Voice" (DESIGN.md line 589); rule at line 593.
 
 **The Should It Exist Rule.** Before a string is phrased, it earns its place on the screen (the `clean-copy` skill). Walk it down in order and cut at the first that fires: a thing the person would never have wondered about, unprompted, goes, since naming it plants the question; a caption that restates its label, field or value goes; a line that rules out a failure, defends a choice or remembers a fixed bug goes (the fix is the fix). Cut whole clauses; when nothing is left, the element goes with its words, its empty hint prop and its `<p>` too.
