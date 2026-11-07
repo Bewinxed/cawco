@@ -5,7 +5,9 @@
    * oldest first, the one stepped to chosen. Made of Jump's parts: its
    * who-said chips, its row (FindRow), its ghost and pill (highlight).
    *
-   * On a desk it is the conversation's side panel's Find (SideSplit); narrow
+   * On a desk it is the conversation's side panel's Find (SideSplit), its
+   * top padded by the room the card's floating head takes (`--side-room`,
+   * SideSurface), so its filters stand clear of it; narrow
    * it is the composer's layer (Composer), and a place picked folds it so
    * the place reads whole.
    *
@@ -130,7 +132,7 @@
 <div
   data-slot="find-places"
   data-narrow={narrow || undefined}
-  class="group/places flex min-h-0 flex-auto flex-col"
+  class="group/places flex min-h-0 flex-auto flex-col pt-(--side-room)"
 >
   {#if nothing}
     <div class="px-space-4 py-space-6 group-data-narrow/places:py-space-4">

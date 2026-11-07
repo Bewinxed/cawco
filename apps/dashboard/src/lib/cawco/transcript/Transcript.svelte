@@ -2829,6 +2829,29 @@
    * frame of the seek (`restore`): the row is drawn, and its words found,
    * once the first write has brought it into range.
    */
+  /**
+   * Whether `item` is still moving by a motion of its own that ends (a fold
+   * opening under the words a seek is after), never a loop (a breath): the
+   * list shifts its offset by every px a row above the view's top grows, so
+   * a seek that ends mid-fold leaves the words above the view.
+   */
+  const settling = (item: Element): boolean =>
+    item
+      .getAnimations({ subtree: true })
+      .some(
+        (motion) =>
+          motion.playState === "running" &&
+          motion.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
+      );
+
+  /**
+   * The last `seekInto` asked for words it did not find drawn, or found in
+   * a row still moving (their fold was opened, or is still opening): the
+   * seek reads them again next frame rather than ending with them out of
+   * the band, under the composer or above the view.
+   */
+  let wordsAwaited = false;
+
   function seekInto(index: number, terms: readonly string[]): number {
     if (!(list && scroller)) {
       return 0;
@@ -2837,11 +2860,13 @@
     const room = bottom - top;
     const drawn = recordDrawn(index);
     if (!drawn) {
+      wordsAwaited = terms.length > 0;
       const size = list.getItemSize(index);
       return size < room ? -(top + (room - size) / 2) : -top;
     }
     const itemTop = drawn.item.getBoundingClientRect().top;
     const words = terms.length > 0 ? matchBox(drawn.record, terms) : null;
+    wordsAwaited = terms.length > 0 && (!words || settling(drawn.item));
     if (words) {
       return words.top + words.height / 2 - itemTop - (top + bottom) / 2;
     }
@@ -3218,7 +3243,9 @@
     const step = (): void => {
       frame = requestAnimationFrame(() => {
         frame = null;
-        if (restore() && frames < SEEK_FRAMES) {
+        // Moved, or its words are not drawn yet (their fold opening): it
+        // reads them again next frame.
+        if ((restore() || wordsAwaited) && frames < SEEK_FRAMES) {
           frames += 1;
           step();
           return;

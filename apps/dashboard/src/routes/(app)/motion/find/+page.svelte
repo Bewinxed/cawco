@@ -149,6 +149,9 @@
       document.querySelector<HTMLElement>("[data-hub-band-said]")
         ?.parentElement ?? null;
     band?.setAttribute("hidden", "");
+    // The bar's own crumb ("Bench") stands where the bench draws its tabs.
+    const crumb = document.querySelector<HTMLElement>('[data-slot="crumb"]');
+    crumb?.setAttribute("hidden", "");
     if (findState === "live") {
       const session = debug.state.sessions[MAIN];
       session.busy = true;
@@ -174,6 +177,7 @@
     return () => {
       clearTimeout(opening);
       band?.removeAttribute("hidden");
+      crumb?.removeAttribute("hidden");
       find.close();
       find.leave();
       for (const id of ids) {
