@@ -111,6 +111,7 @@ import type {
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
+import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
@@ -378,6 +379,7 @@ export interface TaskStore {
     | "summary"
     | "taskId"
     | "taskResult"
+    | "unmetAt"
     | "waitedOn"
   >[];
   /**
@@ -1051,13 +1053,17 @@ const stopperWords = (by: EndedBy): string => {
 };
 
 /**
- * How an attempt ended when it did not land, or how the follow-up of one
+ * How an attempt ended when it did not land, how the follow-up of one
  * that landed ended without landing (a done item's `error`, work-items.ts
- * `finish`) ({@link TaskAttempt.endedHow}).
+ * `finish`), or that one that landed was sent back unmet (dispatch.ts
+ * `judgeCriteria`) ({@link TaskAttempt.endedHow}).
  */
 const endedHowOf = (
   item: ReturnType<TaskStore["attempts"]>[number]
 ): string | null => {
+  if (item.state === "done" && item.unmetAt && !item.error) {
+    return judgedWords.unmetHow;
+  }
   if (item.state === "cancelled") {
     return item.stoppedBy
       ? `Stopped by ${stopperWords(item.stoppedBy)}`
@@ -1599,6 +1605,15 @@ export const createTasks = (store: TaskStore) => {
     return byTask;
   };
 
+  /** The project's attempts the hub sent back unmet (work_items `unmetAt`), by id. */
+  const unmetIn = (projectId: string): Set<string> =>
+    new Set(
+      store
+        .attempts(projectId)
+        .filter((item) => item.unmetAt)
+        .map((item) => item.id)
+    );
+
   /** The tasks whose hook start waits for a slot. */
   const queuedIn = (projectId: string): Set<string> =>
     new Set(store.queuedStarts?.(projectId) ?? []);
@@ -1618,6 +1633,8 @@ export const createTasks = (store: TaskStore) => {
     /** Each target settled once per read, by its handle. */
     settled: Map<string, WaitState>;
     stages: Stages | undefined;
+    /** The attempts the hub sent back unmet: each counts as failed ({@link unmetIn}). */
+    unmet: Set<string>;
     /** The tasks that wait on each task, by id. */
     waitersOf: Map<string, string[]>;
     world: WaitWorld;
@@ -1647,6 +1664,7 @@ export const createTasks = (store: TaskStore) => {
     }
     return {
       attempts: attemptsByTask(projectId),
+      unmet: unmetIn(projectId),
       byId,
       partsOf,
       waitersOf,
@@ -1787,7 +1805,12 @@ export const createTasks = (store: TaskStore) => {
               attempts.find((attempt) => attempt.state === "done")
             )
           : [],
-      lastAttemptFailed: last?.state === "failed" && open,
+      // An attempt sent back unmet counts as failed: dispatch leaves the
+      // task to its starter, who retries it or moves on.
+      lastAttemptFailed:
+        (last?.state === "failed" ||
+          (last !== undefined && context.unmet.has(last.workItemId))) &&
+        open,
       lastAttemptStopped: last?.state === "cancelled" && open,
       queuedStart: context.queued.has(task.id),
       startProblem: store.startProblem?.(projectId, task) ?? null,

@@ -1618,6 +1618,14 @@ export const workItems = sqliteTable(
      */
     taskResult: storedJson(AttemptResultSchema)("task_result"),
     /**
+     * When the hub sent its task back to todo because Jev did not show its
+     * acceptance criteria met (dispatch.ts `judgeCriteria`): its work stays
+     * landed, and the task counts it as a failed attempt (tasks.ts
+     * `lastAttemptFailed`), so dispatch does not start it again on its own
+     * and its starter retries it or moves on. Null otherwise.
+     */
+    unmetAt: timestamp("unmet_at"),
+    /**
      * The pull request its landing opened or found open, when it lands `pr`:
      * what a poller watches to move its task on when it merges.
      */

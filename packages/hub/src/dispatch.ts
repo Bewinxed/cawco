@@ -135,6 +135,7 @@ import type {
   TaskSummary,
   WaitWitness,
 } from "@cawco/core/task-views";
+import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WorkBudget } from "./db/schema";
@@ -215,6 +216,7 @@ export interface DispatchDeps {
     | "projectAttempts"
     | "queuedTaskStarts"
     | "queueTaskStart"
+    | "markAttemptUnmet"
     | "setProjectDispatch"
     | "workItemByPrUrl"
   >;
@@ -1924,8 +1926,9 @@ export const createDispatcher = ({
     const taskId = task.id;
     const criteria = criteriaOf(task.acceptance);
     const judged = await kindAfterJudged(projectId, task, criteria, item);
-    // The project's conversation judges: the task stays where it is until it moves it.
-    if (judged === "conversation") {
+    // The project's conversation judges, or Jev did not answer: the task
+    // stays where it is.
+    if (judged === "conversation" || judged === "stays") {
       return;
     }
     const kind = judged === "done" && reviewsFirst(stages) ? "you" : judged;
@@ -1992,14 +1995,14 @@ export const createDispatcher = ({
   /**
    * The stage kind an ended attempt sends its task to, once a landed one's
    * acceptance criteria are judged ({@link judgeCriteria}); `conversation` while it
-   * judges them.
+   * judges them, `stays` when Jev did not answer.
    */
   const kindAfterJudged = async (
     projectId: string,
     task: TaskView,
     criteria: string[],
     item: WorkItemRow
-  ): Promise<"conversation" | "done" | "todo" | "you"> => {
+  ): Promise<"conversation" | "done" | "stays" | "todo" | "you"> => {
     const kind = kindAfter(item);
     return kind === "done" && criteria.length > 0
       ? await judgeCriteria(projectId, task, criteria, item)
@@ -2046,7 +2049,10 @@ export const createDispatcher = ({
       return `attempt ${short(item.id)} opened ${item.prUrl}`;
     }
     if (kind === "you") {
-      return `attempt ${short(item.id)} ${item.state}; its acceptance criteria wait for you`;
+      return `attempt ${short(item.id)} ${item.state}; with Jev and events off, its acceptance criteria wait for you`;
+    }
+    if (kind === "todo" && item.state === "done") {
+      return `attempt ${short(item.id)} ${item.state}; Jev does not show its acceptance criteria met`;
     }
     return closedMet(judged, kind, criteria)
       ? `attempt ${short(item.id)} ${item.state}; Jev shows its ${criteria} acceptance criteria met`
@@ -2056,18 +2062,21 @@ export const createDispatcher = ({
   /**
    * Judged checks (§5.9) for an attempt that landed at a task with
    * acceptance criteria: never by the session that did the work. Jev on:
-   * done when Jev shows every criterion met, else `you`, with a comment
-   * naming the ones it does not (a Jev that does not answer says so in the
-   * comment, and they go to you). Jev off: the project's conversation judges them (`conversation`: it
-   * is woken, the task stays); with events off, shell checks passed and
-   * the rest is yours.
+   * done when Jev shows every criterion met; else back to `todo`, as a
+   * failed attempt lands, with a comment naming the ones it does not, the
+   * attempt stamped unmet so the task counts it failed (tasks.ts
+   * `lastAttemptFailed`) and its starter retries it or moves on. A Jev that
+   * does not answer leaves the task where it is (`stays`), its work landed,
+   * with a comment saying so. Jev off: the project's conversation judges
+   * them (`conversation`: it is woken, the task stays); with events off,
+   * shell checks passed and the rest is yours.
    */
   const judgeCriteria = async (
     projectId: string,
     task: TaskView,
     criteria: string[],
     item: WorkItemRow
-  ): Promise<"conversation" | "done" | "you"> => {
+  ): Promise<"conversation" | "done" | "stays" | "todo" | "you"> => {
     const report = attemptReport(item);
     const access = placement.access();
     const about = hubActor(`attempt ${short(item.id)} judged`);
@@ -2087,12 +2096,16 @@ export const createDispatcher = ({
         await tasks.comment(
           projectId,
           task.id,
-          `Jev judged the acceptance criteria against the report of ${attemptNamed(item, task)}. Not shown met:\n\n${unmet
-            .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
-            .join("\n")}`,
+          judgedWords.notShownMet(
+            attemptNamed(item, task),
+            unmet
+              .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
+              .join("\n")
+          ),
           about
         );
-        return "you";
+        db.markAttemptUnmet(item.id);
+        return "todo";
       } catch (error) {
         if (!(error instanceof JevFailed)) {
           throw error;
@@ -2100,10 +2113,14 @@ export const createDispatcher = ({
         await tasks.comment(
           projectId,
           task.id,
-          `${error.message} The acceptance criteria of ${attemptNamed(item, task)} wait for you.`,
+          judgedWords.notJudged(
+            error.message,
+            attemptNamed(item, task),
+            task.stage
+          ),
           about
         );
-        return "you";
+        return "stays";
       }
     }
     if (db.project(projectId)?.eventsOn) {

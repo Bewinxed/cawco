@@ -1374,6 +1374,8 @@ export interface DbShape {
    * from is history, and history survives a restart. Only reachability is reset.
    */
   readonly markAllAgentsOffline: () => void;
+  /** Stamps a task's attempt as sent back unmet (work_items `unmetAt`): Jev did not show its acceptance criteria met. */
+  readonly markAttemptUnmet: (itemId: string) => void;
   /** Marks the one-time data migration `name` run: it never runs again. */
   readonly markDataMigrated: (name: string) => void;
   /** Where the fleet's marketplace `name` comes from; undefined for none. */
@@ -8831,6 +8833,12 @@ const make = async (path: string): Promise<DbShape> => {
         .orderBy(desc(workItems.createdAt))
         .limit(1)
         .get(),
+    markAttemptUnmet: (itemId) => {
+      db.update(workItems)
+        .set({ unmetAt: new Date() })
+        .where(eq(workItems.id, itemId))
+        .run();
+    },
     taskIndex: (projectId) => {
       const ofTask = new Map<
         string,
