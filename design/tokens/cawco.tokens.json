@@ -5482,6 +5482,14 @@
         }
       }
     },
+    "c-peek-steps-min-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 112,
+        "unit": "px"
+      },
+      "$description": "The least the peek's opened plan steps keep in a tray its asks fill: about five rows, so opening them always shows the step at work and its neighbours, the asks scrolling in what is left."
+    },
     "c-peek-steps-h": {
       "$type": "dimension",
       "$value": {

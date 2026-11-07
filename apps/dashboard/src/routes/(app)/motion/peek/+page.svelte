@@ -5,7 +5,7 @@
    * (home/peek-fixtures.ts). The peek stands open on a session moving the
    * hub's sign-in to passkeys.
    *
-   * `?state=` working | asking | question | signin | plan | noplan | ended |
+   * `?state=` working | asking | question | signin | several | plan | noplan | ended |
    * failed | unreachable | reading | empty | unread (asking by default);
    * `?steps` the plan's steps opened (`plan` opens them); `?ipad` the sheet
    * rising from the bottom, as an iPad's touch screen has it; `?alone` the
@@ -22,6 +22,7 @@
   } from "#lib/cawco/home/peek-fixtures.js";
   import PeekPane from "#lib/cawco/PeekPane.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { page } from "$app/state";
 
   const asked = page.url.searchParams.get("state") ?? "asking";
@@ -74,4 +75,17 @@
   </div>
 {:else}
   <PeekSheet bind:stepsOpen rises={ipad || undefined} />
+  <!-- The bench's way back to the peek once it is put away, standing where a
+       Home row's expand mark would: a press opens it as that mark does. -->
+  {#if !peek.open}
+    <div
+      class="fixed bottom-space-4 left-1/2 z-(--layer-bench-controls) -translate-x-1/2"
+    >
+      <Button
+        onclick={() => openPeek(stood.target)}
+        size="sm"
+        variant="secondary">Peek</Button
+      >
+    </div>
+  {/if}
 {/if}

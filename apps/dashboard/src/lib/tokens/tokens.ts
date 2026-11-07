@@ -503,6 +503,7 @@ export type TokenSize =
   | "size.c-peek-sheet-h"
   | "size.c-peek-sheet-w"
   | "size.c-peek-tray-h"
+  | "size.c-peek-steps-min-h"
   | "size.c-peek-steps-h"
   | "size.c-grabber-w"
   | "size.c-grabber-h"

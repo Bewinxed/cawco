@@ -48,14 +48,20 @@
      (DESIGN.md, The Open Page Rule): no scrim, no focus trap, and a press on
      the page lands there while the peek waits (vaul lets a press outside a
      sheet that is not modal through); Close, Esc or leaving the place put it
-     away. An iPad's touch screen keeps the drawer's recipe. -->
+     away. An iPad's touch screen keeps the drawer's recipe. Its open is the
+     peek's own, bound both ways: handed down one way with onOpenChange, a
+     sheet put away by a drag down kept its drawer's own copy of the close,
+     and setting the peek open again drew nothing, so no Peek opened it. -->
+
 <Drawer.Root
   direction={rising ? "bottom" : "right"}
   modal={rising}
-  onOpenChange={(open) => {
-    peek.open = open;
-  }}
-  open={peek.open}
+  bind:open={
+    () => peek.open,
+    (open) => {
+      peek.open = open;
+    }
+  }
 >
   <!-- The peek holds its size from the first frame: it opens on "Reading…" and
        the tail arrives into a sheet already its height, instead of the sheet

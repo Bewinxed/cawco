@@ -20,6 +20,7 @@ export type PeekScene =
   | "asking"
   | "question"
   | "signin"
+  | "several"
   | "plan"
   | "noplan"
   | "ended"
@@ -34,6 +35,7 @@ export const PEEK_SCENES: readonly PeekScene[] = [
   "asking",
   "question",
   "signin",
+  "several",
   "plan",
   "noplan",
   "ended",
@@ -225,64 +227,60 @@ function asksOf(scene: PeekScene, now: number): PendingPermission[] {
     requestId: "req-peek-1",
     toolName: "Bash",
   } as unknown as PendingPermission;
-  if (scene === "asking") {
-    return [permission];
-  }
-  if (scene === "question") {
-    return [
-      {
-        ...permission,
-        input: {
-          questions: [
+  const question = {
+    ...permission,
+    input: {
+      questions: [
+        {
+          question:
+            "Which origin should the passkey sign for: the tailnet name, or the LAN address the iPad uses at home?",
+          header: "Origin",
+          multiSelect: false,
+          options: [
             {
-              question:
-                "Which origin should the passkey sign for: the tailnet name, or the LAN address the iPad uses at home?",
-              header: "Origin",
-              multiSelect: false,
-              options: [
-                {
-                  label: "The tailnet name",
-                  description: "obelisk-of-light.tailf7f9d3.ts.net",
-                },
-                { label: "The LAN address", description: "obelisk.local" },
-              ],
+              label: "The tailnet name",
+              description: "obelisk-of-light.tailf7f9d3.ts.net",
             },
+            { label: "The LAN address", description: "obelisk.local" },
           ],
         },
-        presentation: {
-          ...permission.presentation,
-          command: undefined,
-          summary: "Ask user question",
-        },
-        requestId: "req-peek-q",
-        toolName: "AskUserQuestion",
-      } as unknown as PendingPermission,
-    ];
-  }
-  if (scene === "signin") {
-    return [
-      {
-        ...permission,
-        connectAsk: {
-          access: null,
-          again: false,
-          reason:
-            "To open the pull request for the passkey branch and read its checks.",
-          server: "GitHub",
-          url: "https://github.com/login/oauth/authorize",
-        },
-        input: {},
-        presentation: {
-          ...permission.presentation,
-          command: undefined,
-          summary: "Connect GitHub",
-        },
-        requestId: "req-peek-c",
-        toolName: "mcp__github__create_pull_request",
-      } as unknown as PendingPermission,
-    ];
-  }
-  return [];
+      ],
+    },
+    presentation: {
+      ...permission.presentation,
+      command: undefined,
+      summary: "Ask user question",
+    },
+    requestId: "req-peek-q",
+    toolName: "AskUserQuestion",
+  } as unknown as PendingPermission;
+  const signIn = {
+    ...permission,
+    connectAsk: {
+      access: null,
+      again: false,
+      reason:
+        "To open the pull request for the passkey branch and read its checks.",
+      server: "GitHub",
+      url: "https://github.com/login/oauth/authorize",
+    },
+    input: {},
+    presentation: {
+      ...permission.presentation,
+      command: undefined,
+      summary: "Connect GitHub",
+    },
+    requestId: "req-peek-c",
+    toolName: "mcp__github__create_pull_request",
+  } as unknown as PendingPermission;
+  const asks: Partial<Record<PeekScene, PendingPermission[]>> = {
+    asking: [permission],
+    question: [question],
+    signin: [signIn],
+    // Oldest first, as the hub parks them.
+    several: [permission, question, signIn],
+  };
+  return asks[scene] ?? [];
 }
 
 /** The rest of the fleet the home lists, the peeked session first. */
@@ -362,6 +360,11 @@ interface Debug {
 
 const debug = (): Debug => globalThis.__cawcoDebug as unknown as Debug;
 
+/** The scenes' sessions at work on a tool: a session that has said nothing yet has run none. */
+const AT_WORK = new Set(
+  (["working", "plan", "noplan", "unreachable"] as const).map(peekId)
+);
+
 function pulse(id: string, activity: SessionPulse["activity"]): void {
   debug().frame({
     kind: "pulse",
@@ -371,7 +374,7 @@ function pulse(id: string, activity: SessionPulse["activity"]): void {
       at: Date.now(),
       busy: activity === "working",
       currentTool:
-        activity === "working" && id.startsWith("peek-")
+        activity === "working" && AT_WORK.has(id)
           ? {
               name: "Edit",
               glance: "apps/dashboard/src/routes/sign-in/+page.svelte",

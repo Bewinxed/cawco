@@ -88,7 +88,7 @@
   import { frameSize } from "./frame-observer";
   import { conversationHref } from "./links";
   import { echoBeat } from "./motion/echo.svelte";
-  import { unfold } from "./motion/fold.svelte";
+  import { unfold, unfolding } from "./motion/fold.svelte";
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
   import { planProgress } from "./plan/PlanPane.svelte";
@@ -114,6 +114,23 @@
   }
 
   let { target, onclose, stepsOpen = $bindable(false) }: Props = $props();
+
+  /**
+   * The opened steps stand on the step at work, centred in the height they
+   * open to: the height the fold is bound for (`unfolding`), read in the
+   * frame after it starts, since the box is still shut as it mounts; with no
+   * fold (reduced motion) the box's own.
+   */
+  function onStep(box: HTMLElement): () => void {
+    const frame = requestAnimationFrame(() => {
+      const now = box.querySelector<HTMLElement>("[data-status=in_progress]");
+      if (now) {
+        const open = unfolding.get(box)?.height ?? box.clientHeight;
+        box.scrollTop = now.offsetTop + now.offsetHeight / 2 - open / 2;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }
 
   /** The foot tray's height: what it said keeps that much room at its end. */
   let footH = $state(0);
@@ -302,14 +319,23 @@
     "result.error",
   ]);
 
-  const tail = $derived(
-    (session?.messages ?? [])
-      .filter(
-        (message) =>
-          SPOKEN.has(message.type) && message.content.trim().length > 0
-      )
-      .slice(-TAIL)
-  );
+  /**
+   * The failure the tray says, when the session's last turn says the same
+   * words: said once, in the tray, never twice down the sheet's foot.
+   */
+  const failure = $derived(failed ? (row?.lastError ?? "").trim() : "");
+
+  const tail = $derived.by(() => {
+    const spoken = (session?.messages ?? []).filter(
+      (message) => SPOKEN.has(message.type) && message.content.trim().length > 0
+    );
+    const last = spoken.at(-1);
+    const told =
+      last?.type === "result.error" &&
+      failure !== "" &&
+      last.content.trim() === failure;
+    return (told ? spoken.slice(0, -1) : spoken).slice(-TAIL);
+  });
 
   const stream = smoothText(() => session?.streaming ?? "");
   /** The paced stream, flat, held to its last whole word. */
@@ -356,20 +382,17 @@
 
 <!-- The plan's steps, opened upward from its row over what it said: capped
      (`c-peek-steps-h`) and scrolled inside, opened on the step at work, each
-     edge with more past it fading out (the house edge fade). -->
+     edge with more past it fading out (the house edge fade). In a tray at
+     its cap they give the room first (`shrink-100`), down to about five
+     rows (`c-peek-steps-min-h`): an ask standing above them stays whole
+     while there is room, and the plan's row below them never moves. -->
 {#snippet steps()}
   <div
     data-slot="peek-plan"
-    class="kit-edge-fade-block fade-len-c-edge-fade-len relative min-h-0 overflow-y-auto overscroll-contain max-h-c-peek-steps-h pb-space-2"
+    class="kit-edge-fade-block fade-len-c-edge-fade-len relative min-h-c-peek-steps-min-h shrink-100 overflow-y-auto overscroll-contain max-h-c-peek-steps-h"
     in:unfold
     out:unfold
-    {@attach (box) => {
-      const now = box.querySelector<HTMLElement>("[data-status=in_progress]");
-      if (now) {
-        const cap = Number.parseFloat(getComputedStyle(box).maxHeight);
-        box.scrollTop = now.offsetTop - cap / 2;
-      }
-    }}
+    {@attach onStep}
   >
     <PlanTree nodes={planRows} />
   </div>
@@ -577,7 +600,7 @@
            answered on their card in the session. -->
       <div
         data-slot="peek-asks"
-        class="flex min-h-0 flex-col gap-space-2 overflow-y-auto overscroll-contain"
+        class="kit-edge-fade-block fade-len-c-edge-fade-len flex min-h-0 flex-col gap-space-2 overflow-y-auto overscroll-contain"
       >
         {#each parked as request (request.requestId)}
           {@const question =
@@ -671,38 +694,36 @@
       <!-- The plan as itself: its ring in the project's hue, the step at
            work, its figure. A press opens its steps upward over what it
            said; a press folds them. A press outside leaves them open. -->
-      <div class="flex min-h-0 flex-col">
-        {#if stepsOpen}
-          {@render steps()}
-        {/if}
-        <button
-          type="button"
-          data-slot="peek-plan-row"
-          class="group/plan mark-line flex min-w-0 shrink-0 items-center gap-space-2 rounded-sm text-start text-meta text-ink-muted hover:text-ink-strong focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-(--focus-ring-offset) focus-visible:outline-focus-ring"
-          aria-expanded={stepsOpen}
-          aria-label={planWords.ringLabel(progress.done, progress.total)}
-          onclick={() => {
-            stepsOpen = !stepsOpen;
-          }}
+      {#if stepsOpen}
+        {@render steps()}
+      {/if}
+      <button
+        type="button"
+        data-slot="peek-plan-row"
+        class="group/plan mark-line flex min-w-0 shrink-0 items-center gap-space-2 rounded-sm text-start text-meta text-ink-muted hover:text-ink-strong focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-(--focus-ring-offset) focus-visible:outline-focus-ring"
+        aria-expanded={stepsOpen}
+        aria-label={planWords.ringLabel(progress.done, progress.total)}
+        onclick={() => {
+          stepsOpen = !stepsOpen;
+        }}
+      >
+        <span
+          data-box
+          class="identity-ink inline-flex size-icon-md shrink-0 items-center justify-center"
+          style="--identity-h: {folderPrefs.hue(cwd)}"
+          ><TaskRing done={progress.done} total={progress.total} /></span
         >
-          <span
-            data-box
-            class="identity-ink inline-flex size-icon-md shrink-0 items-center justify-center"
-            style="--identity-h: {folderPrefs.hue(cwd)}"
-            ><TaskRing done={progress.done} total={progress.total} /></span
-          >
-          <span
-            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
-            >{stepsOpen ? "" : nowStep}</span
-          >
-          <span class="tabular-nums"
-            >{planWords.figure(progress.done, progress.total)}</span
-          >
-          <IconChevronUp
-            class="size-icon-sm flex-none transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded/plan:rotate-180"
-          />
-        </button>
-      </div>
+        <span
+          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+          >{stepsOpen ? "" : nowStep}</span
+        >
+        <span class="tabular-nums"
+          >{planWords.figure(progress.done, progress.total)}</span
+        >
+        <IconChevronUp
+          class="size-icon-sm flex-none transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded/plan:rotate-180"
+        />
+      </button>
     {/if}
 
     {#if statusShown}
@@ -732,7 +753,9 @@
           class="mark-line flex min-w-0 flex-1 items-center gap-1.5 text-ink-muted"
           data-box
         >
-          {#if activity === "working" && tool}
+          <!-- What it is doing, while the hub can say: a machine out of
+               reach leaves only what it was last seen doing. -->
+          {#if activity === "working" && tool && !stale}
             <span class="shrink-0">{toolWord(tool.name)}</span>
             <span
               class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"

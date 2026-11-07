@@ -27,6 +27,9 @@ export const Question = { args: { scene: "question" } };
 /** Waiting on you to connect GitHub. */
 export const SignIn = { args: { scene: "signin" } };
 
+/** Waiting on you for three things at once, the oldest first. */
+export const Several = { args: { scene: "several" } };
+
 /** Its long plan opened over what it said, on the step it is at. */
 export const LongPlan = { args: { scene: "plan", stepsOpen: true } };
 

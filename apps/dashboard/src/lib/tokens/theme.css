@@ -468,6 +468,7 @@
   --spacing-c-peek-sheet-h: var(--c-peek-sheet-h);
   --spacing-c-peek-sheet-w: var(--c-peek-sheet-w);
   --spacing-c-peek-tray-h: var(--c-peek-tray-h);
+  --spacing-c-peek-steps-min-h: var(--c-peek-steps-min-h);
   --spacing-c-peek-steps-h: var(--c-peek-steps-h);
   --spacing-c-grabber-w: var(--c-grabber-w);
   --spacing-c-grabber-h: var(--c-grabber-h);
