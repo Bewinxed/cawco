@@ -68,7 +68,7 @@ import {
   spawnedPid,
 } from "../packages/core/src/signal";
 import type { CommandKind } from "../packages/core/src/stream";
-import { DAY_MS } from "../packages/core/src/time";
+import { DAY_MS, HOUR_MS } from "../packages/core/src/time";
 import { unhandled } from "../packages/core/src/unhandled";
 import { startedPath } from "../packages/core/src/workspace-needs";
 import { installDeps } from "./lib/deps";
@@ -140,6 +140,43 @@ const toolFailed = (content: unknown): boolean =>
  * short sessions whole, and a bound on a long one's.
  */
 const SEEN_CHARS = 100_000_000;
+
+/**
+ * What the mock answers a provider's usage read with, by path: OpenCode Go's
+ * three windows (`GET /zen/go/v1/usage`, core usage/opencode-go.ts) and
+ * ChatGPT's two (`GET /backend-api/wham/usage`, usage/chatgpt.ts), each some
+ * way into its window.
+ */
+const USAGE_STAND_INS: Record<string, () => unknown> = {
+  "/zen/go/v1/usage": () => {
+    const resetsAt = new Date(Date.now() + HOUR_MS).toISOString();
+    return {
+      usage: {
+        rolling: { status: "ok", percent: 12, resetsAt },
+        weekly: { status: "ok", percent: 30, resetsAt },
+        monthly: { status: "ok", percent: 41, resetsAt },
+      },
+    };
+  },
+  "/backend-api/wham/usage": () => ({
+    plan_type: "plus",
+    rate_limit: {
+      primary_window: {
+        used_percent: 12,
+        limit_window_seconds: 18_000,
+        reset_after_seconds: 3600,
+      },
+      secondary_window: {
+        used_percent: 30,
+        limit_window_seconds: 604_800,
+        reset_after_seconds: 86_400,
+      },
+    },
+  }),
+};
+
+/** Where the fleet's agent reads models.dev's rates: the mock, which has none. */
+const MODELS_DEV_STAND_IN = "/models.dev/api.json";
 
 /** One request the mock answered. */
 export interface Seen {
@@ -1841,6 +1878,12 @@ async function standUp(
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
+  /**
+   * Each read of a provider's usage the stand-ins answered (OpenCode Go's,
+   * ChatGPT's), with the credential it carried: an agent of the fleet reads
+   * usage here, never from the provider ({@link USAGE_STAND_INS}).
+   */
+  const usageReads: { at: number; auth: string; path: string }[] = [];
   /** The text the requests in `seen` still hold, chars, and the first one not yet let go. */
   const seenText = { chars: 0, from: 0 };
   /**
@@ -1870,6 +1913,27 @@ async function standUp(
       hold.resolve();
     };
   };
+  /**
+   * A read the mock answers in place of a host CawCo's own code reads: a
+   * provider's usage ({@link USAGE_STAND_INS}, logged in `usageReads`),
+   * models.dev's rates (none: the agent keeps its bundled snapshot, core
+   * pricing.ts `refreshPricing`), else a model list with nothing in it.
+   */
+  const standInRead = (request: Request, path: string): Response => {
+    const usage = USAGE_STAND_INS[path];
+    if (usage) {
+      usageReads.push({
+        at: Date.now(),
+        auth: request.headers.get("authorization") ?? "",
+        path,
+      });
+      return Response.json(usage());
+    }
+    if (path === MODELS_DEV_STAND_IN) {
+      return new Response("no rates in a scratch fleet", { status: 404 });
+    }
+    return Response.json({ data: [] });
+  };
   const mock = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -1877,7 +1941,7 @@ async function standUp(
     async fetch(request) {
       const path = new URL(request.url).pathname;
       if (request.method !== "POST") {
-        return Response.json({ data: [] });
+        return standInRead(request, path);
       }
       const body = (await request.json().catch(() => ({}))) as {
         messages?: { role: string; content: unknown }[];
@@ -2138,6 +2202,12 @@ async function standUp(
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     DISABLE_AUTOUPDATER: "1",
     OPENCODE_DISABLE_MODELS_FETCH: "1",
+    // The hosts CawCo's own code reads besides a model provider, each its
+    // stand-in on the mock: OpenCode Go's usage (core usage/opencode-go.ts),
+    // ChatGPT's (usage/chatgpt.ts) and models.dev's rates (usage/pricing.ts).
+    CAWCO_OPENCODE_BASE_URL: mockBase,
+    CAWCO_CHATGPT_BASE_URL: `${mockBase}/backend-api`,
+    CAWCO_MODELS_DEV_URL: `${mockBase}${MODELS_DEV_STAND_IN}`,
     // Inside a workspace, public hosts are reached only through its proxy:
     // the hub reading a skill's source (source-facts.ts) goes the same way.
     // Loopback stays direct (`no_proxy`), so the mock model is unchanged.
@@ -3294,6 +3364,7 @@ async function standUp(
     repo,
     workdir,
     seen,
+    usageReads,
     /** How many token-count requests the mock has got so far. */
     countTokensAsked: () => countTokens.asked,
     holdCountTokens,

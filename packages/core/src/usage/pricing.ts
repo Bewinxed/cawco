@@ -53,6 +53,17 @@ const REFRESH_INTERVAL_MS = DAY_MS;
 const MODELS_DEV_URL = "https://models.dev/api.json";
 
 /**
+ * Where the rates are read from: models.dev, or the stand-in
+ * `CAWCO_MODELS_DEV_URL` names (a test-only setting for a scratch fleet,
+ * unset in production). Read only where it runs on a machine: in a browser
+ * there is no environment.
+ */
+const modelsDevUrl = (): string =>
+  (typeof process === "undefined"
+    ? undefined
+    : process.env.CAWCO_MODELS_DEV_URL) || MODELS_DEV_URL;
+
+/**
  * The providers whose models.dev catalogs price turns: Anthropic's (Claude
  * Code's models), OpenCode Zen's (`opencode`), OpenCode Go's, DeepSeek's own
  * API, and OpenAI's (ChatGPT's models, through OpenCode's `openai` and pi's
@@ -68,7 +79,7 @@ const BARE_PROVIDER = "anthropic";
 /**
  * Provider ids that are another's catalog under a harness's own name: pi's
  * `openai-codex` is ChatGPT's sign-in to OpenAI's models, OpenCode's `openai`
- * (core accounts.ts `opencodeProvidersOf`).
+ * (core accounts.ts `providersOpenedBy`).
  */
 const PROVIDER_ALIASES: Record<string, string> = {
   "openai-codex": "openai",
@@ -394,7 +405,7 @@ export async function refreshPricing(): Promise<number> {
 
   let res: Response;
   try {
-    res = await fetch(MODELS_DEV_URL);
+    res = await fetch(modelsDevUrl());
   } catch {
     return RATES.size;
   }

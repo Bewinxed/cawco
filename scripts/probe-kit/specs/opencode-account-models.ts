@@ -32,6 +32,17 @@
  * (h) an agent whose kept account lists hold Go's alone (as an agent before
  *     a Go key opened Zen left them) lists Zen's from the account's server
  *     once it restarts, no key entered again;
+ * (i) the account's usage is read from the fleet's stand-in, with its key:
+ *     nothing of the fleet asks opencode.ai (core usage/opencode-go.ts,
+ *     `CAWCO_OPENCODE_BASE_URL`);
+ *
+ * and the same for pi, whose models.json points pi-ai's built-in `opencode`
+ * provider at the mock with one more model, `opencode/mock-zen`:
+ *
+ * (j) with no account, the machine's pi offers no `opencode/mock-zen`;
+ * (k) with the Go key account, it offers it;
+ * (l) a pi session on it runs on the Go account, and its first send reaches
+ *     the provider with the account's key and is read;
  * (d) with the machine's OpenCode list unread (as a machine that just
  *     installed OpenCode reports it: no `models`, its `modelsUnread`), a
  *     start on a model it does not list is refused at once, saying the
@@ -50,7 +61,8 @@
  * Before 3aeb09a8e main failed (b), and (c) was refused as unlisted; before
  * 81c35f9e5 it failed (d) and (e); before a Go key opened Zen it failed (b)
  * for the Zen model, and (g) was refused as unlisted ("has no sign-in or
- * key for opencode").
+ * key for opencode"); before pi's account runtime opened Zen too it failed
+ * (k) and (l), and the Go key's usage read went to opencode.ai.
  *
  *   bun scripts/probe-kit/run.ts opencode-account-models
  */
@@ -72,9 +84,13 @@ const KEY = `probe-${crypto.randomUUID()}`;
 /** Each send's words, found again in the mock's log. */
 const WORDS = "PROBE-ACCOUNT-MODELS say ok";
 const ZEN_WORDS = "PROBE-ACCOUNT-MODELS-ZEN say ok";
+const PI_WORDS = "PROBE-ACCOUNT-MODELS-PI say ok";
 
-/** The fleet's OpenCode report as the hub holds it: the models it offers. */
-const offered = async (fleet: KitFleet): Promise<string[]> => {
+/** A harness's report of the fleet's machine as the hub holds it: the models it offers. */
+const offered = async (
+  fleet: KitFleet,
+  harness: "opencode" | "pi" = "opencode"
+): Promise<string[]> => {
   const agents = await fleet.api<
     {
       machineId: string;
@@ -84,7 +100,7 @@ const offered = async (fleet: KitFleet): Promise<string[]> => {
   return (
     agents
       .find((row) => row.machineId === MACHINE)
-      ?.harnesses?.find((one) => one.harness === "opencode")
+      ?.harnesses?.find((one) => one.harness === harness)
       ?.models?.map((model) => model.value) ?? []
   );
 };
@@ -228,9 +244,41 @@ const sharedServices = async (fleet: KitFleet): Promise<string[]> => {
   return found;
 };
 
+/**
+ * pi's models.json with pi-ai's built-in Zen provider (`opencode`) sent to
+ * the fleet's mock, and one more model on it, `mock-zen`: its key stays
+ * pi-ai's (`OPENCODE_API_KEY`, or a stored credential), which the machine
+ * has none of.
+ */
+const piZen = async (fleet: KitFleet): Promise<void> => {
+  const file = join(fleet.home, ".pi", "agent", "models.json");
+  const models = JSON.parse(await readFile(file, "utf8")) as {
+    providers: Partial<
+      Record<string, { baseUrl?: string } & Record<string, unknown>>
+    >;
+  };
+  models.providers.opencode = {
+    baseUrl: models.providers.mockpi?.baseUrl,
+    api: "openai-completions",
+    models: [
+      {
+        id: "mock-zen",
+        name: "Mock Zen",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 100_000,
+        maxTokens: 4000,
+      },
+    ],
+  };
+  await writeFile(file, JSON.stringify(models));
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   fleet.env.OPENCODE_MODELS_PATH = await catalogFor(fleet);
+  await piZen(fleet);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -248,6 +296,17 @@ const run = async (kit: Kit) => {
     `(a) with no account, the machine's OpenCode offers neither ${MODEL} nor ${ZEN_MODEL}`,
     !(before.includes(MODEL) || before.includes(ZEN_MODEL)),
     before.join(", ")
+  );
+  const piBefore = await until(
+    "the machine's pi report",
+    () => offered(fleet, "pi"),
+    (models) => models.length > 0,
+    120_000
+  );
+  kit.check(
+    `(j) with no account, the machine's pi offers no ${ZEN_MODEL}`,
+    !piBefore.includes(ZEN_MODEL),
+    piBefore.join(", ")
   );
 
   // (d) and (e): the hub's word on a start on a model the machine's
@@ -306,10 +365,26 @@ const run = async (kit: Kit) => {
     after.join(", ")
   );
 
-  /** A session started on `model` and one send in it: whether it ran on the account and its send reached the provider with the account's key and was read. */
-  const runsOnAccount = async (model: string, words: string) => {
+  const piAfter = await until(
+    `the machine's pi offering ${ZEN_MODEL}`,
+    () => offered(fleet, "pi"),
+    (models) => models.includes(ZEN_MODEL),
+    180_000
+  ).catch(() => offered(fleet, "pi"));
+  kit.check(
+    `(k) with the account's key there, the machine's pi offers ${ZEN_MODEL}`,
+    piAfter.includes(ZEN_MODEL),
+    piAfter.join(", ")
+  );
+
+  /** A `harness` session started on `model` and one send in it: whether it ran on the account and its send reached the provider with the account's key and was read. */
+  const runsOnAccount = async (
+    model: string,
+    words: string,
+    harness: "opencode" | "pi" = "opencode"
+  ) => {
     const id = await fleet
-      .spawn("opencode", `Account models ${model}`, fleet.workdir, { model })
+      .spawn(harness, `Account models ${model}`, fleet.workdir, { model })
       .catch((error: unknown) => {
         throw new Error(`the start on ${model} was refused: ${error}`);
       });
@@ -346,6 +421,15 @@ const run = async (kit: Kit) => {
     `(g) a session on ${ZEN_MODEL} runs on the same account, and its first send reaches the provider with the account's key and is read`,
     zen.ok,
     zen.said
+  );
+
+  const pi = await runsOnAccount(ZEN_MODEL, PI_WORDS, "pi").catch(
+    (error: unknown) => ({ ok: false, said: String(error) })
+  );
+  kit.check(
+    `(l) a pi session on ${ZEN_MODEL} runs on the Go account, and its first send reaches the provider with the account's key and is read`,
+    pi.ok,
+    pi.said
   );
 
   // (h): the account lists as an agent before a Go key opened Zen kept
@@ -390,6 +474,21 @@ const run = async (kit: Kit) => {
     `(h) an agent that kept Go's list alone lists ${ZEN_MODEL} from the account's server once it restarts, and offers it, no key entered again`,
     relisted && offeredAgain.includes(ZEN_MODEL),
     `kept Zen list ${relisted ? "holds" : "lacks"} ${ZEN_MODEL}; offered: ${offeredAgain.join(", ")}`
+  );
+
+  const usage = await until(
+    "the account's usage read",
+    () =>
+      Promise.resolve(
+        fleet.usageReads.filter((one) => one.path === "/zen/go/v1/usage")
+      ),
+    (reads) => reads.length > 0,
+    120_000
+  ).catch(() => []);
+  kit.check(
+    "(i) the account's OpenCode Go usage is read from the fleet's stand-in, with the account's key",
+    usage.length > 0 && usage.every((one) => one.auth === `Bearer ${KEY}`),
+    `${usage.length} read(s) at the stand-in${usage.some((one) => one.auth !== `Bearer ${KEY}`) ? ", one with another credential" : ""}`
   );
 
   const services = await sharedServices(fleet);

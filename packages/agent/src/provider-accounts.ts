@@ -28,9 +28,9 @@ import {
   type HomeCredential,
   type HomeLoginMoved,
   type LentAccess,
-  opencodeProvidersOf,
   type ProviderSigninChallenge,
   type ProviderSigninResult,
+  providersOpenedBy,
   sameIdentity,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -1674,7 +1674,7 @@ export interface OpencodeCredential {
 
 /**
  * The account's credential as OpenCode 2.0 takes it, once under each
- * OpenCode provider the account opens (core `opencodeProvidersOf`: an
+ * OpenCode provider the account opens (core `providersOpenedBy`: an
  * OpenCode Go key under Go's and Zen's); none for a key the account holds
  * none of. Under each:
  * - a key: the key, with what OpenCode kept beside it;
@@ -1684,7 +1684,7 @@ export interface OpencodeCredential {
  * - any other sign-in: its access token as the key.
  */
 export const opencodeCredentialsOf = (held: Held): OpencodeCredential[] =>
-  opencodeProvidersOf(held.provider).flatMap((integrationID) => {
+  providersOpenedBy("opencode", held.provider).flatMap((integrationID) => {
     const one = opencodeCredentialUnder(held, integrationID);
     return one ? [one] : [];
   });

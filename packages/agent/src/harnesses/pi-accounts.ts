@@ -1,6 +1,7 @@
 /**
  * pi sessions on CawCo accounts. A session on an account runs on a runtime
- * whose credential store is composite: the account's provider reads the
+ * whose credential store is composite: each provider the account opens
+ * (core `providersOpenedBy`: an OpenCode Go key, Go's and Zen's) reads the
  * account's one credential (`~/.cawco/accounts/<id>/credential.json`, the
  * agent's), every other provider the machine's own `~/.pi/agent/auth.json`,
  * so a session on an account still sees the proxy and key models it always
@@ -15,7 +16,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { configurePage, mcpGatewayPort } from "@cawco/core";
+import { configurePage, mcpGatewayPort, providersOpenedBy } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
 import { secondsOf } from "@cawco/core/time";
@@ -111,20 +112,20 @@ const askFresh = async (accountId: string): Promise<void> => {
   }
 };
 
-/** The account's provider from its store; everything else from the machine's. */
+/** Each provider the account opens from its store; everything else from the machine's. */
 class AccountCredentials implements CredentialStore {
   readonly #accountId: string;
-  readonly #provider: string;
+  readonly #providers: ReadonlySet<string>;
   readonly #machine: CredentialStore;
 
   constructor(accountId: string, provider: string, machine: CredentialStore) {
     this.#accountId = accountId;
-    this.#provider = provider;
+    this.#providers = new Set(providersOpenedBy("pi", provider));
     this.#machine = machine;
   }
 
   read(providerId: string, options?: AuthOperationOptions) {
-    if (providerId !== this.#provider) {
+    if (!this.#providers.has(providerId)) {
       return this.#machine.read(providerId, options);
     }
     return Promise.resolve(readAccount(this.#accountId)?.credential);
@@ -136,9 +137,12 @@ class AccountCredentials implements CredentialStore {
     const machine = await this.#machine.list(options);
     const held = readAccount(this.#accountId);
     return [
-      ...machine.filter((one) => one.providerId !== this.#provider),
+      ...machine.filter((one) => !this.#providers.has(one.providerId)),
       ...(held
-        ? [{ providerId: this.#provider, type: held.credential.type }]
+        ? [...this.#providers].map((providerId) => ({
+            providerId,
+            type: held.credential.type,
+          }))
         : []),
     ];
   }
@@ -149,7 +153,7 @@ class AccountCredentials implements CredentialStore {
     fn: (current: Credential | undefined) => Promise<Credential | undefined>,
     options?: AuthOperationOptions
   ): Promise<Credential | undefined> {
-    if (providerId !== this.#provider) {
+    if (!this.#providers.has(providerId)) {
       return await this.#machine.modify(providerId, fn, options);
     }
     await askFresh(this.#accountId);
@@ -157,7 +161,7 @@ class AccountCredentials implements CredentialStore {
   }
 
   delete(providerId: string, options?: AuthOperationOptions): Promise<void> {
-    if (providerId !== this.#provider) {
+    if (!this.#providers.has(providerId)) {
       return this.#machine.delete(providerId, options);
     }
     return Promise.reject(
@@ -168,13 +172,15 @@ class AccountCredentials implements CredentialStore {
   }
 }
 
-/** Each provider an account on this machine holds, with the account that holds it (the first, by id). */
+/** Each provider an account on this machine opens (core `providersOpenedBy`), with the account that opens it (the first, by id). */
 const accountProviders = (): Map<string, string> => {
   const found = new Map<string, string>();
   for (const account of credentialAccountIds()) {
     const held = readAccount(account);
-    if (held && !found.has(held.provider)) {
-      found.set(held.provider, account);
+    for (const provider of held ? providersOpenedBy("pi", held.provider) : []) {
+      if (!found.has(provider)) {
+        found.set(provider, account);
+      }
     }
   }
   return found;
@@ -245,8 +251,8 @@ export const machineWithAccountsRuntime = async (): Promise<ModelRuntime> =>
   });
 
 /**
- * The runtime a session on the account runs on: its provider's credential
- * from the account, everything else from the machine. Models, settings and
+ * The runtime a session on the account runs on: the account's credential
+ * under each provider it opens, everything else from the machine. Models, settings and
  * sessions are the machine's, so a session moves between accounts by being
  * reopened on another account's runtime.
  */

@@ -17,9 +17,18 @@ import type { LimitWindow, OpenCodeGoLimits } from "./types";
  * call time for one request and never logged, persisted or returned. The
  * request goes only to that canonical host and follows no redirect, so the
  * key cannot be handed anywhere else.
+ *
+ * `CAWCO_OPENCODE_BASE_URL` points the read at another host: a test-only
+ * setting for a scratch fleet's stand-in, unset in production, as
+ * `CAWCO_CHATGPT_BASE_URL` is for ChatGPT's (usage/chatgpt.ts).
  */
 
-const USAGE_URL = "https://opencode.ai/zen/go/v1/usage";
+const DEFAULT_BASE_URL = "https://opencode.ai";
+const TRAILING_SLASHES = /\/+$/u;
+
+/** Where the Go usage read goes: OpenCode's host, or the stand-in `CAWCO_OPENCODE_BASE_URL` names. */
+const usageUrl = (): string =>
+  `${(process.env.CAWCO_OPENCODE_BASE_URL || DEFAULT_BASE_URL).replace(TRAILING_SLASHES, "")}/zen/go/v1/usage`;
 const TIMEOUT_MS = 10_000;
 /** The same cadence the Claude reading keeps: the daemon ticks faster and is served from cache. */
 const CACHE_TTL_MS = 180_000;
@@ -108,7 +117,7 @@ export async function fetchOpenCodeGoLimits(
   let error: string;
   try {
     const read = await readWithin(TIMEOUT_MS, async (signal) => {
-      const res = await fetch(USAGE_URL, {
+      const res = await fetch(usageUrl(), {
         headers: { Authorization: `Bearer ${key}` },
         redirect: "error",
         signal,

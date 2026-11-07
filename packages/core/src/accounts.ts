@@ -1069,42 +1069,58 @@ export interface ProviderAccountReading {
 }
 
 /**
- * The OpenCode providers an account's credential opens, by the account's
- * provider, where they are not just its own id: a ChatGPT sign-in
- * (`openai-codex`) is OpenCode's `openai`; an OpenCode Go key is a key of
- * OpenCode's Console, which opens Go's models and Zen's pay-per-use ones
- * (`opencode`) alike, billed to its workspace ("Point a harness at the
- * Console gateway with an API key to use any paid or Go model",
- * https://opencode.ai/docs/console/harnesses/, read 2026-11-07). The one
- * rule both ways: an account's own server is given its credential under each
- * ({@link opencodeProvidersOf}), and an OpenCode model's provider is billed
- * to an account of any provider that opens it ({@link accountProvidersOf}).
+ * The providers an account's credential opens, by the account's provider,
+ * where they are more than its own, in the ids pi-ai and OpenCode share:
+ * an OpenCode Go key is a key of OpenCode's Console, which opens Go's
+ * models and Zen's pay-per-use ones (`opencode`) alike, billed to its
+ * workspace ("Point a harness at the Console gateway with an API key to use
+ * any paid or Go model", https://opencode.ai/docs/console/harnesses/, read
+ * 2026-11-07; pi names both providers' key `OPENCODE_API_KEY`). The one
+ * rule both ways, for every harness that runs on accounts: the account's
+ * credential is given to its harness under each ({@link providersOpenedBy}),
+ * and a model's provider is billed to an account of any provider that opens
+ * it ({@link accountProvidersOf}).
  */
-const OPENCODE_PROVIDERS: Readonly<Record<AccountProvider, readonly string[]>> =
-  {
-    "openai-codex": ["openai"],
-    "opencode-go": ["opencode-go", "opencode"],
-  };
+const PROVIDERS_OPENED: Readonly<
+  Record<AccountProvider, readonly AccountProvider[]>
+> = {
+  "opencode-go": ["opencode-go", "opencode"],
+};
 
-/** The OpenCode providers an account of `provider` opens ({@link OPENCODE_PROVIDERS}): its own id unless it is listed there. */
-export const opencodeProvidersOf = (
+/** OpenCode's id for a provider pi-ai names otherwise: a ChatGPT sign-in (`openai-codex`) is OpenCode's `openai`. */
+const OPENCODE_IDS: Readonly<Record<AccountProvider, string>> = {
+  "openai-codex": "openai",
+};
+
+/**
+ * The providers an account of `provider` opens in `harness`, by the
+ * harness's own ids ({@link PROVIDERS_OPENED}, and for OpenCode
+ * {@link OPENCODE_IDS}): its own id unless the table names more.
+ */
+export const providersOpenedBy = (
+  harness: string,
   provider: AccountProvider
-): readonly string[] => OPENCODE_PROVIDERS[provider] ?? [provider];
+): readonly string[] => {
+  const opened = PROVIDERS_OPENED[provider] ?? [provider];
+  return harness === "opencode"
+    ? opened.map((one) => OPENCODE_IDS[one] ?? one)
+    : opened;
+};
 
 /**
  * The account providers a session's model could bill to, by harness, in the
- * order they are tried: Claude Code's models are Claude accounts'; a pi model
- * `provider/id` is that pi-ai provider's; an OpenCode model `provider/id` is
- * every account provider's that opens it ({@link opencodeProvidersOf}), those
- * {@link OPENCODE_PROVIDERS} lists first: OpenCode's `openai` is a ChatGPT
- * subscription's (`openai-codex`) or an OpenAI key's (`openai`), its
- * `opencode` (Zen) an OpenCode Go key's or a Zen key's. A pi or OpenCode
- * `anthropic/…` model is none: Claude subscriptions run in Claude Code alone.
- * An OpenCode session on an account runs in that account's own OpenCode
- * server, so every provider OpenCode signs in to can be an account's.
- * A bare id or `default` names no provider: the hub qualifies a pi one by
- * pi's own resolution first. Whether the session runs on one also needs a
- * signed-in account of it on its machine, which only the hub knows.
+ * order they are tried: Claude Code's models are Claude accounts'; a pi or
+ * OpenCode model `provider/id` is every account provider's that opens it
+ * there ({@link providersOpenedBy}), those the tables name first: OpenCode's
+ * `openai` is a ChatGPT subscription's (`openai-codex`) or an OpenAI key's
+ * (`openai`), and `opencode` (Zen) an OpenCode Go key's or a Zen key's in
+ * both. A pi or OpenCode `anthropic/…` model is none: Claude subscriptions
+ * run in Claude Code alone. An OpenCode session on an account runs in that
+ * account's own OpenCode server, so every provider OpenCode signs in to can
+ * be an account's. A bare id or `default` names no provider: the hub
+ * qualifies a pi one by pi's own resolution first. Whether the session runs
+ * on one also needs a signed-in account of it on its machine, which only the
+ * hub knows.
  */
 export const accountProvidersOf = (
   harness: string,
@@ -1118,13 +1134,14 @@ export const accountProvidersOf = (
   if (!prefix || prefix === CLAUDE_PROVIDER) {
     return [];
   }
-  if (harness !== "opencode") {
-    return [prefix];
-  }
-  return [...Object.keys(OPENCODE_PROVIDERS), prefix].filter(
+  return [
+    ...Object.keys(PROVIDERS_OPENED),
+    ...Object.keys(OPENCODE_IDS),
+    prefix,
+  ].filter(
     (provider, at, all) =>
       all.indexOf(provider) === at &&
-      opencodeProvidersOf(provider).includes(prefix)
+      providersOpenedBy(harness, provider).includes(prefix)
   );
 };
 
@@ -1175,7 +1192,7 @@ export const joinProviders = (
     .filter((one) => one.id !== CLAUDE_PROVIDER)
     .map((one) => {
       const chatgpt = one.id === "openai-codex";
-      const [alias] = opencodeProvidersOf(one.id);
+      const [alias] = providersOpenedBy("opencode", one.id);
       return {
         ...one,
         // pi-ai calls it "OpenAI Codex (legacy)"; it is a ChatGPT subscription.
@@ -1184,7 +1201,9 @@ export const joinProviders = (
         ...(opencodeIds.has(alias) ? { opencode: alias } : {}),
       };
     });
-  const named = new Set(joined.map((one) => opencodeProvidersOf(one.id)[0]));
+  const named = new Set(
+    joined.map((one) => providersOpenedBy("opencode", one.id)[0])
+  );
   for (const one of opencode) {
     if (!named.has(one.id) && one.id !== CLAUDE_PROVIDER) {
       joined.push({

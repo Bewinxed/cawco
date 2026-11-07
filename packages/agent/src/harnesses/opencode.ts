@@ -62,8 +62,8 @@ import {
   machineLabel,
   mcpFleetState,
   offeredMode,
-  opencodeProvidersOf,
   opencodeSignInFaultWords,
+  providersOpenedBy,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -4325,7 +4325,7 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
-   * The models each provider the account opens (core `opencodeProvidersOf`:
+   * The models each provider the account opens (core `providersOpenedBy`:
    * an OpenCode Go key, Go's and Zen's) offers it, as its own server lists
    * them, kept for each provider.
    */
@@ -4339,7 +4339,7 @@ export class OpencodeHarness implements Harness {
     }
     const directory = await quietDir();
     const read = await Promise.all(
-      opencodeProvidersOf(held.provider).map(
+      providersOpenedBy("opencode", held.provider).map(
         async (provider) =>
           [
             provider,
@@ -4561,7 +4561,9 @@ export class OpencodeHarness implements Harness {
     const providers = new Map<string, string>();
     for (const account of credentialAccountIds()) {
       const held = readHeld(account);
-      for (const provider of held ? opencodeProvidersOf(held.provider) : []) {
+      for (const provider of held
+        ? providersOpenedBy("opencode", held.provider)
+        : []) {
         if (!providers.has(provider)) {
           providers.set(provider, account);
         }
@@ -7124,7 +7126,9 @@ async function catalogDigest(): Promise<string> {
   const providers = new Set<string>(["opencode"]);
   for (const account of credentialAccountIds()) {
     const held = readHeld(account);
-    for (const provider of held ? opencodeProvidersOf(held.provider) : []) {
+    for (const provider of held
+      ? providersOpenedBy("opencode", held.provider)
+      : []) {
       providers.add(provider);
     }
   }
