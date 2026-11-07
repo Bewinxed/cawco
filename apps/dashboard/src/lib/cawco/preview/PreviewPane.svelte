@@ -105,7 +105,6 @@
     IconPenLinear,
     IconPin,
     IconPinLinear,
-    IconPlus,
     IconRefresh,
     IconRefreshLinear,
     IconSend,
@@ -121,7 +120,6 @@
   import AskHere from "../AskHere.svelte";
   import {
     artifactShown,
-    createDraftCanvas,
     keepThumbnail,
     removeArtifact,
     showArtifact,
@@ -3909,23 +3907,6 @@
       folded,
     };
   }
-  /** The head's +: a new canvas, standing here at once. */
-  let making = $state(false);
-  async function newCanvas() {
-    making = true;
-    try {
-      const made = await createDraftCanvas(instanceId);
-      await showArtifact(instanceId, made.id);
-    } catch (error) {
-      failure = {
-        message: `The canvas couldn't be made: ${failureClause(error)}. Try + again.`,
-        again: null,
-      };
-    } finally {
-      making = false;
-    }
-  }
-
   let closing = $state(false);
   async function close() {
     closing = true;
@@ -4064,14 +4045,6 @@
         menu: sendMenu,
         place: "prominent",
         words: true,
-      });
-    }
-    if (!ownTab) {
-      all.push({
-        key: "create",
-        priority: HEAD_PRIORITY.create,
-        bar: createBar,
-        menu: createMenu,
       });
     }
     if (canUndock) {
@@ -4286,27 +4259,6 @@
     {#if holding}<IconLock />{:else}<IconGlobe />{/if}<span
       >{holding ? browserWords.handBack : browserWords.takeOver}</span
     >
-  </DropdownMenu.Item>
-{/snippet}
-
-{#snippet createBar()}
-  <BarItem
-    aria-busy={making || undefined}
-    icon={IconPlus}
-    label="New canvas"
-    onclick={() => {
-      if (!making) {
-        newCanvas();
-      }
-    }}
-  />
-{/snippet}
-{#snippet createMenu()}
-  <DropdownMenu.Item
-    disabled={making}
-    onSelect={whileIdle(() => making, newCanvas)}
-  >
-    <IconPlus /><span>New canvas</span>
   </DropdownMenu.Item>
 {/snippet}
 
@@ -4722,11 +4674,16 @@
      inset's alike. -->
 {#snippet framed()}
   {#if isCanvas}
-    <!-- The canvas's stage stands over this box: its one iframe. -->
+    <!-- The canvas's stage stands over this box: its one iframe. The stage
+         is a layer on the body over every page layer (CanvasStages,
+         `--layer-stage`), so it can never run beneath the head's glass as a
+         page in a frame does: the box starts under the head's room, and the
+         head's title, controls and Close stand whatever the canvas holds. -->
     <div
       data-slot="canvas-slot"
       aria-hidden="true"
-      class="absolute inset-0 pointer-events-none"
+      class="absolute inset-x-0 bottom-0 top-(--slot-top) pointer-events-none"
+      style:--slot-top={inset ? "0px" : "var(--side-room, 0px)"}
       bind:this={canvasSlot}
     ></div>
   {:else if isBrowser && artifact}

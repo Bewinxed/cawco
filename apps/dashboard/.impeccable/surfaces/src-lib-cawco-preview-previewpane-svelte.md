@@ -65,6 +65,8 @@ On a page in Comment mode, coral is the target and nothing else, and no mark on 
 ## Canvas and ink
 
 - A pen swiped up on the composer's pill grows the pill into a canvas; Dock flies it into the panel and Undock back. Ink can be drawn on any artifact, and its pen menu offers Annotate, Comment, Illustrate and Erase (PRD §5.10).
+- **The head offers no New canvas** (the owner, 2026-11-07: "i would never open a new canvas from there"): a canvas is made from the composer (a pen's swipe, Draw, ⌘⇧D), never from the panel's glass or its More.
+- **A canvas stands under the head, never beneath it.** Its stage is a layer on the body over every page layer (CanvasStages), so it would cover the head's glass where a page in a frame runs beneath it: the panel's canvas slot starts at the head's foot, and the head keeps its title, its description and Close over any canvas, empty or not yet loaded.
 
 ## Open for the owner
 

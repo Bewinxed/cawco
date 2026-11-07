@@ -372,8 +372,8 @@ export interface ArtifactInput {
   /** What the person does on it (core `ARTIFACT_DOES`); named with `ask`. */
   does?: ArtifactDoes | undefined;
   /**
-   * A canvas the person opened in the composer (a pen's swipe, Draw, ⌘⇧D,
-   * the panel's +): always a new one, `meta.draft` until its first send,
+   * A canvas the person opened in the composer (a pen's swipe, Draw, ⌘⇧D):
+   * always a new one, `meta.draft` until its first send,
    * and not shown in the panel by being made.
    */
   draft?: boolean | undefined;

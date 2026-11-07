@@ -19,7 +19,6 @@
     IconMoreLinear,
     IconPenLinear,
     IconPinLinear,
-    IconPlus,
     IconRefresh,
     IconRefreshLinear,
     IconSearch,
@@ -106,7 +105,7 @@
     {:else}
       <BarGlass form="group">
         {#if holds === "three" || holds === "selected"}
-          <BarItem icon={IconPlus} label="New canvas" tip={false} />
+          <BarItem icon={IconSearch} label="Search" tip={false} />
           <BarItem
             icon={IconTuningLinear}
             label="Inspect"

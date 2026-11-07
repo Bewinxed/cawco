@@ -381,17 +381,10 @@ export class Stage {
    * over the composer the grab band over its top (`--c-btn-h-lg`: the top
    * grab in its middle, the corner handles at its ends), and at its sides
    * the grown shape's shoulders, which stand in from the page's box by the
-   * corner's inset; in a side card's well its floating head's room over the
-   * top (SideSurface `--side-room`: the canvas runs to the card's top
-   * beneath the head's glass); none in an inset panel, which has no head.
+   * corner's inset; none in the panel, whose slot starts under its head
+   * (this layer stands over the head's glass, so it never runs beneath it).
    */
   #inset(): { side: number; top: number } {
-    if (this.at === "panel") {
-      const head = this.slots.panel
-        ?.closest('[data-slot="side-card"]')
-        ?.querySelector<HTMLElement>('[data-slot="side-head"]');
-      return { side: 0, top: head?.offsetHeight ?? 0 };
-    }
     if (this.at !== "composer") {
       return { side: 0, top: 0 };
     }

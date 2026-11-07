@@ -46,7 +46,7 @@ export interface HeadItem {
   words?: boolean;
 }
 
-/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, Send, the mode, Comments, Expand, Reload, Inspect, the canvas view, Undock, Open in new tab, New canvas). */
+/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, Send, the mode, Comments, Expand, Reload, Inspect, the canvas view, Undock, Open in new tab). The panel offers no New canvas: a canvas is made from the composer. */
 export const HEAD_PRIORITY = {
   control: 0,
   send: 1,
@@ -58,7 +58,6 @@ export const HEAD_PRIORITY = {
   view: 7,
   undock: 8,
   open: 9,
-  create: 10,
 } as const;
 
 /** The name keeps its own width up to this, in px, before any control stands. */

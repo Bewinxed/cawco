@@ -119,7 +119,9 @@
  *     at 390 the panel is a sheet: Close leads its head (the surface brief,
  *     The head: "Leading, Close on a phone's sheet"), the mode stands as
  *     its one button, More is the glass's last, and More's menu holds the
- *     controls that went to it, in head order.
+ *     controls that went to it, in head order. At neither width does the
+ *     head offer New canvas (owner, 2026-11-07: a canvas is never made from
+ *     the panel): no `create` item, no such entry in More.
  * 19. The sidebar's theme switch, with no reload, turns the canvas frame's
  *     `color-scheme` from light to dark, and the frame's own
  *     `prefers-color-scheme: dark` from false to true.
@@ -957,7 +959,6 @@ const WORDED = new Set(["send"]);
 /** The panel head's order (the artifact panel's surface brief), Send to Expand; Close stands after them all. */
 const HEAD_ORDER = [
   "send",
-  "create",
   "undock",
   "open",
   "view",
@@ -1287,7 +1288,7 @@ async function panelLegs(
   const keys = wide.items.map((one) => one.key);
   const worded = (wide.width ?? 0) >= 640;
   kit.check(
-    "18: at the desk every head control stands, in head order, with no More, Close last; under a 640px head Send by glyph and count with no word drawn, every other control (Comments its bubble and count) whole",
+    "18: at the desk every head control stands, in head order (no New canvas among them), with no More, Close last; under a 640px head Send by glyph and count with no word drawn, every other control (Comments its bubble and count) whole",
     wide.items.length > 0 &&
       wide.items.every(
         (one) =>
@@ -1404,7 +1405,7 @@ async function panelLegs(
       entries.findIndex((entry) => entry.trim() === one.name)
     );
     kit.check(
-      `18: at 390 (${theme}) Close leads the sheet's head, the mode stands as its one button, More is the glass's last, and More's menu holds what went to it in head order`,
+      `18: at 390 (${theme}) Close leads the sheet's head, the mode stands as its one button, More is the glass's last, More's menu holds what went to it in head order, and no New canvas stands in the head or More`,
       mode?.stands === true &&
         mode.form === "compact" &&
         narrow.more &&
@@ -1412,6 +1413,8 @@ async function panelLegs(
         narrow.closeFirst &&
         !narrow.closeLast &&
         gone.length > 0 &&
+        !narrow.items.some((one) => one.key === "create") &&
+        !entries.some((entry) => entry.includes("New canvas")) &&
         at.every((one, n) => one >= 0 && (n === 0 || one > (at[n - 1] ?? -1))),
       `head ${JSON.stringify(narrow)}; More's entries ${JSON.stringify(entries)}`
     );

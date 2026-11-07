@@ -220,7 +220,7 @@ export async function artifactShown(
 }
 
 /**
- * A new canvas for the composer (a pen's swipe, Draw, ⌘⇧D, the panel's +):
+ * A new canvas for the composer (a pen's swipe, Draw, ⌘⇧D):
  * empty, a draft until its first send, not shown in the panel by being made.
  */
 export async function createDraftCanvas(

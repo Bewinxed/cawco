@@ -44,6 +44,11 @@
  *     claim written first under a number no page answers to, then that
  *     screen closed): another screen joined to the canvas draws it, inside
  *     the hub's wait (sync.ts `releaseClaims`).
+ * head. The blank canvas in the panel, at the desk and at 390: the stage
+ *     (a layer on the body over every page layer) stands under the panel's
+ *     head, never over it, so the head's title and Close are what a press
+ *     at their middles reaches; the head offers no New canvas, in its glass
+ *     or in More.
  * 26. Images: a 32×32 PNG pasted on the canvas (a `paste` event with the
  *     file on its clipboardData) is an image element on both screens joined
  *     to it, its file in each one's doc `files`; the outline reads
@@ -528,7 +533,97 @@ const emptyChecks = async (on: OnCanvas) => {
       pen === 1,
     `${answer.slice(0, 200)}; ${rail.title} / ${rail.line}; pen chosen ${pen}`
   );
+
+  // head. The blank canvas under the panel's head, at the desk and at 390.
+  const desk = await headOver(on.page);
+  on.kit.check(
+    "head: at the desk the blank canvas's stage stands under the panel's head, a press at the head's title and at its Close reaches them, and the head offers no New canvas",
+    headHolds(desk),
+    JSON.stringify(desk)
+  );
+  const phone = await on.kit.page("phone");
+  await open(
+    phone,
+    `${await on.fleet.dashboard()}/session/${on.session}`,
+    COMPOSER
+  );
+  await canvasFrame(phone).catch(() => null);
+  const narrow = await headOver(phone);
+  on.kit.check(
+    "head: at 390 the blank canvas's stage stands under the sheet's head, a press at the head's title and at its Close reaches them, and neither the glass nor More offers New canvas",
+    headHolds(narrow),
+    JSON.stringify(narrow)
+  );
+  await phone.close();
 };
+
+/**
+ * The panel's head over a canvas, read from the DOM: whether the canvas's
+ * stage stands (its layer drawn) and where its top is against the head's
+ * foot; what a press at the middle of the head's title and of its Close
+ * reaches (the head's own, or what covers it); the head's item keys; and,
+ * More opened where it stands, the words of its entries.
+ */
+const headOver = async (page: Page) => {
+  const read = await page.evaluate(() => {
+    const card = document.querySelector('[data-side-card="preview"]');
+    const head = card?.querySelector<HTMLElement>('[data-slot="side-head"]');
+    const stage = document.querySelector<HTMLElement>(
+      '[data-slot="canvas-stage"][data-canvas-stages-docked]'
+    );
+    const reached = (el: Element | null | undefined) => {
+      if (!(el && head)) {
+        return "missing";
+      }
+      const box = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2
+      );
+      if (hit && head.contains(hit)) {
+        return "head";
+      }
+      return hit?.closest("[data-slot]")?.getAttribute("data-slot") ?? "none";
+    };
+    const stageBox =
+      stage && !stage.hidden ? stage.getBoundingClientRect() : null;
+    return {
+      headFoot: head?.getBoundingClientRect().bottom ?? null,
+      stageTop: stageBox?.top ?? null,
+      title: reached(head?.querySelector(":scope > [data-slot=identity] > *")),
+      close: reached(head?.querySelector('[aria-label="Close"]')),
+      items: [
+        ...(head?.querySelectorAll<HTMLElement>("[data-head-item]") ?? []),
+      ].map((one) => one.dataset.headItem ?? ""),
+      named: [...(head?.querySelectorAll("[aria-label]") ?? [])].map(
+        (one) => one.getAttribute("aria-label") ?? ""
+      ),
+    };
+  });
+  const more = page.locator(
+    '[data-side-card="preview"] [data-slot="side-head"] [data-slot="more"]'
+  );
+  let entries: string[] = [];
+  if ((await more.count()) > 0) {
+    await more.first().click();
+    entries = await page
+      .locator('[role="menu"] [role^="menuitem"]')
+      .allTextContents();
+    await page.keyboard.press("Escape");
+  }
+  return { ...read, entries };
+};
+
+/** The head over the blank canvas keeps its title and Close, and offers no New canvas (`headOver`). */
+const headHolds = (read: Awaited<ReturnType<typeof headOver>>) =>
+  read.stageTop !== null &&
+  read.headFoot !== null &&
+  read.stageTop >= read.headFoot - 0.5 &&
+  read.title === "head" &&
+  read.close === "head" &&
+  !read.items.includes("create") &&
+  !read.named.includes("New canvas") &&
+  !read.entries.some((one) => one.includes("New canvas"));
 
 /** The two refusals, as DESIGN.md's error formula has them (images.ts). */
 const TOO_BIG =
