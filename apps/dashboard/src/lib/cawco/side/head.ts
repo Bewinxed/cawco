@@ -36,7 +36,7 @@ export interface HeadItem {
   /**
    * Where it stands in the head (HIG, Toolbars, Item groupings): in the
    * trailing glass of bare symbols (none), the centre (the mode, a
-   * segmented control), or after the glass as the one prominent action
+   * segmented control; a browser's address), or after the glass as the one prominent action
    * (Send, Take over).
    */
   place?: "centre" | "prominent";
@@ -46,19 +46,20 @@ export interface HeadItem {
   words?: boolean;
 }
 
-/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, Send, the mode, Comments, Expand, Reload, Inspect, the canvas view, Undock, Open in new tab, New canvas). */
+/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, its address, Send, the mode, Comments, Expand, Reload, Inspect, the canvas view, Undock, Open in new tab, New canvas). */
 export const HEAD_PRIORITY = {
   control: 0,
-  send: 1,
-  mode: 2,
-  comments: 3,
-  expand: 4,
-  reload: 5,
-  inspect: 6,
-  view: 7,
-  undock: 8,
-  open: 9,
-  create: 10,
+  address: 1,
+  send: 2,
+  mode: 3,
+  comments: 4,
+  expand: 5,
+  reload: 6,
+  inspect: 7,
+  view: 8,
+  undock: 9,
+  open: 10,
+  create: 11,
 } as const;
 
 /** The name keeps its own width up to this, in px, before any control stands. */

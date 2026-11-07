@@ -4242,6 +4242,14 @@
         }
       }
     },
+    "c-browser-address-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "A browser artifact's address in the artifact panel's head, at the head's centre as a browser's toolbar holds it: the most it takes, so a long origin ends in an ellipsis (its whole in its title) before it pushes the head's controls into More."
+    },
     "c-rail-float-room": {
       "$type": "dimension",
       "$value": {

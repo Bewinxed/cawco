@@ -185,6 +185,7 @@
     retryComment,
     sendArtifact,
   } from "./artifact-doc";
+  import BrowserAddress from "./BrowserAddress.svelte";
   import BrowserView from "./BrowserView.svelte";
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import CanvasView from "./CanvasView.svelte";
@@ -3965,6 +3966,11 @@
   /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
   const sheetCanvas = $derived(isSheet ? canvasOf(startAt) : null);
   /**
+   * The frame stands in the design graph's stage, under the stage's own
+   * head: the head's room is the graph page's, never the frame's.
+   */
+  const inGraph = $derived(isSheet && !!artifact && !!link && !!sheetCanvas);
+  /**
    * Where the frame stands in the well: in the design graph's stage, or
    * under the floating head's room (`--page-top`) beside a side card's
    * head. The pins' room takes that box, so a place the page says is a
@@ -4052,6 +4058,13 @@
         bar: controlBar,
         menu: controlMenu,
         place: "prominent",
+      });
+      all.push({
+        key: "address",
+        priority: HEAD_PRIORITY.address,
+        bar: addressBar,
+        menu: addressMenu,
+        place: "centre",
       });
     }
     // A decision page's one Send is its own, at its foot (its doc's
@@ -4287,6 +4300,21 @@
       >{holding ? browserWords.handBack : browserWords.takeOver}</span
     >
   </DropdownMenu.Item>
+{/snippet}
+
+<!-- A browser's address, in the head's centre (BrowserAddress). -->
+{#snippet addressBar()}
+  <BrowserAddress
+    mine={!!browserRow?.takeover}
+    origin={browserRow?.origin ?? null}
+  />
+{/snippet}
+{#snippet addressMenu()}
+  <BrowserAddress
+    as="menu"
+    mine={!!browserRow?.takeover}
+    origin={browserRow?.origin ?? null}
+  />
 {/snippet}
 
 {#snippet createBar()}
@@ -4693,7 +4721,9 @@
         undefined}
       class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
       style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
-      style:--page-top={headRoomTaken ? "0px" : "var(--side-room, 0px)"}
+      style:--page-top={headRoomTaken || inGraph
+        ? "0px"
+        : "var(--side-room, 0px)"}
       style:--page-h="calc(100% - var(--page-top))"
       allow="clipboard-write"
       inert={!current}
@@ -4808,16 +4838,18 @@
          meanwhile. A component artifact's frame stands in its design graph's
          stage (the graph's chrome round it, the panel's DOM), the inspector's
          panel beside the graph. -->
-    {#if isSheet && artifact && link && sheetCanvas}
+    {#if inGraph && artifact && link && sheetCanvas}
       <div
         data-slot="graph-host"
         data-panel-inspector={(inspecting &&
           inspectorLayout === "panel" &&
           !inspectorInRoom) ||
           undefined}
-        class="absolute inset-x-0 top-(--side-room,0px) bottom-0 data-panel-inspector:w-(--frame-w)"
+        class="absolute inset-0 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
       >
+        <!-- The graph runs to the card's top under the floating head and
+             takes its room on its own page (DesignGraph). -->
         <DesignGraph
           ask={artifact.ask ?? ""}
           files={sheetCanvas.files}

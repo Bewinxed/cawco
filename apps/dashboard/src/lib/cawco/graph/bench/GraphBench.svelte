@@ -19,8 +19,11 @@
     type StageReach,
   } from "@cawco/core/stage-graph";
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
+  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
+  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import DesignGraph from "../DesignGraph.svelte";
   import {
     cssValueOf,
@@ -47,6 +50,8 @@
     also?: string[];
   } = $props();
 
+  /** Under 640px the panel is a phone's sheet: Close leads its head. */
+  const phone = new MediaQuery("max-width: 639px");
   const FILE = "apps/dashboard/src/lib/cawco/routines/RoutineForm.stories.ts";
   /** Each story's doc comment, as the stage reads it off the file. */
   const NOTES: Record<string, string> = {
@@ -301,14 +306,30 @@
   </div>
 {/snippet}
 
-<div class="h-dvh min-h-0 bg-surface-page">
-  <DesignGraph
-    ask="Judge the routine form's dials"
-    files={[FILE, ...also]}
-    {frame}
-    {link}
-    keptDials={turned}
-    {spec}
-    startFace={face}
-  />
-</div>
+<!-- In the artifact panel as a person meets it: the panel's card and its
+     floating head (SideSurface), beside the page on a desk and a sheet's
+     on a phone, the graph under the head as PreviewPane hosts it. -->
+<TooltipProvider>
+  <div
+    class="flex h-dvh min-h-0 bg-surface-page p-space-2 *:flex-1 max-phone:p-0"
+  >
+    <SideSurface
+      label="Preview"
+      onclose={() => undefined}
+      placement={phone.current ? "sheet" : "beside"}
+      title="Routine form, every state"
+    >
+      <div class="absolute inset-0" data-slot="graph-host">
+        <DesignGraph
+          ask="Judge the routine form's dials"
+          files={[FILE, ...also]}
+          {frame}
+          {link}
+          keptDials={turned}
+          {spec}
+          startFace={face}
+        />
+      </div>
+    </SideSurface>
+  </div>
+</TooltipProvider>

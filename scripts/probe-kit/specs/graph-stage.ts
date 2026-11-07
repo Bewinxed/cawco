@@ -24,7 +24,8 @@
  * 5b. The drawer's stops are measured inside the surface it stands in,
  *    never the window: at each stop its grabber's press steps it on, the
  *    drawer stands that stop's height over the surface's foot (its head
- *    `c-graph-drawer-head`; whole up to the bar's foot) and no lower, its
+ *    `c-graph-drawer-head`; whole up to the foot of the panel head's room)
+ *    and no lower, its
  *    grabber takes a press where it is drawn, and past its head a state
  *    row in it takes one; the stage ends at its top.
  * 6. `artifact_read({ png: true, state: { story: "Two" } })` answers a
@@ -32,7 +33,7 @@
  *    stage (`by=stage`): 1280 px wide, a desk's form, for a card of no
  *    width of its own.
  * 7. The rendered checks on the panel's design graph at 1440×900 and
- *    390×844, the bar, the room and the stage's head.
+ *    390×844, the panel's head, the room and the stage's head.
  * 8. In the session's panel at its default width on a desk, Inspect stands
  *    the inspector over the well's foot, a sheet, and the stage keeps its
  *    width: picked from the window, its panel beside the graph left the
@@ -62,7 +63,7 @@
  * The graph-compare leg (the build spec's slice 3, Compare), on a session
  * in this checkout and a canvas of the dashboard's routine form:
  *
- * compare 1. Compare on in the bar with the routine form at Just opened
+ * compare 1. Compare on in the stage's head with the routine form at Just opened
  *    (compared with Filled in, the state after it on its path) reads the
  *    lines the design graph's branch read (its design run, Use): "Menu
  *    “When”: day ← weekdays", "Field “Name” emptied (was Triage new
@@ -559,7 +560,8 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
         const root = document.querySelector(graph);
         const sheet = document.querySelector(drawer);
         const stage = root?.querySelector('[data-slot="stage"]');
-        const bar = root?.querySelector('[data-slot="graph-bar"]');
+        // The head's room: the graph page's top padding, under the panel's floating head.
+        const pageBox = root?.querySelector('[data-slot="graph-page"]');
         const head = Number.parseFloat(
           getComputedStyle(document.documentElement).getPropertyValue(
             "--c-graph-drawer-head"
@@ -571,7 +573,10 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
         return {
           head,
           foot: surface ? Math.round(surface.bottom) : null,
-          barFoot: box(bar)?.bottom ?? null,
+          barFoot: pageBox
+            ? pageBox.getBoundingClientRect().top +
+              Number.parseFloat(getComputedStyle(pageBox).paddingTop)
+            : null,
           top: box(sheet)?.top ?? null,
           stageFoot: box(stage)?.bottom ?? null,
           screen: innerHeight,
@@ -580,7 +585,7 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
       [GRAPH, DRAWER] as const
     );
   type Read = Awaited<ReturnType<typeof read>>;
-  /** The height a stop stands over the surface's foot: the head's token, whole up to the bar's foot; half is read, not named. */
+  /** The height a stop stands over the surface's foot: the head's token, whole up to the foot of the panel head's room; half is read, not named. */
   const heightOf = (stop: string, at: Read): number | null => {
     if (stop === "head") {
       return at.head;
@@ -667,7 +672,7 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
     await page.waitForTimeout(900);
   }
   kit.check(
-    "5b: at 390 each of the drawer's stops stands its height over the surface's foot (head, half, whole up to the bar), its grabber and a state row take a press, the stage ends at its top",
+    "5b: at 390 each of the drawer's stops stands its height over the surface's foot (head, half, whole up to the head's room), its grabber and a state row take a press, the stage ends at its top",
     stops.length === 3 && stops.every(ok),
     JSON.stringify(stops)
   );
@@ -676,7 +681,7 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
 /** Leg 9: both states files stand in the components' menu from the graph's first paint. */
 async function componentsListed(kit: Kit, page: Page): Promise<void> {
   const trigger = page
-    .locator(`${GRAPH} [data-slot="graph-bar"] button[aria-haspopup="menu"]`)
+    .locator(`${GRAPH} [data-slot="stage-head"] button[aria-haspopup="menu"]`)
     .first();
   const standing = await trigger.isVisible().catch(() => false);
   let items: string[] = [];
@@ -916,7 +921,7 @@ async function comparing(
   );
   await page
     .locator(
-      `${GRAPH} [data-slot="graph-bar"] button[aria-label="${graphWords.compare}"]`
+      `${GRAPH} [data-slot="stage-head"] button[aria-label="${graphWords.compare}"]`
     )
     .first()
     .click();
@@ -1145,7 +1150,7 @@ async function compareWide(kit: Kit, base: string, id: string): Promise<void> {
   await page.waitForTimeout(900);
   await page
     .locator(
-      `${GRAPH} [data-slot="graph-bar"] button[aria-label="${graphWords.compare}"]`
+      `${GRAPH} [data-slot="stage-head"] button[aria-label="${graphWords.compare}"]`
     )
     .first()
     .click();

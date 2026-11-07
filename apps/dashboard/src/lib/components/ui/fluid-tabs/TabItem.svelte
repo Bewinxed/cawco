@@ -362,6 +362,10 @@
     "in-variant-folder:motion-safe:[transition:color_var(--dur-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
     "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
+    // A glyph alone is narrower than a finger: under one it takes the touch
+    // floor across, its glyph centred (The 44 Touch Rule), since its
+    // neighbours' edges bound its hit area.
+    glyphOnly && "coarse:min-w-c-touch-floor coarse:*:data-hit:justify-center",
     className
   )}
   data-flush={flush}

@@ -19,8 +19,8 @@
  *    the person takes it over from the session's panel, which draws its
  *    frames with "You have control";
  * 2. a tap on the textarea in the stream focuses it in the remote page;
- * 3. the band's Show keyboard stands there, and a tap on it focuses the
- *    view's keyboard field (what raises a phone's keyboard), the band then
+ * 3. Show keyboard floats over the stream there, and a tap on it focuses the
+ *    view's keyboard field (what raises a phone's keyboard), the key then
  *    offering Hide keyboard;
  * 4. typed into that field: "Hél" by key, "lo" as the keyboard's inserted
  *    text, a Backspace, a Return, "teh" by key, the field's "teh" replaced
@@ -556,7 +556,7 @@ export async function typeIntoTakeover(
     120_000
   ).catch(() => viewOf(page));
   kit.check(
-    `the panel draws the take-over's frames (${taken.frames}, ${taken.width}×${taken.height}), the band "${taken.control}"`,
+    `the panel draws the take-over's frames (${taken.frames}, ${taken.width}×${taken.height}), the head's address "${taken.control}"`,
     taken.driving &&
       taken.frames > 0 &&
       taken.control?.startsWith(browserWords.youHaveControl) === true,
@@ -596,7 +596,7 @@ export async function typeIntoTakeover(
     () => false
   );
   kit.check(
-    "the band offers Show keyboard while the person drives from a phone",
+    "the stream offers Show keyboard while the person drives from a phone",
     shown,
     JSON.stringify(await viewOf(page))
   );
@@ -618,7 +618,7 @@ export async function typeIntoTakeover(
       () => false
     );
   kit.check(
-    `a tap on Show keyboard focuses the keyboard field (${raised.focused}), the band then offering Hide keyboard (${hide})`,
+    `a tap on Show keyboard focuses the keyboard field (${raised.focused}), the key then offering Hide keyboard (${hide})`,
     raised.focused === "browser-keys" && hide,
     JSON.stringify(raised)
   );
@@ -721,7 +721,7 @@ export async function typeIntoTakeover(
     errors.join("\n")
   );
 
-  // 7. On a desk the band has no Show keyboard: a click focuses the view.
+  // 7. On a desk the stream has no Show keyboard: a click focuses the view.
   const desk = await kit.page("desk");
   await open(desk, `${base}/session/${session}`, VIEW);
   const deskView = await until(
