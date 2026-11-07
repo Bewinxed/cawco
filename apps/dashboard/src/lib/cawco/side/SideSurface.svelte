@@ -184,6 +184,8 @@
     )
   );
   const prominent = $derived(all.filter((one) => one.place === "prominent"));
+  /** What stands with the name, after it (a browser's address): the head's leading group, the controls trailing. */
+  const inLead = $derived(all.filter((one) => one.place === "lead"));
   /** The controls standing in the head, and how; null until the head is measured: all of them whole. */
   let shown = $state<Map<string, Standing> | null>(null);
   /** The name's own width, up to {@link NAME_KEEPS}: it gives up no more of it to the controls. */
@@ -482,7 +484,7 @@
     }
     // Each of the pane's controls by its key, where it stands now, so a pane's
     // items arriving or a control changing places re-observes them.
-    for (const one of [...inCentre, ...inGlass, ...prominent]) {
+    for (const one of [...inLead, ...inCentre, ...inGlass, ...prominent]) {
       const child = el.querySelector(
         `[data-head-item="${CSS.escape(one.key)}"]`
       );
@@ -531,10 +533,15 @@
 
 <!-- One of the pane's controls where it stands, whole or in its narrowest form; hidden while it stands in More. -->
 {#snippet headItem(one: HeadItem)}
+  <!-- What leads with the name takes the room after it, so the controls
+       trail (`me-auto`). -->
   <div
     data-form={formOf(one.key)}
     data-head-item={one.key}
-    class="unhidden:flex unhidden:flex-none"
+    class={[
+      "unhidden:flex unhidden:flex-none",
+      one.place === "lead" && "me-auto",
+    ]}
     hidden={!stands(one.key)}
   >
     {#if one.compact && formOf(one.key) === "compact"}
@@ -621,9 +628,10 @@
          description, never a line under it. -->
     <div
       data-slot="identity"
+      data-led={inLead.some((one) => stands(one.key)) || undefined}
       data-controlled={titleControl ? "" : undefined}
       data-switched={switcher && switcherAt === "start" ? "" : undefined}
-      class="-m-space-1 flex min-w-(--name-keeps) flex-1 items-center overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
+      class="-m-space-1 flex min-w-(--name-keeps) flex-1 items-center overflow-hidden p-space-1 ps-space-3 *:max-w-full data-led:flex-initial data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
       style:--name-keeps="{nameKeeps}px"
       bind:this={identity}
     >
@@ -646,6 +654,9 @@
       {/if}
     </div>
     {@render actions?.()}
+    {#each inLead as one (one.key)}
+      {@render headItem(one)}
+    {/each}
     {#each inCentre as one (one.key)}
       {@render headItem(one)}
     {/each}

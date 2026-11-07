@@ -196,6 +196,21 @@ export interface StageDials {
   values: Record<string, DialSet>;
 }
 
+/**
+ * Pane → page: the room the stage's floating head takes over the page's
+ * top, px (the design graph's StagePane: its name, its glass, and while
+ * comparing what differs). The page pads its column's top by it, so the
+ * drawing at rest stands clear of the head and scrolls beneath it, and
+ * draws the scroll edge effect under it; a ring brought into view stands
+ * clear of it too (`scroll-padding-top`).
+ */
+export const STAGE_ROOM = "cawco:stage-room";
+export interface StageRoom {
+  px: number;
+}
+/** The most room a stage's head may take, px: a head's, never the page's. */
+const STAGE_ROOM_MOST = 480;
+
 /** One dial's value as set on the drawing: a number, a colour or an option's words, a toggle. */
 export type DialSet = number | string | boolean;
 
@@ -885,6 +900,14 @@ function dialValuesOf(value: unknown): Record<string, DialSet> | null {
 export function stageDialsOf(value: unknown): StageDials | null {
   const values = isRecord(value) ? dialValuesOf(value.values) : null;
   return values ? { values } : null;
+}
+
+/** A {@link StageRoom} as it crossed the frame; null when it is none. */
+export function stageRoomOf(value: unknown): StageRoom | null {
+  const px = isRecord(value) ? value.px : null;
+  return typeof px === "number" && Number.isFinite(px) && px >= 0
+    ? { px: Math.min(px, STAGE_ROOM_MOST) }
+    : null;
 }
 
 /** A {@link StageDialsWritten} as it crossed the frame; null when it is none. */

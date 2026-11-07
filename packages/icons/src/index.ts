@@ -188,6 +188,8 @@ export {
   default as IconAgent,
   default as IconGhost,
 } from "~icons/solar/ghost-smile-bold-duotone";
+/** The agent driving a browser, in its address (BrowserAddress): the agent's ghost, a bar's linear cut. */
+export { default as IconAgentLinear } from "~icons/solar/ghost-smile-linear";
 /** What differs between two states: Compare (bare: the scale stands on a tile, The Solar Duotone Rule). */
 export { default as IconCompare } from "~icons/solar/git-diff-bold-duotone";
 export { default as IconCompareLinear } from "~icons/solar/git-diff-linear";
@@ -251,6 +253,7 @@ export { default as IconMinimizeLinear } from "~icons/solar/minimize-linear";
  */
 export {
   default as IconMinus,
+  default as IconMinusLinear,
   default as IconNeutral,
 } from "~icons/solar/minus-linear";
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
@@ -389,6 +392,9 @@ export { default as IconDeleteForGood } from "~icons/solar/trash-bin-trash-bold-
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
 export { default as IconTuningLinear } from "~icons/solar/tuning-2-linear";
 export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";
+/** Undo and redo in a bar's glass (a canvas's tools), Solar's linear cut. */
+export { default as IconUndoLinear } from "~icons/solar/undo-left-linear";
+export { default as IconRedoLinear } from "~icons/solar/undo-right-linear";
 export { default as IconUser } from "~icons/solar/user-bold-duotone";
 /** Delegated work: the subagents a session still has out. Accounts: Configure's sign-ins. */
 export {

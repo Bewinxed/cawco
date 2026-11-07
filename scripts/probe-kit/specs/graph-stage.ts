@@ -921,7 +921,7 @@ async function comparing(
   );
   await page
     .locator(
-      `${GRAPH} [data-slot="stage-head"] button[aria-label="${graphWords.compare}"]`
+      `${GRAPH} [data-slot="stage-head"] button[aria-label^="${graphWords.compare("")}"]`
     )
     .first()
     .click();
@@ -1143,14 +1143,14 @@ async function compareWide(kit: Kit, base: string, id: string): Promise<void> {
   ]);
   await page
     .locator(
-      `${GRAPH} [data-slot="graph-room"] button[aria-label="${graphWords.closeRoom(roomName)}"]`
+      `${GRAPH} [data-slot="stage-head"] button[data-slot="room-switch"][aria-label="${graphWords.closeRoom(roomName)}"]`
     )
     .first()
     .click();
   await page.waitForTimeout(900);
   await page
     .locator(
-      `${GRAPH} [data-slot="stage-head"] button[aria-label="${graphWords.compare}"]`
+      `${GRAPH} [data-slot="stage-head"] button[aria-label^="${graphWords.compare("")}"]`
     )
     .first()
     .click();

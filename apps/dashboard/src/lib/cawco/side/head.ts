@@ -36,10 +36,12 @@ export interface HeadItem {
   /**
    * Where it stands in the head (HIG, Toolbars, Item groupings): in the
    * trailing glass of bare symbols (none), the centre (the mode, a
-   * segmented control; a browser's address), or after the glass as the one prominent action
-   * (Send, Take over).
+   * segmented control), after the name in its leading group (`lead`: a
+   * browser's address, as a browser's toolbar holds it with the page's
+   * title), or after the glass as the one prominent action (Send, Take
+   * over).
    */
-  place?: "centre" | "prominent";
+  place?: "centre" | "lead" | "prominent";
   /** Its place in {@link HEAD_PRIORITY}: the lower stands while the higher goes to More. */
   priority: number;
   /** `bar` says words its glyph and count stand without (Send): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */

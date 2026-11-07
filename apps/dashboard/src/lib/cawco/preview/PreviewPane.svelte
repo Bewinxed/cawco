@@ -186,6 +186,7 @@
   import BrowserAddress from "./BrowserAddress.svelte";
   import BrowserView from "./BrowserView.svelte";
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
+  import { browserHead } from "./browser-head";
   import CanvasView from "./CanvasView.svelte";
   import ChangeLines, { type ChangeLine } from "./ChangeLines.svelte";
   import ChangesTag from "./ChangesTag.svelte";
@@ -3817,6 +3818,8 @@
       online: known?.online ?? false,
     };
   });
+  /** The browser's stream is drawn in the well (BrowserView): there is a page to take over. */
+  let browserViewing = $state(false);
   let browserActing = $state(false);
   /** Take over from the panel, or Hand back while the person holds it; a refusal on the pane's line. */
   async function browserControl() {
@@ -4033,20 +4036,29 @@
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
     if (isBrowser && browserRow) {
-      all.push({
-        key: "control",
-        priority: HEAD_PRIORITY.control,
-        bar: controlBar,
-        menu: controlMenu,
-        place: "prominent",
+      const shows = browserHead(browserRow, {
+        online: browserMachine.online,
+        viewing: browserViewing,
+        sheet: !!sheet,
       });
-      all.push({
-        key: "address",
-        priority: HEAD_PRIORITY.address,
-        bar: addressBar,
-        menu: addressMenu,
-        place: "centre",
-      });
+      if (shows.control) {
+        all.push({
+          key: "control",
+          priority: HEAD_PRIORITY.control,
+          bar: controlBar,
+          menu: controlMenu,
+          place: "prominent",
+        });
+      }
+      if (shows.address) {
+        all.push({
+          key: "address",
+          priority: HEAD_PRIORITY.address,
+          bar: addressBar,
+          menu: addressMenu,
+          place: "lead",
+        });
+      }
     }
     // A decision page's one Send is its own, at its foot (its doc's
     // `ownSend`): the head stands none for it.
@@ -4231,6 +4243,7 @@
     aria-label={`${commentWords.send}, ${unsentCount} unsent`}
     onclick={() => sendAll("panel-head")}
     pending={sending}
+    shape="capsule"
     title="Send what the session hasn't heard"
   >
     <PendingContent icon={IconSend} pending={sending} />
@@ -4260,6 +4273,7 @@
     onclick={browserControl}
     pending={browserActing}
     pendingLabel={holding ? browserWords.handingBack : browserWords.takingOver}
+    shape="capsule"
     variant={holding ? "outline" : "default"}
   />
 {/snippet}
@@ -4718,10 +4732,12 @@
     ></div>
   {:else if isBrowser && artifact}
     <BrowserView
+      addressAtFoot={!!sheet}
       artifactId={artifact.id}
       browser={browserRow}
       {instanceId}
       machine={browserMachine}
+      bind:viewing={browserViewing}
     />
   {:else if unopened}
     <!-- The hub opened no origin for it (every preview port in use): its

@@ -29,7 +29,7 @@
  * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, a mark out of the accessibility tree (`data-mark`: a comment's pin), a found word (`<mark>`, a search's hit), his own edit marks (a bare `data-edited` undo glyph in coral ink, several to a view) and a region's one coral hairline side (the vermillion section rule) are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does, or one under another bar of its surface, heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) and a foot's lone top hairline (DESIGN.md, Borders are graded) are named, not failed |
- * | bar-room    | own code                    | a head bar (as bar-ground reads one, named or holding a glass group of the bar kit; not a foot, not a group inside a bar, not one standing in its own scroller) floats over its content: of the scrollers in the surface it heads (a box that scrolls, or a page in a frame, another document's scroller; not one in a layer or a panel of its own inside it, a landmark with a heading or bar above the scroller, which that head heads) across half its width or more and running past its foot, the topmost starts above that foot, so what scrolls passes under the bar; one that starts at or under the foot means the bar claims a row and pushes its content down; a page in a frame standing at the foot (another document's layout is not the host's to inset) and a folder-tab shelf over the sheet its chosen tab opens (DESIGN.md, Shapes, Folder tabs) are named |
+ * | bar-room    | own code                    | a head bar (as bar-ground reads one, named or holding a glass group of the bar kit; not a foot, not a group inside a bar, not one standing in its own scroller) floats over its content: of the scrollers in the surface it heads (a box that scrolls, or a page in a frame, another document's scroller; not one in a layer or a panel of its own inside it, a landmark with a heading above the scroller or a bar at its top, in flow or floating over it, which that head heads) across half its width or more and running past its foot, the topmost starts above that foot, so what scrolls passes under the bar; one that starts at or under the foot means the bar claims a row and pushes its content down; a page in a frame standing at the foot (another document's layout is not the host's to inset) and a folder-tab shelf over the sheet its chosen tab opens (DESIGN.md, Shapes, Folder tabs) are named |
  * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
  * | back-close  | own code                    | no control's words say Back or Close (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Back and Close are symbols) |
  * | hidden-cue  | own code + ink              | a scroller cut at an edge (an element of it past that edge: a pseudo's overflow alone hides nothing) carries a computed mask there that draws (the edge's pixels with and without it), or an item peeking 16px or more, or stands under an edge effect (hit there, or blurring it without taking presses); a box that clips without scrolling hides no words past its edge, but inside a control that opens a layer, whole items dropped, none cut, are named |
@@ -1411,19 +1411,23 @@ function readInPage(args: InPageArgs): InPageRead {
         shown(one) &&
         (one.matches(NAMED_BAR) || one.querySelector('[data-slot="tools"]'))
     );
-    /** A panel's own head over `el`: a bar or a heading in it, above `el`. */
+    /**
+     * A panel's own head over `el`: a heading above it, or a bar of the
+     * panel's standing at its top or above, in flow or floating over it.
+     */
     const headedAbove = (panel: Element, el: Element): boolean => {
       const { top } = el.getBoundingClientRect();
       return [
         ...panel.querySelectorAll(
           `${BAR}, h1, h2, h3, h4, h5, h6, [role="heading"]`
         ),
-      ].some(
-        (head) =>
-          shown(head) &&
-          !head.contains(el) &&
-          head.getBoundingClientRect().bottom <= top + 1
-      );
+      ].some((head) => {
+        if (!shown(head) || head.contains(el) || el.contains(head)) {
+          return false;
+        }
+        const r = head.getBoundingClientRect();
+        return r.bottom <= top + 1 || (head.matches(BAR) && r.top <= top + 1);
+      });
     };
     for (const bar of kitBars) {
       if (bar.matches(FOOT) || bar.parentElement?.closest(BAR)) {

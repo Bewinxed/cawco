@@ -9,15 +9,17 @@
    * it; what the drawing needs across, the page says (`laid`), and the
    * split gives the stage that and no more.
    *
-   * One panel, as the room beside it is one: the same corner, edge and
-   * raised head, the two sharing a top and a foot. Its head holds the kept
-   * state's name on the head line the room's faces stand on, its inset the
-   * page's gutter, so the name and the drawing share one leading edge.
-   * The graph has no bar of its own: what acts on the stage stands on its
-   * head, the components' menu leading (`lead`, where the ask names
-   * several) and one glass group of bare symbols trailing (`tools`:
-   * Compare, the view, Show states), the glass a hair in from the panel's
-   * edge as the room's Close stands.
+   * One panel, as the room beside it is one: the same corner and edge,
+   * the two sharing a top and a foot, and a head that floats over what it
+   * heads, on the head line the room's faces stand on. The page runs to
+   * the panel's top beneath the head and pads its top by the head's room
+   * (`room`, which the graph tells the page: STAGE_ROOM), drawing its own
+   * scroll edge effect under it; no hairline cuts the drawing off. The
+   * head's inset is the page's gutter, so the name and the drawing share
+   * one leading edge. What acts on the stage stands on its head: the
+   * components' menu leading (`lead`, where the ask names several) and
+   * one glass group of bare symbols trailing (`tools`: Compare, the view,
+   * and the room's one switch).
    *
    * While comparing, the head names the state compared with: a press that
    * shows it in the kept one's place (the flip), or its name alone where
@@ -33,6 +35,7 @@
   import type { Snippet } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconChevronDown } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { figureOf } from "./figures";
@@ -49,6 +52,7 @@
     onflip,
     ondifference,
     need = $bindable(0),
+    room = $bindable(0),
     lead,
     tools,
   }: {
@@ -86,6 +90,8 @@
      * the drawing out.
      */
     need?: number;
+    /** The room the floating head takes over the field's top, px: the page pads its top by it. */
+    room?: number;
     /** What leads the head before the state's name: the components' menu, where the ask names several. */
     lead?: Snippet;
     /** What trails the head: the stage's glass of bare symbols. */
@@ -120,17 +126,45 @@
 <section
   data-slot="stage"
   aria-label={name}
-  class="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
+  class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-page shadow-tile timeline-scope-transcript-head"
 >
-  <!-- Its head, the room's alike: a panel's raised head on the graph's
-       page, under the panel's floating head; its seam the room's. -->
+  <!-- The field: the frame holding the stage page fills it; the page is
+       its own scroller, its own page and gutter round the drawing. -->
+  <div
+    data-slot="stage-field"
+    class="relative min-h-0 min-w-0 flex-1 bg-surface-page"
+    style:--stage-room="{room}px"
+    {@attach frameSize((node: HTMLElement) => {
+      const own = node.closest<HTMLElement>('[data-slot="stage"]');
+      panel = own?.offsetWidth ?? 0;
+      edge = own ? own.offsetWidth - node.clientWidth : 0;
+    })}
+  >
+    {@render frame()}
+  </div>
+  <!-- The scroll edge effect under the head for a drawing this document
+       scrolls (a bench's stand-in names the timeline); the stage page in its
+       frame is another document and draws its own (STAGE_ROOM). -->
+  <HeadFade band="{room}px" tint="bg-surface-page" />
+  <!-- Its head floats over the field as every bar does (DESIGN.md, The
+       Title Bars Follow Liquid Glass Rule): no ground and no hairline, the
+       page running to the panel's top beneath it and taking its room
+       (`room`, STAGE_ROOM), the page's own scroll edge effect under it. The
+       name, the glass, and while comparing what differs; nothing between
+       its parts takes a press from the drawing. -->
   <div
     data-slot="stage-head"
-    class="flex min-w-0 flex-none flex-col border-b border-border-hairline px-space-4"
+    class="pointer-events-none absolute inset-x-0 top-0 z-1 flex min-w-0 flex-col px-space-4"
+    {@attach frameSize((node: HTMLElement) => {
+      room = node.offsetHeight;
+    })}
   >
     <!-- Unclipped: the glass's focus ring and the view card's join stand
          out past its box. -->
-    <div class="flex min-h-c-top-bar-h min-w-0 items-center gap-x-space-3">
+    <header
+      class="flex h-c-head-room min-w-0 items-center gap-x-space-3 *:pointer-events-auto"
+      data-slot="stage-bar"
+    >
       {@render lead?.()}
       <h2 class="m-0 min-w-0 shrink type-title text-ink-strong">
         <span class="block truncate">{name}</span>
@@ -173,7 +207,7 @@
           {@render tools?.()}
         </div>
       {/if}
-    </div>
+    </header>
     {#if stale}
       <p
         data-slot="stage-stale"
@@ -192,7 +226,7 @@
         type="button"
         aria-controls="{uid}-differences"
         aria-expanded={listShown}
-        class="mark-line pointer-hit touch-hit -ms-space-1 mb-space-2 flex h-c-btn-h-sm items-center gap-space-1 self-start rounded-sm px-space-1 type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+        class="pointer-events-auto mark-line pointer-hit touch-hit -ms-space-1 mb-space-2 flex h-c-btn-h-sm items-center gap-space-1 self-start rounded-sm px-space-1 type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
         data-slot="differences-count"
         onclick={() => {
           listOpen = !listShown;
@@ -223,7 +257,7 @@
           id="{uid}-differences"
           data-slot="differences"
           aria-label={words.differences}
-          class="-ms-space-1 m-0 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0 pb-space-2"
+          class="pointer-events-auto -ms-space-1 m-0 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0 pb-space-2"
         >
           {#each lines as line, at (at)}
             <li class="min-w-0">
@@ -266,18 +300,5 @@
         {words.sameAs(compare.name)}
       </p>
     {/if}
-  </div>
-  <!-- The field: the frame holding the stage page fills it; the page is
-       its own scroller, its own page and gutter round the drawing. -->
-  <div
-    data-slot="stage-field"
-    class="relative min-h-0 min-w-0 flex-1 bg-surface-page"
-    {@attach frameSize((node: HTMLElement) => {
-      const own = node.closest<HTMLElement>('[data-slot="stage"]');
-      panel = own?.offsetWidth ?? 0;
-      edge = own ? own.offsetWidth - node.clientWidth : 0;
-    })}
-  >
-    {@render frame()}
   </div>
 </section>

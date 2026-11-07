@@ -55,6 +55,7 @@
     numberOf,
     sheetSlide,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { track } from "#lib/cawco/track.js";
   import {
     BarGlass,
     BarItem,
@@ -66,12 +67,12 @@
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Resizable from "#lib/components/ui/resizable/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import {
     IconChevronDown,
-    IconClose,
     IconCompareLinear,
     IconEyeLinear,
     IconListRows,
@@ -349,6 +350,15 @@
     against = on && review && kept ? previousOf(review, kept.state) : null;
     flipped = false;
   };
+  /** The state Compare compares with: the one on, else the one it would turn on with. */
+  const compareName = $derived.by(() => {
+    if (!(review && kept)) {
+      return "";
+    }
+    const id =
+      againstState && against ? against : previousOf(review, kept.state);
+    return (id && review.states[id]?.name) ?? "";
+  });
   /** Compared with another state: the kept one shows in its place again. */
   const compareWith = (state: string | null) => {
     against = state;
@@ -1005,6 +1015,23 @@
   let roomLayer = $state<HTMLElement | null>(null);
   let layerHeight = $state(0);
   let headFoot = $state(0);
+  /** The drawer's floating head, its faces' row, px: what its face clears at rest. */
+  let drawerRoom = $state(0);
+  /** The room the stage's floating head takes over the stage page's top, px (StagePane). */
+  let stageRoom = $state(0);
+  // The page pads its top by it: told as it changes, and again as the page
+  // lays a drawing out (a frame loaded afresh has heard nothing yet).
+  $effect(() => {
+    const px = stageRoom;
+    track(link.laid);
+    if (px > 0) {
+      untrack(() => link.room(px));
+    }
+  });
+  /** What floats over a face's top, px: the room's head on a desk, the drawer's faces on a phone. */
+  /** The room's floating head beside the stage, px, as drawn. */
+  let roomHeadRoom = $state(0);
+  const faceTop = $derived(desk ? roomHeadRoom : drawerRoom);
   let drawerNode = $state<HTMLElement | null>(null);
   /** vaul reads a px snap point with parseInt: every one whole. */
   const pxOf = (height: number) => `${Math.round(height)}px`;
@@ -1352,10 +1379,15 @@
   {#if shownFace === "dials"}
     {@render dialsBody()}
   {:else if shownFace === "move" && review && kept}
-    {@render moveFace(false)}
+    <!-- Its own head and scroller under the room's head's room. -->
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col pt-(--face-top,0px)">
+      {@render moveFace(false)}
+    </div>
   {:else if review && kept}
     {#if single}
-      <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
+      <p
+        class="m-0 max-w-c-measure pt-(--face-top,0px) type-body text-ink-muted text-pretty"
+      >
         {words.oneState}
       </p>
     {:else if shownFace === "map"}
@@ -1366,6 +1398,7 @@
         onmove={chooseMove}
         onpress={press}
         {review}
+        top={faceTop}
       />
     {:else}
       <Journey
@@ -1505,7 +1538,7 @@
       {#if !single}
         <BarItem
           icon={IconCompareLinear}
-          label={words.compare}
+          label={words.compare(compareName)}
           onclick={() => setComparing(!comparing)}
           pressed={comparing}
         />
@@ -1653,20 +1686,28 @@
           </div>
         </HangCard>
       </Popover.Root>
-      {#if !roomShown}
-        <BarItem
-          icon={IconRoomLinear}
-          label={words.openRoom(roomName)}
-          onclick={() => {
-            roomOpen = true;
-            stopAt = 0;
-            // The one asked for last stands: the pane's sheet goes as the drawer rises.
-            if (paneSheet) {
-              onroom?.();
-            }
-          }}
-        />
-      {/if}
+      <!-- The room's one switch: it opens the room beside the stage (or
+           its drawer) and puts it away again, as a sidebar's toggle does:
+           its name says which, and it says whether the room stands
+           (`aria-expanded`), never a lit symbol held on. -->
+      <BarItem
+        data-slot="room-switch"
+        icon={IconRoomLinear}
+        label={roomShown ? words.closeRoom(roomName) : words.openRoom(roomName)}
+        onclick={() => {
+          if (roomShown) {
+            roomOpen = false;
+            return;
+          }
+          roomOpen = true;
+          stopAt = 0;
+          // The one asked for last stands: the pane's sheet goes as the drawer rises.
+          if (paneSheet) {
+            onroom?.();
+          }
+        }}
+        expanded={roomShown}
+      />
     </BarGlass>
   </div>
 {/snippet}
@@ -1766,6 +1807,7 @@
               laid={link.laid}
               lead={files.length > 1 ? componentsMenu : undefined}
               tools={stageTools}
+              bind:room={stageRoom}
               ondifference={showDifference}
               onflip={() => {
                 flipped = !flipped;
@@ -1811,33 +1853,37 @@
               aria-label={roomOpen ? roomName : undefined}
               in:sheetSlide|global={{ axis: "X", leaving: false }}
               out:sheetSlide|global={{ axis: "X", leaving: true }}
-              class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
+              class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile timeline-scope-transcript-head"
+              style:--face-top="var(--c-head-room)"
             >
               {#if roomOpen}
-                <!-- Its head on the stage's head line: its faces, and its
-                     Close trailing in a glass of its own, as the stage's
-                     tools and the panel's Close stand. -->
-                <div
-                  class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
+                <!-- Its head floats over its face as every bar does (DESIGN.md,
+                     The Title Bars Follow Liquid Glass Rule), on the stage's
+                     head line: its faces alone, the room's switch standing
+                     in the stage's glass. What the face lists runs to the
+                     room's top beneath it, clears it at rest by its room
+                     (`--face-top`) and blurs and fades under it as it
+                     scrolls (HeadFade on the face's scroll). -->
+                <HeadFade band="var(--face-top)" tint="bg-surface-raised" />
+                <header
+                  class="absolute inset-x-0 top-0 z-2 flex h-c-head-room min-w-0 items-center ps-space-4 pe-space-2"
+                  data-slot="room-head"
+                  {@attach frameSize((node: HTMLElement) => {
+                    roomHeadRoom = node.offsetHeight;
+                  })}
                 >
                   {@render faces(false)}
-                  <BarGlass form="group">
-                    <BarItem
-                      icon={IconClose}
-                      label={words.closeRoom(roomName)}
-                      onclick={() => {
-                        roomOpen = false;
-                      }}
-                    />
-                  </BarGlass>
-                </div>
+                </header>
                 <!-- The map takes the room's whole body, its own surface to
-                     its edges; the states stand at the room's inset. -->
+                     its edges; the other faces stand at the room's inset. -->
                 <div
                   class={[
                     "flex min-h-0 min-w-0 flex-1 flex-col",
-                    shownFace === "map" && !single ? "" : "p-space-4",
+                    shownFace === "map" && !single
+                      ? ""
+                      : "px-space-4 pb-space-4",
                   ]}
+                  data-slot="room-body"
                 >
                   {@render roomFace(true)}
                 </div>
@@ -1905,38 +1951,45 @@
             ownHead
             title={roomName}
           >
+            <!-- The sheet's one bar, right under the grabber (the kit's
+                 `ownHead`): the faces, floating over the face as the kit's
+                 sheet head floats (no Close of its own: the room's one
+                 switch stands in the stage's glass). What the face lists
+                 runs up beneath it, clears it at rest by its room
+                 (`--face-top`) and blurs and fades under it as it scrolls. -->
             <div
-              class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"
+              class="relative flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop) timeline-scope-transcript-head"
               style:--snap-drop="{Math.max(0, layerHeight - cover)}px"
+              style:--face-top="{drawerRoom}px"
             >
-              <!-- The sheet's one bar, right under the grabber (the kit's
-                   `ownHead`): Close leading in a glass of its own, as the
-                   kit's sheet heads draw it, then the faces. Close puts the
-                   room away itself: vaul's Close asks the dialog to close,
-                   and a root that is not `dismissible` refuses every such
-                   ask; the drawer is not dismissible so that a drag past
-                   its head stop never closes it. -->
-              <div class="flex min-w-0 items-center gap-space-2">
-                <BarGlass form="group">
-                  <BarItem
-                    icon={IconClose}
-                    label={words.closeRoom(roomName)}
-                    onclick={() => {
-                      roomOpen = false;
-                    }}
-                  />
-                </BarGlass>
+              <HeadFade band="var(--face-top)" tint="bg-surface-raised" />
+              <div
+                class="absolute inset-x-space-4 top-0 z-2 flex min-w-0 items-center pb-space-3"
+                data-slot="drawer-faces"
+                {@attach frameSize((node: HTMLElement) => {
+                  drawerRoom = node.offsetHeight;
+                })}
+              >
                 {@render faces(true)}
               </div>
               <!-- At the head stop the drawer holds its head alone, the faces
                    and the States face's steps: a face's body drawn into its
                    sliver ran past the screen's foot. -->
               {#if !single && shownFace === "states"}
-                {@render stepper()}
-              {/if}
-              {#if shownFace === "move" && atHead && review && kept}
+                <div class="flex-none pt-(--face-top)">
+                  {@render stepper()}
+                </div>
+                {#if !atHead}
+                  <!-- Under the steps the list clears nothing more. -->
+                  <div class="contents" style:--face-top="initial">
+                    {@render roomFace(false)}
+                  </div>
+                {/if}
+              {:else if shownFace === "move" && atHead && review && kept}
                 <!-- At the head stop the Animation face is its transport, its time and the move, on one line over the stage. -->
-                {@render moveFace(true)}
+                <div class="flex-none pt-(--face-top)">
+                  {@render moveFace(true)}
+                </div>
               {:else if single || !atHead}
                 {@render roomFace(false)}
               {/if}

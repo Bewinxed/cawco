@@ -26,6 +26,7 @@
   import { z } from "zod";
   import BrowserAddress from "#lib/cawco/preview/BrowserAddress.svelte";
   import BrowserView from "#lib/cawco/preview/BrowserView.svelte";
+  import { browserHead } from "#lib/cawco/preview/browser-head.js";
   import { HEAD_PRIORITY } from "#lib/cawco/side/head.js";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
@@ -35,8 +36,10 @@
   import { IconExternalLinear } from "#lib/icons.js";
   import { page } from "$app/state";
 
-  const state = page.url.searchParams.get("state") ?? "live";
+  const asked = page.url.searchParams.get("state") ?? "live";
   const phone = new MediaQuery("max-width: 639px");
+  /** The stream is drawn: there is a page to take over. */
+  let viewing = $state(false);
 
   /** What the view says on neko's socket. */
   const Signal = z.object({
@@ -50,9 +53,9 @@
     long: "https://pr-2417-billing-settings-preview.staging.northwind-internal.dev",
     unreachable: "https://staging.northwind.dev",
   } as Record<string, string>;
-  const origin = ORIGIN[state] ?? "https://app.northwind.dev";
+  const origin = ORIGIN[asked] ?? "https://app.northwind.dev";
 
-  const mine = state === "mine";
+  const mine = asked === "mine";
   /** The browser's own state where the bench's isn't live. */
   const STATE_OF: Record<string, ListedBrowser["state"]> = {
     starting: "starting",
@@ -60,7 +63,7 @@
     failed: "failed",
   };
   const browser: ListedBrowser = {
-    host: state === "local" ? "local" : "container",
+    host: asked === "local" ? "local" : "container",
     key: "project:northwind",
     lastUsedAt: Date.now(),
     machineId: "obelisk",
@@ -68,11 +71,11 @@
     name: "Northwind's browser",
     origin,
     projectId: "northwind",
-    state: STATE_OF[state] ?? "live",
-    ...(state === "building"
+    state: STATE_OF[asked] ?? "live",
+    ...(asked === "building"
       ? { progress: { done: 3, total: 7, what: "image" as const } }
       : {}),
-    ...(state === "failed"
+    ...(asked === "failed"
       ? {
           why: "docker: Error response from daemon: pull access denied for cawco/browser, repository does not exist or may require 'docker login'.",
         }
@@ -82,8 +85,16 @@
   const machine = {
     machineId: "obelisk",
     name: "obelisk",
-    online: state !== "away",
+    online: asked !== "away",
   };
+  /** What the head holds, on the rule PreviewPane's head stands by. */
+  const shows = $derived(
+    browserHead(browser, {
+      online: machine.online,
+      viewing,
+      sheet: phone.current,
+    })
+  );
 
   /** The agent's page as the remote browser paints it, `top` px scrolled. */
   function paint(canvas: HTMLCanvasElement, top: number) {
@@ -94,7 +105,7 @@
     g.fillStyle = "#ffffff";
     g.fillRect(0, 0, W, H);
     g.font = "15px system-ui, sans-serif";
-    if (state === "unreachable") {
+    if (asked === "unreachable") {
       g.fillStyle = "#5f6368";
       g.font = "600 26px system-ui, sans-serif";
       g.fillText("This site can’t be reached", 240, 260);
@@ -178,7 +189,7 @@
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
-    let scroll = state === "scrolled" ? 560 : 0;
+    let scroll = asked === "scrolled" ? 560 : 0;
     paint(canvas, scroll);
     const stream = canvas.captureStream(10);
     // A canvas stream sends a frame only when it is drawn: drawn again each tick.
@@ -197,11 +208,11 @@
       constructor(url: string) {
         super();
         this.url = url;
-        if (state === "connecting") {
+        if (asked === "connecting") {
           return;
         }
         setTimeout(() => {
-          if (state === "lost") {
+          if (asked === "lost") {
             this.readyState = 3;
             this.onclose?.(
               new CloseEvent("close", {
@@ -310,6 +321,7 @@
     data-slot="browser-take"
     label={mine ? browserWords.handBack : browserWords.takeOver}
     onclick={() => undefined}
+    shape="capsule"
     variant={mine ? "outline" : "default"}
   />
 {/snippet}
@@ -337,20 +349,28 @@
   <div class="flex h-dvh bg-surface-recess p-space-2 *:flex-1 max-phone:p-0">
     <SideSurface
       items={[
-        {
-          key: "control",
-          priority: HEAD_PRIORITY.control,
-          bar: controlBar,
-          menu: controlMenu,
-          place: "prominent",
-        },
-        {
-          key: "address",
-          priority: HEAD_PRIORITY.address,
-          bar: addressBar,
-          menu: addressMenu,
-          place: "centre",
-        },
+        ...(shows.control
+          ? [
+              {
+                key: "control",
+                priority: HEAD_PRIORITY.control,
+                bar: controlBar,
+                menu: controlMenu,
+                place: "prominent" as const,
+              },
+            ]
+          : []),
+        ...(shows.address
+          ? [
+              {
+                key: "address",
+                priority: HEAD_PRIORITY.address,
+                bar: addressBar,
+                menu: addressMenu,
+                place: "lead" as const,
+              },
+            ]
+          : []),
         {
           key: "open",
           priority: HEAD_PRIORITY.open,
@@ -364,10 +384,12 @@
       title="Check the billing page after the plan change"
     >
       <BrowserView
+        addressAtFoot={phone.current}
         artifactId="northwind-billing"
         {browser}
         instanceId="bench"
         {machine}
+        bind:viewing
       />
     </SideSurface>
   </div>

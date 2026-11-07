@@ -1,20 +1,27 @@
 <script lang="ts">
   /**
-   * A browser artifact's address in the artifact panel's head (PreviewPane's
-   * `address` item): the page in front, at the head's centre as a browser's
-   * toolbar holds its address, so no band claims a row over the stream
-   * (BrowserView). Who has control is said by its glyph (a globe while the
-   * agent drives, a lock while the person holds it, the Private chip
-   * beside) and in its name. It is no control: Take over or Hand back,
-   * trailing, is the head's one act. `as="menu"` is the same as More's
-   * first line, where the head has no room for it; the origin wraps there.
+   * Where a live browser is, and who drives it: in the artifact panel's
+   * head after its title on a desk (PreviewPane's `address` item), and on a
+   * phone floating at the stream's foot (BrowserView), as a browser keeps
+   * its address in its toolbar on a desk and over the page's foot on a
+   * phone. No band claims a row over the stream.
+   *
+   * It shows the place (address.ts `placeOf`): the registrable domain is
+   * never cut, what stands before it gives way first; an https scheme goes
+   * unsaid. Who drives is its glyph, the word in its name and tooltip (a
+   * list's state rule): the agent's ghost while it drives, the pointer
+   * once the person holds the browser, with the Private chip beside, its
+   * ends the capsule's. No padlock: it read as a secure connection.
+   * It stands only while the browser is live; the stream's own face says
+   * every other state. `as="menu"` is the same as More's first line, where
+   * a desk's head lacks the room; the origin wraps there.
    */
   import { browserWords } from "@cawco/core/words/browser";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { IconGlobe, IconLock } from "#lib/icons.js";
-  import OriginText from "../OriginText.svelte";
+  import { IconAgentLinear, IconInteractLinear } from "#lib/icons.js";
+  import { placeOf } from "./address";
 
   let {
     origin,
@@ -25,36 +32,43 @@
     origin: string | null;
     /** The person holds the browser. */
     mine: boolean;
-    /** In the head, or as More's line. */
+    /** In the head (or over the stream's foot), or as More's line. */
     as?: "bar" | "menu";
   } = $props();
 
   const control = $derived(
     mine ? browserWords.youHaveControl : browserWords.agentDriving
   );
+  const place = $derived(origin ? placeOf(origin) : null);
+  const name = $derived(`${origin ?? browserWords.noPage}, ${control}`);
 </script>
+
+{#snippet glyph()}
+  {#if mine}
+    <IconInteractLinear data-slot="browser-driver" />
+  {:else}
+    <IconAgentLinear data-slot="browser-driver" />
+  {/if}
+{/snippet}
 
 {#snippet held()}
   {#if mine}
-    <Badge aria-hidden="true" data-box data-slot="browser-private"
-      ><span>{browserWords.private}</span></Badge
+    <Badge
+      aria-hidden="true"
+      data-box
+      data-slot="browser-private"
+      size="capsule"><span>{browserWords.private}</span></Badge
     >
   {/if}
   <span class="sr-only" data-slot="browser-control">{control}</span>
 {/snippet}
 
-{#snippet glyph()}
-  {#if mine}<IconLock />{:else}<IconGlobe />{/if}
-{/snippet}
-
 {#if as === "menu"}
   <DropdownMenu.Label data-slot="browser-address">
-    <span class="mark-line flex items-center gap-space-2">
+    <span class="mark-line flex items-center gap-space-2" title={control}>
       {@render glyph()}
       <span class="min-w-0 wrap-anywhere" data-slot="browser-origin"
-        >{#if origin}<OriginText
-            {origin}
-          />{:else}{browserWords.noPage}{/if}</span
+        >{#if place}{place.scheme}{place.lead}{place.domain}{:else}{browserWords.noPage}{/if}</span
       >
       {@render held()}
     </span>
@@ -62,23 +76,36 @@
 {:else}
   <BarGlass form="group">
     <div
-      aria-label={`${origin ?? browserWords.noPage}, ${control}`}
-      class="mark-line flex h-c-bar-item min-w-0 max-w-c-browser-address-w items-center gap-space-1 ps-space-2 pe-space-3 type-meta text-ink-strong"
+      aria-label={name}
+      class="mark-line flex h-c-bar-item min-w-0 max-w-c-browser-address-w items-center gap-space-1 ps-space-2 pe-space-3 has-data-[slot=browser-private]:pe-space-1 type-meta text-ink-strong"
       data-mine={mine || undefined}
       data-slot="browser-address"
       role="status"
-      title={origin ?? undefined}
+      title={origin ? `${origin} · ${control}` : control}
     >
       <span aria-hidden="true" class="mark-cell flex-none text-ink-muted"
         >{@render glyph()}</span
       >
-      <!-- One line, cut at its end: the origin as plain words, since a
-           label break (OriginText's `<wbr>`) breaks a nowrap line too. -->
+      <!-- The place on one line: what leads the domain gives way first,
+           from its end; the domain never. -->
       <span
         aria-hidden="true"
-        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-        data-slot="browser-origin">{origin ?? browserWords.noPage}</span
+        class="flex min-w-0"
+        data-box
+        data-slot="browser-origin"
       >
+        {#if place}
+          {#if place.scheme}<span class="flex-none text-ink-muted"
+              >{place.scheme}</span
+            >{/if}
+          <span
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
+            >{place.lead}</span
+          ><span class="flex-none whitespace-nowrap">{place.domain}</span>
+        {:else}
+          <span class="whitespace-nowrap">{browserWords.noPage}</span>
+        {/if}
+      </span>
       {@render held()}
     </div>
   </BarGlass>

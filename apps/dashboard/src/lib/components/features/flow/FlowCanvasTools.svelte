@@ -1,10 +1,14 @@
 <script lang="ts">
   import { useSvelteFlow } from "@xyflow/svelte";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Toggle } from "#lib/components/ui/toggle/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconMaximize, IconMinus, IconPlus, IconReset } from "#lib/icons.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    IconMaximizeLinear,
+    IconMinusLinear,
+    IconPlus,
+    IconRedoLinear,
+    IconUndoLinear,
+  } from "#lib/icons.js";
 
   let {
     zoom,
@@ -78,100 +82,52 @@
     }
   }}
 />
-<!-- Under a finger the cluster opens its gap (DESIGN.md, The 44 Touch
-     Rule), so each control's 44px area stands clear of its neighbours'.
-     The group is the ground (the tool rail's recipe: floating groups in
-     their own surface); its glyph buttons stand bare in it, ghosts, as a
-     lone glyph sits on nothing.
-     The bar stands over the canvas, not in its zoom: its areas take no
-     --hit-scale from the canvas it floats on. -->
-<div
-  data-slot="tools"
-  style:--hit-scale="1"
-  class="flex items-center gap-space-1 rounded-lg bg-surface-raised p-space-1 text-ink-strong shadow-tile coarse:gap-space-3"
->
-  {#if onpan}
-    <Toggle
-      onPressedChange={() => onpan?.()}
-      pressed={pan}
-      type="button"
-      variant="outline"
-    >
-      {pan ? "Pan" : "Select"}
-    </Toggle>
-  {/if}
-  <Tip label="Zoom out">
-    {#snippet children(tip)}
-      <Button
-        {...tip}
-        aria-label="Zoom out"
-        onclick={() => zoomBy(zoomOut)}
-        size="icon"
-        type="button"
-        variant="ghost"
+<!-- One glass group of bare symbols floating over the canvas (DESIGN.md,
+     The Title Bars Follow Liquid Glass Rule: a group is one capsule of the
+     panel's glass), each a bar item on the glass's contour, as a head's
+     glass draws them; under a finger the glass opens its gap (The 44 Touch
+     Rule). The group stands over the canvas, not in its zoom: its areas
+     take no --hit-scale from the canvas it floats on. -->
+<div class="flex" style:--hit-scale="1">
+  <BarGlass form="group">
+    {#if onpan}
+      <BarItem
+        form="words"
+        label={pan ? "Pan" : "Select"}
+        onclick={() => onpan?.()}
+        pressed={pan}
+        tip={false}><span>{pan ? "Pan" : "Select"}</span></BarItem
       >
-        <IconMinus class="size-icon-md" />
-      </Button>
-    {/snippet}
-  </Tip>{#if figure}<span class="min-w-space-8 text-center type-meta num"
-      >{Math.round(zoom * 100)}%</span
-    >{/if}<Tip label="Zoom in">
-    {#snippet children(tip)}
-      <Button
-        {...tip}
-        aria-label="Zoom in"
-        onclick={() => zoomBy(zoomIn)}
-        size="icon"
-        type="button"
-        variant="ghost"
-      >
-        <IconPlus class="size-icon-md" />
-      </Button>
-    {/snippet}
-  </Tip>
-  <Tip keys="F" label={fitLabel}>
-    {#snippet children(tip)}
-      <Button
-        {...tip}
-        aria-label={fitLabel}
-        onclick={fit}
-        size="icon"
-        type="button"
-        variant="ghost"
-      >
-        <IconMaximize class="size-icon-md" />
-      </Button>
-    {/snippet}
-  </Tip>
-  {#if undo || redo}
-    <Tip label="Undo">
-      {#snippet children(tip)}
-        <Button
-          {...tip}
-          aria-label="Undo"
-          disabled={!canUndo}
-          onclick={undo}
-          size="icon"
-          type="button"
-          variant="ghost"
-        >
-          <IconReset class="size-icon-md" />
-        </Button>
-      {/snippet}
-    </Tip><Tip label="Redo">
-      {#snippet children(tip)}
-        <Button
-          {...tip}
-          aria-label="Redo"
-          disabled={!canRedo}
-          onclick={redo}
-          size="icon"
-          type="button"
-          variant="ghost"
-        >
-          <IconReset class="size-icon-md rotate-180" />
-        </Button>
-      {/snippet}
-    </Tip>
-  {/if}
+    {/if}
+    <BarItem
+      icon={IconMinusLinear}
+      label="Zoom out"
+      onclick={() => zoomBy(zoomOut)}
+    />
+    {#if figure}<span
+        class="min-w-space-8 text-center type-meta num text-ink-strong"
+        >{Math.round(zoom * 100)}%</span
+      >{/if}
+    <BarItem icon={IconPlus} label="Zoom in" onclick={() => zoomBy(zoomIn)} />
+    <BarItem
+      icon={IconMaximizeLinear}
+      keys="F"
+      label={fitLabel}
+      onclick={fit}
+    />
+    {#if undo || redo}
+      <BarItem
+        icon={IconUndoLinear}
+        label="Undo"
+        onclick={undo}
+        props={{ disabled: !canUndo }}
+      />
+      <BarItem
+        icon={IconRedoLinear}
+        label="Redo"
+        onclick={redo}
+        props={{ disabled: !canRedo }}
+      />
+    {/if}
+  </BarGlass>
 </div>

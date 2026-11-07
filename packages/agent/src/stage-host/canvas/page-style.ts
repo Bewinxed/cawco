@@ -63,10 +63,21 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
    a 1440 drawing in a 1440 window stands edge to edge, and the page never scrolls sideways for a gutter. A drawing wider
    than the page scrolls sideways. No scrollbar's gutter stands empty beside the drawing (the preview proxy's floor keeps
    one): a strip of the panel showed through it. */
-html.cawco-stage-page { overflow: auto; overscroll-behavior: contain; scrollbar-gutter: auto; background: var(--surface-page); }
+html.cawco-stage-page { overflow: auto; overscroll-behavior: contain; scrollbar-gutter: auto; background: var(--surface-page);
+  scroll-padding-block-start: var(--stage-room, 0px); }
+/* The stage's floating head (the panel's StagePane) over the page's top: the column pads its top by its room (--stage-room,
+   said by the panel), so the drawing at rest stands clear of it and scrolls beneath it, and the scroll edge effect under it
+   blurs and fades what scrolls there into the page's ground, clear at rest (DESIGN.md, The Title Bars Follow Liquid Glass Rule). */
+html.cawco-stage-page::before { content: ""; position: fixed; inset-inline: 0; inset-block-start: 0; z-index: 2147483000;
+  block-size: var(--stage-room, 0px); pointer-events: none; opacity: 0;
+  background: linear-gradient(to bottom, var(--surface-page) 40%, transparent);
+  backdrop-filter: blur(var(--space-2)); mask-image: linear-gradient(to bottom, black 50%, transparent);
+  transition: opacity var(--dur-control, 150ms) ease-out; }
+html.cawco-stage-page.cawco-stage-scrolled::before { opacity: 1; }
 html.cawco-stage-page body { margin: 0; min-block-size: 100%; }
 html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3);
-  box-sizing: border-box; inline-size: max-content; min-inline-size: 100%; min-block-size: 100dvh; padding: var(--space-4) var(--stage-gutter, var(--space-4)); }
+  box-sizing: border-box; inline-size: max-content; min-inline-size: 100%; min-block-size: 100dvh;
+  padding: calc(var(--space-4) + var(--stage-room, 0px)) var(--stage-gutter, var(--space-4)) var(--space-4); }
 /* The drawing laid out at its width (a container its rules answer), shown at its own: no paper stands beside a component held
    to its measure. Its height held while the next drawing mounts, so the page's scroll stays where it stood. What spills
    past its sides is cut, but no nearer than a popover's shadow reaches (DESIGN.md, Shadows: the overlay's 48px blur): cut at
