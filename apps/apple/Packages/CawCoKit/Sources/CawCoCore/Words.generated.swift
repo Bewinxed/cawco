@@ -1709,6 +1709,18 @@ public enum Words {
             total > 0 ? "Plan, \(done) of \(total) done" : "Plan"
         }
 
+        /// A step's state, for a screen reader: its glyph says it on screen.
+        public enum StepStatus {
+            public static let pending = "To do"
+
+            public static let inProgress = "Doing now"
+
+            public static let completed = "Done"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["pending": pending, "in_progress": inProgress, "completed": completed]
+        }
+
         /// The ring's figure.
         public static func figure(done: Int, total: Int) -> String {
             "\(done)/\(total)"

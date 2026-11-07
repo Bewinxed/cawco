@@ -151,6 +151,9 @@
     detach(readTranscript(target.viewId, "retry", true), "readTranscript");
   }
 
+  /** The foot tray itself, what the context breakdown opens against. */
+  let tray = $state<HTMLElement | null>(null);
+
   /** The foot tray's height: what it said keeps that much room at its end. */
   let footH = $state(0);
   // Read as it mounts, and a change in the next frame (frameSize).
@@ -408,7 +411,7 @@
 {#snippet steps()}
   <div
     data-slot="peek-plan"
-    class="kit-edge-fade-block fade-len-c-edge-fade-len relative min-h-c-peek-steps-min-h shrink-100 overflow-y-auto overscroll-contain max-h-c-peek-steps-h"
+    class="kit-edge-fade-block fade-len-c-edge-fade-len no-scrollbar relative min-h-c-peek-steps-min-h shrink-100 overflow-y-auto overscroll-contain max-h-c-peek-steps-h px-space-2"
     in:unfold
     out:unfold
     {@attach onStep}
@@ -424,7 +427,7 @@
   <div
     data-skeleton
     aria-busy="true"
-    class="flex flex-col gap-3"
+    class="flex flex-col gap-space-3"
     role="status"
     style:--sk-line-my="calc((1lh - var(--c-skeleton-x-height)) / 2)"
   >
@@ -473,9 +476,9 @@
        an iPad the title and its symbols stand over the column they head. The
        boxes mirror the tail's (its side pad, then the measure), and the bar
        takes the pad back so its groups sit where the desk's do. -->
-  <div class="pointer-events-none absolute inset-x-0 top-0 z-2 px-4">
+  <div class="pointer-events-none absolute inset-x-0 top-0 z-2 px-space-4">
     <div class="relative mx-auto max-w-c-measure">
-      <div class="relative -mx-4">
+      <div class="relative -mx-space-4">
         <BarFloat tint="bg-surface-raised">
           {#snippet leading()}
             <ContextMenu.Root>
@@ -489,14 +492,19 @@
                       style="--identity-h: {folderPrefs.hue(cwd)}"
                     />
                   {/if}
+                  <!-- Cut short beside the bar's symbols: the whole of it
+                       on hover. -->
                   <span
                     class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                    >{target.title}</span
+                    title={target.title}>{target.title}</span
                   >
                   {#if machine}
+                    <!-- A machine out of reach dims, as its rows do
+                         everywhere (`data-stale`). -->
                     <span
                       data-box
-                      class="inline-flex flex-none text-ink-muted"
+                      data-stale={stale || undefined}
+                      class="inline-flex flex-none text-ink-muted transition-opacity duration-(--dur-control) ease-out data-stale:opacity-55"
                       aria-label={host}
                       role="img"
                       title={host}
@@ -566,13 +574,13 @@
   {#key target.viewId}
     <div
       data-slot="peek-tail"
-      class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-c-top-bar-h pb-(--peek-foot) scroll-timeline-transcript-head *:shrink-0"
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto px-space-4 pt-c-top-bar-h pb-(--peek-foot) scroll-timeline-transcript-head *:shrink-0"
       {@attach followTail()}
     >
       <!-- One reading measure for what it said and the tray: a sheet as
            wide as an iPad keeps its lines short. -->
       <div
-        class="mx-auto flex w-full max-w-c-measure flex-col gap-3 *:shrink-0"
+        class="mx-auto flex w-full max-w-c-measure flex-col gap-space-3 *:shrink-0"
       >
         {#if session?.readFault && tail.length === 0}
           <!-- A read that failed, as the session's own pane says one: its
@@ -669,229 +677,257 @@
        holds its asks. Top to bottom: a failure as itself, the asks as
        themselves, the plan's row, the status row, a stop that did not go.
        Capped at half the sheet (`c-peek-tray-h`): several asks scroll
-       inside it, the rows below them held. -->
-  <div
-    data-slot="peek-foot"
-    style:--r-outer="var(--c-float-panel-r)"
-    class="concentric-in r-inset-space-1 absolute inset-x-space-2 bottom-space-2 z-2 mx-auto flex max-h-c-peek-tray-h max-w-c-measure flex-col gap-space-3 rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel p-space-3 text-body shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
-    {@attach footSize}
-  >
-    {#if failed}
-      <!-- The failure as itself, in the failed pair. -->
-      <p
-        class="shrink-0 rounded-md bg-status-fail-bg px-3 py-2.5 text-body text-status-fail-ink"
-      >
-        {row?.lastError || "Failed without saying why."}
-      </p>
-    {:else if row?.damaged}
-      <!-- A damaged record that does not stop the session (its wake-ups), or
-           one whose process still runs: said where its failure would be. -->
-      <p
-        class="shrink-0 rounded-md bg-status-fail-bg px-3 py-2.5 text-body text-status-fail-ink"
-      >
-        {damagedWords(row.damaged)}
-      </p>
-    {/if}
+       inside it, the rows below them held.
 
-    {#if parked.length > 0}
-      <!-- Each ask whole, oldest first, as itself: a permission's own words
+       It stands on the tail's reading column, as the bar does: the boxes
+       mirror the tail's (its side pad, `space-4`, then the measure, in the
+       tail's own type, so `ch` is the same) and the tray takes the pad back.
+       Inside it everything stands one inset (`space-2`) from its edge, its
+       edge an inset ring that takes no room, and a row pads by one more, so
+       a row's glyph and an ask's words start on the column the tail's words
+       start on (`space-2` twice is `space-4`), and every fill inside
+       is concentric with the tray (`--r-inner`, the tray's radius less the
+       inset: a button's half-height, so a row's fill is a capsule). -->
+  <div
+    class="pointer-events-none absolute inset-0 z-2 flex flex-col justify-end px-space-4"
+  >
+    <!-- A risen sheet stands on the screen's foot: the tray keeps a step
+         and the safe area clear of it. -->
+    <div
+      class="mx-auto flex max-h-c-peek-tray-h min-h-0 w-full max-w-c-measure flex-col group-data-[vaul-drawer-direction=bottom]/drawer-content:pb-safe-space-2"
+      {@attach footSize}
+    >
+      <div class="-mx-space-4 flex min-h-0 flex-col">
+        <div
+          data-slot="peek-foot"
+          data-stale={stale || undefined}
+          style:--r-outer="var(--c-float-panel-r)"
+          class="group/tray concentric-in r-inset-space-2 pointer-events-auto flex min-h-0 flex-col gap-space-1 rounded-(--c-float-panel-r) bg-material-panel p-space-2 text-body shadow-overlay inset-ring inset-ring-border-hairline glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none data-stale:[&_.loops]:animation-paused"
+          bind:this={tray}
+        >
+          {#if failed}
+            <!-- The failure as itself, in the failed pair. -->
+            <p
+              class="shrink-0 concentric-md bg-status-fail-bg p-space-2 text-body text-status-fail-ink"
+            >
+              {row?.lastError || "Failed without saying why."}
+            </p>
+          {:else if row?.damaged}
+            <!-- A damaged record that does not stop the session (its wake-ups), or
+           one whose process still runs: said where its failure would be. -->
+            <p
+              class="shrink-0 concentric-md bg-status-fail-bg p-space-2 text-body text-status-fail-ink"
+            >
+              {damagedWords(row.damaged)}
+            </p>
+          {/if}
+
+          {#if parked.length > 0}
+            <!-- Each ask whole, oldest first, as itself: a permission's own words
            and the command it runs; a question's own question; a sign-in's
            service and the session's reason. A question and a sign-in are
            answered on their card in the session. -->
-      <div
-        data-slot="peek-asks"
-        class="kit-edge-fade-block fade-len-c-edge-fade-len flex min-h-0 flex-col gap-space-2 overflow-y-auto overscroll-contain"
-      >
-        {#each parked as request (request.requestId)}
-          {@const question =
-            questionsOf(request.toolName, request.input)?.[0] ?? null}
-          {@const connect = request.connectAsk ?? null}
-          <div
-            data-slot="peek-ask"
-            class="flex shrink-0 flex-col gap-2 rounded-md bg-status-attn-bg px-3 py-2.5 text-status-attn-ink"
-          >
-            {#if question}
-              <p class="text-body">{question.question}</p>
-              <div class="flex items-center justify-end">
-                <Button href={target.href} size="sm" variant="secondary"
-                  >Answer</Button
+            <div
+              data-slot="peek-asks"
+              class="kit-edge-fade-block fade-len-c-edge-fade-len flex min-h-0 flex-col gap-space-2 overflow-y-auto overscroll-contain"
+            >
+              {#each parked as request (request.requestId)}
+                {@const question =
+                  questionsOf(request.toolName, request.input)?.[0] ?? null}
+                {@const connect = request.connectAsk ?? null}
+                <div
+                  data-slot="peek-ask"
+                  class="flex shrink-0 flex-col gap-space-2 concentric-md bg-status-attn-bg p-space-2 text-status-attn-ink"
                 >
-              </div>
-            {:else if connect}
-              <p class="text-body font-medium">
-                {connect.again
-                  ? askWords.reconnectTitle(connect.server)
-                  : askWords.connectTitle(connect.server)}
-              </p>
-              {#if connect.reason}
-                <p class="text-meta text-ink-muted">{connect.reason}</p>
-              {/if}
-              <div class="flex items-center justify-end">
-                <Button href={target.href} size="sm" variant="secondary"
-                  >{connect.again
-                    ? askWords.reconnect(connect.server)
-                    : askWords.connect(connect.server)}</Button
-                >
-              </div>
-            {:else}
-              <p class="text-body">{request.presentation.summary}</p>
-              {#if request.presentation.command}
-                <!-- What runs, under why: Approve here is made on the command. -->
-                <code
-                  data-slot="block"
-                  class="block break-word whitespace-pre-wrap border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) text-meta text-ink-muted"
-                  >{request.presentation.command.trim()}</code
-                >
-              {/if}
-              <!-- Equal peers at opposite ends, each outlined in its tint
+                  {#if question}
+                    <p class="text-body">{question.question}</p>
+                    <div class="flex items-center justify-end">
+                      <Button href={target.href} size="sm" variant="secondary"
+                        >Answer</Button
+                      >
+                    </div>
+                  {:else if connect}
+                    <p class="text-body font-medium">
+                      {connect.again
+                        ? askWords.reconnectTitle(connect.server)
+                        : askWords.connectTitle(connect.server)}
+                    </p>
+                    {#if connect.reason}
+                      <p class="text-meta text-ink-muted">{connect.reason}</p>
+                    {/if}
+                    <div class="flex items-center justify-end">
+                      <Button href={target.href} size="sm" variant="secondary"
+                        >{connect.again
+                          ? askWords.reconnect(connect.server)
+                          : askWords.connect(connect.server)}</Button
+                      >
+                    </div>
+                  {:else}
+                    <p class="text-body">{request.presentation.summary}</p>
+                    {#if request.presentation.command}
+                      <!-- What runs, under why: Approve here is made on the command. -->
+                      <code
+                        data-slot="block"
+                        class="block break-word whitespace-pre-wrap border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) text-meta text-ink-muted"
+                        >{request.presentation.command.trim()}</code
+                      >
+                    {/if}
+                    <!-- Equal peers at opposite ends, each outlined in its tint
                    (DESIGN.md, The Peer Rule's apart form). -->
-              <div
-                data-slot="choice"
-                class="flex items-center justify-between gap-space-8"
-              >
-                <Button
-                  data-deny
-                  answer="deny-edge"
-                  hit="always"
-                  aria-label="Deny {request.presentation.summary}"
-                  onclick={() => answer(request, "deny")}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <IconClose />
-                  <span>Deny</span>
-                </Button>
-                <Button
-                  data-approve
-                  answer="approve-edge"
-                  hit="always"
-                  aria-label="{request.browserAsk
-                    ? askWords.takeOver
-                    : 'Approve'} {request.presentation.summary}"
-                  onclick={() => accept(request)}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <IconTick />
-                  <span
-                    >{request.browserAsk ? askWords.takeOver : "Approve"}</span
-                  >
-                </Button>
-              </div>
-              <!-- A refused take-over, under the buttons that asked: its
+                    <div
+                      data-slot="choice"
+                      class="flex items-center justify-between gap-space-8"
+                    >
+                      <Button
+                        data-deny
+                        answer="deny-edge"
+                        hit="always"
+                        aria-label="Deny {request.presentation.summary}"
+                        onclick={() => answer(request, "deny")}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        <IconClose />
+                        <span>Deny</span>
+                      </Button>
+                      <Button
+                        data-approve
+                        answer="approve-edge"
+                        hit="always"
+                        aria-label="{request.browserAsk
+                          ? askWords.takeOver
+                          : 'Approve'} {request.presentation.summary}"
+                        onclick={() => accept(request)}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        <IconTick />
+                        <span
+                          >{request.browserAsk
+                            ? askWords.takeOver
+                            : "Approve"}</span
+                        >
+                      </Button>
+                    </div>
+                    <!-- A refused take-over, under the buttons that asked: its
                    words name the way on, the Take over just above. -->
-              <RowFault
-                data-take-refusal={request.requestId}
-                reason={refusals.reason(takeKey(request.requestId))}
-              />
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
+                    <RowFault
+                      data-take-refusal={request.requestId}
+                      reason={refusals.reason(takeKey(request.requestId))}
+                    />
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
 
-    {#if planned && progress}
-      <!-- The plan as itself: its ring in the project's hue, the step at
+          {#if planned && progress}
+            <!-- The plan as itself: its ring in the project's hue, the step at
            work, its figure. A press opens its steps upward over what it
            said; a press folds them. A press outside leaves them open. -->
-      {#if stepsOpen}
-        {@render steps()}
-      {/if}
-      <button
-        type="button"
-        data-slot="peek-plan-row"
-        class="group/plan mark-line touch-hit press-tint concentric-md -mx-space-2 -my-space-1 flex min-w-0 shrink-0 items-center gap-space-2 px-space-2 py-space-1 text-start text-meta text-ink-muted hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-(--focus-ring-offset) focus-visible:outline-focus-ring"
-        aria-expanded={stepsOpen}
-        aria-label={planWords.ringLabel(progress.done, progress.total)}
-        onclick={() => {
-          stepsOpen = !stepsOpen;
-        }}
-      >
-        <span
-          data-box
-          class="identity-ink inline-flex size-icon-md shrink-0 items-center justify-center"
-          style="--identity-h: {folderPrefs.hue(cwd)}"
-          ><TaskRing done={progress.done} total={progress.total} /></span
-        >
-        <span
-          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
-          >{stepsOpen ? "" : nowStep}</span
-        >
-        <span class="tabular-nums"
-          >{planWords.figure(progress.done, progress.total)}</span
-        >
-        <IconChevronUp
-          class="size-icon-sm flex-none transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded/plan:rotate-180"
-        />
-      </button>
-    {/if}
+            {#if stepsOpen}
+              {@render steps()}
+            {/if}
+            <button
+              type="button"
+              data-slot="peek-plan-row"
+              class="group/plan mark-line touch-hit press-tint concentric-md flex h-c-btn-h min-w-0 shrink-0 items-center gap-space-2 px-space-2 text-start text-meta text-ink-muted transition-[background-color,color,opacity] duration-(--dur-control) ease-out group-data-stale/tray:opacity-55 hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-(--focus-ring-inset) focus-visible:outline-focus-ring"
+              aria-expanded={stepsOpen}
+              aria-label={planWords.ringLabel(progress.done, progress.total)}
+              onclick={() => {
+                stepsOpen = !stepsOpen;
+              }}
+            >
+              <span
+                data-box
+                class="identity-ink inline-flex size-icon-md shrink-0 items-center justify-center"
+                style="--identity-h: {folderPrefs.hue(cwd)}"
+                ><TaskRing done={progress.done} total={progress.total} /></span
+              >
+              <span
+                class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+                >{stepsOpen ? "" : nowStep}</span
+              >
+              <span class="tabular-nums"
+                >{planWords.figure(progress.done, progress.total)}</span
+              >
+              <IconChevronUp
+                class="size-icon-sm flex-none transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded/plan:rotate-180"
+              />
+            </button>
+          {/if}
 
-    {#if statusShown}
-      <!-- The session as its mark (its state in the mark's name and
+          {#if statusShown}
+            <!-- The session as its mark (its state in the mark's name and
            tooltip), the tool at work and its target, the context left as
            its meter. The mark's echo runs only on a beat (motion/echo):
            this row is its list of one. -->
-      <div
-        data-slot="peek-status"
-        class="mark-line flex min-w-0 shrink-0 items-center gap-space-2 text-meta"
-        {@attach echoBeat()}
-      >
-        <span
-          data-box
-          class="inline-flex size-icon-md shrink-0 items-center justify-center"
-          aria-label={stateLabel}
-          role="img"
-          title={stale ? UNKNOWN_HINT : stateLabel}
-          ><SessionMark
-            caw={cawOf(target.viewId)}
-            id={target.viewId}
-            place={sessionPlace(target.viewId)}
-            status={sessionStatus(row)}
-          /></span
-        >
-        <span
-          class="mark-line flex min-w-0 flex-1 items-center gap-1.5 text-ink-muted"
-          data-box
-        >
-          <!-- What it is doing, while the hub can say: a machine out of
-               reach leaves only what it was last seen doing. -->
-          {#if activity === "working" && tool && !stale}
-            <span class="shrink-0">{toolWord(tool.name)}</span>
-            <span
-              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
-              >{tool.glance}</span
+            <div
+              data-slot="peek-status"
+              class="mark-line flex h-c-btn-h min-w-0 shrink-0 items-center gap-space-2 ps-space-2 pe-space-1 text-meta group-data-stale/tray:opacity-55"
+              {@attach echoBeat()}
             >
-          {/if}
-        </span>
-        <!-- The context left, once the session has said it: a meter with no
+              <span
+                data-box
+                class="inline-flex size-icon-md shrink-0 items-center justify-center"
+                aria-label={stateLabel}
+                role="img"
+                title={stale ? UNKNOWN_HINT : stateLabel}
+                ><SessionMark
+                  caw={cawOf(target.viewId)}
+                  id={target.viewId}
+                  place={sessionPlace(target.viewId)}
+                  status={sessionStatus(row)}
+                /></span
+              >
+              <span
+                class="mark-line flex min-w-0 flex-1 items-center gap-1.5 text-ink-muted"
+                data-box
+              >
+                <!-- What it is doing, while the hub can say: a machine out of
+               reach leaves only what it was last seen doing. -->
+                {#if activity === "working" && tool && !stale}
+                  <span class="shrink-0">{toolWord(tool.name)}</span>
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
+                    >{tool.glance}</span
+                  >
+                {/if}
+              </span>
+              <!-- The context left, once the session has said it: a meter with no
              reading stands for nothing. -->
-        {#if running && session?.context}
-          <span class="flex shrink-0 items-center gap-space-1" data-box>
-            <ContextMeter
-              compaction={session?.lastCompaction ?? null}
-              onrefresh={() => {
-                if (session) {
-                  detach(
-                    refreshContext(session.instanceId, session.machineId),
-                    "refreshContext"
-                  );
-                }
-              }}
-              status={session?.sdkStatus ?? null}
-              usage={session.context}
-            />
-          </span>
-        {/if}
-      </div>
-    {/if}
+              {#if running && session?.context}
+                <span class="flex shrink-0 items-center gap-space-1" data-box>
+                  <!-- Its breakdown opens above the tray, never over it. -->
+                  <ContextMeter
+                    anchor={tray}
+                    compaction={session?.lastCompaction ?? null}
+                    onrefresh={() => {
+                      if (session) {
+                        detach(
+                          refreshContext(session.instanceId, session.machineId),
+                          "refreshContext"
+                        );
+                      }
+                    }}
+                    status={session?.sdkStatus ?? null}
+                    usage={session.context}
+                  />
+                </span>
+              {/if}
+            </div>
+          {/if}
 
-    <!-- A stop asked from here that did not go, said where it was asked,
+          <!-- A stop asked from here that did not go, said where it was asked,
          with its way back. -->
-    <RowFault
-      again={act?.fault?.again}
-      againLabel={act?.fault?.againLabel}
-      class="shrink-0"
-      reason={act?.fault?.reason}
-    />
+          <RowFault
+            again={act?.fault?.again}
+            againLabel={act?.fault?.againLabel}
+            class="shrink-0 px-space-2"
+            reason={act?.fault?.reason}
+          />
+        </div>
+      </div>
+    </div>
   </div>
 </div>

@@ -20,6 +20,8 @@
   import type { ContextUsage } from "./client.svelte";
 
   interface Props {
+    /** What the breakdown opens against, when the meter stands inside a panel it must not cover (the peek's tray): it opens above that panel's top edge. */
+    anchor?: HTMLElement | null;
     compaction: {
       at: number;
       preTokens: number;
@@ -33,7 +35,7 @@
     usage: ContextUsage | null;
   }
 
-  let { usage, status, compaction, onrefresh }: Props = $props();
+  let { anchor = null, usage, status, compaction, onrefresh }: Props = $props();
 
   const compacting = $derived(status === "compacting");
 
@@ -129,7 +131,13 @@
     {/if}
   </Popover.Trigger>
 
-  <Popover.Content align="end" frame="panel" pad="none" side="top">
+  <Popover.Content
+    align="end"
+    customAnchor={anchor ?? undefined}
+    frame="panel"
+    pad="none"
+    side="top"
+  >
     <div
       class="mark-line flex items-center gap-2 border-b border-border px-3 py-2.5"
     >

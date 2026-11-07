@@ -13,6 +13,12 @@ export const planWords = {
   /** The ring, for a screen reader: how far the plan has got. */
   ringLabel: (done: number, total: number) =>
     total > 0 ? `Plan, ${done} of ${total} done` : "Plan",
+  /** A step's state, for a screen reader: its glyph says it on screen. */
+  stepStatus: {
+    pending: "To do",
+    in_progress: "Doing now",
+    completed: "Done",
+  },
   /** The ring's figure. */
   figure: (done: number, total: number) => `${done}/${total}`,
   /** The panel's title when it holds a task's to-dos alone, and their part's heading. */

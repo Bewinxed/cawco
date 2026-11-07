@@ -4,6 +4,7 @@
     type SessionPlan,
     todoGroups,
   } from "@cawco/core/plan";
+  import { planWords } from "@cawco/core/words/plan";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   /** One row of a plan's tree: a step or a to-do, its children under it. */
   export interface PlanNode {
@@ -132,6 +133,9 @@
           class="flex items-start gap-space-2 min-w-0 type-label text-ink-strong"
         >
           {@render mark(node.status)}
+          <!-- Its state, read out before its words: the glyph says it on
+               screen. -->
+          <span class="sr-only">{planWords.stepStatus[node.status]}:</span>
           <span
             data-slot="text"
             class={[

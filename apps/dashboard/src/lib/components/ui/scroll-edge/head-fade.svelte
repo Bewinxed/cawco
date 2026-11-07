@@ -60,13 +60,17 @@
   style:--edge="calc({band ?? '0px'} + var(--c-head-fade))"
 >
   {#if band}
-    <!-- The head's room: the ground whole under it. -->
+    <!-- The head's room: the ground whole under it, from a pixel above its
+         top. A head standing at a fractional top (a sheet risen to 218.81)
+         paints its ground from the next whole pixel, while the rows under it
+         are cut at the pixel before, so a hair of a line showed above it. -->
     <div
       data-slot="layer"
       class={[
-        "absolute inset-x-0 top-0 h-(--room) opacity-0 head-fade-scrub",
+        "absolute inset-x-0 -top-px h-(--room-ground) opacity-0 head-fade-scrub",
         tint,
       ]}
+      style:--room-ground="calc(var(--room) + 1px)"
     ></div>
   {/if}
   <!-- Below the room, the rows going out of focus and into the ground. -->
