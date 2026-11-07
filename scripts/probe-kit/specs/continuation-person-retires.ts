@@ -172,9 +172,17 @@ export default {
       (one) => one !== undefined && ["started", "failed"].includes(one.stage),
       240_000
     ).catch((error: Error) => ({ stage: `none: ${error.message}` }));
+    // The job is started once its opening has gone; the new session's process
+    // may still be coming up, so its running is waited for, not read once.
+    const running = await until(
+      `the new session ${target.slice(0, 8)} running`,
+      () => fleet.instance(target)?.status,
+      (status) => status === "running",
+      60_000
+    ).catch(() => fleet.instance(target)?.status);
     check(
       "a: the person's Continue of a session with no work item ends started, its new session running",
-      ended.stage === "started" && fleet.instance(target)?.status === "running",
+      ended.stage === "started" && running === "running",
       `job ${JSON.stringify(ended)}; target ${JSON.stringify(stored(fleet, target))}`
     );
 
