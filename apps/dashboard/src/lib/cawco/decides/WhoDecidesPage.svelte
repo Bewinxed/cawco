@@ -14,6 +14,8 @@
    * and Try again; while it reads, the page's own shape stands in skeletons.
    */
   import { decidesWords } from "@cawco/core/words/decides";
+  import RegionFault from "#lib/cawco/fault/RegionFault.svelte";
+  import { animatedCaw } from "#lib/cawco/home/FaultCaw.svelte";
   import { folderFileHref } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -54,10 +56,7 @@
 </script>
 
 <Tooltip.Provider>
-  <div
-    class="flex w-full max-w-c-config-max-w min-w-0 flex-col gap-space-5"
-    data-who-decides
-  >
+  <div class="flex w-full min-w-0 flex-col gap-space-5" data-who-decides>
     {#if who.projectId !== null}
       <nav
         aria-label={decidesWords.crumbs}
@@ -92,7 +91,14 @@
     {/if}
 
     {#if who.read.state === "failed"}
-      <RowFault again={() => who.load()} reason={who.read.reason} />
+      <RegionFault
+        caw={animatedCaw}
+        details={who.read.reason}
+        onreload={() => location.reload()}
+        onretry={() => who.load()}
+        room="page"
+        what={decidesWords.pageName}
+      />
     {:else if !shown}
       <div class="flex flex-wrap gap-space-2" aria-hidden="true">
         {#each [0, 1, 2, 3, 4] as at (at)}

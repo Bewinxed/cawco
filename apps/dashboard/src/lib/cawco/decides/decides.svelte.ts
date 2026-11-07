@@ -211,16 +211,24 @@ export class WhoDecides {
   readonly fleetRoutes = $derived(
     this.read.state === "read" ? this.read.fleet.routes : {}
   );
-  /** This page's member for each kind: the project's table, or the fleet's. */
-  readonly routes = $derived(
-    this.read.state === "read"
-      ? (this.read.table?.routes ?? this.read.fleet.routes)
-      : {}
-  );
   /** decides.md's problems: while there are any, every kind is his. */
   readonly problems = $derived(
     this.read.state === "read" ? (this.read.table?.problems ?? []) : []
   );
+  /**
+   * This page's member for each kind: the project's table, or the fleet's.
+   * While the project's decides.md can't be read every kind is his, as the
+   * hub routes it (hub decides-file.ts).
+   */
+  readonly routes = $derived.by((): Record<string, string> => {
+    if (this.read.state !== "read") {
+      return {};
+    }
+    if (this.problems.length > 0) {
+      return Object.fromEntries(this.kinds.map((kind) => [kind.id, "you"]));
+    }
+    return this.read.table?.routes ?? this.read.fleet.routes;
+  });
   /** The kinds the project set itself, in the kinds' order; none on the fleet's page. */
   readonly own = $derived(
     this.read.state === "read" && this.read.table

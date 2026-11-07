@@ -192,9 +192,8 @@ export const decidesWords = {
   decisionTrigger: (page: string) => `a decision card on ${page} is yours`,
 
   // ── The page's words: the roster, its tiles and the hand-over ───────────
-  /** A kind this project set itself, in its scope glyph's tooltip. */
-  ownTip: (project: string, subject: string) =>
-    `${project}'s own. The fleet sends it to ${subject}`,
+  /** A kind a project routes itself, on its card. */
+  ownTag: "Set here",
   /** A project's own kind, its way back. */
   giveBack: "Follow the fleet",
   /** The member the fleet names for this kind, at the end of its row. */
@@ -228,6 +227,8 @@ export const decidesWords = {
       : `${harness} · ${model}`,
 
   // ── The page: the team, the kinds' cards ────────────────────────────────
+  /** The page, as its fault names it ("Couldn't show Who decides"). */
+  pageName: "Who decides",
   /** The team row, as a screen reader names it. */
   teamLabel: "Who decides",
   /** The team row's last chip, and a new agent's card while unnamed. */
@@ -301,7 +302,7 @@ export const decidesWords = {
   /** A member's card: the kinds that come to it, as a screen reader names them. */
   kindsOf: (name: string) => `What comes to ${name}`,
   /** A member's card when no kind goes to it. */
-  answersNothing: "No kind yet",
+  answersNothing: "Nothing comes to it yet",
   /** A member that can't run, on the kinds it answers: the way to its card. */
   fixMember: (name: string) => `Change ${name}`,
   /** A member that can't run, in its card: where machines join. */
@@ -360,7 +361,7 @@ export const decidesWords = {
   /** How you hear, its two ways. */
   hears: {
     each: {
-      name: "Tell me each time",
+      name: "Tell me when it decides",
       note: "A notification for every answer",
     },
     later: {
@@ -408,11 +409,14 @@ export const decidesWords = {
     if (count === 0) {
       return "";
     }
-    const where = projects.length > 0 ? ` (${andList(projects)})` : "";
-    return `${count} waiting${where} ${count === 1 ? "moves" : "move"} to the kind you pick.`;
+    const where = projects.length > 0 ? ` in ${andList(projects)}` : "";
+    return count === 1
+      ? `1 decision waits under it${where}. It moves too.`
+      : `${count} decisions wait under it${where}. They move too.`;
   },
+
   /** The kinds to move them to, as a screen reader names the list. */
-  moveToLabel: "The kind they go to",
+  moveToLabel: "Move its choices to",
   pickMoveTo: "Pick a kind.",
   removeAndMove: (count: number) => {
     if (count === 0) {
@@ -432,15 +436,15 @@ export const decidesWords = {
   record: {
     decided: (count: number) => `${count.toLocaleString()} decided`,
     last: (age: string) =>
-      age === "now" ? "last just now" : `last ${age} ago`,
-    takenBack: (count: number) => `${count.toLocaleString()} taken back`,
+      age === "now" ? "last one just now" : `last one ${age} ago`,
+    takenBack: (count: number) => `${count.toLocaleString()} you overruled`,
     waiting: (count: number) => `${count.toLocaleString()} waiting`,
     spend: (usd: string) => `${usd} this month`,
     nothingYet: "Nothing decided yet",
     threads: (count: number) =>
-      `${count.toLocaleString()} ${count === 1 ? "thread" : "threads"}`,
+      `${count.toLocaleString()} ${count === 1 ? "conversation" : "conversations"}`,
     lastTurn: (age: string) =>
-      age === "now" ? "last turn just now" : `last turn ${age} ago`,
+      age === "now" ? "last active just now" : `last active ${age} ago`,
     unread: (reason: string) => `The record didn't load: ${reason}`,
   },
 

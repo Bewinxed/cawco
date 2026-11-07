@@ -18,6 +18,7 @@
   import { tick } from "svelte";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -26,7 +27,6 @@
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconFolder } from "#lib/icons.js";
   import type { WhoDecides } from "./decides.svelte";
   import type { RecentCall } from "./decides-client";
@@ -98,9 +98,6 @@
           },
         ]),
   ]);
-  const ownTip = $derived(
-    decidesWords.ownTip(project ?? "", who.fleetHolder(kind.id)?.subject ?? "")
-  );
 
   const pick = async (to: string) => {
     who.handing = null;
@@ -216,29 +213,13 @@
         class="size-icon-md flex-none self-center text-ink-muted"
       />
       <h2
-        class="min-w-0 flex-auto type-body font-medium text-ink-strong text-balance wrap-anywhere"
+        class="min-w-0 flex-1 type-body font-medium text-ink-strong text-balance"
         id="{uid}-name"
       >
-        {kind.name}{#if own}<Tooltip.Root>
-            <Tooltip.Trigger>
-              {#snippet child({ props })}
-                <span
-                  {...props}
-                  aria-label={ownTip}
-                  class="ms-space-1 inline-block align-middle text-ink-muted"
-                  role="img"
-                  ><IconFolder aria-hidden="true" class="size-icon-sm" /></span
-                >
-              {/snippet}
-            </Tooltip.Trigger>
-            <Tooltip.Content>{ownTip}</Tooltip.Content>
-          </Tooltip.Root>{/if}
+        {kind.name}
       </h2>
       {#if holder}
-        <span
-          class="flex max-w-1/2 min-w-0 flex-none items-center gap-space-1"
-          data-box
-        >
+        <span class="flex flex-none items-center gap-space-1" data-box>
           {#if asking}
             <span class="flex" aria-hidden="true"><LiveDot /></span>
             <span class="sr-only" role="status">{asking}</span>
@@ -280,6 +261,16 @@
           </WhoPicker>
         </span>
       {/if}
+    </div>
+  {/if}
+
+  {#if own}
+    <div class="flex">
+      <Badge variant="secondary"
+        ><IconFolder aria-hidden="true" data-icon="inline-start" /><span
+          >{decidesWords.ownTag}</span
+        ></Badge
+      >
     </div>
   {/if}
 
@@ -356,8 +347,11 @@
   {/if}
 
   <AskHere asker={who.asker} at="remove-kind:{kind.id}">
+    <p class="mb-space-1 type-label text-ink-muted" id="{uid}-move">
+      {decidesWords.moveToLabel}
+    </p>
     <OptionGroup
-      aria-label={decidesWords.moveToLabel}
+      aria-labelledby="{uid}-move"
       layout="list"
       bind:value={
         () => (who.moveTo === null ? [] : [who.moveTo]),

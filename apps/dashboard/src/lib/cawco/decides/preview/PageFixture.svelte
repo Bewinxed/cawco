@@ -153,7 +153,14 @@
     } else if (recent === "reading") {
       who.recent = { state: "reading" };
     } else {
-      who.recent = { state: "read", calls };
+      // A project's page reads its own project's questions only, as the hub answers it.
+      who.recent = {
+        state: "read",
+        calls:
+          project === null
+            ? calls
+            : calls.filter((call) => call.projectId === "cawco-dev"),
+      };
     }
     if (project !== null) {
       // His seat as the page's CawLead holds it: on, at rest, nothing moving.
@@ -320,7 +327,15 @@
     }
     return Promise.resolve();
   };
-  who.removeKind = () => Promise.resolve();
+  who.removeKind = (id) => {
+    const to = who.moveTo;
+    if (to === null) {
+      return Promise.reject(new Error(decidesWords.pickMoveTo));
+    }
+    withKinds((all) => all.filter((one) => one.id !== id));
+    who.moveTo = null;
+    return Promise.resolve();
+  };
   who.loadRecent = () => Promise.resolve();
   who.load = () => Promise.resolve();
 
@@ -347,7 +362,7 @@
         cancelLabel: decidesWords.keep,
         confirmLabel: decidesWords.removeAndMove(2),
         pendingLabel: decidesWords.removingKind,
-        run: () => Promise.resolve(),
+        run: () => who.removeKind(removingKind),
       });
     }
     if (open === null) {

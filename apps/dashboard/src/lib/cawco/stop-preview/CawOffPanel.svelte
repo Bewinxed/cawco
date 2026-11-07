@@ -163,7 +163,7 @@
       </div>
       <label class="flex flex-wrap items-center gap-space-2">
         <Switch bind:checked={() => on, (next) => flip(next)} />
-        <span>Events reach a conversation</span>
+        <span>{conversationWords.eventsSwitch}</span>
       </label>
       {#if open}
         <StopTrayPick

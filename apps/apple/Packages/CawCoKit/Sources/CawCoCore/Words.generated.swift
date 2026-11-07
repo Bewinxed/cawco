@@ -2972,6 +2972,9 @@ public enum Words {
 
     public enum ProjectConversation {
         // packages/core/src/words/project-conversation.ts `conversationWords`
+        /// The project's own switch for its conversation (CawLeadSwitch): on, its events start or reach Caw.
+        public static let eventsSwitch = "Events wake Caw"
+
         /// The panel head's action: a new session in the project, its words the first prompt.
         public static let newConversation = "New conversation"
 

@@ -256,6 +256,7 @@
           lead={who.lead}
           projectId={who.projectId}
           projectName={project}
+          row
         />
       </div>
     {/if}
@@ -383,12 +384,12 @@
       {#if holds.length > 0}
         <ul
           aria-label={decidesWords.kindsOf(member.name)}
-          class="m-0 flex list-none flex-wrap gap-space-1 p-0"
+          class="m-0 flex list-none flex-wrap gap-x-space-3 gap-y-space-1 p-0"
         >
           {#each holds as kind (kind.id)}
             {@const Glyph = kindGlyph(kind.id)}
             <li
-              class="mark-line flex items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 py-px type-label text-ink-strong"
+              class="mark-line flex items-center gap-space-1 type-label text-ink-muted"
             >
               <Glyph aria-hidden="true" class="size-icon-sm text-ink-muted" />
               <span>{kind.name}</span>

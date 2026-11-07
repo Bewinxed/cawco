@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { conversationWords } from "@cawco/core/words/project-conversation";
   /**
    * Whether the project's events reach a conversation, the project's own
    * switch (fable-lead-switch.md §1): one component wherever it stands,
@@ -28,13 +29,16 @@
     lead,
     projectId,
     projectName,
-    label = "Events reach a conversation",
+    label = conversationWords.eventsSwitch,
+    row = false,
   }: {
     lead: CawLead;
     projectId: string;
     projectName: string;
     /** The switch's words beside it. */
     label?: string;
+    /** A settings row: its words leading, the switch at the row's end, as like settings stand. */
+    row?: boolean;
   } = $props();
 
   const on = $derived(lead.on ?? false);
@@ -72,8 +76,19 @@
   }
 </script>
 
-<label data-slot="lead-switch" class="flex flex-wrap items-center gap-space-2">
+<!-- As a settings row its words lead and the switch ends the row; the
+     reading order stays the switch's, then its words. -->
+<label
+  data-slot="lead-switch"
+  class={[
+    "flex items-center",
+    row
+      ? "mark-line min-h-c-touch-floor flex-row-reverse justify-between gap-space-3"
+      : "flex-wrap gap-space-2",
+  ]}
+>
   <Switch
+    data-box
     data-caw-lead-switch
     disabled={lead.moving || lead.on === null}
     bind:checked={() => on, (next) => flip(next)}

@@ -3,6 +3,8 @@
  * its head's actions and why a new one can't start.
  */
 export const conversationWords = {
+  /** The project's own switch for its conversation (CawLeadSwitch): on, its events start or reach Caw. */
+  eventsSwitch: "Events wake Caw",
   /** The panel head's action: a new session in the project, its words the first prompt. */
   newConversation: "New conversation",
   /**

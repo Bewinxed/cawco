@@ -8,24 +8,20 @@
 
 <script lang="ts">
   /**
-   * Who answers a kind, picked from its face chip. On a desk it is the
-   * kit's menu hung from the chip: each member a radio item (its face, its
-   * name, what it runs on, the one answering now ticked), the arrows moving
-   * through them and Enter or a press picking, then a consequence line and
-   * what else is done to the kind. Under the phone line it is the kit's
-   * bottom sheet holding the same list as bits-ui's radio group, a tap
-   * picking. In
-   * a states file's frame it draws in place.
+   * Who answers a kind, picked from its face chip: hung from it in the
+   * kit's popover on a desk and the kit's bottom sheet under the phone line
+   * (Hung). Each member is a row (its face, its name, what it runs on, a
+   * tick on who answers now) in bits-ui's radio group, the arrows moving
+   * through them and a press, Enter or Space picking; under them a
+   * consequence line and what else is done to the kind. In a states file's
+   * frame it draws in place.
    */
   import type { Kind, Member } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import { RadioGroup } from "bits-ui";
   import type { Snippet } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconTick } from "#lib/icons.js";
   import Hung from "./Hung.svelte";
-  import { drawnInPlace } from "./in-place";
   import MemberFace from "./MemberFace.svelte";
 
   let {
@@ -59,8 +55,13 @@
     trigger: Snippet<[Record<string, unknown>]>;
   } = $props();
 
-  const still = drawnInPlace();
-  const phone = new MediaQuery("width < 640px");
+  /** Where the arrows stand in the list; who answers until they move. */
+  let highlight = $state("");
+  $effect(() => {
+    if (open) {
+      highlight = current;
+    }
+  });
 </script>
 
 {#snippet row(member: Member)}
@@ -84,91 +85,59 @@
   {/if}
 {/snippet}
 
-{#if still || phone.current}
-  <Hung
-    align="end"
-    {anchor}
-    label={kind.name}
-    {onopen}
-    {open}
-    width="var(--c-pop-w)"
-    {trigger}
+<Hung
+  align="end"
+  {anchor}
+  label={kind.name}
+  {onopen}
+  {open}
+  width="var(--c-pop-w)"
+  {trigger}
+>
+  <!-- The members as bits-ui's radio group: the arrows move through them
+       and only a press, Enter or Space picks (`highlight` is where the
+       arrows stand; the tick is who answers now). -->
+  <RadioGroup.Root
+    aria-label={kind.name}
+    class="flex flex-col gap-px"
+    bind:value={highlight}
   >
-    <!-- The members as bits-ui's radio group: a tap picks. -->
-    <RadioGroup.Root
-      aria-label={kind.name}
-      class="flex flex-col gap-px"
-      onValueChange={(next) => onpick(next)}
-      value={current}
-    >
-      {#each members as member (member.id)}
-        <RadioGroup.Item
-          class="mark-line flex min-h-c-touch-floor w-full items-center gap-space-2 concentric-xs px-space-2 py-space-1 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-          onclick={() => {
-            if (member.id === current) {
-              onpick(member.id);
-            }
-          }}
-          value={member.id}
-        >
-          {@render row(member)}
+    {#each members as member (member.id)}
+      <RadioGroup.Item
+        class="mark-line flex min-h-c-touch-floor w-full items-center gap-space-2 concentric-xs px-space-2 py-space-1 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+        onclick={() => onpick(member.id)}
+        onkeydown={(event: KeyboardEvent) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onpick(member.id);
+          }
+        }}
+        value={member.id}
+      >
+        {@render row(member)}
+        <span class="grid size-icon-sm flex-none place-items-center" data-box>
           {#if member.id === current}
             <IconTick aria-hidden="true" class="size-icon-sm text-ink-strong" />
           {/if}
-        </RadioGroup.Item>
+        </span>
+      </RadioGroup.Item>
+    {/each}
+  </RadioGroup.Root>
+  {@render noteLine()}
+  {#if actions.length > 0}
+    <div
+      class="mt-space-1 flex flex-col gap-px border-border-hairline border-t pt-space-1"
+    >
+      {#each actions as action (action.label)}
+        <button
+          class="flex min-h-c-touch-floor w-full items-center concentric-xs px-space-2 py-space-1 text-start type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          onclick={() => {
+            onopen(false);
+            action.run();
+          }}
+          type="button">{action.label}</button
+        >
       {/each}
-    </RadioGroup.Root>
-    {@render noteLine()}
-    {#if actions.length > 0}
-      <div
-        class="mt-space-1 flex flex-col gap-px border-border-hairline border-t pt-space-1"
-      >
-        {#each actions as action (action.label)}
-          <button
-            class="flex min-h-c-touch-floor w-full items-center concentric-xs px-space-2 py-space-1 text-start type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-            onclick={() => {
-              onopen(false);
-              action.run();
-            }}
-            type="button">{action.label}</button
-          >
-        {/each}
-      </div>
-    {/if}
-  </Hung>
-{:else}
-  <DropdownMenu.Root bind:open={() => open, onopen}>
-    <DropdownMenu.Trigger>
-      {#snippet child({ props })}
-        {@render trigger(props)}
-      {/snippet}
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-c-pop-w">
-      <DropdownMenu.RadioGroup
-        aria-label={kind.name}
-        onValueChange={(next) => onpick(next)}
-        value={current}
-      >
-        {#each members as member (member.id)}
-          <DropdownMenu.RadioItem value={member.id}>
-            <span
-              class="flex min-w-0 flex-auto items-center gap-space-2"
-              data-box
-            >
-              {@render row(member)}
-            </span>
-          </DropdownMenu.RadioItem>
-        {/each}
-      </DropdownMenu.RadioGroup>
-      {@render noteLine()}
-      {#if actions.length > 0}
-        <DropdownMenu.Separator />
-        {#each actions as action (action.label)}
-          <DropdownMenu.Item onSelect={() => action.run()}
-            >{action.label}</DropdownMenu.Item
-          >
-        {/each}
-      {/if}
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
-{/if}
+    </div>
+  {/if}
+</Hung>
