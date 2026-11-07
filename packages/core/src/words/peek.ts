@@ -13,6 +13,8 @@ export const peekWords = {
     "A quick look at one session without leaving Home. Open goes into it; closing keeps your place.",
   /** The maximize symbol: dives into the session. */
   open: commonWords.openSession,
+  /** Read out while what the session said is on its way. */
+  reading: "Reading what it said…",
   /** Puts the peek away. */
   close: "Close peek",
 };

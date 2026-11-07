@@ -18,6 +18,7 @@
   import { humanize, mcpParts } from "@cawco/core/tool-presentation";
   import { getToolGlance } from "@cawco/core/transcript-rules";
   import { askWords } from "@cawco/core/words/asks";
+  import { commonWords } from "@cawco/core/words/common";
   import { peekWords } from "@cawco/core/words/peek";
   import { planWords } from "@cawco/core/words/plan";
   /**
@@ -44,14 +45,17 @@
   } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { followTail } from "#lib/hooks/follow-tail.js";
   import {
+    IconAlert,
     IconChevronUp,
     IconClose,
     IconExternal,
     IconFolder,
     IconFork,
+    IconLaptop,
     IconMaximizeLinear,
     IconStop,
     IconTick,
@@ -70,6 +74,8 @@
   import {
     answeredOr,
     cawco,
+    clearReadFault,
+    faultMessage,
     isFailed,
     isResumable,
     isStale,
@@ -130,6 +136,19 @@
       }
     });
     return () => cancelAnimationFrame(frame);
+  }
+
+  /** The tail's place held while it is on its way: prose ragged as prose is, a tool line between. */
+  const SKELETON: (string[] | "tool")[] = [
+    ["94%", "81%", "88%", "52%"],
+    "tool",
+    ["91%", "86%", "43%"],
+  ];
+
+  /** Try again: forget what was said about the last read, then read. */
+  function readAgain(): void {
+    clearReadFault(target.viewId);
+    detach(readTranscript(target.viewId, "retry", true), "readTranscript");
   }
 
   /** The foot tray's height: what it said keeps that much room at its end. */
@@ -398,9 +417,48 @@
   </div>
 {/snippet}
 
+<!-- What the tail looks like before it has arrived, in its own geometry:
+     prose on the body's line pitch, a tool line in meta, every bar the kit
+     Skeleton centred in its line box. -->
+{#snippet skeleton()}
+  <div
+    data-skeleton
+    aria-busy="true"
+    class="flex flex-col gap-3"
+    role="status"
+    style:--sk-line-my="calc((1lh - var(--c-skeleton-x-height)) / 2)"
+  >
+    <span class="sr-only">{peekWords.reading}</span>
+    {#each SKELETON as block, i (i)}
+      {#if block === "tool"}
+        <div class="flex items-center gap-1.5 text-meta leading-meta">
+          <Skeleton height="x-height" radius="line" type="meta" width="word" />
+          <Skeleton
+            class="my-(--sk-line-my) w-(--sk-w)"
+            height="x-height"
+            radius="line"
+            style="--sk-w: 46%"
+          />
+        </div>
+      {:else}
+        <div class="flex flex-col text-body leading-body">
+          {#each block as width, k (k)}
+            <Skeleton
+              class="my-(--sk-line-my) w-(--sk-w)"
+              height="x-height"
+              radius="line"
+              style="--sk-w: {width}"
+            />
+          {/each}
+        </div>
+      {/if}
+    {/each}
+  </div>
+{/snippet}
+
 <div
   data-slot="peek"
-  class="relative flex min-h-0 flex-1 flex-col overflow-hidden timeline-scope-transcript-head"
+  class="relative flex min-h-0 flex-1 flex-col timeline-scope-transcript-head"
   style:--peek-foot="calc({footH}px + var(--space-4))"
 >
   <!-- The bar floats over what it said (The Title Bars Follow Liquid Glass
@@ -409,75 +467,94 @@
        named in its tooltip; no path. At the trailing edge Open, the
        maximize symbol in its glass group, which dives, and Close in one of
        its own. The title takes the right-click: Open, Fork, Stop, Close.
-       First in the document, so it is read and tabbed first and a trapped
-       sheet's focus lands on it; it stands over the tail by its layer. -->
-  <BarFloat tint="bg-surface-raised">
-    {#snippet leading()}
-      <ContextMenu.Root>
-        <ContextMenu.Trigger box="none">
-          <h2
-            class="pointer-events-auto mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-body font-medium"
-          >
-            {#if cwd}
-              <IconFolder
-                class="identity-ink size-icon-md shrink-0"
-                style="--identity-h: {folderPrefs.hue(cwd)}"
+       First in the document, so it is read and tabbed first; it stands over
+       the tail by its layer. -->
+  <!-- On the tail's reading measure, as the tray is: on a sheet as wide as
+       an iPad the title and its symbols stand over the column they head. The
+       boxes mirror the tail's (its side pad, then the measure), and the bar
+       takes the pad back so its groups sit where the desk's do. -->
+  <div class="pointer-events-none absolute inset-x-0 top-0 z-2 px-4">
+    <div class="relative mx-auto max-w-c-measure">
+      <div class="relative -mx-4">
+        <BarFloat tint="bg-surface-raised">
+          {#snippet leading()}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger box="none">
+                <h2
+                  class="pointer-events-auto mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-body font-medium"
+                >
+                  {#if cwd}
+                    <IconFolder
+                      class="identity-ink size-icon-md shrink-0"
+                      style="--identity-h: {folderPrefs.hue(cwd)}"
+                    />
+                  {/if}
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                    >{target.title}</span
+                  >
+                  {#if machine}
+                    <span
+                      data-box
+                      class="inline-flex flex-none text-ink-muted"
+                      aria-label={host}
+                      role="img"
+                      title={host}
+                      ><OsMark class="size-space-4" os={machine.os} /></span
+                    >
+                  {/if}
+                </h2>
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onSelect={() => goto(target.href)}>
+                  <IconExternal />
+                  <span>{peekWords.open}</span>
+                </ContextMenu.Item>
+                <ContextMenu.PendingItem
+                  disabled={!(forkable && machine)}
+                  icon={IconFork}
+                  label="Fork"
+                  pendingLabel="Forking…"
+                  run={fork}
+                />
+                {#if running && row}
+                  <ContextMenu.Item
+                    onSelect={() => stopOnRow(row.id, row.machineId)}
+                  >
+                    <IconStop />
+                    <span
+                      >{activity === "working" ? "Stop mid-turn" : "Stop"}</span
+                    >
+                  </ContextMenu.Item>
+                {/if}
+                <ContextMenu.Separator />
+                <ContextMenu.Item onSelect={onclose}>
+                  <IconClose />
+                  <span>{peekWords.close}</span>
+                </ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {/snippet}
+          {#snippet trailing()}
+            <BarGlass form="group">
+              <BarItem
+                href={target.href}
+                icon={IconMaximizeLinear}
+                label={peekWords.open}
               />
-            {/if}
-            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{target.title}</span
-            >
-            {#if machine}
-              <span
-                data-box
-                class="inline-flex flex-none text-ink-muted"
-                aria-label={host}
-                role="img"
-                title={host}
-                ><OsMark class="size-space-4" os={machine.os} /></span
-              >
-            {/if}
-          </h2>
-        </ContextMenu.Trigger>
-        <ContextMenu.Content>
-          <ContextMenu.Item onSelect={() => goto(target.href)}>
-            <IconExternal />
-            <span>{peekWords.open}</span>
-          </ContextMenu.Item>
-          <ContextMenu.PendingItem
-            disabled={!(forkable && machine)}
-            icon={IconFork}
-            label="Fork"
-            pendingLabel="Forking…"
-            run={fork}
-          />
-          {#if running && row}
-            <ContextMenu.Item onSelect={() => stopOnRow(row.id, row.machineId)}>
-              <IconStop />
-              <span>{activity === "working" ? "Stop mid-turn" : "Stop"}</span>
-            </ContextMenu.Item>
-          {/if}
-          <ContextMenu.Separator />
-          <ContextMenu.Item onSelect={onclose}>
-            <IconClose />
-            <span>{peekWords.close}</span>
-          </ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu.Root>
-    {/snippet}
-    {#snippet trailing()}
-      <BarGlass form="group">
-        <BarItem
-          href={target.href}
-          icon={IconMaximizeLinear}
-          label={peekWords.open}
-        />
-      </BarGlass>
-      <BarGlass form="group">
-        <BarItem icon={IconClose} label={peekWords.close} onclick={onclose} />
-      </BarGlass>
-    {/snippet}
-  </BarFloat>
+            </BarGlass>
+            <BarGlass form="group">
+              <BarItem
+                icon={IconClose}
+                label={peekWords.close}
+                onclick={onclose}
+              />
+            </BarGlass>
+          {/snippet}
+        </BarFloat>
+      </div>
+    </div>
+  </div>
 
   <!-- What it said runs the sheet's whole height, under the bar and the
        tray, and follows new turns and the stream: a peek is for the last
@@ -497,19 +574,33 @@
       <div
         class="mx-auto flex w-full max-w-c-measure flex-col gap-3 *:shrink-0"
       >
-        {#if session?.loading && tail.length === 0}
-          <p class="mark-line flex items-center gap-space-2 text-meta">
-            <LiveDot /><span>Reading…</span>
-          </p>
-        {:else if session?.readFault && tail.length === 0}
-          <!-- A read that failed is not a session with nothing to say. -->
-          <p class="text-meta text-error-9">
-            Couldn't read this session: {session.readFault.message}
-          </p>
+        {#if session?.readFault && tail.length === 0}
+          <!-- A read that failed, as the session's own pane says one: its
+               mark, the fault in its own words, and Try again. -->
+          <EmptyState
+            icon={session.readFault.reason === "offline"
+              ? IconLaptop
+              : IconAlert}
+            role="alert"
+            title={faultMessage(session.readFault)}
+          >
+            {#snippet action()}
+              <Button onclick={readAgain} size="sm" variant="outline"
+                >{commonWords.tryAgain}</Button
+              >
+            {/snippet}
+          </EmptyState>
         {:else if tail.length === 0 && !session?.streaming}
-          <p class="text-meta">Nothing said yet.</p>
+          <!-- Its turns still on their way, as the session's own pane holds
+               their place (TranscriptSkeleton): read back, or a first turn
+               under way. An ended session that said nothing shows nothing. -->
+          {#if session?.loading || running}
+            {@render skeleton()}
+          {/if}
         {:else}
           {#each tail as message, index (message.id ?? index)}
+            {@const last = index === tail.length - 1 && !session?.streaming}
+            <!-- The last turn reads whole: it is what the peek is for. -->
             {#if message.type === "tool.use" || message.type === "tool.handoff"}
               <p class="flex items-baseline gap-1.5 text-meta text-ink-muted">
                 <span class="shrink-0"
@@ -529,19 +620,27 @@
             {:else if message.type === "user.peer"}
               <!-- The one voice worth tinting: what the session was asked. -->
               <p
-                class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body wrap-break-word whitespace-pre-wrap"
+                class="{last
+                  ? ''
+                  : 'line-clamp-4'} rounded-lg bg-action-solid/10 px-3 py-2 text-body wrap-break-word whitespace-pre-wrap"
               >
                 {message.content}
               </p>
             {:else if message.type === "result.error"}
               <!-- A failed turn's last words are the agent's too: flat. -->
-              <p class="line-clamp-3 text-body wrap-break-word text-error-9">
+              <p
+                class="{last
+                  ? ''
+                  : 'line-clamp-3'} text-body wrap-break-word text-error-9"
+              >
                 {plainMarkdown(message.content)}
               </p>
             {:else}
               <!-- The agent's words read flat: its markdown, without the syntax. -->
               <p
-                class="line-clamp-6 text-body wrap-break-word whitespace-pre-wrap"
+                class="{last
+                  ? ''
+                  : 'line-clamp-6'} text-body wrap-break-word whitespace-pre-wrap"
               >
                 {plainMarkdown(message.content)}
               </p>
@@ -573,7 +672,8 @@
        inside it, the rows below them held. -->
   <div
     data-slot="peek-foot"
-    class="absolute inset-x-space-2 bottom-space-2 z-2 mx-auto flex max-h-c-peek-tray-h max-w-c-measure flex-col gap-space-3 rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel p-space-3 text-body shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+    style:--r-outer="var(--c-float-panel-r)"
+    class="concentric-in r-inset-space-1 absolute inset-x-space-2 bottom-space-2 z-2 mx-auto flex max-h-c-peek-tray-h max-w-c-measure flex-col gap-space-3 rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel p-space-3 text-body shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
     {@attach footSize}
   >
     {#if failed}
@@ -639,8 +739,8 @@
                 <!-- What runs, under why: Approve here is made on the command. -->
                 <code
                   data-slot="block"
-                  class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) text-meta text-ink-muted"
-                  >{request.presentation.command.trim().split("\n")[0]}</code
+                  class="block break-word whitespace-pre-wrap border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) text-meta text-ink-muted"
+                  >{request.presentation.command.trim()}</code
                 >
               {/if}
               <!-- Equal peers at opposite ends, each outlined in its tint
@@ -700,7 +800,7 @@
       <button
         type="button"
         data-slot="peek-plan-row"
-        class="group/plan mark-line flex min-w-0 shrink-0 items-center gap-space-2 rounded-sm text-start text-meta text-ink-muted hover:text-ink-strong focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-(--focus-ring-offset) focus-visible:outline-focus-ring"
+        class="group/plan mark-line touch-hit press-tint concentric-md -mx-space-2 -my-space-1 flex min-w-0 shrink-0 items-center gap-space-2 px-space-2 py-space-1 text-start text-meta text-ink-muted hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-(--focus-ring-offset) focus-visible:outline-focus-ring"
         aria-expanded={stepsOpen}
         aria-label={planWords.ringLabel(progress.done, progress.total)}
         onclick={() => {
@@ -763,7 +863,9 @@
             >
           {/if}
         </span>
-        {#if running}
+        <!-- The context left, once the session has said it: a meter with no
+             reading stands for nothing. -->
+        {#if running && session?.context}
           <span class="flex shrink-0 items-center gap-space-1" data-box>
             <ContextMeter
               compaction={session?.lastCompaction ?? null}
@@ -776,7 +878,7 @@
                 }
               }}
               status={session?.sdkStatus ?? null}
-              usage={session?.context ?? null}
+              usage={session.context}
             />
           </span>
         {/if}

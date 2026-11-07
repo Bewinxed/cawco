@@ -263,13 +263,16 @@
        reduced motion it fades in and out over --dur-control instead of
        sliding (DESIGN.md, Sheet: "with reduced motion it fades over
        120ms"); vaul's slide stands in the `vendor` layer under it
-       (vite.config.ts, vendorComponentSheets). -->
+       (vite.config.ts, vendorComponentSheets). The sheet draws no focus
+       ring of its own (`outline-off`): it is no control, Tab never lands on
+       it, and it holds the focus only where a sheet opens without moving it
+       to a control (the peek). -->
   <DrawerPrimitive.Content
     class={cn(
-      "motion-reduce:sheet-fade group/drawer-content fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-1 before:rounded-lg before:border before:border-border before:bg-surface-raised data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(--spacing(4)+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
+      "motion-reduce:sheet-fade group/drawer-content outline-off fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-1 before:rounded-lg before:border before:border-border before:bg-surface-raised data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(--spacing(4)+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
       drawerContentVariants({ pad, height, width, closed, look }),
       hosted &&
-        "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
+        "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
       contained &&
         "absolute inset-x-0 top-0 h-full max-h-none data-[vaul-drawer-direction=bottom]:pb-0",
       /* Floating its head, the content starts at the surface's top, inside

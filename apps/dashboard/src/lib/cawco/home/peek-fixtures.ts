@@ -27,7 +27,6 @@ export type PeekScene =
   | "failed"
   | "unreachable"
   | "reading"
-  | "empty"
   | "unread";
 
 export const PEEK_SCENES: readonly PeekScene[] = [
@@ -42,7 +41,6 @@ export const PEEK_SCENES: readonly PeekScene[] = [
   "failed",
   "unreachable",
   "reading",
-  "empty",
   "unread",
 ];
 
@@ -520,8 +518,7 @@ export function standPeek(scene: PeekScene): {
   held.cwd = CWD;
   held.harness = "claude";
   held.initialized = true;
-  const tailless =
-    scene === "reading" || scene === "empty" || scene === "unread";
+  const tailless = scene === "reading" || scene === "unread";
   // A tail-less scene holds a line the peek does not speak, so it reads
   // nothing back from a hub the bench does not have.
   const turns: Turn[] = tailless
@@ -544,6 +541,18 @@ export function standPeek(scene: PeekScene): {
     } as ReturnType<typeof blankSession>["readFault"];
   }
   held.pending = asksOf(scene, now);
+  // The context it has used, as the harness reports it at a turn's end.
+  held.context = {
+    categories: [
+      { name: "System prompt", tokens: 3100, color: "promptBorder" },
+      { name: "System tools", tokens: 14_200, color: "inactive" },
+      { name: "Messages", tokens: 61_800, color: "purple" },
+    ],
+    maxTokens: 200_000,
+    percentage: 40,
+    readAt: now - MINUTE_MS,
+    totalTokens: 79_100,
+  };
   if (scene === "working" || scene === "plan" || scene === "noplan") {
     held.streaming =
       "Adding the passkey button to the sign-in page: it shows only where the browser says a platform authenticator is there, and";

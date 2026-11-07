@@ -48,8 +48,5 @@ export const Unreachable = { args: { scene: "unreachable" } };
 /** Reading what it said. */
 export const Reading = { args: { scene: "reading" } };
 
-/** Started, with nothing said yet. */
-export const NothingYet = { args: { scene: "empty" } };
-
 /** What it said couldn't be read. */
 export const Unread = { args: { scene: "unread" } };

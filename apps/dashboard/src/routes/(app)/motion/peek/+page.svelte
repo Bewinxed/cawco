@@ -6,7 +6,7 @@
    * hub's sign-in to passkeys.
    *
    * `?state=` working | asking | question | signin | several | plan | noplan | ended |
-   * failed | unreachable | reading | empty | unread (asking by default);
+   * failed | unreachable | reading | unread (asking by default);
    * `?steps` the plan's steps opened (`plan` opens them); `?ipad` the sheet
    * rising from the bottom, as an iPad's touch screen has it; `?alone` the
    * sheet alone at its width.

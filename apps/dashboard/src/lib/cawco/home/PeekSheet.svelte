@@ -23,6 +23,9 @@
     stepsOpen?: boolean;
   } = $props();
 
+  /** The sheet itself: where the focus stands as it opens. */
+  let sheet = $state<HTMLElement | null>(null);
+
   /** A touch screen's, unless the page says. */
   const rising = $derived(rises ?? peekRises());
 
@@ -78,6 +81,19 @@
     title={peekWords.title}
     trapFocus={rising}
     width="peek"
+    onOpenAutoFocus={(event) => {
+      // A risen sheet traps the focus, and takes it itself, never its first
+      // control: it put a ring and a tooltip on Open before anything was
+      // pressed; Tab goes on to the bar, first in its order. It is called
+      // as the sheet mounts, before its ref is bound, so the focus moves in
+      // the next frame and the trap holds it there. Beside the page the
+      // peek holds nothing, the focus included.
+      event.preventDefault();
+      if (rising) {
+        requestAnimationFrame(() => sheet?.focus({ preventScroll: true }));
+      }
+    }}
+    bind:ref={sheet}
   >
     <Drawer.Description visible={false}
       >{peekWords.description}</Drawer.Description
