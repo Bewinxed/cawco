@@ -521,12 +521,8 @@ export const awayNotesOf = (
 
 const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 
-/** While the person is away nothing new starts: what nobody asked for goes to them as a proposal card its task waits on. */
-export const AWAY_STARTS_NOTHING =
-  "Start nothing new while they are away: something worth doing that nobody asked for is a proposal, a scope card (Do it, Not now) with its task waiting on the card's Do it; the card reaches their phone and the task waits for it.";
-
-/** The away rule: how a turn ends, the one thing that reaches the person, and that nothing new starts. */
-const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last call. Only a question or a choice reaches them, by ask or a decision card. ${AWAY_STARTS_NOTHING}`;
+/** The away rule: how a turn ends, and the one thing that reaches the person. */
+const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last call. Only a question or a choice reaches them, by ask or a decision card.`;
 
 /** Their message with no reply yet outranks how {@link whereTheyAre} says a turn ends. */
 const UNANSWERED = `Their last message to you has no reply yet: this turn's closing words answer it, whatever woke this turn, and it does not end on ${NO_REPLY_TOOL}.`;

@@ -14,8 +14,10 @@
  *   (Do it, Not now) and its task_create in inbox waits on that card's Do it
  *   (`<page>#<card>=do`). The task is not ready until he picks; his pick of
  *   Do it makes it ready.
- * - b. The away line a session reads at the head of each turn tells it to
- *   start nothing new and to put it as a proposal card instead.
+ * - b. Away is no reason to stop: the away line a session reads at the head
+ *   of each turn says to work silent and does not say to start nothing new;
+ *   the handler skills name work nobody asked for as one scope card whose Not
+ *   now drops its task.
  * - c. His Not now on a proposal's card leaves its task held, flagged, never
  *   ready: a wait on one option settles on that option alone.
  * - d. A wait on an option the card does not offer is refused, naming the
@@ -23,7 +25,7 @@
  *
  *   bun scripts/probe-kit/run.ts filed-not-started
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
@@ -34,11 +36,9 @@ import {
   hubInit,
   hubRequest,
 } from "../../../packages/core/src/hub-request";
-import {
-  AWAY_STARTS_NOTHING,
-  presenceLine,
-} from "../../../packages/core/src/injected";
+import { presenceLine } from "../../../packages/core/src/injected";
 import { machinePath } from "../../../packages/core/src/machine-path";
+import { NO_REPLY_TOOL } from "../../../packages/core/src/no-reply";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
 import type { Kit, Spec } from "../kit";
@@ -49,6 +49,15 @@ const PAGE = "proposals";
 const CARD = "follow-up";
 const OTHER = "outreach";
 const TASK_ID = /tsk-\d+/u;
+/** The away line's old rule, which stopped work while the person was away. */
+const START_NOTHING = /start nothing new/iu;
+/** The skills that meet work nobody asked for, each stating its scope card and its drop. */
+const HANDLER_SKILLS = [
+  "project-delegate-report",
+  "project-routine-report",
+  "project-task-move",
+  "project-inbound-event",
+];
 
 /** Private office's shape: an active stage that runs a writer as a task enters it. */
 const STAGES = `---
@@ -270,12 +279,32 @@ const run = async (
     unknown.text
   );
 
-  // (b) The away line.
+  // (b) Away stops nothing: the away line says to work silent, and the
+  // handler skills carry the rule for work nobody asked for.
   const away = presenceLine({ kind: "away", since: "09:00" });
   check(
-    "b: the away line says to start nothing new and to put it as a proposal card",
-    away.includes(AWAY_STARTS_NOTHING),
+    "b: the away line says to work silent and does not say to start nothing new",
+    away.includes(NO_REPLY_TOOL) && !START_NOTHING.test(away),
     away
+  );
+  const skills = join(import.meta.dir, "../../../packages/hub/skills");
+  const missing: string[] = [];
+  for (const skill of HANDLER_SKILLS) {
+    const text = await readFile(join(skills, skill, "SKILL.md"), "utf8");
+    if (!(
+      text.includes(
+        "scope card (Do it / Not now) on a one-card page (the decision-page skill)"
+      ) && text.includes("drop the task with `task_update`")
+    )) {
+      missing.push(skill);
+    }
+  }
+  check(
+    "b: each handler skill names the scope card and the drop on Not now",
+    missing.length === 0,
+    missing.length
+      ? `missing in ${missing.join(", ")}`
+      : HANDLER_SKILLS.join(", ")
   );
 };
 
