@@ -20,20 +20,24 @@
    * on a line bringing its ring into view. Several components under one
    * ask: one in front, the others behind its name's menu.
    *
-   * One bar of one row (DESIGN.md, The Title Bars Follow Liquid Glass
-   * Rule): leading the component's name (its menu when there are several),
-   * trailing one glass group of bare symbols (Compare, the stage's view,
-   * and Show states only while the room is put away: the room's one close
-   * is its own). The view is a card hung from the glass (HangCard, as the
+   * No bar of its own (DESIGN.md, The Title Bars Follow Liquid Glass
+   * Rule): the artifact panel's head floats over the graph, which runs to
+   * the surface's top beneath it and clears it by the head's room
+   * (`--side-room`). What a bar of the graph's held stands on the panel it
+   * acts on: the stage's head leads with the components' menu where the ask
+   * names several (the component in front, its menu of the others) and
+   * trails one glass group of bare symbols (Compare, the stage's view, and
+   * Show states only while the room is put away: the room's one close is
+   * its own). The view is a card hung from that glass (HangCard, as the
    * app's own glass hangs its cards): one settings row each, its name
    * leading and its control trailing, the widths as device glyphs with
    * their figures, the scheme as sun and moon, Reduce motion as a switch.
    *
-   * One grid under the bar: the stage and the room are two panels of one
+   * One grid under the head: the stage and the room are two panels of one
    * kind (one corner, one edge, one raised head on one head line), sharing
-   * a top and a foot inside the page's gutters; the bar's title starts on
-   * their leading edge and its glass ends on their trailing one. The stage
-   * holds its drawing and no more (the page's `laid`), so the room takes
+   * a top and a foot, standing the head's own inset (`--space-2`) in from
+   * the surface's edges, so they share their edges with the head's glass.
+   * The stage holds its drawing and no more (the page's `laid`), so the room takes
    * what a form held to its measure leaves. Under the line where the
    * surface holds both whole the room is the kit's bottom drawer, its stops
    * head, half and whole, the stage whole above it at the head stop.
@@ -56,7 +60,6 @@
     BarItem,
     BarMenu,
   } from "#lib/components/ui/bar-glass/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
@@ -66,7 +69,6 @@
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronDown,
     IconClose,
@@ -999,10 +1001,10 @@
       event.preventDefault();
     }
   };
-  /** The drawer's layer: the box it stands in, as tall as the surface, and the bar's foot in it. */
+  /** The drawer's layer: the box it stands in, as tall as the surface, and the foot of the head's room in it. */
   let roomLayer = $state<HTMLElement | null>(null);
   let layerHeight = $state(0);
-  let barFoot = $state(0);
+  let headFoot = $state(0);
   let drawerNode = $state<HTMLElement | null>(null);
   /** vaul reads a px snap point with parseInt: every one whole. */
   const pxOf = (height: number) => `${Math.round(height)}px`;
@@ -1014,11 +1016,12 @@
    * whichever of the sheet's stops; measured on the window, every stop
    * stood lower by the surface's top, and at 390 the drawer stood wholly
    * under the screen's foot. Its head (the steps), half the surface, and
-   * whole: up to the bar's foot. A stop no taller than the one under it
+   * whole: up to the foot of the panel head's room, so the head's glass
+   * never stands over the drawer's grabber. A stop no taller than the one under it
    * goes (a surface too short for three).
    */
   const SNAPS = $derived.by(() => {
-    const room = Math.max(0, layerHeight - barFoot);
+    const room = Math.max(0, layerHeight - headFoot);
     const heights = [
       Math.min(browser ? numberOf("--c-graph-drawer-head") : 0, room),
       layerHeight / 2,
@@ -1407,6 +1410,267 @@
   />
 {/snippet}
 
+{#snippet componentsMenu()}
+  {#if files.length > 1 && frontFile}
+    {@const frontName = review?.name ?? loadingName(frontFile)}
+    <!-- The title: plain text with its menu chevron, no glass at
+         rest; open, its menu hangs from it as one shape (BarGlass
+         `form="title"`, BarMenu), as Caw's card hangs from his glass. -->
+    <!-- Its words on the panels' leading edge, as the h1's: the glass
+         and the item stand out past it by their own padding, so the
+         ground hung open stands out past the edge as a hover does. -->
+    <div
+      class="-ms-(--title-in) flex min-w-0"
+      style:--title-in="calc(var(--c-bar-group-pad) + var(--space-2))"
+    >
+      <BarGlass flare="end" form="title">
+        <DropdownMenu.Root bind:open={menuOpen}>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <!-- Its name is what it shows, the switch said before it
+                   (WCAG 2.5.3, Label in Name); the title says itself,
+                   with no tooltip. -->
+              <BarItem
+                form="title"
+                label={`${words.components}: ${frontName}`}
+                {props}
+                tip={false}
+                bind:ref={menuTrigger}
+              >
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
+                  >{frontName}</span
+                >
+                <IconChevronDown
+                  aria-hidden="true"
+                  class="size-icon-sm flex-none text-ink-muted"
+                />
+              </BarItem>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <!-- Hung flush from the title's ground, which stands a padding
+               out past the panels' edge: no collision inset pushes it
+               off the ground at the pane's edge. -->
+          <BarMenu
+            collisionPadding={0}
+            label={words.components}
+            onCloseAutoFocus={(event: Event) => quietFocus(event, menuTrigger)}
+            width="regular"
+          >
+            <DropdownMenu.RadioGroup
+              bind:value={
+                () => frontFile,
+                (next: string) => {
+                  if (next !== frontFile) {
+                    setComparing(false);
+                  }
+                  chosenFile = next;
+                }
+              }
+            >
+              <!-- Every states file from the start; one whose sheet is on
+                   its way says so in its own place. -->
+              {#each entries as one (one.file)}
+                <DropdownMenu.RadioItem value={one.file}>
+                  <span
+                    class={[
+                      "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
+                      !one.review && "text-ink-muted",
+                    ]}
+                    >{one.review
+                      ? one.review.name
+                      : words.mounting(loadingName(one.file))}</span
+                  >
+                </DropdownMenu.RadioItem>
+              {/each}
+            </DropdownMenu.RadioGroup>
+          </BarMenu>
+        </DropdownMenu.Root>
+      </BarGlass>
+    </div>
+  {/if}
+{/snippet}
+
+<!-- The stage's tools, trailing its head (StagePane `tools`): Compare and
+     the view; Show the room only while the room is put away. The room's one
+     close is its own. -->
+{#snippet stageTools()}
+  <div
+    class="flex flex-none"
+    {@attach (node: HTMLElement) => {
+      glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
+    }}
+  >
+    <BarGlass form="group" joined={viewJoined}>
+      {#if !single}
+        <BarItem
+          icon={IconCompareLinear}
+          label={words.compare}
+          onclick={() => setComparing(!comparing)}
+          pressed={comparing}
+        />
+      {/if}
+      <Popover.Root bind:open={viewOpen}>
+        <!-- No tooltip over its own open card: shown, it took the
+             card's Escape for itself. Nor as the card hands the focus
+             back on its close; it shows again once the focus or the
+             pointer leaves the control. -->
+        <Popover.Trigger>
+          {#snippet child({ props })}
+            <BarItem
+              icon={IconEyeLinear}
+              label={words.stageView}
+              props={mergeProps(props, {
+                onblur: () => {
+                  viewQuiet = false;
+                },
+                onpointerleave: () => {
+                  viewQuiet = false;
+                },
+              })}
+              tipOff={viewOpen || viewQuiet}
+              bind:ref={viewTrigger}
+            />
+          {/snippet}
+        </Popover.Trigger>
+        <!-- The view, hung from the glass as the app's glass hangs its
+             cards: it comes down out of the glass and goes back up. -->
+        <HangCard
+          align="end"
+          anchor={glass}
+          aria-label={words.stageView}
+          bind:joined={viewJoined}
+          customAnchor={glass}
+          onCloseAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
+          onOpenAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
+          frame="settings"
+          side="bottom"
+          sideOffset={0}
+        >
+          <!-- One pattern for every setting: its name leading, its
+               control trailing, on one grid, so the three read down
+               two columns (Jitter's inspector rows). On a phone the
+               card has no room for both columns: each control stands
+               under its name, at its own width, never past the card's
+               edge. -->
+          <div
+            class="grid min-w-0 grid-cols-(--cols) items-center justify-between gap-x-space-5 gap-y-space-3 p-space-4 max-phone:grid-cols-1 max-phone:gap-y-space-4"
+            style:--cols="auto auto"
+          >
+            <div
+              class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
+            >
+              <span class="type-label text-ink-row">{words.width}</span>
+              <!-- Each width once: his own is the listed width it
+                   equals, marked his own, and stands apart only when
+                   none is. The names are the items' own; no tooltip
+                   opens over the card. -->
+              <ToggleGroup.Root
+                aria-label={words.width}
+                class="justify-self-end max-phone:justify-self-start"
+                onValueChange={pickWidth}
+                type="single"
+                value={widthValue}
+              >
+                {#if !ownListed}
+                  {@render widthItem(
+                    "own",
+                    words.ownWidth(figure(ownWidth)),
+                    ownWidth,
+                    true,
+                    IconMaximize
+                  )}
+                {/if}
+                {#each WIDTHS as one (one.value)}
+                  {@const own = one.value === ownWidth}
+                  {@render widthItem(
+                    String(one.value),
+                    own
+                      ? words.ownListed(one.name, figure(one.value))
+                      : words.widthOf(one.name, figure(one.value)),
+                    one.value,
+                    own,
+                    one.icon
+                  )}
+                {/each}
+              </ToggleGroup.Root>
+            </div>
+            <div
+              class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
+            >
+              <span class="type-label text-ink-row">{words.scheme}</span>
+              <ToggleGroup.Root
+                aria-label={words.scheme}
+                class="justify-self-end max-phone:justify-self-start"
+                onValueChange={(next: string) => {
+                  if (next) {
+                    scheme = next === "dark" ? "dark" : "light";
+                  }
+                }}
+                type="single"
+                value={scheme}
+              >
+                <ToggleGroup.Item aria-label={words.light} value="light">
+                  <IconSun aria-hidden="true" class="size-icon-md" />
+                </ToggleGroup.Item>
+                <ToggleGroup.Item aria-label={words.dark} value="dark">
+                  <IconMoon aria-hidden="true" class="size-icon-md" />
+                </ToggleGroup.Item>
+              </ToggleGroup.Root>
+            </div>
+            <div
+              class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
+            >
+              <label class="type-label text-ink-row" for="{uid}-reduce"
+                >{words.reduceMotion}</label
+              >
+              <Switch
+                bind:checked={reduce}
+                class="justify-self-end"
+                id="{uid}-reduce"
+              />
+            </div>
+            <!-- A width wider than the stage is scaled to fit it; this
+                 draws it 1:1 instead, the page scrolling across it. It
+                 stands only while it does something: while the drawing
+                 stands scaled, or while it is on, so it can be turned
+                 off (DESIGN.md Voice: a string a rare state needs
+                 stands in that state). -->
+            {#if actual || (link.laid && link.laid.scale < 1)}
+              <div
+                class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
+              >
+                <label class="type-label text-ink-row" for="{uid}-actual"
+                  >{words.actualSize}</label
+                >
+                <Switch
+                  bind:checked={actual}
+                  class="justify-self-end"
+                  id="{uid}-actual"
+                />
+              </div>
+            {/if}
+          </div>
+        </HangCard>
+      </Popover.Root>
+      {#if !roomShown}
+        <BarItem
+          icon={IconRoomLinear}
+          label={words.openRoom(roomName)}
+          onclick={() => {
+            roomOpen = true;
+            stopAt = 0;
+            // The one asked for last stands: the pane's sheet goes as the drawer rises.
+            if (paneSheet) {
+              onroom?.();
+            }
+          }}
+        />
+      {/if}
+    </BarGlass>
+  </div>
+{/snippet}
+
 {#snippet stepper()}
   <Stepper {at} {lang} onstep={(next) => choose(next, null)} {path} />
 {/snippet}
@@ -1442,292 +1706,22 @@
       surface = node.clientWidth;
     })}
   >
-    <!-- The bar: one row, no ground of its own. -->
-    <header
-      {@attach frameSize((node: HTMLElement) => {
-        barFoot = node.offsetTop + node.offsetHeight;
-      })}
-      data-slot="graph-bar"
-      class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 px-space-6 max-desk:px-space-5"
-    >
-      <div class="flex min-w-0 flex-1 items-center">
-        {#if files.length > 1 && frontFile}
-          {@const frontName = review?.name ?? loadingName(frontFile)}
-          <!-- The title: plain text with its menu chevron, no glass at
-               rest; open, its menu hangs from it as one shape (BarGlass
-               `form="title"`, BarMenu), as Caw's card hangs from his glass. -->
-          <!-- Its words on the panels' leading edge, as the h1's: the glass
-               and the item stand out past it by their own padding, so the
-               ground hung open stands out past the edge as a hover does. -->
-          <div
-            class="-ms-(--title-in) flex min-w-0"
-            style:--title-in="calc(var(--c-bar-group-pad) + var(--space-2))"
-          >
-            <BarGlass flare="end" form="title">
-              <DropdownMenu.Root bind:open={menuOpen}>
-                <DropdownMenu.Trigger>
-                  {#snippet child({ props })}
-                    <!-- Its name is what it shows, the switch said before it
-                         (WCAG 2.5.3, Label in Name); the title says itself,
-                         with no tooltip. -->
-                    <BarItem
-                      form="title"
-                      label={`${words.components}: ${frontName}`}
-                      {props}
-                      tip={false}
-                      bind:ref={menuTrigger}
-                    >
-                      <span
-                        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
-                        >{frontName}</span
-                      >
-                      <IconChevronDown
-                        aria-hidden="true"
-                        class="size-icon-sm flex-none text-ink-muted"
-                      />
-                    </BarItem>
-                  {/snippet}
-                </DropdownMenu.Trigger>
-                <!-- Hung flush from the title's ground, which stands a padding
-                     out past the panels' edge: no collision inset pushes it
-                     off the ground at the pane's edge. -->
-                <BarMenu
-                  collisionPadding={0}
-                  label={words.components}
-                  onCloseAutoFocus={(event: Event) =>
-                    quietFocus(event, menuTrigger)}
-                  width="regular"
-                >
-                  <DropdownMenu.RadioGroup
-                    bind:value={
-                      () => frontFile,
-                      (next: string) => {
-                        if (next !== frontFile) {
-                          setComparing(false);
-                        }
-                        chosenFile = next;
-                      }
-                    }
-                  >
-                    <!-- Every states file from the start; one whose sheet is on
-                         its way says so in its own place. -->
-                    {#each entries as one (one.file)}
-                      <DropdownMenu.RadioItem value={one.file}>
-                        <span
-                          class={[
-                            "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
-                            !one.review && "text-ink-muted",
-                          ]}
-                          >{one.review
-                            ? one.review.name
-                            : words.mounting(loadingName(one.file))}</span
-                        >
-                      </DropdownMenu.RadioItem>
-                    {/each}
-                  </DropdownMenu.RadioGroup>
-                </BarMenu>
-              </DropdownMenu.Root>
-            </BarGlass>
-          </div>
-        {:else if review}
-          <h1 class="m-0 min-w-0 truncate type-label text-ink-strong">
-            {review.name}
-          </h1>
-        {/if}
-      </div>
-
-      <div
-        class="flex flex-1 justify-end"
-        {@attach (node: HTMLElement) => {
-          glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
-        }}
-      >
-        <!-- Compare and the view; Show states only while the room is put
-             away. The room's one close is its own. -->
-        <BarGlass form="group" joined={viewJoined}>
-          {#if !single}
-            <BarItem
-              icon={IconCompareLinear}
-              label={words.compare}
-              onclick={() => setComparing(!comparing)}
-              pressed={comparing}
-            />
-          {/if}
-          <Popover.Root bind:open={viewOpen}>
-            <!-- No tooltip over its own open card: shown, it took the
-                 card's Escape for itself. Nor as the card hands the focus
-                 back on its close; it shows again once the focus or the
-                 pointer leaves the control. -->
-            <Popover.Trigger>
-              {#snippet child({ props })}
-                <BarItem
-                  icon={IconEyeLinear}
-                  label={words.stageView}
-                  props={mergeProps(props, {
-                    onblur: () => {
-                      viewQuiet = false;
-                    },
-                    onpointerleave: () => {
-                      viewQuiet = false;
-                    },
-                  })}
-                  tipOff={viewOpen || viewQuiet}
-                  bind:ref={viewTrigger}
-                />
-              {/snippet}
-            </Popover.Trigger>
-            <!-- The view, hung from the glass as the app's glass hangs its
-                 cards: it comes down out of the glass and goes back up. -->
-            <HangCard
-              align="end"
-              anchor={glass}
-              aria-label={words.stageView}
-              bind:joined={viewJoined}
-              customAnchor={glass}
-              onCloseAutoFocus={(event: Event) =>
-                quietFocus(event, viewTrigger)}
-              onOpenAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
-              frame="settings"
-              side="bottom"
-              sideOffset={0}
-            >
-              <!-- One pattern for every setting: its name leading, its
-                   control trailing, on one grid, so the three read down
-                   two columns (Jitter's inspector rows). On a phone the
-                   card has no room for both columns: each control stands
-                   under its name, at its own width, never past the card's
-                   edge. -->
-              <div
-                class="grid min-w-0 grid-cols-(--cols) items-center justify-between gap-x-space-5 gap-y-space-3 p-space-4 max-phone:grid-cols-1 max-phone:gap-y-space-4"
-                style:--cols="auto auto"
-              >
-                <div
-                  class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
-                >
-                  <span class="type-label text-ink-row">{words.width}</span>
-                  <!-- Each width once: his own is the listed width it
-                       equals, marked his own, and stands apart only when
-                       none is. The names are the items' own; no tooltip
-                       opens over the card. -->
-                  <ToggleGroup.Root
-                    aria-label={words.width}
-                    class="justify-self-end max-phone:justify-self-start"
-                    onValueChange={pickWidth}
-                    type="single"
-                    value={widthValue}
-                  >
-                    {#if !ownListed}
-                      {@render widthItem(
-                        "own",
-                        words.ownWidth(figure(ownWidth)),
-                        ownWidth,
-                        true,
-                        IconMaximize
-                      )}
-                    {/if}
-                    {#each WIDTHS as one (one.value)}
-                      {@const own = one.value === ownWidth}
-                      {@render widthItem(
-                        String(one.value),
-                        own
-                          ? words.ownListed(one.name, figure(one.value))
-                          : words.widthOf(one.name, figure(one.value)),
-                        one.value,
-                        own,
-                        one.icon
-                      )}
-                    {/each}
-                  </ToggleGroup.Root>
-                </div>
-                <div
-                  class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
-                >
-                  <span class="type-label text-ink-row">{words.scheme}</span>
-                  <ToggleGroup.Root
-                    aria-label={words.scheme}
-                    class="justify-self-end max-phone:justify-self-start"
-                    onValueChange={(next: string) => {
-                      if (next) {
-                        scheme = next === "dark" ? "dark" : "light";
-                      }
-                    }}
-                    type="single"
-                    value={scheme}
-                  >
-                    <ToggleGroup.Item aria-label={words.light} value="light">
-                      <IconSun aria-hidden="true" class="size-icon-md" />
-                    </ToggleGroup.Item>
-                    <ToggleGroup.Item aria-label={words.dark} value="dark">
-                      <IconMoon aria-hidden="true" class="size-icon-md" />
-                    </ToggleGroup.Item>
-                  </ToggleGroup.Root>
-                </div>
-                <div
-                  class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
-                >
-                  <label class="type-label text-ink-row" for="{uid}-reduce"
-                    >{words.reduceMotion}</label
-                  >
-                  <Switch
-                    bind:checked={reduce}
-                    class="justify-self-end"
-                    id="{uid}-reduce"
-                  />
-                </div>
-                <!-- A width wider than the stage is scaled to fit it; this
-                     draws it 1:1 instead, the page scrolling across it. It
-                     stands only while it does something: while the drawing
-                     stands scaled, or while it is on, so it can be turned
-                     off (DESIGN.md Voice: a string a rare state needs
-                     stands in that state). -->
-                {#if actual || (link.laid && link.laid.scale < 1)}
-                  <div
-                    class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
-                  >
-                    <label class="type-label text-ink-row" for="{uid}-actual"
-                      >{words.actualSize}</label
-                    >
-                    <Switch
-                      bind:checked={actual}
-                      class="justify-self-end"
-                      id="{uid}-actual"
-                    />
-                  </div>
-                {/if}
-              </div>
-            </HangCard>
-          </Popover.Root>
-          {#if !roomShown}
-            <BarItem
-              icon={IconRoomLinear}
-              label={words.openRoom(roomName)}
-              onclick={() => {
-                roomOpen = true;
-                stopAt = 0;
-                // The one asked for last stands: the pane's sheet goes as the drawer rises.
-                if (paneSheet) {
-                  onroom?.();
-                }
-              }}
-            />
-          {/if}
-        </BarGlass>
-      </div>
-    </header>
-
-    <!-- The page: the stage, and on a desk the room beside it. On a phone
-         its foot stands at the drawer's top at each stop, so the stage
-         ends where the drawer begins. -->
+    <!-- The page: the stage, and on a desk the room beside it, running to
+         the surface's top under the panel's floating head and clearing it
+         by the head's room (`--side-room`): the graph has no bar of its own.
+         On a phone its foot stands at the drawer's top at each stop, so the
+         stage ends where the drawer begins. -->
     <div
       data-slot="graph-page"
       class={[
         !laidOut && "invisible",
-        "flex min-h-0 min-w-0 flex-1 overflow-clip px-space-6 max-desk:px-space-5",
-        !desk && drawerShown ? "pb-(--drawer-cover)" : "pb-space-6",
+        "flex min-h-0 min-w-0 flex-1 overflow-clip px-space-2 pt-(--side-room,var(--space-2))",
+        !desk && drawerShown ? "pb-(--drawer-cover)" : "pb-space-2",
       ]}
       style:--drawer-cover="{cover}px"
       {@attach frameSize((node: HTMLElement) => {
         const style = getComputedStyle(node);
+        headFoot = node.offsetTop + Number.parseFloat(style.paddingTop);
         splitWidth =
           node.clientWidth -
           Number.parseFloat(style.paddingInlineStart) -
@@ -1770,6 +1764,8 @@
               {frame}
               {lang}
               laid={link.laid}
+              lead={files.length > 1 ? componentsMenu : undefined}
+              tools={stageTools}
               ondifference={showDifference}
               onflip={() => {
                 flipped = !flipped;
@@ -1818,27 +1814,22 @@
               class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
             >
               {#if roomOpen}
-                <!-- Its head on the stage's head line: its faces, its Close. -->
+                <!-- Its head on the stage's head line: its faces, and its
+                     Close trailing in a glass of its own, as the stage's
+                     tools and the panel's Close stand. -->
                 <div
                   class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
                 >
                   {@render faces(false)}
-                  <Tip label={words.closeRoom(roomName)}>
-                    {#snippet children(tip)}
-                      <button
-                        {...mergeProps(tip, {
-                          onclick: () => {
-                            roomOpen = false;
-                          },
-                        })}
-                        type="button"
-                        aria-label={words.closeRoom(roomName)}
-                        class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-                      >
-                        <IconClose aria-hidden="true" class="size-icon-md" />
-                      </button>
-                    {/snippet}
-                  </Tip>
+                  <BarGlass form="group">
+                    <BarItem
+                      icon={IconClose}
+                      label={words.closeRoom(roomName)}
+                      onclick={() => {
+                        roomOpen = false;
+                      }}
+                    />
+                  </BarGlass>
                 </div>
                 <!-- The map takes the room's whole body, its own surface to
                      its edges; the states stand at the room's inset. -->
@@ -1918,25 +1909,24 @@
               class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"
               style:--snap-drop="{Math.max(0, layerHeight - cover)}px"
             >
+              <!-- The sheet's one bar, right under the grabber (the kit's
+                   `ownHead`): Close leading in a glass of its own, as the
+                   kit's sheet heads draw it, then the faces. Close puts the
+                   room away itself: vaul's Close asks the dialog to close,
+                   and a root that is not `dismissible` refuses every such
+                   ask; the drawer is not dismissible so that a drag past
+                   its head stop never closes it. -->
               <div class="flex min-w-0 items-center gap-space-2">
+                <BarGlass form="group">
+                  <BarItem
+                    icon={IconClose}
+                    label={words.closeRoom(roomName)}
+                    onclick={() => {
+                      roomOpen = false;
+                    }}
+                  />
+                </BarGlass>
                 {@render faces(true)}
-                <!-- The drawer's one Close, the ghost the kit's sheet heads
-                     draw. It puts the room away itself: vaul's Close asks
-                     the dialog to close, and a root that is not
-                     `dismissible` refuses every such ask; the drawer is not
-                     dismissible so that a drag past its head stop never
-                     closes it. -->
-                <Button
-                  aria-label={words.closeRoom(roomName)}
-                  icon={IconClose}
-                  onclick={() => {
-                    roomOpen = false;
-                  }}
-                  press="pressable"
-                  size="icon-sm"
-                  title={words.closeRoom(roomName)}
-                  variant="ghost"
-                />
               </div>
               <!-- At the head stop the drawer holds its head alone, the faces
                    and the States face's steps: a face's body drawn into its

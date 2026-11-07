@@ -2,24 +2,24 @@ import { commonWords } from "./common";
 
 /**
  * A browser artifact's view in the panel (Projects spec §5.11, "The view"):
- * the band under the head (the page's origin and who has control), the
- * head's Take over and Hand back, and the states the well stands in when
- * it shows no stream.
+ * the head's address (the page's origin and who has control), its Take
+ * over and Hand back, and the states the well stands in when it shows no
+ * stream.
  */
 export const browserWords = {
   /** The view's label, for a screen reader. */
   view: "Browser",
-  /** The band: the page in front, or none. */
+  /** The head's address: the page in front, or none. */
   noPage: "No page open",
-  /** The band: who has control. */
+  /** The head's address: who has control (its name, and More's line). */
   agentDriving: "The agent is driving",
   youHaveControl: "You have control",
-  /** The band's chip while you have control. */
+  /** The address's chip while you have control. */
   private: "Private",
-  /** The band's line for a machine with no container runtime. */
+  /** The line under the stream for a machine with no container runtime. */
   localLine:
     "This machine shows one page at a time until a container runtime is installed.",
-  /** The band's control on a touch screen while you have control: the phone's keyboard, typing into the page. */
+  /** The stream's floating control on a touch screen while you have control: the phone's keyboard, typing into the page. */
   showKeyboard: "Show keyboard",
   hideKeyboard: "Hide keyboard",
   /** The field the phone's keyboard types into, for a screen reader. */

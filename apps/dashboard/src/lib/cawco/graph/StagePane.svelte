@@ -13,6 +13,11 @@
    * raised head, the two sharing a top and a foot. Its head holds the kept
    * state's name on the head line the room's faces stand on, its inset the
    * page's gutter, so the name and the drawing share one leading edge.
+   * The graph has no bar of its own: what acts on the stage stands on its
+   * head, the components' menu leading (`lead`, where the ask names
+   * several) and one glass group of bare symbols trailing (`tools`:
+   * Compare, the view, Show states), the glass a hair in from the panel's
+   * edge as the room's Close stands.
    *
    * While comparing, the head names the state compared with: a press that
    * shows it in the kept one's place (the flip), or its name alone where
@@ -44,6 +49,8 @@
     onflip,
     ondifference,
     need = $bindable(0),
+    lead,
+    tools,
   }: {
     /** The kept state's name. */
     name: string;
@@ -79,6 +86,10 @@
      * the drawing out.
      */
     need?: number;
+    /** What leads the head before the state's name: the components' menu, where the ask names several. */
+    lead?: Snippet;
+    /** What trails the head: the stage's glass of bare symbols. */
+    tools?: Snippet;
   } = $props();
 
   /** The most lines of differences the stage's head names; the rest are counted. */
@@ -112,15 +123,16 @@
   class="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
 >
   <!-- Its head, the room's alike: a panel's raised head on the graph's
-       page, under the graph's bar, the one bar; its seam the room's. -->
+       page, under the panel's floating head; its seam the room's. -->
   <div
     data-slot="stage-head"
     class="flex min-w-0 flex-none flex-col border-b border-border-hairline px-space-4"
   >
-    <div
-      class="flex min-h-c-top-bar-h min-w-0 items-center gap-x-space-3 overflow-clip"
-    >
-      <h2 class="m-0 min-w-0 flex-none type-title text-ink-strong">
+    <!-- Unclipped: the glass's focus ring and the view card's join stand
+         out past its box. -->
+    <div class="flex min-h-c-top-bar-h min-w-0 items-center gap-x-space-3">
+      {@render lead?.()}
+      <h2 class="m-0 min-w-0 shrink type-title text-ink-strong">
         <span class="block truncate">{name}</span>
       </h2>
       {#if variant}
@@ -147,12 +159,19 @@
             : words.comparedWith(compare.name)}</button
         >
       {/if}
-      {#if scale}
-        <!-- Not 1:1: what the person judges is scaled, and says so. -->
-        <span
-          class="ms-auto flex-none type-meta text-ink-muted num"
-          data-slot="stage-scale">{scale}</span
+      {#if scale || tools}
+        <div
+          class="-me-space-2 ms-auto flex flex-none items-center gap-x-space-3"
         >
+          {#if scale}
+            <!-- Not 1:1: what the person judges is scaled, and says so. -->
+            <span
+              class="flex-none type-meta text-ink-muted num"
+              data-slot="stage-scale">{scale}</span
+            >
+          {/if}
+          {@render tools?.()}
+        </div>
       {/if}
     </div>
     {#if stale}

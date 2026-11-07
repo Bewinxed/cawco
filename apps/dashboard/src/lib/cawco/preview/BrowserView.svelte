@@ -1,18 +1,21 @@
 <script lang="ts">
   import type { ListedBrowser } from "@cawco/core/browser";
   /**
-   * A browser artifact in the panel (Projects spec §5.11, "The view"): under
-   * the head, an address band with the page's origin and who has control
-   * (the Private chip while you do, the local browser's line on a machine
-   * with no container runtime); the well is the browser's stream, drawn
-   * here from the hub's socket (browser-stream.ts), never a page of its own.
+   * A browser artifact in the panel (Projects spec §5.11, "The view"): the
+   * browser's stream, drawn here from the hub's socket (browser-stream.ts),
+   * never a page of its own, standing under the panel's floating head as
+   * any page not CawCo's own does (its layout is not ours to push down).
+   * No band claims a row over it: the page's origin and who has control
+   * stand in the head's centre (PreviewPane's address, the Private chip
+   * while you hold it) beside Take over or Hand back; the local browser's
+   * line, on a machine with no container runtime, stands under the stream.
    * No comments and no ink: nothing the person sees here reaches an agent
    * (§5.11, "Private").
    *
    * The well's states: starting (the browser woken, its image built), live
    * (the agent driving, the person watching), you have control (the
    * person's pointer, keys and paste go to the browser; on a touch screen
-   * the band's Show keyboard raises the phone's keyboard, its typing read
+   * Show keyboard, floating at the stream's foot, raises the phone's keyboard, its typing read
    * from a field of the view's own, keyboard-sink.ts), and each failure in
    * the error formula with its way out: the machine away, the browser that
    * didn't start, the view's link lost or refused, the stream that found no
@@ -23,21 +26,14 @@
   import { shellWords } from "@cawco/core/words/shell";
   import { untrack } from "svelte";
   import { track } from "#lib/cawco/track.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
-  import {
-    IconAlert,
-    IconGlobe,
-    IconKeyboard,
-    IconLock,
-    IconRefresh,
-  } from "#lib/icons.js";
+  import { IconAlert, IconKeyboardLinear, IconRefresh } from "#lib/icons.js";
   import { newId } from "../id";
   import { appear } from "../motion/curves.svelte";
-  import OriginText from "../OriginText.svelte";
   import { store, stored } from "../storage";
   import { startFromPanel, takeOverFromPanel } from "./browser-acts";
   import {
@@ -504,67 +500,11 @@
 
 <section
   aria-label={browserWords.view}
-  class="absolute inset-x-0 top-(--side-room,0px) bottom-(--keyboard-lift,0px) flex flex-col min-h-0 bg-surface-well"
+  class="absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) flex flex-col min-h-0 pt-(--side-room,0px) bg-surface-well"
   data-browser-host={host ?? undefined}
   data-browser-mine={mine || undefined}
   data-slot="browser-view"
 >
-  <!-- The address band: the page in front and who has control. -->
-  <div
-    class="flex flex-none flex-wrap items-center gap-x-space-2 gap-y-space-1 min-w-0 px-space-3 py-space-2 border-b border-border-hairline bg-surface-raised type-meta"
-    data-slot="browser-band"
-  >
-    <!-- The origin takes half the band at least, so on a phone who has
-         control and Show keyboard wrap under it rather than squeezing it to
-         a letter a line. -->
-    <span
-      class="mark-line flex grow basis-1/2 items-center gap-space-1 min-w-0 text-ink-strong"
-    >
-      <span class="mark-cell flex-none text-ink-muted">
-        {#if mine}<IconLock />{:else}<IconGlobe />{/if}
-      </span>
-      <span class="min-w-0 wrap-anywhere" data-slot="browser-origin">
-        {#if browser?.origin}<OriginText
-            origin={browser.origin}
-          />{:else}{browserWords.noPage}{/if}
-      </span>
-    </span>
-    <span
-      class="flex flex-none items-center gap-space-2 text-ink-muted"
-      data-slot="browser-control"
-    >
-      {mine ? browserWords.youHaveControl : browserWords.agentDriving}
-      {#if mine}
-        <Badge data-slot="browser-private"
-          ><IconLock /><span>{browserWords.private}</span></Badge
-        >
-      {/if}
-    </span>
-    {#if driving && coarse.current}
-      <!-- Held off the focus, so a press that hides the keyboard doesn't
-           first take the focus from the sink (noVNC's keepVirtualKeyboard). -->
-      <Button
-        aria-controls={sinkId}
-        data-slot="browser-keyboard"
-        icon={IconKeyboard}
-        label={keyboardUp
-          ? browserWords.hideKeyboard
-          : browserWords.showKeyboard}
-        onclick={toggleKeyboard}
-        onmousedown={(event: MouseEvent) => event.preventDefault()}
-        size="sm"
-        variant="outline"
-      />
-    {/if}
-    {#if host === "local"}
-      <p
-        class="basis-full m-0 text-ink-muted text-pretty"
-        data-slot="browser-local"
-      >
-        {browserWords.localLine}
-      </p>
-    {/if}
-  </div>
   <div
     bind:this={well}
     class="relative flex-1 min-h-0 overflow-hidden bg-surface-recess"
@@ -661,68 +601,6 @@
           >{shown.line}</span
         >
       </p>
-    {:else if shown?.kind === "fail"}
-      {@const failed = shown}
-      <div
-        class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
-        data-slot="browser-down"
-        role="alert"
-        transition:appear
-      >
-        <EmptyState icon={IconAlert} title={failed.title}>
-          {#snippet line()}
-            {failed.line}
-          {/snippet}
-          {#snippet action()}
-            <div class="flex flex-wrap items-center gap-space-2">
-              {#if failed.again}
-                <Button
-                  icon={IconRefresh}
-                  label={commonWords.tryAgain}
-                  onclick={tryAgain}
-                  pending={starting}
-                  pendingLabel={browserWords.tryingAgain}
-                  size="sm"
-                  variant="outline"
-                />
-              {/if}
-              {#if failed.relay}
-                <Button
-                  href="/config/browsers"
-                  label={browserWords.relaySettings}
-                  pad="none"
-                  size="sm"
-                  variant="link"
-                />
-              {/if}
-              {#if failed.details}
-                <Button
-                  aria-controls={detailsId}
-                  aria-expanded={details}
-                  data-details
-                  label={details
-                    ? shellWords.hideDetails
-                    : shellWords.showDetails}
-                  onclick={() => {
-                    details = !details;
-                  }}
-                  size="sm"
-                  variant="ghost"
-                />
-              {/if}
-            </div>
-            {#if failed.details && details}
-              <p
-                class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
-                data-slot="details"
-                id={detailsId}
-              >
-                {failed.details}
-              </p>
-            {/if}
-          {/snippet}
-        </EmptyState>
-      </div>
     {/if}
     {#if refusal}
       <p
@@ -732,6 +610,105 @@
       >
         {refusal}
       </p>
+    {:else if driving && coarse.current}
+      <!-- Show keyboard, a bare symbol in a glass of its own floating at the
+           stream's trailing foot, as a remote screen's keyboard key floats
+           over it (Screens, Jump Desktop): no band claims a row for it. Held
+           off the focus, so a press that hides the keyboard doesn't first
+           take the focus from the sink (noVNC's keepVirtualKeyboard). -->
+      <div class="absolute end-space-3 bottom-space-3 z-1 flex">
+        <BarGlass form="group">
+          <BarItem
+            icon={IconKeyboardLinear}
+            label={keyboardUp
+              ? browserWords.hideKeyboard
+              : browserWords.showKeyboard}
+            onclick={toggleKeyboard}
+            pressed={keyboardUp}
+            props={{
+              "aria-controls": sinkId,
+              "data-slot": "browser-keyboard",
+              onmousedown: (event: MouseEvent) => event.preventDefault(),
+            }}
+          />
+        </BarGlass>
+      </div>
     {/if}
   </div>
+  <!-- A failure is the panel's own words, not the browser's page: it runs
+       to the card's top under the head and takes its room on its scroller,
+       as the panel's other failures do. -->
+  {#if shown?.kind === "fail"}
+    {@const failed = shown}
+    <div
+      class="absolute inset-0 z-1 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      data-slot="browser-down"
+      role="alert"
+      transition:appear
+    >
+      <EmptyState icon={IconAlert} title={failed.title}>
+        {#snippet line()}
+          {failed.line}
+        {/snippet}
+        {#snippet action()}
+          <div class="flex flex-wrap items-center gap-space-2">
+            {#if failed.again}
+              <Button
+                icon={IconRefresh}
+                label={commonWords.tryAgain}
+                onclick={tryAgain}
+                pending={starting}
+                pendingLabel={browserWords.tryingAgain}
+                size="sm"
+                variant="outline"
+              />
+            {/if}
+            {#if failed.relay}
+              <Button
+                href="/config/browsers"
+                label={browserWords.relaySettings}
+                pad="none"
+                size="sm"
+                variant="link"
+              />
+            {/if}
+            {#if failed.details}
+              <Button
+                aria-controls={detailsId}
+                aria-expanded={details}
+                data-details
+                label={details
+                  ? shellWords.hideDetails
+                  : shellWords.showDetails}
+                onclick={() => {
+                  details = !details;
+                }}
+                size="sm"
+                variant="ghost"
+              />
+            {/if}
+          </div>
+          {#if failed.details && details}
+            <p
+              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
+              data-slot="details"
+              id={detailsId}
+            >
+              {failed.details}
+            </p>
+          {/if}
+        {/snippet}
+      </EmptyState>
+    </div>
+  {/if}
+  {#if host === "local"}
+    <!-- Content under the stream, never a band over it: why this machine
+         shows one page at a time. -->
+    <p
+      class="m-0 flex-none px-space-3 py-space-2 text-ink-muted type-meta text-pretty"
+      data-slot="browser-local"
+    >
+      {browserWords.localLine}
+    </p>
+  {/if}
 </section>

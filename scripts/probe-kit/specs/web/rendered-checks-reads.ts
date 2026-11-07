@@ -68,6 +68,13 @@
  *     read puts it away, the focus kept, and nothing is named.
  * 23. text-overlap, the same tooltip read where the spec left it (`pointer:
  *     kept`, no park): its words over the button's, named.
+ * 24. bar-room, panels under a bar: the head floating over a card whose
+ *     panel (a `section` with its own heading) holds the list's scroller
+ *     under that heading, as the design graph's stage stands under the
+ *     artifact panel's head: the panel's head heads it, no finding.
+ * 25. bar-room, a bare section under a bar: the head in flow over a
+ *     `section` with no head of its own, its list starting at the head's
+ *     foot: the bar claims a row, named.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
@@ -282,6 +289,16 @@ const CASES: Record<string, Case> = {
     rule: "bar-room",
     want: "none",
     html: `${BASE}${CARD}<section class="card" aria-label="Preview"><header data-slot="side-head"><h2>Onboarding</h2></header><iframe title="Onboarding" srcdoc="<p>Step one</p>"></iframe></section>`,
+  },
+  "panels under a bar": {
+    rule: "bar-room",
+    want: "none",
+    html: `${BASE}${CARD}<section class="card" aria-label="Preview"><header class="float" data-slot="side-head"><h2>Routine form</h2></header><div class="list under" style="display: flex; overflow: clip"><section aria-label="Stage" style="display: flex; flex-direction: column; flex: 1"><h3>Just opened</h3><div class="list">${ROWS}</div></section></div></section>`,
+  },
+  "a bare section under a bar": {
+    rule: "bar-room",
+    want: "finding",
+    html: `${BASE}${CARD}<section class="card" aria-label="Task"><header data-slot="side-head"><h2>Run budget</h2></header><section aria-label="Runs" style="display: flex; flex-direction: column; flex: 1; min-block-size: 0"><div class="list">${ROWS}</div></section></section>`,
   },
   "a sheet head claiming a row": {
     rule: "bar-room",

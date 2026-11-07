@@ -677,6 +677,8 @@ public enum Size {
     public static let cBarSymbol: Double = 18
     /// The room a side card keeps at its top while its head floats as glass (Liquid Glass: no bar behind the controls): the head's glass, its inset above and the same gap below; the page stands under it.
     public static let cHeadRoom: Double = 50
+    /// A browser artifact's address in the artifact panel's head, at the head's centre as a browser's toolbar holds it: the most it takes, so a long origin ends in an ellipsis (its whole in its title) before it pushes the head's controls into More.
+    public static let cBrowserAddressW: Double = 320
     /// What a page beside the floating Comments rail leaves it: the rail's width and its inset on both sides, the page's ground running on beneath the glass.
     public static let cRailFloatRoom: Double = 334
     /// The corner of a panel whose head floats as glass over its content (the artifact panel): its glass capsules' radius plus their inset from its edge, so a capsule in its corner is concentric with it (Adopting Liquid Glass: windows "adopt rounder corners to fit controls"); the Comments rail floating over the page takes the same corner, so the capsules of its own bar are concentric with it.
