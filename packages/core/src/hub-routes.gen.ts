@@ -475,6 +475,12 @@ export interface components {
         transcripts?: "0" | "1";
       };
     };
+    "GET /api/find/places": {
+      query: {
+        q: string;
+        session: string;
+      };
+    };
     "GET /api/find/settings": Record<string, never>;
     "GET /api/find/waiting": Record<string, never>;
     "GET /api/fleet": Record<string, never>;

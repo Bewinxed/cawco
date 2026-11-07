@@ -3138,8 +3138,15 @@
     }
     // Find's own seek marks the words, not the row, and its place is said
     // by its count (find/FindLine).
-    const found = findHere.sought === docId;
-    findHere.sought = found ? null : findHere.sought;
+    const found = findHere.sought?.docId === docId;
+    if (found) {
+      const { back } = findHere.sought ?? { back: false };
+      findHere.sought = null;
+      if (!back) {
+        findHere.arrived();
+        keepFoundClear();
+      }
+    }
     marked = found ? null : { key: renderedRows[index].key, state: "on" };
     // The record opened at is the place now, as a reader's scroll to it is.
     keptPlace = placeAt(lastTop);
@@ -4698,15 +4705,32 @@
     })
   );
 
-  /** The step whose words have not yet been brought clear of the composer. */
-  let clearFor = 0;
+  /**
+   * Until when, after a step's seek lands, its words are kept clear of the
+   * composer: the rows round them still measure (a fold just opened, a
+   * row mounted above), so they are read again each frame till then. Our
+   * own call: about the seek's own settling (`SEEK_FRAMES`).
+   */
+  let clearUntil = 0;
+  const CLEAR_MS = 600;
   $effect(() => {
-    clearFor = findHere.stepped;
     // The live turn's place is the conversation's tail, being written.
-    if (clearFor > 0 && untrack(() => findHere.current?.live)) {
+    if (findHere.stepped > 0 && untrack(() => findHere.current?.live)) {
       untrack(jump);
     }
   });
+
+  /** A step's seek landed: its words are kept clear of the composer a moment, read each frame. */
+  function keepFoundClear(): void {
+    clearUntil = performance.now() + CLEAR_MS;
+    const frame = () => {
+      markWords();
+      if (performance.now() < clearUntil) {
+        requestAnimationFrame(frame);
+      }
+    };
+    requestAnimationFrame(frame);
+  }
 
   /** The room the words read in: the scroller less what stands over its foot (the composer, find's layer). */
   function readRoom(view: DOMRect): { top: number; bottom: number } {
@@ -4728,19 +4752,19 @@
   /**
    * The words stepped to stand clear of the composer and find's layer: the
    * seek centres the place's row, and a tall row (a test run's output) can
-   * leave its words under the composer. Once per step, after the seek has
-   * landed, inside the transcript's own scroller.
+   * leave its words under the composer. For a moment after each step's seek
+   * lands, while the rows round them settle, inside the transcript's own
+   * scroller.
    */
   function clearOfFind(word: Range): void {
     if (
       !scroller ||
-      clearFor === 0 ||
+      performance.now() > clearUntil ||
       seeking !== null ||
       openAt.has(session.instanceId)
     ) {
       return;
     }
-    clearFor = 0;
     const box = word.getBoundingClientRect();
     const room = readRoom(scroller.getBoundingClientRect());
     if (box.top >= room.top && box.bottom <= room.bottom) {
@@ -4828,7 +4852,8 @@
   function movedOn(event: Event): void {
     if (
       findHere.landed &&
-      (event.type !== "keydown" || SCROLL_KEYS.has((event as KeyboardEvent).key))
+      (event.type !== "keydown" ||
+        SCROLL_KEYS.has((event as KeyboardEvent).key))
     ) {
       findHere.leave();
     }
@@ -4860,11 +4885,7 @@
     findHere.landed && findHere.reading !== null && rows.length > 0
   );
   const showLatest = $derived(
-    landed &&
-      farFromLatest &&
-      rows.length > 0 &&
-      !findHere.open &&
-      !showBack
+    landed && farFromLatest && rows.length > 0 && !findHere.open && !showBack
   );
 
   // ── The live region ─────────────────────────────────────────────────────

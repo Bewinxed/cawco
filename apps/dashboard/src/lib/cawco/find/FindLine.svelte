@@ -11,6 +11,7 @@
    * The composer unfolds it (`unfold`) as it grows its other rows: a press
    * plays it, a key lands it (The Frequency Rule, motion/keyed).
    */
+  import { commonWords } from "@cawco/core/words/common";
   import { findInWords } from "@cawco/core/words/find-in";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -55,9 +56,7 @@
     return findInWords.place(find.placeNo, total);
   });
   const spoken = $derived(
-    none
-      ? findInWords.noneSpoken
-      : findInWords.placeSpoken(find.placeNo, total)
+    none ? findInWords.noneSpoken : findInWords.placeSpoken(find.placeNo, total)
   );
 
   function onkeydown(event: KeyboardEvent): void {
@@ -108,14 +107,13 @@
     <!-- Narrow, the place opens the places over the conversation. -->
     <Button
       aria-expanded={find.listOpen}
-      aria-label={`${spoken}: ${findInWords.showPlaces}`}
+      aria-label={`${spoken}, ${find.listOpen ? findInWords.hidePlaces : findInWords.showPlaces}`}
       disabled={total === 0}
       onclick={() => {
         find.listOpen = !find.listOpen;
       }}
       size="sm"
-      variant="ghost"
-      ><span class="num">{count}</span></Button
+      variant="ghost"><span class="num">{count}</span></Button
     >
   {:else if count}
     <output
@@ -145,12 +143,12 @@
   />
   <Button
     aria-keyshortcuts="Escape"
-    aria-label={findInWords.close}
+    aria-label={commonWords.close}
     class="flex-none"
     icon={IconClose}
     onclick={() => find.close()}
     size="icon-composer"
-    title={findInWords.close}
+    title={commonWords.close}
     variant="ghost"
   />
 </div>

@@ -2090,8 +2090,9 @@ export const CONTROL_SEARCH_TRANSCRIPTS = "searchTranscripts";
  * The hub stopped waiting for a read it asked a machine (its deadline
  * passed, or the person's Find asked something newer): args `[requestId]`,
  * the read's own. The machine stops that read where it runs (agent
- * session.ts `registerAbandonable`: {@link CONTROL_SEARCH_TRANSCRIPTS} and
- * {@link CONTROL_TRANSCRIPT_TURNS}), and answers `{ stopped }`, whether it
+ * session.ts `registerAbandonable`: {@link CONTROL_SEARCH_TRANSCRIPTS},
+ * {@link CONTROL_TRANSCRIPT_TURNS} and {@link CONTROL_TRANSCRIPT_PLACES}),
+ * and answers `{ stopped }`, whether it
  * held it. Machine-scoped.
  */
 export const CONTROL_ABANDON = "abandon";
@@ -2102,6 +2103,14 @@ export const CONTROL_ABANDON = "abandon";
  * `TranscriptTurns`.
  */
 export const CONTROL_TRANSCRIPT_TURNS = "transcriptTurns";
+
+/**
+ * Every place in one conversation where the words stand, as a machine's
+ * transcript index holds them (daemon-scoped): args
+ * `[TranscriptPlacesQuery]` (core find.ts), answers `TranscriptPlace[]`,
+ * oldest first. The person's find in that conversation reads it.
+ */
+export const CONTROL_TRANSCRIPT_PLACES = "transcriptPlaces";
 
 /** One Claude session the hub has a machine carry into the dir its row names. */
 export interface CarrySessionRequest {

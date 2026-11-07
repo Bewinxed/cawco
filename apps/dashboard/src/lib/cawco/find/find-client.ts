@@ -16,6 +16,7 @@ import type {
   FindAnswer,
   FindBy,
   FindKind,
+  FindPlacesAnswer,
   WaitingAnswer,
 } from "@cawco/core/find";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
@@ -118,3 +119,13 @@ export const findEverywhere = (q: string, ask: Ask = {}) =>
 
 export const findWaiting = (signal?: AbortSignal) =>
   read<WaitingAnswer>(hubRequest("GET /api/find/waiting"), signal);
+
+/**
+ * Every place in one conversation where the words stand, its machine's
+ * transcript index asked (find in a conversation, conversation-find).
+ */
+export const findPlaces = (session: string, q: string, signal?: AbortSignal) =>
+  read<FindPlacesAnswer>(
+    hubRequest("GET /api/find/places", { query: { session, q } }),
+    signal
+  );

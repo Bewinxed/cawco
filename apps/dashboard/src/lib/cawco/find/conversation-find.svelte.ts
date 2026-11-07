@@ -19,9 +19,9 @@
  *   absent while its machine is not heard).
  */
 import type { FindPlace, FindPlacesAnswer } from "@cawco/core/find";
-import { markedRuns } from "@cawco/core/find-match";
 import { findInWords } from "@cawco/core/words/find-in";
 import type { Component } from "svelte";
+import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
 import {
   IconAgent,
   IconReport,
@@ -35,8 +35,8 @@ import { disclosureAt } from "../transcript/disclosure.svelte";
 import { askOpenAt } from "../transcript/open-at.svelte";
 import { speakerName } from "../transcript/speaker";
 import type { Message } from "../types";
-import type { Read } from "./find-client";
-import type { Run } from "./find-rows";
+import { findPlaces, type Read } from "./find-client";
+import { excerptParts, type Run } from "./find-rows";
 
 /** Whose words a place is: the person's, the agent's, what its tools returned, a delegate's report. */
 export type Whose = FindPlace["whose"];
@@ -59,6 +59,12 @@ export interface Place {
   key: string;
   /** Said as this turn is written: its glyph breathes. */
   live: boolean;
+  /**
+   * The transcript record it is in, as the hub's index names it (a block's
+   * stored entry, `sdkUuid`; for a tool's output, the record that called
+   * it): how a place the hub found is known again once its turn is loaded.
+   */
+  record: string;
   /** Who said it, or what returned it. */
   title: string;
   whose: Whose;
@@ -84,13 +90,18 @@ export type AskPlaces = (
 /** How long typing settles before the hub is asked, ms: the finder's own pace (Finder `SETTLE_MS`). */
 const SETTLE_MS = 180;
 
-/** How many characters of a place's words stand either side of the match. */
-const ROOM = 64;
+/**
+ * How many characters of a place's words stand before the match and after
+ * it: little before, so the match stands near the row's start and a narrow
+ * row still shows it.
+ */
+const LEAD = 32;
+const TAIL = 96;
 
 /** `text` cut round its first `words` (case aside), the match marked as the engine marks it. */
 function excerptOf(text: string, at: number, length: number): Run[] {
-  const from = Math.max(0, at - ROOM);
-  const to = Math.min(text.length, at + length + ROOM);
+  const from = Math.max(0, at - LEAD);
+  const to = Math.min(text.length, at + length + TAIL);
   const flat = (s: string) => s.replace(/\s+/gu, " ");
   return [
     {
@@ -103,18 +114,6 @@ function excerptOf(text: string, at: number, length: number): Run[] {
       text: `${flat(text.slice(at + length, to))}${to < text.length ? "…" : ""}`,
     },
   ].filter((run) => run.text !== "");
-}
-
-/** A tool call's short face: its command or its description, else its name. */
-function callWord(message: Message): string {
-  const input = message.metadata?.toolInput ?? {};
-  for (const key of ["description", "command", "pattern", "file_path"]) {
-    const value = input[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim().split("\n")[0] ?? value;
-    }
-  }
-  return "";
 }
 
 interface Said {
@@ -156,17 +155,25 @@ function saidIn(message: Message, agent: string): Said | null {
         whose: "agent",
         word: "",
       };
-    case "tool.use":
+    case "tool.use": {
+      // The call as its row in the transcript reads it: its glyph and its sentence.
+      const call = describeTool(
+        message.metadata?.toolName,
+        message.metadata?.toolInput,
+        message.metadata?.toolResult,
+        message.metadata?.toolStatus ?? "success"
+      );
       return {
         call: String(message.toolCallId ?? message.id),
-        glyph: IconToolTerminal,
+        glyph: call.icon,
         text: message.metadata?.toolResult ?? "",
         title: findInWords.toolOutput(
           message.metadata?.toolName ?? findInWords.tool
         ),
         whose: "tools",
-        word: callWord(message),
+        word: call.label,
       };
+    }
     case "user.peer": {
       const headline = message.metadata?.reportHeadline;
       return {
@@ -193,7 +200,7 @@ function saidIn(message: Message, agent: string): Said | null {
 }
 
 /** The places in the turns the transcript holds, oldest first. */
-export function placesHeld(
+function placesHeld(
   messages: readonly Message[],
   words: string,
   agent: string
@@ -211,7 +218,9 @@ export function placesHeld(
     if (at < 0) {
       return [];
     }
-    const stamp = message.timestamp ? Date.parse(message.timestamp) : Number.NaN;
+    const stamp = message.timestamp
+      ? Date.parse(message.timestamp)
+      : Number.NaN;
     return [
       {
         at: Number.isNaN(stamp) ? null : stamp,
@@ -219,8 +228,12 @@ export function placesHeld(
         docId: message.id,
         excerpt: excerptOf(said.text, at, needle.length),
         glyph: said.glyph,
-        key: said.whose === "tools" && said.call ? `call:${said.call}` : message.id,
+        key:
+          said.whose === "tools" && said.call
+            ? `call:${said.call}`
+            : message.id,
         live: false,
+        record: message.sdkUuid ?? message.id,
         title: said.title,
         whose: said.whose,
         word: said.word,
@@ -229,30 +242,33 @@ export function placesHeld(
   });
 }
 
-/** A place the hub found, in a turn the transcript has not loaded. */
-function placeFound(place: FindPlace, agent: string): Place {
-  const FACE: Record<Whose, { glyph: Component; title: string }> =
-    {
-      me: { glyph: IconUser, title: findInWords.me },
-      agent: { glyph: IconAgent, title: agent },
-      tools: {
-        glyph: IconToolTerminal,
-        title: findInWords.toolOutput(place.tool ?? findInWords.tool),
-      },
-      delegates: {
-        glyph: IconReport,
-        title: findInWords.report,
-      },
-    };
+/** A place the hub found, in a turn the transcript has not loaded; `n`, its place among those of its record. */
+function placeFound(place: FindPlace, n: number, agent: string): Place {
+  const FACE: Record<Whose, { glyph: Component; title: string }> = {
+    me: { glyph: IconUser, title: findInWords.me },
+    agent: { glyph: IconAgent, title: agent },
+    tools: {
+      glyph: IconToolTerminal,
+      title: findInWords.toolOutput(place.tool ?? findInWords.tool),
+    },
+    delegates: {
+      glyph: IconReport,
+      title: findInWords.report,
+    },
+  };
   const face = FACE[place.whose];
+  const key = `found:${place.docId}:${n}`;
   return {
     at: place.at,
-    call: place.call,
+    // Its fold is opened once its turn is loaded and the transcript's own
+    // place stands for it (`arrived`).
+    call: null,
     docId: place.docId,
-    excerpt: markedRuns(place.excerpt),
+    excerpt: excerptParts(place.excerpt, place.secrets, (i) => `${key}|${i}`),
     glyph: place.thinking ? IconStars : face.glyph,
-    key: place.whose === "tools" && place.call ? `call:${place.call}` : place.docId,
+    key,
     live: false,
+    record: place.docId,
     title: face.title,
     whose: place.whose,
     word: "",
@@ -277,7 +293,9 @@ export class ConversationFind {
   /** Narrow, the places stand over the conversation until one is picked. */
   listOpen = $state(true);
   /** Where the conversation was being read as find opened: a record, or its tail. */
-  reading = $state<{ tail: true } | { tail: false; docId: string } | null>(null);
+  reading = $state<{ tail: true } | { tail: false; docId: string } | null>(
+    null
+  );
   /** A step's ask of the field: the field takes the focus (the composer's FindLine). */
   focusAsked = $state(0);
   /** Find closed: the caret goes back to the message (the composer). */
@@ -289,7 +307,9 @@ export class ConversationFind {
    * the row's own mark and its "Opened at that line" (the words are marked,
    * and the place is said by the count).
    */
-  sought: string | null = null;
+  sought: { back: boolean; docId: string } | null = null;
+  /** The place stepped to, by whose words and its record, for when its key changes as its turn loads. */
+  #atRecord = $state<string | null>(null);
 
   readonly #ask: AskPlaces;
   readonly #agent: () => string;
@@ -305,7 +325,9 @@ export class ConversationFind {
   }
 
   /** The transcript says where it is being read, for Back where you were. */
-  readFrom(reading: () => { tail: true } | { tail: false; docId: string } | null) {
+  readFrom(
+    reading: () => { tail: true } | { tail: false; docId: string } | null
+  ) {
     this.#reading = reading;
     return () => {
       if (this.#reading === reading) {
@@ -334,6 +356,7 @@ export class ConversationFind {
         glyph: IconAgent,
         key: `${this.viewId}:live`,
         live: true,
+        record: "",
         title: agent,
         whose: "agent",
         word: findInWords.writing,
@@ -348,11 +371,19 @@ export class ConversationFind {
     if (this.hub.kind !== "answered") {
       return held;
     }
-    const keys = new Set(held.map((place) => place.key));
+    // A place the hub found whose turn is loaded is the transcript's own.
+    const loaded = new Set(
+      held.map((place) => `${place.whose}|${place.record}`)
+    );
     const agent = this.#agent();
+    const ofRecord = new Map<string, number>();
     const found = this.hub.places
-      .map((place) => placeFound(place, agent))
-      .filter((place) => !keys.has(place.key));
+      .map((place) => {
+        const n = ofRecord.get(place.docId) ?? 0;
+        ofRecord.set(place.docId, n + 1);
+        return placeFound(place, n, agent);
+      })
+      .filter((place) => !loaded.has(`${place.whose}|${place.record}`));
     const said = [...found, ...held.filter((place) => !place.live)].toSorted(
       (a, b) => (a.at ?? 0) - (b.at ?? 0)
     );
@@ -376,9 +407,18 @@ export class ConversationFind {
     return counts;
   });
 
-  /** The place stepped to, among those kept; the first when none was. */
+  /**
+   * The place stepped to, among those kept: by its key, or, a place the hub
+   * found whose turn has loaded since, by its record.
+   */
   readonly current = $derived(
-    this.places.find((place) => place.key === this.at) ?? null
+    this.places.find((place) => place.key === this.at) ??
+      this.places.find(
+        (place) =>
+          this.#atRecord !== null &&
+          `${place.whose}|${place.record}` === this.#atRecord
+      ) ??
+      null
   );
 
   /** Its number among the places kept, from 1; 0 with none. */
@@ -525,6 +565,7 @@ export class ConversationFind {
       return;
     }
     this.at = place.key;
+    this.#atRecord = `${place.whose}|${place.record}`;
     if (place.live) {
       this.stepped += 1;
       return;
@@ -533,7 +574,7 @@ export class ConversationFind {
       disclosureAt(this.viewId, place.call).set(true);
     }
     this.stepped += 1;
-    this.sought = place.docId;
+    this.sought = { back: false, docId: place.docId };
     askOpenAt(this.viewId, place.docId);
   }
 
@@ -546,12 +587,30 @@ export class ConversationFind {
     const { reading } = this;
     this.landed = false;
     this.reading = null;
+    // The caret goes back to the message, as the pill it was pressed on goes.
+    this.messageAsked += 1;
     if (reading && !reading.tail) {
-      this.sought = reading.docId;
+      this.sought = { back: true, docId: reading.docId };
       askOpenAt(this.viewId, reading.docId);
       return { tail: false };
     }
     return { tail: true };
+  }
+
+  /**
+   * The transcript arrived at the place stepped to: a place the hub found
+   * is the transcript's own now that its turn is loaded, and its fold (a
+   * tool's output, reasoning, a report) opens.
+   */
+  arrived(): void {
+    const place = this.current;
+    if (!place) {
+      return;
+    }
+    this.at = place.key;
+    if (place.call) {
+      disclosureAt(this.viewId, place.call).set(true);
+    }
   }
 
   /** The reader moved on from the place find closed at: its wash goes. */
@@ -560,11 +619,31 @@ export class ConversationFind {
   }
 }
 
+/** What the places list reads of a find, and asks of it (FindPlaces): a find, or a states file's fixture. */
+export type PlacesView = Pick<
+  ConversationFind,
+  | "all"
+  | "asking"
+  | "at"
+  | "counts"
+  | "filter"
+  | "hub"
+  | "pick"
+  | "places"
+  | "retry"
+  | "viewId"
+  | "whose"
+  | "words"
+>;
+
 /** Each conversation's find, by its view id. */
 const finds = new Map<string, ConversationFind>();
 
-/** How the hub is asked: set once by find-client's reader, or a bench's fixture. */
-let asker: AskPlaces = () => Promise.resolve(null);
+/** How the hub is asked: the engine's places read, or a bench's fixture. */
+let asker: AskPlaces = async (viewId, words, signal) => {
+  const asked = await findPlaces(viewId, words, signal);
+  return asked.kind === "answered" ? asked.read : null;
+};
 
 /** Set how every find asks the hub (the dashboard's find-client; a bench's fixture). */
 export function askPlacesWith(ask: AskPlaces): void {

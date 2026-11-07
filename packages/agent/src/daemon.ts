@@ -63,6 +63,7 @@ import {
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PROVIDER_KEY,
+  CONTROL_TRANSCRIPT_PLACES,
   CONTROL_TRANSCRIPT_TURNS,
   CONTROL_WORKSPACE_APPLY,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -81,6 +82,7 @@ import {
   lawPolicy,
   MACHINE_PART_MS,
   type RemoveFolder,
+  type TranscriptPlacesQuery,
   type TranscriptQuery,
   type TranscriptTurnsQuery,
   UPDATE_CAWCO,
@@ -3967,6 +3969,9 @@ const startDaemon = (rediscover = false) =>
     );
     supervisor.registerAbandonable(CONTROL_TRANSCRIPT_TURNS, (signal, query) =>
       search.turns(query as TranscriptTurnsQuery, signal)
+    );
+    supervisor.registerAbandonable(CONTROL_TRANSCRIPT_PLACES, (signal, query) =>
+      search.places(query as TranscriptPlacesQuery, signal)
     );
 
     phase("connecting");

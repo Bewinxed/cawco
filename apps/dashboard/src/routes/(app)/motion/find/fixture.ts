@@ -156,7 +156,6 @@ const REPORT: Said = {
 /** The conversation find reads: a relay that gave up after sleep, a delegate's report after the network test. */
 export const SAID: Said[] = [...RELAY.slice(0, 11), REPORT, ...RELAY.slice(11)];
 
-
 /** The other tabs: short, so the strip reads as a real group. */
 export const OTHER: Said[] = [
   {
@@ -171,10 +170,34 @@ export const OTHER: Said[] = [
   },
 ];
 
+/** The stored record the `n`th thing said is drawn from, as the hub's index names it. */
+export const recordOf = (id: string, n: number): string => `${id}-record-${n}`;
+
+/** The words `s` is found in: a tool's output, a report's headline and body. */
+export function wordsOf(s: Said): string {
+  switch (s.k) {
+    case "tool":
+      return s.out;
+    case "report":
+      return `${s.headline}\n${s.text}`;
+    case "user":
+    case "assistant":
+    case "thinking":
+      return s.text;
+  }
+}
+
+/** When `s` was said, ms. */
+export const whenOf = (s: Said): number => Date.parse(ago(s.at));
+
 /** `said` as the transcript's messages, under conversation `id`. */
 export function history(id: string, said: Said[]): Message[] {
   return said.map((s, n) => {
-    const base = { instanceId: id, timestamp: ago(s.at) };
+    const base = {
+      instanceId: id,
+      timestamp: ago(s.at),
+      sdkUuid: recordOf(id, n),
+    };
     if (s.k === "report") {
       return {
         ...base,

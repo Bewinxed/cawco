@@ -30,5 +30,7 @@
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  <IconArrowDown class="size-icon-md" /><span>{back ? findInWords.back : "Jump to latest"}</span>
+  <IconArrowDown class="size-icon-md" /><span
+    >{back ? findInWords.back : "Jump to latest"}</span
+  >
 </button>

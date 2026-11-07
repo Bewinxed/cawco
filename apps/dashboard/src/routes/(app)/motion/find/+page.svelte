@@ -19,8 +19,7 @@
    * `&in=caw`: the conversation in Caw's panel, docked beside the project
    * page, where the places are the composer's layer at every width.
    */
-  import type { FindPlacesAnswer } from "@cawco/core/find";
-  import type { PulseFrame } from "@cawco/core/frames";
+  import type { FindPlace, FindPlacesAnswer } from "@cawco/core/find";
   import type { SessionPulse } from "@cawco/core/protocol";
   import { onMount, untrack } from "svelte";
   import { blankSession } from "#lib/cawco/client.svelte.js";
@@ -51,8 +50,8 @@
     IconPlus,
   } from "#lib/icons.js";
   import { page } from "$app/state";
-  import { benchClick, benchLeaf } from "../tab-bench";
-  import { history, OTHER, SAID } from "./fixture";
+  import { benchClick, benchDebug, benchLeaf } from "../tab-bench";
+  import { history, OTHER, recordOf, SAID, whenOf, wordsOf } from "./fixture";
 
   type State = "finding" | "nothing" | "unreached" | "live" | "closed";
   const findState = (page.url.searchParams.get("state") ?? "finding") as State;
@@ -71,16 +70,7 @@
     [ids[2]]: "idle",
   };
 
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
-        state: {
-          sessions: Record<string, ReturnType<typeof blankSession>>;
-        };
-      };
-    }
-  ).__cawcoDebug;
+  const debug = benchDebug();
   const now = Date.now();
   for (const id of ids) {
     const session = blankSession(id);
@@ -106,19 +96,43 @@
 
   // The hub's place: every turn is loaded here, so the engine's answer adds
   // none; a machine that does not answer is obelisk, as a real one is named.
-  askPlacesWith(
-    async (): Promise<Read<FindPlacesAnswer>> => ({
-      ok: true,
-      value: {
-        machine: {
-          answered: findState !== "unreached",
-          id: "obelisk",
-          name: "obelisk",
-        },
-        places: [],
+  askPlacesWith(async (): Promise<Read<FindPlacesAnswer>> => ({
+    ok: true,
+    value: {
+      machine: {
+        answered: findState !== "unreached",
+        id: "obelisk",
+        name: "obelisk",
       },
-    })
-  );
+      // What the engine answers for this conversation: every place, each
+      // by its stored record; every one is loaded here, so each is the
+      // transcript's own place.
+      places: SAID.flatMap((s, n): FindPlace[] => {
+        const text = wordsOf(s);
+        const at = text.indexOf(WORDS);
+        if (at < 0) {
+          return [];
+        }
+        const WHOSE = {
+          user: "me",
+          assistant: "agent",
+          thinking: "agent",
+          tool: "tools",
+          report: "delegates",
+        } as const;
+        return [
+          {
+            at: whenOf(s),
+            docId: recordOf(MAIN, n),
+            excerpt: `${text.slice(Math.max(0, at - 40), at)}「${WORDS}」${text.slice(at + WORDS.length, at + WORDS.length + 40)}`,
+            thinking: s.k === "thinking",
+            tool: s.k === "tool" ? s.name : null,
+            whose: WHOSE[s.k],
+          },
+        ];
+      }),
+    },
+  }));
 
   const leaf = $state<LeafNode>(untrack(() => benchLeaf("find", ids, "1")));
   const bound = $derived(composerBindings.get(MAIN));
@@ -176,7 +190,9 @@
 {#if inCaw}
   <!-- Caw's panel docked beside the project page (CawFloat's docked card),
        its bar floating over the conversation as ProjectConversation's does. -->
-  <div class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong">
+  <div
+    class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong"
+  >
     <div
       class="relative flex min-h-0 w-c-panel-w m-space-6 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile max-phone:m-0 max-phone:w-full max-phone:rounded-none"
     >

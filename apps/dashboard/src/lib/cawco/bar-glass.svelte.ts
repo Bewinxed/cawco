@@ -43,6 +43,17 @@ class BarGlass {
    * brings its row into view, focused, and clears it.
    */
   machine = $state<string | null>(null);
+  /**
+   * Words Jump is asked to find in every session (find in a conversation
+   * that found nothing hands its words over): Jump's finder takes them as it
+   * stands, and clears them (FinderCard).
+   */
+  jumpWords = $state<string | null>(null);
+  /** Opens Jump on `words`, found in every session. */
+  jumpWith(words: string): void {
+    this.jumpWords = words;
+    this.open = "jump";
+  }
   /** Opens `card`, or shuts it when it is the one standing. */
   toggle(card: GlassCard): void {
     this.open = this.open === card ? null : card;

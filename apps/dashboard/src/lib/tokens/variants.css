@@ -454,6 +454,8 @@
 @custom-variant slot-filed-task (&[data-slot="filed-task"]);
 @custom-variant slot-fill (&[data-slot="fill"]);
 @custom-variant slot-filters (&[data-slot="filters"]);
+@custom-variant slot-find-layer (&[data-slot="find-layer"]);
+@custom-variant slot-find-line (&[data-slot="find-line"]);
 @custom-variant slot-finder (&[data-slot="finder"]);
 @custom-variant slot-flight (&[data-slot="flight"]);
 @custom-variant slot-flight-text (&[data-slot="flight-text"]);

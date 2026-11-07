@@ -41,6 +41,8 @@
   } = $props();
 
   let input = $state<HTMLInputElement>();
+  /** Find was chosen: the focus goes to its field, not back to Attach. */
+  let finding = false;
 
   // Asked for from outside the composer (Files' Attach a file): the picker
   // opens as Attach's own press opens it, inside the press's activation.
@@ -92,7 +94,18 @@
     >
       <IconPlus class="size-icon-md" />
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="start" side="top">
+    <!-- Find takes the focus to its field as the menu closes, rather than
+         back to Attach. -->
+    <DropdownMenu.Content
+      align="start"
+      onCloseAutoFocus={(event) => {
+        if (finding) {
+          finding = false;
+          event.preventDefault();
+        }
+      }}
+      side="top"
+    >
       <DropdownMenu.Item onSelect={() => input?.click()}>
         <IconPaperclip />
         <span>Files and photos</span>
@@ -105,7 +118,12 @@
         </DropdownMenu.Item>
       {/if}
       {#if onfind}
-        <DropdownMenu.Item onSelect={onfind}>
+        <DropdownMenu.Item
+          onSelect={() => {
+            finding = true;
+            onfind();
+          }}
+        >
           <IconSearch />
           <span>{findInWords.menuItem}</span>
           <DropdownMenu.Shortcut>⌘F</DropdownMenu.Shortcut>

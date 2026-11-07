@@ -107,6 +107,7 @@ import type {
   ToolStatus,
   TranscriptAnswer,
   TranscriptPage,
+  TranscriptPlacesQuery,
   TranscriptTurns,
   TranscriptWhere,
   TranscriptWindow,
@@ -240,6 +241,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_SLEEP,
+  CONTROL_TRANSCRIPT_PLACES,
   CONTROL_TRANSCRIPT_TURNS,
   CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_APPLY,
@@ -282,6 +284,8 @@ import {
   type EndedBy,
   effectiveImageChoice,
   estimateTokens,
+  type FindPlace,
+  type FindPlacesAnswer,
   type FindSettings,
   FLEET_DELTA,
   FLEET_WATCH,
@@ -807,7 +811,8 @@ import { createDesignVerify } from "./design-verify";
 import { type AttemptAsk, createDispatcher, dispatchRoutes } from "./dispatch";
 import { createExternalItems } from "./external-items";
 import { faviconRoutes } from "./favicon";
-import { answerFind, createFind, FIND_QUERY } from "./find";
+import { answerFind, createFind, FIND_PLACES_QUERY, FIND_QUERY } from "./find";
+import { isPlaces, PLACES_LIMIT, placesForScreens } from "./find-places";
 import { forScreens } from "./find-secrets";
 import { createFindTool } from "./find-tool";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
@@ -1244,6 +1249,14 @@ const GH_ASK_MS = 20_000;
  * search/index.ts `SYNC_WAIT_MS`). Our call.
  */
 const FIND_TURNS_MS = 5000;
+/**
+ * How long the person's find in a conversation waits on its machine for
+ * the places (find-places.ts): one phrase read of the index, a sync first
+ * when it is stale (agent search/index.ts `SYNC_WAIT_MS`). Past it, the
+ * places in the turns loaded stand, the machine named. Our call, as
+ * {@link FIND_TURNS_MS}.
+ */
+const FIND_PLACES_MS = 5000;
 /** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
 const ABANDON_MS = 5000;
 /**
@@ -34379,6 +34392,65 @@ export const createServer = (
         );
       })
       .get("/api/find/waiting", () => find.waiting())
+      // The person's find in one conversation (find-places.ts): every place
+      // its machine's transcript index holds the words in, oldest first,
+      // what tools answered included. A machine that does not answer is
+      // said so, by name, never as a conversation without the words.
+      .get(
+        "/api/find/places",
+        { query: FIND_PLACES_QUERY },
+        async ({ query, request, status }) => {
+          const [row] = db.find.instances([query.session]);
+          if (!row) {
+            return status(404, `no session ${query.session}`);
+          }
+          const named = (
+            answered: boolean,
+            places: FindPlace[] = []
+          ): FindPlacesAnswer => ({
+            machine: {
+              answered,
+              id: row.machineId,
+              name: machineName(row.machineId),
+            },
+            places,
+          });
+          const sessions = [row.sessionId, ...row.priorSessionIds].filter(
+            (each): each is string => !!each
+          );
+          const words = query.q.trim();
+          if (sessions.length === 0 || words === "") {
+            return named(true);
+          }
+          const answer = await readStoppable(
+            row.machineId,
+            CONTROL_TRANSCRIPT_PLACES,
+            [
+              {
+                sessions,
+                words,
+                limit: PLACES_LIMIT,
+              } satisfies TranscriptPlacesQuery,
+            ],
+            FIND_PLACES_MS,
+            {
+              caller: "the person's find in a conversation",
+              signal: request.signal,
+            }
+          );
+          const result =
+            answer?.kind === "answered" && answer.value.ok
+              ? answer.value.result
+              : null;
+          if (!isPlaces(result)) {
+            return named(false);
+          }
+          return named(
+            true,
+            await placesForScreens(result, db.findSettings.hideSecrets())
+          );
+        }
+      )
       // The person's Find settings, the same on every screen: kept at the hub.
       .get("/api/find/settings", (): FindSettings => ({
         hideSecrets: db.findSettings.hideSecrets(),

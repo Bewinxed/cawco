@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { PulseFrame } from "@cawco/core/frames";
   import type { SessionPulse } from "@cawco/core/protocol";
   import { HOUR_MS } from "@cawco/core/time";
   import { onMount, untrack } from "svelte";
@@ -30,7 +29,7 @@
    * own choice goes to the workspace, which holds no such group and would
    * navigate to the session.
    */
-  import { benchClick, benchLeaf } from "../tab-bench";
+  import { benchClick, benchDebug, benchLeaf } from "../tab-bench";
 
   const ids = [
     "1a2b3c4d-0000-4000-8000-000000000001",
@@ -150,16 +149,7 @@
   // the sessions' pulses and their histories, in hand (`initialized`), so a
   // pane opening one reads nothing (dev's `__cawcoDebug`, set when
   // client.svelte.ts loads, which this page imports ahead of this script).
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
-        state: {
-          sessions: Record<string, ReturnType<typeof blankSession>>;
-        };
-      };
-    }
-  ).__cawcoDebug;
+  const debug = benchDebug();
   const now = Date.now();
   for (const id of ids) {
     const activity = DOING[id];

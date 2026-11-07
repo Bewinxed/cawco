@@ -1,5 +1,4 @@
 <script lang="ts" module>
-  import { barGlass } from "../bar-glass.svelte";
   import { FinderState } from "./finder-state.svelte";
 
   /**
@@ -7,20 +6,6 @@
    * again, as the glass's card is shut and opened.
    */
   const finder = new FinderState();
-
-  /**
-   * Jump, asked for `words` in every session (find in a conversation that
-   * found nothing hands its words over).
-   */
-  export function jumpWith(words: string): void {
-    finder.text = words;
-    finder.showFind();
-    if (barGlass.open === "jump") {
-      finder.ask();
-    } else {
-      barGlass.open = "jump";
-    }
-  }
 </script>
 
 <script lang="ts">
@@ -46,6 +31,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { showArtifact } from "../artifact-api";
+  import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
   import { conversationHref, routineHref } from "../links";
   import { MATCH } from "../transcript/open-at.svelte";
@@ -60,6 +46,17 @@
   onMount(() => {
     finder.open();
     return () => finder.close();
+  });
+
+  // Words handed over to be found in every session (bar-glass `jumpWith`).
+  $effect(() => {
+    const words = barGlass.jumpWords;
+    if (words !== null) {
+      barGlass.jumpWords = null;
+      finder.text = words;
+      finder.showFind();
+      finder.ask();
+    }
   });
 
   const at = (href: string, moment: FindMoment | null) => {

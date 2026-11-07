@@ -16,26 +16,28 @@
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { findInWords } from "@cawco/core/words/find-in";
+  import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { untrack } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconSearch } from "#lib/icons.js";
+  import { barGlass } from "../bar-glass.svelte";
   import type {
-    ConversationFind,
     Place,
+    PlacesView,
     WhoseFilter,
   } from "./conversation-find.svelte";
-  import { jumpWith } from "./FinderCard.svelte";
   import FindRow from "./FindRow.svelte";
-  import type { Row } from "./find-rows";
+  import { type Row, secretsIn } from "./find-rows";
 
   let {
     find,
     narrow = false,
   }: {
-    find: ConversationFind;
+    find: PlacesView;
     /** The composer's layer: a pick folds it. */
     narrow?: boolean;
   } = $props();
@@ -52,7 +54,13 @@
   ]);
 
   const rowOf = (place: Place): Row => {
-    const words = place.excerpt.map((run) => run.text).join("");
+    const words = place.excerpt
+      .map((run) => (run.secret ? findSecretWords.hidden : run.text))
+      .filter(
+        (text, i, all) =>
+          !(text === findSecretWords.hidden && all[i - 1] === text)
+      )
+      .join("");
     return {
       at: place.at,
       breathes: place.live,
@@ -60,14 +68,16 @@
       key: place.key,
       meta: [],
       reason: { source: "", parts: place.excerpt },
-      secrets: [],
-      spoken: `${place.title}, ${place.word}: ${words}`,
+      secrets: secretsIn(place.excerpt),
+      spoken: [place.title, place.word, words].filter(Boolean).join(", "),
       state: { tone: place.live ? "live" : "quiet", word: place.word },
       title: place.title,
       titleParts: [{ matched: false, text: place.title }],
     };
   };
   const rows = $derived(find.places.map(rowOf));
+  /** The secrets the person showed, by key; the rest are drawn as dots (Find's "Hide secrets"). */
+  const shown = new SvelteSet<string>();
 
   /** Known to hold nothing: nothing loaded holds the words, and the hub said none or cannot be heard. */
   const nothing = $derived(
@@ -83,15 +93,30 @@
     if (!(key && list)) {
       return;
     }
-    untrack(() => {
-      const row = list?.querySelector<HTMLElement>(
-        `[data-key="${CSS.escape(key)}"]`
-      );
-      if (row) {
-        bringIntoView(row);
-      }
-    });
+    // After the frame the list is laid out in: opened again (narrow), its
+    // height is set by then.
+    const frame = requestAnimationFrame(() =>
+      untrack(() => {
+        const row = list?.querySelector<HTMLElement>(
+          `[data-key="${CSS.escape(key)}"]`
+        );
+        if (row) {
+          bringIntoView(row);
+        }
+      })
+    );
+    return () => cancelAnimationFrame(frame);
   });
+
+  /** A press here keeps the find field's caret where it is (the composer's controls do the same). */
+  function keepField(event: MouseEvent): void {
+    if (
+      document.activeElement instanceof HTMLInputElement &&
+      document.activeElement.closest('[data-slot="find-line"]')
+    ) {
+      event.preventDefault();
+    }
+  }
 
   let now = $state(Date.now());
   $effect(() => {
@@ -114,7 +139,7 @@
         inline={!narrow}
         line={find.hub.kind === "unreached"
           ? findInWords.unreached(find.hub.machine)
-          : findInWords.nothingLine}
+          : undefined}
         title={findInWords.nothingTitle(find.words.trim())}
       >
         {#snippet action()}
@@ -124,7 +149,7 @@
             >
           {:else}
             <Button
-              onclick={() => jumpWith(find.words.trim())}
+              onclick={() => barGlass.jumpWith(find.words.trim())}
               size="sm"
               variant="outline">{findInWords.everywhere}</Button
             >
@@ -133,6 +158,8 @@
       </EmptyState>
     </div>
   {:else}
+    <!-- A press on a filter or a place leaves the caret in the find field,
+         so Enter steps on from where the press landed. -->
     <div
       class="flex flex-none flex-wrap items-center gap-space-1 px-space-3 pt-space-2 pb-space-2"
       role="toolbar"
@@ -145,6 +172,7 @@
           aria-pressed={find.whose === one.value}
           disabled={count === 0 && one.value !== "all"}
           onclick={() => find.filter(one.value)}
+          onmousedown={keepField}
           type="button"
           >{one.label}{#if count > 0}<span
               class="num font-normal text-ink-subtle group-aria-pressed/chip:text-brand-ink"
@@ -171,7 +199,10 @@
       </p>
     {/if}
     {#if waiting}
-      <div class="flex flex-col gap-space-2 px-space-3 py-space-2" aria-busy="true">
+      <div
+        class="flex flex-col gap-space-2 px-space-3 py-space-2"
+        aria-busy="true"
+      >
         {#each [0, 1, 2] as n (n)}
           <Skeleton height="reason-row" />
         {/each}
@@ -180,9 +211,13 @@
       <div
         class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain p-space-1 pt-0"
         aria-label={findInWords.places}
+        onmousedown={keepField}
         role="listbox"
         bind:this={list}
-        {@attach highlight({ rows: "[data-find-row]", hovered: "[data-active]" })}
+        {@attach highlight({
+          rows: "[data-find-row]",
+          hovered: "[data-active]",
+        })}
       >
         {#each rows as row (row.key)}
           <FindRow
@@ -190,7 +225,10 @@
             id={`place-${find.viewId}-${row.key}`}
             {now}
             onpick={() => find.pick(row.key, narrow)}
+            onsecret={(key) => shown.add(key)}
+            phone={narrow}
             {row}
+            {shown}
           />
         {/each}
       </div>

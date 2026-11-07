@@ -43,6 +43,7 @@ import {
 import type { TranscriptDoc, TranscriptFile } from "@cawco/jsonl-parser";
 import {
   type ListOptions,
+  type PlacesOptions,
   type SearchOptions,
   TranscriptIndex,
   type TurnsOptions,
@@ -115,6 +116,7 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
 /** What the reader is asked, by name: each op takes one argument, and answers once. */
 const readOps = (index: TranscriptIndex) => ({
   turns: (options: TurnsOptions) => Promise.resolve(index.turns(options)),
+  places: (options: PlacesOptions) => Promise.resolve(index.places(options)),
   listed: (options: ListOptions) => Promise.resolve(index.listed(options)),
   search: (args: { query: string; options: SearchOptions }) =>
     Promise.resolve(index.search(args.query, args.options)),

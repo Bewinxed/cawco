@@ -14,6 +14,8 @@ import {
   TRANSCRIPT_ANSWER_MS,
   TRANSCRIPT_QUERY_MS,
   type TranscriptAnswer,
+  type TranscriptPlace,
+  type TranscriptPlacesQuery,
   type TranscriptQuery,
   type TranscriptTurns,
   type TranscriptTurnsQuery,
@@ -68,6 +70,12 @@ const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_LISTED_DOCS = 200;
 /** The most turns either side of a centre `turns` answers with: `find`'s detailed `around` asks five. */
 const MAX_TURNS_SIDE = 10;
+/**
+ * The most places one conversation's find answers with: a conversation
+ * saying a word more often than this is stepped through the first of them.
+ * Our own call: a few hundred rows draw in the places list at once.
+ */
+const MAX_PLACES = 500;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -281,6 +289,27 @@ export class TranscriptSearchService {
         side: Math.min(Math.max(0, query.side), MAX_TURNS_SIDE),
         ...(query.docId ? { docId: query.docId } : {}),
         ...(query.at === undefined ? {} : { at: query.at }),
+      },
+      signal
+    );
+  }
+
+  /**
+   * Every place in one conversation where the words stand (fts5.ts
+   * `places`), oldest first, brought up to date first as a search is: what
+   * the person's find in that conversation steps through.
+   */
+  async places(
+    query: TranscriptPlacesQuery,
+    signal?: AbortSignal
+  ): Promise<TranscriptPlace[]> {
+    await this.#fresh();
+    return this.#reader.read(
+      "places",
+      {
+        sessions: query.sessions,
+        words: query.words,
+        limit: Math.min(Math.max(1, query.limit), MAX_PLACES),
       },
       signal
     );

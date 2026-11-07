@@ -132,20 +132,20 @@
       >
     {/if}
     {#if row.state.word || row.meta.length > 0}
-    <span
-      data-slot="meta"
-      class="row-start-2 col-start-2 col-end-4 line-clamp-2 type-meta leading-icon-md text-ink-muted group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md"
-      aria-hidden="true"
-      data-box
-    >
       <span
-        class="font-medium text-ink-muted tone-live:text-status-live-ink tone-attn:text-status-attn-ink tone-fail:text-status-fail-ink"
-        data-tone={row.state.tone}>{row.state.word}</span
+        data-slot="meta"
+        class="row-start-2 col-start-2 col-end-4 line-clamp-2 type-meta leading-icon-md text-ink-muted group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md"
+        aria-hidden="true"
+        data-box
       >
-      {#each row.meta as word (word)}
-        <span class="px-space-1">·</span>{word}
-      {/each}
-    </span>
+        <span
+          class="font-medium text-ink-muted tone-live:text-status-live-ink tone-attn:text-status-attn-ink tone-fail:text-status-fail-ink"
+          data-tone={row.state.tone}>{row.state.word}</span
+        >
+        {#each row.meta as word (word)}
+          <span class="px-space-1">·</span>{word}
+        {/each}
+      </span>
     {/if}
     {#if row.reason}
       <span

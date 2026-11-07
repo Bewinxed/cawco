@@ -1570,6 +1570,12 @@ export const FIND_QUERY = t.Object({
   transcripts: t.Optional(t.Union([t.Literal("0"), t.Literal("1")])),
 });
 
+/** `GET /api/find/places`' query: one conversation, by its instance id, and the words. */
+export const FIND_PLACES_QUERY = t.Object({
+  session: t.String({ minLength: 1 }),
+  q: t.String(),
+});
+
 /** `kinds=conversation,task` read into kinds, or the refusal naming the unknown one. */
 const kindsOf = (raw: string | undefined): FindKind[] | undefined => {
   if (!raw?.trim()) {

@@ -265,6 +265,55 @@ export interface TurnsOptions {
   side: number;
 }
 
+/**
+ * What `places` reads: every place in one conversation where the words
+ * stand together, what tools answered included, for the person's find in
+ * that conversation to step through (core `FindPlace`).
+ */
+export interface PlacesOptions {
+  /** The conversation, by every harness session id it went by. */
+  sessions: readonly string[];
+  /** The words, matched as one phrase, the last also as the start of a longer word. */
+  words: string;
+  /** The most places answered, the oldest first. */
+  limit: number;
+}
+
+/** One place `places` answers. */
+export interface IndexedPlace {
+  author: DocAuthor;
+  /**
+   * For words in what a tool answered: the record that called the tool (the
+   * nearest record of the conversation before it that called one), which a
+   * transcript draws the call and its output under; null elsewhere.
+   */
+  calledBy: { docId: string; tools: string } | null;
+  /** Which of its columns holds the words. */
+  column: "output" | "text" | "thinking";
+  docId: string;
+  /** The words round the match, the match between 「 and 」. */
+  excerpt: string;
+  timestamp: string | null;
+}
+
+/** How far before a tool's answer its call is sought, ms: a call answered later than this names no call. Our own call. */
+const CALL_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * How many characters of a place's words stand before its match and after
+ * it: little before, so a narrow row still shows the match.
+ */
+const PLACE_LEAD = 32;
+const PLACE_TAIL = 96;
+
+/** `column` cut round `at` (`length` long), the match marked as the engine marks it. */
+function placeExcerpt(column: string, at: number, length: number): string {
+  const from = Math.max(0, at - PLACE_LEAD);
+  const to = Math.min(column.length, at + length + PLACE_TAIL);
+  const flat = (text: string) => text.replace(SPACES, " ");
+  return `${from > 0 ? "…" : ""}${flat(column.slice(from, at))}「${flat(column.slice(at, at + length))}」${flat(column.slice(at + length, to))}${to < column.length ? "…" : ""}`;
+}
+
 /** One record of a conversation as `turns` answers it: its words, each column cut to {@link TURN_CHARS}. */
 export interface IndexedTurn {
   author: DocAuthor;
@@ -1581,6 +1630,104 @@ export class TranscriptIndex {
    * A neighbour is a record with words or calls outside a subagent; a tool's
    * answer or a thought alone is a turn only at the centre.
    */
+  /**
+   * Every place in one conversation whose words hold `words` together (an
+   * FTS5 phrase over what was said, thought, called and what tools
+   * answered; the last word also as the start of a longer one), oldest
+   * first, its own words and never a subagent's (a sidechain). Each is cut
+   * round where the words stand in it, the column that holds them as they
+   * were typed first (what was said, then thought, then what a tool
+   * answered), and a tool's answer names the record that called it.
+   */
+  places(options: PlacesOptions): IndexedPlace[] {
+    return section("search index: places", () => this.#placesNow(options));
+  }
+
+  #placesNow(options: PlacesOptions): IndexedPlace[] {
+    const { words, prefix } = matchQueries(options.words);
+    const sessions = this.#sessionIds(options.sessions);
+    if (words.length === 0 || sessions === null) {
+      return [];
+    }
+    const phrase = `"${words.join(" ")}"${prefix ? "*" : ""}`;
+    const rows = this.db
+      .prepare(
+        `SELECT d.doc_id, d.session, a.value AS author, d.ts, d.text, d.thinking, d.output
+         FROM docs_fts f
+         JOIN docs d ON d.id = f.rowid
+         JOIN strings a ON a.id = d.author
+         WHERE docs_fts MATCH ?
+           AND d.session IN (SELECT value FROM json_each(?))
+           AND d.sidechain = 0
+         ORDER BY coalesce(d.ts, ''), d.id
+         LIMIT ?`,
+      )
+      .all(phrase, sessions, options.limit) as {
+      author: DocAuthor;
+      doc_id: string;
+      output: string | null;
+      session: number;
+      text: string;
+      thinking: string | null;
+      ts: string | null;
+    }[];
+    const needle = options.words.trim().replace(SPACES, " ").toLowerCase();
+    const first = words[0]?.toLowerCase() ?? "";
+    const callOf = this.db.query(
+      `SELECT doc_id, tools FROM docs INDEXED BY docs_key
+       WHERE coalesce(ts, '') <= ?1 AND coalesce(ts, '') >= ?2
+         AND session = ?3 AND sidechain = 0 AND tools IS NOT NULL AND doc_id != ?4
+       ORDER BY coalesce(ts, '') DESC LIMIT 1`,
+    );
+    return rows.flatMap((row): IndexedPlace[] => {
+      const columns = [
+        ["text", row.text],
+        ["thinking", row.thinking],
+        ["output", row.output],
+      ] as const;
+      // Where the words stand as typed; else (a stemmed match) where their first word does.
+      const found =
+        columns
+          .map(([name, column]) => ({
+            name,
+            column,
+            at: column?.toLowerCase().indexOf(needle) ?? -1,
+            length: needle.length,
+          }))
+          .find((each) => each.at >= 0) ??
+        columns
+          .map(([name, column]) => ({
+            name,
+            column,
+            at: first ? (column?.toLowerCase().indexOf(first) ?? -1) : -1,
+            length: first.length,
+          }))
+          .find((each) => each.at >= 0);
+      if (!found?.column) {
+        return [];
+      }
+      let calledBy: IndexedPlace["calledBy"] = null;
+      if (found.name === "output" && row.ts) {
+        const since = new Date(Date.parse(row.ts) - CALL_WINDOW_MS).toISOString();
+        const call = callOf.get(row.ts, since, row.session, row.doc_id) as {
+          doc_id: string;
+          tools: string;
+        } | null;
+        calledBy = call ? { docId: call.doc_id, tools: call.tools } : null;
+      }
+      return [
+        {
+          author: row.author,
+          calledBy,
+          column: found.name,
+          docId: row.doc_id,
+          excerpt: placeExcerpt(found.column, found.at, found.length),
+          timestamp: row.ts,
+        },
+      ];
+    });
+  }
+
   turns(options: TurnsOptions): TurnsAnswer {
     return section("search index: turns", () => this.#turnsNow(options));
   }

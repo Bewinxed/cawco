@@ -364,11 +364,36 @@
   $effect(() => shellShortcutsAre(act));
 
   /**
-   * Command-F finds in the conversation the keyboard is in (its pane or its
-   * composer, `data-find-view`), else the one in front; with none, the
-   * browser's own find. Pressed again, it closes find. A key: what it opens
-   * lands at once (motion/keyed). Never forwarded from an artifact's page,
-   * whose own find it is.
+   * The conversation Command-F finds in: the one the keyboard is in (its
+   * pane or its composer, `data-find-view`), else the workspace's tab in
+   * front, else the one conversation on screen (Caw's panel over a project's
+   * page); none, and the browser's own find takes the key.
+   */
+  function findView(): string | null {
+    const at =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement.closest<HTMLElement>("[data-find-view]")
+            ?.dataset.findView
+        : undefined;
+    if (at) {
+      return at;
+    }
+    const front = workspace.activeTab;
+    if (onSession && front && composerBindings.has(front)) {
+      return front;
+    }
+    const shown = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-slot="pane"][data-find-view]'
+      ),
+    ].filter((pane) => pane.checkVisibility());
+    return shown.length === 1 ? (shown[0]?.dataset.findView ?? null) : null;
+  }
+
+  /**
+   * Command-F finds in a conversation (`findView`); pressed again, it closes
+   * find. A key: what it opens lands at once (motion/keyed). Never forwarded
+   * from an artifact's page, whose own find it is.
    */
   function findKey(event: KeyboardEvent): boolean {
     if (
@@ -376,18 +401,12 @@
       event.shiftKey ||
       event.altKey ||
       event.key.toLowerCase() !== "f" ||
-      event.defaultPrevented ||
-      !onSession
+      event.defaultPrevented
     ) {
       return false;
     }
-    const at =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement.closest<HTMLElement>("[data-find-view]")
-            ?.dataset.findView
-        : undefined;
-    const viewId = at ?? workspace.activeTab;
-    if (!(viewId && (at || composerBindings.has(viewId)))) {
+    const viewId = findView();
+    if (!viewId) {
       return false;
     }
     event.preventDefault();

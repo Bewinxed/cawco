@@ -162,6 +162,33 @@ export type TranscriptTurns =
     }
   | { missing: string };
 
+/**
+ * What the hub asks a machine's transcript index for one conversation's
+ * places (`transcriptPlaces`): every record whose words hold the words
+ * together, what tools answered included.
+ */
+export interface TranscriptPlacesQuery {
+  /** The most places answered, oldest first. */
+  limit: number;
+  /** The conversation, by every harness session id it went by. */
+  sessions: string[];
+  /** The words, as one phrase. */
+  words: string;
+}
+
+/** One place a machine's index answers a {@link TranscriptPlacesQuery} with. */
+export interface TranscriptPlace {
+  author: TranscriptAuthor;
+  /** For words in what a tool answered: the record that called it, and the tools it called, space-joined. */
+  calledBy: { docId: string; tools: string } | null;
+  /** Which of the record's columns holds the words. */
+  column: "output" | "text" | "thinking";
+  docId: string;
+  /** The words round the match, the match between 「 and 」. */
+  excerpt: string;
+  timestamp: string | null;
+}
+
 /** Every kind of thing a find answers with. */
 export const FIND_KINDS = [
   "conversation",
@@ -232,15 +259,18 @@ export interface FindPlace {
   /** When it was said, ms epoch; null when the transcript kept no time. */
   at: number | null;
   /**
-   * The tool call whose output holds the words, by its call id, for its fold
-   * to open; a delegate's report, by its record. Null for words said in the
-   * open.
+   * The record to open at: for a tool's output, the record that called it,
+   * under which a transcript draws the call and what it answered (its fold
+   * is opened once the transcript holds the record).
    */
-  call: string | null;
-  /** The record to open at: for a tool's output, the record that called it. */
   docId: string;
   /** The words round the match, terms between 「 and 」. */
   excerpt: string;
+  /**
+   * The secrets its excerpt holds, in the excerpt's words with its 「 」
+   * marks left out: present only while "Hide secrets in Find" is on.
+   */
+  secrets?: SecretSpan[];
   /** In the agent's reasoning, not what it said. */
   thinking: boolean;
   /** For a tool's output, the tool's name. */
