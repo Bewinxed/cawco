@@ -1594,10 +1594,11 @@
               class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
             >
               <span class="type-label text-ink-row">{words.width}</span>
-              <!-- Each width once: his own is the listed width it
-                   equals, marked his own, and stands apart only when
-                   none is. The names are the items' own; no tooltip
-                   opens over the card. -->
+              <!-- Each width once: the component's own is the listed
+                   width it equals, so named, and stands apart only when
+                   none is; the line under the widths says which it is.
+                   The names are the items' own; no tooltip opens over the
+                   card. -->
               <ToggleGroup.Root
                 aria-label={words.width}
                 class="justify-self-end max-phone:justify-self-start"
@@ -1610,7 +1611,6 @@
                     "own",
                     words.ownWidth(figure(ownWidth)),
                     ownWidth,
-                    true,
                     IconMaximize
                   )}
                 {/if}
@@ -1622,11 +1622,16 @@
                       ? words.ownListed(one.name, figure(one.value))
                       : words.widthOf(one.name, figure(one.value)),
                     one.value,
-                    own,
                     one.icon
                   )}
                 {/each}
               </ToggleGroup.Root>
+              <!-- Which width is the component's own, said in words under
+                   the widths (a mark on its figure said it to no one). -->
+              <span
+                class="col-start-2 -mt-space-2 justify-self-end type-meta text-ink-muted num max-phone:col-start-1 max-phone:mt-0 max-phone:justify-self-start"
+                data-slot="own-width">{words.ownWidth(figure(ownWidth))}</span
+              >
             </div>
             <div
               class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
@@ -1720,19 +1725,13 @@
   value: string,
   name: string,
   px: number,
-  own: boolean,
   Icon: typeof IconPhone
 )}
   <ToggleGroup.Item aria-label={name} {value}>
     <!-- The device's glyph, then its figure, on one line inside the item. -->
     <span class="mark-line flex items-center gap-space-1" data-box>
       <Icon aria-hidden="true" class="size-icon-md flex-none" data-box />
-      <span
-        class={[
-          "type-meta num",
-          own && "underline decoration-dotted underline-offset-2",
-        ]}>{figure(px)}</span
-      >
+      <span class="type-meta num">{figure(px)}</span>
     </span>
   </ToggleGroup.Item>
 {/snippet}

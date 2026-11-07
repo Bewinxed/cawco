@@ -321,9 +321,14 @@
           [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY],
         ];
       }
+      // The view reaches past the set by the room what floats over it
+      // takes, so the set's first and last cards can stand clear of it.
       return [
-        [bounds.left - gutter, bounds.top - gutter],
-        [bounds.right + gutter, bounds.bottom + gutter],
+        [bounds.left - gutter, bounds.top - gutter - insets.top / READABLE],
+        [
+          bounds.right + gutter,
+          bounds.bottom + gutter + insets.bottom / READABLE,
+        ],
       ];
     }
   );
@@ -349,8 +354,9 @@
       ? (low + high) / 2
       : Math.min(high - span / 2, Math.max(low + span / 2, at));
   /**
-   * Where a fit held at READABLE stands: on the kept card, held so the view
-   * never reaches past the set's bounds. Centred on the card alone, a card
+   * Where a fit held at READABLE stands: on the kept card, held so the room
+   * clear of the head and the tools (`insets`, the fit's own) never reaches
+   * past the set's bounds. Centred on the card alone, a card
    * near the set's edge left a band of bare dots on one side and the set
    * cut on the other.
    */
@@ -367,12 +373,17 @@
         left,
         right
       ),
-      y: within(
-        box.y + box.h / 2,
-        (pane?.clientHeight ?? 0) / READABLE,
-        top,
-        bottom
-      ),
+      // Held in the room left clear of the room's head and the tools (the
+      // fit's own `insets`), then said as the view's middle, which stands
+      // that much off the clear room's.
+      y:
+        within(
+          box.y + box.h / 2,
+          ((pane?.clientHeight ?? 0) - insets.top - insets.bottom) / READABLE,
+          top,
+          bottom
+        ) -
+        (insets.top - insets.bottom) / 2 / READABLE,
     };
   };
 </script>

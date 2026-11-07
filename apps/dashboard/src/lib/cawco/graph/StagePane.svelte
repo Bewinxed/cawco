@@ -257,7 +257,7 @@
           id="{uid}-differences"
           data-slot="differences"
           aria-label={words.differences}
-          class="pointer-events-auto -ms-space-1 m-0 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0 pb-space-2"
+          class="pointer-events-auto -ms-space-1 m-0 flex list-none flex-col items-start p-0 pb-space-2"
         >
           {#each lines as line, at (at)}
             <li class="min-w-0">

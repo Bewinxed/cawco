@@ -40,9 +40,9 @@
     /** The nodes' placement, as a key: a change refits in place. */
     layout?: string;
     minZoom?: number;
-    /** Where a fit held at `minZoom` centres, in the flow's own coordinates; null: the whole's middle. */
+    /** Where a fit held at `minZoom` centres the view, in the flow's own coordinates, the room `insets` keeps already counted; null: the whole's middle. */
     focus?: () => { x: number; y: number } | null;
-    /** What floats over the canvas's top and foot, px (a head, a group of tools): the fit and the focus stand clear of it. */
+    /** What floats over the canvas's top and foot, px (a head, a group of tools): the fit stands clear of it; a `focus` says its middle with the same room kept. */
     insets?: { top: number; bottom: number };
   } = $props();
   const { fitView, getZoom, setCenter } = useSvelteFlow();
@@ -51,9 +51,7 @@
     await fitted;
     const at = focus?.();
     if (at && minZoom !== undefined && getZoom() <= minZoom + 0.001) {
-      // The middle of the room clear of what floats over the canvas.
-      const shift = (insets.top - insets.bottom) / 2 / minZoom;
-      await setCenter(at.x, at.y - shift, { zoom: minZoom, duration });
+      await setCenter(at.x, at.y, { zoom: minZoom, duration });
     }
   };
   const frame = () => ({

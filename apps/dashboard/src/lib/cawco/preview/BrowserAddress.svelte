@@ -8,16 +8,17 @@
    *
    * It shows the place (address.ts `placeOf`): the registrable domain is
    * never cut, what stands before it gives way first; an https scheme goes
-   * unsaid. Who drives is its glyph, the word in its name and tooltip (a
+   * unsaid. Who drives is its glyph, the words in its name and tooltip (a
    * list's state rule): the agent's ghost while it drives, the pointer
-   * once the person holds the browser, with the Private chip beside, its
-   * ends the capsule's. No padlock: it read as a secure connection.
+   * once the person holds the browser, its words then saying what holding
+   * it means (nothing done here reaches the agent). No chip: a "Private"
+   * mark louder than the address said nothing of what was private; no
+   * padlock: it read as a secure connection.
    * It stands only while the browser is live; the stream's own face says
    * every other state. `as="menu"` is the same as More's first line, where
    * a desk's head lacks the room; the origin wraps there.
    */
   import { browserWords } from "@cawco/core/words/browser";
-  import { Badge } from "#lib/components/ui/badge/index.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconAgentLinear, IconInteractLinear } from "#lib/icons.js";
@@ -36,8 +37,11 @@
     as?: "bar" | "menu";
   } = $props();
 
+  /** Who drives, in words: the glyph's tooltip and the address's name. While the person holds it, what that means for the agent too. */
   const control = $derived(
-    mine ? browserWords.youHaveControl : browserWords.agentDriving
+    mine
+      ? `${browserWords.youHaveControl}. ${browserWords.privateLine}`
+      : browserWords.agentDriving
   );
   const place = $derived(origin ? placeOf(origin) : null);
   const name = $derived(`${origin ?? browserWords.noPage}, ${control}`);
@@ -52,14 +56,6 @@
 {/snippet}
 
 {#snippet held()}
-  {#if mine}
-    <Badge
-      aria-hidden="true"
-      data-box
-      data-slot="browser-private"
-      size="capsule"><span>{browserWords.private}</span></Badge
-    >
-  {/if}
   <span class="sr-only" data-slot="browser-control">{control}</span>
 {/snippet}
 
@@ -77,7 +73,7 @@
   <BarGlass form="group">
     <div
       aria-label={name}
-      class="mark-line flex h-c-bar-item min-w-0 max-w-c-browser-address-w items-center gap-space-1 ps-space-2 pe-space-3 has-data-[slot=browser-private]:pe-space-1 type-meta text-ink-strong"
+      class="mark-line flex h-c-bar-item min-w-0 max-w-c-browser-address-w items-center gap-space-1 ps-space-2 pe-space-3 type-meta text-ink-strong"
       data-mine={mine || undefined}
       data-slot="browser-address"
       role="status"
