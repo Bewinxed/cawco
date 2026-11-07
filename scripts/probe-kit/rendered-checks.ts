@@ -49,7 +49,7 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
- * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws on the control's box (at four points 3px in from each side's middle, composed bottom up, glyphs aside; a glyph or face changing at its centre alone draws nothing on the box) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered;  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused as the keyboard focuses it (`focus({ focusVisible: true })`, so `:focus-visible` matches and a ring placed on `focusin` draws; none while focus stands inside an open layer, and focus put back after), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
+ * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws on the control's box (at four points 3px in from each side's middle, composed bottom up, glyphs aside; a glyph or face changing at its centre alone draws nothing on the box) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered (one on no part of the screen, clipped away whole by what holds it or off it, is said unread);  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused as the keyboard focuses it (`focus({ focusVisible: true })`, so `:focus-visible` matches and a ring placed on `focusin` draws; none while focus stands inside an open layer, and focus put back after), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
  * | touch       | own code                    | on a coarse pointer, each control in a bar's capsule of glass and each segment of a groove: its box with its placed pseudos (`touch-hit`), a field in a frame (InputGroup) with the frame's too, each side stopped at the midpoint to the control beside it there that a press at its centre reaches (the page under a sheet stops nothing), 44×44 or more |
  * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's top trailing corner taking no room, its leading edge at or past the glyph's centre (within half a pixel), over at most a fifth of its own glyph's ink and no more of a neighbour's than a one-figure count standing there (shapes' fill and stroke sampled every half pixel), at any width of count |
  * | baseline    | own code                    | in a flex row set on first baselines (`items-baseline`), each item that is or holds a control stands its first words' baseline within 1px of the first other item's words on its line (a text run's baseline: its line box's top plus the font's ascent share of its height) |
@@ -3969,21 +3969,33 @@ function readInPage(args: InPageArgs): InPageRead {
      * its size or more over it; a glyph's shapes and what stands over `el`
      * (a tooltip) are not its drawing. With `ground`, only what holds it.
      */
-    const tonesOf = (el: Element, ground: boolean): Rgba[] => {
+    const tonesOf = (el: Element, ground: boolean): Rgba[] =>
+      pointsOf(el).map(([x, y]) => toneAt(el, ground, x, y));
+    /** Its five points: its centre, and 3px in from the middle of each side. */
+    const pointsOf = (el: Element): (readonly [number, number])[] => {
       const b = el.getBoundingClientRect();
       const cx = (b.left + b.right) / 2;
       const cy = (b.top + b.bottom) / 2;
       const IN = 3;
-      return (
-        [
-          [cx, cy],
-          [b.left + IN, cy],
-          [b.right - IN, cy],
-          [cx, b.top + IN],
-          [cx, b.bottom - IN],
-        ] as const
-      ).map(([x, y]) => toneAt(el, ground, x, y));
+      return [
+        [cx, cy],
+        [b.left + IN, cy],
+        [b.right - IN, cy],
+        [cx, b.top + IN],
+        [cx, b.bottom - IN],
+      ];
     };
+    /**
+     * Whether it stands anywhere on the screen at its five points, under
+     * whatever covers it: hit at none, what holds it clips it away whole
+     * (the design graph's stage, closed to no height under its drawer at
+     * the whole stop, its bar with it), or it stands off the screen, and
+     * what it draws there nobody sees. Read so, every point composed
+     * without it, its rest and each state read the same, and the press
+     * "painted nothing" (graph-stage at 6150a0010).
+     */
+    const onScreen = (el: Element) =>
+      pointsOf(el).some(([x, y]) => stackAt(x, y).includes(el));
     /** The greatest of the points' distances between two reads of them. */
     const apartAll = (a: Rgba[], b: Rgba[]) =>
       Math.max(0, ...a.map((one, i) => apart(one, b[i] ?? one)));
@@ -4512,6 +4524,7 @@ function readInPage(args: InPageArgs): InPageRead {
       );
       const rest = new Map<Element, Map<string, string>>();
       const tones = new Map<Element, Rgba[]>();
+      const unseen: Element[] = [];
       for (const el of read) {
         const fills = fillsOf(el);
         rest.set(el, new Map(fills.map((f) => [f.key, f.sig])));
@@ -4520,8 +4533,13 @@ function readInPage(args: InPageArgs): InPageRead {
         }
         // Chosen in a bar's glass or a groove, it is painted where it
         // stands (its own wash, or the thumb under it), seen off the ground.
-        const glass = glassFor(el);
-        if (glass || inGroove(el)) {
+        // One on no part of the screen draws nothing anyone sees: what it
+        // draws on its box is not read (no tones kept, so no forced state
+        // reads it either), and said unread.
+        const drawnOn = Boolean(glassFor(el)) || inGroove(el);
+        if (drawnOn && !onScreen(el)) {
+          unseen.push(el);
+        } else if (drawnOn) {
           const tone = tonesOf(el, false);
           tones.set(el, tone);
           const off = el.matches(CHOSEN)
@@ -4546,6 +4564,14 @@ function readInPage(args: InPageArgs): InPageRead {
           (el as HTMLElement).tabIndex >= 0 &&
           (el.closest(BAR) || glassFor(el) || inGroove(el))
       );
+      if (unseen.length > 0) {
+        unread.push(
+          `state-shape: ${unseen.length} control(s) of a bar's glass or a groove stand on no part of the screen (clipped away whole by what holds them, or off it), what they draw on their box unread: ${unseen
+            .slice(0, 3)
+            .map(describe)
+            .join("; ")}`
+        );
+      }
       stash.__stateShape = { els: read, rest, tones, rings };
     }
   }

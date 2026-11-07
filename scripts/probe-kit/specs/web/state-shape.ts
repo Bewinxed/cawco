@@ -47,6 +47,10 @@
  *     hover, clicked as a spec clicks Expand and left there. The read parks
  *     the pointer off every control first (parkPointer), so its rest is
  *     unhovered and its forced hover draws on its box.
+ * 13. a glass clipped away: a glass of items drawn right, in a head that
+ *     stands in a box of no height that clips (the design graph's stage at
+ *     its drawer's whole stop): on no part of the screen, their fills are
+ *     said unread, never "paints nothing".
  *
  *   bun scripts/probe-kit/run.ts web state-shape
  */
@@ -71,6 +75,8 @@ interface Fixture {
   /** What the spec does before it reads, as a person would. */
   act?: (page: Page) => Promise<void>;
   html: string;
+  /** Words the read's unread lines must hold (what the rule said it could not read). */
+  unread?: string;
   /** The control the rule must name (its selector holds this); none for a page drawn right. */
   want: string | null;
 }
@@ -215,6 +221,24 @@ const FIXTURES: Record<string, Fixture> = {
 </div>`,
     want: null,
   },
+  "a glass clipped away": {
+    html: `${BASE}<style>
+  .stage { position: relative; block-size: 0; overflow: clip; border-radius: 12px; }
+  .head { position: absolute; inset-inline: 0; top: 0; display: flex; justify-content: end; }
+  .glass button { border-radius: 5px; }
+  .glass button:first-child { border-start-start-radius: 15px; border-end-start-radius: 15px; }
+  .glass button:last-child { border-start-end-radius: 15px; border-end-end-radius: 15px; }
+  .glass button:is(:hover, :active, [aria-pressed="true"]) { background: #e6e0d6; }
+  .glass button[aria-pressed="true"]:is(:hover, :active) { background: #d9d1c4; }
+</style>
+<div class="stage"><header class="head"><div class="glass" role="toolbar" aria-label="Stage">
+  <button type="button" aria-pressed="true" aria-label="Compare"><span class="glyph"></span></button>
+  <button type="button" aria-label="View options"><span class="glyph"></span></button>
+</div></header></div>`,
+    unread:
+      "2 control(s) of a bar's glass or a groove stand on no part of the screen",
+    want: null,
+  },
   "a button alone": {
     html: `${BASE}<style>
   .act { block-size: 30px; padding-inline: 11px; border-radius: 10px; background: #fff; }
@@ -249,7 +273,14 @@ const spec: Spec = {
         found.length > 0
           ? found.map((one) => `${one.element}: ${one.measured}`).join(" | ")
           : "0 findings";
-      const { want } = fixture;
+      const { unread, want } = fixture;
+      if (unread) {
+        kit.check(
+          `state-shape: ${label}, said unread`,
+          read.unread.some((line) => line.includes(unread)),
+          read.unread.join(" | ") || "nothing said unread"
+        );
+      }
       if (want) {
         kit.check(
           `state-shape: ${label}, names ${want}`,
