@@ -35,7 +35,7 @@ const CARDS: Record<TemplateName, Omit<TemplateCard, "template">> = {
     icon: IconFileCode,
     hue: "var(--hue-cyan-500)",
     name: "Code",
-    meta: "Tasks worked on, reviewed, then landed",
+    meta: "Tasks worked on, reviewed by you, then landed",
   },
   launch: {
     icon: IconRocket,

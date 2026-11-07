@@ -46,12 +46,6 @@
  *   stage after it or drops it; a session only sends it back, to a stage
  *   before it that is not dropped. Telling a session to move it counts for
  *   nothing: it asks you, and you move it.
- * - **A review stage** is the first active stage whose `runs:` type loads
- *   the `review-attempt` skill ({@link reviewStageOf}): an attempt whose
- *   acceptance lines Jev does not show met goes there rather than to you,
- *   and the reviewer's verdict moves the task on (dispatch.ts
- *   `settleReview`). An attempt there runs that type, whatever the task's
- *   own `type:`, and lands nothing.
  * - **Its look**, beside the hooks: `color: <hue>` and `icon: <glyph>` give
  *   the stage's mark on the board, a glyph by a plain word in a section hue
  *   (core `STAGE_COLORS`, `STAGE_ICONS`). Neither is required; a stage with
@@ -619,23 +613,6 @@ export const waitingStageOf = (
   );
 };
 
-/** The skill a reviewer type loads: what makes the stage that runs it a review stage. */
-export const REVIEW_SKILL = "review-attempt";
-
-/**
- * The project's review stage: the first stage of kind `active` whose
- * `runs:` type loads {@link REVIEW_SKILL} (`reviews` says, by the type's
- * name, through the project's catalog); undefined when it has none.
- */
-export const reviewStageOf = (
-  stages: Stages,
-  reviews: (type: string) => boolean
-): Stage | undefined =>
-  stages.stages.find(
-    (stage) =>
-      stage.kind === "active" && !!stage.hooks.runs && reviews(stage.hooks.runs)
-  );
-
 /**
  * Why a move into an active stage (or a new task filed there, `from` "")
  * would leave the task with nothing working on it there: no live attempt,
@@ -671,13 +648,7 @@ const unknownStage = (stages: Stages, name: string): string =>
     "and"
   )}.`;
 
-/**
- * Why `who` may not put a new task in `stage`, or undefined when they may.
- * A session files one only in a stage of kind todo or you, where it waits:
- * entering an active stage is a start (task_start, a delegate naming the
- * task, dispatch or the person makes it), and a waiting, done or dropped
- * stage carries it past its start.
- */
+/** Why `who` may not put a new task in `stage`, or undefined when they may. */
 export const startProblem = (
   stages: Stages,
   stage: string,
@@ -686,17 +657,6 @@ export const startProblem = (
   const to = stageNamed(stages, stage);
   if (!to) {
     return unknownStage(stages, stage);
-  }
-  if (who === "session" && to.kind !== "todo" && to.kind !== "you") {
-    return stageWords.filed(
-      stage,
-      to.kind,
-      listed(
-        stages.stages
-          .filter((each) => each.kind === "todo" || each.kind === "you")
-          .map((each) => each.name)
-      )
-    );
   }
   if (!mayEnter(to, who)) {
     return `Only ${moverPhrase(to.hooks.by as Mover)} moves a task to ${stage}.`;
@@ -780,25 +740,21 @@ const TEMPLATE_TEXT: Record<StagesTemplate, { block: string; about: string }> =
   {
     code: {
       about:
-        "Stages for code: a task waits in ready, is worked on, and lands in done.\nAn attempt whose acceptance lines are not shown met goes to review, where\na reviewer reads it against them: its verdict closes the task, or sends it\nback to working with what is missing as to-dos. Your call holds what you\nsend there yourself, or what the reviewer says is yours to decide, with\nits card. Turn on Review before done and every task waits there for you.",
+        "Stages for code: a task waits in ready, is worked on, and lands in done.\nReview is for the tasks you want a look at: a task there waits for you,\nand only you move it on. Turn on Review before done and every task waits\nthere for you.",
       block: `ready      todo
 working    active
-review     active    runs: reviewer
-your-call  you
+review     you
 done       done
 dropped    dropped
 moves
   * → *                you
   ready → working      session
+  ready → review       session
   ready → done         session
-  working → done       session
   working → review     session
-  review → done        session
+  working → done       session
   review → working     session
   review → ready       session
-  review → your-call   session
-  your-call → working  session
-  your-call → ready    session
   * → dropped          session
 views
   board      by stage
@@ -1027,10 +983,9 @@ export const ruledStages = (stages: Stages, review: boolean): Stages =>
  * The code template's blocks as they were. Before review became a project's
  * choice: every task waited for your review, and only you moved one to
  * done. Then, until a stage of kind `you` held by its kind: a session also
- * moved a task from review to done. Then, until review became the
- * reviewer's stage: review was yours, of kind `you`. A stages.md that reads
- * as any of them (or as today's code template) is the template the project
- * was made with, not one of its own (`isCodeTemplate`).
+ * moved a task from review to done. A stages.md that reads as either (or as
+ * today's code template) is the template the project was made with, not one
+ * of its own (`isCodeTemplate`).
  */
 const FORMER_CODE = [
   `---
@@ -1068,27 +1023,6 @@ moves
   review → working     session
   review → ready       session
   review → done        session
-  * → dropped          session
-views
-  board      by stage
-  table      by rank
----
-`,
-  `---
-ready      todo
-working    active
-review     you
-done       done
-dropped    dropped
-moves
-  * → *                you
-  ready → working      session
-  ready → review       session
-  ready → done         session
-  working → review     session
-  working → done       session
-  review → working     session
-  review → ready       session
   * → dropped          session
 views
   board      by stage

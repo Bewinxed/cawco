@@ -166,40 +166,7 @@ export interface AttemptResult {
   at: number;
   check: string[];
   summary: string;
-  /**
-   * A reviewer's verdict, one per acceptance line of the task it reviews:
-   * handed in only by an attempt that runs in its project's review stage
-   * (hub stages.ts `reviewStageOf`), and the move its task makes when it
-   * ends (dispatch.ts `settleReview`).
-   */
-  verdict?: VerdictLine[];
 }
-
-/**
- * What a reviewer says of one acceptance line: `met`, the change makes it
- * true; `unmet`, it does not yet, and `evidence` says what is missing;
- * `owner`, whether it holds is the owner's to say by the project's Who
- * decides (Look, Behaviour, Scope), asked on the decision card `card`.
- */
-export interface VerdictLine {
-  /** The decision card that asks the owner, `<page>#<card>`: an `owner` line's alone. */
-  card?: string;
-  /** What shows it: a `file:line`, a command's output, a frame; for `unmet`, what is missing. */
-  evidence: string;
-  /** The line, by its place in the task's acceptance list, from 1. */
-  line: number;
-  verdict: VerdictKind;
-}
-
-export const VERDICT_KINDS = ["met", "unmet", "owner"] as const;
-
-/**
- * The review rounds ending unmet one task goes through before the next
- * unmet verdict sends it to the person with a card asking whether to keep
- * going, not back to working (hub dispatch.ts `settleReview`).
- */
-export const REVIEW_ROUNDS_MAX = 3;
-export type VerdictKind = (typeof VERDICT_KINDS)[number];
 
 /**
  * A task's `outputs` as the artifacts of a result its attempt never handed

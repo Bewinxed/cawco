@@ -17,17 +17,16 @@
  *   scheduled and to sent is refused with the sentence naming the stages it
  *   may send it back to; its drop is refused; its move back to inbox goes.
  *   On main, each of the three went.
- * - b. The code template, its Review before done off: with the task in
- *   Your call (put there by him), a session's your-call → done and
- *   your-call → dropped are refused; your-call → ready goes.
+ * - b. The code template, its Review before done off: a session's review →
+ *   done and review → dropped are refused; review → ready goes. On main,
+ *   review → done and the drop went.
  * - c. His move on from the `you` stage goes in each, its history's reason
  *   `approved`.
  * - d. The stage's own routine (waits.ts, `after: 1m`) moves a task on from
  *   a `you` stage whose moves give the routine that move, where a session's
  *   same move under `* → *  you, session` is refused.
- * - e. A stages.md written from the code template as it was before review
- *   was the reviewer's (review of kind `you`), and the one before that (its
- *   `review → done  session` line), still read as the code template
+ * - e. A stages.md written from the code template as it was until now (its
+ *   `review → done  session` line) still reads as the code template
  *   (`isCodeTemplate`), as today's does, and today's names the code
  *   template by its moves (`templateOf`).
  * - f. A project whose active stage comes after its `you` stage (brief,
@@ -59,31 +58,6 @@ import { type ToolSession, toolWords } from "../../lib/tool-call";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-you-stage-machine";
-
-/** The code template until review became the reviewer's stage: review was the person's, of kind `you`. */
-const YOURS_REVIEW = `---
-ready      todo
-working    active
-review     you
-done       done
-dropped    dropped
-moves
-  * → *                you
-  ready → working      session
-  ready → review       session
-  ready → done         session
-  working → review     session
-  working → done       session
-  review → working     session
-  review → ready       session
-  * → dropped          session
-views
-  board      by stage
-  table      by rank
----
-
-Stages for code.
-`;
 
 /** Private office's shape: stage lines only, so the hub reads `* → *  you, session`. */
 const OWN = `---
@@ -400,29 +374,29 @@ const run = async (
   // (b) The code template, Review before done off.
   const code = await project("Code probe");
   const codeTask = await file(code, "Fix the tray chip overflow");
-  await hisMove(code, codeTask, "your-call");
+  await rig.session(code, codeTask, "review");
   check(
-    "b: code template: he puts the task in Your call",
-    (await stageOf(code, codeTask)) === "your-call"
+    "b: code template: a session puts the task in review",
+    (await stageOf(code, codeTask)) === "review"
   );
   const done = await rig.session(code, codeTask, "done");
   check(
-    "b: code template: a session's your-call → done is refused, naming where it can send it back",
+    "b: code template: a session's review → done is refused, naming where it can send it back",
     done.refused &&
       done.text.includes(
-        held(codeTask, "your-call", "done", "ready or working")
+        held(codeTask, "review", "done", "ready or working")
       ) &&
-      (await stageOf(code, codeTask)) === "your-call",
+      (await stageOf(code, codeTask)) === "review",
     done.text
   );
   const codeDrop = await rig.session(code, codeTask, "dropped", "out of scope");
   check(
-    "b: code template: a session's your-call → dropped is refused",
+    "b: code template: a session's review → dropped is refused",
     codeDrop.refused &&
       codeDrop.text.includes(
-        held(codeTask, "your-call", "dropped", "ready or working")
+        held(codeTask, "review", "dropped", "ready or working")
       ) &&
-      (await stageOf(code, codeTask)) === "your-call",
+      (await stageOf(code, codeTask)) === "review",
     codeDrop.text
   );
   const codeBack = await rig.session(
@@ -432,14 +406,14 @@ const run = async (
     "the fix needs a test"
   );
   check(
-    "b: code template: a session's your-call → ready goes",
+    "b: code template: a session's review → ready goes",
     !codeBack.refused && (await stageOf(code, codeTask)) === "ready",
     codeBack.text
   );
-  await hisMove(code, codeTask, "your-call");
+  await rig.session(code, codeTask, "review");
   const codeHis = await hisMove(code, codeTask, "done");
   check(
-    "c: code template: his your-call → done goes, its reason approved",
+    "c: code template: his review → done goes, its reason approved",
     codeHis.status === 200 &&
       codeHis.reason === "approved" &&
       (await stageOf(code, codeTask)) === "done",
@@ -469,25 +443,19 @@ const run = async (
   const { isCodeTemplate, templateOf, templateStages, templateText } =
     await import("../../../packages/hub/src/stages");
   const today = templateText("code");
-  const until = YOURS_REVIEW;
-  const before = YOURS_REVIEW.replace(
+  const until = today.replace(
     "  review → ready       session\n",
     "  review → ready       session\n  review → done        session\n"
   );
   const named = templateOf(templateStages("code"));
   check(
-    "e: the code template as it was until now and before, and as it is, reads as the code template; today's moves name it",
-    before !== until &&
-      isCodeTemplate(before) &&
+    "e: the code template as it was until now, and as it is, reads as the code template; today's moves name it",
+    until !== today &&
       isCodeTemplate(until) &&
       isCodeTemplate(today) &&
       "template" in named &&
       named.template === "code",
-    JSON.stringify({
-      before: isCodeTemplate(before),
-      until: isCodeTemplate(until),
-      named,
-    })
+    JSON.stringify({ until: isCodeTemplate(until), named })
   );
 
   // (f) A session's attempt start does not carry a task past its `you` stage.
@@ -569,7 +537,6 @@ const routineTasks = async (db: Db) => {
     noteComment: db.noteTaskComment,
     saveResult: () => undefined,
     resolvesType: () => false,
-    reviewsType: () => false,
     waitWorld: () => ({}) as never,
     waitReader: () => ({}) as never,
   });

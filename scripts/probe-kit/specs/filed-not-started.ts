@@ -1,11 +1,8 @@
 /**
- * A session's `task_create` files work; it never starts it. A new task
- * lands only in a stage of kind todo or you, where it waits for a start or
- * for the person (hub stages.ts `startProblem`): entering an active stage is
- * a start, which task_start, a delegate naming the task, the project's
- * dispatch or the person makes. Private office, 2026-11-06: a routine's
- * report became tsk-8, filed by Caw straight into an active stage that runs
- * a writer, so it was scouted and drafted with nobody's word.
+ * Work nobody asked for is a proposal: a session files it waiting on the
+ * person's card, and it starts only from his word. Private office,
+ * 2026-11-06: a routine's report became tsk-8, scouted and drafted with
+ * nobody's word.
  *
  * On an in-process hub (hub-in-process.ts) over a scratch database, the
  * session's calls go through its own door (`task_create` on
@@ -13,17 +10,10 @@
  * through the board's routes, in a project shaped as Private office was
  * (inbox, drafting `runs: writer`, Your call, sent, dropped):
  *
- * - a. A session's task_create into drafting (active, runs a writer) is
- *   refused with the sentence naming inbox and Your call, and no task is
- *   filed. Into sent (done) the same. On main both were filed, drafting's
- *   start hook asking for a writer.
- * - b. A session's task_create into inbox (todo) and into Your call (you)
- *   goes, and with no stage named it lands in inbox.
- * - c. The person's own filing into drafting is not held by this rule.
- * - d. A proposal that outlives the turn: the session's page asks one card
+ * - a. A proposal that outlives the turn: the session's page asks one card
  *   (Do it, Not now) and its task_create in inbox waits on that card. The
  *   task is not ready until he picks; his pick of Do it makes it ready.
- * - e. The away line a session reads at the head of each turn tells it to
+ * - b. The away line a session reads at the head of each turn tells it to
  *   start nothing new and to ask instead.
  *
  *   bun scripts/probe-kit/run.ts filed-not-started
@@ -44,7 +34,6 @@ import {
   presenceLine,
 } from "../../../packages/core/src/injected";
 import { machinePath } from "../../../packages/core/src/machine-path";
-import { stageWords } from "../../../packages/core/src/words/stages";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
 import type { Kit, Spec } from "../kit";
@@ -180,19 +169,8 @@ const run = async (
     id: sessionId,
     credential: identities.mint(sessionId),
   };
-  const create = (args: {
-    stage?: string;
-    title: string;
-    waits_on?: string[];
-  }) => toolWords(session, "task_create", args);
-  const tasks = async (): Promise<{ id: string; stage: string }[]> => {
-    const listed = await board(
-      hubRequest("GET /api/projects/:id/tasks", { path: { id: projectId } })
-    );
-    return (
-      (listed.json as { tasks?: { id: string; stage: string }[] }).tasks ?? []
-    );
-  };
+  const create = (args: { title: string; waits_on?: string[] }) =>
+    toolWords(session, "task_create", args);
   const read = async (id: string): Promise<TaskView> =>
     (
       await board(
@@ -203,79 +181,8 @@ const run = async (
     ).json as TaskView;
   /** The id a task tool's words link, `tsk-<n>`. */
   const idIn = (text: string): string => TASK_ID.exec(text)?.[0] ?? "";
-  const open = "inbox or your-call";
 
-  // (a) A session's filing into an active stage, or past its start, is refused.
-  const before = (await tasks()).length;
-  const drafting = await create({
-    title: "Draft the follow-up to the warm leads",
-    stage: "drafting",
-  });
-  check(
-    "a: a session's task_create into drafting (active, runs a writer) is refused with the sentence",
-    drafting.refused &&
-      drafting.text.includes(stageWords.filed("drafting", "active", open)),
-    drafting.text
-  );
-  const sent = await create({
-    title: "Record the letter as sent",
-    stage: "sent",
-  });
-  check(
-    "a: a session's task_create into sent (done) is refused with the sentence",
-    sent.refused && sent.text.includes(stageWords.filed("sent", "done", open)),
-    sent.text
-  );
-  const after = await tasks();
-  check(
-    "a: neither refused task was filed",
-    after.length === before,
-    JSON.stringify(after)
-  );
-
-  // (b) Into a todo or you stage it goes.
-  const inbox = await create({
-    title: "Fix the letter's broken signature",
-    stage: "inbox",
-  });
-  const inboxId = idIn(inbox.text);
-  check(
-    "b: a session's task_create into inbox (todo) goes",
-    !inbox.refused && !!inboxId && (await read(inboxId)).stage === "inbox",
-    inbox.text
-  );
-  const call = await create({
-    title: "Pick the letter's opening line",
-    stage: "your-call",
-  });
-  const callId = idIn(call.text);
-  check(
-    "b: a session's task_create into Your call (you) goes",
-    !call.refused && !!callId && (await read(callId)).stage === "your-call",
-    call.text
-  );
-  const plain = await create({ title: "Check the letter's dates" });
-  const plainId = idIn(plain.text);
-  check(
-    "b: with no stage named it lands in inbox",
-    !plain.refused && !!plainId && (await read(plainId)).stage === "inbox",
-    plain.text
-  );
-
-  // (c) The person's own filing is not held by the rule.
-  const his_ = await board(
-    hubRequest("POST /api/projects/:id/tasks", {
-      path: { id: projectId },
-      body: { title: "Draft the quarterly letter", stage: "drafting" },
-    })
-  );
-  check(
-    "c: the person's own filing into drafting is not refused by the rule",
-    !his_.text.includes("A session files a new task only"),
-    `${his_.status} ${his_.text.slice(0, 300)}`
-  );
-
-  // (d) A proposal: a todo task waiting on a card, ready on his pick.
+  // (a) A proposal: a todo task waiting on a card, ready on his pick.
   const made = await board(
     hubRequest("POST /api/instances/:id/artifacts", {
       path: { id: sessionId },
@@ -300,7 +207,7 @@ const run = async (
   const proposalId = idIn(proposal.text);
   const held = proposalId ? await read(proposalId) : undefined;
   check(
-    "d: the proposal is filed in inbox, waiting on the card, not ready",
+    "a: the proposal is filed in inbox, waiting on the card, not ready",
     !proposal.refused &&
       held?.stage === "inbox" &&
       held.waitsOn.length === 1 &&
@@ -320,15 +227,15 @@ const run = async (
   );
   const ready = proposalId ? await read(proposalId) : undefined;
   check(
-    "d: his pick of Do it makes the proposal ready",
+    "a: his pick of Do it makes the proposal ready",
     picked.status < 400 && ready?.ready === true,
     `${picked.status} ${picked.text.slice(0, 200)}; ready ${ready?.ready}`
   );
 
-  // (e) The away line.
+  // (b) The away line.
   const away = presenceLine({ kind: "away", since: "09:00" });
   check(
-    "e: the away line says to start nothing new and to ask instead",
+    "b: the away line says to start nothing new and to ask instead",
     away.includes(AWAY_STARTS_NOTHING),
     away
   );

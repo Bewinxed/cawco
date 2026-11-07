@@ -263,12 +263,15 @@ import type { TailnetServing } from "./tailnet-https";
  *    delegate type no longer carries `cawcoTodos`: both were sent only for
  *    TestFlight builds the hub no longer serves. A page built for 52 reads
  *    a `delegateWork` the hub no longer sends, so it reloads first.
+ * 54: a task's attempt result no longer carries `verdict`: the reviewer
+ *    whose per-line verdict moved the task is gone. A page built for 53
+ *    reads a `verdict` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 53;
+export const WIRE_PROTOCOL = 54;
 
 /**
  * What a session's stream carries: the changes each frame made to its

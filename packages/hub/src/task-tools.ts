@@ -21,7 +21,6 @@ import {
   type ResultArtifact,
   type ResultArtifactKind,
   type SessionPlan,
-  VERDICT_KINDS,
 } from "@cawco/core";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { z } from "zod";
@@ -450,12 +449,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("What must be true when done, a markdown list."),
         todos: lines("Top-level to-dos."),
-        stage: z
-          .string()
-          .optional()
-          .describe(
-            "A todo or you stage; default the first todo one. An active stage is refused: a start is task_start."
-          ),
+        stage: z.string().optional(),
         type: z.string().optional().describe("The delegate type to run it."),
         waits_on: z
           .array(z.string())
@@ -742,22 +736,9 @@ export function taskTools(context: TaskToolContext | undefined) {
             })
           )
           .optional(),
-        verdict: z
-          .array(
-            z.object({
-              line: z.number().int(),
-              verdict: z.enum(VERDICT_KINDS),
-              evidence: z.string(),
-              card: z.string().optional(),
-            })
-          )
-          .optional()
-          .describe(
-            "Its reviewer's only: one per acceptance line (from 1); owner is his call, with card <page>#<card>."
-          ),
       },
-      async ({ summary, check, artifacts, verdict }) => {
-        const { projectId, tasks, actor } = scope();
+      async ({ summary, check, artifacts }) => {
+        const { projectId, tasks } = scope();
         const workItemId = context?.actor.workItemId;
         const own = context?.workItemTask ?? null;
         if (!(workItemId && own)) {
@@ -765,20 +746,13 @@ export function taskTools(context: TaskToolContext | undefined) {
             "task_result hands in an attempt at a task, and this session works none. Say what you did in finish_item instead."
           );
         }
-        return await tasks.result(
-          projectId,
-          own,
-          workItemId,
-          {
-            summary,
-            check,
-            artifacts: artifacts?.map((one) =>
-              resultArtifact(one, context?.artifactNamed ?? same)
-            ),
-            verdict,
-          },
-          actor
-        );
+        return await tasks.result(projectId, own, workItemId, {
+          summary,
+          check,
+          artifacts: artifacts?.map((one) =>
+            resultArtifact(one, context?.artifactNamed ?? same)
+          ),
+        });
       },
       taskResultWords
     ),

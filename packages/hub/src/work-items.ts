@@ -156,7 +156,6 @@ import { WorkspaceArchivedSchema } from "@cawco/core/stored-shapes";
 import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { reviewWords } from "@cawco/core/words/review";
 import {
   excludedPaths,
   IGNORED_STATUS,
@@ -1140,16 +1139,6 @@ export interface WorkItemDeps {
     caller: InstanceRow,
     input: HeldInput
   ) => Promise<HandedFile[]> | HandedFile[];
-  /**
-   * Whether the item reviews its task in its project's review stage (tasks.ts
-   * `reviewing`): its finish_item waits for its verdict, and the task's
-   * to-dos are the builder's, not its own.
-   */
-  readonly reviews?: (
-    projectId: string,
-    taskId: string,
-    workItemId: string
-  ) => Promise<boolean>;
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -2542,7 +2531,6 @@ export const createWorkItems = ({
   tellYou,
   todos,
   types,
-  reviews,
   untellYou,
   waitingOnPerson,
   makingFrom,
@@ -3705,30 +3693,6 @@ export const createWorkItems = ({
         `attempt ${item.id.slice(0, 8)} ended ${item.state} with these left open in its plan`
       );
     }
-  };
-
-  /**
-   * What sends a `finish_item` that is not blocked back before the item
-   * ends, or nothing when it goes on. A reviewer's verdict first: it is its
-   * task's move (dispatch.ts `settleReview`), so it finishes only once it
-   * has handed one in. Then the task's to-dos: unticked ones are listed
-   * once, to tick or explain, and the next call goes on; a reviewer's
-   * task's are the builder's. Then design work in a project with a design
-   * system: a verifier session judges the working tree as it stands,
-   * committed or not (design-verify.ts), and its pass runs this again.
-   * Holding ends nothing, so it comes before the leftovers.
-   */
-  const heldAtFinish = async (
-    item: WorkItemRow,
-    request: WorkItemSubmission
-  ): Promise<string | undefined> => {
-    const reviewer =
-      !!(item.projectId && item.taskId && reviews) &&
-      (await reviews(item.projectId, item.taskId, item.id));
-    if (reviewer) {
-      return item.taskResult?.verdict ? undefined : reviewWords.noVerdict;
-    }
-    return (await untickedText(item)) ?? (await designHold(item, request));
   };
 
   /** Items whose session was asked once, at finish_item, about the task's unticked to-dos. */
@@ -10321,7 +10285,17 @@ export const createWorkItems = ({
       }
       clearWait(item);
       if (!request.blocked) {
-        const held = await heldAtFinish(item, request);
+        // The task's to-dos first: unticked ones are listed once, to tick or
+        // explain; the next call goes on.
+        const unticked = await untickedText(item);
+        if (unticked) {
+          return unticked;
+        }
+        // Design work in a project with a design system: a verifier session
+        // judges the working tree as it stands, committed or not
+        // (design-verify.ts), and its pass runs this again. Holding ends
+        // nothing, so it comes before the leftovers below.
+        const held = await designHold(item, request);
         if (held) {
           return held;
         }

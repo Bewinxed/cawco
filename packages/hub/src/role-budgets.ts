@@ -96,15 +96,10 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * words cut from generate_image, artifact_read, todo_write, delegate and
  * artifact_create's `to`, so the room comes from words, not the budgets
  * (worker 29,820, delegate 11,142 measured).
- * 2026-11-07: task_result takes a reviewer's `verdict`, one line per
- * acceptance line (met, unmet, or the owner's with its card), which is the
- * task's move when the reviewer ends (dispatch.ts `settleReview`), in place
- * of a reviewer's report read again by Jev and sent to the owner (delegate
- * 11,260 measured). Its budget is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 29_900,
-  delegate: 11_300,
+  delegate: 11_200,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
