@@ -14,6 +14,12 @@
    *   the field over the transcript's column, Jump's who-said chips, the
    *   place and its steps; the composer stays.
    *
+   * - `grown` (his pick, with his direction): Command-F grows the composer a
+   *   find field on its top, the message staying under it; the places are
+   *   listed in the side panel (narrow: the composer's layer) with whose
+   *   words to keep. `?state=` draws find's states: `finding`, `nothing`,
+   *   `unreached`, `live`, and `closed`, where find has just been closed.
+   *
    * The words are marked with the CSS Custom Highlight API: every place
    * washed, the one stepped to solid, without touching the rows' DOM.
    */
@@ -31,6 +37,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import Split from "#lib/cawco/side/Split.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -56,14 +63,13 @@
   import {
     IconAgent,
     IconArrowDownDuotone,
-    IconArtifactCanvas,
     IconChevronDown,
     IconChevronUp,
     IconClose,
     IconListRows,
     IconMoveTab,
-    IconPaperclip,
     IconPlus,
+    IconReport,
     IconSearch,
     IconSend,
     IconStars,
@@ -73,10 +79,19 @@
   } from "#lib/icons.js";
   import { page } from "$app/state";
   import { benchClick, benchLeaf } from "../tab-bench";
+  import AttachItems from "./AttachItems.svelte";
+  import GrownComposer from "./GrownComposer.svelte";
+  import PlacesPanel, { type Finding, type Whose } from "./PlacesPanel.svelte";
 
-  type Shape = "composer" | "jump" | "head";
+  type Shape = "composer" | "jump" | "head" | "grown";
+  type FindState = "finding" | "nothing" | "unreached" | "live" | "closed";
+  const findState = (page.url.searchParams.get("state") ??
+    "finding") as FindState;
   const shape = (page.url.searchParams.get("shape") ?? "composer") as Shape;
   const WORD = "ECONNRESET";
+  /** What was typed: words nothing in the conversation holds, for `nothing`. */
+  const words =
+    shape === "grown" && findState === "nothing" ? "ETIMEDOUT" : WORD;
   /** `?in=caw`: the conversation in Caw's panel, docked beside the project page. */
   const inCaw = page.url.searchParams.get("in") === "caw";
   const AGENT = inCaw ? "Caw" : "Claude Code";
@@ -98,6 +113,13 @@
 
   type Said =
     | { k: "user" | "assistant" | "thinking"; at: number; text: string }
+    | {
+        k: "report";
+        at: number;
+        peer: string;
+        headline: string;
+        text: string;
+      }
     | {
         k: "tool";
         at: number;
@@ -224,6 +246,21 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     },
   ];
 
+  /** A delegate's report, back in the conversation: its words are found too. */
+  const REPORT: Said = {
+    k: "report",
+    at: 74,
+    peer: "Probe the phone's network switch",
+    headline:
+      "Wi-Fi to cellular resets the socket with ECONNRESET, and the relay now retries it",
+    text: "On the iPhone 15 the switch from Wi-Fi to cellular resets the socket with ECONNRESET 40 to 60 ms after the interface changes. With the fix the relay retries a second later and the tabs come back without a reload, in 12 of 12 runs.",
+  };
+  /** The conversation as the grown shape draws it: the report after the network test. */
+  const SAID: Said[] =
+    shape === "grown"
+      ? [...RELAY.slice(0, 11), REPORT, ...RELAY.slice(11)]
+      : RELAY;
+
   /** The other tabs: short, so the strip reads as a real group. */
   const OTHER: Said[] = [
     {
@@ -241,6 +278,19 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   function history(id: string, said: Said[]): Message[] {
     return said.map((s, n) => {
       const base = { instanceId: id, timestamp: ago(s.at) };
+      if (s.k === "report") {
+        return {
+          ...base,
+          id: `${id}-report-${n}`,
+          type: "user.peer",
+          content: s.text,
+          metadata: {
+            reportKind: "report",
+            peerName: s.peer,
+            reportHeadline: s.headline,
+          },
+        } as Message;
+      }
       if (s.k === "tool") {
         return {
           ...base,
@@ -280,7 +330,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     session.machineId = "bench";
     session.cwd = "/home/bewinxed/cockpit";
     session.harness = "claude";
-    session.messages = history(id, id === MAIN ? RELAY : OTHER);
+    session.messages = history(id, id === MAIN ? SAID : OTHER);
     session.initialized = true;
     debug.state.sessions[id] = session;
     debug.frame({
@@ -311,20 +361,46 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     /** The tool call whose fold it is in; null for words said in the open. */
     call: string | null;
     docId: string;
+    /** Whose words, finer: the agent's own, its tools' output, a delegate's report. */
+    kind: Exclude<Whose, "all">;
     /** The words just before the match, to tell this place's mark apart. */
     needle: string;
   }
-  const allPlaces: Place[] = RELAY.flatMap((s, n): Place[] => {
-    const text = s.k === "tool" ? s.out : s.text;
-    const at = text.indexOf(WORD);
+  /** The words a said thing is found in: a tool's output, a report's headline and body. */
+  const textOf = (s: Said): string => {
+    switch (s.k) {
+      case "tool":
+        return s.out;
+      case "report":
+        return `${s.headline}\n${s.text}`;
+      case "user":
+      case "assistant":
+      case "thinking":
+        return s.text;
+    }
+  };
+  const KIND: Record<Said["k"], Place["kind"]> = {
+    user: "me",
+    assistant: "agent",
+    thinking: "agent",
+    tool: "tools",
+    report: "delegates",
+  };
+  const allPlaces: Place[] = SAID.flatMap((s, n): Place[] => {
+    const text = textOf(s);
+    const at = text.indexOf(words);
     if (at < 0) {
       return [];
     }
     return [
       {
         docId: s.k === "tool" ? `${MAIN}-tool-${n}` : `${MAIN}-${s.k}-${n}`,
-        call: s.k === "tool" ? `${MAIN}-call-${n}` : null,
+        call:
+          s.k === "tool" || s.k === "report"
+            ? `${MAIN}-${s.k === "tool" ? "call" : "report"}-${n}`
+            : null,
         by: s.k === "user" ? "me" : "agent",
+        kind: KIND[s.k],
         needle: text.slice(Math.max(0, at - 10), at),
       },
     ];
@@ -363,6 +439,8 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
         return { glyph: IconAgent, title: AGENT, word: "Message" };
       case "thinking":
         return { glyph: IconStars, title: AGENT, word: "Reasoning" };
+      case "report":
+        return { glyph: IconReport, title: s.peer, word: "Report" };
       case "tool":
         return {
           glyph: s.name === "Grep" ? IconToolSearch : IconToolTerminal,
@@ -372,9 +450,9 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     }
   }
 
-  const placeRows: FindRowData[] = RELAY.flatMap((s, n) => {
-    const text = s.k === "tool" ? s.out : s.text;
-    if (!text.includes(WORD)) {
+  const placeRows: FindRowData[] = SAID.flatMap((s, n) => {
+    const text = textOf(s);
+    if (!text.includes(words)) {
       return [];
     }
     const { glyph, title, word } = faceOf(s);
@@ -384,7 +462,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
         at: now - s.at * MINUTE_MS,
         breathes: false,
         glyph,
-        key: `place-${n}`,
+        key: s.k === "tool" ? `${MAIN}-tool-${n}` : `${MAIN}-${s.k}-${n}`,
         meta: [],
         reason: { source: "", parts: runsOf(excerpt) },
         secrets: [],
@@ -412,11 +490,11 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       if (node.parentElement?.closest("[data-find-frame]")) {
         continue;
       }
-      let at = text.indexOf(WORD);
+      let at = text.indexOf(words);
       while (at >= 0) {
         const range = new Range();
         range.setStart(node, at);
-        range.setEnd(node, at + WORD.length);
+        range.setEnd(node, at + words.length);
         const needle = currentPlace?.needle;
         if (
           current === null &&
@@ -427,10 +505,16 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
         } else {
           all.push(range);
         }
-        at = text.indexOf(WORD, at + WORD.length);
+        at = text.indexOf(words, at + words.length);
       }
     }
-    if (shape === "composer" && !finding) {
+    if (shape === "grown" && !finding && landed && current) {
+      // Find closed here: the place keeps its wash until the reader moves on.
+      CSS.highlights.set("find-place", new Highlight(current));
+      CSS.highlights.delete("find-current");
+      return;
+    }
+    if ((shape === "composer" || shape === "grown") && !finding) {
       CSS.highlights.delete("find-place");
       CSS.highlights.delete("find-current");
       return;
@@ -478,7 +562,13 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     const word = range.getBoundingClientRect();
     const view = box.getBoundingClientRect();
     const top = view.top + (shape === "head" ? headH : 0);
-    const bottom = pill ? Math.min(view.bottom, pill.y) - 96 : view.bottom;
+    const layerTop =
+      document
+        .querySelector("section[data-find-frame][data-narrow]")
+        ?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+    const bottom = pill
+      ? Math.min(view.bottom, pill.y - 96, layerTop - 24)
+      : view.bottom;
     if (word.top >= top + 48 && word.bottom <= bottom) {
       cleared = docId;
       return;
@@ -500,13 +590,13 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     }
     const r = cin.getBoundingClientRect();
     pill = { x: r.left, y: r.top, w: r.width, h: r.height };
-    if (shape === "composer") {
+    if (shape === "composer" || shape === "grown") {
       // The transcript's own Jump to latest stands down while find is open:
       // find's Back where you were is in its place.
       for (const span of stage?.querySelectorAll("button > span") ?? []) {
         if (span.textContent === "Jump to latest") {
           const button = span.parentElement as HTMLElement;
-          button.style.visibility = finding ? "hidden" : "";
+          button.style.visibility = finding || landed ? "hidden" : "";
         }
       }
     }
@@ -517,13 +607,21 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     }
   }
   let paneTop = $state(0);
+  /** The side panel's share of the pane, in percent (Split). */
+  let share = $state(0);
+  /** Narrow, the places rise no higher than leaves the place readable above them. */
+  const placesMax = $derived(
+    Math.max(200, Math.min(380, (pill?.y ?? 600) - paneTop - 260))
+  );
   const bound = $derived(composerBindings.get(MAIN));
 
   let glass = $state<HTMLElement | null>(null);
   let glassRoom = $state(0);
 
   onMount(() => {
-    if (shape !== "composer") {
+    if (shape === "grown") {
+      seedGrown();
+    } else if (shape !== "composer") {
       goTo(allPlaces[PLACE - 1]);
     }
     // The frame reads no hub: the shell's hub band, which would say so over
@@ -562,7 +660,9 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     window.addEventListener("resize", measure);
     window.addEventListener("keydown", onkey);
     const opening =
-      shape === "composer" ? setTimeout(openFind, 1200) : undefined;
+      shape === "composer" || (shape === "grown" && findState === "finding")
+        ? setTimeout(openFind, 1200)
+        : undefined;
     return () => {
       observer.disconnect();
       cancelAnimationFrame(asked);
@@ -594,16 +694,112 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
 
   // ── The composer's find state ──────────────────────────────────────────
   /** Find grown out of the composer: Command-F opens it, Escape folds it back. */
-  let finding = $state(shape !== "composer");
+  let finding = $state(shape !== "composer" && shape !== "grown");
   /** The message being written, set aside while find is open. */
   const DRAFT = "Check the push probe next";
   let findField = $state<HTMLInputElement | null>(null);
   let attachOpen = $state(false);
+  // ── The grown shape's own state ─────────────────────────────────────────
+  /** Whose words the places keep (grown). */
+  let whose = $state<Whose>("all");
+  /** Narrow, the places stand over the conversation until one is picked. */
+  let listOpen = $state(true);
+  /** Find has just closed at a place: its wash stays, and the way back stands. */
+  let landed = $state(false);
+  let message = $state<HTMLInputElement | null>(null);
+  /** The places find has to show in this state. */
+  const grownPlaces = $derived.by((): Place[] => {
+    if (findState === "nothing") {
+      return [];
+    }
+    if (findState === "unreached") {
+      // Only what the transcript has drawn: the turns from the sleep test on.
+      return allPlaces.slice(2, 7);
+    }
+    return allPlaces;
+  });
+  /** A live turn arriving with the words: one more place, at the foot. */
+  const LIVE = `${MAIN}-live`;
+  const FINDING: Record<FindState, Finding> = {
+    finding: "places",
+    closed: "places",
+    nothing: "nothing",
+    unreached: "unreached",
+    live: "live",
+  };
+  const findingIs = FINDING[findState];
   const shownPlaces = $derived(
-    allPlaces.filter((p) => who === "anyone" || p.by === who)
+    shape === "grown"
+      ? grownPlaces.filter((p) => whose === "all" || p.kind === whose)
+      : allPlaces.filter((p) => who === "anyone" || p.by === who)
   );
+  const WHOSE_LABEL: Record<Whose, string> = {
+    all: "All",
+    me: "You",
+    agent: AGENT,
+    tools: "Tools",
+    delegates: "Delegates",
+  };
+  const filters = $derived(
+    (["all", "me", "agent", "tools", "delegates"] as const).map((value) => ({
+      value,
+      label: WHOSE_LABEL[value],
+      count:
+        grownPlaces.filter((p) => value === "all" || p.kind === value).length +
+        (findState === "live" && (value === "all" || value === "agent")
+          ? 1
+          : 0),
+    }))
+  );
+  const liveRow: FindRowData = {
+    at: now,
+    breathes: true,
+    glyph: IconAgent,
+    key: LIVE,
+    meta: [],
+    reason: {
+      source: "",
+      parts: runsOf(
+        "…the push probe's socket closed with ECONNRESET as the phone left Wi-Fi, and the relay retried…"
+      ),
+    },
+    secrets: [],
+    spoken: `${AGENT}, working: the push probe's socket closed with ECONNRESET`,
+    state: { tone: "live", word: "Working" },
+    title: AGENT,
+    titleParts: [{ matched: false, text: AGENT }],
+  };
+  const shownRows = $derived([
+    ...placeRows.filter((row) => shownPlaces.some((p) => p.docId === row.key)),
+    ...(findState === "live" && (whose === "all" || whose === "agent")
+      ? [liveRow]
+      : []),
+  ]);
+  /** The places counted: the live one too, once it is said. */
+  const total = $derived(shownRows.length);
+
+  /** The grown frame's state drawn as it loads. */
+  function seedGrown() {
+    if (findState === "live") {
+      const session = debug.state.sessions[MAIN];
+      session.busy = true;
+      session.streaming =
+        "The push probe passes on Wi-Fi. On the switch to cellular its socket closed with ECONNRESET as the phone left Wi-Fi, and the relay retried";
+    }
+    if (findState === "finding") {
+      return;
+    }
+    if (findState === "closed") {
+      goTo(allPlaces[PLACE - 1]);
+      landed = true;
+      queueMicrotask(() => message?.focus());
+      return;
+    }
+    finding = true;
+    goTo(findState === "unreached" ? grownPlaces[0] : allPlaces[PLACE - 1]);
+  }
   /** The place stepped to, by its record. */
-  let atDoc = $state(allPlaces[PLACE - 1].docId);
+  let atDoc = $state(allPlaces[PLACE - 1]?.docId ?? "");
   const currentPlace = $derived(
     shownPlaces.find((p) => p.docId === atDoc) ?? shownPlaces[0]
   );
@@ -632,21 +828,46 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   }
   function openFind() {
     finding = true;
+    landed = false;
     goTo(currentPlace);
     queueMicrotask(() => findField?.focus());
   }
+  /** Where the conversation was being read when find opened: its newest turn here. */
+  const READING = `${MAIN}-user-${SAID.length - 1}`;
   function closeFind() {
     finding = false;
+    if (shape === "grown") {
+      // Find leaves the conversation at the place found; the caret goes
+      // back to the message, and Back where you were stands for the way back.
+      landed = true;
+      queueMicrotask(() => message?.focus());
+      return;
+    }
     // Back where you were: the conversation's newest turn.
-    askOpenAt(MAIN, `${MAIN}-user-${RELAY.length - 1}`);
+    askOpenAt(MAIN, READING);
+  }
+  function backWhereYouWere() {
+    landed = false;
+    askOpenAt(MAIN, READING);
+  }
+  function pick(key: string) {
+    goTo(allPlaces.find((p) => p.docId === key));
+    if (compact) {
+      listOpen = false;
+    }
   }
   function onkey(event: KeyboardEvent) {
-    if (shape !== "composer") {
+    if (shape !== "composer" && shape !== "grown") {
       return;
     }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
       event.preventDefault();
-      openFind();
+      if (finding && shape === "grown") {
+        // Open already: Command-F again closes it, as it opened it.
+        closeFind();
+      } else {
+        openFind();
+      }
     } else if (event.key === "Escape" && finding) {
       event.preventDefault();
       closeFind();
@@ -761,7 +982,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   <div
     bind:this={stage}
     data-shape={shape}
-    class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong [&_[data-marked]]:before:opacity-0 [&_*::highlight(find-place)]:bg-brand-wash [&_*::highlight(find-place)]:text-inherit [&_*::highlight(find-current)]:bg-brand-solid [&_*::highlight(find-current)]:text-on-brand data-[shape=composer]:[&_[data-slot=dock]_[data-slot=cin]]:invisible"
+    class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong [&_[data-marked]]:before:opacity-0 [&_*::highlight(find-place)]:bg-brand-wash [&_*::highlight(find-place)]:text-inherit [&_*::highlight(find-current)]:bg-brand-solid [&_*::highlight(find-current)]:text-on-brand data-[shape=composer]:[&_[data-slot=dock]_[data-slot=cin]]:invisible data-[shape=grown]:[&_[data-slot=dock]_[data-slot=cin]]:invisible"
   >
     <div
       class="relative flex min-h-0 w-c-panel-w m-space-6 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
@@ -818,7 +1039,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   <div
     bind:this={stage}
     data-shape={shape}
-    class="@container/leaf pointer-events-none absolute inset-0 flex flex-col text-ink-strong [&_[data-marked]]:before:opacity-0 [&_*::highlight(find-place)]:bg-brand-wash [&_*::highlight(find-place)]:text-inherit [&_*::highlight(find-current)]:bg-brand-solid [&_*::highlight(find-current)]:text-on-brand data-[shape=composer]:[&_[data-slot=dock]_[data-slot=cin]]:invisible"
+    class="@container/leaf pointer-events-none absolute inset-0 flex flex-col text-ink-strong [&_[data-marked]]:before:opacity-0 [&_*::highlight(find-place)]:bg-brand-wash [&_*::highlight(find-place)]:text-inherit [&_*::highlight(find-current)]:bg-brand-solid [&_*::highlight(find-current)]:text-on-brand data-[shape=composer]:[&_[data-slot=dock]_[data-slot=cin]]:invisible data-[shape=grown]:[&_[data-slot=dock]_[data-slot=cin]]:invisible"
     onclickcapture={benchClick(leaf)}
   >
     <div
@@ -840,19 +1061,39 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
           data-pane={id}
           style:--pane-inset="{paneInset}px"
         >
-          <SessionPane
-            active={shown}
-            browsing={null}
-            browsingCwd=""
-            browsingHarness="claude"
-            focused={shown}
-            viewId={id}
-            visible={shown}
-          />
+          {#if shape === "grown" && id === MAIN && !compact}
+            <!-- The conversation and its side panel: the places beside the
+                 transcript while find is open (SideSplit's split). -->
+            <Split
+              backLabel="Back to conversation"
+              keys={{
+                width: "cawco.find-bench.width",
+                expanded: "cawco.find-bench.expanded",
+              }}
+              main={mainPane}
+              open={finding}
+              side={placesSide}
+              bind:share
+            />
+          {:else}
+            <SessionPane
+              active={shown}
+              browsing={null}
+              browsingCwd=""
+              browsingHarness="claude"
+              focused={shown}
+              viewId={id}
+              visible={shown}
+            />
+          {/if}
         </div>
       {/each}
       {#if bound}
-        <div data-slot="dock" class="pointer-events-none absolute inset-0 z-1">
+        <div
+          data-slot="dock"
+          class="pointer-events-none absolute inset-y-0 start-0 z-1 w-(--dock-w)"
+          style:--dock-w="{100 - share}%"
+        >
           <Composer
             fleet={composerFleet}
             {...composerOf(bound)}
@@ -871,6 +1112,73 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       </div>
     {/if}
   </div>
+{/if}
+
+{#snippet mainPane()}
+  <SessionPane
+    active
+    browsing={null}
+    browsingCwd=""
+    browsingHarness="claude"
+    focused
+    viewId={MAIN}
+    visible
+  />
+{/snippet}
+
+{#snippet places(narrowList: boolean)}
+  <PlacesPanel
+    activeKey={currentPlace?.docId ?? null}
+    {filters}
+    filter={whose}
+    finding={findingIs}
+    machine="obelisk"
+    max={placesMax}
+    narrow={narrowList}
+    onfilter={(value) => {
+      whose = value;
+      goTo(
+        allPlaces.find(
+          (p) =>
+            (value === "all" || p.kind === value) && grownPlaces.includes(p)
+        )
+      );
+    }}
+    onpick={pick}
+    rows={shownRows}
+    {words}
+  />
+{/snippet}
+
+{#snippet placesSide()}
+  {@render places(false)}
+{/snippet}
+
+{#if shape === "grown" && pill}
+  <GrownComposer
+    back={landed}
+    box={pill}
+    draft={DRAFT}
+    {finding}
+    {listOpen}
+    narrow={compact}
+    onback={backWhereYouWere}
+    onclose={closeFind}
+    onlist={() => {
+      listOpen = !listOpen;
+    }}
+    onopen={openFind}
+    onstep={step}
+    {placeNo}
+    {total}
+    {words}
+    bind:field={findField}
+    bind:message
+  >
+    {#snippet layer()}
+      {@render places(true)}
+    {/snippet}
+  </GrownComposer>
 {/if}
 
 {#if shape === "composer" && pill}
@@ -1018,22 +1326,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
             </span>
           {/key}
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" side="top">
-          <DropdownMenu.Item>
-            <IconPaperclip />
-            <span>Files and photos</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item>
-            <IconArtifactCanvas />
-            <span>Draw</span>
-            <DropdownMenu.Shortcut>⌘⇧D</DropdownMenu.Shortcut>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={openFind}>
-            <IconSearch />
-            <span>Find</span>
-            <DropdownMenu.Shortcut>⌘F</DropdownMenu.Shortcut>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
+        <AttachItems onfind={openFind} />
       </DropdownMenu.Root>
       <button
         class="select-none grid size-c-composer-field flex-none pressable place-items-center concentric-xs border-0 bg-(image:--action-surface) bg-action-solid text-on-action [&_svg]:size-icon-md"
