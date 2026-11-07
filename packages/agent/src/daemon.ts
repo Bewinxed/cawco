@@ -36,7 +36,6 @@ import {
   CONTROL_CLONE_HOLDING,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
-  CONTROL_FORGET_TRANSCRIPT_TEXT,
   CONTROL_GH_ACCOUNTS,
   CONTROL_GH_TOKEN,
   CONTROL_HOST_OUTPUTS,
@@ -77,14 +76,12 @@ import {
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
-  type ForgetTranscriptText,
   type HarnessKind,
   invariant,
   lawPolicy,
   MACHINE_PART_MS,
   type RemoveFolder,
   type TranscriptQuery,
-  type TranscriptTextForgotten,
   type TranscriptTurnsQuery,
   UPDATE_CAWCO,
   type WorkspaceRef,
@@ -3501,17 +3498,6 @@ const startDaemon = (rediscover = false) =>
     yield* Effect.addFinalizer(() => Effect.sync(() => search.close()));
     // A deleted transcript's words leave the index with it (a purge).
     supervisor.onTranscriptDeleted((sessionId) => search.forget(sessionId));
-    // A fact the person forgot leaves the index's documents (hub forget-fact.ts).
-    supervisor.registerDaemonFunction(
-      CONTROL_FORGET_TRANSCRIPT_TEXT,
-      async (asked): Promise<TranscriptTextForgotten> => {
-        const { text, dry } = asked as ForgetTranscriptText;
-        if (typeof text !== "string" || !text) {
-          throw new Error("forgetTranscriptText names no words");
-        }
-        return { documents: await search.forgetText(text, dry === true) };
-      }
-    );
     // The agent's memory, by what holds it (memory.ts): once its first usage
     // scan and search sync have ended, and on its own clock from the start, so
     // an agent that never reaches its hub still says it.

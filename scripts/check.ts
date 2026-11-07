@@ -600,12 +600,6 @@ const gated: Gated[] = [
     "packages/hub/skills/decision-page/kit/",
   ]),
   bun("scripts/token-alias-check.ts", ["design/tokens/"]),
-  // The git filter-repo every build carries is its pinned release's, byte for byte.
-  bun(
-    "scripts/git-filter-repo.ts",
-    ["packages/hub/vendor/git-filter-repo/", "packages/hub/src/filter-repo.ts"],
-    "--check"
-  ),
   bun("scripts/patched-dependencies-check.ts", [
     "package.json",
     "bun.lock",

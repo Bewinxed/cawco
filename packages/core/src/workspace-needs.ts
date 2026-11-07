@@ -173,9 +173,7 @@ const PROGRAMS = {
     package: "perl",
   },
   plutil: { for: "reading which of Xcode's builds is a clone's", os: "darwin" },
-  python3: {
-    for: "the hub's git filter-repo, which rewrites a project folder's history, and the probe kit's Simulator driver",
-  },
+  python3: { for: "the probe kit's Simulator driver", os: "darwin" },
   rm: {
     trusted: true,
     for: "a workspace judge's rewrite of an older session's command",

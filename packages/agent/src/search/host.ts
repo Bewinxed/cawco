@@ -110,9 +110,6 @@ const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
   /** A deleted transcript's documents forgotten; how many. */
   forget: (sessionId: string) =>
     Promise.resolve(index.forgetSession(sessionId)),
-  /** A forgotten fact's words written `[redacted]` in every document holding them (`dry`: counted); how many. */
-  forgetText: (asked: { dry: boolean; text: string }) =>
-    Promise.resolve(index.forgetText(asked.text, asked.dry)),
 });
 
 /** What the reader is asked, by name: each op takes one argument, and answers once. */

@@ -14,10 +14,7 @@
  *   caller's ({@link TurnWatch}, kept in the database): a routine's run, a
  *   heartbeat (a turn the hub did not deliver, a keep-alive's), a harness
  *   subagent still running, or a session that read the web. A tainted note
- *   never becomes a candidate, nor does one its writer marks private
- *   (`private: true`, the person having called the fact private), which
- *   never reaches `knowledge/` or a brief; words marked `<private>` are
- *   stripped before a note is written (core private-mark.ts).
+ *   never becomes a candidate.
  * - **Rules first**: a note holding what reads as a credential is written
  *   with it redacted (secret-filter.ts: secretlint's recommended preset and
  *   a password typed in a sentence) and marked `secret`; one AGENTS.md or `knowledge/`
@@ -84,9 +81,6 @@
  *   editing the card's diff before approving it ({@link asApproved}).
  *   Purging a session (deleting its transcript) withdraws every note it
  *   wrote the same way.
- * - **Forgetting a fact** (the person's, forget-fact.ts): every note holding
- *   its words and every fact line stating it or resting on those notes alone
- *   go at once, nothing archived; the folder's history is rewritten after.
  * - **Make a note** (the person's): straight to AGENTS.md as a diff commit,
  *   from a hub route.
  * - **Brief context** (dispatch.ts): AGENTS.md, then the fact lines a task
@@ -112,7 +106,6 @@ import {
   type ProjectNote,
 } from "@cawco/core";
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
-import { stripPrivate } from "@cawco/core/private-mark";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
 import { Elysia, t } from "elysia";
@@ -577,12 +570,6 @@ export interface Note {
   /** Archived only: what came of it (`applied <sha>`, `rejected`, `tainted`, its verdict). */
   outcome: string | null;
   path: string;
-  /**
-   * Its writer marked it private (`memory_note` `private: true`): it is
-   * never a candidate, so it never reaches `knowledge/` or a brief, and the
-   * curator's run archives it as `private`.
-   */
-  private: boolean;
   role: string;
   session: string;
   /**
@@ -635,23 +622,6 @@ const sinceAsked = (
   return since < today ? since : null;
 };
 
-/**
- * A note's words as written: words marked `<private>` stripped (core
- * private-mark.ts), refused when none are left.
- */
-const noteWords = (raw: string): string => {
-  const words = stripPrivate(raw).trim();
-  if (!words) {
-    refuse(
-      400,
-      raw.trim()
-        ? "Every word of this note was marked <private>, so nothing was written."
-        : "A note needs words."
-    );
-  }
-  return words;
-};
-
 /** Whether a note's words can stand as a fact line by themselves. */
 const oneLine = (note: Note): boolean =>
   !note.text.trim().includes("\n") && note.text.trim().length <= FACT_WORDS;
@@ -686,7 +656,6 @@ const renderNote = (note: Note): string =>
     `time: ${note.time}`,
     ...(note.since ? [`since: ${note.since}`] : []),
     ...(note.taint.length > 0 ? [`taint: [${note.taint.join(", ")}]`] : []),
-    ...(note.private ? ["private: true"] : []),
     ...(note.verdict ? [`verdict: ${note.verdict}`] : []),
     ...(note.by ? [`by: ${note.by}`] : []),
     ...(note.outcome ? [`outcome: ${quoted(note.outcome)}`] : []),
@@ -722,7 +691,6 @@ const parseNote = (path: string, content: string): Note | undefined => {
     time: field("time") ?? "",
     since: since && DAY.test(since) ? since : null,
     taint: ((taintLine ? listOf(taintLine) : undefined) ?? []) as Taint[],
-    private: field("private") === "true",
     verdict: VERDICTS.includes(verdict as Verdict)
       ? (verdict as Verdict)
       : null,
@@ -922,9 +890,8 @@ const archivedFile = ({ note, outcome, verdict, by }: Settled) => ({
 });
 
 /**
- * The inbox as a curator run starts, by the rules: private and tainted
- * notes, notes already sorted out, and notes `known` now says word for
- * word leave it;
+ * The inbox as a curator run starts, by the rules: tainted notes, notes
+ * already sorted out, and notes `known` now says word for word leave it;
  * those an open proposal cites stay put; the rest wait for the curator.
  */
 const sortByRules = (
@@ -935,9 +902,7 @@ const sortByRules = (
   const settled: Settled[] = [];
   const waiting: Note[] = [];
   for (const each of inbox.filter((one) => !cited.has(one.id))) {
-    if (each.private) {
-      settled.push({ note: each, outcome: "private" });
-    } else if (each.taint.length > 0) {
+    if (each.taint.length > 0) {
       settled.push({
         note: each,
         outcome: `tainted: ${each.taint.join(", ")}`,
@@ -958,9 +923,8 @@ const sortByRules = (
   return { settled, waiting };
 };
 
-/** Whether a note may become a candidate: not private, no taint, and nothing sorted it out. */
+/** Whether a note may become a candidate: no taint, and nothing sorted it out. */
 const candidate = (note: Note, cited: ReadonlySet<string>): boolean =>
-  !note.private &&
   note.taint.length === 0 &&
   (note.verdict === null || note.verdict === "lasting") &&
   !cited.has(note.id);
@@ -1862,18 +1826,9 @@ export const createMemory = ({
   /**
    * An agent's note into its project's inbox, one commit, its taint the
    * hub's. `since`: the day its fact became true, when that is before today
-   * (a backfill); a day to come is refused. `secret`: its writer marked it
-   * private, so it is never a candidate ({@link Note.private}). Words
-   * marked `<private>` are stripped before anything reads them (core
-   * private-mark.ts); a note that was all private is refused, nothing
-   * written.
+   * (a backfill); a day to come is refused.
    */
-  const note = async (
-    actor: InstanceRow,
-    raw: string,
-    since?: string,
-    secret = false
-  ) => {
+  const note = async (actor: InstanceRow, raw: string, since?: string) => {
     const projectId =
       actor.projectId ??
       refuse(
@@ -1881,7 +1836,10 @@ export const createMemory = ({
         "This session is in no project; a note goes to a project's inbox."
       );
     projectOf(projectId);
-    const words = noteWords(raw);
+    const words = raw.trim();
+    if (!words) {
+      refuse(400, "A note needs words.");
+    }
     const at = new Date();
     const held = sinceAsked(since, dayOf(at));
     const { text, verdict } = await byRules(projectId, words);
@@ -1897,30 +1855,24 @@ export const createMemory = ({
       time: at.toISOString(),
       since: held,
       taint: taintOf(actor),
-      private: secret,
       verdict,
       by: verdict ? "rules" : null,
       outcome: null,
       text,
     };
     made.path = `${INBOX_DIR}/${made.id}.md`;
-    const marks = [
-      ...(made.private ? ["private"] : []),
-      ...(made.taint.length > 0 ? [`taint ${made.taint.join("+")}`] : []),
-      ...(verdict ? [verdict] : []),
-    ];
     const written = await writeFolderFile(
       projectId,
       made.path,
       renderNote(made),
       {
         author: { name: made.author },
-        message: `memory: a note from ${made.author}${made.private ? " (private)" : ""}${made.taint.length > 0 ? ` (${made.taint.join(", ")})` : ""}`,
+        message: `memory: a note from ${made.author}${made.taint.length > 0 ? ` (${made.taint.join(", ")})` : ""}`,
       }
     );
     folderChanged(projectId);
     console.log(
-      `[memory] ${projectId}: ${made.id} from ${actor.id} (${[made.source, ...marks].join(", ")}) at ${written.sha.slice(0, 9)}`
+      `[memory] ${projectId}: ${made.id} from ${actor.id} (${made.source}${made.taint.length > 0 ? `, taint ${made.taint.join("+")}` : ""}${verdict ? `, ${verdict}` : ""}) at ${written.sha.slice(0, 9)}`
     );
     curator().ensure(projectId);
     if ((await candidates(projectId)).length > INBOX_MARK) {
@@ -1931,7 +1883,6 @@ export const createMemory = ({
       path: made.path,
       sha: written.sha,
       taint: made.taint,
-      private: made.private,
       verdict,
     };
   };
@@ -3299,56 +3250,6 @@ export const createMemory = ({
     return { withdrawn: done };
   };
 
-  /**
-   * A fact the person forgets (forget-fact.ts), as memory holds it: every
-   * note whose words hold `text`, in the inbox or the archive, goes, and
-   * every `knowledge/` line (the archive's too) that states it, or rests on
-   * those notes alone, goes with it; a line that rests on other notes as
-   * well keeps them. One commit, as the person, saying nothing of the
-   * words. `dry`: only said. Nothing is archived: an archive would keep it.
-   * What the folder's history still holds is forget-fact.ts's to rewrite.
-   */
-  const forgetFact = async (projectId: string, text: string, dry: boolean) => {
-    projectOf(projectId);
-    const notes = [
-      ...(await notesIn(projectId, INBOX_DIR)),
-      ...(await notesIn(projectId, ARCHIVE_DIR)),
-    ].filter((each) => each.text.includes(text));
-    const ids = notes.map((each) => each.id);
-    let lines = 0;
-    const writes: { content: string; path: string }[] = [];
-    for (const file of (await knowledgeOf(projectId)).filter(
-      (each) => each.path.endsWith(".md") && !BRAND.test(each.path)
-    )) {
-      const stating = parseFactFile(file.path, file.content).facts.filter(
-        (fact) => fact.text.includes(text) || fact.why?.includes(text)
-      );
-      let content = withoutFacts(file.content, stating);
-      lines += stating.length;
-      for (const id of ids) {
-        const after = withoutSource(file.path, content, id);
-        lines += after.retired.length;
-        ({ content } = after);
-      }
-      if (content !== file.content) {
-        writes.push({ path: file.path, content });
-      }
-    }
-    if (dry || writes.length + notes.length === 0) {
-      return { notes: ids, lines, sha: null };
-    }
-    const done = await changeFolderFiles(
-      projectId,
-      { writes, deletes: notes.map((each) => each.path) },
-      { author: YOU, message: "memory: a fact forgotten" }
-    );
-    folderChanged(projectId);
-    console.log(
-      `[memory] ${projectId}: a fact forgotten: ${ids.length} note${ids.length === 1 ? "" : "s"} and ${lines} knowledge line${lines === 1 ? "" : "s"} gone at ${done.sha.slice(0, 9)}`
-    );
-    return { notes: ids, lines, sha: done.sha };
-  };
-
   // --- what the curator sorts out -------------------------------------------------------
 
   const classify = async (
@@ -3768,7 +3669,6 @@ export const createMemory = ({
     contextFor,
     withdraw,
     purged,
-    forgetFact,
     start,
 
     /** Whether `requestId` is a memory proposal waiting on the person. */
@@ -3859,15 +3759,8 @@ export const createMemory = ({
               .string()
               .optional()
               .describe("YYYY-MM-DD it became true, if before today."),
-            private: z
-              .boolean()
-              .optional()
-              .describe(
-                "true: the person called it private; kept out of knowledge/ and every brief."
-              ),
           },
-          ({ text, since, private: secret }) =>
-            note(me(), text, since, secret ?? false),
+          ({ text, since }) => note(me(), text, since),
           memoryNotedWords
         ),
         tool(

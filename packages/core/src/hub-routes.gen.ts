@@ -1675,17 +1675,6 @@ export interface components {
         source: string;
       };
     };
-    "POST /api/facts/forget": {
-      body: {
-        confirm: string;
-        text: string;
-      };
-    };
-    "POST /api/facts/forget/dry-run": {
-      body: {
-        text: string;
-      };
-    };
     "POST /api/files": Record<string, never>;
     "POST /api/fleet/agents/push": Record<string, never>;
     "POST /api/fleet/hooks/adopt": {
@@ -3103,11 +3092,6 @@ export interface components {
         anyway?: boolean;
         discard?: boolean;
       };
-      path: {
-        id: string | number;
-      };
-    };
-    "POST /api/workspaces/:id/carry/let-go": {
       path: {
         id: string | number;
       };
@@ -4840,8 +4824,6 @@ export interface components {
       response_format?: "concise" | "detailed";
     };
     "tool memory_note": {
-      /** @description true: the person called it private; kept out of knowledge/ and every brief. */
-      private?: boolean;
       /** @enum {string} */
       response_format?: "concise" | "detailed";
       /** @description YYYY-MM-DD it became true, if before today. */

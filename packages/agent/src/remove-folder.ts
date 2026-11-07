@@ -1,6 +1,5 @@
 /**
- * A folder of a project deleted for good, or a carry the person lets go
- * (hub forget-fact.ts), removed from this machine (core
+ * A folder of a project deleted for good, removed from this machine (core
  * `CONTROL_REMOVE_FOLDER`, hub project-delete.ts). The hub has held the
  * path to the project's own recorded places, refusing one another live
  * project shares; this machine holds it to its own floor besides: nothing
@@ -86,7 +85,7 @@ export const removeFolder = async (
   }
   await removeTree(path);
   console.info(
-    `[remove-folder] ${asked.kind} ${path} removed, as the hub asked (a project deleted for good, a carry let go)`
+    `[remove-folder] ${asked.kind} ${path} removed: its project was deleted for good`
   );
   return { removed: true };
 };

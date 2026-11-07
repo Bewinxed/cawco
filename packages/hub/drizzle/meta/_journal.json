@@ -2612,6 +2612,13 @@
       "when": 1794045067292,
       "tag": "0380_forgotten_facts",
       "breakpoints": true
+    },
+    {
+      "idx": 381,
+      "version": "6",
+      "when": 1794062670718,
+      "tag": "0381_drop_forgotten_facts",
+      "breakpoints": true
     }
   ]
 }

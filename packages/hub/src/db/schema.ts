@@ -4969,22 +4969,6 @@ export const purgedSessions = sqliteTable(
 );
 
 /**
- * Each fact the person forgot (forget-fact.ts), as an agent's `find` and
- * every other answer the secret filter reads must leave it out
- * (secret-filter.ts `ForgottenFact`): how many words it is and a salted
- * sha256 of them, never the words. A machine's transcript index that was
- * not connected at the forget, or reads its transcripts again, still holds
- * them; this keeps them out of what the hub answers.
- */
-export const forgottenFacts = sqliteTable("forgotten_facts", {
-  id: text("id").primaryKey(),
-  salt: text("salt").notNull(),
-  hash: text("hash").notNull(),
-  words: integer("words").notNull(),
-  forgottenAt: timestamp("forgotten_at").notNull(),
-});
-
-/**
  * What the hub says to the person about a project (caw.ts `notice`): a
  * repository made, an offer to answer, a routine made. Each is a line in its
  * conversation's transcript (`instance_id`), waking nobody; one written

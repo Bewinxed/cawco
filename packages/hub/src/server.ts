@@ -818,7 +818,6 @@ import { refreshOf, skillVersion } from "./fleet-versions";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence, historyPoints } from "./forecast";
 import { createForgePosts } from "./forge-posts";
-import { factForget, factForgetRoutes } from "./forget-fact";
 import { gateRoutes } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
@@ -26532,14 +26531,6 @@ export const createServer = (
     },
     tell: (instanceId, text, line) => tellProposer(instanceId, text, line),
   });
-  /** A fact the person forgets, wherever it stands (forget-fact.ts). */
-  const forgottenFacts = factForget({
-    call: (machineId, method, args) => callMachine(machineId, method, args),
-    db,
-    machineName: (machineId) => machineName(machineId),
-    memory: projectMemory,
-    online: (machineId) => !!registry.agent(machineId),
-  });
   // Open proposals are the person's asks again as the hub starts.
   // Read by the boot's sweep of the asks push took (below), which waits on it.
   let memoryParked: Promise<void> = Promise.resolve();
@@ -32712,7 +32703,6 @@ export const createServer = (
         cawRoutes(caw),
         phoneRequestRoutes(jevTasks),
         memoryRoutes(projectMemory),
-        factForgetRoutes(forgottenFacts),
         routineRoutes(routines),
         connectionRoutes(connections),
         trackerRoutes(trackers),
