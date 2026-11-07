@@ -36,6 +36,11 @@
  *      (`continue_session`), so it goes on as one session in its
  *      continuation: the approval is parked again under the session it went
  *      on in, and its card is drawn on that session's page.
+ *  (g) is its own spec, proposal-closes-item-ended: it starts a workspace
+ *      boundary, so it runs on the host.
+ *  (h) (f)'s session also had a memory proposal and a design proposal
+ *      waiting: after the fold both name the session it went on in, and
+ *      still do once the hub restarts.
  *
  * Main fails (a): the proposal stands until Approve is pressed, nobody is
  * told; (b): Approve is refused with "Reject it" and the card stays; (c):
@@ -43,7 +48,7 @@
  *
  *   bun scripts/probe-kit/run.ts proposal-closes-stale
  */
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { hubRequest } from "../../../packages/core/src/hub-request";
@@ -69,6 +74,8 @@ const PROPOSED = TYPE("Scouts the field and reports back.");
 const REWRITTEN = TYPE("Scouts the field quietly.");
 /** (b): the second proposal, and the edit on disk no commit carries. */
 const PROPOSED_AGAIN = TYPE("Scouts the field loudly.");
+/** (h): the folded session's proposal of a type of its own. */
+const PROPOSED_FOLD = TYPE("Scouts the field after the fold.");
 const ON_DISK = TYPE("Scouts the field at night.");
 
 /** The card's buttons on the session's page. */
@@ -78,15 +85,15 @@ const PROPOSAL_TOOL = "mcp__cawco__delegate_type_proposal";
 
 interface Parked {
   instanceId?: string;
-  payload?: { toolName?: string };
+  payload?: { originInstanceId?: string; toolName?: string };
   requestId?: string;
 }
 
-const pendingNow = (fleet: KitFleet) =>
+export const pendingNow = (fleet: KitFleet) =>
   fleet.api<Parked[]>(hubRequest("GET /api/pending"));
 
 /** Waits until `requestId` is off the ledger; answers whether it went. */
-const leaves = (fleet: KitFleet, requestId: string) =>
+export const leaves = (fleet: KitFleet, requestId: string) =>
   until(
     `${requestId} off the ledger`,
     async () =>
@@ -96,7 +103,7 @@ const leaves = (fleet: KitFleet, requestId: string) =>
   ).catch(() => false);
 
 /** Whether `instanceId` was sent words holding `text`, within the wait. */
-const sentTo = (fleet: KitFleet, instanceId: string, text: string) =>
+export const sentTo = (fleet: KitFleet, instanceId: string, text: string) =>
   until(
     `${instanceId.slice(0, 8)} sent ${text.slice(0, 40)}…`,
     async () =>
@@ -177,6 +184,9 @@ const run = async (kit: Kit): Promise<void> => {
   await foldLeg(kit, fleet, base);
 };
 
+/** The project legs (a), (b) and (f) work in, once (a) made it. */
+const scouting = { id: "" };
+
 /** Legs (a) and (b): proposals to delegates/scout.md whose file changed under them. */
 const proposalLegs = async (
   kit: Kit,
@@ -210,6 +220,7 @@ const proposalLegs = async (
       )
     ).content;
   await write(FIRST);
+  scouting.id = project.id;
   const session = await fleet.spawn("claude", "Scouting", fleet.repo, {
     projectId: project.id,
   });
@@ -341,7 +352,7 @@ const proposalLegs = async (
 };
 
 /** The person's design system, a reference the session proposes, and the one the person writes there first. */
-const DESIGN = "# Scouting\n\nThe field guide.\n";
+export const DESIGN = "# Scouting\n\nThe field guide.\n";
 const DESIGN_PROPOSED = "# Field notes\n\nThe proposal's notes.\n";
 const DESIGN_THEIRS = "# Field notes\n\nThe person's notes.\n";
 const DESIGN_PATH = "design/references/field-notes.md";
@@ -434,6 +445,36 @@ const designLeg = async (
   );
 };
 
+/** The repository's own design system, committed, so a change to it is a proposal. */
+export const commitDesign = async (repo: string): Promise<void> => {
+  const git = (...args: string[]) => {
+    const ran = Bun.spawnSync(
+      [
+        "git",
+        "-C",
+        repo,
+        "-c",
+        "user.name=probe",
+        "-c",
+        "user.email=probe@example.invalid",
+        ...args,
+      ],
+      { env: process.env }
+    );
+    if (ran.exitCode !== 0) {
+      throw new Error(`git ${args[0]}: ${ran.stderr.toString()}`);
+    }
+  };
+  await mkdir(join(repo, "design"), { recursive: true });
+  await writeFile(
+    join(repo, "design", "manifest.json"),
+    `${JSON.stringify({ sources: {}, files: {} })}\n`
+  );
+  await writeFile(join(repo, "design", "DESIGN.md"), DESIGN);
+  git("add", "design");
+  git("commit", "-q", "-m", "The repository's design system");
+};
+
 /**
  * Leg (f): a session's approval, the session folded into its continuation:
  * the ask is parked again under the session it went on in, and its card is
@@ -444,7 +485,10 @@ const foldLeg = async (
   fleet: KitFleet,
   base: string
 ): Promise<void> => {
-  const source = await fleet.spawn("claude", "Folded source", fleet.repo);
+  await commitDesign(fleet.repo);
+  const source = await fleet.spawn("claude", "Folded source", fleet.repo, {
+    projectId: scouting.id,
+  });
   const opened = await fleet.send(source, "Say ok.");
   await until(
     "the source's turn read and ended",
@@ -485,6 +529,25 @@ const foldLeg = async (
     );
     return;
   }
+  // (h) Its memory proposal and its design proposal, waiting too.
+  const memory = await proposeOn(fleet, source, PROPOSED_FOLD);
+  const designed = await toolWords(
+    {
+      base: fleet.base,
+      id: source,
+      credential: await fleet.sessionCredential(source),
+    },
+    "design_write",
+    {
+      files: [{ path: "references/fold-notes.md", content: "# Fold notes\n" }],
+      why: "The probe's change from a session that goes on",
+    }
+  );
+  const design = (await pendingNow(fleet)).find(
+    (one) =>
+      one.requestId?.startsWith("dp-") &&
+      one.payload?.originInstanceId === source
+  );
   const caller = await fleet.spawn("claude", "Continuing caller", fleet.repo);
   const known = new Set(
     (
@@ -552,6 +615,46 @@ const foldLeg = async (
       source,
       drawn,
     })
+  );
+  if (!(memory.requestId && design?.requestId)) {
+    kit.check(
+      "(h) the source's memory and design proposals wait on the person",
+      false,
+      `${memory.said} ${designed.text.slice(0, 300)}`
+    );
+    return;
+  }
+  const ids = [memory.requestId, design.requestId];
+  /** Each proposal's session, as its parked card names it. */
+  const origins = async () => {
+    const parked = await pendingNow(fleet);
+    return ids.map(
+      (id) =>
+        parked.find((one) => one.requestId === id)?.payload?.originInstanceId
+    );
+  };
+  const target = job.targetInstanceId;
+  const moved = await until(
+    "the proposals parked under the session it went on in",
+    origins,
+    (now) => now.every((one) => one === target),
+    30_000
+  ).catch(origins);
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  const afterRestart = await until(
+    "the proposals parked again as the hub starts",
+    origins,
+    (now) => now.every((one) => one !== undefined),
+    60_000
+  ).catch(origins);
+  kit.check(
+    "(h) a session folded into its continuation: its memory and design proposals name the session it went on in, before and after the hub restarts",
+    moved.every((one) => one === target) &&
+      afterRestart.every((one) => one === target),
+    JSON.stringify({ source, target, moved, afterRestart })
   );
 };
 

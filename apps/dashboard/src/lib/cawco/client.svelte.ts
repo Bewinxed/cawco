@@ -3865,6 +3865,8 @@ function handleFrame(frame: FramePayload): void {
         existing.routedTo = routedTo;
         existing.raisedAt = frame.raisedAt;
         existing.presentation = frame.presentation;
+        // A proposal's session moved on (a fold): its card follows.
+        existing.originInstanceId = frame.originInstanceId;
         existing.heard = hearAsk();
         break;
       }

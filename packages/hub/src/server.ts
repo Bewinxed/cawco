@@ -19597,6 +19597,14 @@ export const createServer = (
         parkForPerson(askEnvelope(ask, target));
       }
     }
+    // Its memory and design proposals go on with it too: each names the
+    // session it went on in from here, across restarts, and its card is
+    // drawn there.
+    detach(
+      projectMemory.folded(from, to),
+      "memory proposals of a folded session"
+    );
+    designSystem.folded(to);
     if (folded && folded.ending.length > 0) {
       lifecycle.oweEndSession(from, "delete");
     }
@@ -26097,6 +26105,8 @@ export const createServer = (
         routines.itemEnded(item);
         projectStarters.itemEnded(item);
         designVerify.itemEnded(item);
+        // A design proposal made in its clone has nowhere to land now.
+        detach(designSystem.itemEnded(), "design proposals of an ended item");
         watch?.itemEnded(item);
         endBrowserOf(item);
       }),

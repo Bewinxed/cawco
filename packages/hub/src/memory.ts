@@ -3681,6 +3681,41 @@ export const createMemory = ({
     folderCommitted,
 
     /**
+     * Session `from` folded into `to`, the one it went on in: each open
+     * proposal it made names `to` from here (its kept file rewritten, so a
+     * restart reads it so too), and is parked again, its card drawn under
+     * `to`.
+     */
+    async folded(from: string, to: string): Promise<void> {
+      const projects = new Set(open.values());
+      for (const projectId of projects) {
+        const moved = (await proposalsOf(projectId)).filter(
+          (proposal) => open.has(proposal.id) && proposal.session === from
+        );
+        if (moved.length === 0) {
+          continue;
+        }
+        await changeFolderFiles(
+          projectId,
+          {
+            writes: moved.map((proposal) => ({
+              path: `${PROPOSALS_DIR}/${proposal.id}.json`,
+              content: `${JSON.stringify({ ...proposal, session: to }, null, 2)}\n`,
+            })),
+            deletes: [],
+          },
+          {
+            author: HUB,
+            message: `memory: ${moved.length} open proposal${moved.length === 1 ? "" : "s"} of ${from} go${moved.length === 1 ? "es" : ""} on with ${to}, the session it went on in`,
+          }
+        );
+        for (const proposal of moved) {
+          parkProposal({ ...proposal, session: to });
+        }
+      }
+    },
+
+    /**
      * The person's answer to a proposal: approved, it applies as they left
      * it ({@link asApproved}); rejected, its notes are archived. Either way
      * the ask leaves the ledger once done. Approved as its file changed in

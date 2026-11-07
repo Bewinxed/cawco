@@ -1243,6 +1243,21 @@ public enum Words {
 
         public static let proposalUnbasedLine = "Proposal closed: made before CawCo kept its base"
 
+        /// A design proposal made in its work item's clone, closed as that item ended: nothing would land a commit there any more. Its why, what its session reads, its line, and what a press in the same moment is told.
+        public static func proposalItemEnded(root: String) -> String {
+            "the work item that proposed it ended, so nothing would land a commit in \(root) any more"
+        }
+
+        public static func proposalItemEndedTold(id: String, root: String) -> String {
+            "Your design proposal \(id) is closed: your work item ended, so nothing would land a commit in \(root) any more. Nothing was written, and it no longer waits on the person."
+        }
+
+        public static let proposalItemEndedLine = "Proposal closed: its work item ended"
+
+        public static func proposalItemEndedOnAnswer(root: String) -> String {
+            "The work item that proposed this ended, so nothing would land a commit in \(root) any more, and CawCo closed it."
+        }
+
         /// While the session's machine is offline.
         public static let connectOffline = "Machine offline — can't connect yet."
 

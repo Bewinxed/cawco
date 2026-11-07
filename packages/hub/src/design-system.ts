@@ -1437,11 +1437,6 @@ export const createDesignSystem = (deps: {
       return { repo: { machineId: row.machineId, root: row.root } };
     }
     const { workspace } = own;
-    if (own.ended) {
-      throw new Error(
-        `The work item that proposed this has ended, so nothing would land a commit in ${row.root} any more. Deny it; the change can be proposed again.`
-      );
-    }
     return {
       repo: {
         machineId: row.machineId,
@@ -1451,26 +1446,64 @@ export const createDesignSystem = (deps: {
     };
   };
 
+  /** Why a proposal no longer applies: the reason kept, what its session reads, its transcript's line. */
+  interface Closing {
+    line: string;
+    told: string;
+    why: string;
+  }
+
+  /** Closing for a proposal whose change no longer merges into `path` (in design/). */
+  const staleAt = (row: DesignProposalRow, path: string): Closing => {
+    const at = `${DESIGN_DIR}/${path}`;
+    return {
+      why: askWords.proposalClosed(at),
+      told: askWords.proposalClosedTold(row.id, at),
+      line: askWords.proposalClosedLine(at),
+    };
+  };
+
+  /** Closing for a proposal kept before bases were, which can't be read. */
+  const unbased = (row: DesignProposalRow): Closing => ({
+    why: askWords.proposalUnbased,
+    told: askWords.proposalUnbasedTold(row.id),
+    line: askWords.proposalUnbasedLine,
+  });
+
+  /**
+   * THE TARGET IS GONE: a proposal made in its work item's own clone, that
+   * item ended, so nothing would land a commit there any more. Its closing;
+   * undefined while the proposal still has somewhere to go.
+   */
+  const itemGone = (row: DesignProposalRow): Closing | undefined => {
+    if (!(row.machineId && row.root)) {
+      return;
+    }
+    // A host-scope item's folder is the machine's own, not a clone: an
+    // approval writes there whether or not the item still runs.
+    const own = workspaceOfSession(row.instanceId);
+    if (!own?.ended || own.workspace.host || own.workspace.path !== row.root) {
+      return;
+    }
+    return {
+      why: askWords.proposalItemEnded(row.root),
+      told: askWords.proposalItemEndedTold(row.id, row.root),
+      line: askWords.proposalItemEndedLine,
+    };
+  };
+
   /**
    * A proposal that no longer applies, closed by the hub: it leaves the
-   * record and every screen with why, and its session is told so it can
-   * propose again from design/ as it is now. `path`: the file it no longer
-   * applies to; none for one kept without its bases. Answers whether its
-   * session was told.
+   * record and every screen with why (a delegate's parent hears it then,
+   * delegate-waits.ts), and its session is told so it can propose again
+   * from where things stand now. Answers whether its session was told.
    */
-  const closeStale = (row: DesignProposalRow, path?: string): boolean => {
-    const at = path ? `${DESIGN_DIR}/${path}` : undefined;
-    const why = at ? askWords.proposalClosed(at) : askWords.proposalUnbased;
+  const closeStale = (row: DesignProposalRow, closing: Closing): boolean => {
+    const { why } = closing;
     deps.db.designChecks.dropProposal(row.id);
     open.delete(row.id);
     deps.settle(row.id, why);
-    const told = deps.tellClosed(
-      row.instanceId,
-      at
-        ? askWords.proposalClosedTold(row.id, at)
-        : askWords.proposalUnbasedTold(row.id),
-      at ? askWords.proposalClosedLine(at) : askWords.proposalUnbasedLine
-    );
+    const told = deps.tellClosed(row.instanceId, closing.told, closing.line);
     console.log(
       `[design] ${row.projectId}: ${row.id} closed, ${why}; ${told ? `${row.instanceId} told` : "no session to tell"}`
     );
@@ -1492,6 +1525,11 @@ export const createDesignSystem = (deps: {
         (row) => open.has(row.id) && !answering.has(row.id) && which(row)
       );
     for (const row of rows) {
+      const gone = itemGone(row);
+      if (gone) {
+        closeStale(row, gone);
+        continue;
+      }
       let applies: Awaited<ReturnType<typeof appliesAt>>;
       try {
         applies = await appliesAt(
@@ -1512,7 +1550,7 @@ export const createDesignSystem = (deps: {
         open.has(row.id) &&
         !answering.has(row.id)
       ) {
-        closeStale(row, applies.stale);
+        closeStale(row, staleAt(row, applies.stale));
       }
     }
   };
@@ -1553,6 +1591,11 @@ export const createDesignSystem = (deps: {
    * is refused saying so.
    */
   const approve = async (row: DesignProposalRow): Promise<string> => {
+    const gone = itemGone(row);
+    if (gone && row.root) {
+      closeStale(row, gone);
+      throw new Error(askWords.proposalItemEndedOnAnswer(row.root));
+    }
     const place = placeOfProposal(row);
     const applies = await appliesAt(
       storeAt(row.projectId, place, row.instanceId, YOU.name),
@@ -1560,7 +1603,7 @@ export const createDesignSystem = (deps: {
     );
     if (!applies || "stale" in applies) {
       const path = applies?.stale;
-      const told = closeStale(row, path);
+      const told = closeStale(row, path ? staleAt(row, path) : unbased(row));
       const closed = path
         ? askWords.proposalClosedOnAnswer(`${DESIGN_DIR}/${path}`)
         : `${askWords.proposalUnbased}.`;
@@ -1628,6 +1671,25 @@ export const createDesignSystem = (deps: {
     },
 
     /**
+     * A work item ended: each open proposal made in its own clone closes,
+     * having nowhere to land ({@link itemGone}).
+     */
+    itemEnded: (): Promise<void> => recheck((row) => !!itemGone(row)),
+
+    /**
+     * A session folded into `to`, the one it went on in (db `foldContinued`
+     * moved its rows): each of `to`'s open proposals is parked again, so
+     * its card is drawn under `to`.
+     */
+    folded: (to: string): void => {
+      for (const row of deps.db.designChecks.proposals()) {
+        if (row.instanceId === to && open.has(row.id)) {
+          park(row);
+        }
+      }
+    },
+
+    /**
      * A commit changed `paths` in `projectId`'s folder: its open proposals
      * on design/ there that it left no longer applying close.
      */
@@ -1685,8 +1747,11 @@ export const createDesignSystem = (deps: {
     /** Every open proposal, parked again as the hub starts: the person's asks outlive it. */
     start: (): void => {
       for (const row of deps.db.designChecks.proposals()) {
-        if (row.files.some((file) => file.before === undefined)) {
-          closeStale(row);
+        const closing = row.files.some((file) => file.before === undefined)
+          ? unbased(row)
+          : itemGone(row);
+        if (closing) {
+          closeStale(row, closing);
         } else {
           park(row);
         }

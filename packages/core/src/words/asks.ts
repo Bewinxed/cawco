@@ -110,6 +110,18 @@ export const askWords = {
   proposalUnbasedTold: (id: string) =>
     `Your design proposal ${id} is closed: it was made before CawCo kept what a proposal is made against, so whether it still applies can't be told. Nothing was written, and it no longer waits on the person. If the change is still wanted, propose it again.`,
   proposalUnbasedLine: "Proposal closed: made before CawCo kept its base",
+  /**
+   * A design proposal made in its work item's clone, closed as that item
+   * ended: nothing would land a commit there any more. Its why, what its
+   * session reads, its line, and what a press in the same moment is told.
+   */
+  proposalItemEnded: (root: string) =>
+    `the work item that proposed it ended, so nothing would land a commit in ${root} any more`,
+  proposalItemEndedTold: (id: string, root: string) =>
+    `Your design proposal ${id} is closed: your work item ended, so nothing would land a commit in ${root} any more. Nothing was written, and it no longer waits on the person.`,
+  proposalItemEndedLine: "Proposal closed: its work item ended",
+  proposalItemEndedOnAnswer: (root: string) =>
+    `The work item that proposed this ended, so nothing would land a commit in ${root} any more, and CawCo closed it.`,
   /** While the session's machine is offline. */
   connectOffline: "Machine offline — can't connect yet.",
   /** The chip at the tray row's end while a card stands open above. */
