@@ -2820,8 +2820,8 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * A stages.md that is the code template, now or as it was (stages.ts
-   * `isCodeTemplate`), goes: the project reads the hub's code template,
+   * A stages.md that is the code template, now or as it was before review
+   * was a project's choice, goes: the project reads the hub's code template,
    * so it follows the template and its Review before done. A project's own
    * stages stay, and so does the file of one whose row records another
    * template, which it would read in the file's place ({@link stagesOf}).

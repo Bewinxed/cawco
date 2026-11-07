@@ -93,7 +93,6 @@
     "./decides": "./src/decides.ts",
     "./house-faces": "./src/house-faces.ts",
     "./words/decisions": "./src/words/decisions.ts",
-    "./words/stages": "./src/words/stages.ts",
     "./words/onboarding": "./src/words/onboarding.ts",
     "./words/decides": "./src/words/decides.ts",
     "./words/helpers": "./src/words/helpers.ts",

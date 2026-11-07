@@ -40,12 +40,6 @@
  *   to has no `by:` naming someone else. A file without `moves` lets you and
  *   a session make any move, and the routine move a task held by a stage's
  *   `after:` or `until:` on to the next stage that is not dropped.
- * - **A stage of kind `you` holds by its kind**, whatever the moves say: a
- *   task in it waits for you. Only your own move, an approved action, the
- *   stage's own routine (its `after:` or `until:`) or the hub takes it to a
- *   stage after it or drops it; a session only sends it back, to a stage
- *   before it that is not dropped. Telling a session to move it counts for
- *   nothing: it asks you, and you move it.
  * - **Its look**, beside the hooks: `color: <hue>` and `icon: <glyph>` give
  *   the stage's mark on the board, a glyph by a plain word in a section hue
  *   (core `STAGE_COLORS`, `STAGE_ICONS`). Neither is required; a stage with
@@ -78,7 +72,6 @@ import type {
   StageView,
 } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-import { stageWords } from "@cawco/core/words/stages";
 
 export interface Stages {
   moves: StageMove[];
@@ -447,10 +440,8 @@ export const readStages = (content: string): StagesReading => {
     ok: true,
     stages: {
       stages: reader.stages,
-      // No moves section: you and a session make any move, except that a
-      // stage of kind `you` still holds by its kind (`youStageLets`), so a
-      // session only sends a task in it back; and the routine moves a task
-      // on from each stage that holds it (`heldOn`).
+      // No moves section: you and a session make any move, and the routine
+      // moves a task on from each stage that holds it (`heldOn`).
       moves: reader.hasMoves
         ? reader.moves
         : [
@@ -513,31 +504,6 @@ const covers = (
       move.who.includes(who)
   );
 
-/**
- * Whether the kind of `from` lets `who` take a task out of it to `to`. A
- * stage of kind `you` holds the task for you: a session sends it back only,
- * to a stage before it that is not dropped; you, an approved action and the
- * stage's own routine (waits.ts, on its `after:` or `until:`) take it
- * anywhere the moves allow. Any other stage lets every move the moves allow.
- */
-const youStageLets = (
-  stages: Stages,
-  from: string,
-  to: string,
-  who: Mover
-): boolean => {
-  const source = stageNamed(stages, from);
-  if (who !== "session" || source?.kind !== "you") {
-    return true;
-  }
-  const target = stageNamed(stages, to);
-  return (
-    target !== undefined &&
-    target.kind !== "dropped" &&
-    stages.stages.indexOf(target) < stages.stages.indexOf(source)
-  );
-};
-
 /** The stages `who` may move a task to from `from`. */
 export const movesFrom = (stages: Stages, from: string, who: Mover): string[] =>
   stages.stages
@@ -545,8 +511,7 @@ export const movesFrom = (stages: Stages, from: string, who: Mover): string[] =>
       (to) =>
         to.name !== from &&
         mayEnter(to, who) &&
-        covers(stages, from, to.name, who) &&
-        youStageLets(stages, from, to.name, who)
+        covers(stages, from, to.name, who)
     )
     .map((to) => to.name);
 
@@ -664,33 +629,6 @@ export const startProblem = (
 };
 
 /**
- * Why `who` may not take `task` out of `from`, a stage of kind `you`, to
- * `to` ({@link youStageLets}): it waits for the person, so only they, an
- * approved action or the stage's own routine take it on or drop it. Names
- * the stages `who` can send it back to; `refused` is what was refused, a
- * move unless said. Undefined when the stage's kind lets it.
- */
-export const heldProblem = (
-  stages: Stages,
-  task: string,
-  from: string,
-  to: string,
-  who: Mover,
-  refused = stageWords.move(from, to)
-): string | undefined => {
-  if (youStageLets(stages, from, to, who)) {
-    return;
-  }
-  const open = movesFrom(stages, from, who);
-  return stageWords.held(
-    task,
-    refused,
-    from,
-    stageWords.instead(moverPhrase(who), open.length > 0 ? listed(open) : "")
-  );
-};
-
-/**
  * Why `who` may not move `task` from `from` to `to`, naming the moves they
  * can make instead; undefined when the move is allowed.
  */
@@ -705,17 +643,13 @@ export const moveProblem = (
   if (!target) {
     return unknownStage(stages, to);
   }
-  const held = heldProblem(stages, task, from, to, who);
-  if (held) {
-    return held;
-  }
   if (mayEnter(target, who) && covers(stages, from, to, who)) {
     return;
   }
-  const open = movesFrom(stages, from, who);
   const why = mayEnter(target, who)
     ? `${moverPhrase(who)} may not make that move`
     : `only ${moverPhrase(target.hooks.by as Mover)} moves a task to ${to}`;
+  const open = movesFrom(stages, from, who);
   const instead =
     open.length > 0
       ? `From ${from || "where it is"}, ${moverPhrase(who)} can move it to ${listed(open)}.`
@@ -730,17 +664,14 @@ dropped. Hooks: \`runs: <delegate type>\` starts that type as a task enters an
 active stage; \`until: <field>\` and \`after: <duration>\` hold a task until a
 routine moves it on; \`by: <who>\` says who alone moves a task in. \`moves\`
 lists who may make each move (you, session, action, routine; \`*\` is
-any stage). Tasks in a stage of kind \`you\` show in Needs you and wait for
-you there, whatever the moves say: only your own move, an approved action or
-the stage's own routine takes one on or drops it; a session only sends it
-back, to a stage before it.
+any stage). Tasks in a stage of kind \`you\` show in Needs you.
 `;
 
 const TEMPLATE_TEXT: Record<StagesTemplate, { block: string; about: string }> =
   {
     code: {
       about:
-        "Stages for code: a task waits in ready, is worked on, and lands in done.\nReview is for the tasks you want a look at: a task there waits for you,\nand only you move it on. Turn on Review before done and every task waits\nthere for you.",
+        "Stages for code: a task waits in ready, is worked on, and lands in done.\nReview is for the tasks you want a look at; turn on Review before done\nand every task waits there for you.",
       block: `ready      todo
 working    active
 review     you
@@ -755,6 +686,7 @@ moves
   working → done       session
   review → working     session
   review → ready       session
+  review → done        session
   * → dropped          session
 views
   board      by stage
@@ -980,15 +912,12 @@ export const ruledStages = (stages: Stages, review: boolean): Stages =>
     : stages;
 
 /**
- * The code template's blocks as they were. Before review became a project's
- * choice: every task waited for your review, and only you moved one to
- * done. Then, until a stage of kind `you` held by its kind: a session also
- * moved a task from review to done. A stages.md that reads as either (or as
- * today's code template) is the template the project was made with, not one
- * of its own (`isCodeTemplate`).
+ * The code template's block before review became a project's choice: every
+ * task waited for your review, and only you moved one to done. A stages.md
+ * that reads as this (or as today's code template) is the template the
+ * project was made with, not one of its own (`isCodeTemplate`).
  */
-const FORMER_CODE = [
-  `---
+const FORMER_CODE = `---
 ready      todo
 working    active
 review     you
@@ -1006,30 +935,7 @@ views
   board      by stage
   table      by rank
 ---
-`,
-  `---
-ready      todo
-working    active
-review     you
-done       done
-dropped    dropped
-moves
-  * → *                you
-  ready → working      session
-  ready → review       session
-  ready → done         session
-  working → review     session
-  working → done       session
-  review → working     session
-  review → ready       session
-  review → done        session
-  * → dropped          session
-views
-  board      by stage
-  table      by rank
----
-`,
-];
+`;
 
 /** Stages as one comparable line each: moves and their movers in any order are the same rules. */
 const shapeOf = (stages: Stages): string =>
@@ -1045,7 +951,7 @@ const shapeOf = (stages: Stages): string =>
 
 /**
  * Whether a stages.md says nothing the code template (as it is, or as it
- * was: {@link FORMER_CODE}) does not: the same stages, moves and
+ * was before review became a choice) does not: the same stages, moves and
  * views, whatever its notes. Such a file is dropped, and the project reads
  * the hub's code template.
  */
@@ -1055,12 +961,10 @@ export const isCodeTemplate = (content: string): boolean => {
     return false;
   }
   const shape = shapeOf(reading.stages);
+  const former = readStages(FORMER_CODE);
   return (
     shape === shapeOf(templateStages("code")) ||
-    FORMER_CODE.some((block) => {
-      const former = readStages(block);
-      return former.ok && shape === shapeOf(former.stages);
-    })
+    (former.ok && shape === shapeOf(former.stages))
   );
 };
 
