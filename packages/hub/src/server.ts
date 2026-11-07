@@ -1040,7 +1040,7 @@ import {
   viaSshForward,
 } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
-import { templateOf } from "./stages";
+import { REVIEW_SKILL, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
@@ -26213,6 +26213,8 @@ export const createServer = (
       write: (projectId, taskId, changes, reason) =>
         tasks.todos(projectId, taskId, changes, hubActor(reason)),
     },
+    reviews: async (projectId, taskId, workItemId) =>
+      !!(await tasks.reviewing(projectId, taskId, workItemId)),
     call: callMachine,
     // A handoff to a delegate whose workspace retired waited at the hub
     // while the clone was cut again; it goes now, waking the session.
@@ -26369,6 +26371,10 @@ export const createServer = (
     startProblem: (projectId, task) => dispatcher.problemOf(projectId, task),
     resolvesType: (projectId, type) =>
       projectTypes.resolveTypeFor(projectId, type) !== undefined,
+    reviewsType: (projectId, type) =>
+      projectTypes
+        .resolveTypeFor(projectId, type)
+        ?.skills?.includes(REVIEW_SKILL) ?? false,
     queuedStarts: (projectId) =>
       db.queuedTaskStarts(projectId).map((row) => row.taskId),
     // What the one resolver reads past the project's tasks (task-waits.ts).

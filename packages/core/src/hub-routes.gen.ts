@@ -5242,6 +5242,14 @@ export interface components {
       response_format?: "concise" | "detailed";
       /** @description What you did, in a few sentences. */
       summary: string;
+      /** @description Its reviewer's only: one per acceptance line (from 1); owner is his call, with card <page>#<card>. */
+      verdict?: {
+        card?: string;
+        evidence: string;
+        line: number;
+        /** @enum {string} */
+        verdict: "met" | "unmet" | "owner";
+      }[];
     };
     "tool task_retry": {
       /** @description A task id, like tsk-12: what ends its link, cawco:task/<project>/tsk-12. */

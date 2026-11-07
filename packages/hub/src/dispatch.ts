@@ -105,10 +105,22 @@
  *   order. Delegate type: a task whose stage runs none and that names none
  *   runs Jev's choice from the project's catalog, else "medium". Judged
  *   checks: an attempt that lands at a task with acceptance criteria moves
- *   it to done only when Jev shows every criterion met (else to the first
- *   `you` stage, with a comment naming what is not); Jev off, the project's conversation
- *   judges them (the task stays until it moves it), and with events off
- *   it goes to you.
+ *   it to done only when Jev shows every criterion met (else, with a comment
+ *   naming what is not, to the project's review stage when it has one, else
+ *   the first `you` stage); Jev off, the project's conversation judges them
+ *   (the task stays until it moves it), and with events off it goes on as
+ *   one Jev did not show met.
+ * - **Review** (stages.ts `reviewStageOf`). A task the hub sends to its
+ *   project's review stage gets that stage's reviewer started by the hub,
+ *   reporting to whoever the ended attempt reported to, queued at
+ *   `max_attempts` ({@link startAfter}). An attempt there runs the
+ *   reviewer, whatever the task's own type, and lands nothing. The
+ *   reviewer's verdict (task_result `verdict`, which its finish_item waits
+ *   for) is the move as it ends: every line met → done, its criteria
+ *   ticked; a line that is the owner's by Who decides → the first `you`
+ *   stage, waiting on its card; else an unmet line → back to working with
+ *   each unmet line a to-do, the hub starting its next attempt
+ *   ({@link settleReview}). The owner sees only the `you` kind.
  *
  * It wakes on events only: a work item ending, a task changing, a setting
  * changing, a machine with a checkout coming online. A slow timer looks
@@ -127,6 +139,7 @@ import {
   type TaskMover,
   taskLink,
   todoLink,
+  type VerdictLine,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import type {
@@ -135,6 +148,7 @@ import type {
   TaskSummary,
   WaitWitness,
 } from "@cawco/core/task-views";
+import { reviewWords } from "@cawco/core/words/review";
 import { stageWords } from "@cawco/core/words/stages";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow, WorkItemRow } from "./db";
@@ -167,6 +181,7 @@ import {
   type TaskEvent,
   type Tasks,
   type TaskView,
+  TODO_LIMIT,
 } from "./tasks";
 import {
   budgetProblem,
@@ -562,6 +577,25 @@ const attemptNamed = (
   task: Pick<TaskView, "title">
 ): string => `its attempt ${sessionLink(item.instanceId, task.title)}`;
 
+/** A reviewer's attempt, as a sentence names it. */
+const reviewerOf = (
+  item: Pick<WorkItemRow, "instanceId">,
+  task: Pick<TaskView, "title">
+): string => `its reviewer ${sessionLink(item.instanceId, task.title)}`;
+
+/** The hub, moving or writing on a task by its reviewer's verdict. */
+const reviewerActor = (item: Pick<WorkItemRow, "id">, why: string): TaskActor =>
+  hubActor(`reviewer ${short(item.id)} ${why}`);
+
+/** Verdict lines as a comment lists them: each by its place, the acceptance line, and its evidence. */
+const verdictLines = (lines: VerdictLine[], criteria: string[]): string =>
+  lines
+    .map(
+      (line) =>
+        `- ${line.line}. ${criteria[line.line - 1] ?? ""}: ${line.evidence}`
+    )
+    .join("\n");
+
 /** The work item's title: the task's title, what its session's chip reads, cut to what a session name takes. */
 const titleOf = (task: TaskView): string => {
   const { title } = task;
@@ -589,10 +623,13 @@ const briefOf = ({
   design,
   retry,
   asked,
+  reviewed,
 }: {
   all: TaskSummary[];
   /** The brief of the `delegate` call that named the task, above the task file. */
   asked?: string;
+  /** The attempt this one reviews, as the task's reviewer in its review stage. */
+  reviewed?: WorkItemRow;
   comments: TaskComment[];
   context: string;
   design: string;
@@ -611,18 +648,6 @@ const briefOf = ({
   /** A wait as the brief names it: its link, where it stands, a card's pick, whose chain it is from. */
   const waitLine = (wait: TaskView["waits"][number]): string =>
     `${markdownLink(wait.label, wait.href)}, ${wait.flag ? `blocked: ${wait.flag}` : wait.state}${wait.kind === "card" && wait.value ? `, picked ${wait.value}` : ""}${wait.via ? ` (through ${line(wait.via)})` : ""}`;
-  const open = task.todos.filter((todo) => !todo.done);
-  const todos =
-    open.length > 0
-      ? `Start your plan from these open to-dos: a step for each, its \`id\` the to-do's id (the last part of its link, \`td-3\`) and its content the to-do's words, like \`{ id: "td-3", content: "Persist the choice" }\`:\n\n${open
-          .map(
-            (todo) =>
-              `${"  ".repeat(todo.depth)}- ${todo.id ? todoLink(project.id, task.id, todo.id, todo.text) : todo.text}`
-          )
-          .join(
-            "\n"
-          )}\n\nWhen a step whose id is a to-do's is completed, the hub ticks that to-do; you can also tick it with todo_write. Add the steps you find. finish_item lists the to-dos still open once: tick or explain each in your summary. Steps you leave open become proposed to-dos on the task.`
-      : "The task has no open to-dos. Add the steps you find with todo_write as you go; plan items you leave open become proposed to-dos on the task.";
   const sits = [
     ...(task.waits.length > 0
       ? [`It waits on: ${task.waits.map(waitLine).join("; ")}.`]
@@ -644,22 +669,54 @@ const briefOf = ({
       : []),
   ];
   return [
-    `Your work item is an attempt at ${taskLink(project.id, task.id, task.title)}, a task of the project ${project.name}. ${asked ? "This brief is the words of the session that started you, then the task file as it stands." : "This brief is its task file as it stands."} Name it, its to-dos and the tasks below to the person by their links.`,
+    openingOf(project, task, !!asked, !!reviewed),
     ...(asked ? [`## From the session that started you\n\n${asked}`] : []),
+    ...(reviewed ? [reviewedSection(reviewed)] : []),
     ...(task.description ? [`## Description\n\n${task.description}`] : []),
     ...(task.acceptance
       ? [`## Acceptance criteria\n\n${task.acceptance}`]
       : []),
-    `## To-dos\n\n${todos}`,
+    ...(reviewed ? [] : [`## To-dos\n\n${todosOf(project, task)}`]),
     `${checksSection(task)}\n\n${AT_FINISH[lands]}`,
     `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits on nothing."}`,
     ...(task.parts.length > 0 ? [partsSection(task.parts.map(line))] : []),
-    `## Handing it in\n\n${RESULT_LINE}`,
+    `## Handing it in\n\n${reviewed ? VERDICT_LINE : RESULT_LINE}`,
     ...(context ? [context] : []),
     ...(design ? [design] : []),
     ...(retry ? [retrySection(project.id, task, retry)] : []),
     ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
+};
+
+/** The brief's first line: what the work item is, an attempt or a review, and what the brief holds. */
+const openingOf = (
+  project: ProjectRow,
+  task: TaskView,
+  asked: boolean,
+  reviews: boolean
+): string => {
+  const link = taskLink(project.id, task.id, task.title);
+  const holds = asked
+    ? "This brief is the words of the session that started you, then the task file as it stands."
+    : "This brief is its task file as it stands.";
+  return reviews
+    ? `Your work item reviews the last attempt at ${link}, a task of the project ${project.name}, as its reviewer. ${holds} Name it and the tasks below to the person by their links.`
+    : `Your work item is an attempt at ${link}, a task of the project ${project.name}. ${holds} Name it, its to-dos and the tasks below to the person by their links.`;
+};
+
+/** The brief's to-dos: the task's open ones, each a step of the attempt's plan. */
+const todosOf = (project: ProjectRow, task: TaskView): string => {
+  const open = task.todos.filter((todo) => !todo.done);
+  return open.length > 0
+    ? `Start your plan from these open to-dos: a step for each, its \`id\` the to-do's id (the last part of its link, \`td-3\`) and its content the to-do's words, like \`{ id: "td-3", content: "Persist the choice" }\`:\n\n${open
+        .map(
+          (todo) =>
+            `${"  ".repeat(todo.depth)}- ${todo.id ? todoLink(project.id, task.id, todo.id, todo.text) : todo.text}`
+        )
+        .join(
+          "\n"
+        )}\n\nWhen a step whose id is a to-do's is completed, the hub ticks that to-do; you can also tick it with todo_write. Add the steps you find. finish_item lists the to-dos still open once: tick or explain each in your summary. Steps you leave open become proposed to-dos on the task.`
+    : "The task has no open to-dos. Add the steps you find with todo_write as you go; plan items you leave open become proposed to-dos on the task.";
 };
 
 /**
@@ -678,6 +735,18 @@ const partsSection = (parts: string[]): string =>
  */
 const RESULT_LINE =
   'Before finish_item, show your work, then hand it in. Show it with artifact_create: a page that draws what you made as its reader will meet it (the post as it will read, the report, the screen), or a preview of the app running. The review draws that artifact whole; it draws no file. Then call task_result: `summary`, what you did in a few sentences; `check`, what the reviewer should look at, one line each; `artifacts`, that artifact first (`kind: "artifact"`, its `artifactId`, `primary: true`), then each file by its path from the project folder and each link by its url. Words alone only when there is nothing to show.';
+
+/** How a reviewer hands in: its verdict is the task's move. */
+const VERDICT_LINE =
+  "Judge each acceptance line with the review-attempt skill, then call task_result: `summary`, your review in a few sentences; `verdict`, one line per acceptance line by its place from 1, each `met`, `unmet` (its `evidence` says what is missing) or `owner` (his to decide by the project's Who decides: a Look, Behaviour or Scope question, asked on a decision card you name in `card`). Then call finish_item with the same summary. When you finish, your verdict moves the task: every line met closes it, its lines ticked; an owner's line sends it to him, waiting on its card; otherwise an unmet line sends it back to be worked, each unmet line a to-do. You change nothing in the work.";
+
+/**
+ * The attempt a reviewer judges: its session and where its work landed. Its
+ * report is left out, so the review is formed from the change itself
+ * (review-attempt step 1).
+ */
+const reviewedSection = (item: WorkItemRow): string =>
+  `## The attempt you review\n\n${sessionLink(item.instanceId, item.title)}, ${item.state}${item.landed ? `, its work ${item.landed.onto ? "landed" : "pushed to its branch"} as ${item.landed.sha}` : ""}. Read its change from the commits, not its report.`;
 
 /** The most comments a brief carries: the newest. */
 const BRIEF_COMMENTS_MAX = 20;
@@ -1209,7 +1278,11 @@ export const createDispatcher = ({
     project: ProjectRow,
     task: TaskView,
     lands: LandsMode,
-    { asked, previous }: { asked?: string; previous?: WorkItemRow }
+    {
+      asked,
+      previous,
+      reviews,
+    }: { asked?: string; previous?: WorkItemRow; reviews?: boolean }
   ): Promise<(design: string) => string> => {
     const { tasks: all } = await tasks.list(project.id);
     const retry = previous
@@ -1240,7 +1313,31 @@ export const createDispatcher = ({
         design,
         retry,
         ...(asked ? { asked } : {}),
+        ...(reviews && last ? { reviewed: last } : {}),
       });
+  };
+
+  /**
+   * The type an attempt runs, and whether it is the task's reviewer: what a
+   * `delegate` naming the task asked; in the project's review stage its
+   * reviewer, whatever the task's own type; else the task's or its stage's
+   * ({@link typeOf}); else the judged one ({@link chosenType}).
+   */
+  const attemptType = async (
+    project: ProjectRow,
+    task: TaskView,
+    active: Stage | undefined,
+    asked: AttemptAsk | undefined
+  ): Promise<{ reviews: boolean; type: string | undefined }> => {
+    const review = await tasks.reviewStage(project.id);
+    const reviewer =
+      active && review?.name === active.name ? review.hooks.runs : undefined;
+    const type =
+      asked?.type ??
+      reviewer ??
+      typeOf(task, active) ??
+      (await chosenType(project, task));
+    return { type, reviews: !!reviewer && type === reviewer };
   };
 
   /**
@@ -1263,13 +1360,15 @@ export const createDispatcher = ({
     }: { asked?: AttemptAsk; origin?: Origin; previous?: WorkItemRow }
   ): Promise<WorkItemStart> => {
     const placed = placementOf(project, task, parent, previous);
-    const type =
-      asked?.type ?? typeOf(task, active) ?? (await chosenType(project, task));
-    const lands = asked?.lands ?? landsOf(project, task, type);
+    const { type, reviews } = await attemptType(project, task, active, asked);
+    // A reviewer changes nothing, so it lands nothing.
+    const lands =
+      asked?.lands ?? (reviews ? "none" : landsOf(project, task, type));
     try {
       const brief = await briefFor(project, task, lands, {
         asked: asked?.prompt,
         previous,
+        reviews,
       });
       const request: WorkItemRequest = {
         parentInstanceId: parent.id,
@@ -1684,7 +1783,9 @@ export const createDispatcher = ({
     const stages = await tasks.stages(project.id);
     const stage = stages.stages.find((each) => each.name === queued.stage);
     const task = await tasks.get(project.id, queued.taskId);
-    const hook = stage?.kind === "active" && !!stage.hooks.runs;
+    // A start into an active stage is queued only by its `runs:` hook or by
+    // the hub after an attempt ended (startAfter): either runs here.
+    const hook = stage?.kind === "active";
     if (!(hook || owns) || task.stage !== queued.stage || task.liveAttempt) {
       console.log(
         `[dispatch] ${project.name}: ${task.id}'s queued start is dropped: it is in ${task.stage}${task.liveAttempt ? " with a live attempt" : ""}, not waiting in ${queued.stage}.`
@@ -1945,7 +2046,13 @@ export const createDispatcher = ({
       : settleOne(projectId, task, item, stages));
   };
 
-  /** {@link settle} for a task with no parts: done, review, or back to todo, as its attempt ended. */
+  /**
+   * {@link settle} for a task with no parts: done, review, or back to todo,
+   * as its attempt ended. Its reviewer's verdict, when the attempt that
+   * ended reviewed it ({@link settleReview}); an attempt whose acceptance
+   * criteria are not shown met goes to the project's review stage, where
+   * the hub starts its reviewer ({@link startAfter}), else to you.
+   */
   const settleOne = async (
     projectId: string,
     task: TaskView,
@@ -1953,13 +2060,30 @@ export const createDispatcher = ({
     stages: { stages: readonly Stage[] }
   ): Promise<void> => {
     const taskId = task.id;
+    const reviewed = await tasks.reviewing(projectId, taskId, item.id);
+    if (reviewed && item.state === "done") {
+      await settleReview(projectId, task, item, stages, reviewed);
+      return;
+    }
     const criteria = criteriaOf(task.acceptance);
-    const judged = await kindAfterJudged(projectId, task, criteria, item);
+    const review = await tasks.reviewStage(projectId);
+    const judged = await kindAfterJudged(
+      projectId,
+      task,
+      criteria,
+      item,
+      review
+    );
     // The project's conversation judges: the task stays where it is until it moves it.
     if (judged === "conversation") {
       return;
     }
-    const kind = judged === "done" && reviewsFirst(stages) ? "you" : judged;
+    if (judged === "unshown" && review) {
+      await toReview(projectId, task, item, review);
+      return;
+    }
+    const landed = judged === "unshown" ? "you" : judged;
+    const kind = landed === "done" && reviewsFirst(stages) ? "you" : landed;
     const target = stages.stages.find((each) => each.kind === kind);
     // Only an approved action enters a `by: action` stage (§5.2): the task stays.
     if (target?.hooks.by === "action") {
@@ -1974,9 +2098,268 @@ export const createDispatcher = ({
         projectId,
         taskId,
         target.name,
-        hubActor(movedBecause(item, judged, kind, criteria.length)),
+        hubActor(movedBecause(item, landed, kind, criteria.length)),
         undefined,
-        { tickCriteria: closedMet(judged, kind, criteria.length) }
+        { tickCriteria: closedMet(landed, kind, criteria.length) }
+      );
+    }
+  };
+
+  /**
+   * An attempt whose acceptance criteria are not shown met goes to the
+   * project's review stage, as the hub, and the hub starts its reviewer
+   * there ({@link startAfter}).
+   */
+  const toReview = async (
+    projectId: string,
+    task: TaskView,
+    item: WorkItemRow,
+    review: Stage
+  ): Promise<void> => {
+    if (review.name !== task.stage) {
+      await tasks.move(
+        projectId,
+        task.id,
+        review.name,
+        hubActor(
+          `attempt ${short(item.id)} ${item.state}; its acceptance criteria go to ${review.name}, for its reviewer${landedAs(item)}`
+        )
+      );
+    }
+    await startAfter(
+      projectId,
+      task,
+      review,
+      item,
+      `It went to ${review.name}, which runs ${review.hooks.runs}`
+    );
+  };
+
+  /**
+   * A reviewer's attempt ended done: its verdict (task_result `verdict`,
+   * tasks.ts `verdictChecked`) is the task's move, as the hub. Each unmet
+   * line becomes a to-do. A line that is the owner's sends it to the first
+   * `you` stage, waiting on each such line's card ({@link toOwner}); else an
+   * unmet line sends it back to work ({@link backToWork}); else every line
+   * met closes it to the first done stage, its criteria ticked (to the
+   * first `you` stage while the project reviews before done). A reviewer
+   * that ended with no verdict (work-items.ts refuses its finish_item
+   * without one) judged nothing: the task goes on to its todo stage, saying
+   * so.
+   */
+  const settleReview = async (
+    projectId: string,
+    task: TaskView,
+    item: WorkItemRow,
+    stages: { stages: readonly Stage[] },
+    review: Stage
+  ): Promise<void> => {
+    const verdict = item.taskResult?.verdict;
+    if (!verdict) {
+      await nobodyOn(
+        projectId,
+        task.id,
+        review.name,
+        `${reviewerOf(item, task)} ended with no verdict`
+      );
+      return;
+    }
+    const criteria = criteriaOf(task.acceptance);
+    const unmet = verdict.filter((line) => line.verdict === "unmet");
+    const owner = verdict.filter((line) => line.verdict === "owner");
+    if (unmet.length > 0) {
+      await tasks.todos(
+        projectId,
+        task.id,
+        {
+          add: unmet.map((line) => ({
+            text: reviewWords
+              .todo(line.line, criteria[line.line - 1] ?? "", line.evidence)
+              .slice(0, TODO_LIMIT),
+          })),
+        },
+        reviewerActor(item, "found acceptance lines unmet")
+      );
+    }
+    const you = stages.stages.find((each) => each.kind === "you");
+    if (owner.length > 0 && you) {
+      await toOwner(projectId, task, item, you, { owner, unmet, criteria });
+      return;
+    }
+    if (unmet.length > 0) {
+      await backToWork(projectId, task, item, stages, review, {
+        unmet,
+        criteria,
+      });
+      return;
+    }
+    // Review before done holds a closed task for the person, as any close.
+    const closes = reviewsFirst(stages)
+      ? you
+      : stages.stages.find((each) => each.kind === "done");
+    if (!closes || closes.hooks.by === "action") {
+      return;
+    }
+    await tasks.move(
+      projectId,
+      task.id,
+      closes.name,
+      reviewerActor(
+        item,
+        `shows its ${criteria.length} acceptance criteria met${closes.kind === "you" ? "; this project reviews before done, so it waits for you" : ""}`
+      ),
+      undefined,
+      { tickCriteria: criteria.length > 0 && closes.kind === "done" }
+    );
+  };
+
+  /**
+   * A verdict with lines that are the owner's to decide: the task waits on
+   * each one's card, a comment names them (and the unmet ones, now to-dos),
+   * and it goes to stage `you`.
+   */
+  const toOwner = async (
+    projectId: string,
+    task: TaskView,
+    item: WorkItemRow,
+    you: Stage,
+    lines: { criteria: string[]; owner: VerdictLine[]; unmet: VerdictLine[] }
+  ): Promise<void> => {
+    const { owner, unmet, criteria } = lines;
+    const why = reviewerActor(
+      item,
+      `says ${owner.length === 1 ? "a line is" : "lines are"} the owner's to decide`
+    );
+    await tasks.link(
+      projectId,
+      task.id,
+      { waitsOn: owner.flatMap((line) => (line.card ? [line.card] : [])) },
+      why
+    );
+    const unmetSaid =
+      unmet.length > 0
+        ? reviewWords.unmetBeside(verdictLines(unmet, criteria))
+        : "";
+    await tasks.comment(
+      projectId,
+      task.id,
+      `${reviewWords.owner(capitalized(reviewerOf(item, task)), owner.length, verdictLines(owner, criteria))}${unmetSaid}`,
+      why
+    );
+    await tasks.move(projectId, task.id, you.name, why);
+  };
+
+  /**
+   * A verdict with unmet lines: a comment names them, and the task goes back
+   * to the first active stage that is not the review stage, where the hub
+   * starts its next attempt ({@link startAfter}); with no such stage, on to
+   * its todo stage.
+   */
+  const backToWork = async (
+    projectId: string,
+    task: TaskView,
+    item: WorkItemRow,
+    stages: { stages: readonly Stage[] },
+    review: Stage,
+    lines: { criteria: string[]; unmet: VerdictLine[] }
+  ): Promise<void> => {
+    const { unmet, criteria } = lines;
+    const why = reviewerActor(
+      item,
+      `found ${unmet.length} acceptance ${unmet.length === 1 ? "line" : "lines"} unmet`
+    );
+    await tasks.comment(
+      projectId,
+      task.id,
+      reviewWords.unmet(
+        capitalized(reviewerOf(item, task)),
+        unmet.length,
+        verdictLines(unmet, criteria)
+      ),
+      why
+    );
+    const working = stages.stages.find(
+      (each) => each.kind === "active" && each.name !== review.name
+    );
+    if (!working) {
+      await nobodyOn(
+        projectId,
+        task.id,
+        review.name,
+        `${reviewerOf(item, task)} found lines unmet, and the project has no other active stage to work them in`
+      );
+      return;
+    }
+    await tasks.move(projectId, task.id, working.name, why);
+    await startAfter(
+      projectId,
+      task,
+      working,
+      item,
+      `Its reviewer sent it back to ${working.name}`
+    );
+  };
+
+  /**
+   * The hub's start of an attempt at `task` in active stage `stage` after
+   * attempt `item` ended: its reviewer, or its next attempt once its reviewer
+   * sent it back. It reports to the session `item` reported to when that
+   * can take reports, else the project's conversation; it waits for a slot
+   * while the project runs `max_attempts` already (`queued_task_starts`,
+   * whatever the stage runs); and one that cannot start sends the task on to
+   * its todo stage ({@link nobodyOn}), as nothing works on it.
+   */
+  const startAfter = async (
+    projectId: string,
+    task: TaskView,
+    stage: Stage,
+    item: WorkItemRow,
+    how: string
+  ): Promise<void> => {
+    const project = projectOf(projectId);
+    const current = await tasks.get(projectId, task.id);
+    if (current.liveAttempt) {
+      return;
+    }
+    const parent = await hookParent(
+      project,
+      current,
+      item.parentInstanceId,
+      how
+    );
+    let failed = parent ? undefined : "no session can take its report";
+    if (parent && liveIn(projectId) >= project.maxAttempts) {
+      db.queueTaskStart({
+        projectId,
+        taskId: task.id,
+        stage: stage.name,
+        parentInstanceId: parent.id,
+        origin: "event",
+      });
+      console.log(
+        `[dispatch] ${project.name}: ${task.id}: ${how}; ${counted(liveIn(projectId), "attempt is", "attempts are")} live, the cap is ${project.maxAttempts}, so its start waits for a slot.`
+      );
+      return;
+    }
+    if (parent) {
+      try {
+        await startAttempt(projectId, task.id, parent, {
+          stage,
+          origin: "event",
+        });
+      } catch (error) {
+        failed = failure(error).message;
+        console.warn(
+          `[dispatch] ${task.id}: ${how}, and its attempt did not start: ${failed}`
+        );
+      }
+    }
+    if (failed) {
+      await nobodyOn(
+        projectId,
+        task.id,
+        stage.name,
+        `its attempt in ${stage.name} did not start (${failed})`
       );
     }
   };
@@ -2023,17 +2406,18 @@ export const createDispatcher = ({
   /**
    * The stage kind an ended attempt sends its task to, once a landed one's
    * acceptance criteria are judged ({@link judgeCriteria}); `conversation` while it
-   * judges them.
+   * judges them; `unshown` when they are not shown met.
    */
   const kindAfterJudged = async (
     projectId: string,
     task: TaskView,
     criteria: string[],
-    item: WorkItemRow
-  ): Promise<"conversation" | "done" | "todo" | "you"> => {
+    item: WorkItemRow,
+    review: Stage | undefined
+  ): Promise<"conversation" | "unshown" | AttemptLanding> => {
     const kind = kindAfter(item);
     return kind === "done" && criteria.length > 0
-      ? await judgeCriteria(projectId, task, criteria, item)
+      ? await judgeCriteria(projectId, task, criteria, item, review)
       : kind;
   };
 
@@ -2087,21 +2471,26 @@ export const createDispatcher = ({
   /**
    * Judged checks (§5.9) for an attempt that landed at a task with
    * acceptance criteria: never by the session that did the work. Jev on:
-   * done when Jev shows every criterion met, else `you`, with a comment
+   * done when Jev shows every criterion met, else `unshown`, with a comment
    * naming the ones it does not (a Jev that does not answer says so in the
-   * comment, and they go to you). Jev off: the project's conversation judges them (`conversation`: it
+   * comment). Jev off: the project's conversation judges them (`conversation`: it
    * is woken, the task stays); with events off, shell checks passed and
-   * the rest is yours.
+   * the rest is `unshown`. An unshown attempt goes to the project's review
+   * stage, `review`, for its reviewer, else to you ({@link settleOne}).
    */
   const judgeCriteria = async (
     projectId: string,
     task: TaskView,
     criteria: string[],
-    item: WorkItemRow
-  ): Promise<"conversation" | "done" | "you"> => {
+    item: WorkItemRow,
+    review: Stage | undefined
+  ): Promise<"conversation" | "done" | "unshown"> => {
     const report = attemptReport(item);
     const access = placement.access();
     const about = hubActor(`attempt ${short(item.id)} judged`);
+    const goes = review
+      ? reviewWords.toReview(review.name, review.hooks.runs ?? "")
+      : reviewWords.toYou;
     if (access) {
       try {
         const judged = await jevJudged(
@@ -2118,12 +2507,12 @@ export const createDispatcher = ({
         await tasks.comment(
           projectId,
           task.id,
-          `Jev judged the acceptance criteria against the report of ${attemptNamed(item, task)}. Not shown met:\n\n${unmet
+          `Jev judged the acceptance criteria against the report of ${attemptNamed(item, task)}. Not shown met, so they ${goes}:\n\n${unmet
             .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
             .join("\n")}`,
           about
         );
-        return "you";
+        return "unshown";
       } catch (error) {
         if (!(error instanceof JevFailed)) {
           throw error;
@@ -2131,10 +2520,10 @@ export const createDispatcher = ({
         await tasks.comment(
           projectId,
           task.id,
-          `${error.message} The acceptance criteria of ${attemptNamed(item, task)} wait for you.`,
+          `${error.message} The acceptance criteria of ${attemptNamed(item, task)} ${goes}.`,
           about
         );
-        return "you";
+        return "unshown";
       }
     }
     if (db.project(projectId)?.eventsOn) {
@@ -2154,9 +2543,9 @@ export const createDispatcher = ({
     offLine(
       "judged",
       projectId,
-      `${task.id}'s attempt ${short(item.id)} passed its shell checks; with events off its ${criteria.length} acceptance criteria go to you`
+      `${task.id}'s attempt ${short(item.id)} passed its shell checks; with events off its ${criteria.length} acceptance criteria ${goes}`
     );
-    return "you";
+    return "unshown";
   };
 
   /**

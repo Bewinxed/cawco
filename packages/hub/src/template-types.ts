@@ -12,7 +12,8 @@
  * their briefs to the person's words; it never writes them from nothing
  * (setup.ts).
  *
- * - code, outreach: none.
+ * - code: `reviewer` (review runs it).
+ * - outreach: none.
  * - launch: `writer` (make runs it), `designer` (launch-plan files it).
  * - social: `writer`.
  * - seo: `seo`, `writer`.
@@ -25,6 +26,16 @@ import { type Stages, templateStages } from "./stages";
 
 /** Every type a template stage runs, as its file: front matter and brief. */
 const TYPE_FILES: Record<string, string> = {
+  reviewer: `---
+harness: claude
+model: claude-opus-5-5
+effort: high
+skills: [review-attempt]
+lands: none
+deny: [Edit, Write, MultiEdit, NotebookEdit, mcp__claude-in-chrome__*]
+---
+Review an attempt at the task against its acceptance lines and checks, with a fresh eye: read the diff and run the checks, judge each line met, unmet or the owner's to decide, and hand in the verdict with task_result. Load the review-attempt skill and follow it. You judge the work; you never change it.
+`,
   brand: `---
 harness: claude
 model: claude-opus-5-5

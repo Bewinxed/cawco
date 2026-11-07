@@ -40795,6 +40795,13 @@
           },
           "summary": {
             "type": "string"
+          },
+          "verdict": {
+            "description": "A reviewer's verdict, one per acceptance line of the task it reviews:\nhanded in only by an attempt that runs in its project's review stage\n(hub stages.ts `reviewStageOf`), and the move its task makes when it\nends (dispatch.ts `settleReview`).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VerdictLine"
+            }
           }
         },
         "required": [
@@ -40897,6 +40904,40 @@
             "type": "boolean"
           }
         }
+      },
+      "VerdictLine": {
+        "description": "What a reviewer says of one acceptance line: `met`, the change makes it\ntrue; `unmet`, it does not yet, and `evidence` says what is missing;\n`owner`, whether it holds is the owner's to say by the project's Who\ndecides (Look, Behaviour, Scope), asked on the decision card `card`.",
+        "type": "object",
+        "properties": {
+          "card": {
+            "description": "The decision card that asks the owner, `<page>#<card>`: an `owner` line's alone.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "What shows it: a `file:line`, a command's output, a frame; for `unmet`, what is missing.",
+            "type": "string"
+          },
+          "line": {
+            "description": "The line, by its place in the task's acceptance list, from 1.",
+            "type": "number"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/VerdictKind"
+          }
+        },
+        "required": [
+          "evidence",
+          "line",
+          "verdict"
+        ]
+      },
+      "VerdictKind": {
+        "type": "string",
+        "enum": [
+          "met",
+          "owner",
+          "unmet"
+        ]
       },
       "WorkItemState": {
         "description": "A work item's life. Only `starting` and `running` take messages.",

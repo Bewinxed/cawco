@@ -84,7 +84,10 @@ import { SESSION_ROLES } from "./delegate-types";
 import type {
   AttemptResult as AttemptResultType,
   ResultArtifact as ResultArtifactType,
+  VerdictKind as VerdictKindType,
+  VerdictLine as VerdictLineType,
 } from "./deliverables";
+import { VERDICT_KINDS } from "./deliverables";
 import type {
   ExternalActor as ExternalActorType,
   ExternalSource as ExternalSourceType,
@@ -2027,12 +2030,30 @@ const ResultArtifactShape = declared(
   "packages/core/src/deliverables.ts"
 );
 
+const VerdictKindShape = declared(
+  z.enum(VERDICT_KINDS),
+  "VerdictKind",
+  "packages/core/src/deliverables.ts"
+);
+
+const VerdictLineShape = declared(
+  z.object({
+    card: z.string().optional(),
+    evidence: z.string(),
+    line: z.number(),
+    verdict: VerdictKindShape,
+  }),
+  "VerdictLine",
+  "packages/core/src/deliverables.ts"
+);
+
 const AttemptResultShape = declared(
   z.object({
     artifacts: z.array(ResultArtifactShape),
     at: z.number(),
     check: z.array(z.string()),
     summary: z.string(),
+    verdict: z.array(VerdictLineShape).optional(),
   }),
   "AttemptResult",
   "packages/core/src/deliverables.ts"
@@ -3265,6 +3286,8 @@ prove<
     Same<z.output<typeof CompactionShape>, CompactionType>,
     Same<z.output<typeof AtLimitShape>, AtLimitType>,
     Same<z.output<typeof ResultArtifactShape>, ResultArtifactType>,
+    Same<z.output<typeof VerdictKindShape>, VerdictKindType>,
+    Same<z.output<typeof VerdictLineShape>, VerdictLineType>,
     Same<z.output<typeof AttemptResultShape>, AttemptResultType>,
     Same<z.output<typeof CarryRestoredShape>, CarryRestoredType>,
     Same<z.output<typeof CheckoutMoveShape>, CheckoutMoveType>,

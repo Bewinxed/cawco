@@ -223,6 +223,7 @@ typeOverrides:
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     TrashKind: OpenEnums.TrashKind
     Verb: OpenEnums.Verb
+    VerdictKind: OpenEnums.VerdictKind
     WaitKind: OpenEnums.WaitKind
     WaitReason: OpenEnums.WaitReason
     WaitingKind: OpenEnums.WaitingKind

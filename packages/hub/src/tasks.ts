@@ -88,6 +88,7 @@ import {
   taskLinkWords,
   taskTarget,
   todoProgress,
+  type VerdictLine,
   type WaitTarget,
   waitHandle,
   waitTarget,
@@ -111,6 +112,7 @@ import type {
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
+import { reviewWords } from "@cawco/core/words/review";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
@@ -153,6 +155,7 @@ import {
   nobodyProblem,
   passesReview,
   readStages,
+  reviewStageOf,
   ruledStages,
   STAGE_NAME,
   type Stages,
@@ -168,6 +171,7 @@ import {
 import {
   ARCHIVE_DIR,
   archivePath,
+  criteriaOf,
   EXTRA_KEY,
   type ExtraValue,
   fileTaskNumber,
@@ -378,6 +382,7 @@ export interface TaskStore {
     | "summary"
     | "taskId"
     | "taskResult"
+    | "type"
     | "waitedOn"
   >[];
   /**
@@ -429,6 +434,8 @@ export interface TaskStore {
   readonly queuedStarts?: (projectId: string) => string[];
   /** Whether a session of the project resolves `type`: a type file of its own, or a fleet type (project-delegate-types.ts). */
   readonly resolvesType: (projectId: string, type: string) => boolean;
+  /** Whether `type`, as the project resolves it, loads the review-attempt skill (stages.ts `REVIEW_SKILL`): a reviewer. */
+  readonly reviewsType: (projectId: string, type: string) => boolean;
   /** Keeps an attempt's result, replacing the one it had. */
   readonly saveResult: (workItemId: string, result: AttemptResult) => void;
   /** Records the template a project's stages came from: its starter skills follow it. */
@@ -678,7 +685,8 @@ export interface TodoChanges {
 }
 
 const TITLE_LIMIT = 200;
-const TODO_LIMIT = 500;
+/** The longest a to-do's words may be. */
+export const TODO_LIMIT = 500;
 /** A to-do line promoted to a task: `- [ ] Persist it → #152` (task-file.ts `PROMOTED`), its number apart. */
 const PROMOTED_TODO = /^(\s*- \[[ xX]\] .*?(?:→|->)\s*#)(\d{1,9})(?=\s*$)/gmu;
 const TEXT_LIMIT = 20_000;
@@ -2694,6 +2702,113 @@ export const createTasks = (store: TaskStore) => {
     return highest + 1;
   };
 
+  /** The project's review stage (stages.ts `reviewStageOf`); undefined when it has none or its stages do not read. */
+  const reviewStageIn = async (
+    projectId: string
+  ): Promise<Stage | undefined> => {
+    const { reading } = await stagesOf(projectId);
+    return reading.ok
+      ? reviewStageOf(reading.stages, (type) =>
+          store.reviewsType(projectId, type)
+        )
+      : undefined;
+  };
+
+  /**
+   * The review stage when attempt `workItemId` is its task's reviewer: the
+   * task is in that stage (`stage`, as its file says) and the attempt runs
+   * the type the stage runs.
+   */
+  const reviewIn = async (
+    projectId: string,
+    stage: string | null,
+    workItemId: string
+  ): Promise<Stage | undefined> => {
+    const review = await reviewStageIn(projectId);
+    const item = store
+      .attempts(projectId)
+      .find((attempt) => attempt.id === workItemId);
+    return review && review.name === stage && item?.type === review.hooks.runs
+      ? review
+      : undefined;
+  };
+
+  /**
+   * A reviewer's verdict as `task_result` hands it in, checked: only the
+   * task's reviewer hands one in, and it must; one line per acceptance line,
+   * each by its place from 1; an `owner` line names its decision card, read
+   * as the reviewer wrote it and kept as the card's handle, so the hub
+   * links it once the attempt ends. Undefined for any other attempt.
+   */
+  const verdictChecked = (
+    projectId: string,
+    review: Stage | undefined,
+    criteria: string[],
+    verdict: VerdictLine[] | undefined,
+    actor: TaskActor
+  ): VerdictLine[] | undefined => {
+    if (!review) {
+      if (verdict) {
+        refuse(409, reviewWords.notReviewer);
+      }
+      return;
+    }
+    if (!verdict) {
+      return refuse(422, reviewWords.verdictMissing(review.name));
+    }
+    const lines = criteria.map((criterion, index) => {
+      const said = verdict.filter((line) => line.line === index + 1);
+      if (said.length !== 1) {
+        refuse(
+          422,
+          reviewWords.lineCount(
+            criteria.length,
+            index + 1,
+            criterion,
+            said.length
+          )
+        );
+      }
+      return said[0] as VerdictLine;
+    });
+    const extra = verdict.find(
+      (line) => line.line < 1 || line.line > criteria.length
+    );
+    if (extra) {
+      refuse(422, reviewWords.lineOutside(extra.line, criteria.length));
+    }
+    return lines.map((line) => {
+      const evidence = line.evidence.trim();
+      if (!evidence) {
+        refuse(422, reviewWords.noEvidence(line.line));
+      }
+      if (line.verdict !== "owner") {
+        return { line: line.line, verdict: line.verdict, evidence };
+      }
+      if (!line.card) {
+        return refuse(422, reviewWords.noCard(line.line));
+      }
+      let target: WaitTarget;
+      try {
+        target = readWait(line.card, store.waitReader(projectId, actor));
+      } catch (error) {
+        if (error instanceof WaitRefusal) {
+          return refuse(400, reviewWords.badCard(line.line, error.message));
+        }
+        throw error;
+      }
+      if (target.kind !== "card") {
+        return refuse(400, reviewWords.notCard(line.line));
+      }
+      return {
+        line: line.line,
+        verdict: line.verdict,
+        evidence,
+        card: waitHandle(target),
+      };
+    });
+  };
+
   /**
    * A reading with the project's Review before done applied: the one place
    * the rules the hub checks moves against are made (stages.ts `ruledStages`).
@@ -4464,12 +4579,23 @@ export const createTasks = (store: TaskStore) => {
         summary: string;
         check?: string[];
         artifacts?: ResultArtifact[];
-      }
+        verdict?: VerdictLine[];
+      },
+      actor: TaskActor
     ): Promise<AttemptResult> {
       known(projectId);
       const { path, number } = await locate(projectId, ref);
       const { content } = await readFolderFile(projectId, path);
-      const { outputs } = new TaskDoc(path, content).read().fields;
+      const parsed = new TaskDoc(path, content).read();
+      const { outputs } = parsed.fields;
+      const review = await reviewIn(projectId, parsed.fields.stage, workItemId);
+      const verdict = verdictChecked(
+        projectId,
+        review,
+        criteriaOf(parsed.acceptance),
+        written.verdict,
+        actor
+      );
       const summary = written.summary.trim();
       if (!summary) {
         refuse(
@@ -4496,9 +4622,33 @@ export const createTasks = (store: TaskStore) => {
             : { ...artifact, path: folderPath(artifact.path) }
         ),
         at: Date.now(),
+        ...(verdict ? { verdict } : {}),
       };
       store.saveResult(workItemId, result);
       return told({ kind: "changed", projectId, id: taskId(number) }, result);
+    },
+
+    /** The project's review stage (stages.ts `reviewStageOf`); undefined when it has none or its stages do not read. */
+    reviewStage: reviewStageIn,
+
+    /**
+     * The review stage `workItemId` reviews its task in: the task sits in
+     * the project's review stage and the attempt runs the type that stage
+     * runs. Undefined for any other attempt.
+     */
+    async reviewing(
+      projectId: string,
+      ref: string,
+      workItemId: string
+    ): Promise<Stage | undefined> {
+      known(projectId);
+      const { path } = await locate(projectId, ref);
+      const { content } = await readFolderFile(projectId, path);
+      return await reviewIn(
+        projectId,
+        new TaskDoc(path, content).read().fields.stage,
+        workItemId
+      );
     },
 
     /**
