@@ -10,17 +10,12 @@ export default {
   title: "Onboarding/Board before setup",
   component: SetupScene,
   args: { act: { kind: "ask", ask: () => undefined } },
+  // The board at a desk's width; the canvas's widths draw it on a phone and at 2529.
   parameters: { viewport: 1440 },
 };
 
-/** No setup under way (left unsent, or Caw off): the action asks him for one. */
+/** Nobody is setting the project up yet, so the board offers to start. */
 export const NothingUnderWay = {};
 
-/** No machine online: no action the board can carry. */
+/** No machine is online, so the board has nothing to offer. */
 export const NoMachine = { args: { act: { kind: "none" } } };
-
-/** On a phone. */
-export const Phone = { parameters: { viewport: 390 } };
-
-/** At 2529: the scene stays on its axis. */
-export const Wide = { parameters: { viewport: 2529 } };

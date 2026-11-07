@@ -13,23 +13,11 @@ export default {
   args: { segments: ["Day", "Week", "Month"], chosen: "Day" },
 };
 
-/** The first segment chosen: the thumb at the groove's leading corners. */
-export const First = { parameters: { viewport: 390 } };
+/** Day picked, the first of the three. */
+export const First = {};
 
-/** The last segment chosen: the thumb at the groove's trailing corners. */
-export const Last = {
-  args: { chosen: "Month" },
-  parameters: { viewport: 390 },
-};
+/** Month picked, the last of the three. */
+export const Last = { args: { chosen: "Month" } };
 
-/** Each segment named in its tooltip, the middle one chosen: the thumb still finds it under the tooltip's trigger. */
-export const Tipped = {
-  args: { chosen: "Week", tips: true },
-  parameters: { viewport: 1440 },
-};
-
-/** The segments with their tooltips on a phone. */
-export const TippedPhone = {
-  args: { chosen: "Week", tips: true },
-  parameters: { viewport: 390 },
-};
+/** Week picked, each segment with a tooltip naming it. */
+export const Tipped = { args: { chosen: "Week", tips: true } };

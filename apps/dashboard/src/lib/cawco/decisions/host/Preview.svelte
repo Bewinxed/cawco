@@ -32,7 +32,8 @@
   (core `previewHeld`): a cold dev server still compiling, or holding the
   page's modules or data, is still opening, that it showed nothing. A
   component canvas draws the stories its `stories` names (every one
-  when it names none) as the component alone, each at its own size, and
+  when it names none) as the component alone, each at the width it names
+  (core `canvasEmbedUrl`), else at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
   `sayShape`), so its frame is that wide and that tall; a page's canvases
   load together, each telling its module graph before it fetches any of it,
@@ -139,7 +140,7 @@
    * `CanvasShapes`), so its skeleton stands at the picture's own shape from
    * its first paint: the shape an embed of these stories said, as any
    * browser's Preview heard it; else each story it names as the stage drew
-   * it, one under another with the embed's own gap (agent canvas chrome.ts
+   * it at the width named (any, where it names none), one under another with the embed's own gap (agent canvas chrome.ts
    * `cawco-embed`: `--space-3`). Null where none has been drawn anywhere:
    * the kit's picture stands in.
    */
@@ -153,7 +154,13 @@
       if (said) {
         return { parts: [said], w: said.w };
       }
-      const drawn = stories.map((one) => shapes?.drawn[one]);
+      // The stage drew each story at its own width: a shape of another width than the one named is none of this picture's.
+      const drawn = stories.map((one) => {
+        const shape = shapes?.drawn[one];
+        return shape && (namedWidth === null || shape.w === namedWidth)
+          ? shape
+          : undefined;
+      });
       if (stories.length === 0 || !drawn.every((one) => one !== undefined)) {
         return null;
       }
@@ -666,7 +673,7 @@
     if (canvas ? !near : !close) {
       return;
     }
-    const address = canvas ? canvasEmbedUrl(embed, stories) : embed;
+    const address = canvas ? canvasEmbedUrl(embed, stories, namedWidth) : embed;
     let gone = false;
     const at = new URL(embed);
     /** The hub asked whether it reaches `origin`, and how its previews are reached heard with it. */

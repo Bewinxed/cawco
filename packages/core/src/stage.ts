@@ -255,17 +255,26 @@ export const isEmbedShape = (value: unknown): value is EmbedShape => {
 /**
  * A component canvas's address (`embed`, as the hub answers it in a
  * decision page's media) drawn as a Preview: `by=embed`, a `story` per name
- * in `stories` (none: every story).
+ * in `stories` (none: every story), and the width the Preview names, which
+ * every story it draws is laid out at (the canvas's `width`, agent canvas
+ * runtime.ts `viewOf`), its own `parameters.viewport` or none: one story
+ * shown at a phone's and a desk's width is two Previews of it.
  */
 export const canvasEmbedUrl = (
   embed: string,
-  stories: readonly string[]
+  stories: readonly string[],
+  width: number | null
 ): string => {
   const url = new URL(embed);
   url.searchParams.set("by", "embed");
   url.searchParams.delete("story");
   for (const one of stories) {
     url.searchParams.append("story", one);
+  }
+  if (width === null) {
+    url.searchParams.delete("width");
+  } else {
+    url.searchParams.set("width", String(width));
   }
   return url.href;
 };

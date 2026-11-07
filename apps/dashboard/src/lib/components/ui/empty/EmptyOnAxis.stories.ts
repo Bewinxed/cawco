@@ -16,40 +16,15 @@ export default {
   title: "Empty/On the axis",
   component: EmptyOnAxis,
   args: { look: "setup", starters: [...starters] },
-};
-
-/** Not set up yet, its one action "Set it up with Caw" centred under the line. */
-export const NotSetUp = {
-  args: { look: "setup" },
+  // The board it stands in, at a desk's width; the canvas's widths draw it on a phone.
   parameters: { viewport: 1440 },
 };
 
-/** Not set up yet on a phone, the button still under the line. */
-export const NotSetUpPhone = {
-  args: { look: "setup" },
-  parameters: { viewport: "phone" },
-};
+/** The project isn't set up yet, so Caw offers to set it up. */
+export const NotSetUp = { args: { look: "setup" } };
 
-/** An empty board's starters, a column as wide as the block. */
-export const Starters = {
-  args: { look: "starters" },
-  parameters: { viewport: 1440 },
-};
+/** An empty board, with four things to start Caw on. */
+export const Starters = { args: { look: "starters" } };
 
-/** An empty board's starters on a phone, one column, full width. */
-export const StartersPhone = {
-  args: { look: "starters" },
-  parameters: { viewport: "phone" },
-};
-
-/** Not set up and Caw can't start it: the folder, the title and the line, no action. */
-export const NoAction = {
-  args: { look: "none" },
-  parameters: { viewport: 1440 },
-};
-
-/** No action, on a phone. */
-export const NoActionPhone = {
-  args: { look: "none" },
-  parameters: { viewport: "phone" },
-};
+/** The project isn't set up and Caw can't start it, so there is nothing to press. */
+export const NoAction = { args: { look: "none" } };

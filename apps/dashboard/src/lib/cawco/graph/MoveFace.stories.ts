@@ -235,10 +235,11 @@ export default {
     onundo: noop,
     lang: undefined,
   },
+  // The room beside a desk's stage; the canvas's widths draw it at 800 beside a 2529 stage, and in the drawer at 680 and 390.
   parameters: { viewport: 400 },
 };
 
-/** At rest beside a 1440 stage: the move into "Hub didn't answer" played, its playhead on its end over the kept state. */
+/** At rest: the move into "Hub didn't answer" played, its playhead on its end over the kept state. */
 export const AtRest = {};
 
 /** A row chosen: Form failure's words in the Selected wash, its bar ringed, its three settings under it. */
@@ -252,9 +253,6 @@ export const TwoRunsOneChosen = {
   args: { selected: "1/1/--swap-away" },
 };
 
-/** At rest beside a 2529 stage: the room at 800. */
-export const Wide = { parameters: { viewport: 800 } };
-
 /** Playing: the playhead 700 ms in, Pause in Play's place. */
 export const Playing = { args: { playing: true, playhead: 700 } };
 
@@ -265,9 +263,6 @@ export const OnRepeat = {
 
 /** Held mid-way: a scrub let go 412 ms in, the move held on that frame. */
 export const HeldMidway = { args: { playhead: 412 } };
-
-/** Scrubbed to the move's end: the line on the end's edge. */
-export const AtTheEnd = { args: { playhead: 886 } };
 
 /** The failure line made 400 ms long and set 74 ms later by hand: each edited value marked on its chip, the original outlined, Reset in the head. */
 export const Edited = { args: { move: ready(edited()), selected: "5" } };
@@ -313,12 +308,6 @@ export const ThirtyMinutes = {
 export const German = {
   args: { move: ready(longMove, "Running"), playhead: 600_000, lang: "de-DE" },
 };
-
-/** On a phone, in the drawer at 390. */
-export const Phone = { parameters: { viewport: 390 } };
-
-/** In the drawer at 680. */
-export const Drawer = { parameters: { viewport: 680 } };
 
 /** A mockup's own choreography: the agent's Header group over its rows, the card's two legs marked on its bar, the badge going back and forth to the lane's end; the card chosen, its Values and Repeats chips under it. */
 export const Authored = {
