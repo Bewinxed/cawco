@@ -7,10 +7,24 @@
    * from, the page giving it that room (`peekBeside`). Open in the pane
    * dives.
    */
+  import { peekWords } from "@cawco/core/words/peek";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { afterNavigate } from "$app/navigation";
   import PeekPane from "../PeekPane.svelte";
   import { closePeek, peek, peekable, peekRises } from "./peek.svelte";
+
+  let {
+    rises,
+    stepsOpen = $bindable(false),
+  }: {
+    /** It rises from the bottom (a touch screen's) rather than coming in from the right. */
+    rises?: boolean;
+    /** The plan's steps stand open in its foot tray. */
+    stepsOpen?: boolean;
+  } = $props();
+
+  /** A touch screen's, unless the page says. */
+  const rising = $derived(rises ?? peekRises());
 
   // The window narrowed into the phone's layout, where there is no peek.
   $effect(() => {
@@ -21,9 +35,10 @@
 
   // A peek belongs to the place it was opened from. Leaving that place puts
   // it away, whichever control did the leaving: its own Open, a rail row, the
-  // browser's back.
+  // browser's back. The page's first load comes from no place (`from`
+  // holds no url).
   afterNavigate(({ from, to }) => {
-    if (from && to && from.url.pathname !== to.url.pathname) {
+    if (from?.url && to?.url && from.url.pathname !== to.url.pathname) {
       closePeek();
     }
   });
@@ -35,8 +50,8 @@
      sheet that is not modal through); Close, Esc or leaving the place put it
      away. An iPad's touch screen keeps the drawer's recipe. -->
 <Drawer.Root
-  direction={peekRises() ? "bottom" : "right"}
-  modal={peekRises()}
+  direction={rising ? "bottom" : "right"}
+  modal={rising}
   onOpenChange={(open) => {
     peek.open = open;
   }}
@@ -50,19 +65,19 @@
   <Drawer.Content
     data-peek-sheet
     height="cap"
-    modal={peekRises()}
+    modal={rising}
     pad="sheet-safe-bottom"
     style="--drawer-max-height: var(--c-peek-sheet-h)"
     ownHead
-    title="Peek"
-    trapFocus={peekRises()}
+    title={peekWords.title}
+    trapFocus={rising}
     width="peek"
   >
     <Drawer.Description visible={false}
-      >The tail of one session. Open dives into it; closing keeps your place.</Drawer.Description
+      >{peekWords.description}</Drawer.Description
     >
     {#if peek.target}
-      <PeekPane onclose={closePeek} target={peek.target} />
+      <PeekPane bind:stepsOpen onclose={closePeek} target={peek.target} />
     {/if}
   </Drawer.Content>
 </Drawer.Root>

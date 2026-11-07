@@ -501,6 +501,8 @@ export type TokenSize =
   | "size.c-sheet-max-h"
   | "size.c-peek-sheet-h"
   | "size.c-peek-sheet-w"
+  | "size.c-peek-tray-h"
+  | "size.c-peek-steps-h"
   | "size.c-grabber-w"
   | "size.c-grabber-h"
   | "size.c-lightbox-sheet-w"

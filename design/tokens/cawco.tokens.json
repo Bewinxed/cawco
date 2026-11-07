@@ -5455,6 +5455,27 @@
       },
       "$description": "The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (the peek's surface brief, Peek: \"a sheet from the right beside the home it was opened from\")."
     },
+    "c-peek-tray-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0.5,
+        "unit": "px"
+      },
+      "$description": "The peek's foot tray's height cap, half the sheet (the peek's surface brief, Foot tray): several asks scroll inside it, the plan and status rows held below them, so what the session said keeps the sheet's upper half.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "50%"
+        }
+      }
+    },
+    "c-peek-steps-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 288,
+        "unit": "px"
+      },
+      "$description": "The height cap of the peek's plan steps opened upward from its plan row: a long plan scrolls inside it, opened on the step at work."
+    },
     "c-grabber-w": {
       "$type": "dimension",
       "$value": {

@@ -935,6 +935,10 @@ public enum Size {
     public static let cPeekSheetH: Double = 675.2
     /// The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (the peek's surface brief, Peek: "a sheet from the right beside the home it was opened from").
     public static let cPeekSheetW: Double = 384
+    /// The peek's foot tray's height cap, half the sheet (the peek's surface brief, Foot tray): several asks scroll inside it, the plan and status rows held below them, so what the session said keeps the sheet's upper half.
+    public static let cPeekTrayH: Double = 0.5
+    /// The height cap of the peek's plan steps opened upward from its plan row: a long plan scrolls inside it, opened on the step at work.
+    public static let cPeekStepsH: Double = 288
     /// The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber").
     public static let cGrabberW: Double = 100
     /// The drawer grabber's height (DESIGN.md Drawer: "A 100×6 grabber").

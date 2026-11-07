@@ -1136,6 +1136,10 @@
     --c-peek-sheet-h: 80dvh;
     /* The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (the peek's surface brief, Peek: "a sheet from the right beside the home it was opened from"). */
     --c-peek-sheet-w: 384px;
+    /* The peek's foot tray's height cap, half the sheet (the peek's surface brief, Foot tray): several asks scroll inside it, the plan and status rows held below them, so what the session said keeps the sheet's upper half. */
+    --c-peek-tray-h: 50%;
+    /* The height cap of the peek's plan steps opened upward from its plan row: a long plan scrolls inside it, opened on the step at work. */
+    --c-peek-steps-h: 288px;
     /* The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber"). */
     --c-grabber-w: 100px;
     /* The drawer grabber's height (DESIGN.md Drawer: "A 100×6 grabber"). */
