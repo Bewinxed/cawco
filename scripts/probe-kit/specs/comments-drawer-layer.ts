@@ -18,11 +18,12 @@
  *    Chromium, the page's held clock on WebKit) and after; the drawer rises
  *    by a run of its own and its box lies over the frame's, its foot on the
  *    frame's foot.
- * 2. With the drawer's search field focused, then a comment written from
- *    the drawer's + and its thread's Reply focused, the page's box is the
- *    same; on a phone, with a keyboard up for the Reply in Safari's shape
- *    ({@link keyboardUp}), the same, the thread's sheet over the keyboard;
- *    closing the thread and the drawer, the same again.
+ * 2. With the drawer's search field focused (Search turns its bar into the
+ *    field), then a comment written from the drawer's + and its thread's
+ *    Reply focused (the thread standing in the drawer over its list), the
+ *    page's box is the same; on a phone, with a keyboard up for the Reply in
+ *    Safari's shape ({@link keyboardUp}), the same, the thread's sheet over
+ *    the keyboard; Back to the list and the drawer closed, the same again.
  * 3. On a phone, while the preview is open (with the drawer up, and with a
  *    field in it focused), the point at the composer's centre is the
  *    preview's or the drawer's; once the preview closes, the composer is
@@ -42,6 +43,7 @@
  */
 import type { Frame, Page } from "playwright-core";
 import { commentWords } from "../../../packages/core/src/words/comments";
+import { commonWords } from "../../../packages/core/src/words/common";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import {
@@ -66,7 +68,8 @@ const THREAD = '[data-slot="thread-sheet"]';
 const CREATE = "mcp__cawco__artifact_create";
 const SHEET = "[data-preview-sheet]";
 const FRAME = `${SHEET} iframe[title="Preview"]`;
-const RAIL = '[data-slot="rail-sheet"]';
+/** The Comments drawer: the thread sheet while it holds the rail (PreviewPane's rail ThreadSheet). */
+const RAIL = '[data-slot="thread-sheet"]:has([data-slot="comment-rail"])';
 const DRAFT = "a draft the preview must keep";
 const COMMENTED = "the foot bar reads cramped";
 
@@ -207,19 +210,20 @@ const transcriptTop = (page: Page) =>
     return last ? Math.round(last.getBoundingClientRect().top) : null;
   });
 
+/** The drawer's surface (the thread sheet's), as drawn. */
 const railBox = (page: Page) =>
   page.evaluate((at) => {
     const r = document.querySelector(at)?.getBoundingClientRect();
     return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
-  }, `${RAIL} [data-slot="comment-rail"]`);
+  }, RAIL);
 
-/** Whether the drawer's box lies over the frame's: inside its width, its foot on the frame's foot, its top below the frame's top. */
+/** Whether the drawer's box lies over the frame's: inside its width, its foot on the frame's foot, its top at or below the frame's top. */
 const over = (rail: Box | null, frame: Box | null) =>
   !!rail &&
   !!frame &&
   rail.x >= frame.x - 0.5 &&
   rail.x + rail.w <= frame.x + frame.w + 0.5 &&
-  rail.y > frame.y &&
+  rail.y >= frame.y - 0.5 &&
   Math.abs(rail.y + rail.h - (frame.y + frame.h)) <= 1;
 
 /** A software keyboard's height on a phone (artifact-resize-loop's KEYBOARD). */
@@ -415,7 +419,11 @@ const leg = async (
   await stillWithin(page, SHEET);
   const after = await pageBox(page, frame);
   const rail = await railBox(page);
-  const railRuns = rise.runs.filter((run) => run.target.includes("rail-sheet"));
+  // The drawer's own run: its content's slide (the panel's sheet, the other
+  // kit drawer here, stands still as Comments opens; the page's box, below).
+  const railRuns = rise.runs.filter(
+    (run) => run.target.includes("drawer-content") && run.name === "transform"
+  );
   kit.check(
     `${label}: Comments opens the drawer by a run of its own, read on the ${rise.by === "clock" ? "DevTools clock" : "held clock"} at 0, ½ and 1`,
     railRuns.length > 0 &&
@@ -450,10 +458,13 @@ const leg = async (
   }
 
   // 2. A field in the drawer focused: its search, then a thread's Reply.
+  // Search turns the drawer's bar into the field, focused.
   const search = page.locator(`${RAIL} input[data-slot="search"]`);
-  // The press lands on the field's frame, whose touch area stands over the
-  // field and hands it the focus (ui/input-group `focusField`).
-  await page.locator(`${RAIL} [data-slot="input-group"]`).click();
+  await page
+    .locator(RAIL)
+    .getByRole("button", { name: commentWords.searchComments })
+    .click();
+  await search.waitFor({ timeout: 10_000 });
   await settle(page, 400);
   const searching = await pageBox(page, frame);
   const searchCover = phone ? await atComposer(page) : null;
@@ -464,7 +475,11 @@ const leg = async (
       (!searchCover || ["preview", "drawer"].includes(searchCover.hit)),
     JSON.stringify({ searching, searchCover })
   );
-  await search.blur();
+  await page.locator(`${RAIL} [data-slot="cancel-search"]`).click();
+  await search
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .catch(() => undefined);
+  await settle(page, 300);
 
   await page
     .locator(RAIL)
@@ -503,7 +518,10 @@ const leg = async (
   if (phone) {
     await keyboardUp(kit, page, frame, before, label);
   }
-  await card.getByRole("button", { name: "Close", exact: true }).click();
+  // The thread stands in the drawer over its list: Back gives the list again.
+  await card
+    .getByRole("button", { name: commonWords.backTo(commentWords.comments) })
+    .click();
   await page.locator(RAIL).waitFor({ timeout: 10_000 });
   await stillWithin(page, SHEET);
   await page

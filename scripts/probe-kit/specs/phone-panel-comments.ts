@@ -17,7 +17,9 @@
  * 1. The panel is one sheet: every box from its surface down to the page's
  *    frame paints nothing or the sheet's own ground, and rounds no corner of
  *    its own (the card's well once stood in it as a second sheet the page's
- *    ground, its 25px corners under the grabber).
+ *    ground, its 25px corners under the grabber). A pan begun on the
+ *    panel's own grabber, the strip beside it, its head's title, its Close
+ *    or its head between the controls is no one's either.
  * 2. Comments with one comment, a list that fits: a pan begun on the
  *    drawer's bar, its lists' tabs or its one row is no one's (the
  *    touch-action WebKit uses there, read from the element up to the nearest
@@ -134,6 +136,48 @@ const pansAt = (page: Page, x: number, y: number) =>
     [x, y] as const
   );
 
+/**
+ * The panel's own head and grabber, outside the Comments drawer: the
+ * grabber's centre, the strip beside it, the head's title, its Close, and a
+ * point of the head standing on no control.
+ */
+const panelPoints = (page: Page) =>
+  page.evaluate((sheetAt) => {
+    const sheet = document.querySelector(sheetAt);
+    const centre = (el: Element | null | undefined) => {
+      const box = el?.getBoundingClientRect();
+      return box && box.width > 0
+        ? { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        : null;
+    };
+    const grab = centre(sheet?.querySelector("[data-preview-grab]"));
+    const head = sheet?.querySelector<HTMLElement>('[data-slot="side-head"]');
+    const row = head?.getBoundingClientRect();
+    let between: { x: number; y: number } | null = null;
+    if (head && row) {
+      const y = row.y + row.height / 2;
+      for (let x = row.x + 1; x < row.right && !between; x += 2) {
+        if (document.elementFromPoint(x, y) === head) {
+          between = { x, y };
+        }
+      }
+    }
+    const points: Record<string, { x: number; y: number }> = {};
+    const named = {
+      grabber: grab,
+      strip: grab ? { x: 24, y: grab.y } : null,
+      title: centre(head?.querySelector('[data-slot="identity"]')),
+      close: centre(head?.querySelector('[data-slot="close"]')),
+      between,
+    };
+    for (const [name, at] of Object.entries(named)) {
+      if (at) {
+        points[name] = at;
+      }
+    }
+    return points;
+  }, SHEET);
+
 /** The drawer's bar, its tabs and its first row, each at its centre. */
 const drawerPoints = async (page: Page) => {
   const centre = async (selector: string) => {
@@ -238,6 +282,20 @@ const leg = async (kit: Kit, url: string, view: View, label: string) => {
     `${label}: the panel is one sheet: from its surface to the page's frame no box paints another ground or rounds a corner of its own`,
     !!chain && chain.length > 1 && second.length === 0,
     JSON.stringify({ ground, second, chain })
+  );
+
+  // 1b. The panel's own head and grabber: no pan there is the browser's.
+  const head = await panelPoints(page);
+  const headPans: Record<string, Awaited<ReturnType<typeof pansAt>> | null> =
+    {};
+  for (const [name, at] of Object.entries(head)) {
+    headPans[name] = at ? await pansAt(page, at.x, at.y) : null;
+  }
+  kit.check(
+    `${label}: a pan begun on the panel's grabber, the strip beside it, its head's title, Close or the head between its controls is no one's to scroll`,
+    Object.keys(head).length === 5 &&
+      Object.values(headPans).every((one) => !!one && !one.panY),
+    JSON.stringify({ head, headPans })
   );
 
   // 2. A list that fits: no pan on the drawer is the browser's.
