@@ -7,17 +7,31 @@
  * opencode.ts `#catalog`), and the hub refuses a start on a model the
  * machine does not list (server.ts `modelRefusal`), so none ever started.
  *
- * On a scratch fleet (real hub, agent and sessiond; OpenCode against the
- * mock model), whose OpenCode reads a catalog naming one more provider,
- * `mockgo` (its key from `MOCKGO_API_KEY`, its endpoint the mock), which the
- * machine has no key for:
+ * An OpenCode Go key is a key of OpenCode's Console, which opens Go's
+ * models and Zen's pay-per-use ones (`opencode/…`) alike ("Point a harness
+ * at the Console gateway with an API key to use any paid or Go model",
+ * https://opencode.ai/docs/console/harnesses/), and the owner chose
+ * (2026-11-06) that a Go key account opens both. Before it, a session on
+ * `opencode/deepseek-v4.1-flash` ran on the machine's own server with no
+ * key and failed `provider.no-route` (niftybot.art).
  *
- * (a) the machine's OpenCode offers no `mockgo` model before any account;
- * (b) a key account of `mockgo`, its key written on the machine as the
+ * On a scratch fleet (real hub, agent and sessiond; OpenCode against the
+ * mock model), whose OpenCode reads a catalog of OpenCode's two providers
+ * as models.dev names them, `opencode-go` and `opencode` (Zen), each with
+ * one model, both keyed from `OPENCODE_API_KEY` and served by the mock; the
+ * machine has no key for either, so OpenCode lists Zen keyless, its paid
+ * models left out:
+ *
+ * (a) the machine's OpenCode offers neither model before any account;
+ * (b) a key account of `opencode-go`, its key written on the machine as the
  *     dashboard writes it (`POST /api/accounts/:id/key`), and the machine's
- *     OpenCode report offers `mockgo/mock-go`, no session started;
- * (c) a session started on `mockgo/mock-go` runs on that account, its
- *     first send reaches the provider with the account's key, and is read;
+ *     OpenCode report offers both providers' models, no session started;
+ * (c) a session started on the Go model runs on that account, its first
+ *     send reaches the provider with the account's key, and is read;
+ * (g) so does one started on the Zen model, on the same account and key;
+ * (h) an agent whose kept account lists hold Go's alone (as an agent before
+ *     a Go key opened Zen left them) lists Zen's from the account's server
+ *     once it restarts, no key entered again;
  * (d) with the machine's OpenCode list unread (as a machine that just
  *     installed OpenCode reports it: no `models`, its `modelsUnread`), a
  *     start on a model it does not list is refused at once, saying the
@@ -34,7 +48,9 @@
  *     fleet's HOME.
  *
  * Before 3aeb09a8e main failed (b), and (c) was refused as unlisted; before
- * this leg's fix it failed (d) and (e).
+ * 81c35f9e5 it failed (d) and (e); before a Go key opened Zen it failed (b)
+ * for the Zen model, and (g) was refused as unlisted ("has no sign-in or
+ * key for opencode").
  *
  *   bun scripts/probe-kit/run.ts opencode-account-models
  */
@@ -45,14 +61,17 @@ import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { envOf, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
-/** The provider only the account's key opens, as models.dev names a provider. */
-const PROVIDER = "mockgo";
-/** Its one model, as OpenCode names it. */
+/** The account's provider: OpenCode Go, as models.dev and pi-ai name it. */
+const PROVIDER = "opencode-go";
+/** Go's one model, as OpenCode names it. */
 const MODEL = `${PROVIDER}/mock-go`;
+/** Zen's one model: a paid one, which OpenCode lists only with a key. */
+const ZEN_MODEL = "opencode/mock-zen";
 /** The account's key: what the mock must see on the provider's request. */
 const KEY = `probe-${crypto.randomUUID()}`;
-/** The send's words, found again in the mock's log. */
+/** Each send's words, found again in the mock's log. */
 const WORDS = "PROBE-ACCOUNT-MODELS say ok";
+const ZEN_WORDS = "PROBE-ACCOUNT-MODELS-ZEN say ok";
 
 /** The fleet's OpenCode report as the hub holds it: the models it offers. */
 const offered = async (fleet: KitFleet): Promise<string[]> => {
@@ -70,10 +89,28 @@ const offered = async (fleet: KitFleet): Promise<string[]> => {
   );
 };
 
+/** One models.dev model entry, priced `input` per 1M tokens: OpenCode lists a priced Zen model only with a key. */
+const modelEntry = (id: string, input: number) => ({
+  id,
+  name: id,
+  attachment: false,
+  reasoning: false,
+  tool_call: true,
+  temperature: true,
+  release_date: "2026-01-01",
+  last_updated: "2026-01-01",
+  modalities: { input: ["text"], output: ["text"] },
+  open_weights: false,
+  cost: { input, output: input },
+  limit: { context: 100_000, output: 4000 },
+});
+
 /**
- * A models.dev catalog of {@link PROVIDER} alone, its endpoint the fleet's
- * mock (read off the fleet's own OpenCode config, which points its `mockoc`
- * provider there), in the shape OpenCode reads `OPENCODE_MODELS_PATH` in.
+ * A models.dev catalog of OpenCode Go and Zen alone, each with one model,
+ * keyed as models.dev keys both (`OPENCODE_API_KEY`), their endpoint the
+ * fleet's mock (read off the fleet's own OpenCode config, which points its
+ * `mockoc` provider there), in the shape OpenCode reads
+ * `OPENCODE_MODELS_PATH` in.
  */
 const catalogFor = async (fleet: KitFleet): Promise<string> => {
   const config = JSON.parse(
@@ -84,33 +121,21 @@ const catalogFor = async (fleet: KitFleet): Promise<string> => {
   ) as { providers: { mockoc: { settings: { baseURL: string } } } };
   const file = join(fleet.home, "probe-catalog", "api.json");
   await mkdir(join(fleet.home, "probe-catalog"), { recursive: true });
+  const api = config.providers.mockoc.settings.baseURL;
+  const provider = (id: string, name: string, model: string) => ({
+    id,
+    name,
+    env: ["OPENCODE_API_KEY"],
+    npm: "@ai-sdk/openai-compatible",
+    api,
+    doc: "https://example.invalid",
+    models: { [model]: modelEntry(model, 1) },
+  });
   await writeFile(
     file,
     JSON.stringify({
-      [PROVIDER]: {
-        id: PROVIDER,
-        name: "Mock Go",
-        env: ["MOCKGO_API_KEY"],
-        npm: "@ai-sdk/openai-compatible",
-        api: config.providers.mockoc.settings.baseURL,
-        doc: "https://example.invalid",
-        models: {
-          "mock-go": {
-            id: "mock-go",
-            name: "Mock Go",
-            attachment: false,
-            reasoning: false,
-            tool_call: true,
-            temperature: true,
-            release_date: "2026-01-01",
-            last_updated: "2026-01-01",
-            modalities: { input: ["text"], output: ["text"] },
-            open_weights: false,
-            cost: { input: 0, output: 0 },
-            limit: { context: 100_000, output: 4000 },
-          },
-        },
-      },
+      [PROVIDER]: provider(PROVIDER, "OpenCode Go", "mock-go"),
+      opencode: provider("opencode", "OpenCode Zen", "mock-zen"),
     })
   );
   return file;
@@ -220,8 +245,8 @@ const run = async (kit: Kit) => {
     120_000
   );
   kit.check(
-    `(a) with no account, the machine's OpenCode offers no ${PROVIDER} model`,
-    !before.some((value) => value.startsWith(`${PROVIDER}/`)),
+    `(a) with no account, the machine's OpenCode offers neither ${MODEL} nor ${ZEN_MODEL}`,
+    !(before.includes(MODEL) || before.includes(ZEN_MODEL)),
     before.join(", ")
   );
 
@@ -270,38 +295,101 @@ const run = async (kit: Kit) => {
     JSON.stringify(keyed.machines)
   );
   const after = await until(
-    `the machine's OpenCode offering ${MODEL}`,
+    `the machine's OpenCode offering ${MODEL} and ${ZEN_MODEL}`,
     () => offered(fleet),
-    (models) => models.includes(MODEL),
+    (models) => models.includes(MODEL) && models.includes(ZEN_MODEL),
     180_000
   ).catch(() => offered(fleet));
   kit.check(
-    `(b) with the account's key there, the machine's OpenCode offers ${MODEL}, no session started`,
-    after.includes(MODEL),
+    `(b) with the account's key there, the machine's OpenCode offers ${MODEL} and ${ZEN_MODEL}, no session started`,
+    after.includes(MODEL) && after.includes(ZEN_MODEL),
     after.join(", ")
   );
 
-  const id = await fleet.spawn("opencode", "Account models", fleet.workdir, {
-    model: MODEL,
-  });
-  const [row] = fleet.query<{ account_id: string | null }>(
-    "SELECT account_id FROM instances WHERE id = ?",
-    id
-  );
-  const sent = await fleet.send(id, WORDS);
-  const read = await until(
-    "the send read",
-    () => fleet.sendRow(sent),
-    (one) => one?.state === "read" || one?.state === "failed",
-    180_000
-  ).catch(() => fleet.sendRow(sent));
-  const asked = fleet.seen.find((one) => one.all.includes(WORDS));
+  /** A session started on `model` and one send in it: whether it ran on the account and its send reached the provider with the account's key and was read. */
+  const runsOnAccount = async (model: string, words: string) => {
+    const id = await fleet
+      .spawn("opencode", `Account models ${model}`, fleet.workdir, { model })
+      .catch((error: unknown) => {
+        throw new Error(`the start on ${model} was refused: ${error}`);
+      });
+    const [row] = fleet.query<{ account_id: string | null }>(
+      "SELECT account_id FROM instances WHERE id = ?",
+      id
+    );
+    const sent = await fleet.send(id, words);
+    const read = await until(
+      "the send read",
+      () => fleet.sendRow(sent),
+      (one) => one?.state === "read" || one?.state === "failed",
+      180_000
+    ).catch(() => fleet.sendRow(sent));
+    const asked = fleet.seen.find((one) => one.all.includes(words));
+    return {
+      ok:
+        row?.account_id === account.id &&
+        read?.state === "read" &&
+        asked?.auth === `Bearer ${KEY}`,
+      said: `account ${row?.account_id ?? "none"} (wanted ${account.id}); send ${read?.state ?? "none"}${read?.reason ? ` (${read.reason})` : ""}; provider asked ${asked ? `with ${asked.auth === `Bearer ${KEY}` ? "the account's key" : "another credential"}` : "never"}`,
+    };
+  };
+  const go = await runsOnAccount(MODEL, WORDS);
   kit.check(
     `(c) a session on ${MODEL} runs on the account, and its first send reaches the provider with the account's key and is read`,
-    row?.account_id === account.id &&
-      read?.state === "read" &&
-      asked?.auth === `Bearer ${KEY}`,
-    `account ${row?.account_id ?? "none"} (wanted ${account.id}); send ${read?.state ?? "none"}${read?.reason ? ` (${read.reason})` : ""}; provider asked ${asked ? `with ${asked.auth === `Bearer ${KEY}` ? "the account's key" : "another credential"}` : "never"}`
+    go.ok,
+    go.said
+  );
+  const zen = await runsOnAccount(ZEN_MODEL, ZEN_WORDS).catch(
+    (error: unknown) => ({ ok: false, said: String(error) })
+  );
+  kit.check(
+    `(g) a session on ${ZEN_MODEL} runs on the same account, and its first send reaches the provider with the account's key and is read`,
+    zen.ok,
+    zen.said
+  );
+
+  // (h): the account lists as an agent before a Go key opened Zen kept
+  // them (agent opencode.ts ACCOUNT_CATALOGS), Go's alone, and the agent
+  // started again on them.
+  const catalogs = join(
+    fleet.home,
+    ".config",
+    "opencode",
+    "cawco-account-catalogs.json"
+  );
+  const zenListed = async (): Promise<boolean> => {
+    const kept = JSON.parse(
+      await readFile(catalogs, "utf8").catch(() => "{}")
+    ) as Partial<Record<string, { value: string }[]>>;
+    return (kept.opencode ?? []).some((one) => one.value === ZEN_MODEL);
+  };
+  await fleet.stop("agent");
+  const goOnly = JSON.parse(await readFile(catalogs, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  await writeFile(
+    catalogs,
+    JSON.stringify({ [PROVIDER]: goOnly[PROVIDER] ?? [] })
+  );
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const relisted = await until(
+    `the restarted agent listing ${ZEN_MODEL}`,
+    zenListed,
+    (listed) => listed,
+    180_000
+  ).catch(() => false);
+  const offeredAgain = await until(
+    `the restarted agent offering ${ZEN_MODEL}`,
+    () => offered(fleet),
+    (models) => models.includes(ZEN_MODEL),
+    180_000
+  ).catch(() => offered(fleet));
+  kit.check(
+    `(h) an agent that kept Go's list alone lists ${ZEN_MODEL} from the account's server once it restarts, and offers it, no key entered again`,
+    relisted && offeredAgain.includes(ZEN_MODEL),
+    `kept Zen list ${relisted ? "holds" : "lacks"} ${ZEN_MODEL}; offered: ${offeredAgain.join(", ")}`
   );
 
   const services = await sharedServices(fleet);

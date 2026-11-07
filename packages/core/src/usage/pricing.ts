@@ -68,7 +68,7 @@ const BARE_PROVIDER = "anthropic";
 /**
  * Provider ids that are another's catalog under a harness's own name: pi's
  * `openai-codex` is ChatGPT's sign-in to OpenAI's models, OpenCode's `openai`
- * (agent provider-accounts.ts `opencodeProviderOf`).
+ * (core accounts.ts `opencodeProvidersOf`).
  */
 const PROVIDER_ALIASES: Record<string, string> = {
   "openai-codex": "openai",

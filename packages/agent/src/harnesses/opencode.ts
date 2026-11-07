@@ -62,6 +62,7 @@ import {
   machineLabel,
   mcpFleetState,
   offeredMode,
+  opencodeProvidersOf,
   opencodeSignInFaultWords,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -136,12 +137,11 @@ import {
   type OpencodeOwnCredential,
   onAccountCredential,
   opencodeAccountEnv,
-  opencodeCredentialOf,
+  opencodeCredentialsOf,
   opencodeOwnChanges,
   opencodeOwnCredentialRows,
   opencodeOwnIntegrations,
   opencodeOwnSignInTypes,
-  opencodeProviderOf,
   readHeld,
   setOpencodeAccountsHost,
 } from "../provider-accounts";
@@ -4324,23 +4324,37 @@ export class OpencodeHarness implements Harness {
     return this.#accountCatalogs;
   }
 
-  /** The models the account's provider offers it, as its own server lists them, kept for the provider. */
+  /**
+   * The models each provider the account opens (core `opencodeProvidersOf`:
+   * an OpenCode Go key, Go's and Zen's) offers it, as its own server lists
+   * them, kept for each provider.
+   */
   async #readAccountCatalog(
     account: string,
     client: OpencodeClient
-  ): Promise<ModelInfo[]> {
+  ): Promise<void> {
     const held = readHeld(account);
     if (!held) {
-      return [];
+      return;
     }
-    const provider = opencodeProviderOf(held.provider);
-    const models = (
-      await opencodeCatalog(client, await quietDir(), provider)
-    ).filter((row) => row.value !== "default");
-    const catalogs = { ...this.#loadAccountCatalogs(), [provider]: models };
+    const directory = await quietDir();
+    const read = await Promise.all(
+      opencodeProvidersOf(held.provider).map(
+        async (provider) =>
+          [
+            provider,
+            (await opencodeCatalog(client, directory, provider)).filter(
+              (row) => row.value !== "default"
+            ),
+          ] as const
+      )
+    );
+    const catalogs = {
+      ...this.#loadAccountCatalogs(),
+      ...Object.fromEntries(read),
+    };
     this.#accountCatalogs = catalogs;
     await writeJson(ACCOUNT_CATALOGS, catalogs);
-    return models;
   }
 
   /** {@link OPENCODE_SERVER_FACTS} as last read or written; null when there is none. */
@@ -4547,9 +4561,10 @@ export class OpencodeHarness implements Harness {
     const providers = new Map<string, string>();
     for (const account of credentialAccountIds()) {
       const held = readHeld(account);
-      const provider = held && opencodeProviderOf(held.provider);
-      if (provider && !providers.has(provider)) {
-        providers.set(provider, account);
+      for (const provider of held ? opencodeProvidersOf(held.provider) : []) {
+        if (!providers.has(provider)) {
+          providers.set(provider, account);
+        }
       }
     }
     const cached = this.#loadAccountCatalogs();
@@ -7043,8 +7058,9 @@ async function runningIn(
 }
 
 /**
- * The account's credential on its server, and no other of CawCo's: put
- * under an id named for its value (`POST /api/credential`, then
+ * The account's credentials on its server, and no other of CawCo's: one
+ * under each OpenCode provider it opens ({@link opencodeCredentialsOf}),
+ * each put under an id named for its value (`POST /api/credential`, then
  * `/activate`, which applies from the next request), and every earlier one
  * removed. CawCo keeps refreshing the account (pi-ai, 15 minutes ahead of
  * expiry) and puts each new token on the server from outside, as here: a
@@ -7057,21 +7073,24 @@ async function putCredential(
   client: OpencodeClient
 ): Promise<void> {
   const held = readHeld(account);
-  const wanted = held ? opencodeCredentialOf(held) : undefined;
-  const id = wanted
-    ? `${CREDENTIAL_PREFIX}${createHash("sha256").update(JSON.stringify(wanted)).digest("hex").slice(0, 16)}`
-    : undefined;
+  const wanted = (held ? opencodeCredentialsOf(held) : []).map(
+    (credential) => ({
+      credential,
+      id: `${CREDENTIAL_PREFIX}${createHash("sha256").update(JSON.stringify(credential)).digest("hex").slice(0, 16)}`,
+    })
+  );
+  const ids = new Set(wanted.map((one) => one.id));
   const put = await askOpencode(async (options) => {
     const stored = await client.credential.list(options);
-    if (wanted && id) {
+    for (const { credential, id } of wanted) {
       if (!stored.some((entry) => entry.id === id)) {
         await client.credential.create(
           {
             id,
-            integrationID: wanted.integrationID,
+            integrationID: credential.integrationID,
             label: `CawCo account ${account}`,
             // Read from the account's JSON file: every value in it is JSON.
-            value: wanted.value as CredentialCreateInput["value"],
+            value: credential.value as CredentialCreateInput["value"],
             activate: true,
           },
           options
@@ -7082,7 +7101,8 @@ async function putCredential(
     await Promise.all(
       stored
         .filter(
-          (entry) => entry.id.startsWith(CREDENTIAL_PREFIX) && entry.id !== id
+          (entry) =>
+            entry.id.startsWith(CREDENTIAL_PREFIX) && !ids.has(entry.id)
         )
         .map((entry) =>
           client.credential.remove({ credentialID: entry.id }, options)
@@ -7104,8 +7124,8 @@ async function catalogDigest(): Promise<string> {
   const providers = new Set<string>(["opencode"]);
   for (const account of credentialAccountIds()) {
     const held = readHeld(account);
-    if (held) {
-      providers.add(opencodeProviderOf(held.provider));
+    for (const provider of held ? opencodeProvidersOf(held.provider) : []) {
+      providers.add(provider);
     }
   }
   for (const integration of await opencodeOwnIntegrations()) {

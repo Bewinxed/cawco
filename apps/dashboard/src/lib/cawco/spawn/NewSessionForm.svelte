@@ -492,7 +492,13 @@
           if (!stale && preview) {
             placement = {
               preview,
-              provider: providerOf(query.harness, preview.model),
+              // The account placement picked names its provider: an
+              // OpenCode model can bill to more than one (core
+              // accountProvidersOf), and the first may have none here.
+              provider:
+                (cawco.accounts?.accounts ?? []).find(
+                  (one) => one.id === preview.accountId
+                )?.provider ?? providerOf(query.harness, preview.model),
             };
             placementRefusal = null;
           }

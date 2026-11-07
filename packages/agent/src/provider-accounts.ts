@@ -10,7 +10,7 @@
  * Every harness on the machine that speaks the provider uses this one
  * credential: pi sessions read it through their runtime's store, and the
  * account's own OpenCode server through the credential the agent puts on it
- * ({@link opencodeCredentialOf}), again on every change. Nothing holds a
+ * ({@link opencodeCredentialsOf}), again on every change. Nothing holds a
  * second copy of a grant: refresh tokens rotate, so copies sign each other
  * out, and OpenCode's copy carries a marker where a rotating refresh token
  * would be.
@@ -28,6 +28,7 @@ import {
   type HomeCredential,
   type HomeLoginMoved,
   type LentAccess,
+  opencodeProvidersOf,
   type ProviderSigninChallenge,
   type ProviderSigninResult,
   sameIdentity,
@@ -100,7 +101,7 @@ export const readHeld = (accountId: string): Held | undefined => {
 
 /**
  * Who hears that an account's credential changed: the OpenCode harness, which
- * puts it on the account's running server ({@link opencodeCredentialOf}).
+ * puts it on the account's running server ({@link opencodeCredentialsOf}).
  */
 const credentialListeners = new Set<(accountId: string) => void>();
 
@@ -1632,10 +1633,6 @@ export const joinProviderAccount = async (
 
 // ── OpenCode: each account's own server and its store ─────────────────
 
-/** OpenCode's id for an account provider: ChatGPT is its `openai`. */
-export const opencodeProviderOf = (provider: string): string =>
-  provider === "openai-codex" ? "openai" : provider;
-
 /**
  * Put in an account's OpenCode credential where the refresh token of a
  * sign-in whose refresh token rotates would be: pi-ai stays its only
@@ -1676,18 +1673,27 @@ export interface OpencodeCredential {
 }
 
 /**
- * The account's credential as OpenCode 2.0 takes it, under OpenCode's id for
- * the provider; undefined for a key the account holds none of:
+ * The account's credential as OpenCode 2.0 takes it, once under each
+ * OpenCode provider the account opens (core `opencodeProvidersOf`: an
+ * OpenCode Go key under Go's and Zen's); none for a key the account holds
+ * none of. Under each:
  * - a key: the key, with what OpenCode kept beside it;
  * - ChatGPT and xAI: the access token and its expiry (and ChatGPT's account),
  *   with {@link OPENCODE_MARKER} for the refresh token they rotate;
  * - Copilot: the GitHub token as both, which does not rotate, expiring never;
  * - any other sign-in: its access token as the key.
  */
-export const opencodeCredentialOf = (
-  held: Held
+export const opencodeCredentialsOf = (held: Held): OpencodeCredential[] =>
+  opencodeProvidersOf(held.provider).flatMap((integrationID) => {
+    const one = opencodeCredentialUnder(held, integrationID);
+    return one ? [one] : [];
+  });
+
+/** The account's credential as OpenCode 2.0 takes it under `integrationID` ({@link opencodeCredentialsOf}). */
+const opencodeCredentialUnder = (
+  held: Held,
+  integrationID: string
 ): OpencodeCredential | undefined => {
-  const integrationID = opencodeProviderOf(held.provider);
   const { credential } = held;
   if (credential.type === "api_key") {
     const { metadata } = credential as { metadata?: unknown };
