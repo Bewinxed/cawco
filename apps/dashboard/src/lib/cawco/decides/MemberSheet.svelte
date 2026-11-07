@@ -1,13 +1,15 @@
 <script lang="ts">
   /**
-   * A member's card, hung from its chip in the team row, or a new agent's
-   * while it is added. Its face (a press opens its picture), its name, and
-   * for an agent whether he is told of each answer; what it runs on as a
-   * chip that unfolds where it is changed; its standing instructions as its
-   * own words, pressed to edit; and its record: this month's figures and
-   * the questions it was asked, each with its pick. Save and Cancel stand
-   * only once something changed; an agent he added can be removed, asked in
-   * the card.
+   * A member's card, hung from its chip in the team row (a bottom sheet on
+   * a phone), or a new agent's while it is added. Its face (a press opens
+   * its picture) and name; for an agent what it runs on as three setting
+   * chips, why it can't run where it can't, its standing instructions as
+   * its own words (pressed to edit, its skills folded under them) and its
+   * two switches; Caw's lead switch on a project's page; the kinds that
+   * come to it; and its record: this month's figures and the questions it
+   * was asked, each with its pick. Its body scrolls under one text edge;
+   * Save and Cancel stand in its foot only once something changed, and an
+   * agent he added can be removed, asked in the card.
    */
   import { BUILT_IN_MEMBERS, type Member } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
@@ -26,26 +28,31 @@
   import type { WhoDecides } from "./decides.svelte";
   import { readRecord } from "./decides-client";
   import { showFirstProblem } from "./first-problem";
+  import { kindGlyph } from "./kind-glyph";
   import MemberFace from "./MemberFace.svelte";
   import MemberRecord from "./MemberRecord.svelte";
   import PicturePicker from "./PicturePicker.svelte";
-  import RunsOnEditor from "./RunsOnEditor.svelte";
+  import RunsOn from "./RunsOn.svelte";
   import { NEW, type Setup } from "./setup.svelte";
 
   let {
     who,
     setup,
     project,
+    blocked = null,
     now = Date.now(),
   }: {
     who: WhoDecides;
     setup: Setup;
     /** The project's name; null on the fleet's page. */
     project: string | null;
+    /** Why it can't be reached now; null when it can. */
+    blocked?: string | null;
     /** The moment ages count to, ms epoch. */
     now?: number;
   } = $props();
 
+  const uid = $props.id();
   let body = $state<HTMLElement | null>(null);
 
   const member = $derived(who.setupMember(setup));
@@ -62,15 +69,14 @@
       member.type === "advisor" ||
       member.type === "practice"
   );
-  /** Its settings can change here: the agents, and Caw on a project's page. */
+  /** What it runs on can change here: the agents, and Caw on a project's page. */
   const settable = $derived(isAgent || (isCaw && who.projectId !== null));
   const pictured = $derived(member === null || member.type !== "asker");
-  /** Its open part: what it runs on, or its instructions. */
-  let editing = $state<"runs" | "knows" | null>(null);
+  /** Its instructions stand as a field: while adding, or once pressed. */
+  let editingKnows = $state(false);
+  const showKnows = $derived(editingKnows);
   /** The skills it may use stand listed, under its instructions. */
   let skillsOpen = $state(false);
-  const showRuns = $derived(editing === "runs");
-  const showKnows = $derived(adding || editing === "knows");
 
   /** The member as its face draws it: a new one, or a hue picked, as the draft says. */
   const face = $derived.by((): Member => {
@@ -78,7 +84,7 @@
       return {
         id: NEW,
         type: "agent",
-        name: draft.name || decidesWords.addAgent,
+        name: draft.name.trim() || decidesWords.newAgent,
         job: "",
         subject: draft.name,
         builtIn: false,
@@ -91,15 +97,17 @@
     }
     return member.type === "agent" ? { ...member, hue: draft.hue } : member;
   });
-  const runsLine = $derived(
-    draft.harness === null
-      ? decidesWords.harnessLabel
-      : decidesWords.runsOn(
-          who.harnessName(draft.harness),
-          who.modelName(draft.harness, draft.model),
-          isCaw ? null : draft.effort
-        )
-  );
+  /** Why it can't run, its name left out where the card's head says it. */
+  const blockedHere = $derived.by(() => {
+    if (!blocked) {
+      return "";
+    }
+    const own = blocked.startsWith(`${face.name} `)
+      ? blocked.slice(face.name.length + 1)
+      : blocked;
+    return own.charAt(0).toUpperCase() + own.slice(1);
+  });
+  const holds = $derived(member ? who.holds(member.id) : []);
   const calls = $derived(member ? who.callsOfMember(member.id) : []);
   const removeAsked = $derived(who.asker.pending?.at === `remove:${setup.key}`);
   const footFault = $derived(
@@ -112,20 +120,17 @@
 
   $effect(() => {
     if (setup.shown > 0) {
-      const row = setup.open;
-      if (row === "runs" || row === "knows") {
-        editing = row;
+      if (setup.open === "knows") {
+        editingKnows = true;
       }
       tick().then(() => showFirstProblem(body));
     }
   });
 
-  async function open(part: "runs" | "knows") {
-    editing = editing === part ? null : part;
-    if (editing === "knows") {
-      await tick();
-      body?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
-    }
+  async function editKnows() {
+    editingKnows = true;
+    await tick();
+    body?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
   }
 
   async function askRemove() {
@@ -142,7 +147,7 @@
         record?.waiting ?? 0
       ),
       cancelLabel: decidesWords.keep,
-      confirmLabel: decidesWords.remove,
+      confirmLabel: decidesWords.remove(gone.name),
       pendingLabel: decidesWords.removing,
       run: () => who.removeMember(gone.id),
     });
@@ -163,132 +168,154 @@
   {/if}
 {/snippet}
 
+{#snippet toggle(label: string, on: boolean, set: (on: boolean) => void)}
+  <label
+    class="mark-line flex min-h-c-touch-floor items-center justify-between gap-space-3 type-label text-ink-strong"
+  >
+    <span>{label}</span>
+    <Switch checked={on} data-box onCheckedChange={set} />
+  </label>
+{/snippet}
+
 <div
-  bind:this={body}
-  class="flex max-h-(--pop-max-h) min-h-0 min-w-0 flex-col gap-space-3 overflow-y-auto overscroll-contain"
+  class="flex max-h-(--pop-max-h,100%) min-h-0 min-w-0 flex-col"
   data-setup={setup.key}
 >
-  <header class="flex min-w-0 items-center gap-space-3">
-    {#if pictured}
-      <button
-        aria-expanded={setup.picking}
-        aria-label={decidesWords.changePicture(face.name)}
-        class="flex flex-none rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-        onclick={() => {
-          setup.picking = !setup.picking;
-        }}
-        type="button"
-      >
-        <MemberFace member={face} size={48} />
-      </button>
-    {:else}
-      <MemberFace member={face} size={48} />
-    {/if}
-    <div class="flex min-w-0 flex-auto flex-col items-start gap-space-1">
-      {#if adding}
-        <Input
-          aria-invalid={problemOf("does") ? true : undefined}
-          aria-label={decidesWords.nameLabel}
-          autocomplete="off"
-          placeholder={decidesWords.namePlaceholder}
-          bind:value={setup.draft.name}
-        />
-      {:else}
-        <h2 class="type-title text-balance text-ink-strong wrap-anywhere">
-          {face.name}
-        </h2>
-      {/if}
-      {#if settable}
+  <div
+    bind:this={body}
+    class="flex min-h-0 min-w-0 flex-auto flex-col gap-space-3 overflow-x-clip overflow-y-auto overscroll-contain p-space-3"
+  >
+    <div class="flex min-w-0 items-start gap-space-3">
+      {#if pictured}
         <button
-          aria-expanded={showRuns}
-          aria-label={decidesWords.changeRuns(face.name, runsLine)}
-          class={[
-            "mark-line inline-flex max-w-full items-center gap-space-1 rounded-sm border border-border-control bg-surface-raised px-space-2 py-px type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
-            problemOf("runs") && "border-error-9",
-          ]}
-          onclick={() => open("runs")}
+          aria-expanded={setup.picking}
+          aria-label={decidesWords.changePicture(face.name)}
+          class="flex flex-none rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          onclick={() => {
+            setup.picking = !setup.picking;
+          }}
           type="button"
         >
-          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-            >{runsLine}</span
+          <MemberFace member={face} size={48} />
+        </button>
+      {:else}
+        <MemberFace member={face} size={48} />
+      {/if}
+      <div class="flex min-w-0 flex-auto flex-col gap-space-2">
+        {#if adding}
+          <label class="flex min-w-0 flex-col gap-space-1">
+            <span class="type-label text-ink-muted"
+              >{decidesWords.nameLabel}</span
+            >
+            <Input
+              aria-invalid={problemOf("does") ? true : undefined}
+              autocomplete="off"
+              bind:value={setup.draft.name}
+            />
+            {@render problemLine("does")}
+          </label>
+        {:else}
+          <!-- On a phone the sheet's own head names it. -->
+          <h2
+            class="type-title text-balance text-ink-strong wrap-anywhere max-phone:sr-only"
+            id="{uid}-name"
+          >
+            {face.name}
+          </h2>
+        {/if}
+        {#if settable}
+          <RunsOn caw={isCaw} draft={setup.draft} name={face.name} {who} />
+        {/if}
+      </div>
+    </div>
+    {@render problemLine("runs")}
+    {#if blocked}
+      <div
+        class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+      >
+        <p class="min-w-0 text-status-attn-ink text-pretty">{blockedHere}.</p>
+        <a
+          class="rounded-xs text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          href="/config/devices">{decidesWords.joinMachine}</a
+        >
+      </div>
+    {/if}
+
+    {#if setup.picking}
+      <div transition:unfold>
+        <PicturePicker
+          member={face}
+          onpicked={(picture) => who.pickPicture(picture)}
+        />
+      </div>
+    {/if}
+
+    {#if isCaw && who.lead && who.projectId !== null && project !== null}
+      <div class="type-label text-ink-strong">
+        <CawLeadSwitch
+          lead={who.lead}
+          projectId={who.projectId}
+          projectName={project}
+        />
+      </div>
+    {/if}
+
+    {#if isAgent}
+      {#if showKnows}
+        <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
+          <Textarea
+            aria-invalid={problemOf("knows") ? true : undefined}
+            aria-label={decidesWords.instructionsLabel}
+            bind:value={setup.draft.instructions}
+          />
+          {@render problemLine("knows")}
+        </div>
+      {:else if draft.instructions.trim() === ""}
+        <button
+          class="mark-line flex w-fit items-center gap-space-1 rounded-xs type-label text-link-ink can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          onclick={editKnows}
+          type="button"><span>{decidesWords.addInstructions}</span></button
+        >
+        {@render problemLine("knows")}
+      {:else}
+        <button
+          aria-label={decidesWords.changeInstructions(face.name)}
+          class="-mx-space-2 rounded-md px-space-2 py-space-1 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          onclick={editKnows}
+          type="button"
+        >
+          <span class="line-clamp-4 type-body text-pretty text-ink-strong"
+            >{draft.instructions}</span
+          >
+        </button>
+      {/if}
+      {#if who.skills.length > 0}
+        <button
+          aria-expanded={skillsOpen}
+          class="mark-line flex w-fit items-center gap-space-1 rounded-xs type-label text-ink-muted can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          onclick={() => {
+            skillsOpen = !skillsOpen;
+          }}
+          type="button"
+        >
+          <span
+            >{draft.skills.length === 0
+              ? decidesWords.skillsLabel
+              : decidesWords.skillsPicked(draft.skills.length)}</span
           >
           <IconChevronDown
             aria-hidden="true"
-            class="size-icon-sm flex-none text-ink-muted"
+            class={[
+              "size-icon-sm transition-transform",
+              skillsOpen && "rotate-180",
+            ]}
           />
         </button>
-      {/if}
-    </div>
-  </header>
-  {@render problemLine("does")}
-
-  {#if setup.picking}
-    <div transition:unfold>
-      <PicturePicker
-        member={face}
-        onpicked={(picture) => who.pickPicture(picture)}
-      />
-    </div>
-  {/if}
-
-  {#if isCaw && who.lead && who.projectId !== null && project !== null}
-    <div class="type-label text-ink-strong">
-      <CawLeadSwitch
-        lead={who.lead}
-        projectId={who.projectId}
-        projectName={project}
-      />
-    </div>
-  {/if}
-
-  {#if showRuns && settable}
-    <div class="rounded-md bg-surface-recess p-space-3" transition:unfold>
-      <RunsOnEditor
-        caw={isCaw}
-        draft={setup.draft}
-        problem={problemOf("runs")}
-        {who}
-      />
-    </div>
-  {/if}
-
-  {#if isAgent}
-    {#if showKnows}
-      <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
-        <Textarea
-          aria-invalid={problemOf("knows") ? true : undefined}
-          aria-label={decidesWords.instructionsLabel}
-          placeholder={decidesWords.instructionsPlaceholder}
-          bind:value={setup.draft.instructions}
-        />
-        {@render problemLine("knows")}
-        {#if who.skills.length > 0}
-          <button
-            aria-expanded={skillsOpen}
-            class="mark-line flex w-fit items-center gap-space-1 rounded-xs type-label text-ink-muted can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-            onclick={() => {
-              skillsOpen = !skillsOpen;
-            }}
-            type="button"
-          >
-            <span
-              >{draft.skills.length === 0
-                ? decidesWords.skillsLabel
-                : decidesWords.skillsPicked(draft.skills.length)}</span
-            >
-            <IconChevronDown
-              aria-hidden="true"
-              class={[
-                "size-icon-sm transition-transform",
-                skillsOpen && "rotate-180",
-              ]}
-            />
-          </button>
-        {/if}
-        {#if who.skills.length > 0 && skillsOpen}
+        {#if skillsOpen}
           <ul
             aria-label={decidesWords.skillsLabel}
-            class="m-0 flex max-h-64 list-none flex-col overflow-y-auto overscroll-contain p-0"
+            class="m-0 flex list-none flex-col p-0"
+            transition:unfold
           >
             {#each who.skills as skill (skill.id)}
               <li>
@@ -322,128 +349,125 @@
             {/each}
           </ul>
         {/if}
-      </div>
-    {:else}
-      <button
-        aria-label={decidesWords.changeInstructions(face.name)}
-        class="flex min-w-0 flex-col gap-space-2 rounded-md bg-surface-recess px-space-3 py-space-2 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-        onclick={() => open("knows")}
-        type="button"
-      >
-        <span class="line-clamp-3 type-body text-pretty text-ink-strong"
-          >{draft.instructions}</span
-        >
-        {#if draft.skills.length > 0}
-          <span class="flex flex-wrap gap-space-1">
-            {#each draft.skills as skill (skill)}
-              <span
-                class="rounded-xs bg-surface-raised px-space-1 type-meta font-mono text-ink-muted"
-                >{skill}</span
-              >
-            {/each}
-          </span>
+      {/if}
+      <div class="flex flex-col">
+        {#if member?.hear !== null}
+          {@render toggle(
+            decidesWords.hears.each.name,
+            draft.hear === "each",
+            (on) => {
+              setup.draft.hear = on ? "each" : "later";
+            }
+          )}
         {/if}
-      </button>
-    {/if}
-  {:else if isCaw}
-    <p class="flex min-w-0 flex-wrap gap-x-space-3 gap-y-space-1 type-label">
-      {#if who.projectId !== null && project !== null}
+        {@render toggle(decidesWords.delegatesLabel, draft.delegates, (on) => {
+          setup.draft.delegates = on;
+        })}
+      </div>
+    {:else if isCaw}
+      <p class="flex min-w-0 flex-wrap gap-x-space-3 gap-y-space-1 type-label">
+        {#if who.projectId !== null && project !== null}
+          <a
+            class="rounded-xs text-link-ink underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+            href={folderFileHref(who.projectId, "AGENTS.md")}>AGENTS.md</a
+          >
+        {/if}
         <a
-          class="rounded-xs text-link-ink underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-          href={folderFileHref(who.projectId, "AGENTS.md")}>AGENTS.md</a
+          class="rounded-xs text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          href="/config/skills">{decidesWords.skillsLabel}</a
         >
-      {/if}
-      <a
-        class="rounded-xs text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-        href="/config/skills">{decidesWords.skillsLabel}</a
-      >
-    </p>
-  {/if}
+      </p>
+    {/if}
 
-  {#if isAgent && member?.hear !== null}
-    <label
-      class="mark-line flex min-h-c-touch-floor items-center justify-between gap-space-3 type-label text-ink-strong"
-    >
-      <span>{decidesWords.hears.each.name}</span>
-      <Switch
-        data-box
-        bind:checked={
-          () => draft.hear === "each",
-          (on) => {
-            setup.draft.hear = on ? "each" : "later";
-          }
-        }
-      />
-    </label>
-  {/if}
-
-  {#if member && !adding}
-    <section
-      aria-label={decidesWords.recordLabel(member.name)}
-      class="flex min-w-0 flex-col gap-space-2 border-border-hairline border-t pt-space-3"
-    >
-      {#if who.record?.member === member.id}
-        <MemberRecord
-          {now}
-          onretry={() => who.readRecord(member.id)}
-          projectId={who.projectId}
-          read={who.record.read}
-        />
-      {/if}
-      {#if calls.length > 0}
-        <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
-          {#each calls as call (`${call.artifactId}#${call.card}`)}
-            <li class="flex min-w-0 flex-col gap-px">
-              <p class="line-clamp-2 type-body text-pretty text-ink-strong">
-                {call.question}
-              </p>
-              <p
-                class="mark-line flex min-w-0 items-center gap-space-1 type-meta text-ink-muted"
-              >
-                {#if call.takenBack}
-                  <IconUndoLinear
-                    aria-hidden="true"
-                    class="size-icon-sm flex-none text-status-attn-glyph"
-                  />
-                  <span class="flex-none text-status-attn-ink"
-                    >{decidesWords.pickedAgain}</span
-                  >
-                  <span aria-hidden="true">·</span>
-                {/if}
-                <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                  >{call.picked.length === 0
-                    ? decidesWords.waiting
-                    : call.picked.join(", ")}</span
-                >
-                <span aria-hidden="true">·</span>
-                <span class="flex-none tabular-nums"
-                  >{formatAgeShort(Date.parse(call.at), now)}</span
-                >
-              </p>
+    {#if member && !adding}
+      {#if holds.length > 0}
+        <ul
+          aria-label={decidesWords.kindsOf(member.name)}
+          class="m-0 flex list-none flex-wrap gap-space-1 p-0"
+        >
+          {#each holds as kind (kind.id)}
+            {@const Glyph = kindGlyph(kind.id)}
+            <li
+              class="mark-line flex items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 py-px type-label text-ink-strong"
+            >
+              <Glyph aria-hidden="true" class="size-icon-sm text-ink-muted" />
+              <span>{kind.name}</span>
             </li>
           {/each}
         </ul>
+      {:else}
+        <p class="type-meta text-ink-muted text-pretty">
+          {decidesWords.answersNothing}
+        </p>
       {/if}
-    </section>
-  {/if}
+      <section
+        aria-label={decidesWords.recordLabel(member.name)}
+        class="flex min-w-0 flex-col gap-space-2 border-border-hairline border-t pt-space-3"
+      >
+        {#if who.record?.member === member.id}
+          <MemberRecord
+            {now}
+            onretry={() => who.readRecord(member.id)}
+            projectId={who.projectId}
+            read={who.record.read}
+          />
+        {/if}
+        {#if calls.length > 0}
+          <ul class="m-0 flex list-none flex-col gap-space-2 p-0">
+            {#each calls as call (`${call.artifactId}#${call.card}`)}
+              <li class="flex min-w-0 flex-col gap-px">
+                <p class="line-clamp-2 type-body text-pretty text-ink-strong">
+                  {call.question}
+                </p>
+                <p
+                  class="mark-line flex min-w-0 items-center gap-space-1 type-meta text-ink-muted"
+                >
+                  {#if call.takenBack}
+                    <IconUndoLinear
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none text-status-attn-glyph"
+                    />
+                    <span class="flex-none text-status-attn-ink"
+                      >{decidesWords.pickedAgain}</span
+                    >
+                    <span aria-hidden="true">·</span>
+                  {/if}
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                    >{call.picked.length === 0
+                      ? decidesWords.waiting
+                      : call.picked.join(", ")}</span
+                  >
+                  <span aria-hidden="true">·</span>
+                  <span class="flex-none tabular-nums"
+                    >{formatAgeShort(Date.parse(call.at), now)}</span
+                  >
+                </p>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+    {/if}
 
-  {#if footFault}
-    <p class="type-meta text-status-fail-ink text-pretty" role="alert">
-      {footFault}
-    </p>
-  {/if}
+    {#if footFault}
+      <p class="type-meta text-status-fail-ink text-pretty" role="alert">
+        {footFault}
+      </p>
+    {/if}
+    <AskHere asker={who.asker} at="remove:{setup.key}" />
+  </div>
 
   {#if adding || setup.changed || removable}
     <footer
-      class="sticky bottom-0 -mx-c-floating-pad -mb-c-floating-pad flex min-w-0 flex-wrap items-center gap-space-2 border-border-hairline border-t bg-surface-raised px-c-floating-pad py-space-2"
+      class="flex min-w-0 flex-none flex-wrap items-center gap-space-2 border-border-hairline border-t px-space-3 py-space-2"
     >
       {#if removable && !adding}
         <Button
           disabled={removeAsked}
           onclick={askRemove}
           size="sm"
-          variant="ghost"><span>{decidesWords.remove}</span></Button
+          variant="ghost"><span>{decidesWords.remove(face.name)}</span></Button
         >
       {/if}
       {#if adding || setup.changed}
@@ -466,5 +490,4 @@
       {/if}
     </footer>
   {/if}
-  <AskHere asker={who.asker} at="remove:{setup.key}" />
 </div>

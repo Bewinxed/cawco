@@ -1,6 +1,7 @@
 <script lang="ts">
   /**
-   * A member as a chip: its face and name in one pill. On a kind's card it
+   * A member as a chip: its face and name, its corners concentric with the
+   * face's. On a kind's card it
    * is who answers the kind, its chevron saying a press changes who; in the
    * team row it opens the member. A member that can't be reached wears the
    * attention dot on its face, why in its tooltip.
@@ -33,7 +34,7 @@
   bind:this={ref}
   {...rest}
   class={[
-    "mark-line flex min-w-0 max-w-full items-center gap-space-2 rounded-pill py-space-1 ps-space-1 pe-space-3 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
+    "mark-line flex min-w-0 max-w-full items-center gap-space-2 rounded-lg py-space-1 ps-space-1 pe-space-3 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
     change && "pe-space-2",
     pressed && "bg-surface-pressed",
   ]}

@@ -1,21 +1,20 @@
 <script lang="ts">
   /**
    * Add a kind, closing the kinds' grid: a quiet card until pressed, then a
-   * kind's card in the making, where it will stand. Its name in the head,
-   * the face of who will answer it trailing (pressed to pick), and under
-   * them the few examples agents file choices under it by. Cancel is the
+   * kind's card in the making, where it will stand: its name, the few
+   * examples agents file choices under it by, and the face of who will
+   * answer it (pressed to pick) beside Cancel and Add kind. Cancel is the
    * one discard; closed with words in it, it stays for the session.
    */
   import { decidesWords } from "@cawco/core/words/decides";
   import { tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { IconPlus, IconToolGeneric } from "#lib/icons.js";
+  import { IconPlus } from "#lib/icons.js";
   import type { WhoDecides } from "./decides.svelte";
   import FaceChip from "./FaceChip.svelte";
-  import HandOver from "./HandOver.svelte";
-  import Hung from "./Hung.svelte";
   import { writeParkedKind } from "./kinds.svelte";
+  import WhoPicker from "./WhoPicker.svelte";
 
   let { who }: { who: WhoDecides } = $props();
 
@@ -55,70 +54,23 @@
       who.addKind();
     }}
   >
-    <div class="mark-line flex min-w-0 items-center gap-space-2">
-      <span class="grid h-c-btn-h-sm flex-none place-items-center" data-box>
-        <IconToolGeneric
-          aria-hidden="true"
-          class="size-icon-md text-ink-muted"
-        />
-      </span>
+    <label class="flex min-w-0 flex-col gap-space-1">
+      <span class="type-label text-ink-muted">{decidesWords.nameLabel}</span>
       <Input
         aria-invalid={add.tried && problems.name ? true : undefined}
-        aria-label={decidesWords.kindSteps.name}
         autocomplete="off"
-        class="min-w-0 flex-auto"
-        data-box
-        placeholder={decidesWords.kindNamePlaceholder}
         bind:value={add.name}
       />
-      {#if to}
-        <span class="flex" data-box>
-          <Hung
-            align="end"
-            anchor={chip}
-            label={decidesWords.kindSteps.to}
-            onopen={(open) => {
-              picking = open;
-            }}
-            open={picking}
-            width="var(--c-pop-w)"
-          >
-            {#snippet trigger(props)}
-              <FaceChip
-                {...props}
-                aria-label={decidesWords.answeredBy(draftKind.name, to.name)}
-                bind:ref={chip}
-                change
-                member={to}
-                pressed={picking}
-              />
-            {/snippet}
-            <HandOver
-              current={to.id}
-              fleetChoice={null}
-              kind={draftKind}
-              members={who.members}
-              onpick={(id) => {
-                add.to = id;
-                picking = false;
-                chip?.focus({ preventScroll: true });
-              }}
-              runsOn={(member) =>
-                member.type === "caw"
-                  ? null
-                  : (who.facts(member, undefined)?.text ?? null)}
-            />
-          </Hung>
-        </span>
-      {/if}
-    </div>
-    <Input
-      aria-invalid={add.tried && problems.example ? true : undefined}
-      aria-label={decidesWords.kindSteps.example}
-      autocomplete="off"
-      placeholder={decidesWords.kindExamplePlaceholder}
-      bind:value={add.example}
-    />
+    </label>
+    <label class="flex min-w-0 flex-col gap-space-1">
+      <span class="type-label text-ink-muted">{decidesWords.examplesLabel}</span
+      >
+      <Input
+        aria-invalid={add.tried && problems.example ? true : undefined}
+        autocomplete="off"
+        bind:value={add.example}
+      />
+    </label>
     {#if add.tried && (problems.name || problems.example || problems.to)}
       <p class="type-meta text-status-fail-ink text-pretty" role="alert">
         {problems.name ?? problems.example ?? problems.to}
@@ -129,7 +81,41 @@
         {add.fault.reason}
       </p>
     {/if}
-    <div class="flex justify-end gap-space-2">
+    <div class="flex min-w-0 items-center gap-space-2">
+      {#if to}
+        <WhoPicker
+          anchor={chip}
+          current={to.id}
+          fleetChoice={null}
+          kind={draftKind}
+          members={who.members}
+          onopen={(open) => {
+            picking = open;
+          }}
+          onpick={(id) => {
+            add.to = id;
+            picking = false;
+            chip?.focus({ preventScroll: true });
+          }}
+          open={picking}
+          runsOn={(member) =>
+            member.type === "caw"
+              ? null
+              : (who.facts(member, undefined)?.text ?? null)}
+        >
+          {#snippet trigger(props)}
+            <FaceChip
+              {...props}
+              aria-label={decidesWords.answeredBy(draftKind.name, to.name)}
+              bind:ref={chip}
+              change
+              member={to}
+              pressed={picking}
+            />
+          {/snippet}
+        </WhoPicker>
+      {/if}
+      <span class="ms-auto"></span>
       <Button onclick={() => who.cancelKind()} size="sm" variant="ghost"
         ><span>{decidesWords.cancel}</span></Button
       >

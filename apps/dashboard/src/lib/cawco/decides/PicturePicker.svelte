@@ -67,7 +67,4 @@
       {/each}
     {/if}
   </OptionGroup>
-  {#if flock}
-    <p class="m-0 type-meta text-ink-muted">{decidesWords.posesNote}</p>
-  {/if}
 </div>

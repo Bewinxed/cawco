@@ -182,6 +182,17 @@ export class WhoDecides {
           .slice(0, KIND_CALLS)
       : [];
 
+  /** How many questions of kind `kind` still wait on member `member`. */
+  waitingOn = (kind: string, member: string): number =>
+    this.recent.state === "read"
+      ? this.recent.calls.filter(
+          (call) =>
+            call.kind === kind &&
+            call.member === member &&
+            call.picked.length === 0
+        ).length
+      : 0;
+
   /** The questions member `member` was asked, newest first. */
   callsOfMember = (member: string): RecentCall[] =>
     this.recent.state === "read"
@@ -1015,9 +1026,7 @@ export class WhoDecides {
     this.asker.ask({
       at: `remove-kind:${id}`,
       title: decidesWords.removeKindAsk(kind.name),
-      body: [
-        `${decidesWords.waitingUnder(count, projects)} ${decidesWords.fileUnder(count)}`,
-      ],
+      body: [decidesWords.waitingMove(count, projects)].filter(Boolean),
       cancelLabel: decidesWords.keep,
       confirmLabel: decidesWords.removeAndMove(count),
       pendingLabel: decidesWords.removingKind,

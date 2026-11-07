@@ -11,6 +11,7 @@
     KIND_SEED,
     type Kind,
     type Member,
+    slugOf,
   } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import { conversationWords } from "@cawco/core/words/project-conversation";
@@ -256,17 +257,67 @@
     who.cancelSetup();
     return Promise.resolve();
   };
+  /** The fleet as the hub would answer it after a kind's write. */
+  const withKinds = (
+    next: (kinds: Kind[]) => Kind[],
+    route?: [string, string]
+  ) => {
+    if (who.read.state !== "read") {
+      return;
+    }
+    who.read = {
+      ...who.read,
+      fleet: {
+        ...who.read.fleet,
+        kinds: next(who.read.fleet.kinds),
+        routes: route
+          ? { ...who.read.fleet.routes, [route[0]]: route[1] }
+          : who.read.fleet.routes,
+      },
+    };
+  };
   who.addKind = () => {
     const add = who.kindAdd;
-    if (add && Object.keys(who.kindAddProblems(add)).length > 0) {
-      add.tried = true;
+    if (!add) {
       return Promise.resolve();
     }
+    add.tried = true;
+    if (Object.keys(who.kindAddProblems(add)).length > 0) {
+      return Promise.resolve();
+    }
+    const id = slugOf(add.name.trim());
+    withKinds(
+      (all) => [
+        ...all,
+        {
+          id,
+          name: add.name.trim(),
+          example: add.example.trim(),
+          builtIn: false,
+          position: all.length,
+        },
+      ],
+      [id, add.to]
+    );
     who.kindAdd = null;
     return Promise.resolve();
   };
   who.doneRename = () => {
-    who.kindRename = null;
+    const rename = who.kindRename;
+    if (rename && Object.keys(who.renameProblems(rename)).length === 0) {
+      withKinds((all) =>
+        all.map((one) =>
+          one.id === rename.id
+            ? {
+                ...one,
+                name: rename.name.trim(),
+                example: rename.example.trim(),
+              }
+            : one
+        )
+      );
+      who.kindRename = null;
+    }
     return Promise.resolve();
   };
   who.removeKind = () => Promise.resolve();
@@ -292,9 +343,7 @@
       who.asker.ask({
         at: `remove-kind:${removingKind}`,
         title: decidesWords.removeKindAsk(kind?.name ?? removingKind),
-        body: [
-          `${decidesWords.waitingUnder(2, ["Cawco-Dev"])} ${decidesWords.fileUnder(2)}`,
-        ],
+        body: [decidesWords.waitingMove(2, ["Cawco-Dev"])],
         cancelLabel: decidesWords.keep,
         confirmLabel: decidesWords.removeAndMove(2),
         pendingLabel: decidesWords.removingKind,

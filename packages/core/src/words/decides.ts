@@ -11,7 +11,7 @@ import { andList } from "./helpers";
 /** A removed member's kinds, coming back to him. */
 const kindsBack = (kinds: readonly string[]): string => {
   if (kinds.length === 0) {
-    return "It decides no kind now.";
+    return "";
   }
   if (kinds.length === 1) {
     return `Its one kind, ${kinds[0]}, comes back to you.`;
@@ -43,7 +43,7 @@ export const decidesWords = {
     subject: "common practice",
   },
   asker: {
-    name: "The agent",
+    name: "The agent that asked",
     job: "The session that asked settles it itself.",
     subject: "the agent that asked",
   },
@@ -110,8 +110,9 @@ export const decidesWords = {
     reason: string
   ) =>
     `${kind} goes to ${member} ${here}, but ${reason}, so the card waits on him.`,
-  /** decides.md doesn't read: every kind is his until it does. */
-  fileProblems: (problems: string) => `decides.md doesn't read: ${problems}`,
+  /** decides.md can't be read: every kind is his until it does. */
+  fileProblems: (problems: string) =>
+    `decides.md can't be read: ${problems} Every kind comes to you until it's fixed.`,
 
   // ── Why a member can't be reached (lower case: the routed line and the signature open it) ──
   /** A person or channel member: no connection carries a question yet. */
@@ -119,7 +120,7 @@ export const decidesWords = {
     `${name} can't be reached until Slack or email is connected`,
   /** An agent member whose harness is on no online machine. */
   cantRun: (name: string, harness: string) =>
-    `${name} can't run: ${harness} is on no machine`,
+    `${name} can't run: no online machine has ${harness}`,
   /** Caw, while his lead switch is off for the project. */
   notLeading: (project: string) => `Caw isn't leading ${project}`,
   /** Caw, for a card in no project. */
@@ -164,13 +165,12 @@ export const decidesWords = {
   builtInMember: "A built-in member can't be removed.",
   cawRunsOn:
     "Caw's harness and model are the project's: change them in the project's Caw settings.",
-  nameMissing: "Give it a name; it's shown on every decision it makes.",
+  nameMissing: "Give it a name.",
   nameTaken: (name: string) => `There's already a member called ${name}.`,
   kindTaken: (name: string) => `There's already a kind called ${name}.`,
   noMachine: (harness: string) => `${harness} is on no machine yet.`,
   moveToSelf: "Move its decisions to another kind.",
-  instructionsMissing:
-    "Give it standing instructions: what it reads before every decision.",
+  instructionsMissing: "Give it instructions.",
   kindFields:
     "Give the kind a name and the line agents read to file a choice under it.",
   wearsMark: (name: string) =>
@@ -178,7 +178,7 @@ export const decidesWords = {
   wearsPose: (name: string) =>
     `${name} wears one of Caw's poses, not an identity mark.`,
   fileUnread: (problems: string) =>
-    `decides.md doesn't read, so it was not changed: ${problems}`,
+    `decides.md can't be read, so it was not changed: ${problems}`,
   /** A member removed: the decides.md commit. */
   removedCommit: (name: string, kinds: readonly string[]) =>
     `${name} removed: ${andList(kinds.map((kind) => kind.toLowerCase()))} ${kinds.length === 1 ? "comes" : "come"} back to you`,
@@ -196,10 +196,7 @@ export const decidesWords = {
   ownTip: (project: string, subject: string) =>
     `${project}'s own. The fleet sends it to ${subject}`,
   /** A project's own kind, its way back. */
-  giveBack: "Give it back to the fleet's choice",
-  /** The hand-over's head. */
-  handTo: (kind: string) =>
-    `Hand ${kind.toLowerCase()} to, for choices raised from now on`,
+  giveBack: "Follow the fleet",
   /** The member the fleet names for this kind, at the end of its row. */
   fleetsChoice: "Fleet's choice",
   /** A hand-over the hub is writing, said to a screen reader. */
@@ -239,13 +236,51 @@ export const decidesWords = {
   addAgentAct: "Add agent",
   /** A kind's face chip, as its control is named. */
   answeredBy: (kind: string, member: string) =>
-    `${kind}: ${member} answers. Change who`,
+    `${kind}: ${member} answers. Change who answers`,
   /** A kind's More, as its control is named. */
   kindMore: (kind: string) => `More for ${kind}`,
   renameItem: "Rename",
   removeItem: "Remove kind",
-  /** A kind no agent has asked of yet. */
-  noQuestionsYet: "No questions yet",
+  /**
+   * What an agent might ask under each built-in kind, drawn muted on a
+   * kind no agent has asked of yet, each with who it would go to.
+   */
+  kindSamples: {
+    look: [
+      "Call the new tab Decisions or Choices?",
+      "Should the empty board show Caw's sketch or one line of text?",
+    ],
+    behaviour: [
+      "When a run fails twice, retry once more or stop?",
+      "Does closing the sheet keep a half-written reply?",
+    ],
+    scope: [
+      "Leave dark mode out of this release?",
+      "The brief asks for CSV and PDF export. Ship CSV first?",
+    ],
+    approach: [
+      "Keep drafts in the database or in the browser?",
+      "One query per page, or one cached list for all of them?",
+    ],
+    rules: [
+      "Turn off the line-length rule for generated files?",
+      "Skip the screenshot check? This change only moves a comment.",
+    ],
+    tools: [
+      "Dates as ISO strings or as timestamps?",
+      "Move to Svelte 6 now, or stay on 5 for this release?",
+    ],
+  } as Record<string, readonly string[]>,
+  /** Under a sample question: who it would go to. */
+  wouldGo: (member: string | null) =>
+    member === null ? "Comes to you" : `Goes to ${member}`,
+  /** A kind's hand-over list, while questions of it wait on who answers it now. */
+  waitingStay: (count: number, member: string) =>
+    `${count} waiting ${count === 1 ? "stays" : "stay"} with ${member}`,
+  /** Under an open question another member holds. */
+  deciding: (member: string) => `${member} is deciding`,
+  /** A pick's maker, as a screen reader hears it before the pick. */
+  pickedBy: (member: string) => `${member} picked`,
   /** A question still waiting on him: its link to the card. */
   waitingOnYou: "Waiting on you",
   /** The latest questions could not be read. */
@@ -263,34 +298,41 @@ export const decidesWords = {
   pickedAgain: "You picked again",
   /** A question in a member's record still waiting. */
   waiting: "Waiting",
+  /** A member's card: the kinds that come to it, as a screen reader names them. */
+  kindsOf: (name: string) => `What comes to ${name}`,
+  /** A member's card when no kind goes to it. */
+  answersNothing: "No kind yet",
+  /** A member that can't run, on the kinds it answers: the way to its card. */
+  fixMember: (name: string) => `Change ${name}`,
+  /** A member that can't run, in its card: where machines join. */
+  joinMachine: "Join a machine",
+  /** A member's setting chips, as their controls are named. */
+  harnessOf: (name: string) => `${name}'s harness`,
+  modelOf: (name: string) => `${name}'s model`,
+  effortOf: (name: string) => `${name}'s effort`,
+  /** A harness in its menu: how many machines run it. */
+  harnessMachines: (count: number) =>
+    count === 0
+      ? "on no machine"
+      : `on ${count} ${count === 1 ? "machine" : "machines"}`,
+  /** A new agent's card, as a screen reader names it before it has a name. */
+  newAgent: "New agent",
+  /** A kind's fields, adding or renaming it. */
+  examplesLabel: "Examples",
+  /** decides.md that can't be read: its way out. */
+  openFile: "Open decides.md",
 
   // ── A member's settings, and Add a member ───────────────────────────────
   /** A card whose settings were closed before saving, on its facts line. */
   unsaved: "Unsaved changes",
   /** The add card, with a new member's draft closed before adding. */
   resume: (name: string) => (name ? `Resume ${name}` : "Resume the new member"),
-  /** The row labels, in their order. */
-  rows: {
-    does: "What it does",
-    doesCaw: "What he does",
-    lead: "Leads this project",
-    runs: "Runs on",
-    knows: "Knows",
-    decides: "Decides",
-    hear: "How you hear",
-    record: "Record",
-  },
   nameLabel: "Name",
-  namePlaceholder: "Release checker",
-  /** An added member's name, which can't change. */
-  nameKept: "Its name is its delegate type's, so it stays.",
   harnessLabel: "Harness",
   modelLabel: "Model",
   effortLabel: "Effort",
   /** A harness tile's note: where it runs. */
   harnessOn: (machines: readonly string[]) => andList(machines),
-  /** A harness on no online machine. */
-  notOnMachine: "Not on any machine yet",
   /**
    * The names composed for a harness's models where the harness's own
    * would repeat or fall short (packages/core/src/model-names.ts).
@@ -312,9 +354,9 @@ export const decidesWords = {
   skillsPicked: (count: number) =>
     `${count} ${count === 1 ? "skill" : "skills"}`,
   noSkills: "The fleet has no skills yet: add them in Configure › Skills.",
-  instructionsLabel: "Standing instructions",
-  instructionsPlaceholder:
-    "Read the changelog and the last build's checks. Pick the option that ships safely, and say which check decided it.",
+  instructionsLabel: "Instructions",
+  /** An agent's card with no instructions yet: the press that adds them. */
+  addInstructions: "Add instructions",
   /** How you hear, its two ways. */
   hears: {
     each: {
@@ -331,60 +373,47 @@ export const decidesWords = {
   saving: "Saving…",
   addingMember: "Adding…",
   /** Removing a member he added. */
-  remove: "Remove member",
+  remove: (name: string) => `Remove ${name}`,
   removing: "Removing…",
   keep: "Keep it",
   removeAsk: (name: string) => `Remove ${name}?`,
   removeLine: (kinds: readonly string[], waiting: number) =>
     [
       kindsBack(kinds),
-      "Decisions it already settled stay as they are.",
       ...(waiting === 0
         ? []
         : [
             waiting === 1
-              ? "The one waiting on it stays with it until answered."
-              : `The ${waiting} waiting on it stay with it until answered.`,
+              ? "1 waiting stays with it until answered."
+              : `${waiting} waiting stay with it until answered.`,
           ]),
-    ].join(" "),
+    ]
+      .filter(Boolean)
+      .join(" "),
   /** The setup's commit on a project's decides.md. */
   setupCommit: (name: string) => `${name}'s kinds changed`,
 
   // ── Kinds of choice ─────────────────────────────────────────────────────
   addKind: "Add a kind",
-  /** Add a kind's steps, in their order. */
-  kindSteps: {
-    name: "Name",
-    example: "What agents read",
-    to: "Who decides it",
-  },
-  kindNamePlaceholder: "Data and migrations",
-  kindExamplePlaceholder: "a schema change, a backfill, a data fix",
-  kindNameMissing: "Give it a name; agents file choices under it.",
-  kindExampleMissing: "Say what agents file under it, as a few examples.",
+  kindNameMissing: "Give it a name.",
+  kindExampleMissing: "Give an example or two.",
   addKindAct: "Add kind",
   addingKind: "Adding…",
   rename: (name: string) => `Rename ${name}`,
   renameDone: "Done",
   renaming: "Saving…",
   removeKindAsk: (name: string) => `Remove ${name}?`,
-  /** What waits under a kind being removed, and the projects it waits in. */
-  waitingUnder: (count: number, projects: readonly string[]) => {
+  /** What waits under a kind being removed, where it goes; nothing when none waits. */
+  waitingMove: (count: number, projects: readonly string[]) => {
     if (count === 0) {
-      return "No decisions are waiting under it.";
+      return "";
     }
     const where = projects.length > 0 ? ` (${andList(projects)})` : "";
-    return count === 1
-      ? `1 decision is waiting under it${where}.`
-      : `${count} decisions are waiting under it${where}.`;
+    return `${count} waiting${where} ${count === 1 ? "moves" : "move"} to the kind you pick.`;
   },
-  fileUnder: (count: number) =>
-    count === 0
-      ? "From now on agents file these choices under the kind you pick."
-      : `From now on agents file these choices under the kind you pick, and the waiting ${count === 1 ? "decision moves" : "decisions move"} there too.`,
   /** The kinds to move them to, as a screen reader names the list. */
   moveToLabel: "The kind they go to",
-  pickMoveTo: "Pick the kind they go to.",
+  pickMoveTo: "Pick a kind.",
   removeAndMove: (count: number) => {
     if (count === 0) {
       return "Remove kind";
@@ -420,15 +449,14 @@ export const decidesWords = {
   detailsFollows: "Follows the fleet",
   detailsExcept: (count: number) =>
     `Follows the fleet, except ${count} ${count === 1 ? "kind" : "kinds"}`,
-  /** decides.md doesn't read: every kind is his. */
-  detailsUnread: "decides.md doesn't read: every choice comes to you",
+  /** decides.md can't be read: every kind is his. */
+  detailsUnread: "decides.md can't be read: every kind comes to you",
 
   // ── Pictures ────────────────────────────────────────────────────────────
   /** The face's button. */
   changePicture: (name: string) => `Change ${name}'s picture`,
   /** The picker's group, as a screen reader names it. */
   pictureFor: (name: string) => `${name}'s picture`,
-  posesNote: "Caw's poses, drawn from his files.",
   /** An identity hue's tile. */
   hueName: (hue: number) => `Mark ${hue}`,
 };

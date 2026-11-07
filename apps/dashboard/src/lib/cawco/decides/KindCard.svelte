@@ -2,13 +2,16 @@
   /**
    * One kind of choice: its glyph and name leading, the face of who answers
    * it trailing, and under them the latest questions agents asked of it,
-   * each with its pick, or Waiting on you where it waits on him. The face
-   * is the press that hands the kind over, its list hung from it; nothing
-   * on the page moves, and once the hub has written it the face changes in
-   * place. Under the members the same list renames the kind, removes one
-   * he added (asked in the card), and on a project's page gives a kind the
-   * project set back to the fleet's choice, which the folder beside its
-   * name marks.
+   * each with its pick after the face of who made it, Waiting on you where
+   * it waits on him, or who is deciding it. A kind no agent has asked of
+   * yet shows what it would be asked, muted, each with who it would go to.
+   * The face is the press that hands the kind over, its list hung from it;
+   * nothing on the page moves, and once the hub has written it the face
+   * changes in place. Under the members the same list renames the kind,
+   * removes one he added (asked in the card), and on a project's page gives
+   * a kind the project set back to the fleet's choice, which the folder
+   * after its name marks. When its member can't run, the card says so with
+   * the way to that member's card.
    */
   import type { Kind, Member } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
@@ -26,10 +29,11 @@
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconFolder } from "#lib/icons.js";
   import type { WhoDecides } from "./decides.svelte";
+  import type { RecentCall } from "./decides-client";
   import FaceChip from "./FaceChip.svelte";
-  import HandOver from "./HandOver.svelte";
-  import Hung from "./Hung.svelte";
   import { kindGlyph } from "./kind-glyph";
+  import MemberFace from "./MemberFace.svelte";
+  import WhoPicker, { type PickerAction } from "./WhoPicker.svelte";
 
   let {
     who,
@@ -37,6 +41,7 @@
     project,
     named,
     waitingHref,
+    facts,
   }: {
     who: WhoDecides;
     kind: Kind;
@@ -46,19 +51,28 @@
     named: (projects: string[]) => string[];
     /** Where a question waiting on him is answered, by its project. */
     waitingHref: (projectId: string | null) => string;
+    /** Why a member can't be reached now; null when it can. */
+    facts: (id: string) => string | null;
   } = $props();
 
+  const uid = $props.id();
   let card = $state<HTMLElement | null>(null);
   let chip = $state<HTMLElement | null>(null);
 
   const Glyph = $derived(kindGlyph(kind.id));
   const holder = $derived(who.member(who.routes[kind.id]));
+  const blocked = $derived(holder ? facts(holder.id) : null);
   const own = $derived(project !== null && who.isOwn(kind.id));
   const asking = $derived(
     who.asking?.kinds.includes(kind.id) ? who.asking.said : null
   );
   const fault = $derived(who.fault?.kinds.includes(kind.id) ? who.fault : null);
   const calls = $derived(who.callsOfKind(kind.id));
+  const samples = $derived(
+    kind.builtIn
+      ? (decidesWords.kindSamples[kind.id] ?? [])
+      : [kind.example.charAt(0).toUpperCase() + kind.example.slice(1)]
+  );
   const rename = $derived(
     who.kindRename?.id === kind.id ? who.kindRename : null
   );
@@ -68,6 +82,25 @@
   );
   const others = $derived(who.kinds.filter((one) => one.id !== kind.id));
   const handing = $derived(who.handing === kind.id);
+  const waiting = $derived(holder ? who.waitingOn(kind.id, holder.id) : 0);
+  /** What else is done to the kind, under the members in its picker. */
+  const pickerActions = $derived<PickerAction[]>([
+    { label: decidesWords.renameItem, run: startRename },
+    ...(own
+      ? [{ label: decidesWords.giveBack, run: () => who.useFleet([kind.id]) }]
+      : []),
+    ...(kind.builtIn
+      ? []
+      : [
+          {
+            label: decidesWords.removeItem,
+            run: () => who.askRemoveKind(kind.id, named),
+          },
+        ]),
+  ]);
+  const ownTip = $derived(
+    decidesWords.ownTip(project ?? "", who.fleetHolder(kind.id)?.subject ?? "")
+  );
 
   const pick = async (to: string) => {
     who.handing = null;
@@ -97,167 +130,171 @@
 
   const runsOn = (member: Member): string | null =>
     member.type === "caw" ? null : (who.facts(member, undefined)?.text ?? null);
+
+  /** Who made a question's pick: him where he picked again, else its member. */
+  const pickerOf = (call: RecentCall): Member | undefined =>
+    who.member(call.takenBack ? "you" : call.member);
 </script>
 
-{#snippet action(label: string, run: () => unknown)}
-  <button
-    class="flex min-h-c-touch-floor w-full items-center concentric-xs px-space-2 py-space-1 text-start type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
-    onclick={() => {
-      who.handing = null;
-      run();
-    }}
-    type="button">{label}</button
+{#snippet byLine(member: Member | undefined, words: string, attention = false)}
+  <p
+    class={[
+      "mark-line flex min-w-0 items-center gap-space-1 type-meta",
+      attention ? "text-status-attn-ink" : "text-ink-muted",
+    ]}
   >
+    {#if member}
+      <span class="flex" data-box><MemberFace {member} size={18} /></span>
+    {/if}
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{words}</span
+    >
+  </p>
 {/snippet}
 
 <article
-  aria-labelledby="kind-{kind.id}"
+  aria-labelledby="{uid}-name"
   bind:this={card}
   class="flex min-w-0 flex-col gap-space-3 rounded-lg bg-surface-raised p-space-3 shadow-tile"
   data-kind={kind.id}
 >
-  <div class="mark-line flex min-w-0 items-start gap-space-2">
-    <span class="grid h-c-btn-h-sm flex-none place-items-center" data-box>
-      <Glyph aria-hidden="true" class="size-icon-md text-ink-muted" />
-    </span>
-    {#if rename}
-      <form
-        class="flex min-w-0 flex-auto flex-col gap-space-2"
-        data-box
-        data-rename
-        onsubmit={(event) => {
-          event.preventDefault();
-          who.doneRename();
-        }}
-      >
+  {#if rename}
+    <form
+      class="flex min-w-0 flex-col gap-space-2"
+      data-rename
+      onsubmit={(event) => {
+        event.preventDefault();
+        who.doneRename();
+      }}
+    >
+      <label class="flex min-w-0 flex-col gap-space-1">
+        <span class="type-label text-ink-muted">{decidesWords.nameLabel}</span>
         <Input
           aria-invalid={renameProblems.name ? true : undefined}
-          aria-label={decidesWords.rename(kind.name)}
           autocomplete="off"
           onkeydown={putBack}
           bind:value={rename.name}
         />
+      </label>
+      <label class="flex min-w-0 flex-col gap-space-1">
+        <span class="type-label text-ink-muted"
+          >{decidesWords.examplesLabel}</span
+        >
         <Input
           aria-invalid={renameProblems.example ? true : undefined}
-          aria-label={decidesWords.kindSteps.example}
           autocomplete="off"
           onkeydown={putBack}
-          placeholder={decidesWords.kindExamplePlaceholder}
           bind:value={rename.example}
         />
-        {#if renameProblems.name || renameProblems.example}
-          <p class="type-meta text-status-fail-ink text-pretty" role="alert">
-            {renameProblems.name ?? renameProblems.example}
-          </p>
-        {/if}
-        <div class="flex justify-end gap-space-2">
-          <Button
-            onclick={() => {
-              who.kindRename = null;
-            }}
-            size="sm"
-            variant="ghost"><span>{decidesWords.cancel}</span></Button
-          >
-          <Button
-            pending={rename.saving}
-            pendingLabel={decidesWords.renaming}
-            size="sm"
-            type="submit"
-            variant="default"><span>{decidesWords.renameDone}</span></Button
-          >
-        </div>
-      </form>
-    {:else}
+      </label>
+      {#if renameProblems.name || renameProblems.example}
+        <p class="type-meta text-status-fail-ink text-pretty" role="alert">
+          {renameProblems.name ?? renameProblems.example}
+        </p>
+      {/if}
+      <div class="flex justify-end gap-space-2">
+        <Button
+          onclick={() => {
+            who.kindRename = null;
+          }}
+          size="sm"
+          variant="ghost"><span>{decidesWords.cancel}</span></Button
+        >
+        <Button
+          pending={rename.saving}
+          pendingLabel={decidesWords.renaming}
+          size="sm"
+          type="submit"
+          variant="default"><span>{decidesWords.renameDone}</span></Button
+        >
+      </div>
+    </form>
+  {:else}
+    <div class="mark-line flex min-w-0 items-center gap-space-2">
+      <Glyph
+        aria-hidden="true"
+        class="size-icon-md flex-none self-center text-ink-muted"
+      />
       <h2
-        class="flex min-h-c-btn-h-sm min-w-0 flex-auto items-center gap-space-1 type-body font-medium text-ink-strong text-balance wrap-anywhere"
-        data-box
-        id="kind-{kind.id}"
+        class="min-w-0 flex-auto type-body font-medium text-ink-strong text-balance wrap-anywhere"
+        id="{uid}-name"
       >
-        <span>{kind.name}</span>
-        {#if own}
-          <Tooltip.Root>
+        {kind.name}{#if own}<Tooltip.Root>
             <Tooltip.Trigger>
               {#snippet child({ props })}
                 <span
                   {...props}
-                  aria-label={decidesWords.ownTip(
-                    project ?? "",
-                    who.fleetHolder(kind.id)?.subject ?? ""
-                  )}
-                  class="flex text-ink-muted"
+                  aria-label={ownTip}
+                  class="ms-space-1 inline-block align-middle text-ink-muted"
                   role="img"
                   ><IconFolder aria-hidden="true" class="size-icon-sm" /></span
                 >
               {/snippet}
             </Tooltip.Trigger>
-            <Tooltip.Content
-              >{decidesWords.ownTip(
-                project ?? "",
-                who.fleetHolder(kind.id)?.subject ?? ""
-              )}</Tooltip.Content
-            >
-          </Tooltip.Root>
-        {/if}
+            <Tooltip.Content>{ownTip}</Tooltip.Content>
+          </Tooltip.Root>{/if}
       </h2>
       {#if holder}
         <span
-          class="flex max-w-3/5 min-w-0 flex-none items-center gap-space-1"
+          class="flex max-w-1/2 min-w-0 flex-none items-center gap-space-1"
           data-box
         >
           {#if asking}
             <span class="flex" aria-hidden="true"><LiveDot /></span>
             <span class="sr-only" role="status">{asking}</span>
           {/if}
-          <Hung
+          <WhoPicker
+            actions={pickerActions}
             anchor={chip}
-            align="end"
-            label={decidesWords.handTo(kind.name)}
+            current={holder.id}
+            fleetChoice={project === null ? null : who.fleetRoutes[kind.id]}
+            {kind}
+            members={who.members}
+            note={waiting > 0
+              ? decidesWords.waitingStay(
+                  waiting,
+                  holder.id === "you" ? holder.subject : holder.name
+                )
+              : null}
             onopen={(open) => {
               if (open && who.asking !== null) {
                 return;
               }
               who.handing = open ? kind.id : null;
             }}
+            onpick={pick}
             open={handing}
-            width="var(--c-pop-w)"
+            {runsOn}
           >
             {#snippet trigger(props)}
               <FaceChip
                 {...props}
                 aria-label={decidesWords.answeredBy(kind.name, holder.name)}
+                attention={blocked !== null}
                 bind:ref={chip}
                 change
                 member={holder}
                 pressed={handing}
               />
             {/snippet}
-            <HandOver
-              current={holder.id}
-              fleetChoice={project === null ? null : who.fleetRoutes[kind.id]}
-              {kind}
-              members={who.members}
-              onpick={pick}
-              {runsOn}
-            >
-              {#snippet actions()}
-                {@render action(decidesWords.renameItem, startRename)}
-                {#if own}
-                  {@render action(decidesWords.giveBack, () =>
-                    who.useFleet([kind.id])
-                  )}
-                {/if}
-                {#if !kind.builtIn}
-                  {@render action(decidesWords.removeItem, () =>
-                    who.askRemoveKind(kind.id, named)
-                  )}
-                {/if}
-              {/snippet}
-            </HandOver>
-          </Hung>
+          </WhoPicker>
         </span>
       {/if}
-    {/if}
-  </div>
+    </div>
+  {/if}
+
+  {#if blocked && holder}
+    <div
+      class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+    >
+      <p class="min-w-0 text-status-attn-ink text-pretty">{blocked}.</p>
+      <button
+        class="rounded-xs text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+        onclick={() => who.openSetup(holder.id)}
+        type="button">{decidesWords.fixMember(holder.name)}</button
+      >
+    </div>
+  {/if}
 
   <RowFault again={fault?.again} reason={fault?.reason} />
   <RowFault again={kindFault?.again} reason={kindFault?.reason} />
@@ -272,32 +309,50 @@
       {/each}
     </div>
   {:else if who.recent.state === "read"}
-    {#if calls.length === 0}
-      <p class="type-meta text-ink-muted">{decidesWords.noQuestionsYet}</p>
-    {:else}
-      <ul class="m-0 flex list-none flex-col gap-space-3 p-0">
+    <ul class="m-0 flex list-none flex-col gap-space-3 p-0">
+      {#if calls.length === 0}
+        {#each samples as sample (sample)}
+          <li class="flex min-w-0 flex-col gap-px">
+            <p class="line-clamp-2 type-body text-pretty text-ink-muted">
+              {sample}
+            </p>
+            {@render byLine(
+              holder,
+              decidesWords.wouldGo(
+                !holder || holder.id === "you" ? null : holder.name
+              )
+            )}
+          </li>
+        {/each}
+      {:else}
         {#each calls as call (`${call.artifactId}#${call.card}`)}
+          {@const picker = pickerOf(call)}
+          {@const asked = who.member(call.member)}
           <li class="flex min-w-0 flex-col gap-px">
             <p class="line-clamp-2 type-body text-pretty text-ink-strong">
               {call.question}
             </p>
-            {#if call.picked.length === 0}
+            {#if call.picked.length > 0}
+              <span class="sr-only"
+                >{decidesWords.pickedBy(picker?.name ?? "")}</span
+              >
+              {@render byLine(picker, call.picked.join(", "))}
+            {:else if call.member === "you"}
               <a
                 class="w-fit rounded-xs type-meta text-status-attn-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
                 href={waitingHref(call.projectId)}
                 >{decidesWords.waitingOnYou}</a
               >
             {:else}
-              <p
-                class="overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
-              >
-                {call.picked.join(", ")}
-              </p>
+              {@render byLine(
+                asked,
+                decidesWords.deciding(asked?.name ?? call.member)
+              )}
             {/if}
           </li>
         {/each}
-      </ul>
-    {/if}
+      {/if}
+    </ul>
   {/if}
 
   <AskHere asker={who.asker} at="remove-kind:{kind.id}">

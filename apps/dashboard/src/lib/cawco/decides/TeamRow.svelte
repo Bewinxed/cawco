@@ -43,7 +43,12 @@
 
 {#snippet sheet()}
   {#if who.setup}
-    <MemberSheet {project} setup={who.setup} {who} />
+    <MemberSheet
+      blocked={who.setup.key === NEW ? null : facts(who.setup.key)}
+      {project}
+      setup={who.setup}
+      {who}
+    />
   {/if}
 {/snippet}
 
@@ -57,6 +62,7 @@
     <li class="min-w-0">
       <Hung
         anchor={chips[member.id] ?? null}
+        flush
         label={member.name}
         onopen={(open) => toggle(member.id, open)}
         open={opened(member.id)}
@@ -97,7 +103,8 @@
   <li>
     <Hung
       anchor={chips[NEW] ?? null}
-      label={decidesWords.addAgent}
+      flush
+      label={decidesWords.newAgent}
       onopen={(open) => toggle(NEW, open)}
       open={opened(NEW)}
       width="var(--c-panel-w)"
@@ -107,13 +114,13 @@
           {...props}
           bind:this={chips[NEW]}
           class={[
-            "mark-line flex items-center gap-space-2 rounded-pill py-space-1 ps-space-1 pe-space-3 text-ink-muted transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
+            "mark-line flex items-center gap-space-2 rounded-lg py-space-1 ps-space-1 pe-space-3 text-ink-muted transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
             opened(NEW) && "bg-surface-pressed",
           ]}
           type="button"
         >
           <span
-            class="grid size-c-btn-h-sm place-items-center rounded-pill border border-border-control border-dashed"
+            class="grid size-c-row-lead place-items-center rounded-sm border border-border-control border-dashed"
             data-box><IconPlus aria-hidden="true" class="size-icon-sm" /></span
           >
           <span class="type-label"

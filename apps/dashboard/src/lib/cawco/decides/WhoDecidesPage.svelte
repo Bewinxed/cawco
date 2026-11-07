@@ -14,6 +14,7 @@
    * and Try again; while it reads, the page's own shape stands in skeletons.
    */
   import { decidesWords } from "@cawco/core/words/decides";
+  import { folderFileHref } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
@@ -108,10 +109,20 @@
       </div>
     {:else}
       <TeamRow {facts} {project} {who} />
-      {#if who.problems.length > 0}
-        <p class="type-meta text-status-fail-ink text-pretty" role="alert">
-          {decidesWords.fileProblems(who.problems.join(" "))}
-        </p>
+      {#if who.problems.length > 0 && who.projectId !== null}
+        <div
+          class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+          role="alert"
+        >
+          <p class="min-w-0 text-status-attn-ink text-pretty">
+            {decidesWords.fileProblems(who.problems.join(" "))}
+          </p>
+          <a
+            class="rounded-xs text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+            href={folderFileHref(who.projectId, "decides.md")}
+            >{decidesWords.openFile}</a
+          >
+        </div>
       {/if}
       {#if who.recent.state === "failed"}
         <RowFault again={() => who.loadRecent()} reason={who.recent.reason} />
@@ -121,7 +132,7 @@
         style:--kind-cols={"repeat(auto-fill, minmax(min(100%, var(--c-roster-card-min)), 1fr))"}
       >
         {#each who.kinds as kind (kind.id)}
-          <KindCard {kind} {named} {project} {waitingHref} {who} />
+          <KindCard {facts} {kind} {named} {project} {waitingHref} {who} />
         {/each}
         <NewKindCard {who} />
       </div>

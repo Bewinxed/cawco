@@ -9,13 +9,6 @@
   "packages/core/src/words/accounts.ts": {
     "How it shows": 1
   },
-  "packages/core/src/words/decides.ts": {
-    "Decides": 1,
-    "Knows": 1,
-    "Runs on": 1,
-    "What he does": 1,
-    "What it does": 1
-  },
   "packages/core/src/words/delegate-types.ts": {
     "What it can reach": 1,
     "What it runs on": 1
