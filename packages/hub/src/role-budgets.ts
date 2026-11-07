@@ -93,13 +93,17 @@ import type { Tasks } from "./tasks";
  * words cut from generate_image, artifact_read, todo_write, delegate and
  * artifact_create's `to`, so the room comes from words, not the budgets
  * (worker 29,820, delegate 11,142 measured).
+ * 2026-11-07: every tool refuses an argument it does not take, and its
+ * schema says so (`additionalProperties: false`, with the `__cawco` stamp
+ * admitted by `patternProperties`, mcp-tool.ts `STAMPED_KEY`): about 15
+ * tokens a tool (worker 31,772, delegate 11,804, curator 1,235 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 29_900,
-  delegate: 11_200,
+  worker: 31_850,
+  delegate: 11_880,
   overseer: 770,
   "web-facing": 3400,
-  curator: 1200,
+  curator: 1280,
 };
 
 /**

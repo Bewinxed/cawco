@@ -55,6 +55,27 @@ export type ResponseFormat = (typeof RESPONSE_FORMATS)[number];
  */
 const responseFormat = () => z.enum(RESPONSE_FORMATS).optional();
 
+/**
+ * The one key CawCo adds to a call's arguments that no tool takes: the
+ * session credential and call id CawCo's OpenCode plugin stamps into each
+ * `cawco_*` call (agent opencode-plugin.ts `admit`), which the hub reads and
+ * takes off before a tool runs (delegation-mcp.ts `answer`). Claude Code
+ * sends its tool_use id in `_meta` and pi its call id beside the arguments
+ * (agent delegation.ts `callDelegationTool`), so neither adds a key.
+ */
+export const STAMPED_KEY = "__cawco";
+
+/**
+ * What a harness is shown admits the stamped key by `patternProperties`, not
+ * by name, so no model reads it as a parameter. OpenCode's own
+ * `opencode.tool.input.repair` hook deletes every key a schema with
+ * `additionalProperties: false` does not name, unless the schema has
+ * `patternProperties` (anomalyco/opencode packages/core/src/plugin/
+ * tool-input-repair.ts: `if (!declared && schema.additionalProperties ===
+ * false && !patterned && !composed)`), so the stamp survives it.
+ */
+const STAMPED_PATTERN = { [`^${STAMPED_KEY}$`]: {} };
+
 export interface McpTool {
   annotations?: ToolAnnotations;
   /** The call: arguments parsed, the domain answer run and presented. */
@@ -73,13 +94,7 @@ export interface ToolOptions<R, A> {
    * is written after it (core no-reply.ts {@link END_TURN_META}).
    */
   endsTurn?: true;
-  /**
-   * A tool with its own input error refuses unknown keys itself, as it
-   * parses. What a harness is shown never says `additionalProperties:
-   * false`: OpenCode 2.0.29's own `opencode.tool.input.repair` hook deletes
-   * every key such a schema does not name, so a call would reach the hub
-   * without the `__cawco` credential the CawCo plugin stamps into it.
-   */
+  /** The whole answer to a call that does not parse, in place of zod's words and {@link inputHelp}. */
   inputError?: string;
   /** One sentence on the input's shape, after what a malformed call got wrong. */
   inputHelp?: string;
@@ -117,27 +132,51 @@ export function tool<T extends z.ZodRawShape, R, N extends string = string>(
   const shape = formats
     ? { ...input, response_format: responseFormat() }
     : input;
-  const schema = options.inputError
-    ? z.strictObject(shape, { error: options.inputError })
-    : z.object(shape);
+  // Every tool refuses a key it does not take: a misspelt setting is said,
+  // never dropped. The stamped key alone is admitted, and taken off here.
+  const schema = z.strictObject(
+    { ...shape, [STAMPED_KEY]: z.unknown().optional() },
+    options.inputError ? { error: options.inputError } : undefined
+  );
+  const names = Object.keys(shape);
+  const takes =
+    names.length > 0
+      ? `${name} takes: ${names.join(", ")}.`
+      : `${name} takes no arguments.`;
   return {
     name,
     description,
-    inputSchema: z.toJSONSchema(z.object(shape), {
-      target: "draft-07",
-      io: "input",
-    }) as Record<string, unknown>,
+    inputSchema: {
+      ...(z.toJSONSchema(z.strictObject(shape), {
+        target: "draft-07",
+        io: "input",
+      }) as Record<string, unknown>),
+      patternProperties: STAMPED_PATTERN,
+    },
     ...(options.annotations ? { annotations: options.annotations } : {}),
     call: async (args) => {
       const parsed = schema.safeParse(args);
       if (!parsed.success) {
-        // A tool's own input error is its whole answer; any other, what was wrong, then the shape.
+        // A tool's own input error is its whole answer; any other, what was
+        // wrong, what it takes when a key was not one, then the shape.
+        const unknown = parsed.error.issues.some(
+          (issue) => issue.code === "unrecognized_keys"
+        );
         throw new Error(
           options.inputError ??
-            `${z.prettifyError(parsed.error)}${options.inputHelp ? `\n${options.inputHelp}` : ""}`
+            [
+              z.prettifyError(parsed.error),
+              ...(unknown ? [takes] : []),
+              ...(options.inputHelp ? [options.inputHelp] : []),
+            ].join("\n")
         );
       }
-      const { response_format: format, ...rest } = parsed.data as {
+      const {
+        response_format: format,
+        [STAMPED_KEY]: _stamp,
+        ...rest
+      } = parsed.data as {
+        [STAMPED_KEY]?: unknown;
         response_format?: ResponseFormat;
       } & z.infer<z.ZodObject<T>>;
       const asked = rest as z.infer<z.ZodObject<T>>;

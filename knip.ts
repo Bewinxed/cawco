@@ -171,6 +171,8 @@ export default {
         "scripts/resolution-check.ts",
         // scripts/check.ts:634
         "scripts/call-cuts-check.ts",
+        // scripts/check.ts, beside call-cuts-check.ts
+        "scripts/tool-input-check.ts",
         // scripts/check.ts:655
         "scripts/git-door-words-check.ts",
         // scripts/check.ts:635

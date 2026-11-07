@@ -727,6 +727,8 @@ const gated: Gated[] = [
   ),
   bun("scripts/protocol-sweep.ts", ["packages/core/src/"]),
   bun("scripts/call-cuts-check.ts", ["packages/hub/src/call-cuts.ts"]),
+  // Every tool refuses an argument it does not take, and its schema says so.
+  bun("scripts/tool-input-check.ts", ["packages/hub/src/", "bun.lock"]),
   bun("scripts/git-door-words-check.ts", [
     "packages/agent/src/",
     "packages/core/src/",
