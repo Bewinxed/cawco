@@ -6,7 +6,7 @@
  */
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { placedMemoryDir } from "@cawco/core/paths";
+import { placedMemoryDir } from "@cawco/core/paths/claude";
 
 /** Every markdown file under `root`, by its path there, in path order; none when it is no folder. */
 export const markdownUnder = async (
