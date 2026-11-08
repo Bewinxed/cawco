@@ -4,7 +4,6 @@ import { join, relative, sep } from "node:path";
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
 import {
   DASHBOARD_COOKIE,
@@ -18,7 +17,6 @@ import {
   previewEnterUrl,
 } from "@cawco/core/frames";
 import type { PageFaultReport } from "@cawco/core/page-faults";
-import { passDomainRefusal } from "@cawco/core/pass-domain";
 import {
   asksUpgrade,
   cachePreview,
@@ -89,7 +87,9 @@ import {
   type PreviewsDb,
   projectOfOrigin,
 } from "./db/previews";
+import { decisionHostFile } from "./decision-host";
 import { DECISION_ASSETS } from "./decision-program";
+import { passDomainRefusal } from "./pass-domain";
 import {
   enter,
   lockedResponse,
@@ -1191,7 +1191,7 @@ const labelOf = (key: string): string =>
  * a public suffix (`ts.net`, `pages.dev`, a bare `localhost`), or under an
  * ending the Public Suffix List doesn't know (`.localhost`, `.test`,
  * `.lan`), is refused, since no browser's frames would carry their pass
- * (core pass-domain.ts).
+ * (hub pass-domain.ts).
  */
 const parsePattern = (pattern: string): HostPattern => {
   const parts = pattern.match(PATTERN_SHAPE);

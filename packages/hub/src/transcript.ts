@@ -14,14 +14,14 @@
  * tail, and the facts the session has stated.
  */
 
-import { fnv1a } from "./fnv1a";
+import { fnv1a } from "@cawco/core/fnv1a";
 import {
   CONTEXT_LINE,
   type NeutralMessage,
   type SendRecord,
   type SessionMessage,
   STREAM_SO_FAR,
-} from "./harness";
+} from "@cawco/core/harness";
 import {
   applyBranchEvent,
   applyToolResult,
@@ -41,7 +41,7 @@ import {
   type ToolResult,
   turnStart,
   uuidOf,
-} from "./transcript-rules";
+} from "@cawco/core/transcript-rules";
 import type {
   BlockTooling,
   TranscriptBlock,
@@ -51,9 +51,9 @@ import type {
   TranscriptPage,
   TranscriptPageBranch,
   TranscriptTail,
-} from "./transcript-types";
-import { cutAt, cutOf, type TurnCut } from "./turn-cuts";
-import { turnCutWords } from "./words/cuts";
+} from "@cawco/core/transcript-types";
+import { cutAt, cutOf, type TurnCut } from "@cawco/core/turn-cuts";
+import { turnCutWords } from "@cawco/core/words/cuts";
 
 /** How long after an interrupt the error closing the turn is its receipt, not a failure. */
 const INTERRUPT_WINDOW_MS = 15_000;

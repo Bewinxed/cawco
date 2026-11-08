@@ -135,7 +135,6 @@ import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
-import { measureMemoryRoom } from "@cawco/core/machine-room";
 import { MOVE_STEPS } from "@cawco/core/move";
 import { sessionScratchDir } from "@cawco/core/paths";
 import type {
@@ -260,6 +259,7 @@ import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
 import { createLeftRunning } from "./left-running";
 import { isMachineAgent } from "./machine-agent";
+import { measureMemoryRoom } from "./machine-room";
 import { type HostedConfig, hostedEntry, mcpGateOf, mcpHost } from "./mcp-host";
 import { placeInstalls, retireInstalls, syncInstalls } from "./mcp-install";
 import { resolveMcpLauncher } from "./mcp-launcher";
