@@ -49,7 +49,7 @@
 
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { downOf } from "../../../packages/core/src/preview-proxy";
+import { downOf } from "../../../packages/core/src/preview/proxy";
 import { artifactLink } from "../../../packages/core/src/references";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { workWords } from "../../../packages/core/src/words/work";

@@ -355,11 +355,11 @@ const run = async (kit: Kit) => {
   const { createPreviewListeners } =
     await import("../../../packages/hub/src/preview");
   const { sourceKeyOf } =
-    await import("../../../packages/core/src/preview-upstream");
+    await import("../../../packages/core/src/preview/upstream");
   const { mintSessionTicket, mintTicket, sessionPassCookie } =
     await import("../../../packages/hub/src/preview-access");
   const { PREVIEW_ENTER_PATH, PREVIEW_PASS_COOKIE } =
-    await import("../../../packages/core/src/frames");
+    await import("../../../packages/core/src/preview/routes");
   type Deps = Parameters<typeof createPreviewListeners>[1];
   type Db = Parameters<typeof createPreviewListeners>[2];
   type Passes = Parameters<typeof createPreviewListeners>[3];

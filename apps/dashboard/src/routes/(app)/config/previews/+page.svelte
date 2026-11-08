@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hubRequest } from "@cawco/core/hub-request";
   /**
    * Previews: how every session's preview is reached, fleet-wide (hub
    * preview.ts). Each preview is an origin of its own, never the
@@ -7,8 +8,7 @@
    * sends those names to the hub. The hub tries a host pattern before it
    * keeps it, and says why when it doesn't.
    */
-  import type { PreviewSettings } from "@cawco/core/frames";
-  import { hubRequest } from "@cawco/core/hub-request";
+  import type { PreviewSettings } from "@cawco/core/preview/routes";
   import { onMount } from "svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";

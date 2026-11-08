@@ -51,11 +51,11 @@
 import { join } from "node:path";
 import { $ } from "bun";
 import type { Page } from "playwright-core";
-import { readWithin } from "../../../packages/core/src/bounded";
 import {
   ARTIFACT_GONE,
   ARTIFACT_SESSION_PATH,
-} from "../../../packages/core/src/frames";
+} from "../../../packages/core/src/artifact-session";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { machineLabel } from "../../../packages/core/src/machine-names";

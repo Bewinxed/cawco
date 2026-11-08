@@ -905,7 +905,8 @@ const run = async (kit: Kit) => {
     await import("../../../packages/hub/src/tailnet-https");
   const { createPreviewListeners } =
     await import("../../../packages/hub/src/preview");
-  const { previewRoute } = await import("../../../packages/core/src/frames");
+  const { previewRoute } =
+    await import("../../../packages/core/src/preview/routes");
   const { makeLifetime } = await import("../../../packages/hub/src/lifetime");
   const lifetime = makeLifetime();
   const tailnet = createTailnetHttps({

@@ -65,6 +65,10 @@
 -->
 <script lang="ts">
   import {
+    PREVIEW_DOWNS,
+    type PreviewDown,
+  } from "@cawco/core/preview/protocol";
+  import {
     askHubReach,
     PREVIEW_REACH_PATH,
     type PreviewWays,
@@ -73,8 +77,7 @@
     previewUnreachedWords,
     probePreview,
     unreachedOf,
-  } from "@cawco/core/preview-reach";
-  import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/protocol";
+  } from "@cawco/core/preview/reach";
   import {
     CANVAS_EMBED_FAILED,
     CANVAS_EMBED_FETCHED,

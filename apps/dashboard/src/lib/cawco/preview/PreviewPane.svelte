@@ -17,17 +17,14 @@
     writeAgain,
   } from "@cawco/core/comments";
   import { detach } from "@cawco/core/detach";
-  import {
-    PAGE_TOUCHED_MESSAGE,
-    PREVIEW_LOCKED_MESSAGE,
-    type PreviewAddress,
-    type PreviewSettings,
-    previewRoute,
-    projectPagePlace,
-  } from "@cawco/core/frames";
   import { hubRequest } from "@cawco/core/hub-request";
   import { machineLabel } from "@cawco/core/machine-names";
   import { pinName } from "@cawco/core/pin-name";
+  import {
+    PREVIEW_DOWNS,
+    type PreviewDown,
+    type ShownFailure,
+  } from "@cawco/core/preview/protocol";
   import {
     askHubReach,
     PAGE_SILENT_MS,
@@ -35,12 +32,15 @@
     previewUnreachedWords,
     probePreview,
     unreachedOf,
-  } from "@cawco/core/preview-reach";
+  } from "@cawco/core/preview/reach";
   import {
-    PREVIEW_DOWNS,
-    type PreviewDown,
-    type ShownFailure,
-  } from "@cawco/core/protocol";
+    PAGE_TOUCHED_MESSAGE,
+    PREVIEW_LOCKED_MESSAGE,
+    type PreviewAddress,
+    type PreviewSettings,
+    previewRoute,
+    projectPagePlace,
+  } from "@cawco/core/preview/routes";
   import type { PaneKey } from "@cawco/core/shell-shortcuts";
   import {
     canvasOf,

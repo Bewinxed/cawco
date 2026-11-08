@@ -9,7 +9,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
-} from "@cawco/core/preview-proxy";
+} from "@cawco/core/preview/proxy";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { TailnetServing } from "@cawco/core/tailnet-https";
 import type { Server } from "bun";

@@ -62,11 +62,11 @@
  * `window.cawcoCanvasProbe`.
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
-import { previewRoute } from "../../../packages/core/src/frames";
 import {
   type HubSent,
   hubRequest,
 } from "../../../packages/core/src/hub-request";
+import { previewRoute } from "../../../packages/core/src/preview/routes";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
