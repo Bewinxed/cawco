@@ -191,13 +191,6 @@ export type AskRecord = z.infer<typeof ASK_STORED> & {
   state: AskState;
 };
 
-/**
- * The `system` origin the answer is delivered under: the person's act (core
- * harness.ts `byPerson`), so it reaches the session as their words do, into
- * a running turn at its next step, starting one in a session at rest.
- */
-export const ASK_ORIGIN = "ask";
-
 /** The tool that changes a project's settings, asking the person first unless it is in Full Send. */
 export const PROJECT_SETTINGS = "project_settings";
 
