@@ -52,18 +52,16 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
-import type {
-  CommandResult,
-  PermissionResult,
-  WorkspaceRef,
-} from "@cawco/core/harness";
 import { machineCalled } from "@cawco/core/machine-names";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import type { PermissionResult } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { askWords } from "@cawco/core/words/asks";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import {
   type BuiltTokens,
   buildTokens,

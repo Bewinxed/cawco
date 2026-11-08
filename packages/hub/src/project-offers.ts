@@ -19,12 +19,12 @@
  * proposed tasks in the project's first to-do stage.
  */
 
+import type { CommandResult } from "@cawco/core/commands/controls";
 import type {
   AcceptResult,
   ProjectOfferReason,
   ProjectOfferSummary,
 } from "@cawco/core/frames";
-import type { CommandResult } from "@cawco/core/harness";
 import { machineCalled } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { PlanStep } from "@cawco/core/plan";
