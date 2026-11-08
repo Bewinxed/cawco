@@ -59,3 +59,5 @@ tool-answer-from-last/scripts/planted.ts:13:1 tool-answer-from-last
 tool-answer-from-last/scripts/planted.ts:14:7 tool-answer-from-last
 no-whole-seconds/planted.ts:5:27 no-whole-seconds
 no-whole-seconds/planted.ts:6:27 no-whole-seconds
+no-hand-shell-quote/planted.ts:4:28 no-hand-shell-quote
+no-hand-shell-quote/planted.ts:5:31 no-hand-shell-quote
