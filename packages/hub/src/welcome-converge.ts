@@ -10,12 +10,8 @@
  * window says the machine is in the fleet only once what the fleet holds is
  * on it, a machine whose last converge was cut short included.
  */
-import type {
-  ControlResultFrame,
-  FleetAck,
-  FleetDelta,
-  FleetItemStatus,
-} from "@cawco/core";
+import type { FleetAck, FleetDelta, FleetItemStatus } from "@cawco/core/fleet";
+import type { ControlResultFrame } from "@cawco/core/frames";
 
 interface Owed {
   generation: number;
