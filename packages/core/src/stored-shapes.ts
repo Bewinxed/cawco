@@ -10,7 +10,7 @@ import { CONNECTION_AUTHS, CONNECTION_TRANSPORTS } from "./connections";
 import { SESSION_ROLES } from "./delegate-types";
 import { EXTERNAL_SOURCES } from "./external-items";
 import { FAULT_CAUSES, MCP_PLATFORMS, PLACED_SECTIONS } from "./fleet";
-import { HARNESSES, WIRE_PERMISSION_MODES } from "./harness";
+import { HARNESSES, WIRE_PERMISSION_MODES } from "./harness/kinds";
 import { HARNESS_CONFIG_KINDS } from "./harness-config";
 import { COMMAND_STEPS, INSTALL_CHECKS, SSH_STEPS } from "./install";
 import type { MachinePath as MachinePathType } from "./machine-path";
@@ -142,7 +142,7 @@ export type BrowserRowOutput = z.output<typeof BrowserRowShape>;
 export const HarnessKindShape = declared(
   z.enum(HARNESSES),
   "HarnessKind",
-  "packages/core/src/harness.ts"
+  "packages/core/src/harness/kinds.ts"
 );
 export type HarnessKindOutput = z.output<typeof HarnessKindShape>;
 
@@ -474,7 +474,7 @@ export type FleetMcpConfigOutput = z.output<typeof FleetMcpConfigShape>;
 export const EffortLevelShape = declared(
   z.enum(["low", "medium", "high", "xhigh", "max"]),
   "EffortLevel",
-  "packages/core/src/harness.ts"
+  "packages/core/src/harness/kinds.ts"
 );
 export type EffortLevelOutput = z.output<typeof EffortLevelShape>;
 
@@ -495,7 +495,7 @@ const ModelInfoShape = declared(
     value: z.string(),
   }),
   "ModelInfo",
-  "packages/core/src/harness.ts"
+  "packages/core/src/harness/kinds.ts"
 );
 export const ModelInfoSchema = ModelInfoShape;
 export type ModelInfoOutput = z.output<typeof ModelInfoShape>;
@@ -891,7 +891,7 @@ export type BinaryUpdateStateOutput = z.output<typeof BinaryUpdateStateShape>;
 export const PermissionModeShape = declared(
   z.enum(WIRE_PERMISSION_MODES),
   "PermissionMode",
-  "packages/core/src/harness.ts"
+  "packages/core/src/harness/kinds.ts"
 );
 export type PermissionModeOutput = z.output<typeof PermissionModeShape>;
 

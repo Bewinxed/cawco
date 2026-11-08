@@ -7,7 +7,7 @@
  * draws none of it, so it is not written into it (scripts/words-swift.ts).
  */
 
-import type { OfferedMode } from "../harness";
+import type { OfferedMode } from "../harness/kinds";
 
 /** The mode chip's name, before the mode it names. */
 const PERMISSION_MODE = "Permission mode:";
