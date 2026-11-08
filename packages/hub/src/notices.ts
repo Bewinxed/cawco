@@ -16,15 +16,13 @@
  */
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import {
-  type DamagedHubRecord,
-  damagedHubRecordWords,
-} from "@cawco/core/protocol";
+import type { DamagedHubRecord } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
   readRecordSync,
   writeStateFileSync,
 } from "@cawco/core/state-file";
+import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 
