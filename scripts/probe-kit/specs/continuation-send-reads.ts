@@ -7,7 +7,7 @@
  * 2026-11-04, obelisk's hub: every `deliverToSession` read every job whole,
  * and each row's `prepared` (a 691k-token source's extracted transcript and
  * its summariser prompt, several MB) was parsed and checked against its
- * schema on each read (core stored-json.ts), on the loop.
+ * schema on each read (hub stored-json.ts), on the loop.
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model): a session takes one turn and is continued from its asks by a
@@ -37,7 +37,7 @@ import type { Kit, KitFleet, Spec } from "../kit";
 const PREPARED_MB = 40;
 /** How many sends the source is sent while the job stands. */
 const SENDS = 3;
-/** The hub's words for a stored column read that failed its schema (core stored-json.ts `StoredShapeError`). */
+/** The hub's words for a stored column read that failed its schema (hub stored-json.ts `StoredShapeError`). */
 const PREPARED_READ = "continuations.prepared";
 
 /** A session on the fleet's machine that has taken one turn, and the send of that turn. */

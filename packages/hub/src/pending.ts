@@ -2,11 +2,11 @@ import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
 import type { PermissionResult } from "@cawco/core/harness";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
-import { received } from "@cawco/core/stored-json";
 import { EnvelopeShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
 import { parkedToolAsk } from "./parked-ask";
+import { received } from "./stored-json";
 
 /**
  * Permission and dialog requests the agent is blocked on, keyed by SDK
