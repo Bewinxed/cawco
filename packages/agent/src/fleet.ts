@@ -64,17 +64,19 @@ import {
   accountIds,
   claudeHomeJson,
   claudeSkillsDir,
-  fleetHarnessSetFile,
-  fleetHooksDir,
-  fleetPlacedDir,
-  fleetPlacesDir,
   placedMemoryDir,
   placedSkillsDir,
   projectClaudeDir,
   treeStoreOf,
   userLayerPath,
   VENDOR_MARKETPLACES_DIR,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/claude";
+import {
+  fleetHarnessSetFile,
+  fleetHooksDir,
+  fleetPlacedDir,
+  fleetPlacesDir,
+} from "@cawco/core/paths/fleet";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { versionSaid } from "@cawco/core/version-said";
