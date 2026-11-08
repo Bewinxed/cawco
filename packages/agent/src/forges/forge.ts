@@ -15,7 +15,6 @@
  */
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
-  changeRequestWords,
   FORGE_NAMES,
   type Forge,
   type ForgeAsk,
@@ -24,6 +23,7 @@ import {
 } from "@cawco/core/forge-post";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { changeRequestWords } from "@cawco/core/words/forge";
 import { giteaForge } from "./gitea";
 import { githubForge } from "./github";
 import { gitlabForge } from "./gitlab";
