@@ -223,6 +223,7 @@ const HOST_REACHES = new Set([
   "packages/core/src/socat.ts",
   "packages/core/src/hub-previews.ts",
   "packages/core/src/git-dir.ts",
+  "packages/core/src/absent.ts",
   "packages/core/src/safe-git.ts",
   "packages/core/src/shell-quote.ts",
   "packages/core/src/srt-refusal.ts",

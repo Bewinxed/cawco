@@ -45,6 +45,7 @@ import {
   type SyncHookJSONOutput,
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
+import { isGone } from "@cawco/core/absent";
 import type { AccountIdentity, AccountKind } from "@cawco/core/accounts";
 import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
@@ -862,7 +863,7 @@ const subdirectories = async (dir: string): Promise<string[]> => {
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name);
   } catch (error) {
-    if (missing(error)) {
+    if (isGone(error)) {
       return [];
     }
     throw error;
@@ -876,7 +877,7 @@ const jsonlNames = async (dir: string): Promise<string[]> => {
       .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
       .map((entry) => entry.name);
   } catch (error) {
-    if (missing(error)) {
+    if (isGone(error)) {
       return [];
     }
     throw error;
@@ -892,7 +893,7 @@ const sessionInfoAt = async (
   try {
     modified = (await stat(file)).mtimeMs;
   } catch (error) {
-    if (missing(error)) {
+    if (isGone(error)) {
       return;
     }
     throw error;
@@ -921,10 +922,6 @@ const requireSessionFile = async (
   }
   return file;
 };
-
-/** Whether `error` is the file system saying there is nothing at the path. */
-const missing = (error: unknown): boolean =>
-  (error as { code?: string } | null)?.code === "ENOENT";
 
 const CLAUDE_CAPABILITIES = FULL_CAPABILITIES;
 
