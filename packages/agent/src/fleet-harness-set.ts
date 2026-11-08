@@ -27,7 +27,7 @@ import {
   hookUnsupported,
   hookWorkspaceNote,
 } from "@cawco/core/hooks";
-import { fleetHarnessSetFile } from "@cawco/core/paths";
+import { fleetHarnessSetFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { FleetPlaceSet } from "./fleet-place-set";
 import { FleetHarnessSetShape } from "./stored-shapes";
