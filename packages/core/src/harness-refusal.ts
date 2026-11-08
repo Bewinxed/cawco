@@ -9,7 +9,8 @@
  * CawCo doesn't run), else ours.
  */
 
-import { HARNESS_TOOL, type HarnessKind, type HarnessReport } from "./harness";
+import { HARNESS_TOOL, type HarnessReport } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import { type ToolSpec, type ToolStatus, toolRuns, toolSpec } from "./tools";
 import { harnessRefusedWords } from "./words/harness";
 import { toolWords } from "./words/tools";

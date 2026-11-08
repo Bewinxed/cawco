@@ -31,7 +31,7 @@ import {
   sameIdentity,
 } from "@cawco/core/accounts";
 import type { RanFrom, StoredRun } from "@cawco/core/harness";
-import { isEffortLevel, PERMISSION_MODES } from "@cawco/core/harness";
+import { isEffortLevel, PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import {
   accountClaudeJson,
   claudeHomeJson,
