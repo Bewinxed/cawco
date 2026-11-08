@@ -227,19 +227,17 @@ import { fleetMcpAt } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
 import { type FleetPlaceSet, placeSetAt } from "../fleet-place-set";
 import { sessionGitEnv } from "../git-credential";
-// Type-only, and deliberately so: `session.ts` imports the harness registry
-// this file is part of, so a value import here would close a module cycle.
-import type { SessiondAwareContext } from "../harness";
 import {
   type Harness,
   type HarnessContext,
   type HarnessSession,
   HeldProcessRefused,
+  type KeeperCustody,
   type TranscriptSpan,
   type TurnExtras,
 } from "../harness";
 import { HUB_AWAY_BOUND_MS } from "../hub-away";
-import { type HeldProc, KeeperPool, type KeeperReading } from "../keepers";
+import { KeeperPool } from "../keepers";
 import { enterSpawn } from "../layer";
 import {
   beginAccountLogin,
@@ -298,6 +296,7 @@ import {
   withHarnessNote,
 } from "./claude-transcript";
 import { claudeCompactsAt, claudeEnvWindow } from "./compaction-points";
+import { keeperCustody } from "./keeper-custody";
 import { lastPromptAt } from "./last-prompt";
 import { tailLines } from "./transcript-tail";
 
@@ -3574,10 +3573,7 @@ class ClaudeSession implements HarnessSession {
       (proc) => proc.procId === ring.procId && proc.alive
     )?.pid;
     if (epoch !== undefined && pid !== undefined) {
-      (this.#ctx as Partial<SessiondAwareContext>).line?.(
-        procEpoch(epoch, pid),
-        seq
-      );
+      this.#ctx.line?.(procEpoch(epoch, pid), seq);
     }
   }
 
@@ -4865,7 +4861,8 @@ const readAsk = (
  */
 const RING_START = 0;
 
-class ClaudeHarness implements Harness {
+class ClaudeHarness implements Harness<"claude"> {
+  readonly detectStartsNothing = true;
   readonly kind = "claude" as const;
   readonly capabilities = CLAUDE_CAPABILITIES;
   auth: AuthState = "authenticated";
@@ -4930,6 +4927,24 @@ class ClaudeHarness implements Harness {
    * (with an instance to report against) rather than at import time.
    */
   readonly #keepers = new KeeperPool();
+
+  /**
+   * The children every keeper holds of Claude's. {@link adopt} takes one back
+   * and {@link turnRunning} reads its ring; both stay here, and the
+   * connection each read goes through is {@link sessiond}, the current
+   * keeper's, which every start goes to.
+   */
+  readonly custody: KeeperCustody = {
+    kind: "keeper",
+    ...keeperCustody("claude", {
+      current: () => this.sessiond(),
+      endpoints: () => this.#keepers.endpoints(),
+      held: () => this.#keepers.held(),
+      read: (endpoint) => this.#keepers.read(endpoint),
+    }),
+    adopt: (spec, ctx, options) => this.adopt(spec, ctx, options),
+    turnRunning: (instanceId, head) => this.turnRunning(instanceId, head),
+  };
 
   /**
    * The current keeper's connection, which every start goes to. A dead
@@ -5122,7 +5137,7 @@ class ClaudeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    const { procs } = await this.custodyCandidates();
+    const { procs } = await this.custody.candidates();
     const proc = procs.find(
       (child) => child.procId === ctx.instanceId && child.alive
     );
@@ -5346,39 +5361,6 @@ class ClaudeHarness implements Harness {
     }
     await adoptKeptWakeups(session, wakeups, sessionId, ctx.cwd);
     return session;
-  }
-
-  /** The keepers there for custody to read, the current one first. */
-  async custodyKeepers(): Promise<string[]> {
-    await this.sessiond();
-    return await this.#keepers.endpoints();
-  }
-
-  /** One keeper's word on Claude's children: its listing of them, its end, or why it could not be read. */
-  async custodyReading(keeper: string): Promise<KeeperReading> {
-    const reading = await this.#keepers.read(keeper);
-    return reading.kind === "listed"
-      ? {
-          kind: "listed",
-          procs: reading.procs.filter(
-            (proc) => parseProcId(proc.procId).kind === "claude"
-          ),
-        }
-      : reading;
-  }
-
-  /**
-   * What every keeper is still holding for this machine, the current one's
-   * first. Each child carries its keeper's epoch, the space its seqs count
-   * in.
-   */
-  async custodyCandidates(): Promise<{ procs: HeldProc[] }> {
-    await this.sessiond();
-    return {
-      procs: (await this.#keepers.held()).filter(
-        (proc) => parseProcId(proc.procId).kind === "claude"
-      ),
-    };
   }
 
   /**
@@ -5633,4 +5615,4 @@ class ClaudeHarness implements Harness {
   }
 }
 
-export const claudeHarness: Harness = new ClaudeHarness();
+export const claudeHarness: Harness<"claude"> = new ClaudeHarness();
