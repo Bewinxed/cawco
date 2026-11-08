@@ -7,7 +7,7 @@
  */
 
 import { resolve } from "node:path";
-import type { BuildInfo } from "./index";
+import type { BuildInfo } from "./protocol";
 import {
   protocolRange,
   runtimeCommit,

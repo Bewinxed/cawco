@@ -9,7 +9,7 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { GhAccount } from "@cawco/core";
+import type { GhAccount } from "@cawco/core/connections";
 import {
   workspaceCacheDir,
   workspaceScratchRoot,

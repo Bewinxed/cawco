@@ -25,12 +25,12 @@
 import type {
   FleetConfig,
   FleetItemState,
-  FleetPlacement,
   FleetProjectRows,
   FleetSyncReport,
-} from "@cawco/core";
-import { PLACED_SECTIONS } from "@cawco/core";
+} from "@cawco/core/fleet";
+import { PLACED_SECTIONS } from "@cawco/core/fleet";
 import { noProjectRows } from "@cawco/core/fleet-items";
+import type { FleetPlacement } from "@cawco/core/fleet-placement";
 
 /** A place as the hub keeps it (`project_places`). */
 export interface PlacementPlace {

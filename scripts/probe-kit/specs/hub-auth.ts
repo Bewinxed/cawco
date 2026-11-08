@@ -50,6 +50,7 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import {
   type AskRecord,
   askAnsweredText,
@@ -66,7 +67,6 @@ import {
   type ToolArgs,
   type ToolName,
 } from "../../../packages/core/src/hub-request";
-import { RESOLVE_PERMISSION } from "../../../packages/core/src/index";
 import { httpProof } from "../../../packages/core/src/machine-key";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { toolWords } from "../../lib/tool-call";

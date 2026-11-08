@@ -26,8 +26,14 @@ import {
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/harness";
 import {
-  CAWCO_ENV,
+  type HubRepoKey,
+  hubRepoOfUrl,
+  hubRepoSegment,
+} from "@cawco/core/hub-repo";
+import {
   FREE_SPACE_MARGIN,
   LARGE_FILE_BYTES,
   type MoveCloneRequest,
@@ -41,13 +47,7 @@ import {
   type MoveRemoteAuth,
   type MoveSnapshotRequest,
   type MoveSnapshotResult,
-  WORKSPACE_GIT_TIMEOUT_MS,
-} from "@cawco/core";
-import {
-  type HubRepoKey,
-  hubRepoOfUrl,
-  hubRepoSegment,
-} from "@cawco/core/hub-repo";
+} from "@cawco/core/move";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
 import { remoteWithoutCredential } from "@cawco/core/remote-credential";
 import { GIT_LOCALE } from "@cawco/core/safe-git";

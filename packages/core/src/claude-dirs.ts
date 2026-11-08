@@ -9,7 +9,10 @@
 /** Claude Code's dir name, in a home (the user layer) and in a project. */
 const CLAUDE_DIR = ".claude";
 
-/** The user layer as a person reads it on any machine: `~/.claude`. */
+/**
+ * The user layer as a person reads it on any machine: `~/.claude`.
+ * @public Read by name by scripts/words-swift.ts.
+ */
 export const USER_LAYER_LABEL = `~/${CLAUDE_DIR}`;
 
 /**

@@ -56,15 +56,14 @@ import {
   type ArtifactPending,
   type ArtifactReason,
   type ArtifactStop,
-  artifactLink,
   artifactStopHref,
-  type HarnessKind,
   notNowId,
-  type PlanStep,
   setupLanding,
-  stepNamesArtifact,
-} from "@cawco/core";
+} from "@cawco/core/artifact-needs";
 import type { CanvasAuthor } from "@cawco/core/canvas";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { type PlanStep, stepNamesArtifact } from "@cawco/core/plan";
+import { artifactLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactChange, ArtifactRow } from "../db/artifacts";
 import { isSetupPage } from "../setup";

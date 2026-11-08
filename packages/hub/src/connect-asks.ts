@@ -28,23 +28,23 @@
  * delegate type's, or the fleet baseline's) is refused at once, before any
  * card, in words that say which: a sign-in would bring it nothing.
  */
+
+import { CONNECT_ASK_TOOL } from "@cawco/core/ask-tools";
+import { connectAnsweredWords } from "@cawco/core/connect-ask";
+import { mcpServerDeniedBy } from "@cawco/core/delegate-types";
 import type {
   ConnectAccess,
   ConnectAccessSet,
   ConnectAnswer,
   ConnectAskFrame,
-  Envelope,
+} from "@cawco/core/frames";
+import type {
   FleetMcpChange,
   FleetMcpTaken,
-  InstanceRow,
   PermissionResult,
-} from "@cawco/core";
-import {
-  askWords,
-  CONNECT_ASK_TOOL,
-  connectAnsweredWords,
-  mcpServerDeniedBy,
-} from "@cawco/core";
+} from "@cawco/core/harness";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import { askWords } from "@cawco/core/words/asks";
 import { z } from "zod";
 import type { AskFacts } from "./fleet-mcp";
 import { tool } from "./mcp-tool";

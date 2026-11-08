@@ -21,7 +21,6 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
-import { configurePage } from "@cawco/core";
 import {
   DatabaseHeld,
   databaseHolder,
@@ -34,6 +33,7 @@ import {
   pairingOffRequestPath,
 } from "@cawco/core/paths";
 import { PairingOffAnswerSchema } from "@cawco/core/stored-shapes";
+import { configurePage } from "@cawco/core/words/configure";
 
 /** Thrown when there is no hub here to change: a sentence for the person. */
 class PairingError extends Error {}
