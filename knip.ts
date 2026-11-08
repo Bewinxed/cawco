@@ -240,6 +240,8 @@ export default {
     },
     "apps/dashboard": {
       entry: [
+        // Never imported: `golar tsc -b` reads it, the drift proof of its stored-shapes.ts (packages/hub/scripts/stored-shapes.ts).
+        "src/lib/cawco/stored-shapes.proof.ts",
         // Every states file under src/, found by its name by the component canvas's stage host: packages/agent/src/stage-host/host.ts:2358 (core stage.ts:568 STORY_FILE).
         "src/**/*.stories.{ts,js,tsx,jsx}",
         // The states files' preview file, read by the stage host by its name: packages/agent/src/stage-host/host.ts `previewFile`.
@@ -291,6 +293,8 @@ export default {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
       entry: [
+        // Never imported: `golar tsc -b` reads it, the drift proof of its stored-shapes.ts (packages/hub/scripts/stored-shapes.ts).
+        "src/stored-shapes.proof.ts",
         // Spawned as plain Bun by the boundary: src/boundary.ts:3612; bundled for Linux at scripts/build-binary.ts:182.
         "src/boundary-host.ts",
         // Run as plain Bun as each workspace's judge: src/boundary.ts:684.
@@ -324,6 +328,8 @@ export default {
       // knip.dev/reference/configuration: "In files with multiple exports, some of them might be used only internally. If these exports should not be reported, there is a `ignoreExportsUsedInFile` option available." Here for interfaces and types only: createServer's declared type reaches types no file imports (db/index.ts's DbShape names MemoryVersion, MemoryDocRow, SkillVersion and HookVersionMaterial; server.ts BridgedHeldPlace; project-delegate-types.ts DelegateCatalog), and `tsc -b` refuses them unexported with TS4023/TS4058 ("Exported variable 'createServer' has or is using name … but cannot be named"); they are named schemas in openapi.json too. Knip counts a type that another used export of its file names only under this option (node_modules/knip/dist/graph/analyze.js:39-42, `isReferencedInUsedExport`).
       ignoreExportsUsedInFile: { interface: true, type: true },
       entry: [
+        // Never imported: `golar tsc -b` reads it, the drift proof of its stored-shapes.ts (packages/hub/scripts/stored-shapes.ts).
+        "src/db/stored-shapes.proof.ts",
         // Inlined into every decision page as its script: src/decision-page.ts:123.
         "skills/decision-page/kit/page.js",
         // The decision-page skill tells the agent to run it: skills/decision-page/SKILL.md:74.
@@ -340,6 +346,8 @@ export default {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
       entry: [
+        // Never imported: `golar tsc -b` reads it, the drift proof of its stored-shapes.ts (packages/hub/scripts/stored-shapes.ts).
+        "src/stored-shapes.proof.ts",
         // A Worker started from its path: src/loop-watch.ts `WATCHDOG_URL`.
         "src/loop-watch-worker.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the request door's proof (src/hub-request.ts).
