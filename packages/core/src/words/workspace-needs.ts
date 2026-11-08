@@ -13,7 +13,7 @@ import type { WorkspaceTool } from "../capabilities";
 import { andList } from "./helpers";
 
 /** How every refusal of these begins: the hub knows one by it (work-items.ts `openWorkspace`). */
-export const WORKSPACE_NEEDS_LEAD = "This machine is missing";
+const WORKSPACE_NEEDS_LEAD = "This machine is missing";
 
 export const workspaceNeedsWords = {
   /** What happened: the tools it lacks, each group with what it is for (the walls', the checkout's). */

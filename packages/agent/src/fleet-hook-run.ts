@@ -20,7 +20,7 @@ import {
   hookTestPasses,
   hookUnsupported,
   hookVerdict,
-} from "@cawco/core";
+} from "@cawco/core/hooks";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import type { Boundary } from "./boundary";

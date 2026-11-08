@@ -6,11 +6,11 @@
  * their own, so each is numbered in the conversation's order, the first
  * "Picture 1".
  */
+import type { SessionAttachment } from "@cawco/core/protocol";
 import type {
-  SessionAttachment,
   TranscriptBlock,
   TranscriptPage,
-} from "@cawco/core";
+} from "@cawco/core/transcript-types";
 
 /** Blocks per page the walk asks for, back to the conversation's start. */
 export const ATTACHMENT_PAGE_LIMIT = 500;
