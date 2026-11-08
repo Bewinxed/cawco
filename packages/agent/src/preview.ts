@@ -13,7 +13,7 @@ import {
   fileViewOf,
   opensAsFile,
 } from "@cawco/core/file-viewer";
-import { PREVIEW_PING_PATH } from "@cawco/core/frames";
+import type { PreviewSource } from "@cawco/core/preview/protocol";
 import {
   asksUpgrade,
   cachePreview,
@@ -40,10 +40,10 @@ import {
   upgradePreview,
   versionAssets,
   versionedFile,
-} from "@cawco/core/preview-proxy";
-import { PREVIEW_HELD_HEADER } from "@cawco/core/preview-reach";
-import type { ServingPreview, SourceKey } from "@cawco/core/preview-upstream";
-import type { PreviewSource } from "@cawco/core/protocol";
+} from "@cawco/core/preview/proxy";
+import { PREVIEW_HELD_HEADER } from "@cawco/core/preview/reach";
+import { PREVIEW_PING_PATH } from "@cawco/core/preview/routes";
+import type { ServingPreview, SourceKey } from "@cawco/core/preview/upstream";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
 import { wakeBrowser } from "./browser/browsers";
