@@ -802,8 +802,6 @@ import {
 import type {
   AgentAuth,
   BoardInstanceRow,
-  ContinuationRow,
-  ContinuationSlip,
   DbShape,
   InstanceKind,
   MachineLine,
@@ -826,6 +824,7 @@ import {
 import type { AccountLeave, LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
+import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { PriorConversation, TrashKind } from "./db/schema";
