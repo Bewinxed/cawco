@@ -27,6 +27,7 @@
  * panel says it too (project-caps.ts in the hub).
  */
 
+import type { ProjectCap } from "@cawco/core/areas";
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { bringIntoView } from "@cawco/core/bring-into-view";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -34,7 +35,6 @@ import {
   CAW_NO_MACHINE,
   type CawInitiated,
   type CawStatus,
-  type ProjectCap,
   type ProjectConversationView,
 } from "@cawco/core/project-conversation";
 import type { StarterPlace } from "@cawco/core/starters";
