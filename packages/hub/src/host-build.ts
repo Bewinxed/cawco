@@ -54,7 +54,7 @@ const LABELS: Record<HostName, string> = {
 /** Host `host`'s files by name, built on a thread of its own once per process. */
 export const hostFiles = (host: HostName): Promise<Map<string, Blob>> => {
   const kept = built.get(host);
-  if (kept) {
+  if (kept !== undefined) {
     return kept;
   }
   const building = new Promise<Map<string, Blob>>((done, fail) => {
