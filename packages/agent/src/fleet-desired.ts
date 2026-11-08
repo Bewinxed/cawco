@@ -2,7 +2,7 @@
  * What this agent holds of the fleet: every item the hub's deltas carried
  * (core fleet-items.ts), by id, with its hash, and the generation of the
  * desired state it last acknowledged (its `observedGeneration`, core
- * fleet.ts `FLEET_DELTA`), kept on disk (core paths.ts `fleetDesiredFile`)
+ * fleet.ts `FLEET_DELTA`), kept on disk (core paths/fleet.ts `fleetDesiredFile`)
  * before the agent answers each delta; beside it, what its harnesses last
  * converged (fleet-converged.ts). An item a delta carries is moved only when
  * its hash is not the one last converged (or a person's Overwrite forces
@@ -28,7 +28,7 @@ import {
   itemKind,
   reportKeyOf,
 } from "@cawco/core/fleet-items";
-import { fleetDesiredFile } from "@cawco/core/paths";
+import { fleetDesiredFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
