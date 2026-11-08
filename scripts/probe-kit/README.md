@@ -129,7 +129,7 @@ settle, when the move is over, so a spec holds one on the clock with `anim.ts`.
 Impeccable runs as `impeccable detect --json --cdp <port>` on the page as it
 stands: every kit Chromium carries a DevTools port (`devtoolsPort(page)`),
 and the launcher is `$IMPECCABLE`, else the impeccable skill's in the first
-of the fleet's skill layers that holds it (core `paths.ts` `userSkillLayers`:
+of the fleet's skill layers that holds it (core `paths/fleet.ts` `userSkillLayers`:
 the user layer's skills, pi's, each vendored plugin's), which a workspace's
 boundary reads too. It reads Chromium only; on WebKit the report says so and
 the kit's own contrast and overflow reads stand alone. With no launcher it is
