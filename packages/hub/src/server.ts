@@ -525,7 +525,6 @@ import {
   ENDED_STATUSES,
   MEDIA_LIMIT_BYTES,
   OVER_STATUSES,
-  pauseClock,
   personsOwn,
   type RunKind,
   type StoppedCommands,
@@ -639,6 +638,7 @@ import { harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
+import { pauseClock } from "@cawco/core/words/machine-pause";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { noticeWords } from "@cawco/core/words/notices";
