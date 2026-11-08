@@ -1,4 +1,5 @@
-import { type NeutralAssistantBlock, NO_REPLY_TOOL } from "@cawco/core";
+import type { NeutralAssistantBlock } from "@cawco/core/harness";
+import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { CAWCO_TOOL } from "./web-reads";
 
 /** What a turn said by its end, for whoever hears it end. */

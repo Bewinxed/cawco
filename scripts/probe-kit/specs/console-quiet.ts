@@ -54,7 +54,6 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page, Response, WebSocketRoute } from "playwright-core";
-import type { AgentRow } from "../../../packages/core/src";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { RECONNECTING_MS } from "../../../packages/core/src/handover";
 import { hubRequest } from "../../../packages/core/src/hub-request";
@@ -62,6 +61,7 @@ import {
   machineCalled,
   machineFaultWords,
 } from "../../../packages/core/src/machine-names";
+import type { AgentRow } from "../../../packages/core/src/protocol";
 import { filesWords } from "../../../packages/core/src/words/files";
 import { MACHINE, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";

@@ -50,12 +50,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
-import {
-  type MachineActivity,
-  type MachineState,
-  presenceLogWords,
-} from "@cawco/core";
+import type { MachineActivity, MachineState } from "@cawco/core/notifications";
 import { spawnTethered, untether } from "@cawco/core/tether";
+import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
