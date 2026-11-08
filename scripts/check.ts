@@ -630,10 +630,16 @@ const gated: Gated[] = [
   inDashboard("scripts/role-order.ts"),
   inDashboard("scripts/build-variants.ts", "--check"),
   bun("packages/hub/scripts/skills-check.ts", ["packages/hub/"]),
-  run("packages/core", "faces:check", [
-    "assets/",
-    "apps/dashboard/src/house-faces/",
-  ]),
+  bun(
+    "scripts/house-faces.ts",
+    [
+      "packages/core/",
+      "scripts/fmt.ts",
+      "assets/",
+      "apps/dashboard/src/house-faces/",
+    ],
+    "--check"
+  ),
   bun("scripts/style-residual-check.ts", DASH),
   bun("scripts/relics-check.ts", DASH),
   bun("scripts/style-greps.ts", DASH),
