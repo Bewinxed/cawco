@@ -16,11 +16,13 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { configurePage, mcpGatewayPort, providersOpenedBy } from "@cawco/core";
+import { providersOpenedBy } from "@cawco/core/accounts";
 import { readWithin } from "@cawco/core/bounded";
 import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
+import { mcpGatewayPort } from "@cawco/core/protocol";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { configurePage } from "@cawco/core/words/configure";
 import type {
   AuthOperationOptions,
   Credential,

@@ -17,11 +17,7 @@
  * - **Bounded inputs**, as meaning.ts bounds its slices: every text is cut
  *   to a stated length and every list to a stated count before it is sent.
  */
-import {
-  type ProjectStarter,
-  STARTER_PLACES,
-  type StarterPlace,
-} from "@cawco/core";
+
 import type { Bounded } from "@cawco/core/bounded";
 import type {
   JevChoiceAnswer,
@@ -29,6 +25,11 @@ import type {
   JevResult,
   JevText,
 } from "@cawco/core/jev";
+import {
+  type ProjectStarter,
+  STARTER_PLACES,
+  type StarterPlace,
+} from "@cawco/core/starters";
 import { unhandled } from "@cawco/core/unhandled";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
 import {

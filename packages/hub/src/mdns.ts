@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { hostname, networkInterfaces } from "node:os";
-import { CAWCO_ENV, CAWCO_MDNS_TYPE, readEnv } from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import {
   getResponder,
   type Responder,

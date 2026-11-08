@@ -49,12 +49,11 @@ import {
   type FindKind,
   type FindMoment,
   type FindResult,
-  type InstanceRow,
   type MomentAuthor,
   type TranscriptTurn,
   type TranscriptTurns,
   type TranscriptTurnsQuery,
-} from "@cawco/core";
+} from "@cawco/core/find";
 import {
   excerptWindow,
   type MarkedText,
@@ -62,6 +61,7 @@ import {
   withWords,
   wordsOf,
 } from "@cawco/core/find-match";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { z } from "zod";
 import {

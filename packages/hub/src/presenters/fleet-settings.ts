@@ -5,24 +5,26 @@
  * by the name its write takes; a write answers the row it
  * saved, a removal what the dashboard can still undo.
  */
+import type { ConnectionView } from "@cawco/core/connections";
+import type { DelegateType } from "@cawco/core/delegate-types";
 import {
-  type ConnectionView,
-  type DelegateType,
   type FleetAgent,
-  type FleetHarnessConfig,
-  type FleetHook,
   type FleetMarketplace,
   type FleetMcpServer,
   type FleetMemory,
   type FleetMemoryDoc,
   type FleetPlugin,
   type FleetSkillMeta,
-  type HarnessConfigKind,
-  harnessConfigLabel,
   type MemoryScope,
   parseAgentFrontMatter,
-  type RuleRow,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
+import {
+  type FleetHarnessConfig,
+  type HarnessConfigKind,
+  harnessConfigLabel,
+} from "@cawco/core/harness-config";
+import type { FleetHook } from "@cawco/core/hooks";
+import type { RuleRow } from "@cawco/core/rules";
 import {
   memoryKeptWords,
   memoryListWords,
