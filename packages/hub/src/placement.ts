@@ -26,7 +26,7 @@ import {
   windowUsed,
   windowWords,
 } from "@cawco/core";
-import { harnessNamed } from "@cawco/core/harness";
+import { harnessNamed } from "@cawco/core/harness/kinds";
 import { HOUR_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
