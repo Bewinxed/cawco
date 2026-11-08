@@ -57,7 +57,6 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
-import type { WorkspaceRef } from "@cawco/core/harness";
 import { stagesCarriedPath } from "@cawco/core/paths/cawco";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
@@ -102,6 +101,7 @@ import { readRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { StageErrorSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { sheetWords } from "@cawco/core/words/sheet";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import {
