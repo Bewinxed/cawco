@@ -78,10 +78,8 @@ import {
   type LeakFound,
   LIMIT_REACHED,
   type LimitHolder,
-  limitSentence,
   RATE_LIMIT_READ,
   ROOM_HELD,
-  roomHeldSentence,
   SESSION_DIR_READ,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
@@ -165,7 +163,6 @@ import {
   REPEATED_FAILURE_LIMIT,
 } from "@cawco/core/session-messages";
 import {
-  processLimitSentence,
   SESSIOND_PROCESS_LIMIT,
   type SessiondLimit,
 } from "@cawco/core/sessiond";
@@ -186,8 +183,14 @@ import {
 import { getToolGlance } from "@cawco/core/transcript-rules";
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
+import {
+  limitSentence,
+  roomHeldSentence,
+} from "@cawco/core/words/harness-lines";
+import { processLimitSentence } from "@cawco/core/words/sessiond";
 import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
+import { holdingWords } from "@cawco/core/words/workspace-holding";
 import {
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
@@ -198,7 +201,6 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
-  holdingWords,
   WORKSPACE_GIT_TIMEOUT_MS,
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
