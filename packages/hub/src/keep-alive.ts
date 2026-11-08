@@ -1,17 +1,17 @@
 import { modelScope } from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
 import {
-  cacheHit,
-  type NeutralResultMessage,
-  type NeutralUserMessage,
-  promptCacheUsage,
-} from "@cawco/core/harness";
-import {
   type Envelope,
   type KeepAlive,
   OVER_STATUSES,
   type SendPayload,
 } from "@cawco/core/protocol";
+import {
+  cacheHit,
+  type NeutralResultMessage,
+  type NeutralUserMessage,
+  promptCacheUsage,
+} from "@cawco/core/session-messages";
 import { HOUR_MS } from "@cawco/core/time";
 import { resolveRates } from "@cawco/core/usage/pricing";
 import type { ClaudeLimits } from "@cawco/core/usage/types";
