@@ -32861,7 +32861,7 @@ export const createServer = (
           }),
         },
         ({ query, status }) =>
-          delegationMcp.list(query.instanceId, query.lister === "pi") ??
+          delegationMcp.list(query.instanceId, query.lister !== undefined) ??
           status(404, `No session ${query.instanceId} on this hub.`)
       )
       // Preparation only: enforcement is a separate cutover after every live row ACKs.
