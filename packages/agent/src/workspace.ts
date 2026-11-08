@@ -74,6 +74,7 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import {
   isDamagedRecord,
@@ -99,7 +100,6 @@ import {
   heldBy,
   ownInodes,
   setProject,
-  shellQuote,
   stopWorkspaceBoundary,
   whileBoundaryClosed,
 } from "./boundary";
