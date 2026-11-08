@@ -73,6 +73,7 @@ import {
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import { MACHINE_PART_MS } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { invariant, lawPolicy } from "@cawco/core/invariant";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
@@ -249,7 +250,7 @@ import { convergeDeniedTools } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
 import { forgePost } from "./forges/forge";
 import { setHubGitOrigins } from "./git-credential";
-import type { Harness } from "./harness";
+import { type Harness, isServerHarness } from "./harness";
 import { harness, harnesses } from "./harnesses";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
 import {
@@ -293,10 +294,10 @@ import { placeLfs, placeRepo } from "./place-repo";
 import { listenBrowsers, previewNetworks, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import {
-  isSessionProc,
   parseProcId,
   procIdFor,
   SESSION_PROC_KINDS,
+  sessionOfProc,
 } from "./proc-id";
 import {
   accountLent,
@@ -1604,8 +1605,8 @@ const readCustody = async (
         instances: [
           ...new Set(
             held.flatMap((proc) => {
-              const id = parseProcId(proc.procId);
-              return isSessionProc(id) ? [id.instanceId] : [];
+              const session = sessionOfProc(proc.procId);
+              return session ? [session.instanceId] : [];
             })
           ),
         ],
@@ -1614,7 +1615,14 @@ const readCustody = async (
         opencode:
           held.some(
             (proc) => parseProcId(proc.procId).kind === "opencode-server"
-          ) || (await harness("opencode")?.serversRunning?.()) === true,
+          ) ||
+          (
+            await Promise.all(
+              harnesses()
+                .filter(isServerHarness)
+                .map((adapter) => adapter.custody.serversRunning())
+            )
+          ).includes(true),
       };
     });
   } catch (error) {
@@ -1956,7 +1964,7 @@ const attach = (
     const keepReport = (report: MachineHarnessReport): void => {
       // A machine with no Claude Code has its sentence in the report's
       // `authReason`, not the one about its accounts' sign-ins.
-      if (report.harness === "claude" && report.installed) {
+      if (traitsOf(report.harness).accountModel === "dir" && report.installed) {
         noteClaudeAuth(report.auth);
       }
       reportedHarnesses = [
@@ -2159,7 +2167,7 @@ const attach = (
     const reportTools = async (): Promise<void> => {
       const again = harnesses().filter(
         (adapter) =>
-          adapter.kind === "claude" ||
+          adapter.detectStartsNothing ||
           reportedHarnesses.some(
             (report) => report.harness === adapter.kind && report.refused
           )
@@ -2265,7 +2273,7 @@ const attach = (
     > => {
       const claude = harness("claude");
       const report = claude ? await readHarness(claude) : undefined;
-      const old = reportedHarnesses.find((one) => one.harness === "claude");
+      const old = reportedHarnesses.find((one) => one.harness === claude?.kind);
       return report && old && Bun.deepEquals(report, old) ? undefined : report;
     };
     /** Claude's report sent when {@link rereadClaude} finds it moved. */
@@ -2339,7 +2347,9 @@ const attach = (
     // still be waiting on another harness's, and a report not sent yet
     // carries the answer itself.
     const stopVersionWatch = onVersionAnswered(() => {
-      if (reportedHarnesses.some((one) => one.harness === "claude")) {
+      if (
+        reportedHarnesses.some((one) => one.harness === harness("claude")?.kind)
+      ) {
         readPart("Claude's report", sendClaudeIfMoved).catch(() => undefined);
       }
     });
@@ -2957,14 +2967,14 @@ const attach = (
       }
       const spawn = envelope.payload as SpawnPayload | undefined;
       const reattachOnly = spawn?.reattachOnly;
-      const opencodeSpawn = spawn?.harness === "opencode";
+      const serverSpawn = traitsOf(spawn?.harness).custody === "server";
       const instanceId = spawn?.instanceId;
       if (adoptable(spawn)) {
         heldSpawns.push({ ...envelope, payload: spawn });
         undecided.set(spawn.instanceId, undecided.get(spawn.instanceId) ?? []);
         return true;
       }
-      if (reattachOnly || opencodeSpawn) {
+      if (reattachOnly || serverSpawn) {
         reattaching.push(envelope);
         if (instanceId) {
           undecided.set(instanceId, undecided.get(instanceId) ?? []);
