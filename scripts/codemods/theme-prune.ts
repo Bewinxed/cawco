@@ -99,7 +99,7 @@ for (const text of [...texts.values(), themeText]) {
 const READS_IN = (path: string) =>
   /\.(svelte|css|ts|tsx|js|mjs|html)$/u.test(path) &&
   !path.startsWith("scripts/lint/fixtures/") &&
-  path !== "packages/hub/src/design-tokens.ts" &&
+  path !== "packages/design-tokens/src/design-tokens.ts" &&
   !/(^|\/)dtcg-[^/]*$/u.test(path);
 
 const changed = new Set<string>();
