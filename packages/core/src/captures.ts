@@ -5,7 +5,7 @@
  * JPEG SOF0/SOF2, WebP VP8/VP8L/VP8X), with no decoder: the hub counts them
  * on a built page, the daemon in a folder preview's start page.
  */
-import { DESK_CAPTURE_WIDTH } from "./index";
+import { DESK_CAPTURE_WIDTH } from "./protocol";
 
 /** Whether `bytes` hold `text`'s characters at `offset`. */
 const holds = (bytes: Uint8Array, offset: number, text: string): boolean =>
