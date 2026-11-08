@@ -14,7 +14,7 @@
   import { Button } from "../../../apps/dashboard/src/lib/components/ui/button/index.js";
   import * as Resizable from "../../../apps/dashboard/src/lib/components/ui/resizable/index.js";
   import { IconComment } from "../../../apps/dashboard/src/lib/icons.js";
-  import { pinSaid } from "../../../packages/core/src/comments.ts";
+  import { pinSaid } from "../../../packages/core/src/comments/model.ts";
   import { pinName } from "../../../packages/core/src/pin-name.ts";
   import { commentWords as said } from "../../../packages/core/src/words/comments.ts";
   import {
