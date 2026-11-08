@@ -22,7 +22,7 @@ import {
   accountCredentialPath,
   credentialAccountIds,
 } from "@cawco/core/paths/claude";
-import { mcpGatewayPort } from "@cawco/core/protocol";
+import { mcpGatewayPort } from "@cawco/core/ports";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";

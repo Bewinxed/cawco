@@ -21,12 +21,12 @@ import {
   removeLaunchdLog,
 } from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths/hub";
-import type { AgentRow } from "@cawco/core/protocol";
 import {
   CAWCO_HUB_PORT,
   localDashboardPort,
   mcpGatewayPort,
-} from "@cawco/core/protocol";
+} from "@cawco/core/ports";
+import type { AgentRow } from "@cawco/core/protocol";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";

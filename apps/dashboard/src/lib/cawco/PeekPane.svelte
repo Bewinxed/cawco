@@ -13,11 +13,11 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import { machineLabel } from "@cawco/core/machine-names";
-  import { damagedWords } from "@cawco/core/protocol";
   import { questionsOf } from "@cawco/core/question";
   import { humanize, mcpParts } from "@cawco/core/tool-presentation";
   import { getToolGlance } from "@cawco/core/transcript-rules";
   import { askWords } from "@cawco/core/words/asks";
+  import { damagedWords } from "@cawco/core/words/damaged";
   import { peekWords } from "@cawco/core/words/peek";
   import { planWords } from "@cawco/core/words/plan";
   /**
