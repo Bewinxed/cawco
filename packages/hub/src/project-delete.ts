@@ -41,13 +41,13 @@
  */
 
 import type { BrowserKey } from "@cawco/core/browser";
+import { projectTrashWords } from "@cawco/core/words/project-trash";
 import {
   CONTROL_REMOVE_FOLDER,
   CONTROL_WORKSPACE_ARCHIVE,
   type RemoveFolder,
   type WorkspaceArchive,
-} from "@cawco/core/harness";
-import { projectTrashWords } from "@cawco/core/words/project-trash";
+} from "@cawco/core/workspace/controls";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";
 import { deleteProjectFolder } from "./project-folder";

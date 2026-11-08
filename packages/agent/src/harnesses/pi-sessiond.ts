@@ -2,25 +2,22 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import type {
-  FleetMcpChange,
-  FleetMcpTakeAnswer,
-  NeutralMessage,
-  SentMessage,
-} from "@cawco/core/harness";
-import {
-  BOUNDARY_RELAUNCH,
-  CONTROL_INTERRUPT,
-  CONTROL_MCP_FLEET_CHANGED,
-  CONTROL_MCP_FLEET_HEAL,
-  GATEWAY_RELAUNCH,
-  MESSAGES_HELD,
-  MESSAGES_READ,
-} from "@cawco/core/harness";
+import { BOUNDARY_RELAUNCH, GATEWAY_RELAUNCH } from "@cawco/core/harness";
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { standalone } from "@cawco/core/runtime";
+import type {
+  FleetMcpChange,
+  FleetMcpTakeAnswer,
+} from "@cawco/core/session/controls";
+import {
+  CONTROL_INTERRUPT,
+  CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
+} from "@cawco/core/session/controls";
+import type { NeutralMessage, SentMessage } from "@cawco/core/session-messages";
+import { MESSAGES_HELD, MESSAGES_READ } from "@cawco/core/session-messages";
 import { z } from "zod";
 import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt } from "../fleet-mcp-set";
