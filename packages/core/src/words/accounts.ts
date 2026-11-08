@@ -12,7 +12,7 @@
  * where the HIG asks for something the web does another way.
  */
 import type { AccountHue, CompactMethod, PlacementStrategy } from "../accounts";
-import type { HarnessKind } from "../harness";
+import type { HarnessKind } from "../harness/kinds";
 import { commonWords } from "./common";
 import { andList, pad2 } from "./helpers";
 

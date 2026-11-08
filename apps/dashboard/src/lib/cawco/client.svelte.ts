@@ -65,19 +65,15 @@ import type {
   ProjectStopFrame,
 } from "@cawco/core/frames";
 import type {
-  EffortLevel,
   HarnessCapabilities,
-  HarnessKind,
   MachineHarnessReport,
   McpServerStatus,
   ModeAsk,
   NeutralSessionInfo,
   NeutralStatus,
-  PermissionMode,
   PermissionResult,
   PermissionUpdate,
   SendRecord,
-  SessionEffort,
   StoredRun,
   SupportedCommands,
   WorkspaceHolding,
@@ -85,9 +81,15 @@ import type {
 import {
   CONTROL_STORED_RUN,
   CONTROL_SUPPORTED_COMMANDS,
-  isEffortLevel,
-  WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness";
+import {
+  type EffortLevel,
+  type HarnessKind,
+  isEffortLevel,
+  type PermissionMode,
+  type SessionEffort,
+  WIRE_PERMISSION_MODES,
+} from "@cawco/core/harness/kinds";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import type { LawBroken } from "@cawco/core/invariant";
