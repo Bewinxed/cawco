@@ -30,11 +30,11 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import {
   type PreviewTicket,
   previewEnterUrl,
-} from "../../../packages/core/src/frames";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+} from "../../../packages/core/src/preview/routes";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type Kit, ROOT, type Spec } from "../kit";
