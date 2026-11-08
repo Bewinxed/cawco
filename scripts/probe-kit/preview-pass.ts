@@ -10,11 +10,11 @@
  * enters once more.
  */
 import type { BrowserContext } from "playwright-core";
+import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import {
   type PreviewTicket,
   previewEnterUrl,
-} from "../../packages/core/src/frames";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
+} from "../../packages/core/src/preview/routes";
 
 /** The fleet as a pass needs it: the hub's base, where tickets are asked. */
 interface Hub {
