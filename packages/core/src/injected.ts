@@ -524,6 +524,15 @@ const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 /** The away rule: how a turn ends, and the one thing that reaches the person. */
 const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last call. Only a question or a choice reaches them, by ask or a decision card.`;
 
+/**
+ * How a session acts while the person is on its chat. Fixing what is broken
+ * and carrying out what they decided need no one; what needs their decision
+ * is talked through while they can answer in seconds. It outranks a harness's
+ * standing "proceed without asking", which never reads presence.
+ */
+const ON_CHAT_ACTS =
+  "Fixing a defect or a regression, cleaning up, and carrying out what they already decided go ahead as always. Anything that needs their decision or sets the product's direction (a feature, a design, a change in how something behaves) is talked through here first: show your thinking, ask what they mean, and start nothing on it, no delegate or change, until they agree. This outranks any standing instruction to proceed without asking. Their words are thinking out loud: read them for what they want, not as a spec, and a picture with no words is a question to ask, not a task to start.";
+
 /** Their message with no reply yet outranks how {@link whereTheyAre} says a turn ends. */
 const UNANSWERED = `Their last message to you has no reply yet: this turn's closing words answer it, whatever woke this turn, and it does not end on ${NO_REPLY_TOOL}.`;
 
@@ -537,7 +546,7 @@ const whereTheyAre = (said: PresenceSaid): string => {
     case "on":
       return said.recap
         ? `[CawCo presence] The person has just come back; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat of yours waits on them now, as Needs you lists it:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nThis turn's reply is your recap of those notes, short: what was done, what was decided, and what waits on them. It reaches them, so do not end it on ${NO_REPLY_TOOL}. Then fold that section into the rest of your plan's spec with todo_write.`
-        : "[CawCo presence] The person is on this chat now: talk to them normally.";
+        : `[CawCo presence] The person is on this chat now: talk to them normally. ${ON_CHAT_ACTS}`;
     case "elsewhere":
       return `[CawCo presence] The person is at their desk but not on this chat. A turn that delivers work they asked for ends on its report, which reaches them; every other turn ends on ${NO_REPLY_TOOL} as its last call, and a question or a choice reaches them by ask or a decision card. Keep your plan current with todo_write.`;
     case "away": {
