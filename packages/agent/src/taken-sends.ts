@@ -22,7 +22,7 @@
  */
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { sessionTakenDir } from "@cawco/core/paths";
+import { sessionTakenDir } from "@cawco/core/paths/cawco";
 import {
   DamagedRecord,
   readRecordSync,
