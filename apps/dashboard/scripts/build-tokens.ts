@@ -37,6 +37,7 @@
  * `font` shorthand utility (a type role, `font-inherit` …) that Tailwind
  * sorts after a font longhand utility (role-order.ts).
  */
+
 import { readdirSync, rmSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -47,7 +48,8 @@ import {
   buildTokens,
   cssLeafName,
   tailwindThemeCss,
-} from "../../../packages/hub/src/design-tokens";
+} from "../../../packages/design-tokens/src/design-tokens";
+import { KIT_TOKENS_PATH } from "../../../packages/design-tokens/src/kit-tokens";
 import { formatText, formattedAlike } from "../../../scripts/fmt";
 import {
   COLOUR_CATALOG,
@@ -403,7 +405,7 @@ const CONTAINERS = {
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */
-const SKILL_OUT = "../../packages/hub/skills/decision-page/kit/tokens.css";
+const SKILL_OUT = KIT_TOKENS_PATH;
 
 const built = await buildTokens(
   RESOLVER,
