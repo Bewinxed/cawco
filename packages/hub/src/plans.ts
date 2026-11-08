@@ -54,7 +54,8 @@ import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
 import { Elysia } from "elysia";
 import { createPatch } from "rfc6902";
-import type { DbShape, PlanChangeRow } from "./db";
+import type { DbShape } from "./db";
+import type { PlanChangeRow } from "./db/session-plans";
 import { FolderRefusal, refused } from "./project-folder";
 import type { TaskEvent, Tasks } from "./tasks";
 
