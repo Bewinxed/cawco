@@ -15,7 +15,7 @@
  */
 
 import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
-import { type FleetPlacement, placementProblem } from "./fleet";
+import { type FleetPlacement, placementProblem } from "./fleet-placement";
 import type { HarnessKind } from "./harness/kinds";
 import { accountsWords } from "./words/accounts";
 
