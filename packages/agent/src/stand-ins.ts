@@ -49,14 +49,14 @@ import {
 import { basename, dirname, join, relative } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
-import { isGitDir } from "@cawco/core/git-dir";
 import type { WorkspaceRef } from "@cawco/core/harness";
-import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir, workspaceStateDir } from "@cawco/core/paths";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
+import { isGitDir } from "./git-dir";
+import { mountedAnywhere } from "./mount-table";
 
 /**
  * A mount point a sandbox left on the host, as the host tests it

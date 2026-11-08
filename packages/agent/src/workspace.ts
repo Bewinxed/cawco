@@ -56,7 +56,6 @@ import {
 import type { HubRepoKey } from "@cawco/core/hub-repo";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
-import { PACKAGE_TREES } from "@cawco/core/package-trees";
 import {
   forgetWorkspaceTmp,
   isSecretFileName,
@@ -166,6 +165,7 @@ import {
   urlOrigin,
   withoutCredential,
 } from "./move";
+import { PACKAGE_TREES } from "./package-trees";
 import { removeTree } from "./remove-tree";
 import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
