@@ -1,6 +1,5 @@
 <script lang="ts">
   import {
-    ASK_ORIGIN,
     type AskRecord,
     askAnsweredText,
     askOutcome,
@@ -13,6 +12,7 @@
     type UserAnswers,
     type UserQuestion,
   } from "@cawco/core/harness";
+  import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
   import type { InstanceRow } from "@cawco/core/protocol";
   import type { Stage as BoardStage } from "@cawco/core/task-views";
   import { askAnsweredTitle } from "@cawco/core/transcript-rules";

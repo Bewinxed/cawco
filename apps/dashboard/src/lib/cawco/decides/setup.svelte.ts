@@ -19,7 +19,7 @@ import {
   type EffortLevel,
   HARNESSES,
   type HarnessKind,
-} from "@cawco/core/harness";
+} from "@cawco/core/harness/kinds";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
 import { z } from "zod";

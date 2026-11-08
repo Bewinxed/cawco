@@ -1,6 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
+  import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
