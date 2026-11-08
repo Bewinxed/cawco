@@ -22,6 +22,7 @@
  * why, so a reader over many records skips that one and says so, and the
  * rest proceed.
  */
+
 import { randomUUID } from "node:crypto";
 import {
   closeSync,
@@ -38,6 +39,7 @@ import {
 import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
+import { isGone } from "./absent";
 import { isAlive, listedPid } from "./signal-wall";
 
 export interface StateWriteOptions {
@@ -291,9 +293,6 @@ const checkTextRecord = (file: string, text: string): string => {
   return text;
 };
 
-const absent = (error: unknown): boolean =>
-  (error as NodeJS.ErrnoException).code === "ENOENT";
-
 /**
  * The JSON record at `file`, checked against `schema`: undefined when there
  * is none, a {@link DamagedRecord} when there is one that does not parse or
@@ -307,7 +306,7 @@ export const readRecord = async <S extends z.ZodType>(
   try {
     text = await readFile(file, "utf8");
   } catch (error) {
-    if (absent(error)) {
+    if (isGone(error)) {
       return;
     }
     throw error;
@@ -324,7 +323,7 @@ export const readRecordSync = <S extends z.ZodType>(
   try {
     text = readFileSync(file, "utf8");
   } catch (error) {
-    if (absent(error)) {
+    if (isGone(error)) {
       return;
     }
     throw error;
@@ -340,7 +339,7 @@ export const readTextRecord = async (
   try {
     text = await readFile(file, "utf8");
   } catch (error) {
-    if (absent(error)) {
+    if (isGone(error)) {
       return;
     }
     throw error;
@@ -354,7 +353,7 @@ export const readTextRecordSync = (file: string): string | undefined => {
   try {
     text = readFileSync(file, "utf8");
   } catch (error) {
-    if (absent(error)) {
+    if (isGone(error)) {
       return;
     }
     throw error;
