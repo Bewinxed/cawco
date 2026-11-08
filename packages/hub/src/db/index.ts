@@ -159,7 +159,12 @@ import {
   dropGraphPlaces,
   GRAPH_PLACES_MIGRATION_WHEN,
 } from "./drop-graph-places";
-import { type FindDb, findDb } from "./find";
+import {
+  type FindDb,
+  type FindSettingsDb,
+  findDb,
+  findSettingsDb,
+} from "./find";
 import { type ForgetDb, forgetDb } from "./forget";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
@@ -171,7 +176,7 @@ import {
 } from "./merge-project-pages";
 import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
-import { PRESENCE_ID, type PresenceDb, presenceDb } from "./presence";
+import { type PresenceDb, presenceDb } from "./presence";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type ProjectWorkDb, projectWorkDb } from "./project-work";
@@ -196,7 +201,6 @@ import {
   dataMigrations,
   delegateEvents,
   eventRoutes,
-  findSettings,
   fleetAgents,
   fleetHarnessConfig,
   fleetHookHistory,
@@ -989,11 +993,6 @@ interface HubStore {
   ) => void;
   /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
-  /** The person's Find settings (find-secrets.ts): "Hide secrets in Find", on until they turn it off. */
-  readonly findSettings: {
-    readonly hideSecrets: () => boolean;
-    readonly setHideSecrets: (on: boolean, at: Date) => void;
-  };
   /** Transcript deletion follows confirmed process exit, never precedes it. */
   readonly finishTranscriptDelete: (id: string) => void;
   readonly finishWorkspaceCreate: (id: string) => void;
@@ -2652,7 +2651,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = ProjectAccountsDb &
+export type DbShape = FindSettingsDb &
+  ProjectAccountsDb &
   AskPartsDb &
   PresenceDb &
   SessionIdentityDb &
@@ -4687,6 +4687,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...findSettingsDb(core),
     ...projectAccountsDb(core),
     ...askPartsDb(core),
     ...presenceDb(core),
@@ -9976,21 +9977,6 @@ const make = async (path: string): Promise<DbShape> => {
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db, core),
     find: findDb(db),
-    findSettings: {
-      hideSecrets: () =>
-        db
-          .select({ hideSecrets: findSettings.hideSecrets })
-          .from(findSettings)
-          .where(eq(findSettings.id, PRESENCE_ID))
-          .get()?.hideSecrets ?? true,
-      setHideSecrets: (on, at) => {
-        const set = { hideSecrets: on, changedAt: at };
-        db.insert(findSettings)
-          .values({ id: PRESENCE_ID, ...set })
-          .onConflictDoUpdate({ target: findSettings.id, set })
-          .run();
-      },
-    },
     previews: previewsDb(db),
     moveEndings: moveEndingsDb(db),
     sessionTasks: sessionTasksDb(db),
