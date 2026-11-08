@@ -19,12 +19,10 @@
  *   bun scripts/probe-kit/run.ts slash-commands-before-start
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import {
-  CONTROL_SUPPORTED_COMMANDS,
-  type SlashCommand,
-} from "../../../packages/core/src/harness";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
+import { CONTROL_SUPPORTED_COMMANDS } from "../../../packages/core/src/session/controls";
+import type { SlashCommand } from "../../../packages/core/src/session-messages";
 import { MACHINE, MODEL, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
