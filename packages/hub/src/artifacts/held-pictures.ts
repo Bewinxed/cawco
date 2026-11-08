@@ -8,7 +8,7 @@
  */
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { MarkPictures } from "@cawco/core/comments";
+import type { MarkPictures } from "@cawco/core/comments/model";
 import { writeStateFileSync } from "@cawco/core/state-file";
 
 /** The page's address the marks were made at, beside their pictures. */
