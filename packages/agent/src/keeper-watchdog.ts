@@ -49,6 +49,7 @@ import { type Ran, runInC } from "@cawco/core/run-captured";
 import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { until } from "@cawco/core/until";
 import { type KeeperJob, KeeperKept, keeperJob } from "./keeper-jobs";
 import { dialKeeper, KEEPER_WELCOME_MS } from "./sessiond-client";
 
@@ -430,10 +431,10 @@ export class KeeperWatchdog {
     // What the dead keeper started is ended here: a keeper killed outright
     // (launchd's SIGKILL after its exit timeout) leaves its children under
     // init, each in its own process group, where nobody can reach them.
-    const gone = Date.now() + KEEPER_GONE_MS;
-    while (isAlive(streak.pid) && Date.now() < gone) {
-      await Bun.sleep(250);
-    }
+    await until(() => !isAlive(streak.pid), {
+      deadline: Date.now() + KEEPER_GONE_MS,
+      every: 250,
+    });
     const now = await processTable();
     const left = now.filter((row) =>
       tree.some((was) => was.pid === row.pid && was.started === row.started)
