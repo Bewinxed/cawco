@@ -33,7 +33,7 @@
  *     a Go key opened Zen left them) lists Zen's from the account's server
  *     once it restarts, no key entered again;
  * (i) the account's usage is read from the fleet's stand-in, with its key:
- *     nothing of the fleet asks opencode.ai (core usage/opencode-go.ts,
+ *     nothing of the fleet asks opencode.ai (agent usage/opencode-go.ts,
  *     `CAWCO_OPENCODE_BASE_URL`);
  *
  * and the same for pi, whose models.json points pi-ai's built-in `opencode`

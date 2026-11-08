@@ -39,7 +39,6 @@ import {
 } from "@cawco/core/harness";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
-import { credentialIn } from "@cawco/core/secret-text";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -47,6 +46,7 @@ import { refuseShortOfWorkspace } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { configEnv } from "./git-credential";
 import { LFS_FILTERS } from "./move";
+import { credentialIn } from "./secret-text";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [
@@ -229,7 +229,7 @@ const nulList = (text: string): string[] => text.split("\0").filter(Boolean);
 const SCAN_READ = 1024 * 1024;
 /**
  * How much of what it read last the scan carries into the next read: more
- * than any credential's shape needs to be seen whole (core secret-text.ts),
+ * than any credential's shape needs to be seen whole (agent secret-text.ts),
  * so one across two reads is found.
  */
 const SCAN_CARRY = 4096;
