@@ -1,4 +1,4 @@
-import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./boundary";
+import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./bun-runtime";
 
 /**
  * The relay, a bun program: it listens on the unix socket its first argument
