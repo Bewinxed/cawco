@@ -332,7 +332,7 @@ interface LineStat {
 }
 
 /** The line diff of two texts (line-diff.ts), counted, and the markdown sections it touches. */
-export function lineStat(before: string, after: string): LineStat {
+function lineStat(before: string, after: string): LineStat {
   const a = linesOf(before);
   const b = linesOf(after);
   const { removedAt, addedAt } = editScript(a, b);
@@ -431,7 +431,7 @@ const hunkOf = (
 /** Maps whose every value is private by nature: a server's environment, a request's headers. */
 const KEYS_ONLY = new Set(["env", "headers", "environment"]);
 
-export const HIDDEN = "(hidden)";
+const HIDDEN = "(hidden)";
 
 /** A value with every credential in it replaced by {@link HIDDEN}, at any depth. */
 export function redact(key: string, value: unknown): unknown {
@@ -475,7 +475,7 @@ const shown = (key: string, value: unknown): string => {
 };
 
 /** The input's fields as shown, secrets hidden, `skip` and empty ones left out. */
-export function fieldsOf(
+function fieldsOf(
   input: Record<string, unknown>,
   skip: readonly string[] = []
 ): PermissionField[] {
@@ -517,7 +517,7 @@ const humanize = (name: string): string => {
 };
 
 /** A tool as a person reads it: an MCP tool by its server, then its name in words. */
-export function toolDisplayName(toolName: string): string {
+function toolDisplayName(toolName: string): string {
   const mcp = MCP_NAME.exec(toolName);
   if (!mcp) {
     return toolName;
@@ -1788,7 +1788,7 @@ const shellCall = (input: Record<string, unknown>): Presented => {
 };
 
 /** The shell command a permission is about, said whole under the summary. */
-export const commandOf = (input: Record<string, unknown>): string | null =>
+const commandOf = (input: Record<string, unknown>): string | null =>
   typeof input.command === "string" ? input.command : null;
 
 /** Who asks, and where, as every ask's head says. */

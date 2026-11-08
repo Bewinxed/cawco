@@ -20,8 +20,6 @@
  */
 import { stat } from "node:fs/promises";
 import {
-  type FleetHarnessConfig,
-  type FleetHook,
   type FleetMcpServer,
   type FleetPlacedMemoryDoc,
   type FleetProjectRows,
@@ -29,7 +27,9 @@ import {
   type MachineFleetConfig,
   type PlacedFleetConfig,
   placeKeyOf,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
+import type { FleetHarnessConfig } from "@cawco/core/harness-config";
+import type { FleetHook } from "@cawco/core/hooks";
 import { workspaceProjectFile } from "@cawco/core/paths";
 import { readRecord } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";

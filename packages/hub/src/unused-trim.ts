@@ -38,17 +38,20 @@
  * Nothing here unlists by itself, uninstalls anything, or touches a type
  * defined in a project's own `delegates/*.md`, which cannot name a set yet.
  */
+
+import { type AskRecord, PROJECT_SETTINGS } from "@cawco/core/asks";
 import {
-  type CalledItem,
   type DelegateType,
-  type InstanceRow,
-  type SetOwner,
-  type SetStanding,
   type StartingSet,
   startingSetProblem,
-} from "@cawco/core";
-import { type AskRecord, PROJECT_SETTINGS } from "@cawco/core/asks";
+} from "@cawco/core/delegate-types";
 import { maskMcpConfig } from "@cawco/core/fleet-secrets";
+import type {
+  CalledItem,
+  SetOwner,
+  SetStanding,
+} from "@cawco/core/permission-presentation";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { routinesWords } from "@cawco/core/words/routines";
 import {
   CALLS_DEFAULT_DAYS,

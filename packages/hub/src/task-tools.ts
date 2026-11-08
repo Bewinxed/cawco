@@ -16,15 +16,17 @@
  * steps and its spec, with or without a project or task.
  */
 import {
-  type InstanceRow,
-  LANDS_MODES,
-  PLAN_STEP_PRIORITIES,
-  PLAN_STEP_STATUSES,
   RESULT_ARTIFACT_KINDS,
   type ResultArtifact,
   type ResultArtifactKind,
+} from "@cawco/core/deliverables";
+import { LANDS_MODES } from "@cawco/core/injected";
+import {
+  PLAN_STEP_PRIORITIES,
+  PLAN_STEP_STATUSES,
   type SessionPlan,
-} from "@cawco/core";
+} from "@cawco/core/plan";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { z } from "zod";
 import { BUILD_TITLE } from "./design-offers";

@@ -15,7 +15,7 @@ import type { RelayProvider } from "./relays";
  * has a relay, so Caw is woken to offer one. Stripe is the one service the
  * relay verifies by its own scheme (`Stripe-Signature`); GitHub is polled.
  */
-export const PUSH_ONLY_SERVICES: Readonly<Record<string, RelayProvider>> = {
+const PUSH_ONLY_SERVICES: Readonly<Record<string, RelayProvider>> = {
   stripe: "stripe",
 };
 
@@ -62,7 +62,7 @@ export type ConnectionAuth = (typeof CONNECTION_AUTHS)[number];
  * token, a GitHub App's installation, a machine's gh, or a code sign-in. An
  * MCP OAuth sign-in's token is for GitHub's MCP server alone.
  */
-export const GITHUB_API_AUTHS: readonly ConnectionAuth[] = [
+const GITHUB_API_AUTHS: readonly ConnectionAuth[] = [
   "bearer",
   "app",
   "gh",

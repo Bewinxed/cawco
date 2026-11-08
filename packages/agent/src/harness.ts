@@ -15,14 +15,14 @@
  * it ships new UI concepts, teach the dashboard's folding layer about them
  * (they arrive as `raw` frames until then).
  */
+import type { AskAnswer } from "@cawco/core/asks";
+import type { TextAttachment } from "@cawco/core/attachments";
+import type { RestartHold } from "@cawco/core/binary-updates";
+import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
 import type {
-  AskAnswer,
   AuthState,
   CutCommand,
-  Envelope,
-  FleetSyncReport,
   HarnessCapabilities,
-  HarnessKind,
   HarnessReport,
   MachineHarnessReport,
   MoveEnded,
@@ -30,18 +30,14 @@ import type {
   NeutralSessionInfo,
   PermissionResult,
   PermissionUpdate,
-  PlacedFleetConfig,
-  SendPayload,
   SentMessage,
   SessionMessage,
   SignInFault,
-  SpawnPayload,
   StoredRun,
-  TextAttachment,
-  TranscriptWindow,
-  WindowAsk,
-} from "@cawco/core";
-import type { RestartHold } from "@cawco/core/binary-updates";
+} from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
+import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import type { FleetPart } from "./fleet-parts";
 
 /**
@@ -151,7 +147,7 @@ export interface HarnessContext {
    * every other session: a bounded one's `TMPDIR` is its boundary's.
    */
   readonly hostTmp?: string;
-  readonly ingested?: import("@cawco/core").IngestMark;
+  readonly ingested?: import("@cawco/core/protocol").IngestMark;
   readonly instanceId: string;
   /**
    * The session keeper refused this session's process its input
@@ -258,7 +254,7 @@ export interface HarnessSession {
   interrupt: () => Promise<void>;
   /**
    * The supervisor stopped this session for failing the same way again and
-   * again ({@link import("@cawco/core").REPEATED_FAILURE}), in `words`: kept
+   * again ({@link import("@cawco/core/harness").REPEATED_FAILURE}), in `words`: kept
    * in the session's own history, so a transcript read back says so as the
    * live one did. A runtime that starts no turn of its own between sends
    * cannot loop that way, and has none.
@@ -364,7 +360,7 @@ export interface Harness {
    * The fleet content this harness's own copy holds on disk now, hashed as the
    * hub hashes it. Absent from a harness that converges no content.
    */
-  fleetHoldings?: () => Promise<import("@cawco/core").FleetHoldings>;
+  fleetHoldings?: () => Promise<import("@cawco/core/fleet").FleetHoldings>;
   /**
    * Where this harness's fleet sync ({@link syncFleet}) writes: the dir every
    * file it writes or links for the fleet hangs from, as this process
@@ -442,7 +438,7 @@ export interface Harness {
    */
   serversRunning?: () => Promise<boolean>;
   /** Exact addresses retained by this adapter, never reconstructed by guessing. */
-  sessionAddresses?: () => import("@cawco/core").SessionAddress[];
+  sessionAddresses?: () => import("@cawco/core/protocol").SessionAddress[];
   readonly sessionPresent?: (
     sessionKey: string,
     dir: string

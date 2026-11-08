@@ -123,7 +123,6 @@ export const CLOSED_STAGE_KINDS = [
 
 /** Text roles a view may set: DESIGN.md's (The Role, Not Size Rule). */
 export const VIEW_TEXT_ROLES = ["title", "label", "body", "meta"] as const;
-export type ViewTextRole = (typeof VIEW_TEXT_ROLES)[number];
 
 /**
  * A view as `GET /api/projects/:id/views` lists it: kept (`views/<name>.oui`)
@@ -291,13 +290,4 @@ export interface ViewEvent {
 export interface ViewEventsOutput {
   /** Newest first. */
   rows: ViewEvent[];
-}
-
-/** Each view tool's input and output, by name. */
-export interface ViewToolIO {
-  events: { input: ViewEventsInput; output: ViewEventsOutput };
-  routines: { input: ViewRoutinesInput; output: ViewRoutinesOutput };
-  spend: { input: ViewSpendInput; output: ViewSpendOutput };
-  stages: { input: Record<string, never>; output: ViewStagesOutput };
-  tasks: { input: ViewTasksInput; output: ViewTasksOutput };
 }
