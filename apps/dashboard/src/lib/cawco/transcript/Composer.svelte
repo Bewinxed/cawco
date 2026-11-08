@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { traitsOf } from "@cawco/core/harness/traits";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import type { PendingPermission } from "../client.svelte";
@@ -3158,7 +3159,7 @@
 
   /** Whose queued sends this harness calls queued, for the wheel's rows. */
   const queuedWord = $derived(
-    recalled?.harness === "claude" ? "Queued" : undefined
+    traitsOf(recalled?.harness).queuesSends ? "Queued" : undefined
   );
 
   /**

@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import { traitsOf } from "@cawco/core/harness/traits";
+
   const HOME = /^\/(home|Users)\/[^/]+/u;
 </script>
 
@@ -171,13 +173,16 @@
     return () => clearInterval(timer);
   });
   const providerLimit = $derived.by(() => {
-    if (harness === "claude") {
+    if (traitsOf(harness).providerLimit === "account") {
       const accountId = row?.accountId;
       const claude = accountId ? cawco.claudeLimits[accountId] : undefined;
       const limit = firstToStop(limitRows("Claude", claude, limitNow));
       return limit && claude ? { ...limit, seenAt: claude.fetchedAt } : null;
     }
-    if (harness === "opencode" && model?.startsWith("opencode-go/")) {
+    if (
+      traitsOf(harness).providerLimit === "go" &&
+      model?.startsWith("opencode-go/")
+    ) {
       const go = speakingReading(cawco.openCodeGoLimits)?.reading;
       const limit = firstToStop(limitRows("opencode", go, limitNow));
       return limit && go ? { ...limit, seenAt: go.fetchedAt } : null;
