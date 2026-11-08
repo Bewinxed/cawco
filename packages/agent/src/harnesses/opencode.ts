@@ -129,6 +129,7 @@ import type {
   Harness,
   HarnessContext,
   HarnessSession,
+  ServerCustody,
   TranscriptSpan,
 } from "../harness";
 import {
@@ -1860,7 +1861,22 @@ const oauthVerdict = (
 /** The id CawCo puts an account's credential on its server under: its own, named for its value. */
 const CREDENTIAL_PREFIX = "cred_cawco_";
 
-class OpencodeHarness implements Harness {
+class OpencodeHarness implements Harness<"opencode"> {
+  /** Its sessions live in servers that outlive the agent: everything the agent asks of custody, it asks here. */
+  readonly custody: ServerCustody = {
+    kind: "server",
+    abortSession: (sessionKey, dir) => this.abortSession(sessionKey, dir),
+    busyInstances: () => this.busyInstances(),
+    endSession: (sessionKey, dir, instanceId, claimed, forget) =>
+      this.endSession(sessionKey, dir, instanceId, claimed, forget),
+    serversRunning: () => this.serversRunning(),
+    sessionAddresses: () => this.sessionAddresses(),
+    sessionPresent: (sessionKey, dir) => this.sessionPresent(sessionKey, dir),
+    sessionsOn: (procId) => this.sessionsOn(procId),
+    setCustodyReadiness: (read) => this.setCustodyReadiness(read),
+    unclaimedRunners: (directory, claimed) =>
+      this.unclaimedRunners(directory, claimed),
+  };
   readonly kind = "opencode" as const;
   /** Its catalog is its servers' databases, read on the stores thread ({@link listSessions}). */
   readonly catalogFromServer = true as const;
@@ -7249,4 +7265,4 @@ function slotName(slot: ServerSlot): string {
     : `account ${slot.account}'s`;
 }
 
-export const opencodeHarness: Harness = new OpencodeHarness();
+export const opencodeHarness: Harness<"opencode"> = new OpencodeHarness();
