@@ -82,7 +82,7 @@ const { ts } = TJS;
 // loads its type generator, which imports `typebox` without declaring it
 // since 2.0.0-rc.0 dropped the peer, so the root fails to resolve it.
 const { toOpenAPISchema } = await import("@elysia/openapi/openapi");
-const { CAWCO_HUB_PORT } = await import("@cawco/core/protocol");
+const { CAWCO_HUB_PORT } = await import("@cawco/core/ports");
 const { WIRE_PROTOCOL } = await import("@cawco/core/stream");
 
 type Schema = Record<string, unknown>;

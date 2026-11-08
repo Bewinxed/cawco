@@ -17,6 +17,14 @@ import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import {
+  ARTIFACT_NAME,
+  type ArtifactDoes,
+  ASK_BANNED,
+  ASK_PATHLIKE,
+  DESK_CAPTURE_WIDTH,
+  DESK_CAPTURES_PER_PAGE,
+} from "@cawco/core/artifact-kinds";
+import {
   type ArtifactNeedsRead,
   type ArtifactPending,
   type ArtifactPlace,
@@ -127,19 +135,13 @@ import type {
 } from "@cawco/core/preview/protocol";
 import { type FolderWeight, pageHash } from "@cawco/core/preview/proxy";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
-import {
-  type AgentRow,
-  ARTIFACT_NAME,
-  type ArtifactDoes,
-  type ArtifactHit,
-  type ArtifactPromotion,
-  type ArtifactSummary,
-  type ArtifactThumbnail,
-  ASK_BANNED,
-  ASK_PATHLIKE,
-  DESK_CAPTURE_WIDTH,
-  DESK_CAPTURES_PER_PAGE,
-  type InstanceRow,
+import type {
+  AgentRow,
+  ArtifactHit,
+  ArtifactPromotion,
+  ArtifactSummary,
+  ArtifactThumbnail,
+  InstanceRow,
 } from "@cawco/core/protocol";
 import {
   artifactLink,

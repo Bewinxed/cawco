@@ -3,7 +3,7 @@ import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { END_TURN_META } from "@cawco/core/no-reply";
-import { CAWCO_HUB_PORT, mcpGatewayPort } from "@cawco/core/protocol";
+import { CAWCO_HUB_PORT, mcpGatewayPort } from "@cawco/core/ports";
 import { unhandled } from "@cawco/core/unhandled";
 import { hubAnswer } from "./hub-away";
 
