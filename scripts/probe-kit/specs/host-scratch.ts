@@ -37,8 +37,8 @@ import type {
   HostOutputListed,
   WorkspaceOutputs,
 } from "../../../packages/core/src/harness";
-import { workWords } from "../../../packages/core/src/index";
 import { withHostLine } from "../../../packages/core/src/injected";
+import { workWords } from "../../../packages/core/src/words/work";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import type { Kit, Spec } from "../kit";
 

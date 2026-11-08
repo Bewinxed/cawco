@@ -21,17 +21,16 @@
  *   new area, what falls back to the fleet's. Its running conversation moves
  *   with an account it now starts on, as an account edit moves it.
  */
+import type { ProjectAtLimit } from "@cawco/core/accounts";
 import {
   AREA_NAME_LIMIT,
   type Area,
   type CapPeriod,
-  type OfferedMode,
   type OnCap,
-  PERMISSION_MODES,
-  type ProjectAtLimit,
   type SettingSource,
   type SettingsInEffect,
-} from "@cawco/core";
+} from "@cawco/core/areas";
+import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow } from "./db";

@@ -23,17 +23,17 @@
  * that poll itself (ingress.ts `githubWait`). A project with no GitHub
  * poller is refused either target where it is written ({@link readWait}).
  */
+import { referenceHref } from "@cawco/core/references";
+import type { WaitState } from "@cawco/core/task-views";
+import type { StageKind } from "@cawco/core/views";
 import {
   githubTarget,
-  referenceHref,
-  type StageKind,
-  taskLinkWords,
   taskTarget,
   type WaitTarget,
   waitHandle,
   waitTarget,
-} from "@cawco/core";
-import type { WaitState } from "@cawco/core/task-views";
+} from "@cawco/core/wait-targets";
+import { taskLinkWords } from "@cawco/core/words/task-links";
 import type { WorkItemState } from "./db/schema";
 
 /** A pull request's state as its link row holds it, or an Actions run's as the poller last read it. */

@@ -8,12 +8,8 @@ import {
   toHttpBase,
   toWsUrl,
 } from "@cawco/agent/discovery";
-import {
-  CAWCO_ENV,
-  CAWCO_HUB_PORT,
-  CAWCO_MDNS_TYPE,
-  readEnv,
-} from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { CAWCO_HUB_PORT, CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 
 /** Which rung of the ladder answered. */
