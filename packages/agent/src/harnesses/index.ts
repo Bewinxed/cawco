@@ -3,22 +3,21 @@
  * adapter implements {@link Harness}; a machine can run several at once, and a
  * spawn names which one it wants (`SpawnPayload.harness`, default `claude`).
  */
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import type { Harness } from "../harness";
 import { claudeHarness } from "./claude";
 import { opencodeHarness } from "./opencode";
 import { piHarness } from "./pi";
 
-const registry = new Map<HarnessKind, Harness>();
-
-/** Registers a harness; the last registration for a kind wins. */
-const registerHarness = (adapter: Harness): void => {
-  registry.set(adapter.kind, adapter);
+const ADAPTERS: { [K in HarnessKind]: Harness<K> } = {
+  claude: claudeHarness,
+  opencode: opencodeHarness,
+  pi: piHarness,
 };
 
-registerHarness(claudeHarness);
-registerHarness(opencodeHarness);
-registerHarness(piHarness);
+const registry = new Map<HarnessKind, Harness>(
+  HARNESSES.map((kind) => [kind, ADAPTERS[kind]])
+);
 
 /** Every harness this daemon has an adapter for. */
 export const harnesses = (): Harness[] => [...registry.values()];
