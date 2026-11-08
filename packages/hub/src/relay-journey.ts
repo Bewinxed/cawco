@@ -53,11 +53,11 @@ import {
   type RelayStep,
   type RelaySummary,
   type RelayTry,
-  STREAM_RELAY_WORDS,
   streamRelayUrls,
   suggestedName,
   zoneOf,
 } from "@cawco/core/stream-relay";
+import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { Elysia, t } from "elysia";
 import {
   addRecord,
