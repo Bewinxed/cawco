@@ -54,7 +54,7 @@ import {
   replyToPin,
   resolvePin,
   writePin,
-} from "../../../packages/core/src/comments";
+} from "../../../packages/core/src/comments/model";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
