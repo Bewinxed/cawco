@@ -24,7 +24,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Envelope } from "@cawco/core";
 import {
   encodeJson,
   type JsonPieces,
@@ -32,6 +31,7 @@ import {
   textPieces,
 } from "@cawco/core/json-stream";
 import { sessionIdentityDir } from "@cawco/core/paths";
+import type { Envelope } from "@cawco/core/protocol";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
 import { delegationHubUrl } from "./delegation";

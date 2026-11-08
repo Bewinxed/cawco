@@ -156,7 +156,7 @@ export interface RuleRow extends Rule {
 }
 
 /** How long a body of text a rule will read. Longer than this and it reads the tail. */
-export const RULE_SCAN_LIMIT = 200_000;
+const RULE_SCAN_LIMIT = 200_000;
 
 /** The most times in a row a rule fires on one session before the hub goes quiet for it. */
 export const RULE_FIRE_CEILING = 10;
@@ -171,7 +171,7 @@ const escapeForRegex = (text: string): string => text.replace(RESERVED, "\\$&");
  * Returns undefined for a pattern that cannot compile — {@link ruleProblem}
  * is what explains why.
  */
-export function ruleRegex(
+function ruleRegex(
   rule: Pick<Rule, "pattern" | "matchKind" | "caseSensitive" | "wholeWord">
 ): RegExp | undefined {
   const flags = rule.caseSensitive ? "g" : "gi";

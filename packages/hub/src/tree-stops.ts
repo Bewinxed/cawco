@@ -26,7 +26,9 @@
  * The root's report lists how each delegate under it ended, nested as the
  * tree was; it goes to the root's parent as any report does.
  */
-import { type EndedBy, type InstanceStatus, workWords } from "@cawco/core";
+import type { EndedBy } from "@cawco/core/accounts";
+import type { InstanceStatus } from "@cawco/core/protocol";
+import { workWords } from "@cawco/core/words/work";
 import type { DbShape, WorkItemRow } from "./db";
 import type { TreeStopRow } from "./db/tree-stops";
 import { handle } from "./presenters/words";

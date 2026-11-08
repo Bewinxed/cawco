@@ -55,7 +55,7 @@ export const referenceHref = (kind: ReferenceKind, id: string): string =>
   `${SCHEME}${kind}/${encodeURI(id).replace(DESTINATION_SYNTAX, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 
 /** A reference's markdown: `[label](cawco:<kind>/<id>)`. */
-export const referenceLink = (
+const referenceLink = (
   kind: ReferenceKind,
   id: string,
   label: string

@@ -296,7 +296,7 @@ export interface ToolPolicy {
  * permission", anomalyco/opencode#54930), which the plugin's `shell` asks
  * through.
  */
-export const OPENCODE_VERSION = "2.0.29";
+const OPENCODE_VERSION = "2.0.29";
 
 /**
  * The oldest Claude Code CawCo runs at all (agent claude-version.ts
@@ -324,7 +324,7 @@ export const CLAUDE_VERSION_FLOOR = "2.1.301";
  * base URL must now include `/v1`". A pi older than 1.3.0 reads and writes
  * them by other rules than CawCo's sessions do.
  */
-export const PI_VERSION_FLOOR = "1.3.0";
+const PI_VERSION_FLOOR = "1.3.0";
 
 const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)/u;
 

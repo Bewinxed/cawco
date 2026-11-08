@@ -1,5 +1,63 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
+import type { FleetSettings, OnCap, SettingsInEffect } from "@cawco/core/areas";
+import { settingsInEffect } from "@cawco/core/areas";
+import type { MayStart, StartingSet } from "@cawco/core/delegate-types";
+import type { TaskLinkSummary } from "@cawco/core/external-items";
+import { FILE_HASH_SCHEME, hashFiles } from "@cawco/core/file-hash";
+import type {
+  FleetAgent,
+  FleetConfig,
+  FleetItemStatus,
+  FleetMarketplace,
+  FleetMcpConfig,
+  FleetMcpServer,
+  FleetPlugin,
+  FleetRefresh,
+  FleetSkillMeta,
+  FleetSyncOutcome,
+  FleetSyncReport,
+  FleetVersioned,
+  McpPlatform,
+  MemoryScope,
+  MemoryVersion,
+  SkillFile,
+} from "@cawco/core/fleet";
+import { placedOnly, scoped } from "@cawco/core/fleet";
+import type { FleetPlacement, FleetScope } from "@cawco/core/fleet-placement";
+import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
+import type { HarnessReport, NeutralUserMessage } from "@cawco/core/harness";
+import type {
+  EffortLevel,
+  HarnessKind,
+  OfferedMode,
+  PermissionMode,
+  SessionEffort,
+} from "@cawco/core/harness/kinds";
+import { CONTINUATION_ORIGIN } from "@cawco/core/harness/kinds";
+import type {
+  FleetHarnessConfig,
+  HarnessConfigKind,
+} from "@cawco/core/harness-config";
+import type {
+  FleetHook,
+  HookEvent,
+  HookHandler,
+  HookVersion,
+} from "@cawco/core/hooks";
+import {
+  DEFAULT_IMAGE_SETTINGS,
+  type ImageSettings,
+} from "@cawco/core/image-generation";
+import { REMOVED_MACHINE } from "@cawco/core/join";
+import {
+  type MachinePath,
+  MachinePathRefused,
+  machinePath,
+} from "@cawco/core/machine-path";
+import type { OrphanedComments, PlanStep } from "@cawco/core/plan";
+import { ownIdentity } from "@cawco/core/process-identity";
+import type { ProjectNote } from "@cawco/core/project-conversation";
 import type {
   AgentRow,
   BuildInfo,
@@ -8,98 +66,41 @@ import type {
   DelegateEventKind,
   DelegateEventPayload,
   DelegateSummary,
-  EffortLevel,
   Envelope,
-  FleetAgent,
-  FleetConfig,
-  FleetHarnessConfig,
-  FleetHook,
-  FleetItemStatus,
-  FleetMarketplace,
-  FleetMcpConfig,
-  FleetMcpServer,
-  FleetPlacement,
-  FleetPlugin,
-  FleetRefresh,
-  FleetScope,
-  FleetSettings,
-  FleetSkillMeta,
-  FleetSyncOutcome,
-  FleetSyncReport,
-  FleetVersioned,
-  FleetWatchNotice,
-  HarnessConfigKind,
-  HarnessKind,
-  HarnessReport,
-  HookEvent,
-  HookHandler,
-  HookVersion,
   InstanceStatus,
-  MayStart,
-  McpPlatform,
-  MemoryScope,
-  MemoryVersion,
-  NeutralUserMessage,
-  OfferedMode,
-  OnCap,
-  OpenCodeGoLimits,
-  OrphanedComments,
-  PermissionMode,
-  PlanStep,
-  ProjectNote,
-  Rule,
-  RuleState,
-  RuleStats,
   RunKind,
   SendPayload,
   SessionCommands,
-  SessionEffort,
   SessionEndIntent,
   SessionLimits,
   SessionOrigin,
   SessionTooling,
-  SettingsInEffect,
-  SkillFile,
   SpawnPayload,
-  StagesTemplate,
-  StartingSet,
   StoppedCommands,
-  TaskLinkSummary,
-  ToolPolicy,
-  ToolStatus,
+} from "@cawco/core/protocol";
+import { RESTART_LOST, stoppedWords } from "@cawco/core/protocol";
+import {
+  CLAUDE_CONVERSATION_GONE,
+  type LastErrorKind,
+} from "@cawco/core/relaunch";
+import type { Rule, RuleState, RuleStats } from "@cawco/core/rules";
+import { ruleSettings } from "@cawco/core/rules";
+import { runtimeTree, standalone } from "@cawco/core/runtime";
+import { writeStateFileSync } from "@cawco/core/state-file";
+import { nameStoredRowsFrom } from "@cawco/core/stored-json";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
+import { resolveRates } from "@cawco/core/usage/pricing";
+import type {
+  OpenCodeGoLimits,
   UsageBucket,
   UsageGroupBy,
   UsageHarness,
   UsageSummary,
   UsageSummaryRow,
   UsageTotals,
-} from "@cawco/core";
-import {
-  CLAUDE_CONVERSATION_GONE,
-  CONTINUATION_ORIGIN,
-  DEFAULT_IMAGE_SETTINGS,
-  type ImageSettings,
-  type LastErrorKind,
-  placedOnly,
-  REMOVED_MACHINE,
-  RESTART_LOST,
-  resolveRates,
-  ruleSettings,
-  scoped,
-  settingsInEffect,
-  stoppedWords,
-} from "@cawco/core";
-import { FILE_HASH_SCHEME, hashFiles } from "@cawco/core/file-hash";
-import {
-  type MachinePath,
-  MachinePathRefused,
-  machinePath,
-} from "@cawco/core/machine-path";
-import { ownIdentity } from "@cawco/core/process-identity";
-import { runtimeTree, standalone } from "@cawco/core/runtime";
-import { writeStateFileSync } from "@cawco/core/state-file";
-import { nameStoredRowsFrom } from "@cawco/core/stored-json";
-import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+} from "@cawco/core/usage/types";
+import type { StagesTemplate } from "@cawco/core/views";
 import {
   and,
   asc,
@@ -2188,7 +2189,7 @@ export interface DbShape {
   /** A scratch session's worktree as its machine made it; `dir` is where it now launches. */
   readonly recordScratchWorktree: (
     id: string,
-    worktree: import("@cawco/core").ScratchWorktree,
+    worktree: import("@cawco/core/protocol").ScratchWorktree,
     dir: MachinePath
   ) => void;
   readonly recordSend: (

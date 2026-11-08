@@ -11,7 +11,8 @@
  * as the CLI's other hub calls are. What is printed is the name, the key's
  * length and the connection's state; never the key.
  */
-import { CAWCO_ENV, CONNECTION_NAME, readEnv } from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { CONNECTION_NAME } from "@cawco/core/delegate-types";
 import { hubRequest } from "@cawco/core/hub-request";
 import { ConnectionViewSchema } from "@cawco/core/stored-shapes";
 import { ownerAsk } from "./owner";

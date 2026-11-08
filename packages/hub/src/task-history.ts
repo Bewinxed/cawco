@@ -23,14 +23,9 @@
  *   it; one the history never held still does.
  */
 
-import {
-  type StageKind,
-  TASK_MOVERS,
-  type TaskFileState,
-  type TaskHistoryKind,
-  type TaskMover,
-} from "@cawco/core";
+import type { TaskFileState, TaskHistoryKind } from "@cawco/core/task-history";
 import type { TaskHistoryEvent, TaskLife } from "@cawco/core/task-views";
+import { type StageKind, TASK_MOVERS, type TaskMover } from "@cawco/core/views";
 import type {
   FolderFileChange,
   FolderFileTimes,

@@ -22,13 +22,11 @@
  *   an `http.extraHeader` given through git's environment, never argv; the
  *   project then links it as that repository's published copy.
  */
-import {
-  CONTROL_PLACE_PUSH,
-  type PlacePush,
-  type ProjectSettingChange,
-} from "@cawco/core";
+
 import { readWithin } from "@cawco/core/bounded";
+import { CONTROL_PLACE_PUSH, type PlacePush } from "@cawco/core/harness";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
+import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";

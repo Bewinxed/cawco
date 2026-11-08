@@ -7,9 +7,10 @@
  * the preview's, so the pane joins the doc and sends here, never on the
  * preview origin.
  */
-import type { PreviewAddress } from "@cawco/core";
+
 import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROLS } from "@cawco/core/comments";
+import type { PreviewAddress } from "@cawco/core/frames";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";

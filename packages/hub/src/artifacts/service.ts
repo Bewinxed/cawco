@@ -15,54 +15,15 @@
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
+import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import {
-  type AgentRow,
-  ARTIFACT_NAME,
-  type ArtifactChoices,
-  type ArtifactDoes,
-  type ArtifactHit,
-  type ArtifactKind,
   type ArtifactNeedsRead,
   type ArtifactPending,
   type ArtifactPlace,
-  type ArtifactPromotion,
-  type ArtifactSummary,
-  type ArtifactThumbnail,
-  ASK_BANNED,
-  ASK_PATHLIKE,
-  artifactCommentsNotice,
-  artifactErrorsNotice,
-  artifactLink,
-  artifactSavesNotice,
   artifactStopHref,
-  artifactToolWords,
-  CAWCO_HUB_PORT,
-  type ChoiceEntry,
-  changeLink,
-  choiceEntryProblem,
-  DESK_CAPTURE_WIDTH,
-  DESK_CAPTURES_PER_PAGE,
-  decisionLink,
-  decisionReference,
-  fileHash,
-  type InstanceRow,
-  localDashboardPort,
-  machineLabel,
-  noteText,
-  PICTURE_VIEW,
-  type PlanStep,
-  type PreviewAddress,
-  type PreviewDown,
-  type PreviewSource,
-  parseReference,
-  pinLink,
-  type SendAttachment,
-  type SettledBy,
-  type ShownFailure,
-  sessionLink,
   setupLanding,
-  unsentChoices,
-} from "@cawco/core";
+} from "@cawco/core/artifact-needs";
+import { fileHash, type SendAttachment } from "@cawco/core/attachments";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
@@ -72,6 +33,14 @@ import {
   excalidrawFile,
 } from "@cawco/core/canvas";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
+import {
+  type ArtifactChoices,
+  type ChoiceEntry,
+  choiceEntryProblem,
+  noteText,
+  type SettledBy,
+  unsentChoices,
+} from "@cawco/core/choices";
 import {
   ACTIVITY_LIMIT,
   type ArtifactChanges,
@@ -133,7 +102,14 @@ import {
   matchOf,
   parse,
 } from "@cawco/core/find-match";
+import { PICTURE_VIEW, type PreviewAddress } from "@cawco/core/frames";
+import {
+  artifactCommentsNotice,
+  artifactErrorsNotice,
+  artifactSavesNotice,
+} from "@cawco/core/injected";
 import type { InkGroup } from "@cawco/core/ink";
+import { machineLabel } from "@cawco/core/machine-names";
 import {
   faultsAt,
   faultsWith,
@@ -142,7 +118,36 @@ import {
   type PageFaultsKept,
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
+import type { PlanStep } from "@cawco/core/plan";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
+import {
+  type AgentRow,
+  ARTIFACT_NAME,
+  type ArtifactDoes,
+  type ArtifactHit,
+  type ArtifactPromotion,
+  type ArtifactSummary,
+  type ArtifactThumbnail,
+  ASK_BANNED,
+  ASK_PATHLIKE,
+  CAWCO_HUB_PORT,
+  DESK_CAPTURE_WIDTH,
+  DESK_CAPTURES_PER_PAGE,
+  type InstanceRow,
+  localDashboardPort,
+  type PreviewDown,
+  type PreviewSource,
+  type ShownFailure,
+} from "@cawco/core/protocol";
+import {
+  artifactLink,
+  changeLink,
+  decisionLink,
+  decisionReference,
+  parseReference,
+  pinLink,
+  sessionLink,
+} from "@cawco/core/references";
 import type {
   SessionQuestion,
   SessionQuestionsRead,
@@ -179,6 +184,7 @@ import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import { unhandled } from "@cawco/core/unhandled";
+import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { decidesWords } from "@cawco/core/words/decides";
 import { applyPatch, type Operation } from "rfc6902";

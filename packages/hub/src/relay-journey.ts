@@ -33,8 +33,8 @@
 import { createHash } from "node:crypto";
 import { Resolver } from "node:dns/promises";
 import { isIP } from "node:net";
-import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { pageOrigin } from "@cawco/core/browser-gate";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
 import {
   type NameFinding,

@@ -21,7 +21,7 @@ import {
   type MachineFleetConfig,
   type PlacedSection,
   worstFleetState,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
 import {
   type FleetItems,
   fleetConfigOf,

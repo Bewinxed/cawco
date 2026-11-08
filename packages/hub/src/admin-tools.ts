@@ -7,27 +7,25 @@
  * validation, fan-out and persistence the dashboard uses. The tools are
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
+import { type Account, accountNames } from "@cawco/core/accounts";
+import { readWithin } from "@cawco/core/bounded";
+import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
+import type { ConnectionAuth } from "@cawco/core/connections";
 import {
-  type Account,
-  accountNames,
-  type ConnectionAuth,
-  EFFORT_LEVELS,
   type FleetAgent,
-  type FleetHook,
   type FleetMemory,
   type FleetMemoryDoc,
   type FleetPlugin,
   type FleetSkillMeta,
-  HARNESSES,
   type MarketplaceLink,
   MCP_PLATFORMS,
   MEMORY_ROLES,
   type MemoryScope,
-  type RuleRow,
   scoped,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
-import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
+} from "@cawco/core/fleet";
+import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
+import type { FleetHook } from "@cawco/core/hooks";
+import type { RuleRow } from "@cawco/core/rules";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";

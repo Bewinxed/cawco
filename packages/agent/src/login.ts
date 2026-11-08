@@ -4,10 +4,8 @@ import {
   type AccountIdentity,
   type AccountKind,
   type AccountSigninResult,
-  accountsWords,
-  configurePage,
   sameIdentity,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { accountConfigDir, accountIds, accountsRoot } from "@cawco/core/paths";
@@ -27,6 +25,8 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { accountsWords } from "@cawco/core/words/accounts";
+import { configurePage } from "@cawco/core/words/configure";
 import type { Subprocess } from "bun";
 import type { z } from "zod";
 import {
