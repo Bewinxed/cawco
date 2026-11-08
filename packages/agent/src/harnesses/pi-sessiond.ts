@@ -18,8 +18,8 @@ import {
   MESSAGES_READ,
 } from "@cawco/core/harness";
 import { workspaceSpillDir } from "@cawco/core/paths/workspace";
+import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SpawnPayload } from "@cawco/core/protocol";
-import { mcpGatewayPort } from "@cawco/core/protocol";
 import { standalone } from "@cawco/core/runtime";
 import { z } from "zod";
 import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
