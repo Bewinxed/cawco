@@ -47,7 +47,11 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { contextWords } from "@cawco/core/words/context";
 import type { Started } from "./call-cuts";
-import type { WorkBudget, WorkItemSubmission } from "./db/schema";
+import type {
+  SendHold,
+  WorkBudget,
+  WorkItemSubmission,
+} from "./db/stored-types";
 import type {
   DelegateList,
   DelegateListQuery,
@@ -663,57 +667,6 @@ function resolve(peers: Peer[], target: string): Peer {
   }
   throw ambiguous(target, candidates);
 }
-
-/**
- * Why the hub keeps a send queued instead of handing it to its session now
- * (server.ts `deliverSend`): its machine is installing an update, so the
- * session's start waits for it (`update`); its machine runs a build older
- * than its hub's, which cannot start sessions for it, so the session's start
- * waits until that machine installs the hub's build (`build`); its machine's
- * agent is restarting
- * (`agent`); the hub has just started and the machine has not reconnected
- * (`hub`); sends before it to the same session are still queued
- * (`behind`); the session has no process and this sender may not wake it
- * (`resting`: a stopped session is woken only by a person or its parent); or
- * its account is at its limit, where a turn would only be refused, and it
- * waits for the reset, a move, or its continuation from a summary (`limit`);
- * or Claude Code refused its account's credential and no other account can
- * take it, so it waits for a sign-in or a free account (`signin`); or it
- * moved accounts at its limit and files its open items and is compacted
- * there first, so it waits for that to end, or for a stop of its turn
- * (`compacting`); or its context reached its compaction policy's threshold
- * and it takes one turn of its own to file its open items, so it waits for
- * that turn to end, or for a stop of it (`filing`); or the
- * owner paused its machine until a time (`paused`, machine-pause.ts); or its
- * work item is finishing (`finishing`: its landing gate runs, or the turn
- * that called `finish_item` is still ending, work-items.ts `finishingFor`),
- * so the send goes as its next turn and reopens the item if it landed; or an
- * interrupt holds its work item and only its parent, its conversation or the person
- * wakes it (`held`); or its workspace retired once its work was over and the
- * hub is cutting its clone again at the same path (`recut`, work-items.ts
- * `recut`); or its start waits its turn among the hub's own launches on its
- * machine, which go one at a time (`starting`, server.ts `paceSpawn`); or
- * its work item is blocked, its delegate type, machine or
- * account missing, and it goes once that is back (`blocked`, work-items.ts
- * `blockIfMissing`).
- */
-export type SendHold =
-  | "agent"
-  | "behind"
-  | "blocked"
-  | "build"
-  | "compacting"
-  | "filing"
-  | "finishing"
-  | "held"
-  | "hub"
-  | "limit"
-  | "paused"
-  | "recut"
-  | "resting"
-  | "signin"
-  | "starting"
-  | "update";
 
 /** What the hub did with a send, as `handoff` tells its sender. */
 export interface SendDelivery {
