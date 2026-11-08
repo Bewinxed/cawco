@@ -30,6 +30,7 @@
  * copied into its carry as they are, on this host ({@link copyStrays}),
  * beside the README.
  */
+
 import { constants } from "node:fs";
 import {
   copyFile,
@@ -42,6 +43,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { holdingWords } from "@cawco/core/harness";
 import { workspaceCarriesDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -90,12 +92,12 @@ export const copyStrays = async (
   const copy = async (entry: string): Promise<void> => {
     const source = join(from, entry);
     const target = join(folder, entry);
-    const found = await unlessGone(lstat(source));
+    const found = await lstat(source).catch(unlessGone(undefined));
     if (!found) {
       return;
     }
     if (found.isDirectory()) {
-      const names = await unlessGone(readdir(source));
+      const names = await readdir(source).catch(unlessGone(undefined));
       if (!names) {
         return;
       }
@@ -105,9 +107,11 @@ export const copyStrays = async (
       }
     } else if (found.isFile()) {
       await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-      await unlessGone(copyFile(source, target, constants.COPYFILE_EXCL));
+      await copyFile(source, target, constants.COPYFILE_EXCL).catch(
+        unlessGone(undefined)
+      );
     } else if (found.isSymbolicLink()) {
-      const to = await unlessGone(readlink(source));
+      const to = await readlink(source).catch(unlessGone(undefined));
       if (to !== undefined) {
         left.push(`${entry}: a link to ${to}`);
       }
@@ -125,18 +129,6 @@ export const copyStrays = async (
   }
   return left;
 };
-
-/**
- * What `read` answers, or undefined when the path it reads is gone (ENOENT):
- * a path listed a moment ago that no longer exists. Any other error throws.
- */
-const unlessGone = <T>(read: Promise<T>): Promise<T | undefined> =>
-  read.catch((error: NodeJS.ErrnoException): undefined => {
-    if (error.code === "ENOENT") {
-      return;
-    }
-    throw error;
-  });
 
 /** The rev-list arguments naming the commits a checkout alone has. */
 const LOST_COMMITS: Record<CarryCheckout, string> = {
