@@ -784,7 +784,7 @@ export interface HandoffDeps {
    */
   readonly formerIds: () => Record<string, string>;
   /**
-   * A send with inputs (core handed-input.ts) to session `target`, through
+   * A send with inputs (hub handed-input.ts) to session `target`, through
    * the hub's one step that writes them and sends (work-items.ts
    * `handOff`): `compose` makes the send once the hub knows where they
    * landed. Refused, nothing sent, when an input cannot go or be written.
@@ -936,7 +936,7 @@ export interface HandoffActions {
       fork?: boolean;
       /** Its session starts clean, with no instruction context (core `SpawnPayload.clean`). */
       clean?: boolean;
-      /** What it is handed (core handed-input.ts), written into its `$TMPDIR/inputs/` before its brief. */
+      /** What it is handed (hub handed-input.ts), written into its `$TMPDIR/inputs/` before its brief. */
       inputs?: unknown[];
       /** Where its commits go once it passes the landing gate; `main` by default. */
       lands?: LandsMode;
@@ -994,7 +994,7 @@ export interface HandoffActions {
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
   /**
-   * Sends `message` to another session; `inputs` (core handed-input.ts)
+   * Sends `message` to another session; `inputs` (hub handed-input.ts)
    * are written first into the target's inputs folder (its work item's
    * `$TMPDIR/inputs/`, or a session with no work item's own), where
    * handoff's relations reach: its parent, a session it delegated or
