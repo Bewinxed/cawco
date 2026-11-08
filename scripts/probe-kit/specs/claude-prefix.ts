@@ -70,7 +70,7 @@ import { dirname, join } from "node:path";
 import type { Subprocess } from "bun";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import { isAlive, listedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
@@ -224,7 +224,7 @@ const run = async (kit: Kit) => {
 
   const boundaryModule = await import("../../../packages/agent/src/boundary");
   const { claudeBoundaryOptions, executorUnsandboxed } = boundaryModule;
-  const paths = await import("../../../packages/core/src/paths");
+  const paths = await import("../../../packages/core/src/paths/workspace");
   const { workspacePolicy } =
     await import("../../../packages/core/src/workspace-policy");
   const { writeFleetMcpSet } =

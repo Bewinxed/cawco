@@ -31,7 +31,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { generateImage } from "../../../packages/agent/src/image-generation";
-import { accountCredentialPath } from "../../../packages/core/src/paths";
+import { accountCredentialPath } from "../../../packages/core/src/paths/claude";
 import { DAY_MS } from "../../../packages/core/src/time";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import type { Kit, Spec } from "../kit";

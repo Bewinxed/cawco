@@ -68,7 +68,7 @@ export const toolEnv = (): Record<string, string | undefined> => ({
 
 /**
  * {@link toolEnv} for a Claude Code that acts on the user layer, `~/.claude`
- * (core paths.ts `claudeHome`): the fleet's `claude plugin …` and its MCP
+ * (core paths/claude.ts `claudeHome`): the fleet's `claude plugin …` and its MCP
  * status read. Without either config-dir variable Claude Code reads, so it
  * runs in `$HOME/.claude`, the dir this daemon's own paths name. A daemon
  * started from inside a session inherits that session's `CLAUDE_CONFIG_DIR`;

@@ -19,7 +19,7 @@
  * to half the machine's cores of checks at once) all started together.
  *
  * HOW. Each slot is a file `slot-<i>` in {@link HEAVY_SLOTS_DIR}, under the
- * workspaces' shared cache (paths.ts `workspaceCacheDir`), the one tree
+ * workspaces' shared cache (paths/workspace.ts `workspaceCacheDir`), the one tree
  * every workspace's boundary and the host's shells all write (the boundary's
  * caches are writable, workspace-policy.ts `workspaceCaches`). A run holds a
  * slot by `flock(2)` on its file from a close-on-exec descriptor (flock.ts):
@@ -63,7 +63,7 @@ import { cpus, getPriority, setPriority, totalmem } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { openLockFile, tryLock, unlock } from "./flock";
-import { workspaceCacheDir } from "./paths";
+import { workspaceCacheDir } from "./paths/workspace";
 import { parentPid } from "./process-identity";
 import { parseRecord } from "./state-file";
 import { HOUR_MS } from "./time";

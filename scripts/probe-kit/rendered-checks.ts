@@ -74,7 +74,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { userSkillLayers } from "../../packages/core/src/paths";
+import { userSkillLayers } from "../../packages/core/src/paths/fleet";
 import { capture, type Raster } from "./ink";
 import { scan } from "./journeys/scan";
 import { devtoolsPort, installRuns, type Kit, ROOT, Run, settle } from "./kit";
@@ -5668,7 +5668,7 @@ async function impeccable(page: Page): Promise<{
   if (!bin) {
     // The place, not the page: this machine holds no impeccable where the
     // fleet places skills. A workspace's boundary reads every one of those
-    // layers (core paths.ts `fleetSyncedPaths`), so inside one the answer is
+    // layers (core paths/fleet.ts `fleetSyncedPaths`), so inside one the answer is
     // the host's. Said as not run here, as a spec that runs on the host is
     // (kit.ts `Spec.host`).
     const why = `$IMPECCABLE is unset and none of the fleet's skill layers holds ${IMPECCABLE_LAUNCHER}: ${userSkillLayers().join(", ")}`;

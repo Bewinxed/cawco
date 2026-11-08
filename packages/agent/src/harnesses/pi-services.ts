@@ -25,7 +25,11 @@ import {
   type SupportedCommands,
 } from "@cawco/core/harness";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
-import { piAgentDir, piMemoryFile, piSkillsDir } from "@cawco/core/paths";
+import {
+  piAgentDir,
+  piMemoryFile,
+  piSkillsDir,
+} from "@cawco/core/paths/harnesses";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";

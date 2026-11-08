@@ -1,6 +1,6 @@
 /**
  * Every file of a fleet skill a harness loads is readable, and read only,
- * from inside every workspace boundary (core paths.ts `fleetSyncedPaths`, and
+ * from inside every workspace boundary (core paths/fleet.ts `fleetSyncedPaths`, and
  * in a clone `placedSyncedPaths`).
  *
  * A fleet skill is a relative link into the tree store beside its dir

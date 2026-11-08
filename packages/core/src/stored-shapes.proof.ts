@@ -184,7 +184,7 @@ import type {
   MoveStep as MoveStepType,
   NamedMoveRequest as NamedMoveRequestType,
 } from "./move";
-import type { PairingOffAnswer as PairingOffAnswerType } from "./paths";
+import type { PairingOffAnswer as PairingOffAnswerType } from "./paths/hub";
 import type {
   OrphanedComments as OrphanedCommentsType,
   PlanComment as PlanCommentType,

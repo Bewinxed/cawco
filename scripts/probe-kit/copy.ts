@@ -49,7 +49,7 @@ interface LayerRecord {
   mounts?: Mount[];
 }
 
-/** The workspace's state dir in the fleet's HOME (core paths.ts `workspaceStateDir`). */
+/** The workspace's state dir in the fleet's HOME (core paths/workspace.ts `workspaceStateDir`). */
 export const stateDirOf = (fleet: CopyFleet, id: string): string =>
   join(fleet.home, ".cawco", "workspaces", id);
 
