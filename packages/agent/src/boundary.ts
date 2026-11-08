@@ -184,6 +184,7 @@ import {
 } from "@cawco/core/state-file";
 import { PolicySchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
+import { until } from "@cawco/core/until";
 import type { Policy } from "@cawco/core/workspace-judge";
 import {
   systemProgram,
@@ -4572,23 +4573,25 @@ const COMMAND_DRAIN_LOOK_MS = 100;
  * they all ended.
  */
 const commandsEnded = async (id: string, gen: string): Promise<number[]> => {
-  const deadline = Date.now() + COMMAND_DRAIN_MS;
-  for (;;) {
-    const seen = await snapshot();
-    const past = await commandsIn(seen, id, gen);
-    const ours = executors(
-      seen.filter((one) => one.ppid === process.pid),
-      id
-    );
-    if (
-      past.length === 0 ||
-      ours.some((pid) => !past.includes(pid)) ||
-      Date.now() >= deadline
-    ) {
-      return past;
+  const { past } = await until(
+    async () => {
+      const seen = await snapshot();
+      return {
+        past: await commandsIn(seen, id, gen),
+        ours: executors(
+          seen.filter((one) => one.ppid === process.pid),
+          id
+        ),
+      };
+    },
+    {
+      deadline: Date.now() + COMMAND_DRAIN_MS,
+      done: ({ past: ran, ours }) =>
+        ran.length === 0 || ours.some((pid) => !ran.includes(pid)),
+      every: COMMAND_DRAIN_LOOK_MS,
     }
-    await Bun.sleep(COMMAND_DRAIN_LOOK_MS);
-  }
+  );
+  return past;
 };
 
 /**
@@ -5143,21 +5146,25 @@ const endWork = async (
     signalPid(listedPid(one.pid), "SIGTERM");
   }
   let ending = first;
-  const graceEnds = Date.now() + WORK_GRACE_MS;
-  while (ending.length > 0 && Date.now() < graceEnds) {
-    await Bun.sleep(50);
-    ending = await stillRunning(ending);
-  }
+  await until(
+    async () => {
+      ending = await stillRunning(ending);
+      return ending.length === 0;
+    },
+    { deadline: Date.now() + WORK_GRACE_MS, every: 50 }
+  );
   const last = await read();
   for (const one of last) {
     signalPid(listedPid(one.pid), "SIGKILL");
   }
   let left = last;
-  const killEnds = Date.now() + KILL_WAIT_MS;
-  while (left.length > 0 && Date.now() < killEnds) {
-    await Bun.sleep(50);
-    left = await stillRunning(left);
-  }
+  await until(
+    async () => {
+      left = await stillRunning(left);
+      return left.length === 0;
+    },
+    { deadline: Date.now() + KILL_WAIT_MS, every: 50 }
+  );
   return {
     ended: [...new Set([...first, ...last].map((one) => one.pid))],
     left: left.map((one) => one.pid),
@@ -5959,18 +5966,11 @@ const forgetStubbed = (id: string): void => {
 };
 
 /** Waits for each sandbox init in `inners` to be gone, up to {@link STOP_TIMEOUT_MS}; answers whether all are. */
-const sandboxesGone = async (inners: readonly number[]): Promise<boolean> => {
-  const deadline = Date.now() + STOP_TIMEOUT_MS;
-  for (;;) {
-    if (!inners.some((pid) => existsSync(`/proc/${pid}`))) {
-      return true;
-    }
-    if (Date.now() >= deadline) {
-      return false;
-    }
-    await Bun.sleep(20);
-  }
-};
+const sandboxesGone = async (inners: readonly number[]): Promise<boolean> =>
+  await until(() => !inners.some((pid) => existsSync(`/proc/${pid}`)), {
+    deadline: Date.now() + STOP_TIMEOUT_MS,
+    every: 20,
+  });
 
 /**
  * Replaces each {@link stubbed} workspace's boundary when nothing runs in it:
@@ -6916,10 +6916,10 @@ const repairJudge = async (
     const stuck = await keepers.holding(procId);
     if (stuck) {
       await stuck.client.signal(procId, "SIGKILL");
-      const deadline = Date.now() + STOP_TIMEOUT_MS;
-      while ((await holding(procId)) && Date.now() < deadline) {
-        await Bun.sleep(20);
-      }
+      await until(async () => !(await holding(procId)), {
+        deadline: Date.now() + STOP_TIMEOUT_MS,
+        every: 20,
+      });
     }
   }
   let started = "its judge was started again";
@@ -7954,18 +7954,11 @@ const endMembers = async (
 };
 
 /** Waits up to `ms` for sessiond to hold `procId` no more: whether it is gone. */
-const goneWithin = async (procId: string, ms: number): Promise<boolean> => {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    if (!(await holding(procId))) {
-      return true;
-    }
-    if (Date.now() >= deadline) {
-      return false;
-    }
-    await Bun.sleep(20);
-  }
-};
+const goneWithin = async (procId: string, ms: number): Promise<boolean> =>
+  await until(async () => !(await holding(procId)), {
+    deadline: Date.now() + ms,
+    every: 20,
+  });
 
 /**
  * How long a Linux boundary's srt host has, once told to stop, to end its
@@ -8372,14 +8365,12 @@ const endUsers = async (
   for (const pid of found.execs) {
     signalPid(listedPid(pid), "SIGKILL");
   }
-  const deadline = Date.now() + STOP_TIMEOUT_MS;
-  for (;;) {
-    const left = await users();
-    if (left.words.length === 0 || Date.now() >= deadline) {
-      return { ended: found.words, left: left.words };
-    }
-    await Bun.sleep(50);
-  }
+  const left = await until(users, {
+    deadline: Date.now() + STOP_TIMEOUT_MS,
+    done: ({ words }) => words.length === 0,
+    every: 50,
+  });
+  return { ended: found.words, left: left.words };
 };
 
 /** {@link stopWorkspaceBoundary}'s stop itself, inside its hold. */
