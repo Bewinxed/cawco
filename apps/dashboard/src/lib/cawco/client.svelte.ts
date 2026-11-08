@@ -68,20 +68,6 @@ import type {
 import type {
   HarnessCapabilities,
   MachineHarnessReport,
-  McpServerStatus,
-  ModeAsk,
-  NeutralSessionInfo,
-  NeutralStatus,
-  PermissionResult,
-  PermissionUpdate,
-  SendRecord,
-  StoredRun,
-  SupportedCommands,
-  WorkspaceHolding,
-} from "@cawco/core/harness";
-import {
-  CONTROL_STORED_RUN,
-  CONTROL_SUPPORTED_COMMANDS,
 } from "@cawco/core/harness";
 import {
   type EffortLevel,
@@ -132,6 +118,21 @@ import type {
 import { DELEGATE_SUMMARIES_LIMIT } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import { relaunchOf } from "@cawco/core/relaunch";
+import {
+  CONTROL_STORED_RUN,
+  CONTROL_SUPPORTED_COMMANDS,
+} from "@cawco/core/session/controls";
+import type {
+  McpServerStatus,
+  ModeAsk,
+  NeutralSessionInfo,
+  NeutralStatus,
+  PermissionResult,
+  PermissionUpdate,
+  SendRecord,
+  StoredRun,
+  SupportedCommands,
+} from "@cawco/core/session-messages";
 import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import type {
   CommandKind,
@@ -181,6 +182,7 @@ import { projectEndWords } from "@cawco/core/words/project-ends";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { transcriptWords } from "@cawco/core/words/transcript";
 import { workWords } from "@cawco/core/words/work";
+import type { WorkspaceHolding } from "@cawco/core/workspace/controls";
 import { flushSync, untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import {

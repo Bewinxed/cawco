@@ -33,6 +33,14 @@ import {
   resolve,
 } from "node:path";
 import {
+  sessionScratchDir,
+  workspaceClaudeTmpDir,
+  workspaceScratchDir,
+  workspaceTmpDir,
+} from "@cawco/core/paths/workspace";
+import { writeStateFile } from "@cawco/core/state-file";
+import { workWords } from "@cawco/core/words/work";
+import {
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
   type InputFile,
@@ -43,15 +51,7 @@ import {
   type InputsRead,
   type WorkspaceRef,
   type WorkspaceSaved,
-} from "@cawco/core/harness";
-import {
-  sessionScratchDir,
-  workspaceClaudeTmpDir,
-  workspaceScratchDir,
-  workspaceTmpDir,
-} from "@cawco/core/paths/workspace";
-import { writeStateFile } from "@cawco/core/state-file";
-import { workWords } from "@cawco/core/words/work";
+} from "@cawco/core/workspace/controls";
 import {
   inputDenial,
   projectFolderOf,

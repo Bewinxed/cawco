@@ -12,9 +12,9 @@
  * so and offers Send again.
  */
 import type { Account } from "@cawco/core/accounts";
-import type { ModeAsk, SendRefusal } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
+import type { ModeAsk, SendRefusal } from "@cawco/core/session-messages";
 import { nameOf, signinState } from "../accounts/model.svelte";
 import { signedInHere } from "../accounts/switch.svelte";
 import { type BoardRow, cawco } from "../client.svelte";

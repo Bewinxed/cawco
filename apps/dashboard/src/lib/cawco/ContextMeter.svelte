@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { NeutralStatus } from "@cawco/core/harness";
+  import type { NeutralStatus } from "@cawco/core/session-messages";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
     IconSparkles as IconCompact,
