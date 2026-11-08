@@ -43,7 +43,7 @@
  *   nothing; its writer is told so on create and revision (`linksOf`).
  */
 import type { ChoiceEntry } from "@cawco/core/choices";
-import { SEND_WRITES_MAX } from "@cawco/core/comments";
+import { SEND_WRITES_MAX } from "@cawco/core/comments/model";
 import {
   type AfterLinks,
   cardRef,
