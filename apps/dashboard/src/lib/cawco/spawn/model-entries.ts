@@ -1,4 +1,4 @@
-import type { EffortLevel, ModelInfo } from "@cawco/core/harness";
+import type { EffortLevel, ModelInfo } from "@cawco/core/harness/kinds";
 import { modelNameIn, modelRun, providerOf } from "@cawco/core/model-names";
 import type { ModelUse } from "./modelUse.svelte";
 
