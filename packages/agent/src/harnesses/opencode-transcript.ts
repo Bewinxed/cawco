@@ -10,6 +10,8 @@
  * `compaction`, `idle` (a turn's end, with its outcome) and the switches of
  * agent, model and location. There are no parts: a message is whole.
  */
+
+import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
 import type {
   CompactionFailure,
   NeutralAssistantBlock,
@@ -19,13 +21,8 @@ import type {
   UserAnswers,
   UserQuestion,
   UserQuestionResult,
-} from "@cawco/core";
-import {
-  ASK_USER_QUESTION,
-  CODE_MODE_TOOL,
-  MCP_NOT_CONNECTED,
-  REPEATED_FAILURE,
-} from "@cawco/core";
+} from "@cawco/core/harness";
+import { MCP_NOT_CONNECTED, REPEATED_FAILURE } from "@cawco/core/harness";
 import type {
   SessionInboxInfo,
   SessionMessageAssistant,

@@ -1,18 +1,14 @@
 import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
-import {
-  type AcceptResult,
-  type Envelope,
-  type HarnessKind,
-  type InstanceRow,
-  type Kind,
-  parseConnectionTool,
-  type SendPayload,
-} from "@cawco/core";
 import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
+import type { Kind } from "@cawco/core/decides";
+import { parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import type { AcceptResult } from "@cawco/core/frames";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";

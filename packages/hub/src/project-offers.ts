@@ -19,17 +19,17 @@
  * proposed tasks in the project's first to-do stage.
  */
 
-import {
-  type AcceptResult,
-  type CommandResult,
-  type InstanceRow,
-  machineCalled,
-  type PlanStep,
-  type ProjectNote,
-  type ProjectOfferReason,
-  type ProjectOfferSummary,
-} from "@cawco/core";
+import type {
+  AcceptResult,
+  ProjectOfferReason,
+  ProjectOfferSummary,
+} from "@cawco/core/frames";
+import type { CommandResult } from "@cawco/core/harness";
+import { machineCalled } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { PlanStep } from "@cawco/core/plan";
+import type { ProjectNote } from "@cawco/core/project-conversation";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
 import { Elysia } from "elysia";

@@ -17,7 +17,7 @@ import {
   ARTIFACT_GONE,
   ARTIFACT_SESSION_REFUSED,
   type ArtifactSessionFrame,
-} from "@cawco/core";
+} from "@cawco/core/frames";
 import { type HubSocket, sendFrame } from "./wire-socket";
 
 /** A tab's socket, which the hub closes once its artifact is gone. */
