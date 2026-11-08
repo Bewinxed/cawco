@@ -196,7 +196,6 @@ import {
   instances,
   limitEvents,
   lineAnchors,
-  type MachineLineKind,
   marketplaces,
   mcpServers,
   mcpToolListings,
@@ -219,10 +218,8 @@ import {
   removedMachines,
   routines,
   rules,
-  type SessionLineKind,
   sentMessages,
   sessionLimits,
-  sessionLines,
   sessionSubagents,
   sessionTaints,
   skills,
@@ -239,6 +236,7 @@ import {
 import { sealAtRest } from "./seal-at-rest";
 import type { Revocations } from "./session-identity";
 import { type SessionIdentityDb, sessionIdentityDb } from "./session-identity";
+import { type SessionLinesDb, sessionLinesDb } from "./session-lines";
 import { type SessionPlansDb, sessionPlansDb } from "./session-plans";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
@@ -354,30 +352,7 @@ export interface SourceNote {
   } | null;
   lastRefresh?: FleetRefresh | null;
 }
-
-interface LimitNote {
-  at: number;
-  content: string;
-  id: string;
-}
-/** A machine's line as its row keeps it, with which kind it is. */
-export type MachineLine = LimitNote & { kind: MachineLineKind };
 export type { MachineLineKind } from "./schema";
-
-/** How many of a session's machine lines of each kind are kept. */
-const LIMIT_NOTES_KEPT = 20;
-/** A fleet-watch line kept for a session ({@link DbShape.noteWatchLine}). */
-type WatchLine = LimitNote;
-/** How many of a session's fleet-watch lines are kept. */
-const WATCH_LINES_KEPT = 20;
-/** How many of a session's lines about its context are kept ({@link DbShape.noteContextLine}). */
-const CONTEXT_LINES_KEPT = 20;
-/** A session's move line ({@link DbShape.noteMovedHere}). */
-interface MovedHere {
-  at: number;
-  moved: string;
-  stayed?: string;
-}
 /**
  * A board row: a {@link PublicInstanceRow}, whether its work item is live
  * (null: it runs none), which the board reads to list it and never sends,
@@ -742,8 +717,6 @@ interface HubStore {
   readonly confirmInstanceEnd: (id: string, reason?: string) => void;
   /** Connections and the projects that grant them (connections.ts). */
   readonly connections: ConnectionsDb;
-  /** The session's lines about its context ({@link DbShape.noteContextLine}), oldest first. */
-  readonly contextLinesOf: (id: string) => LimitNote[];
   /**
    * A project, with its folder on the hub as its first place, and the
    * checkout it was made from (`checkout`), its primary, when it has one.
@@ -1132,8 +1105,6 @@ interface HubStore {
   readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
   /** The ids of a machine's workspaces with a clone and a live work item (starting or running). */
   readonly liveWorkspacesOn: (machineId: string) => string[];
-  /** The lines its machine said, kept on the session's row, each kind oldest first. */
-  readonly machineLinesOf: (id: string) => MachineLine[];
   /**
    * `raw` as a path on `machineId` ({@link machinePath}), against the home
    * that machine's daemon reported. Every path a person or a session names
@@ -1210,8 +1181,6 @@ interface HubStore {
     name: string,
     rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
   ) => number | null;
-  /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
-  readonly movedHereOf: (id: string) => MovedHere | null;
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;
   /** Every machine by its id and hostname, in {@link listAgents}' order: what a machine's name is read from. */
@@ -1234,13 +1203,6 @@ interface HubStore {
    * answer ({@link personUnanswered}). Sends it has not read stay owed.
    */
   readonly noteAnswered: (id: string, at: Date) => void;
-  /**
-   * Keeps a line about the session's context on its row (core
-   * `CONTEXT_LINE`, its `content` the line as JSON), the last {@link
-   * CONTEXT_LINES_KEPT}: one already kept under its id is what it says now,
-   * where it stood. False when the hub keeps no row for the session.
-   */
-  readonly noteContextLine: (id: string, line: LimitNote) => boolean;
   /**
    * The name the session's first user message gives it, for a row nobody named.
    * Write-once and never over a given title: a spawn's headline, or a custom
@@ -1276,14 +1238,6 @@ interface HubStore {
     tooling?: SessionTooling,
     commands?: SessionCommands
   ) => void;
-  /** Keeps a line its machine said on the session's row, the last {@link LIMIT_NOTES_KEPT} of its kind; false when one under its id is already kept. */
-  readonly noteMachineLine: (
-    id: string,
-    kind: MachineLineKind,
-    note: LimitNote
-  ) => boolean;
-  /** Records that a session started where its project was moved to for it: the move's ready line. */
-  readonly noteMovedHere: (id: string, line: MovedHere) => void;
   /**
    * What a fetch of a skill or plugin came to, and what its source holds now
    * (FleetVersioned). `lastRefresh` null clears it; `checked` with an `error`
@@ -1307,8 +1261,6 @@ interface HubStore {
    * One whose last end is still unseen stays news, as it was.
    */
   readonly noteTurnEnded: (id: string, at: Date, silent: boolean) => void;
-  /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
-  readonly noteWatchLine: (id: string, line: WatchLine) => void;
   /** Files an offer; false when the session was already offered one. */
   readonly offerProject: (offer: {
     instanceId: string;
@@ -2234,8 +2186,6 @@ interface HubStore {
   } | null;
   /** Stored waits, including any that elapsed while the hub was stopped. */
   readonly waitingWorkItems: () => WorkItemRow[];
-  /** The fleet-watch lines kept on the session's row, oldest first. */
-  readonly watchLinesOf: (id: string) => WatchLine[];
   readonly workItem: (id: string) => WorkItemRow | undefined;
   /** The newest work item whose landing opened or found the pull request at `url`. */
   readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
@@ -2255,7 +2205,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = UsageDb &
+export type DbShape = SessionLinesDb &
+  UsageDb &
   DelegateEventsDb &
   MovesDb &
   ContinuationsDb &
@@ -2950,77 +2901,6 @@ const make = async (path: string): Promise<DbShape> => {
   // exactly when its files do, which is also what fleetConfig's files kept
   // by hash rest on (`keptFiles`).
   rehashStoredFilesOnce();
-
-  /** A session's lines of one kind, in the order written. */
-  const linesOf = (instanceId: string, kind: SessionLineKind) =>
-    db
-      .select()
-      .from(sessionLines)
-      .where(
-        and(
-          eq(sessionLines.instanceId, instanceId),
-          eq(sessionLines.kind, kind)
-        )
-      )
-      .orderBy(sql`rowid`)
-      .all()
-      .map((row) => ({ ...row, at: row.at.getTime() }));
-
-  /**
-   * Keeps a line of a session's, and the last `kept` of its kind, in one
-   * transaction; false when one under its id is kept already, or the hub
-   * keeps no row for the session.
-   */
-  const keepLine = (
-    instanceId: string,
-    kind: SessionLineKind,
-    line: LimitNote,
-    kept: number,
-    /** One already kept under its id says this now, where it stood: true for a line said again as it goes. */
-    again = false
-  ): boolean =>
-    db.transaction((tx) => {
-      if (
-        !tx
-          .select({ id: instances.id })
-          .from(instances)
-          .where(eq(instances.id, instanceId))
-          .get()
-      ) {
-        return false;
-      }
-      const added = tx
-        .insert(sessionLines)
-        .values({
-          instanceId,
-          kind,
-          id: line.id,
-          at: new Date(line.at),
-          content: line.content,
-        })
-        .onConflictDoNothing()
-        .returning({ id: sessionLines.id })
-        .all();
-      if (added.length === 0) {
-        if (again) {
-          tx.update(sessionLines)
-            .set({ content: line.content })
-            .where(
-              and(
-                eq(sessionLines.instanceId, instanceId),
-                eq(sessionLines.kind, kind),
-                eq(sessionLines.id, line.id)
-              )
-            )
-            .run();
-        }
-        return again;
-      }
-      tx.run(
-        sql`DELETE FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} AND rowid NOT IN (SELECT rowid FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} ORDER BY rowid DESC LIMIT ${kept})`
-      );
-      return true;
-    });
 
   /**
    * The conversation a session's new key replaces (a `/clear`, a fresh
@@ -4101,6 +3981,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...sessionLinesDb(core),
     ...usageDb(core),
     ...delegateEventsDb(core),
     ...movesDb(core),
@@ -8313,58 +8194,6 @@ const make = async (path: string): Promise<DbShape> => {
         .from(instances)
         .where(eq(instances.id, id))
         .get()?.at ?? null,
-    noteMovedHere: (id, line) => {
-      const values = {
-        at: new Date(line.at),
-        content: line.moved,
-        stayed: line.stayed ?? null,
-      };
-      db.insert(sessionLines)
-        .values({ instanceId: id, kind: "moved", id: "moved", ...values })
-        .onConflictDoUpdate({
-          target: [sessionLines.instanceId, sessionLines.kind, sessionLines.id],
-          set: values,
-        })
-        .run();
-    },
-    movedHereOf: (id) => {
-      const [row] = linesOf(id, "moved");
-      return row
-        ? {
-            at: row.at,
-            moved: row.content,
-            ...(row.stayed === null ? {} : { stayed: row.stayed }),
-          }
-        : null;
-    },
-    noteWatchLine: (id, line) => {
-      keepLine(id, "watch", line, WATCH_LINES_KEPT);
-    },
-    noteContextLine: (id, line) =>
-      keepLine(id, "context", line, CONTEXT_LINES_KEPT, true),
-    contextLinesOf: (id) =>
-      linesOf(id, "context").map(({ id: lineId, at, content }) => ({
-        id: lineId,
-        at,
-        content,
-      })),
-    watchLinesOf: (id) =>
-      linesOf(id, "watch").map(({ id: lineId, at, content }) => ({
-        id: lineId,
-        at,
-        content,
-      })),
-    noteMachineLine: (id, kind, note) =>
-      keepLine(id, kind, note, LIMIT_NOTES_KEPT),
-    machineLinesOf: (id) =>
-      (["limit", "outdated", "room"] as const).flatMap((kind) =>
-        linesOf(id, kind).map(({ id: lineId, at, content }) => ({
-          kind,
-          id: lineId,
-          at,
-          content,
-        }))
-      ),
     takeOwedSend: (uuid) => {
       const owed = db
         .select({ owed: sentMessages.owed })
