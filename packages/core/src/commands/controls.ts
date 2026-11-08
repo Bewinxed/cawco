@@ -100,10 +100,6 @@ export interface CommandQueue {
   slot: QueueSlot;
 }
 
-/** How a status says a {@link CommandQueue}: "queued for the Mac's build slot behind …". */
-export const queueWords = (queue: CommandQueue): string =>
-  `queued for ${QUEUE_SLOTS[queue.slot]}${queue.holders ? ` behind ${queue.holders}` : ""}`;
-
 /**
  * Daemon → hub: a {@link CONTROL_RUN_COMMAND} run named `runId` began
  * waiting for a slot (`queue`), or stopped (null).

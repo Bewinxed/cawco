@@ -20,7 +20,3 @@ export const ARTIFACT_SESSION_REFUSED = {
   /** The artifact was deleted, or the session that made it was. */
   gone: 4404,
 } as const;
-
-/** What the hub says, closing an artifact tab's socket {@link ARTIFACT_SESSION_REFUSED}`.gone`. */
-export const ARTIFACT_GONE =
-  "This artifact is gone: it was deleted, or the session that made it was.";

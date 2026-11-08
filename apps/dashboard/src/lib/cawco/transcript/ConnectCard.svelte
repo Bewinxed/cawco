@@ -1,4 +1,8 @@
 <script lang="ts">
+  import type { ConnectAnswer } from "@cawco/core/frames";
+  import { unhandled } from "@cawco/core/unhandled";
+  import { askWords } from "@cawco/core/words/asks";
+  import { configureWords } from "@cawco/core/words/configure";
   /**
    * A connect ask (hub connect-asks.ts) as a card in the conversation, at the
    * point the agent asked it, that becomes the record of it where it stands
@@ -28,11 +32,7 @@
    * stands at the tail ahead of the call's message, and a call with no ask
    * behind it (the hub that held it restarted) is the plain tool row it is.
    */
-  import { accessLabel } from "@cawco/core/connect-ask";
-  import type { ConnectAnswer } from "@cawco/core/frames";
-  import { unhandled } from "@cawco/core/unhandled";
-  import { askWords } from "@cawco/core/words/asks";
-  import { configureWords } from "@cawco/core/words/configure";
+  import { accessLabel } from "@cawco/core/words/connect-lines";
   import { shellWords } from "@cawco/core/words/shell";
   import {
     LogoFigma,
