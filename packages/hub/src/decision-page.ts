@@ -10,7 +10,7 @@
  * way.
  *
  * - `{{KIT_CSS}}`: the house faces (an `@import` of the sheet the hub serves
- *   on every preview origin, core decision-host.ts), then the kit's
+ *   on every preview origin, hub decision-host.ts), then the kit's
  *   tokens.css and page.css.
  * - `{{KIT_JS}}`: the kit's page.js.
  * - `{{DIALS}}`: `cawcoDials`, the design graph's own dial controls, from the
