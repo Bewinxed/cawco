@@ -18,7 +18,6 @@ import {
   type SigninState,
   sameIdentity,
 } from "@cawco/core/accounts";
-import { received } from "@cawco/core/stored-json";
 import { ModelInfoSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
@@ -35,6 +34,7 @@ import { freshWindows, windowKey } from "@cawco/core/usage/windows";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { z } from "zod";
 import type { DbShape } from "./db";
+import { received } from "./stored-json";
 
 /**
  * The hub's half of accounts: where each is signed in, as machines report it,
@@ -69,7 +69,7 @@ const MODELS = z.array(ModelInfoSchema);
 /**
  * Keeps what a probe read of an account: its models, as its catalog
  * (replacing the one before, rows and all), and its plan. The models are
- * Claude Code's own list, taken into CawCo's type here (core stored-json.ts
+ * Claude Code's own list, taken into CawCo's type here (hub stored-json.ts
  * `received`): a field its release adds is left out and said, never a
  * catalog its write refuses.
  */
