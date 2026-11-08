@@ -11,6 +11,7 @@
 
 import { HARNESS_TOOL, type HarnessReport } from "./harness";
 import type { HarnessKind } from "./harness/kinds";
+import { traitsOf } from "./harness/traits";
 import { type ToolSpec, type ToolStatus, toolRuns, toolSpec } from "./tools";
 import { harnessRefusedWords } from "./words/harness";
 import { toolWords } from "./words/tools";
@@ -84,7 +85,7 @@ export const harnessRefusal = (
       why: harnessRefusedWords.notInstalled(
         spec.name,
         machine,
-        report.harness === "claude"
+        traitsOf(report.harness).requiredOnEveryMachine
       ),
     };
   }
