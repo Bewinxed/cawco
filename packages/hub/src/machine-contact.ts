@@ -33,7 +33,7 @@
  * A machine not heard from since the hub started is offline on the board,
  * not lost: nothing of this run waits on it.
  */
-import { contactWords, MACHINE_LOST_MS } from "@cawco/core";
+import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import type { HubLifetimeShape } from "./lifetime";
 
 /** How often silence is looked at: the span is met within this much. */
