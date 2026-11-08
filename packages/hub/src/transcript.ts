@@ -15,13 +15,13 @@
  */
 
 import { fnv1a } from "@cawco/core/fnv1a";
+import { CONTEXT_LINE } from "@cawco/core/harness";
 import {
-  CONTEXT_LINE,
   type NeutralMessage,
   type SendRecord,
   type SessionMessage,
   STREAM_SO_FAR,
-} from "@cawco/core/harness";
+} from "@cawco/core/session-messages";
 import {
   applyBranchEvent,
   applyToolResult,

@@ -20,7 +20,10 @@
  * `AskUserQuestion` answers without a second pass.
  */
 
-import type { HarnessNote, NeutralSystemMessage } from "@cawco/core/harness";
+import type {
+  HarnessNote,
+  NeutralSystemMessage,
+} from "@cawco/core/session-messages";
 import {
   interruptLine,
   transcriptUserText,

@@ -8,7 +8,6 @@
 import type { AccountMove } from "@cawco/core/accounts";
 import type { SendAttachment } from "@cawco/core/attachments";
 import type { Extracted } from "@cawco/core/continuation-read";
-import type { ModeAsk, SendRefusal } from "@cawco/core/harness";
 import type {
   EffortLevel,
   HarnessKind,
@@ -26,6 +25,7 @@ import type {
   MoveStep,
 } from "@cawco/core/move";
 import type { SendPayload } from "@cawco/core/protocol";
+import type { ModeAsk, SendRefusal } from "@cawco/core/session-messages";
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 /** The session being continued, as the header names it. */
