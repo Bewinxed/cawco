@@ -136,7 +136,12 @@ import { hubId } from "../hub-id";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import { nameStoredRowsFrom } from "../stored-json";
-import { type AccountsDb, accountsDb } from "./accounts";
+import {
+  type AccountsDb,
+  accountsDb,
+  type ProjectAccountsDb,
+  projectAccountsDb,
+} from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import type { AreaRow, AreasDb } from "./areas";
 import type { ArtifactListenersDb } from "./artifacts";
@@ -2196,8 +2201,6 @@ interface HubStore {
   /** A move's "Don't move", remembered on its project; null forgets it. */
   /** Records the root commit checkout place `id` was read at. */
   readonly setPlaceRoot: (id: string, commit: string) => void;
-  /** The accounts the project's sessions may run on; null: every account. */
-  readonly setProjectAccounts: (id: string, accounts: string[] | null) => void;
   /** The project's spend cap and what reaching it does (project-caps.ts). */
   readonly setProjectCap: (
     id: string,
@@ -2649,7 +2652,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = AskPartsDb &
+export type DbShape = ProjectAccountsDb &
+  AskPartsDb &
   PresenceDb &
   SessionIdentityDb &
   Pick<Revocations, "revokedAmong" | "onCredentialsRevoked"> &
@@ -4683,6 +4687,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...projectAccountsDb(core),
     ...askPartsDb(core),
     ...presenceDb(core),
     ...sessionIdentityDb(core),
@@ -8028,23 +8033,6 @@ const make = async (path: string): Promise<DbShape> => {
           .where(inArray(instances.id, ids))
           .run();
       }
-    },
-    setProjectAccounts: (id, list) => {
-      db.transaction((tx) => {
-        tx.update(projects)
-          .set({ accountsLimited: list !== null })
-          .where(eq(projects.id, id))
-          .run();
-        tx.delete(projectAccounts)
-          .where(eq(projectAccounts.projectId, id))
-          .run();
-        const distinct = [...new Set(list ?? [])];
-        if (distinct.length > 0) {
-          tx.insert(projectAccounts)
-            .values(distinct.map((accountId) => ({ projectId: id, accountId })))
-            .run();
-        }
-      });
     },
     setProjectDispatch: (id, change) => setProject(id, change),
     setProjectCaw: (id, change) => setProject(id, change),
