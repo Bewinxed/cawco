@@ -1,7 +1,6 @@
 /**
  * The control names and tool names a parked ask is settled by, and what an
- * ask the hub could not show says: imported alone by a reader of them; core's
- * index re-exports it.
+ * ask the hub could not show says.
  */
 
 /** Settles a parked permission request; args are `[requestId, PermissionResult]`. */

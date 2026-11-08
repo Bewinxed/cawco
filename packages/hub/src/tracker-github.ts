@@ -27,8 +27,10 @@
  * - **Time.** Every request has 30 s to answer (readWithin), as the GitHub
  *   poller's do; none answered says so.
  */
-import type { ExternalActor, TrackerTarget } from "@cawco/core";
+
 import { readWithin } from "@cawco/core/bounded";
+import type { ExternalActor } from "@cawco/core/external-items";
+import type { TrackerTarget } from "@cawco/core/trackers";
 import type { Octokit } from "@octokit/rest";
 import {
   type Issue,

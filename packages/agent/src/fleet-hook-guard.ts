@@ -20,7 +20,7 @@
  * (fleet.ts `syncHooks`), which every workspace reads.
  */
 import { join } from "node:path";
-import type { HookCommandHandler, HookHandler } from "@cawco/core";
+import type { HookCommandHandler, HookHandler } from "@cawco/core/hooks";
 import { fleetHooksDir } from "@cawco/core/paths";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { shellQuote } from "./boundary";
