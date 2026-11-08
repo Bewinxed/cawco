@@ -34,13 +34,13 @@
 </script>
 
 <script lang="ts">
+  import { askerLine } from "@cawco/core/permission-presentation";
+  import { questionsOf } from "@cawco/core/question";
   import type {
     PermissionResult,
     UserAnswers,
     UserQuestion,
-  } from "@cawco/core/harness";
-  import { askerLine } from "@cawco/core/permission-presentation";
-  import { questionsOf } from "@cawco/core/question";
+  } from "@cawco/core/session-messages";
   import { askWords } from "@cawco/core/words/asks";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape

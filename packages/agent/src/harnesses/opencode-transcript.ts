@@ -21,8 +21,11 @@ import type {
   UserAnswers,
   UserQuestion,
   UserQuestionResult,
-} from "@cawco/core/harness";
-import { MCP_NOT_CONNECTED, REPEATED_FAILURE } from "@cawco/core/harness";
+} from "@cawco/core/session-messages";
+import {
+  MCP_NOT_CONNECTED,
+  REPEATED_FAILURE,
+} from "@cawco/core/session-messages";
 import type {
   SessionInboxInfo,
   SessionMessageAssistant,

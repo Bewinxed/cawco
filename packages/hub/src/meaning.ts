@@ -1,7 +1,7 @@
 import type { Bounded } from "@cawco/core/bounded";
-import type { NeutralMessage } from "@cawco/core/harness";
 import type { Rule, RuleFacts } from "@cawco/core/rules";
 import { ruleInScope } from "@cawco/core/rules";
+import type { NeutralMessage } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
