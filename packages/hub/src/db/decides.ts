@@ -1,4 +1,3 @@
-import type { DelegateType } from "@cawco/core";
 import {
   BUILT_IN,
   BUILT_IN_MEMBERS,
@@ -11,6 +10,7 @@ import {
   type Kind,
   type Member,
 } from "@cawco/core/decides";
+import type { DelegateType } from "@cawco/core/delegate-types";
 import {
   and,
   asc,

@@ -20,12 +20,12 @@
  * before Jev is asked and before the inputs are hashed.
  */
 import type {
-  StageKind,
   StarterGlyph,
   StarterOutcome,
   StarterPlace,
   StarterSource,
-} from "@cawco/core";
+} from "@cawco/core/starters";
+import type { StageKind } from "@cawco/core/views";
 
 /**
  * Every input's bound, and the output's: each text cut to its length, each

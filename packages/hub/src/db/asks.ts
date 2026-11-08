@@ -7,8 +7,7 @@
  * and none after it lapsed.
  */
 
-import type { AskAnswer } from "@cawco/core";
-import type { AskRecord, AskResult } from "@cawco/core/asks";
+import type { AskAnswer, AskRecord, AskResult } from "@cawco/core/asks";
 import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { asks } from "./schema";
