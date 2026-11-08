@@ -5,7 +5,7 @@ import {
   CAWCO_HUB_PORT,
   localDashboardPort,
   mcpGatewayPort,
-} from "@cawco/core/protocol";
+} from "@cawco/core/ports";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 
 /** Reported by `GET /health`; keep in sync with package.json. */
