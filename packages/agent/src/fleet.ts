@@ -20,6 +20,8 @@ import {
   stat,
 } from "node:fs/promises";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hashFiles } from "@cawco/core/file-hash";
 import type {
   CliInstall,
   ConfigInspection,
@@ -27,39 +29,37 @@ import type {
   DiscoveredSkill,
   FleetConfig,
   FleetFaultCause,
-  FleetHarnessConfig,
   FleetHoldings,
-  FleetHook,
   FleetItemState,
   FleetMcpConfig,
   FleetMemory,
   FleetMemoryDoc,
   FleetPlacedMemoryDoc,
   FleetPluginPayload,
-  FleetScope,
   FleetSkillPayload,
   FleetSyncReport,
   FleetToolchain,
-  HookEvent,
-  HookHandler,
   MachineHookScript,
   MachineMemoryDoc,
   MachineMemorySet,
   PlacedFleetConfig,
   SkillFile,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
 import {
-  hookMatchTest,
-  hookProblem,
-  hookWorkspaceNote,
   memoryDocProblem,
   SKILL_FOLDER_LIMIT_BYTES,
   SKILL_FOLDER_LIMIT_FILES,
   SKILL_SKIPPED_DIRS,
   skillDescription,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { hashFiles } from "@cawco/core/file-hash";
+} from "@cawco/core/fleet";
+import type { FleetScope } from "@cawco/core/fleet-placement";
+import type { FleetHarnessConfig } from "@cawco/core/harness-config";
+import type { FleetHook, HookEvent, HookHandler } from "@cawco/core/hooks";
+import {
+  hookMatchTest,
+  hookProblem,
+  hookWorkspaceNote,
+} from "@cawco/core/hooks";
 import {
   accountIds,
   claudeHomeJson,
