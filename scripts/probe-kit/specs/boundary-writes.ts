@@ -514,7 +514,7 @@ const run = async (kit: Kit) => {
 
 /**
  * impeccable's hook, run inside the boundary on an Edit in the clone, keeps
- * its state in the workspaces' cache (core paths.ts `workspaceCacheEnv`,
+ * its state in the workspaces' cache (agent boundary-env.ts `workspaceCacheEnv`,
  * `IMPECCABLE_CACHE_ROOT`), and nothing of it is in the clone.
  */
 const checkHookCache = async (
