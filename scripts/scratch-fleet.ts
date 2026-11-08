@@ -12,6 +12,7 @@
  * the probe's `respond` picks, streamed at its pace, and keeps every request
  * it answered in `seen` (the oldest one's text let go past `SEEN_CHARS`).
  */
+
 import { Database } from "bun:sqlite";
 import {
   closeSync,
@@ -48,6 +49,7 @@ import {
   HARNESSES,
   type HarnessKind,
 } from "../packages/core/src/harness/kinds";
+import { traitsOf } from "../packages/core/src/harness/traits";
 import {
   fetchHub,
   type HubRequest,
@@ -3241,7 +3243,9 @@ async function standUp(
         harness,
         model: MODEL[harness],
         title,
-        ...(harness === "pi" ? {} : { permissionMode: "bypassPermissions" }),
+        ...(traitsOf(harness).permissionModes
+          ? { permissionMode: "bypassPermissions" }
+          : {}),
         ...extra,
       },
     });

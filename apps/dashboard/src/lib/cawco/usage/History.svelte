@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { traitsOf } from "@cawco/core/harness/traits";
   import { HOUR_MS } from "@cawco/core/time";
   /**
    * History: what each harness cost over the
@@ -186,10 +187,10 @@
       return {
         harness,
         title:
-          harness === "claude"
+          traitsOf(harness).costMeaning === "estimated"
             ? "Claude, at API prices"
             : "opencode, real spend",
-        approx: harness === "claude" ? "~" : "",
+        approx: traitsOf(harness).costMeaning === "estimated" ? "~" : "",
         points,
         total: points.reduce((sum, p) => sum + p.cost, 0),
         peak: Math.max(0, ...points.map((p) => p.cost)),
@@ -377,7 +378,9 @@
           class="type-label num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted"
           scope="col"
         >
-          {chart.harness === "claude" ? "API price" : "Spend"}
+          {traitsOf(chart.harness).costMeaning === "estimated"
+            ? "API price"
+            : "Spend"}
         </th>
       </tr>
     </thead>

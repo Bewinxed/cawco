@@ -21,6 +21,7 @@
     type HarnessKind,
     type PermissionMode,
   } from "@cawco/core/harness/kinds";
+  import { traitsOf } from "@cawco/core/harness/traits";
   import { hubRequest } from "@cawco/core/hub-request";
   import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";
@@ -531,7 +532,7 @@
     models.forHarness(
       harness,
       machineIds,
-      harness === "claude" ? placedAccount : undefined
+      traitsOf(harness).accountModel === "dir" ? placedAccount : undefined
     )
   );
   /**
@@ -1445,7 +1446,7 @@
       machineId,
       harness,
       cwd: cwd.trim(),
-      account: harness === "claude" ? placedAccount : null,
+      account: traitsOf(harness).accountModel === "dir" ? placedAccount : null,
       model,
     };
     commands = [];
