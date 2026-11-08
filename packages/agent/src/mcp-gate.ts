@@ -13,7 +13,7 @@
  * A module with nothing to start, so a harness's own host (pi's) can read it.
  */
 import { createHash } from "node:crypto";
-import type { FleetMcpConfig } from "@cawco/core";
+import type { FleetMcpConfig } from "@cawco/core/fleet";
 
 /** A workspace session's gate: the path its servers hang off, and the host key every call carries. */
 export interface McpGate {

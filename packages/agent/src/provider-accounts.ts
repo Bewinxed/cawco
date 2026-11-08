@@ -32,7 +32,7 @@ import {
   type ProviderSigninResult,
   providersOpenedBy,
   sameIdentity,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   accountCredentialPath,
