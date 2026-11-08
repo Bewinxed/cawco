@@ -63,7 +63,10 @@ import {
 } from "@cawco/core/browser";
 import { gatedPageScript } from "@cawco/core/browser-gate";
 import { machineId } from "@cawco/core/machine-id";
-import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
+import {
+  workspaceProjectFile,
+  workspaceStateDir,
+} from "@cawco/core/paths/workspace";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
