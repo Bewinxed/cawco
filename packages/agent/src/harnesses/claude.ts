@@ -136,8 +136,8 @@ import {
   projectSlug,
   sessionConfigDir,
 } from "@cawco/core/paths/claude";
+import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
-import { mcpGatewayPort } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { isDamagedRecord } from "@cawco/core/state-file";
