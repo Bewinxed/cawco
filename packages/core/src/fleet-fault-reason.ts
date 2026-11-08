@@ -8,7 +8,7 @@
  * and the dashboard reads every stored one through {@link readFault}, so
  * rows stored before that read the same.
  */
-import { HARNESSES, type HarnessKind } from "./harness";
+import { HARNESSES, type HarnessKind } from "./harness/kinds";
 
 /** A reason's longest plain text: past it, the words are a body, not a sentence. */
 const PLAIN_MAX = 160;

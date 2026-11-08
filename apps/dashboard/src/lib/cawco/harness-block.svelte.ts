@@ -13,7 +13,8 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import { HARNESS_TOOL, HARNESSES, type HarnessKind } from "@cawco/core/harness";
+import { HARNESS_TOOL } from "@cawco/core/harness";
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import {
   type HarnessRefusalKind,
   harnessRefusal,

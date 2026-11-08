@@ -20,7 +20,7 @@ import {
   PROJECT_SKILLS,
   projectClaudeRelative,
 } from "./claude-dirs";
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 
 /**
  * What stands in for a clone-side deny path its clone does not have, before
