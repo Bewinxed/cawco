@@ -31,11 +31,12 @@
  *
  *   bun scripts/probe-kit/run.ts page-faults-live
  */
+
+import type { PageFault } from "../../../packages/core/src/page-faults";
 import {
   PREVIEW_ENTER_PATH,
   PREVIEW_ERRORS_PATH,
-} from "../../../packages/core/src/frames";
-import type { PageFault } from "../../../packages/core/src/page-faults";
+} from "../../../packages/core/src/preview/routes";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
