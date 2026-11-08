@@ -105,8 +105,6 @@ const run = async (kit: Kit) => {
         contents: [
           "export const workspaceNetworks = async () => globalThis.__probeNetworks;",
           "export const listeners = async () => [];",
-          "export const bunScriptRuntime = () => process.execPath;",
-          "export const BUN_SCRIPT_ENV = {};",
         ].join("\n"),
         loader: "ts",
       }));
