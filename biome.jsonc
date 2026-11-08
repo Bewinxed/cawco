@@ -22,7 +22,7 @@
     "./scripts/lint/artifact-rows-drop.grit",
     // A preview origin's upstream is the hub's preview-service.ts's alone,
     // and what serves an artifact is read off its row
-    // (packages/core/src/preview-upstream.ts).
+    // (packages/core/src/preview/upstream.ts).
     "./scripts/lint/preview-upstream.grit",
     // An artifact's machine and source have one write, db/artifacts.ts
     // `resource`, which moves its preview with it.

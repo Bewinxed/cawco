@@ -36,11 +36,12 @@
  *
  *   bun scripts/probe-kit/run.ts preview-lock
  */
+
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import {
   type PreviewTicket,
   previewEnterUrl,
-} from "../../../packages/core/src/frames";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+} from "../../../packages/core/src/preview/routes";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
 import { PASS_DOMAIN } from "../pass-legs";

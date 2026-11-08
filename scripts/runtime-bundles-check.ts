@@ -10,7 +10,7 @@
  *   bun scripts/runtime-bundles-check.ts
  */
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
-import { loadOverlay } from "../packages/core/src/preview-proxy";
+import { loadOverlay } from "../packages/core/src/preview/proxy";
 import { buildCanvasHost } from "../packages/hub/src/canvas-host";
 import { buildDecisionHost } from "../packages/hub/src/decision-host";
 

@@ -7,17 +7,19 @@
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
 
+import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { CHOICE_LIMITS } from "@cawco/core/choices";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { PICTURE_LIMITS } from "@cawco/core/frames";
+import {
+  PREVIEW_START_PATH,
+  SHOWN_FAILURES,
+} from "@cawco/core/preview/protocol";
 import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
   ARTIFACT_TITLE_LIMIT,
   ASK_LIMIT,
-  PREVIEW_START_PATH,
-  SHOWN_FAILURES,
 } from "@cawco/core/protocol";
 import {
   CANVAS_SPEC_LIMITS,
