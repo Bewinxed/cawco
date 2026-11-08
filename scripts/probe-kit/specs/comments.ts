@@ -283,11 +283,8 @@ import type { Frame, Locator, Page, WebSocketRoute } from "playwright-core";
 import { PNG } from "pngjs";
 import { applyUpdate, Doc } from "yjs";
 import { readWithin } from "../../../packages/core/src/bounded";
-import {
-  type PageAnchor,
-  type Pin,
-  readPins,
-} from "../../../packages/core/src/comments";
+import type { PageAnchor } from "../../../packages/core/src/comments/anchor";
+import { type Pin, readPins } from "../../../packages/core/src/comments/model";
 import { PIN_MAPS } from "../../../packages/core/src/doc-maps";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { hubRequest } from "../../../packages/core/src/hub-request";
