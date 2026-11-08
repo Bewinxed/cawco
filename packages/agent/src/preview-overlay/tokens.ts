@@ -6,7 +6,7 @@
  * `:root`. Every previewed page carries the overlay, so it carries the
  * tokens at a third of the file's size.
  */
-import { readFileSync } from "node:fs";
+import { kitTokensCss } from "@cawco/design-tokens/kit-tokens";
 
 const COMMENTS = /\/\*[\s\S]*?\*\//gu;
 const SPACES = /\s+/gu;
@@ -17,14 +17,7 @@ const ROOT = /:root/gu;
 const ROOT_DARK = /:root\.dark/gu;
 
 export function hostTokens(): string {
-  const css = readFileSync(
-    new URL(
-      "../../../hub/skills/decision-page/kit/tokens.css",
-      import.meta.url
-    ),
-    "utf8"
-  );
-  return css
+  return kitTokensCss()
     .replace(COMMENTS, "")
     .replace(SPACES, " ")
     .replace(AROUND, "$1")

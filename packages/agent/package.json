@@ -30,6 +30,7 @@
     "@anthropic-ai/sandbox-runtime": "0.0.81",
     "@babel/parser": "7.29.9",
     "@cawco/core": "workspace:*",
+    "@cawco/design-tokens": "workspace:*",
     "@cawco/jsonl-parser": "workspace:*",
     "@code-inspector/core": "2.0.9",
     "@earendil-works/pi-ai": "1.4.0",

@@ -6,11 +6,11 @@
  * asset-catalog colour set with an Any and a Dark appearance, plus a `UIColor`
  * accessor in `Palette` that resolves against the trait collection it is drawn
  * in. A token's values are read from its CSS form (the hub's token view,
- * packages/hub/src/design-tokens.ts): its light value its base CSS, its dark
+ * packages/design-tokens/src/design-tokens.ts): its light value its base CSS, its dark
  * value the dark context's CSS when that differs, else the base CSS
  * evaluated with every reference in its dark value: exactly how
  * `light-dark()` and `var()` resolve in the dashboard's cascade. The CSS is
- * evaluated by the hub's one evaluator (packages/hub/src/design-css.ts),
+ * evaluated by the hub's one evaluator (packages/design-tokens/src/design-css.ts),
  * converted to Display P3 and gamut-mapped with CSS Color 4's algorithm.
  *
  * Everything else becomes a Swift constant in a namespace per group: points
@@ -31,11 +31,11 @@ import {
   call,
   gradientStops,
   splitTop,
-} from "../../../packages/hub/src/design-css";
+} from "../../../packages/design-tokens/src/design-css";
 import type {
   TokenView,
   ViewToken,
-} from "../../../packages/hub/src/design-tokens";
+} from "../../../packages/design-tokens/src/design-tokens";
 import { isAppleToken } from "./token-groups";
 
 const CATALOG = "Resources/Tokens.xcassets";
