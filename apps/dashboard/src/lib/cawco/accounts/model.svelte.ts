@@ -9,7 +9,6 @@
 import {
   ACCOUNT_RULES,
   type Account,
-  type AccountHue,
   type AccountProvider,
   type AccountSignin,
   accountNameAmong,
@@ -17,12 +16,12 @@ import {
   type HomeStore,
   LIMITED_PROVIDERS,
   type NameableAccount,
-  type PlacementStrategy,
   type ProviderChoice,
   type ProviderRouting,
   type RebalanceNotice,
   type SigninState,
 } from "@cawco/core/accounts";
+import type { AccountHue, PlacementStrategy } from "@cawco/core/accounts/kinds";
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords as words } from "@cawco/core/words/accounts";
