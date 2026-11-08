@@ -25,6 +25,7 @@ import type {
   SignInFault,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { KeeperHarnessKind } from "@cawco/core/harness/traits";
 import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
 import type {
@@ -129,6 +130,17 @@ export interface HarnessContext {
    * it was handed kept for its next start.
    */
   keeperRefused: (error: KeeperRefused) => void;
+  /**
+   * Which line of a sessiond ring the frame about to be emitted came from
+   * (design §7): supplied by the supervisor, read by an adapter reading such
+   * a ring. Absent where no ring is read (pi's host, which writes to no
+   * keeper).
+   *
+   * The one producer is claude's `adopt`: its `stamp` runs one statement before
+   * `custody.ingest`, and `ingest` emits its frame synchronously, so the stamp
+   * lands on that frame and no other.
+   */
+  line?: (srcEpoch: string, srcSeq: number) => void;
   /**
    * The gate a workspace session reaches every fleet MCP server with a
    * command through (mcp-gate.ts): its {@link workspace}'s, on the agent's
@@ -287,10 +299,9 @@ export interface HarnessSession {
 export type TranscriptSpan = "chain" | "whole";
 
 /**
- * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
- * structurally rather than imported as a class: the supervisor stays
- * harness-agnostic, and an adapter that cannot keep processes simply does not
- * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
+ * What {@link SessionSupervisor.reattach} needs of a harness whose sessions are
+ * children of a keeper. Claude and pi share custody; OpenCode owns its server
+ * ({@link ServerCustody}).
  */
 export interface SessiondAdoption {
   /**
@@ -311,7 +322,7 @@ export interface SessiondAdoption {
       turnRunning: boolean;
     }
   ) => Promise<HarnessSession>;
-  custodyCandidates: () => Promise<{
+  candidates: () => Promise<{
     /**
      * What every keeper holds, the current keeper's first. `cwd` is what lets
      * a survivor the hub never named be adopted at all; `epoch` is its
@@ -328,35 +339,75 @@ export interface SessiondAdoption {
     }[];
   }>;
   /** The keepers there for custody to read, the current one first. */
-  custodyKeepers: () => Promise<string[]>;
+  keepers: () => Promise<string[]>;
   /** One keeper's word on this harness's children ({@link KeeperPool.read}): its listing of them, its end, or why it could not be read. */
-  custodyReading: (keeper: string) => Promise<KeeperReading>;
+  reading: (keeper: string) => Promise<KeeperReading>;
   /** Whether the child is mid-turn as its ring stands up to `head`. */
   turnRunning: (instanceId: string, head: number) => Promise<boolean>;
 }
 
-/**
- * The context the supervisor hands an adapter, plus the one thing only an
- * adapter reading a sessiond ring can supply: which line the frame it is about
- * to emit came from (design §7).
- *
- * Declared here rather than on {@link HarnessContext} because it is not part of
- * the harness contract — a ring-reading adapter reaches it as
- * `(ctx as Partial<SessiondAwareContext>).line?.(epoch, seq)`, and every other
- * adapter neither knows nor needs it.
- *
- * The one producer is claude's `adopt`: its `stamp` runs one statement before
- * `custody.ingest`, and `ingest` emits its frame synchronously, so the stamp
- * lands on that frame and no other.
- */
-export interface SessiondAwareContext extends HarnessContext {
-  line: (srcEpoch: string, srcSeq: number) => void;
+/** The sessions are children of a keeper (sessiond): each has a process of its own, and the agent takes it back. */
+export interface KeeperCustody extends SessiondAdoption {
+  readonly kind: "keeper";
 }
 
-/** One harness adapter. Implemented per runtime; registered in `./harnesses`. */
-export interface Harness {
+/**
+ * The sessions live in a server that outlives the agent. It holds many at
+ * once, and proves no absence by not listing one: the agent asks it, never
+ * reads its listing as an answer.
+ */
+export interface ServerCustody {
   /** Abort a server-held turn without adopting or waking its session. */
-  abortSession?: (sessionKey: string, dir: string) => Promise<boolean>;
+  abortSession: (sessionKey: string, dir: string) => Promise<boolean>;
+  /** Authoritative server activity, when the runtime owns turns outside this daemon. */
+  busyInstances: () => Promise<string[]>;
+  /**
+   * Confirm a server session's turn and resources ended without adopting it.
+   * `forget`: nothing will reattach it (a stop's `forget`), so
+   * what the harness kept to reattach it goes too.
+   */
+  endSession: (
+    sessionKey: string,
+    dir: string,
+    instanceId?: string,
+    claimed?: readonly string[],
+    forget?: boolean
+  ) => Promise<void>;
+  readonly kind: "server";
+  /**
+   * Whether a server this adapter's sessions run in still runs, held by a
+   * keeper or not (OpenCode's): its sessions, and any turn in them, outlived
+   * the agent.
+   */
+  serversRunning: () => Promise<boolean>;
+  /** Exact addresses retained by this adapter, never reconstructed by guessing. */
+  sessionAddresses: () => import("@cawco/core/protocol").SessionAddress[];
+  readonly sessionPresent: (
+    sessionKey: string,
+    dir: string
+  ) => Promise<boolean>;
+  /**
+   * The sessions whose work runs inside the keeper's child `procId`: an
+   * adapter whose sessions share one server process (OpenCode's) names those
+   * that server holds now.
+   */
+  sessionsOn: (procId: string) => string[];
+  /** Lifecycle guards read the supervisor's one machine recovery barrier. */
+  readonly setCustodyReadiness: (read: () => boolean) => void;
+  /** Complete post-stop reading; unknown server runners must remain untouched. */
+  unclaimedRunners: (
+    directory: string,
+    claimed: readonly string[]
+  ) => Promise<{ count: number; readStartedAt: number }>;
+}
+
+/** The facet a harness of kind `K` carries, per the traits table: a type error when the two disagree. */
+type CustodyOf<K extends HarnessKind> = K extends KeeperHarnessKind
+  ? KeeperCustody
+  : ServerCustody;
+
+/** One harness adapter. Implemented per runtime; registered in `./harnesses`. */
+export interface Harness<K extends HarnessKind = HarnessKind> {
   /**
    * The machine's provider accounts changed (one signed in, keyed, moved in
    * or forgotten): the harness takes the change into what it runs. Absent
@@ -371,8 +422,6 @@ export interface Harness {
    * to start ({@link HarnessReport.authReason}).
    */
   readonly authReason?: string;
-  /** Authoritative server activity, when the runtime owns turns outside this daemon. */
-  busyInstances?: () => Promise<string[]>;
   readonly capabilities: HarnessCapabilities;
   /**
    * `true` when {@link listSessions} reads the harness's servers' databases
@@ -381,22 +430,14 @@ export interface Harness {
    * follows on a beat, so no register waits on that read.
    */
   readonly catalogFromServer?: true;
+  /** How it holds a session that outlives the agent ({@link HarnessTraits.custody}, which the table states and this type holds it to). */
+  readonly custody: CustodyOf<K>;
   deleteSession: (sessionKey: string, dir?: string) => Promise<void>;
   /** What this machine can do with the harness — install, version, auth. */
   detect: () => Promise<MachineHarnessReport>;
+  /** Its `detect` starts nothing, so a tool move re-reads it unasked (daemon.ts `reportTools`). */
+  readonly detectStartsNothing?: true;
   dispose?: () => Promise<void>;
-  /**
-   * Confirm a server session's turn and resources ended without adopting it.
-   * `forget`: nothing will reattach it (a stop's `forget`), so
-   * what the harness kept to reattach it goes too.
-   */
-  endSession?: (
-    sessionKey: string,
-    dir: string,
-    instanceId?: string,
-    claimed?: readonly string[],
-    forget?: boolean
-  ) => Promise<void>;
   /**
    * The fleet content this harness's own copy holds on disk now, hashed as the
    * hub hashes it. Absent from a harness that converges no content.
@@ -429,7 +470,7 @@ export interface Harness {
    * itself is made again. Absent for a harness whose connections do.
    */
   hubRestarted?: () => Promise<void>;
-  readonly kind: HarnessKind;
+  readonly kind: K;
   /** The stored sessions this harness can resume. */
   listSessions: (dir?: string) => Promise<NeutralSessionInfo[]>;
   /** A machine-scoped control this harness owns; `undefined` when it is not its word. */
@@ -471,28 +512,6 @@ export interface Harness {
    * adapter whose runtime holds all of it under the keeper.
    */
   restartHolds?: () => import("@cawco/core/binary-updates").RestartHold[];
-  /**
-   * Whether a server this adapter's sessions run in still runs, held by a
-   * keeper or not (OpenCode's): its sessions, and any turn in them, outlived
-   * the agent. Absent for an adapter whose sessions each run in a process of
-   * their own, which the keeper lists.
-   */
-  serversRunning?: () => Promise<boolean>;
-  /** Exact addresses retained by this adapter, never reconstructed by guessing. */
-  sessionAddresses?: () => import("@cawco/core/protocol").SessionAddress[];
-  readonly sessionPresent?: (
-    sessionKey: string,
-    dir: string
-  ) => Promise<boolean>;
-  /**
-   * The sessions whose work runs inside the keeper's child `procId`: an
-   * adapter whose sessions share one server process (OpenCode's) names those
-   * that server holds now. Absent for an adapter that runs each session in a
-   * process of its own, whose procId names it.
-   */
-  sessionsOn?: (procId: string) => string[];
-  /** Lifecycle guards read the supervisor's one machine recovery barrier. */
-  readonly setCustodyReadiness?: (read: () => boolean) => void;
   /** The machine's own sign-ins their providers last refused, cached beside {@link auth} (OpenCode's, {@link HarnessReport.signInFaults}). */
   readonly signInFaults?: SignInFault[];
   /** Start a session; resolves once the runtime handle is in place. */
@@ -523,9 +542,14 @@ export interface Harness {
     tag: string | null,
     dir?: string
   ) => Promise<void>;
-  /** Complete post-stop reading; unknown server runners must remain untouched. */
-  unclaimedRunners?: (
-    directory: string,
-    claimed: readonly string[]
-  ) => Promise<{ count: number; readStartedAt: number }>;
 }
+
+/** A harness whose sessions are children of a keeper. */
+export type KeeperHarness = Harness & { readonly custody: KeeperCustody };
+/** A harness whose sessions live in a server that outlives the agent. */
+export type ServerHarness = Harness & { readonly custody: ServerCustody };
+
+export const isKeeperHarness = (adapter: Harness): adapter is KeeperHarness =>
+  adapter.custody.kind === "keeper";
+export const isServerHarness = (adapter: Harness): adapter is ServerHarness =>
+  adapter.custody.kind === "server";
