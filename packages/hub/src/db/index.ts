@@ -141,6 +141,7 @@ import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
 import { type CapabilityCallsDb, capabilityCallsDb } from "./capability-calls";
 import { type ConnectionsDb, connectionsDb } from "./connections";
+import { type ContinuationsDb, continuationsDb } from "./continuations";
 import { type DbCore, dbCore } from "./core";
 import { type DecidesDb, decidesDb } from "./decides";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
@@ -188,7 +189,6 @@ import {
   completedTurns,
   connectionProjects,
   connectorPolls,
-  continuations,
   dataMigrations,
   delegateEvents,
   eventRoutes,
@@ -435,29 +435,6 @@ export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
   subagents: OpenSubagent[];
 };
-
-export type ContinuationRow = typeof continuations.$inferSelect;
-/**
- * A continuation job without its request, its prepared transcript and
- * prompt, its summary and its open items: what is read of every job on
- * every send and every board publish ({@link DbShape.continuationSlips}).
- * `prepared` runs to megabytes for a long session, and its column parses
- * and checks it whole on every read (hub stored-json.ts), so a read that
- * needs a job's session, stage and ids never selects it.
- */
-export type ContinuationSlip = Pick<
-  ContinuationRow,
-  | "id"
-  | "sourceInstanceId"
-  | "summariserInstanceId"
-  | "targetInstanceId"
-  | "stage"
-  | "error"
-  | "askedBy"
-  | "waiting"
-  | "createdAt"
-  | "updatedAt"
->;
 /** A project move as moves.ts reads it: its state whole, the machines it names put back in it. */
 export type MoveRow = Omit<
   typeof moves.$inferSelect,
@@ -815,13 +792,6 @@ interface HubStore {
   readonly connections: ConnectionsDb;
   /** The session's lines about its context ({@link DbShape.noteContextLine}), oldest first. */
   readonly contextLinesOf: (id: string) => LimitNote[];
-  readonly continuationRow: (id: string) => ContinuationRow | undefined;
-  /** Every continuation job, oldest first, as its slip: a job whole is {@link continuationRow}'s. */
-  readonly continuationSlips: () => ContinuationSlip[];
-  /** A job's stage alone, for the steps that look for a Cancel while they wait ({@link ContinuationSlip}). */
-  readonly continuationStage: (
-    id: string
-  ) => ContinuationRow["stage"] | undefined;
   /**
    * A project, with its folder on the hub as its first place, and the
    * checkout it was made from (`checkout`), its primary, when it has one.
@@ -891,7 +861,6 @@ interface HubStore {
   ) => DelegateSummary[];
   /** The fleet's delegate types (delegate-types.ts), on this connection. */
   readonly delegateTypes: DelegateTypesShape;
-  readonly deleteContinuation: (id: string) => void;
   readonly deleteFleetMemoryDoc: (path: string) => void;
   /**
    * Forgets a machine's entry, its places and its current limit reading;
@@ -1081,9 +1050,6 @@ interface HubStore {
   readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
   readonly ingress: IngressDb;
-  readonly insertContinuation: (
-    row: Omit<ContinuationRow, "createdAt" | "updatedAt">
-  ) => ContinuationRow;
   readonly insertMove: (
     row: Omit<MoveRow, "createdAt" | "updatedAt">
   ) => MoveRow;
@@ -2280,22 +2246,6 @@ interface HubStore {
    * back heals without a refresh.
    */
   readonly unresolvedPlugins: () => string[];
-  /** Moves one job; the row as it now is, or undefined when it is gone. */
-  readonly updateContinuation: (
-    id: string,
-    patch: Partial<
-      Pick<
-        ContinuationRow,
-        | "stage"
-        | "error"
-        | "summary"
-        | "summariserInstanceId"
-        | "prepared"
-        | "openItems"
-        | "waiting"
-      >
-    >
-  ) => ContinuationRow | undefined;
   /** Cache bookkeeping never changes the session's activity timestamp. */
   readonly updateKeepAlive: (
     id: string,
@@ -2476,7 +2426,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = TaskIndexDb &
+export type DbShape = ContinuationsDb &
+  TaskIndexDb &
   SessionPlansDb &
   RulesDb &
   HubSettingsDb &
@@ -4469,6 +4420,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...continuationsDb(core),
     ...taskIndexDb(core),
     ...sessionPlansDb(core),
     ...rulesDb(core),
@@ -9656,31 +9608,6 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
           .map((row) => [row.model, row.contextWindow])
       ),
-    continuationSlips: () =>
-      db
-        .select({
-          id: continuations.id,
-          sourceInstanceId: continuations.sourceInstanceId,
-          summariserInstanceId: continuations.summariserInstanceId,
-          targetInstanceId: continuations.targetInstanceId,
-          stage: continuations.stage,
-          error: continuations.error,
-          askedBy: continuations.askedBy,
-          waiting: continuations.waiting,
-          createdAt: continuations.createdAt,
-          updatedAt: continuations.updatedAt,
-        })
-        .from(continuations)
-        .orderBy(continuations.createdAt)
-        .all(),
-    continuationRow: (id) =>
-      db.select().from(continuations).where(eq(continuations.id, id)).get(),
-    continuationStage: (id) =>
-      db
-        .select({ stage: continuations.stage })
-        .from(continuations)
-        .where(eq(continuations.id, id))
-        .get()?.stage,
     moveRows: () =>
       db.select().from(moves).orderBy(moves.createdAt).all().map(moveOf),
     moveRowsOn: (machineId) =>
@@ -9738,24 +9665,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(projects.id, id))
         .run();
     },
-    deleteContinuation: (id) => {
-      db.delete(continuations).where(eq(continuations.id, id)).run();
-    },
-    insertContinuation: (row) => {
-      const now = new Date();
-      return db
-        .insert(continuations)
-        .values({ ...row, createdAt: now, updatedAt: now })
-        .returning()
-        .get();
-    },
-    updateContinuation: (id, patch) =>
-      db
-        .update(continuations)
-        .set({ ...patch, updatedAt: new Date() })
-        .where(eq(continuations.id, id))
-        .returning()
-        .get(),
     noteClaudeContextWindow: (model, contextWindow) => {
       db.insert(claudeContextWindows)
         .values({ model, contextWindow, observedAt: new Date() })
