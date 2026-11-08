@@ -61,6 +61,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { holdingWords } from "@cawco/core/words/workspace-holding";
 import type {
   CarryRestored,
   WorkspaceArchive,
@@ -77,7 +78,6 @@ import type {
   WorkspaceUnlanded,
 } from "@cawco/core/workspace/controls";
 import {
-  holdingWords,
   holdsNothing,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";

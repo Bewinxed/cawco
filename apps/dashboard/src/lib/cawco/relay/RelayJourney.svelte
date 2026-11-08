@@ -25,9 +25,9 @@
     type RelayMachine,
     type RelayStep,
     type RelaySummary,
-    STREAM_RELAY_WORDS as words,
     zoneOf,
   } from "@cawco/core/stream-relay";
+  import { STREAM_RELAY_WORDS as words } from "@cawco/core/words/stream-relay";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import CopyBox from "#lib/cawco/CopyBox.svelte";
