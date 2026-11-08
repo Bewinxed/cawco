@@ -45,7 +45,7 @@
    * (overlay `data-cawco-bare-scroll`). The head is the owner's picks: the
    * title over its description, the Comments beside the page.
    */
-  import { type Pin, pinHeld } from "@cawco/core/comments";
+  import { type Pin, pinHeld } from "@cawco/core/comments/model";
   import { hubRequest } from "@cawco/core/hub-request";
   import { commentWords } from "@cawco/core/words/comments";
   import { onMount } from "svelte";
