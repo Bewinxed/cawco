@@ -99,7 +99,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
-import { cawcoDataDir } from "@cawco/core/paths";
+import { cawcoDataDir } from "@cawco/core/paths/cawco";
 import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { darwinSocketRoot } from "@cawco/core/socket-root";

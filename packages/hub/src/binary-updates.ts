@@ -39,7 +39,7 @@ import type {
   BinaryUpdateState,
   ChannelRelease,
 } from "@cawco/core/binary-updates";
-import { hubUpdatePolicyPath } from "@cawco/core/paths";
+import { hubUpdatePolicyPath } from "@cawco/core/paths/hub";
 import {
   type DamagedHubRecord,
   damagedHubRecordWords,

@@ -213,7 +213,7 @@ import {
   type HubRequest,
   hubRequest,
 } from "../../../packages/core/src/hub-request";
-import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import {
   commandLines,
   processArgs,

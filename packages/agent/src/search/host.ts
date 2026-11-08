@@ -34,12 +34,9 @@
  */
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-  listClaudeFiles,
-  listPiFiles,
-  opencodeDatabases,
-  transcriptIndexPath,
-} from "@cawco/core/paths";
+import { transcriptIndexPath } from "@cawco/core/paths/cawco";
+import { listClaudeFiles, listPiFiles } from "@cawco/core/paths/claude";
+import { opencodeDatabases } from "@cawco/core/paths/harnesses";
 import type { TranscriptDoc, TranscriptFile } from "@cawco/jsonl-parser";
 import {
   type ListOptions,
