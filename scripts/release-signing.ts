@@ -1,6 +1,6 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { releaseEnvPath } from "../packages/core/src/paths";
+import { releaseEnvPath } from "../packages/core/src/paths/cawco";
 
 /**
  * The release's secrets arrive only through the environment, never as

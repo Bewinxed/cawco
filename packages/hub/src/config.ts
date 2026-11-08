@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { CAWCO_ENV, type CawcoEnvVar, readEnv } from "@cawco/core/cawco-env";
-import { hubDbPath } from "@cawco/core/paths";
+import { hubDbPath } from "@cawco/core/paths/hub";
 import {
   CAWCO_HUB_PORT,
   localDashboardPort,
