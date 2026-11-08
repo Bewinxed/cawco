@@ -31,10 +31,10 @@ import {
 import { machineCalled } from "@cawco/core/machine-names";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import type { ProjectNote } from "@cawco/core/project-conversation";
-import { received } from "@cawco/core/stored-json";
 import { PlaceLfsRowSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import type { DbShape } from "./db";
+import { received } from "./stored-json";
 
 /** What {@link createPlaceRepos} needs of the hub. */
 export interface PlaceRepoDeps {
