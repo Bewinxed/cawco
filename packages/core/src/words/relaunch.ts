@@ -58,3 +58,19 @@ export const relaunchWords = {
   ) =>
     `[hub] ${session} is on ${account} now, and isn't relaunched: its process wasn't working (it is ${status}${launching ? ", its launch on its way" : ""}). ${carried ? "What stopped its last turn no longer applies, so it is told to carry on, and that starts it there." : "Whatever wakes it next starts it there."}`,
 };
+
+/** Why a session whose work a continuation took on never runs again. */
+export const continuedWords = (continuedInto: string): string =>
+  `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
+
+/**
+ * Where a continued session's work went, as its page says it in its
+ * composer's place (the words before the new session's title, a link to
+ * it), and as the hub refuses a person's message to it: a moved
+ * conversation points onward, it never takes a message on silently.
+ */
+export const CONTINUED_IN = "Continued in";
+
+/** {@link CONTINUED_IN} with the new session's title, as one sentence. */
+export const continuedInWords = (title: string): string =>
+  `${CONTINUED_IN} ${title}`;
