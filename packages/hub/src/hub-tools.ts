@@ -21,7 +21,7 @@
  * One list, made here: the MCP server lists it to sessions (server.ts) and
  * the role budgets measure it (role-budgets.ts).
  */
-import type { InstanceRow } from "@cawco/core";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { z } from "zod";
 import type { DesignFinding, DesignPick } from "./db/stored-types";
 import {

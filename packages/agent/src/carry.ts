@@ -42,7 +42,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { holdingWords } from "@cawco/core";
+import { holdingWords } from "@cawco/core/harness";
 import { workspaceCarriesDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
