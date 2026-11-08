@@ -6,8 +6,12 @@
  * assistant text. What `delegate_list` with a `target` says a delegate is
  * doing (delegation-tree.ts `peek`).
  */
-import type { TranscriptBlock, TranscriptPage } from "@cawco/core";
+
 import { describeTool, type ToolStatus } from "@cawco/core/tool-presentation";
+import type {
+  TranscriptBlock,
+  TranscriptPage,
+} from "@cawco/core/transcript-types";
 
 /** One tool call: the tool in words, what it was about, when, and how it ended. */
 export interface Step {

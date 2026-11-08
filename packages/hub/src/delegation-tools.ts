@@ -1,26 +1,27 @@
+import { DECIDES_RULE, type Kind, kindsLine } from "@cawco/core/decides";
 import {
-  DECIDES_RULE,
-  DEFAULT_IMAGE_PROVIDER,
+  sessionMayStart,
+  spawningToolAllowed,
+  startsAny,
+} from "@cawco/core/delegate-types";
+import type { ForgeWrite } from "@cawco/core/forge-post";
+import { handedInputsListed } from "@cawco/core/handed-input";
+import {
   HARNESSES,
   type HarnessKind,
+  SESSION_CHOSEN_MODES,
+} from "@cawco/core/harness/kinds";
+import {
+  DEFAULT_IMAGE_PROVIDER,
   IMAGE_GENERATION_DESCRIPTION,
   IMAGE_PROVIDER_MODELS,
   IMAGE_PROVIDERS,
   IMAGE_QUALITIES,
-  type Kind,
-  kindsLine,
-  LANDS_MODES,
   MAX_REFERENCE_IMAGES,
-  NO_REPLY_OWED,
-  NO_REPLY_TOOL,
-  REFERENCE_GUIDANCE,
-  SESSION_CHOSEN_MODES,
-  sessionMayStart,
-  spawningToolAllowed,
-  startsAny,
-} from "@cawco/core";
-import type { ForgeWrite } from "@cawco/core/forge-post";
-import { handedInputsListed } from "@cawco/core/handed-input";
+} from "@cawco/core/image-generation";
+import { LANDS_MODES } from "@cawco/core/injected";
+import { NO_REPLY_OWED, NO_REPLY_TOOL } from "@cawco/core/no-reply";
+import { REFERENCE_GUIDANCE } from "@cawco/core/references";
 import type { DesignMap } from "@cawco/core/stage";
 import { z } from "zod";
 import type {

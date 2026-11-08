@@ -25,7 +25,6 @@
  * close (`browser.viewers`), which its unwatched hand-back reads.
  */
 import { randomUUID } from "node:crypto";
-import { PAIRING_REQUIRED } from "@cawco/core";
 import {
   BROWSER_LISTEN,
   BROWSER_VIEWER_TOKEN,
@@ -38,6 +37,7 @@ import {
   isBrowserKey,
 } from "@cawco/core/browser";
 import { detach } from "@cawco/core/detach";
+import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
 import {
   causeOf,
   decodedHeaders,

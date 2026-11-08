@@ -30,7 +30,7 @@
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import { workWords } from "../../../packages/core/src/index";
+import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";

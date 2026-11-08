@@ -37,11 +37,6 @@
  * nothing of Tailscale's.
  */
 import { hostname, userInfo } from "node:os";
-import type {
-  TailnetHttps,
-  TailnetHttpsTodo,
-  TailnetOrigin,
-} from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import {
   causeOf,
@@ -52,6 +47,11 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
+import type {
+  TailnetHttps,
+  TailnetHttpsTodo,
+  TailnetOrigin,
+} from "@cawco/core/tailnet-https";
 import { secondsOf } from "@cawco/core/time";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
