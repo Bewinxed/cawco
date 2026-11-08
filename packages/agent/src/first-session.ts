@@ -19,12 +19,11 @@ import { readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceFirstSession } from "@cawco/core/harness";
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import { projectSlug, sessionConfigDir } from "@cawco/core/paths/claude";
 import {
-  projectSlug,
-  sessionConfigDir,
   workspaceSpillDir,
   workspaceStateDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { writeStateFile } from "@cawco/core/state-file";
 import { z } from "zod";
 
