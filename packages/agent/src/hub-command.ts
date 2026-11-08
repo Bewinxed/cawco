@@ -20,7 +20,7 @@ import {
   SlotWaitStopped,
   takeSlot,
 } from "@cawco/core/heavy-slots";
-import { workspaceScratchDir } from "@cawco/core/paths";
+import { workspaceScratchDir } from "@cawco/core/paths/workspace";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,

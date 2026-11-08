@@ -7,7 +7,7 @@ import { z } from "zod";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
 import { versionsInUse } from "./live-processes";
-import { hubDbPath } from "./paths";
+import { hubDbPath } from "./paths/hub";
 import { markerIsLive, ProcessMarkerSchema } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
 import { runtimeVersion } from "./runtime";
@@ -273,7 +273,7 @@ export async function recordInstall(
  * (`binary-releases/<version>/<archive>`, hub binary-updates.ts), beside the
  * hub's database. It holds archives only: everything in it is a build's, and
  * {@link prune} trims it. The update policy is not here
- * (paths.ts `hubUpdatePolicyPath`). Only on the hub's machine does it exist.
+ * (paths/hub.ts `hubUpdatePolicyPath`). Only on the hub's machine does it exist.
  */
 export const hubReleasesDir = (): string =>
   join(dirname(hubDbPath()), "binary-releases");

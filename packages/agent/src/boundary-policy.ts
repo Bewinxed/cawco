@@ -344,7 +344,7 @@ export interface SeatbeltPlace {
   /**
    * The tool, git and GitHub doors' sockets, the unix sockets under
    * CawCo's dirs a command connects to, and its `TMPDIR`'s short name
-   * (paths.ts `workspaceTmpDir`), through which a tool reaches its own socket.
+   * (paths/workspace.ts `workspaceTmpDir`), through which a tool reaches its own socket.
    */
   readonly doors: readonly string[];
   /**
