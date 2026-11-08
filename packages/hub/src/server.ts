@@ -514,7 +514,6 @@ import {
   DELEGATE_SUMMARIES_LIMIT,
   ENDED_STATUSES,
   OVER_STATUSES,
-  pauseClock,
   type RunKind,
   type StoppedCommands,
   UPDATE_CAWCO,
@@ -627,6 +626,7 @@ import { harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
+import { pauseClock } from "@cawco/core/words/machine-pause";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
