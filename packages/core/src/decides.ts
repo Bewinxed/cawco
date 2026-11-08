@@ -11,8 +11,6 @@
  * pick by the person is his, its why his note.
  */
 import type { SettingSource } from "./areas";
-import type { SettledBy } from "./choices";
-import { unhandled } from "./unhandled";
 import { decidesWords } from "./words/decides";
 
 /** Who decides a kind. The five built in are constants; the rest are rows. */
@@ -267,27 +265,6 @@ export const kindName = (
 export const DECIDES_RULE =
   "A choice that is not yours to make is a decision card with its kind; wait on the card — the hub settles it by the project's Who decides. A choice already made stays made: before a card, search for it with find (in a project, its decided pages' logs are decisions/<page>/log.md, by folder_read) and apply what you find.";
 
-/** The fleet's kinds as every session's instructions list them: `Kinds: look (layout, copy, …) · …`. */
-export const kindsLine = (kinds: readonly Kind[]): string =>
-  decidesWords.kindsLine(
-    kinds.map((kind) => `${kind.id} (${kind.example})`).join(" · ")
-  );
-
-/**
- * A member's answer in words: "Decided by Advisor · Claude Code · Opus 5.5
- * · why · 2 sources"; the person's own pick says nothing more than it does.
- */
-export const decidedByLine = (
-  settled: Pick<SettledBy, "name" | "runs" | "sources" | "why">
-): string =>
-  [
-    decidesWords.decidedBy(settled.name, settled.runs),
-    settled.why,
-    ...(settled.sources.length > 0
-      ? [decidesWords.sources(settled.sources.length)]
-      : []),
-  ].join(" · ");
-
 /** How a card's member stands for its writer's line: on it, could not start, settled by the writer, the person's, or unreachable. */
 export type RouteState =
   | { state: "you" }
@@ -295,30 +272,6 @@ export type RouteState =
   | { state: "running" }
   | { state: "failed"; why: string }
   | { state: "unreachable"; reason: string };
-
-/** Where a card goes, said to the session that wrote it, after the card's link (one line per card). */
-export const routeLine = (
-  kind: string,
-  member: string,
-  where: "project" | "fleet",
-  state: RouteState
-): string => {
-  const here = decidesWords.here(where === "project");
-  switch (state.state) {
-    case "you":
-      return decidesWords.routedYou(kind, here);
-    case "asker":
-      return decidesWords.routedAsker(kind, here);
-    case "failed":
-      return decidesWords.routedFailed(kind, member, here, state.why);
-    case "unreachable":
-      return decidesWords.routedUnreachable(kind, member, here, state.reason);
-    case "running":
-      return decidesWords.routedMember(kind, member, here);
-    default:
-      return unhandled("route state", state);
-  }
-};
 
 const DECIDES_FENCE = /^---\s*$/u;
 const DECIDES_LINES = /\r?\n/u;
