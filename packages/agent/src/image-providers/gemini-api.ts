@@ -1,4 +1,4 @@
-import { credentialAccountIds } from "@cawco/core/paths";
+import { credentialAccountIds } from "@cawco/core/paths/claude";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { GoogleGenAI } from "@google/genai";
 import { readHeld } from "../provider-accounts";

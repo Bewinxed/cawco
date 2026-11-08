@@ -88,11 +88,8 @@ import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
-import {
-  cawcoDataDir,
-  sessionIdentityDir,
-  workspaceScratchDir,
-} from "@cawco/core/paths";
+import { cawcoDataDir, sessionIdentityDir } from "@cawco/core/paths/cawco";
+import { workspaceScratchDir } from "@cawco/core/paths/workspace";
 import { processStart } from "@cawco/core/process-identity";
 import { identifiedPid, signal as sendSignal } from "@cawco/core/signal";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
@@ -213,7 +210,7 @@ export const hostKeyFile = (): string =>
 /**
  * This machine's host key: what a harness's config carries to call a shared
  * server or a gate's, kept owner-only beside the sessions' credentials (core
- * paths.ts `sessionIdentityDir`), hidden from every workspace boundary. Made
+ * paths/cawco.ts `sessionIdentityDir`), hidden from every workspace boundary. Made
  * once per boot of that directory; the next fleet sync writes it into every
  * config.
  */

@@ -20,7 +20,7 @@ import {
   harnessConfigProblem,
   npmPackageOf,
 } from "@cawco/core/harness-config";
-import { fleetPlacedDir } from "@cawco/core/paths";
+import { fleetPlacedDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { z } from "zod";
 import type { SetHarnessConfig } from "./fleet-harness-set";
