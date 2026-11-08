@@ -86,7 +86,7 @@ export default {
         join(scratch, "home")
       );
       const { MACHINE_PROOF_HEADER } =
-        await import("../../../packages/core/src");
+        await import("../../../packages/core/src/hub-auth");
       const { hubId } = await import("../../../packages/hub/src/hub-id");
       const { writeMachineKey } =
         await import("../../../packages/core/src/machine-key");
