@@ -67,8 +67,9 @@ import {
   buildTokens,
 } from "@cawco/design-tokens/design-tokens";
 import { tokensIn } from "@cawco/design-tokens/dtcg-resolver";
-import type { DbShape, WorkItemRow } from "./db";
+import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
+import type { WorkItemRow } from "./db/project-work";
 import type { DesignProposalFile } from "./db/stored-types";
 import { boardTitle } from "./labels";
 import {
