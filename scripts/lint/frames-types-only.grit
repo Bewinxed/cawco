@@ -1,0 +1,15 @@
+language js
+
+// core frames.ts holds frame shapes and nothing else: every other part of a
+// feature (routes, cookies, regular expressions, sentences) lives with its
+// feature, so a new frame changes one file and a new route changes another.
+or {
+  `export const $name = $value` as $hit where {
+    $filename <: includes "packages/core/src/frames.ts",
+    register_diagnostic(span=$hit, message="core frames.ts holds frame shapes alone: put a value with its feature (preview/routes.ts, artifact-session.ts, ...).")
+  },
+  or { `export function $name($args) { $body }`, `export function $name($args): $ret { $body }` } as $hit where {
+    $filename <: includes "packages/core/src/frames.ts",
+    register_diagnostic(span=$hit, message="core frames.ts holds frame shapes alone: put a function with its feature (preview/routes.ts, artifact-session.ts, ...).")
+  }
+}
