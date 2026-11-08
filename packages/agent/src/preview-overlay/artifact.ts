@@ -50,7 +50,6 @@ import {
   isSendControl,
   keepAside,
   type MarkPictures,
-  PIN_MAPS,
   type Pin,
   type RefusedReplies,
   type RefusedWrites,
@@ -61,6 +60,7 @@ import {
 } from "@cawco/core/comments";
 import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
 import type { MapDoc } from "@cawco/core/doc-maps";
+import { PIN_MAPS } from "@cawco/core/doc-maps";
 import { commentWords } from "@cawco/core/words/comments";
 import { here } from "./boot";
 import type { DeviceCopy, FromWorker, ToWorker } from "./doc-wire";
