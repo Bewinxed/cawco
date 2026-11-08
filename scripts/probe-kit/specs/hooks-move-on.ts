@@ -17,13 +17,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TaskHistory } from "../../../packages/core/src";
 import {
   type HubRequest,
   hubInit,
   hubRequest,
 } from "../../../packages/core/src/hub-request";
 import { machinePath } from "../../../packages/core/src/machine-path";
+import type { TaskHistory } from "../../../packages/core/src/task-views";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
