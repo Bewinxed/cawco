@@ -50,7 +50,6 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
-import type { OrphanedComments, PlanStep } from "@cawco/core/plan";
 import { ownIdentity } from "@cawco/core/process-identity";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type {
@@ -226,7 +225,6 @@ import {
   moves,
   type OpenSubagent,
   type PriorConversation,
-  planChanges,
   plugins,
   projectAccounts,
   projectLinks,
@@ -250,7 +248,6 @@ import {
   sentMessages,
   sessionLimits,
   sessionLines,
-  sessionPlans,
   sessionSubagents,
   sessionTaints,
   skills,
@@ -267,6 +264,7 @@ import {
 import { sealAtRest } from "./seal-at-rest";
 import type { Revocations } from "./session-identity";
 import { type SessionIdentityDb, sessionIdentityDb } from "./session-identity";
+import { type SessionPlansDb, sessionPlansDb } from "./session-plans";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
@@ -274,8 +272,6 @@ import type { MoveState, SendHold } from "./stored-types";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import {
   summaryOf as linkSummaryOf,
-  planLinkOwner,
-  planWaitLinks,
   syncTaskLinks,
   type TaskLinksDb,
 } from "./task-links";
@@ -458,8 +454,6 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect & {
   links: TaskLinkSummary[];
 };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
-type SessionPlanRow = typeof sessionPlans.$inferSelect;
-export type PlanChangeRow = typeof planChanges.$inferSelect;
 /** What a session has done that taints its memory notes (memory.ts), its open subagents with it. */
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
   subagents: OpenSubagent[];
@@ -839,11 +833,6 @@ interface HubStore {
   readonly clearEndConfirmation: (id: string) => void;
   /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
   readonly close: () => void;
-  /** Marks changes told (`at`, by the message `sent` to a session), or reaching no one (`undelivered`). */
-  readonly closePlanChanges: (
-    ids: readonly string[],
-    outcome: { at: Date; sent?: string } | { undelivered: string }
-  ) => void;
   /** The session's turn ended. */
   readonly closeTurn: (id: string) => void;
   /** A receipt for the current row's decision; deletes are finalized here. */
@@ -1630,17 +1619,6 @@ interface HubStore {
    * which asks the harness and not the session. Null when none is owed.
    */
   readonly personUnanswered: (id: string) => "read" | "pending" | null;
-  /** A plan's latest `limit` changes, oldest first. */
-  readonly planChangesOf: (
-    instanceId: string,
-    limit: number
-  ) => PlanChangeRow[];
-  /**
-   * The sessions whose plan's spec may hold away notes (a `## Since`
-   * heading; core injected.ts `awayNotesOf` reads whether it does), by id:
-   * those that may hold news for the person on their return.
-   */
-  readonly plansWithAwayNotes: () => string[];
   /** Host mode's preview passes, one per browser (preview-access.ts). */
   readonly previewPasses: PreviewPassesDb;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
@@ -1741,8 +1719,6 @@ interface HubStore {
   readonly projectWorkItems: (projectId: string) => WorkItemRow[];
   /** Drops the fleet MCP relay sessions unused since `before`; answers how many. */
   readonly pruneMcpSessions: (before: Date) => number;
-  /** The person saw the session's away notes as `notes` read (`session_plans.away_seen`). A session with no plan row has none to see. */
-  readonly putAwaySeen: (instanceId: string, notes: string) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
     name: string;
@@ -1796,8 +1772,6 @@ interface HubStore {
     machineId: string,
     openCodeGo: OpenCodeGoLimits | null
   ) => void;
-  /** Keeps one change the person made to a session's plan (plan-changes.ts). */
-  readonly putPlanChange: (row: PlanChangeRow) => void;
   readonly putPlugin: (plugin: {
     id: string;
     enabled?: boolean;
@@ -1819,17 +1793,6 @@ interface HubStore {
     /** What the files declare (fleet-versions.ts `pluginVersion`). */
     version?: string;
   }) => void;
-  /** Replaces a session's spec whole, its steps kept. */
-  readonly putSessionSpec: (instanceId: string, spec: string) => void;
-  /**
-   * Replaces a session's own steps whole, its spec kept;
-   * `orphanedComments` given, those too.
-   */
-  readonly putSessionSteps: (
-    instanceId: string,
-    steps: PlanStep[],
-    orphanedComments?: OrphanedComments[]
-  ) => void;
   /** Stores what a session has done that taints its memory notes (memory.ts), replacing what it had. */
   readonly putSessionTaint: (row: SessionTaintRow) => void;
   /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
@@ -2020,8 +1983,6 @@ interface HubStore {
     instanceId: string,
     states: SentMessageRow["state"][]
   ) => SentMessageRow[];
-  /** The changes told to `receiver` by a message still on record (core `PlanChange`, `sent_uuid`). */
-  readonly sentPlanChanges: (receiver: string) => PlanChangeRow[];
   /** What a harness session has cost, in dollars, by the usage its machine reported. */
   readonly sessionCostUsd: (sessionId: string) => number;
   /** Every session id on `machineId`, and nothing else of them: a read of thousands of rows' every column held the hub's thread (hub-restart-load). */
@@ -2030,8 +1991,6 @@ interface HubStore {
   readonly sessionLimits: () => SessionLimits;
   /** Unfiltered ownership, including hidden deletes and discarded rows. */
   readonly sessionOwnership: (machineId?: string) => OwnedInstanceRow[];
-  /** What a session last wrote of its own plan through `todo_write` (plans.ts). */
-  readonly sessionPlan: (instanceId: string) => SessionPlanRow | undefined;
   /** What a session has done that taints its memory notes; undefined for one that has done nothing the hub keeps. */
   readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
   /** The background tasks each Claude session's process runs now (session-tasks.ts). */
@@ -2192,8 +2151,6 @@ interface HubStore {
     status: "moving" | "error",
     lastError?: string
   ) => boolean;
-  /** The plan's own session has written its steps, or heard why a write was refused. */
-  readonly settlePlanChanges: (instanceId: string) => void;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
   /** Where the fleet's skill `name` comes from; undefined for none. */
@@ -2335,12 +2292,6 @@ interface HubStore {
    * back heals without a refresh.
    */
   readonly unresolvedPlugins: () => string[];
-  /** A plan's changes its own session has not written its steps over since. */
-  readonly unsettledPlanChanges: (instanceId: string) => PlanChangeRow[];
-  /** What `receiver` is still owed, oldest first: not told, and nothing said it could not be. */
-  readonly untoldPlanChanges: (receiver: string) => PlanChangeRow[];
-  /** Every receiver still owed a change. */
-  readonly untoldPlanReceivers: () => string[];
   /** Moves one job; the row as it now is, or undefined when it is gone. */
   readonly updateContinuation: (
     id: string,
@@ -2537,7 +2488,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = RulesDb &
+export type DbShape = SessionPlansDb &
+  RulesDb &
   HubSettingsDb &
   FindSettingsDb &
   ProjectAccountsDb &
@@ -4528,6 +4480,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...sessionPlansDb(core),
     ...rulesDb(core),
     ...hubSettingsDb(core),
     ...findSettingsDb(core),
@@ -7698,150 +7651,6 @@ const make = async (path: string): Promise<DbShape> => {
         .get(),
     openProjectOffers: () =>
       db.select().from(projectOffers).where(isNull(projectOffers.answer)).all(),
-    sessionPlan: (instanceId) =>
-      db
-        .select()
-        .from(sessionPlans)
-        .where(eq(sessionPlans.instanceId, instanceId))
-        .get(),
-    plansWithAwayNotes: () =>
-      db
-        .select({ instanceId: sessionPlans.instanceId })
-        .from(sessionPlans)
-        .where(sql`${sessionPlans.spec} LIKE '%## Since %'`)
-        .all()
-        .map((one) => one.instanceId),
-    putPlanChange: (row) => {
-      db.insert(planChanges).values(row).run();
-    },
-    planChangesOf: (instanceId, limit) =>
-      db
-        .select()
-        .from(planChanges)
-        .where(eq(planChanges.instanceId, instanceId))
-        .orderBy(desc(planChanges.at), desc(planChanges.id))
-        .limit(limit)
-        .all()
-        .reverse(),
-    untoldPlanChanges: (receiver) =>
-      db
-        .select()
-        .from(planChanges)
-        .where(
-          and(
-            eq(planChanges.receiver, receiver),
-            isNull(planChanges.toldAt),
-            isNull(planChanges.undelivered)
-          )
-        )
-        .orderBy(asc(planChanges.at), asc(planChanges.id))
-        .all(),
-    untoldPlanReceivers: () =>
-      db
-        .selectDistinct({ receiver: planChanges.receiver })
-        .from(planChanges)
-        .where(and(isNull(planChanges.toldAt), isNull(planChanges.undelivered)))
-        .all()
-        .map((row) => row.receiver),
-    closePlanChanges: (ids, outcome) => {
-      if (ids.length === 0) {
-        return;
-      }
-      db.update(planChanges)
-        .set(
-          "at" in outcome
-            ? {
-                toldAt: outcome.at,
-                sentUuid: outcome.sent ?? null,
-                undelivered: null,
-              }
-            : {
-                undelivered: outcome.undelivered,
-                toldAt: null,
-                sentUuid: null,
-              }
-        )
-        .where(inArray(planChanges.id, [...ids]))
-        .run();
-    },
-    sentPlanChanges: (receiver) =>
-      db
-        .select()
-        .from(planChanges)
-        .where(
-          and(
-            eq(planChanges.receiver, receiver),
-            isNotNull(planChanges.sentUuid)
-          )
-        )
-        .orderBy(asc(planChanges.at), asc(planChanges.id))
-        .all(),
-    unsettledPlanChanges: (instanceId) =>
-      db
-        .select()
-        .from(planChanges)
-        .where(
-          and(
-            eq(planChanges.instanceId, instanceId),
-            eq(planChanges.settled, false)
-          )
-        )
-        .orderBy(asc(planChanges.at), asc(planChanges.id))
-        .all(),
-    settlePlanChanges: (instanceId) => {
-      db.update(planChanges)
-        .set({ settled: true })
-        .where(
-          and(
-            eq(planChanges.instanceId, instanceId),
-            eq(planChanges.settled, false)
-          )
-        )
-        .run();
-    },
-    putSessionSteps: (instanceId, steps, orphanedComments) => {
-      const updatedAt = new Date();
-      const kept = orphanedComments ? { orphanedComments } : {};
-      db.transaction((tx) => {
-        tx.insert(sessionPlans)
-          .values({ instanceId, steps, updatedAt, ...kept })
-          .onConflictDoUpdate({
-            target: sessionPlans.instanceId,
-            set: { steps, updatedAt, ...kept },
-          })
-          .run();
-        // Its waits on pull requests are its plan's link rows, as a task's are its file's.
-        const projectId = tx
-          .select({ projectId: instances.projectId })
-          .from(instances)
-          .where(eq(instances.id, instanceId))
-          .get()?.projectId;
-        if (projectId) {
-          syncTaskLinks(
-            tx,
-            projectId,
-            planLinkOwner(instanceId),
-            planWaitLinks(steps)
-          );
-        }
-      });
-    },
-    putAwaySeen: (instanceId, notes) => {
-      db.update(sessionPlans)
-        .set({ awaySeen: notes })
-        .where(eq(sessionPlans.instanceId, instanceId))
-        .run();
-    },
-    putSessionSpec: (instanceId, spec) => {
-      const updatedAt = new Date();
-      db.insert(sessionPlans)
-        .values({ instanceId, steps: [], spec, specAt: updatedAt, updatedAt })
-        .onConflictDoUpdate({
-          target: sessionPlans.instanceId,
-          set: { spec, specAt: updatedAt, updatedAt },
-        })
-        .run();
-    },
     offerProject: ({ instanceId, reason, line }) =>
       db
         .insert(projectOffers)
