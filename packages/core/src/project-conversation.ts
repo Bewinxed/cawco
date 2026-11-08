@@ -6,12 +6,8 @@
  */
 
 import type { SettingSource } from "./areas";
-import type {
-  HarnessKind,
-  OfferedMode,
-  PermissionMode,
-  PlaceLfsRow,
-} from "./harness";
+import type { PlaceLfsRow } from "./harness";
+import type { HarnessKind, OfferedMode, PermissionMode } from "./harness/kinds";
 import type { ItemEnd } from "./work-items";
 
 /**
