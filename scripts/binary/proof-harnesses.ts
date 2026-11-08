@@ -5,7 +5,7 @@
  * `sleep`) is spawned through the session-holding process by the same client
  * call the Claude harness uses (`SessiondClient.spawnProc`, under the same
  * `procIdFor` id), outlives the agent, and is taken back by the same
- * `reattach`/`adopt`/`custodyCandidates` contract after the agent restarts.
+ * `reattach`/`adopt`/`custody.candidates` contract after the agent restarts.
  * No model. Claude's sign-ins are read as the real harness reads them
  * ({@link detected}), so the hub places the proof's sessions on an account.
  *
