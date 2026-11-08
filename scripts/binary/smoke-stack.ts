@@ -13,7 +13,7 @@ import {
 import {
   accountClaudeJson,
   accountConfigDir,
-} from "../../packages/core/src/paths";
+} from "../../packages/core/src/paths/claude";
 import { WIRE_PROTOCOL } from "../../packages/core/src/stream";
 import { unhandled } from "../../packages/core/src/unhandled";
 import { loopWords } from "../../packages/core/src/words/loop";

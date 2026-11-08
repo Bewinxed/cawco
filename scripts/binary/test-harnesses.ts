@@ -59,7 +59,7 @@ import {
   HARNESSES,
   type HarnessKind,
 } from "../../packages/core/src/harness/kinds";
-import { claudeHome } from "../../packages/core/src/paths";
+import { claudeHome } from "../../packages/core/src/paths/claude";
 import { sessionEnvironment } from "../../packages/core/src/session-env";
 
 /** What a session is handed by the supervisor, and what the harness hands back for it. */
