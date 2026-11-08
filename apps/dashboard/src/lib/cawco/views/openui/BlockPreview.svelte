@@ -21,7 +21,7 @@
   (decisions/host/Preview.svelte), which the page's media resolve.
 -->
 <script lang="ts">
-  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/frames";
+  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
   import type { ArtifactSummary } from "@cawco/core/protocol";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
