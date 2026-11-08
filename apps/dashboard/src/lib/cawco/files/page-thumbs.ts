@@ -16,11 +16,11 @@
  * and runs a server to be drawn, so it is drawn by the pane alone.
  */
 
+import { PICTURE_VIEW } from "@cawco/core/artifact-picture";
 import {
-  PICTURE_VIEW,
   PREVIEW_LOCKED_MESSAGE,
   projectPagePlace,
-} from "@cawco/core/frames";
+} from "@cawco/core/preview/routes";
 import type { ArtifactSummary } from "@cawco/core/protocol";
 import { theme } from "#lib/theme.svelte.js";
 import { keepThumbnail } from "../artifact-api";
