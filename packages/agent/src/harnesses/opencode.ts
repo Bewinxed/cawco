@@ -128,6 +128,8 @@ import type {
   HarnessContext,
   HarnessSession,
   ServerCustody,
+  ServerStop,
+  ServerStopRequest,
   TranscriptSpan,
 } from "../harness";
 import {
@@ -165,6 +167,7 @@ import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
 import { FULL_CAPABILITIES } from "./capabilities";
 import { type FleetSidecar, readSidecar } from "./fleet-common";
+import { neutralSubagentChange } from "./neutral-subagents";
 import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
   answerOf,
@@ -1855,18 +1858,19 @@ const oauthVerdict = (
 const CREDENTIAL_PREFIX = "cred_cawco_";
 
 export class OpencodeHarness implements Harness<"opencode"> {
+  readonly subagentChange = neutralSubagentChange;
+
   /** Its sessions live in servers that outlive the agent: everything the agent asks of custody, it asks here. */
   readonly custody: ServerCustody = {
     kind: "server",
     abortSession: (sessionKey, dir) => this.abortSession(sessionKey, dir),
     busyInstances: () => this.busyInstances(),
-    endSession: (sessionKey, dir, instanceId, claimed, forget) =>
-      this.endSession(sessionKey, dir, instanceId, claimed, forget),
     serversRunning: () => this.serversRunning(),
     sessionAddresses: () => this.sessionAddresses(),
     sessionPresent: (sessionKey, dir) => this.sessionPresent(sessionKey, dir),
     sessionsOn: (procId) => this.sessionsOn(procId),
     setCustodyReadiness: (read) => this.setCustodyReadiness(read),
+    stop: (request) => this.stopServerSession(request),
     unclaimedRunners: (directory, claimed) =>
       this.unclaimedRunners(directory, claimed),
   };
@@ -5047,6 +5051,58 @@ export class OpencodeHarness implements Harness<"opencode"> {
       throw new Error(`OpenCode session ${sessionKey} is still running`);
     }
     return true;
+  }
+
+  /** See {@link ServerCustody.stop}. */
+  async stopServerSession({
+    claimed,
+    directory,
+    forget,
+    instanceId,
+    key,
+    sharedElsewhere,
+  }: ServerStopRequest): Promise<ServerStop> {
+    if (!directory) {
+      throw new Error(
+        "OpenCode end requires the row's conversation and directory."
+      );
+    }
+    if (key) {
+      const shared = claimed.includes(key) || sharedElsewhere(key);
+      await this.endSession(
+        key,
+        directory,
+        instanceId,
+        shared ? [...claimed, key] : claimed,
+        forget
+      );
+      return {
+        ended: {
+          harness: this.kind,
+          sessionId: key,
+          resourcesClosed: true,
+          ...(shared ? { reason: "conversation held by another row" } : {}),
+        },
+        sharedConversation: shared,
+      };
+    }
+    const reading = await this.unclaimedRunners(directory, claimed);
+    if (reading.count > 0) {
+      return {
+        waiting: {
+          message: "End intent is waiting for unclaimed server runners.",
+          endReason: `waiting: ${reading.count} unclaimed runner(s) in ${directory}`,
+        },
+      };
+    }
+    return {
+      ended: {
+        harness: this.kind,
+        resourcesClosed: true,
+        reason: `no unclaimed runner in ${directory} at ${new Date(reading.readStartedAt).toISOString()}`,
+      },
+      sharedConversation: false,
+    };
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: runner idle and last-directory-owner confirmation must remain one ordered transaction
