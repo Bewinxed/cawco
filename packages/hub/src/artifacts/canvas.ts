@@ -25,7 +25,7 @@ import {
   keptOnRemake,
   NO_SCREEN,
 } from "@cawco/core/canvas";
-import { injectOverlay } from "@cawco/core/preview-proxy";
+import { injectOverlay } from "@cawco/core/preview/proxy";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Map as YMap } from "yjs";
