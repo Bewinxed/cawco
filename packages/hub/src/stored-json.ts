@@ -19,6 +19,8 @@
  * table, column, row and the zod issue. A stored row that fails means a
  * migration is missing: the fix is the migration, never a looser schema.
  */
+
+import { typeAt } from "@cawco/core/stored-types";
 import { getTableName, is, type Table } from "drizzle-orm";
 import {
   customType,
@@ -28,7 +30,6 @@ import {
   type SQLiteTable,
 } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
-import { typeAt } from "./stored-types";
 
 /** Which way a value failed its schema: read back from a row, or on its way into one. */
 export type StoredDirection = "read" | "write";
