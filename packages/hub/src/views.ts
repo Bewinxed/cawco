@@ -31,7 +31,6 @@ import {
 } from "@cawco/core/blocks";
 import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
-import { unrecognizedKeys } from "@cawco/core/unrecognized-keys";
 import {
   type ProjectView,
   STAGE_KINDS,
@@ -67,6 +66,7 @@ import {
 import { type Applies, appliesNow } from "./proposal-base";
 import { nextRunsOf, slotLabel } from "./routines";
 import type { Tasks } from "./tasks";
+import { unrecognizedKeys } from "./unrecognized-keys";
 
 /** A view's name: what its file is called, and the tab it becomes. */
 const VIEW_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
