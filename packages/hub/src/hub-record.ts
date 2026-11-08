@@ -18,7 +18,7 @@
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { hubDbPath } from "@cawco/core/paths";
+import { hubDbPath } from "@cawco/core/paths/hub";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** The file beside the hub's database that holds {@link HubEvent}s. */
