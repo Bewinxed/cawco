@@ -1,6 +1,6 @@
+import { hubDbPath } from "@cawco/core/paths/hub";
 import { defineConfig } from "drizzle-kit";
 import { getTableName } from "drizzle-orm";
-import { hubDbPath } from "../core/src/paths";
 // biome-ignore lint/performance/noNamespaceImport: Drizzle must enumerate every declared table to protect separately managed tables in the same database.
 import * as schema from "./src/db/schema";
 

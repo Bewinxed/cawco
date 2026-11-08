@@ -89,10 +89,12 @@ import {
   fleetHarnessSetFile,
   fleetMcpSetFile,
   fleetPlacesDir,
+} from "@cawco/core/paths/fleet";
+import {
   SPILLS_DIR_NAME,
   WORKSPACE_POLICY_NAME,
   workspacesDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
