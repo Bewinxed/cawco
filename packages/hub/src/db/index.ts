@@ -25,12 +25,10 @@ import type {
 } from "@cawco/core/fleet";
 import { placedOnly, scoped } from "@cawco/core/fleet";
 import type { FleetPlacement, FleetScope } from "@cawco/core/fleet-placement";
-import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { HarnessReport } from "@cawco/core/harness";
 import type {
   EffortLevel,
   HarnessKind,
-  OfferedMode,
   PermissionMode,
   SessionEffort,
 } from "@cawco/core/harness/kinds";
@@ -46,10 +44,6 @@ import type {
   HookHandler,
   HookVersion,
 } from "@cawco/core/hooks";
-import {
-  DEFAULT_IMAGE_SETTINGS,
-  type ImageSettings,
-} from "@cawco/core/image-generation";
 import { REMOVED_MACHINE } from "@cawco/core/join";
 import {
   type MachinePath,
@@ -151,7 +145,7 @@ import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
 import { type ConnectionsDb, connectionsDb } from "./connections";
-import { type DbCore, dbCore, SUPERVISOR_CONFIG_ID } from "./core";
+import { type DbCore, dbCore } from "./core";
 import { type DecidesDb, decidesDb } from "./decides";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
@@ -167,6 +161,7 @@ import {
 } from "./find";
 import { type ForgetDb, forgetDb } from "./forget";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
+import { type HubSettingsDb, hubSettingsDb } from "./hub-settings";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type LfsOffersDb, lfsOffersDb } from "./lfs-offers";
 import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
@@ -215,16 +210,13 @@ import {
   fleetMemoryHistory,
   fleetSkillHistory,
   fleetWatchNotices,
-  fleetWatchSettings,
   githubPollCursors,
   githubPollers,
   type HubFolder,
-  imageSettings,
   inboundEvents,
   instanceAliases,
   instanceConversations,
   instances,
-  jevSettings,
   limitEvents,
   lineAnchors,
   type MachineLineKind,
@@ -234,7 +226,6 @@ import {
   memoryBriefings,
   moves,
   type OpenSubagent,
-  openrouterConnection,
   type PriorConversation,
   planChanges,
   plugins,
@@ -266,7 +257,6 @@ import {
   sessionTaints,
   skills,
   spendSettings,
-  supervisorConfig,
   taskCommentIds,
   tools,
   usageBuckets,
@@ -796,9 +786,6 @@ interface HubStore {
    * `from`'s row no longer names it.
    */
   readonly carryWorkItem: (itemId: string, from: string, to: string) => void;
-  /** The fleet's choices row (`supervisor_config`) and its tool denials. */
-  /** The permission mode the fleet starts a project's conversation in (`supervisor_config.caw_mode`); null for none. */
-  readonly cawMode: () => OfferedMode | null;
   /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
   /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
   readonly cawSpentSince: (projectId: string, since: number) => number;
@@ -852,8 +839,6 @@ interface HubStore {
     sessionId: string;
   }[];
   readonly clearEndConfirmation: (id: string) => void;
-  /** Forget the OpenRouter key. */
-  readonly clearOpenRouterConnection: () => void;
   /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
   readonly close: () => void;
   /** Marks changes told (`at`, by the message `sent` to a session), or reaching no one (`undelivered`). */
@@ -975,8 +960,6 @@ interface HubStore {
   readonly dropQueuedWorkItem: (id: string) => void;
   /** Forgets the index rows of task files that are gone. */
   readonly dropTaskIndex: (projectId: string, paths: string[]) => void;
-  /** Takes the session's notice down; true when it had one. */
-  readonly dropWatchNotice: (instanceId: string) => boolean;
   /** Persist the decision before its reconciler may send anything. */
   readonly endInstance: (
     id: string,
@@ -1013,8 +996,6 @@ interface HubStore {
   readonly fleetSkillVersion: (
     id: number
   ) => (SkillVersion & { skillSource: string; files: SkillFile[] }) | undefined;
-  /** Whether fleet watch is on for the fleet; on while no row says otherwise. */
-  readonly fleetWatchOn: () => boolean;
   /**
    * Folds session `from` into `to`, the continuation it went on in, as
    * {@link foldFormerSessions} folds a former row, in one transaction: `from`
@@ -1077,15 +1058,6 @@ interface HubStore {
    * from a derived one.
    */
   readonly getInstancesByIds: (ids: string[]) => PublicInstanceRow[];
-  /**
-   * Jev's own settings: the TypeSafe key the hub holds (null while none is,
-   * or when the hub's key does not open it) and the suggestions switch.
-   */
-  readonly getJevSettings: () => {
-    suggestWhileTyping: boolean;
-    typesafeKey: string | null;
-    typesafeKeySetAt: Date | null;
-  };
   readonly getMcpOauth: (
     name: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
@@ -1099,15 +1071,8 @@ interface HubStore {
     id: string,
     server: string
   ) => Record<string, unknown> | undefined;
-  /** The stored OpenRouter key and when it was connected, or undefined while not connected. */
-  readonly getOpenRouterConnection: () =>
-    { apiKey: string; connectedAt: Date } | undefined;
   /** One rule, or nothing when it has been deleted out from under a caller. */
   readonly getRule: (id: string) => Rule | undefined;
-  readonly getSupervisorConfig: () => {
-    deniedTools: string[];
-    updatedAt: Date;
-  };
   /** A parent's items in one group that no combined report has carried yet, oldest first. */
   readonly groupWorkItems: (
     parentInstanceId: string,
@@ -1157,8 +1122,6 @@ interface HubStore {
   readonly holdSend: (uuid: string, envelope: Envelope<SendPayload>) => boolean;
   /** Who may call the hub: the pairing setting, the person's devices, the machines' keys (hub-auth.ts). */
   readonly hubAuth: HubAuthDb;
-  /** The fleet's image default; core's `DEFAULT_IMAGE_SETTINGS` while no row says otherwise. */
-  readonly imageSettings: () => ImageSettings;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
   readonly ingress: IngressDb;
   readonly insertContinuation: (
@@ -1916,8 +1879,6 @@ interface HubStore {
    * never accumulates.
    */
   readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
-  /** Raises (or replaces) the session's notice. */
-  readonly putWatchNotice: (notice: FleetWatchNotice) => void;
   /** Every hook start waiting for a slot in the project, oldest first (dispatch.ts). */
   readonly queuedTaskStarts: (projectId: string) => QueuedTaskStartRow[];
   /** `delegate` calls waiting for files a live item owns, oldest first. */
@@ -2167,17 +2128,12 @@ interface HubStore {
     outcome: FleetSyncOutcome
   ) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
-  /** Sets {@link DbShape.cawMode}; null clears it. */
-  readonly setCawMode: (mode: OfferedMode | null) => void;
   /** Stores the document and the hash the machines compare against. */
   readonly setFleetMemory: (content: string) => {
     content: string;
     hash: string;
     updatedAt: Date;
   };
-  readonly setFleetWatchOn: (on: boolean) => void;
-  /** Sets the fleet's image default. */
-  readonly setImageSettings: (settings: ImageSettings) => void;
 
   /** Puts sessions in a project: a session made a project, and its delegates. */
   readonly setInstancesProject: (ids: string[], projectId: string) => void;
@@ -2195,8 +2151,6 @@ interface HubStore {
     mode: "direct" | "oauth",
     error?: string
   ) => void;
-  /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
-  readonly setOpenRouterConnection: (apiKey: string) => void;
   /** A move's "Don't move", remembered on its project; null forgets it. */
   /** Records the root commit checkout place `id` was read at. */
   readonly setPlaceRoot: (id: string, commit: string) => void;
@@ -2266,10 +2220,6 @@ interface HubStore {
   ) => FleetSkillMeta | undefined;
   /** What reaching a cap does where a project sets nothing. */
   readonly setSpendOnCap: (onCap: OnCap) => void;
-  /** Turn composer suggestions on or off. Only meaningful while Jev is on. */
-  readonly setSuggestWhileTyping: (enabled: boolean) => void;
-  /** Hold (or replace) the TypeSafe key; null forgets it. */
-  readonly setTypesafeKey: (key: string | null) => void;
   /** Closes it. An ask this hub never recorded is nothing to close. */
   readonly settleDelegateAsk: (
     requestId: string,
@@ -2630,8 +2580,6 @@ interface HubStore {
   readonly waitingWorkItems: () => WorkItemRow[];
   /** The fleet-watch lines kept on the session's row, oldest first. */
   readonly watchLinesOf: (id: string) => WatchLine[];
-  /** Fleet watch's open needs-you notices, oldest first. */
-  readonly watchNotices: () => FleetWatchNotice[];
   readonly workItem: (id: string) => WorkItemRow | undefined;
   /** The newest work item whose landing opened or found the pull request at `url`. */
   readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
@@ -2651,7 +2599,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = FindSettingsDb &
+export type DbShape = HubSettingsDb &
+  FindSettingsDb &
   ProjectAccountsDb &
   AskPartsDb &
   PresenceDb &
@@ -3054,11 +3003,6 @@ const folderOf = (path: string | null | undefined): string | undefined =>
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
 export const MEMORY_ID = "memory";
-const OPENROUTER_CONNECTION_ID = "openrouter";
-const JEV_SETTINGS_ID = "jev";
-const FLEET_WATCH_ID = "fleet-watch";
-/** The one row of {@link imageSettings}. */
-const IMAGE_SETTINGS_ID = "images";
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -4687,6 +4631,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...hubSettingsDb(core),
     ...findSettingsDb(core),
     ...projectAccountsDb(core),
     ...askPartsDb(core),
@@ -10115,70 +10060,6 @@ const make = async (path: string): Promise<DbShape> => {
 
       return { rows, totals, missingPricing };
     },
-
-    cawMode: () => supervisorChoices().cawMode,
-    setCawMode: (mode) => {
-      supervisorChoices();
-      db.update(supervisorConfig)
-        .set({ cawMode: mode, updatedAt: new Date() })
-        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-        .run();
-    },
-    getSupervisorConfig: () => {
-      const row = supervisorChoices();
-      return {
-        deniedTools: deniedToolNames(),
-        updatedAt: row.updatedAt,
-      };
-    },
-    imageSettings: () => {
-      const row = db
-        .select()
-        .from(imageSettings)
-        .where(eq(imageSettings.id, IMAGE_SETTINGS_ID))
-        .get();
-      return row
-        ? { provider: row.provider, model: row.model }
-        : DEFAULT_IMAGE_SETTINGS;
-    },
-    setImageSettings: (settings) => {
-      db.insert(imageSettings)
-        .values({ id: IMAGE_SETTINGS_ID, ...settings })
-        .onConflictDoUpdate({ target: imageSettings.id, set: settings })
-        .run();
-    },
-    fleetWatchOn: () =>
-      db
-        .select({ on: fleetWatchSettings.on })
-        .from(fleetWatchSettings)
-        .where(eq(fleetWatchSettings.id, FLEET_WATCH_ID))
-        .get()?.on ?? true,
-    setFleetWatchOn: (on) => {
-      db.insert(fleetWatchSettings)
-        .values({ id: FLEET_WATCH_ID, on })
-        .onConflictDoUpdate({ target: fleetWatchSettings.id, set: { on } })
-        .run();
-    },
-    watchNotices: () =>
-      db
-        .select()
-        .from(fleetWatchNotices)
-        .orderBy(fleetWatchNotices.at)
-        .all()
-        .map((row) => ({ ...row, at: row.at.getTime() })),
-    putWatchNotice: (notice) => {
-      const row = { ...notice, at: new Date(notice.at) };
-      db.insert(fleetWatchNotices)
-        .values(row)
-        .onConflictDoUpdate({ target: fleetWatchNotices.instanceId, set: row })
-        .run();
-    },
-    dropWatchNotice: (instanceId) =>
-      db
-        .delete(fleetWatchNotices)
-        .where(eq(fleetWatchNotices.instanceId, instanceId))
-        .returning({ id: fleetWatchNotices.id })
-        .all().length > 0,
     claudeContextWindows: () =>
       Object.fromEntries(
         db
@@ -10296,39 +10177,6 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
     },
-    getOpenRouterConnection: () => {
-      const row = db
-        .select()
-        .from(openrouterConnection)
-        .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
-        .get();
-      // A key the hub's key does not open reads as not connected: connect again.
-      return row?.apiKey
-        ? { apiKey: row.apiKey, connectedAt: row.connectedAt }
-        : undefined;
-    },
-    getJevSettings: () => {
-      const row = db
-        .select()
-        .from(jevSettings)
-        .where(eq(jevSettings.id, JEV_SETTINGS_ID))
-        .get();
-      return {
-        typesafeKey: row?.typesafeKey || null,
-        typesafeKeySetAt: row?.typesafeKey ? row.typesafeKeySetAt : null,
-        suggestWhileTyping: row?.suggestWhileTyping ?? false,
-      };
-    },
-    setTypesafeKey: (key) => {
-      const typesafeKeySetAt = key === null ? null : new Date();
-      db.insert(jevSettings)
-        .values({ id: JEV_SETTINGS_ID, typesafeKey: key, typesafeKeySetAt })
-        .onConflictDoUpdate({
-          target: jevSettings.id,
-          set: { typesafeKey: key, typesafeKeySetAt },
-        })
-        .run();
-    },
     addCapabilityUsage: (rows) => {
       db.transaction((tx) => {
         for (const row of rows) {
@@ -10367,30 +10215,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(gte(skills.createdAt, since))
         .all()
         .map((row) => row.name),
-    setSuggestWhileTyping: (enabled) => {
-      db.insert(jevSettings)
-        .values({ id: JEV_SETTINGS_ID, suggestWhileTyping: enabled })
-        .onConflictDoUpdate({
-          target: jevSettings.id,
-          set: { suggestWhileTyping: enabled },
-        })
-        .run();
-    },
-    setOpenRouterConnection: (apiKey) => {
-      const connectedAt = new Date();
-      db.insert(openrouterConnection)
-        .values({ id: OPENROUTER_CONNECTION_ID, apiKey, connectedAt })
-        .onConflictDoUpdate({
-          target: openrouterConnection.id,
-          set: { apiKey, connectedAt },
-        })
-        .run();
-    },
-    clearOpenRouterConnection: () => {
-      db.delete(openrouterConnection)
-        .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
-        .run();
-    },
     listRules: () =>
       db.select().from(rules).orderBy(desc(rules.createdAt)).all().map(ruleOf),
 
