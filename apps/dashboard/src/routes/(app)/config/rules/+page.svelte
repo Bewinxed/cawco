@@ -1,9 +1,6 @@
 <script lang="ts">
-  import {
-    RULE_TEMPLATES,
-    type RuleRow,
-    ruleSentence,
-  } from "@cawco/core/rules";
+  import { RULE_TEMPLATES, type RuleRow } from "@cawco/core/rules";
+  import { ruleSentence } from "@cawco/core/words/rule-lines";
   import { rulesWords } from "@cawco/core/words/rules";
   import { deleteRule } from "#lib/cawco/config/deletes.js";
   import FleetStarters from "#lib/cawco/config/FleetStarters.svelte";
