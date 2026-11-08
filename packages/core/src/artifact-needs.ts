@@ -19,7 +19,7 @@
  * closing answer and a session that ended with its ask unanswered are
  * notices, never needs: a notice never outranks an ask.
  */
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import type { ArtifactKind } from "./index";
 import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
