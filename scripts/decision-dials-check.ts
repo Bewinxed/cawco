@@ -8,7 +8,7 @@
  *    adb12cab3 every page that kept the line was refused ("page.html shows
  *    /__cawco/decision/dials.js, which is not beside it") and no check
  *    noticed. Built, it loads the dials entry and never the host's sheet.
- * 2. The dials' own sheet (core decision-host.ts `dials.css`, page-css.ts
+ * 2. The dials' own sheet (hub decision-host.ts `dials.css`, page-css.ts
  *    `shadowSheet`) holds no `:root` and no `@property`, its root rules on
  *    the dials' root, and no `rem` outside a query's prelude.
  * 3. A program's Dials piece builds with controls the panel draws, and is
@@ -21,9 +21,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { KIND_SEED } from "../packages/core/src/decides";
-import { buildDecisionHost } from "../packages/core/src/decision-host";
 import { DIALS_REM, DIALS_ROOT } from "../packages/core/src/dials-root";
 import { clipEnd, stageReachedOf } from "../packages/core/src/stage-graph";
+import { buildDecisionHost } from "../packages/hub/src/decision-host";
 import { buildDecisionPage } from "../packages/hub/src/decision-page";
 import {
   buildProgram,

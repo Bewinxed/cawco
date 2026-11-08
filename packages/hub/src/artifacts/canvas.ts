@@ -25,15 +25,11 @@ import {
   keptOnRemake,
   NO_SCREEN,
 } from "@cawco/core/canvas";
-import {
-  CANVAS_ASSETS,
-  canvasHostFile,
-  canvasHostPage,
-} from "@cawco/core/canvas-host";
 import { injectOverlay } from "@cawco/core/preview-proxy";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Map as YMap } from "yjs";
+import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
 import { type ArtifactDocs, elementsOf } from "./docs";
 import { ArtifactRefusal } from "./service";
 
