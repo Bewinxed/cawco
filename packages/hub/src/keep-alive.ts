@@ -1,5 +1,6 @@
 import { modelScope } from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
+import { traitsOf } from "@cawco/core/harness/traits";
 import {
   type Envelope,
   type KeepAlive,
@@ -51,7 +52,7 @@ export const promptCacheExpiresAt = (
     );
   }
   // Without a measurement, only the longest Claude lifetime proves expiry.
-  return row.harness === "claude" && lastTurnAt
+  return traitsOf(row.harness).keepAlive && lastTurnAt
     ? new Date(lastTurnAt).getTime() + HOUR_MS
     : null;
 };
@@ -231,7 +232,7 @@ const tickKeepAlive = async (
   for (const row of ports.rows()) {
     if (!(
       row.keepAliveEnabled &&
-      row.harness === "claude" &&
+      traitsOf(row.harness).keepAlive &&
       row.status === "running" &&
       !row.keepAliveTurn
     )) {
