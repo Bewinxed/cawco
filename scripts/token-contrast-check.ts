@@ -28,7 +28,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Color from "colorjs.io";
 import postcss from "postcss";
-import { ACCOUNT_HUES } from "../packages/core/src/accounts";
+import { ACCOUNT_HUES } from "../packages/core/src/accounts/kinds";
 import { STATUS_PAIRS } from "../packages/core/src/views";
 import { CssEvaluator, type CssToken } from "../packages/hub/src/design-css";
 
