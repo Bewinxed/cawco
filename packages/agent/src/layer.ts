@@ -73,13 +73,6 @@ import {
 import { constants, homedir, release } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { cloneDenies } from "@cawco/core/clone-denies";
-import type {
-  ChangedPath,
-  ChangeVersion,
-  WorkspaceChanges,
-  WorkspaceConflict,
-  WorkspaceKind,
-} from "@cawco/core/harness";
 import { claudeHome } from "@cawco/core/paths/claude";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import { commandLine } from "@cawco/core/process-identity";
@@ -87,6 +80,13 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { WorkspaceKindSchema } from "@cawco/core/stored-shapes";
+import type {
+  ChangedPath,
+  ChangeVersion,
+  WorkspaceChanges,
+  WorkspaceConflict,
+  WorkspaceKind,
+} from "@cawco/core/workspace/controls";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { z } from "zod";
 import { removeTree } from "./remove-tree";

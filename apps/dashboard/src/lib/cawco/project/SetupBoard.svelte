@@ -13,7 +13,7 @@
    * draw this, the page from the setup page he writes (setup-draft.svelte.ts),
    * the bench from fixtures.
    */
-  import type { PermissionResult } from "@cawco/core/harness";
+  import type { PermissionResult } from "@cawco/core/session-messages";
   import { setupWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
   import {
