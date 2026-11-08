@@ -53,7 +53,6 @@ import {
 import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
-import { received } from "@cawco/core/stored-json";
 import {
   MoveInspectionSchema,
   MoveLfsResultShape,
@@ -73,6 +72,7 @@ import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
+import { received } from "./stored-json";
 
 /** A machine a step needs is away: the job waits for its next register. */
 export class MoveAway extends Error {
