@@ -38,19 +38,26 @@ import {
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { SessionInstruction } from "@cawco/core/fleet";
+import {
+  byPerson,
+  EFFORT_READ,
+  INSTALL_SESSION_CREDENTIAL,
+  offeredMode,
+  VERIFY_SESSION_CREDENTIAL,
+} from "@cawco/core/harness";
+import type {
+  EffortLevel,
+  ModelInfo,
+  PermissionMode,
+} from "@cawco/core/harness/kinds";
+import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
+import { machineLabel } from "@cawco/core/machine-names";
+import { unlistedModelRefusal } from "@cawco/core/model-names";
 import type {
   FleetMcpChange,
   FleetMcpTakeAnswer,
-  McpServerStatus,
-  ModelTurnUsage,
-  NeutralContentBlock,
-  PermissionResult,
-  SentMessage,
-  UserAnswers,
-  UserQuestion,
-} from "@cawco/core/harness";
+} from "@cawco/core/session/controls";
 import {
-  byPerson,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
@@ -64,27 +71,26 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
-  EFFORT_READ,
-  INSTALL_SESSION_CREDENTIAL,
+} from "@cawco/core/session/controls";
+import type {
+  McpServerStatus,
+  ModelTurnUsage,
+  NeutralContentBlock,
+  PermissionResult,
+  SentMessage,
+  UserAnswers,
+  UserQuestion,
+} from "@cawco/core/session-messages";
+import {
   MCP_NOT_CONNECTED,
   MESSAGES_READ,
   MESSAGES_STORED,
   mcpNotConnectedLine,
-  offeredMode,
   PROVIDER_RETRY,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   usageByModel,
-  VERIFY_SESSION_CREDENTIAL,
-} from "@cawco/core/harness";
-import type {
-  EffortLevel,
-  ModelInfo,
-  PermissionMode,
-} from "@cawco/core/harness/kinds";
-import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
-import { machineLabel } from "@cawco/core/machine-names";
-import { unlistedModelRefusal } from "@cawco/core/model-names";
+} from "@cawco/core/session-messages";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";

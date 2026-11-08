@@ -22,12 +22,6 @@
 
 import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { FramePayload } from "@cawco/core/frames";
-import {
-  CONTROL_INTERRUPT,
-  CONTROL_SET_EFFORT,
-  CONTROL_SET_MODEL,
-  CONTROL_SET_PERMISSION_MODE,
-} from "@cawco/core/harness";
 import type { PlanDelta, PlanSnapshot } from "@cawco/core/plan";
 import type {
   ControlPayload,
@@ -37,6 +31,12 @@ import type {
   SendPayload,
 } from "@cawco/core/protocol";
 import { SessionRing } from "@cawco/core/ring";
+import {
+  CONTROL_INTERRUPT,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
+  CONTROL_SET_PERMISSION_MODE,
+} from "@cawco/core/session/controls";
 import {
   alreadyDelivered,
   alreadyIngested,

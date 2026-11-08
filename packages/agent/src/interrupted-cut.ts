@@ -24,12 +24,12 @@
 import type { Stats } from "node:fs";
 import { lstat, readdir, readFile, readlink, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { WorkspaceCut } from "@cawco/core/harness";
 import { isSecretFileName } from "@cawco/core/paths/host-policy";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { WorkspaceCutSchema } from "@cawco/core/stored-shapes";
+import type { WorkspaceCut } from "@cawco/core/workspace/controls";
 import { z } from "zod";
 import { placedAsMade } from "./fleet";
 import { isGitDir } from "./git-dir";

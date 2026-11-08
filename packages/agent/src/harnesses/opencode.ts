@@ -51,16 +51,9 @@ import { mcpFleetState } from "@cawco/core/fleet";
 import type {
   HarnessCapabilities,
   HarnessReport,
-  NeutralSessionInfo,
-  SessionMessage,
   SignInFault,
-  SlashCommand,
-  WorkspaceRef,
 } from "@cawco/core/harness";
 import {
-  CONTROL_FOLDER_COMMANDS,
-  CONTROL_MODEL_CATALOG,
-  CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
   cleanStartRefusal,
   offeredMode,
@@ -84,7 +77,17 @@ import {
 } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
+import {
+  CONTROL_FOLDER_COMMANDS,
+  CONTROL_MODEL_CATALOG,
+  CONTROL_SUPPORTED_COMMANDS,
+} from "@cawco/core/session/controls";
 import { serverEnvironment } from "@cawco/core/session-env";
+import type {
+  NeutralSessionInfo,
+  SessionMessage,
+  SlashCommand,
+} from "@cawco/core/session-messages";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
@@ -93,6 +96,7 @@ import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { contactWords } from "@cawco/core/words/contact";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type {
   CredentialCreateInput,
   SessionInfo,
@@ -1854,7 +1858,7 @@ export class OpencodeHarness implements Harness {
   /** Its catalog is its servers' databases, read on the stores thread ({@link listSessions}). */
   readonly catalogFromServer = true as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
-  auth: import("@cawco/core/harness").AuthState = "authenticated";
+  auth: import("@cawco/core/session-messages").AuthState = "authenticated";
 
   /** The machine's keepers as OpenCode's servers reach them. */
   readonly #keepers = new KeeperPool();
