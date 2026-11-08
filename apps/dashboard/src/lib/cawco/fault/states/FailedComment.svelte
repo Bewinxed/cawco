@@ -6,7 +6,7 @@
    * one line in its place (CommentRail's RegionBoundary per row), its
    * siblings standing.
    */
-  import type { Pin } from "@cawco/core/comments";
+  import type { Pin } from "@cawco/core/comments/model";
   import CommentRail from "../../preview/CommentRail.svelte";
 
   let {
