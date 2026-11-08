@@ -808,15 +808,16 @@ import type {
   PlaceRow,
   ProjectRow,
   PublicInstanceRow,
-  SourceNote,
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
-import { checkoutOf, hashHookMaterial, listedAt, MEMORY_ID } from "./db";
+import { checkoutOf, listedAt } from "./db";
 import type { AccountLeave, LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
+import type { SourceNote } from "./db/fleet-catalog";
+import { hashHookMaterial, MEMORY_ID } from "./db/fleet-catalog";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { PriorConversation, TrashKind } from "./db/schema";
