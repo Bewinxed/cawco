@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { traitsOf } from "@cawco/core/harness/traits";
   import { MediaQuery } from "svelte/reactivity";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
 
@@ -384,7 +385,7 @@
     }
     if (waiting) {
       const here = cawco.session(message.instanceId);
-      if (here?.harness !== "claude") {
+      if (!traitsOf(here?.harness).queuesSends) {
         return "sent";
       }
       if (lifted) {
