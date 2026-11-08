@@ -1,4 +1,5 @@
 /** Stored decisions own lifetime; connection-local work is only delivery. */
+import { traitsOf } from "@cawco/core/harness/traits";
 import type {
   InstanceRow,
   NamedStop,
@@ -129,7 +130,7 @@ export const createSessionLifecycle = (ports: {
           fresh &&
           confirmAbsent &&
           postStopRead &&
-          row.harness !== "opencode" &&
+          traitsOf(row.harness).custody !== "server" &&
           !held.has(row.id) &&
           !attached.has(row.id) &&
           !pending.has(row.id) &&
@@ -168,11 +169,11 @@ export const createSessionLifecycle = (ports: {
             harness: row.harness,
             ...(row.sessionId ? { sessionId: row.sessionId } : {}),
             cwd: row.cwd,
-            ...(row.harness === "opencode"
+            ...(traitsOf(row.harness).custody === "server"
               ? {
                   claimedSessionIds: rows.flatMap((owner) =>
                     owner.id !== row.id &&
-                    owner.harness === "opencode" &&
+                    traitsOf(owner.harness).custody === "server" &&
                     owner.sessionId &&
                     (!row.sessionId ||
                       ["running", "starting"].includes(owner.status) ||
@@ -297,9 +298,9 @@ export const createSessionLifecycle = (ports: {
       return false;
     }
     if (
-      row.harness === "opencode" &&
+      traitsOf(row.harness).custody === "server" &&
       !(
-        payload.ended?.harness === "opencode" &&
+        traitsOf(payload.ended?.harness).custody === "server" &&
         (payload.ended.sessionId === row.sessionId ||
           (!row.sessionId &&
             payload.ended.reason?.startsWith(
