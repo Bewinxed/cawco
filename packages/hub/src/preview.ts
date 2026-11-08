@@ -13,7 +13,6 @@ import {
   cachePreview,
   causeOf,
   compressed,
-  DOWN_WORDS,
   decodedHeaders,
   downOf,
   downResponse,
@@ -57,6 +56,7 @@ import type { MachineSource, Upstream } from "@cawco/core/preview/upstream";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
+import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import {
   type PortHolders,
   previewPortWords,
