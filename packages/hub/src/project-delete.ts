@@ -40,13 +40,13 @@
  * again finishes it (each removal finds nothing left of what went before).
  */
 
+import type { BrowserKey } from "@cawco/core/browser";
 import {
   CONTROL_REMOVE_FOLDER,
   CONTROL_WORKSPACE_ARCHIVE,
   type RemoveFolder,
   type WorkspaceArchive,
-} from "@cawco/core";
-import type { BrowserKey } from "@cawco/core/browser";
+} from "@cawco/core/harness";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";

@@ -42,7 +42,7 @@
  *   `unlocks`. An `after` naming no decision of the project's links
  *   nothing; its writer is told so on create and revision (`linksOf`).
  */
-import type { ChoiceEntry, InstanceRow } from "@cawco/core";
+import type { ChoiceEntry } from "@cawco/core/choices";
 import { SEND_WRITES_MAX } from "@cawco/core/comments";
 import {
   type AfterLinks,
@@ -66,6 +66,7 @@ import {
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
 import { pageHash } from "@cawco/core/preview-proxy";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { Elysia, status, t } from "elysia";
 import type { PageHearer } from "./artifacts/service";

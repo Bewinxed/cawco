@@ -37,8 +37,7 @@ export const INSTALL_GRACE_MS = 15_000;
  * How long the command route's install may run on the machine before it
  * reads as stuck: the agent's wait and the hub's grace, folded together.
  */
-export const COMMAND_INSTALL_LIMIT_MS =
-  INSTALL_LIST_LIMIT_MS + INSTALL_GRACE_MS;
+const COMMAND_INSTALL_LIMIT_MS = INSTALL_LIST_LIMIT_MS + INSTALL_GRACE_MS;
 
 export type InstallRoute = "ssh" | "command";
 

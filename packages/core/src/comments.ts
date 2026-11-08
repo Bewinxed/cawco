@@ -69,7 +69,7 @@
 import { humanSize } from "./attachments";
 import { type DocMap, type MapDoc, PIN_MAPS } from "./doc-maps";
 import { fnv1a } from "./fnv1a";
-import type { PreviewElement } from "./index";
+import type { PreviewElement } from "./protocol";
 import type { Interaction } from "./stage";
 
 /**

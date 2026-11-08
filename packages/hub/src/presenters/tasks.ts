@@ -11,22 +11,18 @@
  * with where it stands) and "Unblocks"; a write of them, a filing and a
  * close each answer in three lines at most.
  */
+import type { AttemptResult, ResultArtifact } from "@cawco/core/deliverables";
+import type { ExternalRef } from "@cawco/core/external-items";
+import type { SessionPlan, TaskTodo } from "@cawco/core/plan";
 import {
-  type AttemptResult,
   artifactLink,
-  type ExternalRef,
-  externalItemWords,
   markdownLink,
   planLink,
-  type ResultArtifact,
-  type SessionPlan,
   sessionLink,
   stepLink,
-  type TaskTodo,
   taskLink,
-  taskLinkWords,
   todoLink,
-} from "@cawco/core";
+} from "@cawco/core/references";
 import type {
   AttemptStart,
   StagesView,
@@ -35,6 +31,8 @@ import type {
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
+import { externalItemWords } from "@cawco/core/words/external-items";
+import { taskLinkWords } from "@cawco/core/words/task-links";
 import type { DuplicateOutcome } from "../jev-tasks";
 import type { TaskComment } from "../task-file";
 import type { Closing, LinkOutcome, TaskView } from "../tasks";
