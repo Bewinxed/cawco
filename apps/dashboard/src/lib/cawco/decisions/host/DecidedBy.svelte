@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
   import type { SettledBy } from "@cawco/core/choices";
-  import { decidedByLine } from "@cawco/core/decides";
+  import { decidedByLine } from "@cawco/core/words/decides-lines";
   import { sourceShown } from "./decided-by.js";
 
   let {
