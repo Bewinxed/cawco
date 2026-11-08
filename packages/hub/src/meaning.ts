@@ -1,7 +1,8 @@
-import type { NeutralMessage, Rule, RuleFacts } from "@cawco/core";
-import { ruleInScope } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
+import type { NeutralMessage } from "@cawco/core/harness";
 import type { JevResult } from "@cawco/core/jev";
+import type { Rule, RuleFacts } from "@cawco/core/rules";
+import { ruleInScope } from "@cawco/core/rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";

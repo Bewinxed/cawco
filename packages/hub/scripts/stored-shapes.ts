@@ -28,7 +28,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
-import { z } from "zod";
 
 const HUB = resolve(import.meta.dir, "..");
 const ROOT = resolve(HUB, "../..");
@@ -384,13 +383,6 @@ const add = (kind: keyof Needs, file: string, name: string): void => {
   into.set(file, set);
 };
 
-const coreExports = Object.keys(
-  z
-    .object({ exports: z.record(z.string(), z.unknown()) })
-    .parse(
-      JSON.parse(readFileSync(join(ROOT, "packages/core/package.json"), "utf8"))
-    ).exports
-);
 /** How the generated file `out` imports what `file` exports: core by its package from the hub, by path within itself. */
 const specifierOf = (file: string, out: string): string => {
   const sdk = SDK.exec(file);
@@ -404,10 +396,7 @@ const specifierOf = (file: string, out: string): string => {
     );
   }
   if (file.startsWith(CORE_SRC) && out !== CORE_OUT) {
-    const sub = `./${file.slice(CORE_SRC.length).replace(TS_FILE, "")}`;
-    return coreExports.includes(sub)
-      ? `@cawco/core/${sub.slice(2)}`
-      : "@cawco/core";
+    return `@cawco/core/${file.slice(CORE_SRC.length).replace(TS_FILE, "")}`;
   }
   const path = relative(dirname(out), file).replace(TS_FILE, "");
   return path.startsWith(".") ? path : `./${path}`;

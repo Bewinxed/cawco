@@ -1,19 +1,13 @@
-import type {
-  Envelope,
-  InstanceRow,
-  NeutralMessage,
-  Rule,
-  RuleFacts,
-  RuleTiming,
-  SendPayload,
-} from "@cawco/core";
+import type { Bounded } from "@cawco/core/bounded";
+import type { NeutralMessage } from "@cawco/core/harness";
+import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
+import type { Rule, RuleFacts, RuleTiming } from "@cawco/core/rules";
 import {
   RULE_FIRE_CEILING,
   ruleInScope,
   ruleMarker,
   ruleMatches,
-} from "@cawco/core";
-import type { Bounded } from "@cawco/core/bounded";
+} from "@cawco/core/rules";
 import { unhandled } from "@cawco/core/unhandled";
 import type { DbShape } from "./db";
 import { jevUnanswered } from "./jev";

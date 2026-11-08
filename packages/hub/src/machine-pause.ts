@@ -27,13 +27,13 @@
  * The pause is the machine's row (`agents.paused_until`), so it survives the
  * hub's restart and its agent's; the timer is armed again as the hub starts.
  */
+import { machineCalled } from "@cawco/core/machine-names";
 import {
-  machineCalled,
   pauseClock,
   type RunKind,
   type StoppedCommands,
   stoppedWords,
-} from "@cawco/core";
+} from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";

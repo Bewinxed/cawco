@@ -4,8 +4,8 @@
  * lets the hub say so instead of the user finding out through a protocol error.
  */
 
-import type { BuildInfo } from "@cawco/core";
 import { readBuildInfo } from "@cawco/core/build-info";
+import type { BuildInfo } from "@cawco/core/protocol";
 
 let reported: Promise<BuildInfo> | undefined;
 
