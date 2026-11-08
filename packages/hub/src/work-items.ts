@@ -160,13 +160,13 @@ import {
 } from "@cawco/core/workspace-policy";
 import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
 import { briefingFor } from "./briefings";
+import type { DbShape } from "./db";
+import type { ArtifactRow } from "./db/artifacts";
 import type {
-  DbShape,
   QueuedWorkItemRow,
   WorkItemRow,
   WorkspaceRow,
-} from "./db";
-import type { ArtifactRow } from "./db/artifacts";
+} from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { LandingPhase, Origin, WorkOrigin } from "./db/schema";
 import type {
