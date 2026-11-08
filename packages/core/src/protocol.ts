@@ -1,10 +1,10 @@
 // The registry of CawCo's environment variables, in a file of its own that
 // imports nothing (cawco-env.ts), read here by the readers below it.
+
 import type { ACTIVITIES } from "./activity";
-import type { ArtifactKind } from "./artifact-kinds";
-import { CAWCO_ENV, readEnv } from "./cawco-env";
+import type { ArtifactDoes, ArtifactKind } from "./artifact-kinds";
 import type { MayStart } from "./delegate-types";
-import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
+import type { FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
 import type { LastErrorKind } from "./relaunch";
 import type { ToolStatus } from "./tools";
@@ -401,12 +401,6 @@ export interface DamagedRow {
   workspaceId?: string;
 }
 
-/** What a {@link DamagedRow} says to the person: what happened, and the way out (DESIGN.md's error formula). */
-export const damagedWords = (damaged: DamagedRow): string =>
-  damaged.remedy === "archive"
-    ? `This workspace's record is damaged: ${damaged.file} (${damaged.reason}). Archive workspace ${damaged.workspaceId ?? ""} to remove it. Every other workspace runs as before.`
-    : `This session's record is damaged: ${damaged.file} (${damaged.reason}). Its wake-ups are not known until its next turn ends, which writes the record whole again. Stop the session to remove it.`;
-
 /**
  * A record of the hub's own that it read at start and found damaged: the
  * feature it belongs to is off until the person resets it (hub
@@ -419,13 +413,6 @@ export interface DamagedHubRecord {
 
 /** The hub features whose one record can be damaged and reset, by what the person calls them. */
 export type HubRecordFeature = "notices" | "update policy";
-
-/** What a damaged hub record says to the person, and its way out (DESIGN.md's error formula). */
-export const damagedHubRecordWords = (
-  feature: HubRecordFeature,
-  damaged: DamagedHubRecord
-): string =>
-  `This hub's ${feature} record is damaged: ${damaged.file} (${damaged.reason}). ${feature === "notices" ? "Notices are off" : "Updates are off"} until you reset it; Reset writes a fresh record.`;
 
 /**
  * `heartbeat`: the daemon's 15s pulse. `instances` is the supervisor's live
@@ -812,52 +799,14 @@ export interface ScratchWorktree {
 }
 
 /**
- * A machine pause's end as the fleet says it (hub machine-pause.ts): the
- * local clock, "00:57", and the weekday too when it is not today ("Fri 08:00").
- */
-export function pauseClock(at: number, now = Date.now()): string {
-  const end = new Date(at);
-  const time = end.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  return end.toDateString() === new Date(now).toDateString()
-    ? time
-    : `${end.toLocaleDateString("en-GB", { weekday: "short" })} ${time}`;
-}
-
-/**
  * What a command the hub runs on a machine is, as a pause that stops it
  * counts it: one of an item's merge checks (the iOS build among them), or
  * any other.
  */
 export type RunKind = "merge check" | "command";
 
-const COMMAND_NOUNS: Record<RunKind, [string, string]> = {
-  "merge check": ["merge check", "merge checks"],
-  command: ["command", "commands"],
-};
-
 /** How many of each kind a machine's pause stopped as it began. */
 export type StoppedCommands = Partial<Record<RunKind, number>>;
-
-/**
- * "stopped 1 running merge check", "stopped 2 running merge checks and 1
- * running command"; undefined when the pause stopped nothing.
- */
-export function stoppedWords(stopped: StoppedCommands): string | undefined {
-  const parts = (Object.keys(COMMAND_NOUNS) as RunKind[]).flatMap((kind) => {
-    const count = stopped[kind] ?? 0;
-    const [one, many] = COMMAND_NOUNS[kind];
-    return count > 0 ? [`${count} running ${count === 1 ? one : many}`] : [];
-  });
-  if (parts.length === 0) {
-    return;
-  }
-  const last = parts.pop();
-  return `stopped ${parts.length > 0 ? `${parts.join(", ")} and ${last}` : last}`;
-}
 
 /** What a daemon reports about the checkout it was started from. */
 export interface BuildInfo {
@@ -1437,52 +1386,6 @@ export interface SessionPulse {
   runningSubagents: number;
 }
 
-/** What the hub records on a session whose daemon restarted out from under it, with nothing to go back to. */
-export const RESTART_LOST =
-  "The agent restarted, and this session left nothing to resume from.";
-
-/**
- * The error an OpenCode session's turn ends with when the server it ran in
- * stopped before finishing it, read back on reattach from the reply the
- * server kept unfinished. The turn did not end: it was cut, and the hub hands
- * it back to the session once.
- */
-export const SERVER_STOPPED_MID_TURN =
-  "The opencode server stopped before this turn finished; its reply is incomplete.";
-
-export const CAWCO_HUB_PORT = 3456;
-
-/**
- * The dashboard's port, beside the hub's (IANA lists 3455 as `prsvp`, a
- * legacy RSVP encapsulation; no dev server defaults to it, as Vite, Next and
- * Rails do to 3000): on the hub's computer the dashboard's socket listens on
- * it, on the network and loopback alike, and on every other computer running
- * the agent `http://localhost:3455` is carried to it (agent hub-loopback.ts).
- * Every address of the dashboard ends in it. Loopback is a secure context,
- * so its previews run in a process of their own.
- */
-export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
-
-/** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
-export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
-
-/** What the person does on an artifact: the reason it is in their panel. */
-export const ARTIFACT_DOES = ["pick", "judge", "try", "draw"] as const;
-export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
-/** The ask's length: one line in the panel's head. */
-export const ASK_LIMIT = 160;
-/** A title's length: the panel head's name, a menu row, a chip. */
-export const ARTIFACT_TITLE_LIMIT = 80;
-/** Words the owner banned from anything that reaches him. */
-export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/iu;
-/** A path or a file in the ask: the person's words carry neither. */
-export const ASK_PATHLIKE =
-  /(^|[\s(])[\w.-]*\/[\w.-]+\.[a-z]{1,5}\b|\b[\w-]+\.(svelte|tsx?|png|webp|jpe?g|oui|html)\b/iu;
-/** Desk captures one page for judging or picking may hold: past it, the page is a catalogue of pictures drawn at a fraction of their size in the panel. */
-export const DESK_CAPTURES_PER_PAGE = 2;
-/** A capture wider than this many pixels is a desk capture: the panel is 600px beside the transcript, 390px on a phone. */
-export const DESK_CAPTURE_WIDTH = 1600;
-
 /** One artifact as the panel's list shows it, newest first. */
 export interface ArtifactSummary {
   /** The one line the panel's head shows under its title: what the person does here, in their words. Empty on one made before asks were kept. */
@@ -1586,59 +1489,6 @@ export interface ArtifactPromotion {
   at: string;
   commit: string;
 }
-
-let gatewayPort: number | undefined;
-
-/**
- * The port this machine's agent serves its MCP gateway on: `CAWCO_MCP_PORT`,
- * else {@link CAWCO_MCP_DEFAULT_PORT}, read once per process. It is the one
- * setting every end that names the gateway reads: the agent's listener, the
- * URL each session's MCP config and OpenCode config carry, the pi host the
- * keeper runs (given it by its agent), and `cawco service`'s restart
- * question. So a second agent on one host runs on a port of its own, with no
- * network namespace; production machines keep the default, which nothing in
- * the installer changes.
- *
- * A session's CLI is started with the gateway URL in its config and keeps it
- * for its whole life, across restarts of its agent (the keeper holds it).
- * So when the port changes (an update that moves the default, or a new
- * `CAWCO_MCP_PORT`), the agent asks the hub to relaunch each session whose
- * process names another port, between its turns ({@link GATEWAY_RELAUNCH}:
- * a Claude CLI by its CawCo slot's URL, a pi host by the port it says),
- * and each OpenCode server, whose config and plugin carry the URL, fails its
- * launch check and is replaced at rest.
- */
-export const mcpGatewayPort = (): number => {
-  if (gatewayPort === undefined) {
-    const named = readEnv(CAWCO_ENV.mcpPort);
-    const port = named === undefined ? CAWCO_MCP_DEFAULT_PORT : Number(named);
-    if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
-      throw new Error(
-        `${CAWCO_ENV.mcpPort} must be a port number, not "${named}"`
-      );
-    }
-    gatewayPort = port;
-  }
-  return gatewayPort;
-};
-
-/**
- * The dashboard's loopback port: `CAWCO_LOCAL_DASHBOARD_PORT`, else
- * {@link CAWCO_LOCAL_DASHBOARD_PORT}. The hub names it to every agent in its
- * register answer, and the installer listens on it with the dashboard's
- * sockets on the hub's computer (cli service.ts `dashboardAddress`); both
- * read it here.
- */
-export const localDashboardPort = (): number => {
-  const named = readEnv(CAWCO_ENV.localDashboardPort);
-  const port = named === undefined ? CAWCO_LOCAL_DASHBOARD_PORT : Number(named);
-  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
-    throw new Error(
-      `${CAWCO_ENV.localDashboardPort} must be a port number, not "${named}"`
-    );
-  }
-  return port;
-};
 
 /**
  * The mDNS service the hub advertises and `cawco` browses for.
