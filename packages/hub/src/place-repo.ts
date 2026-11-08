@@ -25,12 +25,12 @@
  */
 import {
   CONTROL_PLACE_REPO,
-  LARGE_FILE_BYTES,
-  machineCalled,
   type PlaceLeftOut,
   type PlaceRepo,
-  type ProjectNote,
-} from "@cawco/core";
+} from "@cawco/core/harness";
+import { machineCalled } from "@cawco/core/machine-names";
+import { LARGE_FILE_BYTES } from "@cawco/core/move";
+import type { ProjectNote } from "@cawco/core/project-conversation";
 import { received } from "@cawco/core/stored-json";
 import { PlaceLfsRowSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";

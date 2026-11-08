@@ -10,9 +10,10 @@
  * disk, where any process running as this user, a session's among them,
  * could read it. The hub keeps it for a quarter of an hour, in memory.
  */
-import type { PairingPoll, PairingStart } from "@cawco/core";
-import { OWNER_SCHEME } from "@cawco/core";
+
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { PairingPoll, PairingStart } from "@cawco/core/hub-auth";
+import { OWNER_SCHEME } from "@cawco/core/hub-auth";
 import {
   fetchHub,
   type HubRequest,

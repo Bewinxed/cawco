@@ -12,14 +12,14 @@
 import { createHash } from "node:crypto";
 import { readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
+import type { FleetItemState } from "@cawco/core/fleet";
+import { harnessConfigKey } from "@cawco/core/fleet-items";
 import {
   type FleetHarnessConfig,
-  type FleetItemState,
   harnessConfigProblem,
   npmPackageOf,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
-import { harnessConfigKey } from "@cawco/core/fleet-items";
+} from "@cawco/core/harness-config";
 import { fleetPlacedDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { z } from "zod";
