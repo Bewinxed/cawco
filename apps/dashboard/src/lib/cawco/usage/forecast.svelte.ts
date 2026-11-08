@@ -10,7 +10,9 @@
  * and morphs figures; the minute moving on ("clock") changes the words in
  * place, with nothing animated for it.
  */
+
 import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { hubRequest } from "@cawco/core/hub-request";
 import { hubFetch } from "#lib/cawco/hub-read.js";
 import { cawco, followAccounts } from "../client.svelte";
@@ -123,7 +125,7 @@ const openCode = $derived.by((): RingAccount | null => {
     reading,
     cawco.runningInstances.filter(
       (row) =>
-        row.harness === "opencode" &&
+        traitsOf(row.harness).providerLimit === "go" &&
         (row.status === "running" || row.status === "starting")
     ),
     state.now,

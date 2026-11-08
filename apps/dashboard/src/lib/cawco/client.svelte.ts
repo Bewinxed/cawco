@@ -75,6 +75,7 @@ import type {
   PermissionMode,
   SessionEffort,
 } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import type { LawBroken } from "@cawco/core/invariant";
@@ -5009,7 +5010,7 @@ function restoreComposer(
 export function canWithdraw(message: Message): boolean {
   return (
     message.state === "pending" &&
-    state.sessions[message.instanceId]?.harness === "claude"
+    traitsOf(state.sessions[message.instanceId]?.harness).withdrawSend
   );
 }
 
@@ -9228,7 +9229,7 @@ export async function editAndResend(
   // OpenCode reverts the selected user turn; Claude resumes through the
   // preceding completed assistant frame.
   const point =
-    target.harness === "opencode"
+    traitsOf(target.harness).rewindAnchor === "user-turn"
       ? target.messages.find((message) => message.id === id)?.sdkUuid
       : await rewindPointBehind(target, id);
   if (!point) {
