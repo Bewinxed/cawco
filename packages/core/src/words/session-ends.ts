@@ -12,3 +12,9 @@ export const RESTART_LOST =
  */
 export const SERVER_STOPPED_MID_TURN =
   "The opencode server stopped before this turn finished; its reply is incomplete.";
+
+const FINAL_STOP = /\.$/u;
+
+/** What a session's transcript and its model are told of a server that did not connect ({@link MCP_NOT_CONNECTED}). */
+export const mcpNotConnectedLine = (name: string, why: string): string =>
+  `${name} didn't connect: ${why.trim().replace(FINAL_STOP, "")}. This session runs without its tools.`;
