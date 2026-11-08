@@ -21,7 +21,6 @@ import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { detach } from "@cawco/core/detach";
-import type { PermissionResult } from "@cawco/core/harness";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import { MachinePathRefused, machinePath } from "@cawco/core/machine-path";
 import {
@@ -53,6 +52,7 @@ import {
 import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import type { PermissionResult } from "@cawco/core/session-messages";
 import {
   MoveInspectionSchema,
   MoveLfsResultShape,
