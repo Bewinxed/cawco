@@ -15,7 +15,7 @@
  */
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { sessionIdentityDir } from "@cawco/core/paths";
+import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "../delegation";
 
