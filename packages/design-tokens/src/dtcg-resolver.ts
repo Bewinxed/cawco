@@ -25,7 +25,7 @@
  *
  * Both files are checked against the DTCG's published JSON Schemas
  * (https://www.designtokens.org/schemas/2025.10/format.json and
- * …/resolver.json, kept in packages/hub/schemas/dtcg-2025.10/).
+ * …/resolver.json, kept in packages/design-tokens/schemas/dtcg-2025.10/).
  */
 import { posix } from "node:path";
 import Ajv, { type ValidateFunction } from "ajv";
