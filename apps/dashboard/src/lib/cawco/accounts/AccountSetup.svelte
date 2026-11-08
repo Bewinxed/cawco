@@ -30,7 +30,6 @@
    */
   import {
     type Account,
-    type AccountHue,
     type AccountJoined,
     CLAUDE_PROVIDER,
     DEFAULT_AT_LIMIT,
@@ -38,6 +37,7 @@
     type ProviderChoice,
     type StrategyChoice,
   } from "@cawco/core/accounts";
+  import type { AccountHue } from "@cawco/core/accounts/kinds";
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
