@@ -44,6 +44,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import {
   STAGE_RESUMED_SAID,
   type StageStatus,
@@ -77,11 +78,8 @@ const SERVED_WORD = "carried served page";
 /** The stage's name for it in the agent's `[stage]` lines (stage.ts `tell`). */
 const SERVED_AT = `port ${SERVED_PORT}`;
 
-/** `word` as one single-quoted shell word. */
-const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
-
 /** What serves the delegate's preview: a page saying {@link SERVED_WORD} on the `PORT` the stage gives it. */
-const SERVED = `bun -e ${quoted(
+const SERVED = `bun -e ${shellQuote(
   `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${SERVED_WORD}</title></head><body><h1 id="word">${SERVED_WORD}</h1></body></html>`)};Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch:()=>new Response(page,{headers:{"content-type":"text/html"}})});`
 )}`;
 
