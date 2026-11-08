@@ -43,10 +43,12 @@
  *
  *   bun scripts/probe-kit/run.ts workspace-install
  */
+
 import { lstatSync } from "node:fs";
 import { readdir, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { hubRequest } from "../../../packages/core/src/hub-request";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   copyPath,
@@ -113,7 +115,7 @@ const installCommand = (tag: Tag): string =>
 
 /** Lists the other workspace's clone from inside this one's boundary, then the exit. */
 const listCommand = (tag: Tag, other: string): string =>
-  `ls -A '${other.replaceAll("'", `'\\''`)}' 2>&1 | head -n 5; echo ${apart(`LISTED-${tag}:`)}\${PIPESTATUS[0]}`;
+  `ls -A ${shellQuote(other)} 2>&1 | head -n 5; echo ${apart(`LISTED-${tag}:`)}\${PIPESTATUS[0]}`;
 
 /**
  * Each delegate's last answer, held until the leg lets it go
