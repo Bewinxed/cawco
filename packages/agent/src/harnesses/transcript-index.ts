@@ -21,8 +21,8 @@
  * nobody has read for {@link IDLE_MS} is dropped.
  */
 
-import type { WindowAsk } from "@cawco/core";
 import { inFlight } from "@cawco/core/loop-watch";
+import type { WindowAsk } from "@cawco/core/transcript-types";
 import {
   type BytePrefilter,
   type Checkpoint,
