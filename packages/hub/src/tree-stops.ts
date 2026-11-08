@@ -29,7 +29,8 @@
 import type { EndedBy } from "@cawco/core/accounts";
 import type { InstanceStatus } from "@cawco/core/protocol";
 import { workWords } from "@cawco/core/words/work";
-import type { DbShape, WorkItemRow } from "./db";
+import type { DbShape } from "./db";
+import type { WorkItemRow } from "./db/project-work";
 import type { TreeStopRow } from "./db/tree-stops";
 import { handle } from "./presenters/words";
 import { isHubParent, isLive, type WorkItems } from "./work-items";
