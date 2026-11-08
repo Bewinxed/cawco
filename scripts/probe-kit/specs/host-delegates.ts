@@ -54,7 +54,7 @@ import { readFileSync, readlinkSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sessionEnv } from "../../../packages/agent/src/harnesses/claude";
-import type { HarnessKind } from "../../../packages/core/src/harness";
+import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
