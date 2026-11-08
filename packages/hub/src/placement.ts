@@ -4,32 +4,34 @@ import {
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
-  aheadOfWeek,
-  bearing,
   clockWords,
-  configurePage,
-  earliestReset,
-  headroom,
   keepsGoingOnExtraUsage,
-  type LimitWindow,
   modelScope,
-  openedAt,
   type PlacementExplain,
-  type PlacementStrategy,
   type ProviderRouting,
-  type SettingsInEffect,
   type StrategyChoice,
   spanWords,
+} from "@cawco/core/accounts";
+import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
+import type { SettingsInEffect } from "@cawco/core/areas";
+import { harnessNamed } from "@cawco/core/harness/kinds";
+import { HOUR_MS } from "@cawco/core/time";
+import type { LimitWindow } from "@cawco/core/usage/types";
+import {
+  aheadOfWeek,
+  bearing,
+  earliestReset,
+  headroom,
+  openedAt,
   windowNoun,
   windowOpen,
   windowResetAt,
   windowUsed,
   windowWords,
-} from "@cawco/core";
-import { harnessNamed } from "@cawco/core/harness/kinds";
-import { HOUR_MS } from "@cawco/core/time";
+} from "@cawco/core/usage/windows";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
+import { configurePage } from "@cawco/core/words/configure";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { AccountPaces } from "./forecast";

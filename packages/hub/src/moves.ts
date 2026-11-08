@@ -19,8 +19,12 @@
 
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
+import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import { detach } from "@cawco/core/detach";
+import type { PermissionResult } from "@cawco/core/harness";
+import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
+import { MachinePathRefused, machinePath } from "@cawco/core/machine-path";
 import {
-  ASK_USER_QUESTION,
   CONTROL_MOVE_CANCEL,
   CONTROL_MOVE_CLONE,
   CONTROL_MOVE_INSPECT,
@@ -28,8 +32,6 @@ import {
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
-  deriveTitleFromFirstMessage,
-  type Envelope,
   MOVE_JOB_STEPS,
   type MoveAsk,
   type MoveError,
@@ -47,13 +49,8 @@ import {
   moveBranch,
   moveSize,
   type NamedMoveRequest,
-  type PermissionResult,
-  type SendPayload,
-  type SpawnPayload,
-} from "@cawco/core";
-import { detach } from "@cawco/core/detach";
-import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
-import { MachinePathRefused, machinePath } from "@cawco/core/machine-path";
+} from "@cawco/core/move";
+import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { received } from "@cawco/core/stored-json";
@@ -63,6 +60,7 @@ import {
   MoveSnapshotResultShape,
 } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
+import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
 import {
   checkoutOf,

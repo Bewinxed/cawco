@@ -1,9 +1,5 @@
-import {
-  CAWCO_ENV,
-  CAWCO_HUB_PORT,
-  localDashboardPort,
-  readEnv,
-} from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { CAWCO_HUB_PORT, localDashboardPort } from "@cawco/core/protocol";
 
 /**
  * The hub's API port and the dashboard's port (on a machine that is not the

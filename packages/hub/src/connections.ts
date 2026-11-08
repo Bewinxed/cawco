@@ -53,28 +53,30 @@
  * use", docs.github.com, authorizing OAuth apps).
  */
 import { createHash, createPrivateKey } from "node:crypto";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   APP_SERVICES,
   type AppService,
   CONNECTION_AUTHS,
-  CONNECTION_NAME,
   CONNECTION_TRANSPORTS,
   type ConnectionApp,
   type ConnectionAuth,
   type ConnectionTransport,
   type ConnectionView,
-  connectionsWords,
-  connectionToolName,
   type GhSignIn,
-  type InstanceRow,
-  parseConnectionTool,
   pushOnlyProvider,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/connections";
+import {
+  CONNECTION_NAME,
+  connectionToolName,
+  parseConnectionTool,
+} from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
+import { connectionsWords } from "@cawco/core/words/connections";
 import { LinearClient } from "@linear/sdk";
 import {
   auth,

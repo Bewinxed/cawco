@@ -20,7 +20,7 @@ BASE_LOCAL=localhost/cawco-test-ubuntu:24.04
 # account never read signed-in, and both stacks failed "Did not become ready: http://127.0.0.1:43456/api/accounts".
 sdk_claude_version() {
   local said version floor older
-  said=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../packages/agent" && bun -e 'const { CLAUDE_VERSION_FLOOR, olderThan } = await import("@cawco/core"); const v = require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion; console.log(`${v} ${CLAUDE_VERSION_FLOOR} ${olderThan(v, CLAUDE_VERSION_FLOOR)}`)') &&
+  said=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../packages/agent" && bun -e 'const { CLAUDE_VERSION_FLOOR, olderThan } = await import("@cawco/core/tools"); const v = require("@anthropic-ai/claude-agent-sdk/package.json").claudeCodeVersion; console.log(`${v} ${CLAUDE_VERSION_FLOOR} ${olderThan(v, CLAUDE_VERSION_FLOOR)}`)') &&
     read -r version floor older <<< "$said" &&
     [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "could not read the SDK's claudeCodeVersion (got '${said:-}'): run bun install --frozen-lockfile" >&2; return 1; }
   [[ $older == false ]] || { echo "the SDK's Claude Code $version is older than $floor, the oldest the agent runs (packages/core/src/tools.ts CLAUDE_VERSION_FLOOR): move packages/agent's @anthropic-ai/claude-agent-sdk to one built against $floor or newer" >&2; return 1; }

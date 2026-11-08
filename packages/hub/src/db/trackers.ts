@@ -1,4 +1,4 @@
-import type { IssueTracker } from "@cawco/core";
+import type { IssueTracker } from "@cawco/core/trackers";
 import { and, count, eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { projects, taskLinks, trackerBindings, trackerLinks } from "./schema";
