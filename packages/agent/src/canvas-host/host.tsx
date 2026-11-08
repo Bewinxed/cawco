@@ -2,12 +2,12 @@
  * A canvas artifact's host page (Projects spec §5.10, D24): Excalidraw with
  * its own chrome hidden, our tool rail over it, the empty state when it
  * holds nothing. The hub serves it at the canvas's root with the overlay in
- * it (core canvas-host.ts); the overlay joins the artifact's doc as it does
+ * it (hub canvas-host.ts); the overlay joins the artifact's doc as it does
  * for any page, and hands it over as Yjs updates through
  * `window.cawcoArtifact` (artifact.ts) to this page's own replica of it
  * (replica.ts), which scene.ts binds Excalidraw to. Its stylesheet,
  * Excalidraw's and canvas.css, is no import of this module's: Lightning CSS
- * compiles it (core canvas-host.ts `SHEETS`), and index.html links it.
+ * compiles it (hub canvas-host.ts `SHEETS`), and index.html links it.
  */
 import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
 import { themeVariablesCss } from "@cawco/core/theme-css";
