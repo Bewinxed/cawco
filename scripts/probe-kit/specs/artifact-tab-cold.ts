@@ -25,11 +25,11 @@
  *    within HUB_STALL_MS each.
  *
  * A hub run from source (this fleet's) builds the decision host on the
- * first request for it (core decision-host.ts `bundle`). On the hub's own
+ * first request for it (hub decision-host.ts `bundle`). On the hub's own
  * thread, Svelte's compiler, Tailwind and the house faces' subsetting held
  * its event loop in blocks of up to 900 ms (sampled with bun:jsc), and a
  * reload landing then took 1.2 s; the build now runs on a thread of its
- * own (core host-build.ts). The released binary serves the host prebuilt
+ * own (hub host-build.ts). The released binary serves the host prebuilt
  * (`standalone`).
  *
  * Then the hub's show of a decision page (`POST …/artifacts/<id>/show`, the
