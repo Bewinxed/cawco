@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { ConnectAnswer } from "@cawco/core/frames";
+  import { askWords } from "@cawco/core/words/asks";
   /**
    * What a connect ask's card (ConnectCard) becomes once it has settled, where
    * the agent's turn goes on: a row in the tool rows' own recipe (ToolGroup:
@@ -14,9 +16,7 @@
    * The glyph carries the state's hue and the words carry the state, so
    * nothing rides on colour alone.
    */
-  import { accessWords } from "@cawco/core/connect-ask";
-  import type { ConnectAnswer } from "@cawco/core/frames";
-  import { askWords } from "@cawco/core/words/asks";
+  import { accessWords } from "@cawco/core/words/connect-lines";
   import { IconChevronRight, IconKey, IconNeutral } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
 
