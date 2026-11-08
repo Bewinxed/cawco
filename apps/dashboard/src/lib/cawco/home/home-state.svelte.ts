@@ -30,11 +30,11 @@ import {
 } from "@cawco/core/project-membership";
 import { questionsOf } from "@cawco/core/question";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
-import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
 import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { presenceWords } from "@cawco/core/words/presence";
+import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { tailnetWords } from "@cawco/core/words/tailnet";
 import { untrack } from "svelte";
 import {
