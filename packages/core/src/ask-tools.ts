@@ -36,3 +36,9 @@ export const ASK_USER_QUESTION = "AskUserQuestion";
  * program's (`parent_tool_use_id`).
  */
 export const CODE_MODE_TOOL = "execute";
+
+/** The tool a browser ask parks under (hub browser-tools.ts). */
+export const BROWSER_ASK_TOOL = "mcp__cawco__browser_ask";
+
+/** The tool a connect ask parks under (hub connect-asks.ts). */
+export const CONNECT_ASK_TOOL = "mcp__cawco__connect_ask";

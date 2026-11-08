@@ -56,7 +56,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CDPSession, Frame, Page, Request } from "playwright-core";
-import { PIN_MAPS } from "../../../packages/core/src/comments";
+import { PIN_MAPS } from "../../../packages/core/src/doc-maps";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
