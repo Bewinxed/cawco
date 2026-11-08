@@ -30,7 +30,6 @@
  */
 
 import { CONNECT_ASK_TOOL } from "@cawco/core/ask-tools";
-import { connectAnsweredWords } from "@cawco/core/connect-ask";
 import { mcpServerDeniedBy } from "@cawco/core/delegate-types";
 import type {
   ConnectAccess,
@@ -45,6 +44,7 @@ import type {
 } from "@cawco/core/session/controls";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import { askWords } from "@cawco/core/words/asks";
+import { connectAnsweredWords } from "@cawco/core/words/connect-lines";
 import { z } from "zod";
 import type { AskFacts } from "./fleet-mcp";
 import { tool } from "./mcp-tool";

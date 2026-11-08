@@ -41,7 +41,6 @@ import { serverEnvironment, sessionEnvironment } from "@cawco/core/session-env";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
-  notAliveReason,
   type ProcSpec,
   procSpecOf,
   SESSIOND_DRAINING,
@@ -60,6 +59,7 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "@cawco/core/signal";
+import { notAliveReason } from "@cawco/core/words/sessiond";
 import { workWords } from "@cawco/core/words/work";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import {
