@@ -3,7 +3,6 @@ import { dirname } from "node:path";
 import type { FleetSettings, OnCap, SettingsInEffect } from "@cawco/core/areas";
 import { settingsInEffect } from "@cawco/core/areas";
 import type { MayStart, StartingSet } from "@cawco/core/delegate-types";
-import type { TaskLinkSummary } from "@cawco/core/external-items";
 import { FILE_HASH_SCHEME, hashFiles } from "@cawco/core/file-hash";
 import type {
   FleetAgent,
@@ -232,10 +231,6 @@ import {
   projectPlaces,
   projectRepositories,
   projects,
-  projectTaskEdges,
-  projectTaskFields,
-  projectTaskLabels,
-  projectTasks,
   queuedTaskStarts,
   queuedWorkItemGlobs,
   queuedWorkItems,
@@ -269,11 +264,8 @@ import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
 import type { MoveState, SendHold } from "./stored-types";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
-import {
-  summaryOf as linkSummaryOf,
-  syncTaskLinks,
-  type TaskLinksDb,
-} from "./task-links";
+import { type TaskIndexDb, taskIndexDb } from "./task-index";
+import type { TaskLinksDb } from "./task-links";
 import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
@@ -437,21 +429,6 @@ export type ProjectRow = Omit<
   /** Its links (`project_links`), one per repository, oldest first. */
   links: string[];
   places: PlaceRow[];
-};
-/** One task file as a project's task index holds it (tasks.ts). */
-export type TaskIndexRow = typeof projectTasks.$inferSelect & {
-  /** What it waits on (`waits_on`), as its file lists them: a task as `tsk-12`, any other target as wait-targets.ts keeps it. */
-  waitsOn: string[];
-  labels: string[];
-  /** Its file's own scalar fields (`priority`, `due`), as written. */
-  fields: Record<string, string>;
-  /**
-   * The external items its file links (`issue:`, mode `record`, then
-   * `links:`), as `task_links` holds them: written, each URL becomes the
-   * task's row (task-links.ts `syncTaskLinks`); read, each row as the source
-   * last said it.
-   */
-  links: TaskLinkSummary[];
 };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 /** What a session has done that taints its memory notes (memory.ts), its open subagents with it. */
@@ -942,8 +919,6 @@ interface HubStore {
   /** Forgets a task's queued start, if it had one. */
   readonly dropQueuedTaskStart: (projectId: string, taskId: string) => void;
   readonly dropQueuedWorkItem: (id: string) => void;
-  /** Forgets the index rows of task files that are gone. */
-  readonly dropTaskIndex: (projectId: string, paths: string[]) => void;
   /** Persist the decision before its reconciler may send anything. */
   readonly endInstance: (
     id: string,
@@ -1829,8 +1804,6 @@ interface HubStore {
     error?: string;
     files?: SkillFile[];
   }) => FleetSkillMeta;
-  /** Files or refreshes rows of a project's task index, each by its file's path, its lists with it. */
-  readonly putTaskIndex: (rows: TaskIndexRow[]) => void;
   readonly putToolListing: (listing: string, toolsHash: string) => void;
   /** Upsert; a patch names only what it changes and the rest stays as it was. */
   readonly putToolPolicy: (
@@ -2245,15 +2218,8 @@ interface HubStore {
   readonly taskCommentSaid: (
     id: string
   ) => { projectId: string; taskId: string } | undefined;
-  /** Every row of a project's task index, in id order. */
-  readonly taskIndex: (projectId: string) => TaskIndexRow[];
   /** The external items tasks link, and the comments carried from them (task-links.ts). */
   readonly taskLinks: TaskLinksDb;
-  /** The indexed tasks that wait on `target` (`waits_on:`, a task as `tsk-12`), by number: an indexed lookup. */
-  readonly taskWaiters: (
-    projectId: string,
-    taskId: string
-  ) => { id: string; path: string }[];
   /** Each relayed tool call taken under an idempotency key, and its answer (tool-call-keys.ts). */
   readonly toolCallKeys: ToolCallKeysDb;
   /** The hash of the tools a cawco MCP listing last answered, if it has. */
@@ -2510,7 +2476,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = SessionPlansDb &
+export type DbShape = TaskIndexDb &
+  SessionPlansDb &
   RulesDb &
   HubSettingsDb &
   FindSettingsDb &
@@ -4502,6 +4469,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...taskIndexDb(core),
     ...sessionPlansDb(core),
     ...rulesDb(core),
     ...hubSettingsDb(core),
@@ -8067,175 +8035,6 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(workItems)
         .set({ unmetAt: new Date() })
         .where(eq(workItems.id, itemId))
-        .run();
-    },
-    taskIndex: (projectId) => {
-      const ofTask = new Map<
-        string,
-        Pick<TaskIndexRow, "waitsOn" | "labels" | "fields">
-      >();
-      const linksOf = Map.groupBy(
-        taskLinksOf.ofProject(projectId),
-        (row) => row.taskId
-      );
-      const lists = (file: string) => {
-        const known = ofTask.get(file);
-        if (known) {
-          return known;
-        }
-        const made: Pick<TaskIndexRow, "waitsOn" | "labels" | "fields"> = {
-          waitsOn: [],
-          labels: [],
-          fields: {},
-        };
-        ofTask.set(file, made);
-        return made;
-      };
-      for (const edge of db
-        .select()
-        .from(projectTaskEdges)
-        .where(eq(projectTaskEdges.projectId, projectId))
-        .orderBy(sql`rowid`)
-        .all()) {
-        lists(edge.path).waitsOn.push(edge.otherId);
-      }
-      for (const labelled of db
-        .select()
-        .from(projectTaskLabels)
-        .where(eq(projectTaskLabels.projectId, projectId))
-        .orderBy(sql`rowid`)
-        .all()) {
-        lists(labelled.path).labels.push(labelled.label);
-      }
-      for (const field of db
-        .select()
-        .from(projectTaskFields)
-        .where(eq(projectTaskFields.projectId, projectId))
-        .orderBy(sql`rowid`)
-        .all()) {
-        lists(field.path).fields[field.key] = field.value;
-      }
-      return db
-        .select()
-        .from(projectTasks)
-        .where(eq(projectTasks.projectId, projectId))
-        .orderBy(asc(projectTasks.number), asc(projectTasks.path))
-        .all()
-        .map((row) => ({
-          ...row,
-          ...lists(row.path),
-          links: (linksOf.get(row.id) ?? []).map(linkSummaryOf),
-        }));
-    },
-    taskWaiters: (projectId, taskId) =>
-      db
-        .select({ id: projectTasks.id, path: projectTasks.path })
-        .from(projectTaskEdges)
-        .innerJoin(
-          projectTasks,
-          and(
-            eq(projectTasks.projectId, projectTaskEdges.projectId),
-            eq(projectTasks.path, projectTaskEdges.path)
-          )
-        )
-        .where(
-          and(
-            eq(projectTaskEdges.projectId, projectId),
-            eq(projectTaskEdges.kind, "waits_on"),
-            eq(projectTaskEdges.otherId, taskId)
-          )
-        )
-        .orderBy(asc(projectTasks.number), asc(projectTasks.path))
-        .all(),
-    putTaskIndex: (rows) => {
-      if (rows.length === 0) {
-        return;
-      }
-      db.transaction((tx) => {
-        // An index is read from a project's folder off the write path: a
-        // project deleted meanwhile has no tasks left to index.
-        const live = new Set(
-          tx
-            .select({ id: projects.id })
-            .from(projects)
-            .where(
-              inArray(projects.id, [...new Set(rows.map((r) => r.projectId))])
-            )
-            .all()
-            .map((project) => project.id)
-        );
-        for (const { waitsOn, labels, fields, links, ...row } of rows.filter(
-          (r) => live.has(r.projectId)
-        )) {
-          const { projectId, path: file } = row;
-          syncTaskLinks(
-            tx,
-            projectId,
-            row.id,
-            links.map((link) => ({
-              url: link.url,
-              record: link.mode === "record",
-            }))
-          );
-          tx.insert(projectTasks)
-            .values(row)
-            .onConflictDoUpdate({
-              target: [projectTasks.projectId, projectTasks.path],
-              set: row,
-            })
-            .run();
-          // Its lists as its file has them now, in its file's order.
-          const ofIt = (
-            table:
-              | typeof projectTaskEdges
-              | typeof projectTaskLabels
-              | typeof projectTaskFields
-          ) => and(eq(table.projectId, projectId), eq(table.path, file));
-          tx.delete(projectTaskEdges).where(ofIt(projectTaskEdges)).run();
-          tx.delete(projectTaskLabels).where(ofIt(projectTaskLabels)).run();
-          tx.delete(projectTaskFields).where(ofIt(projectTaskFields)).run();
-          const edges = [...new Set(waitsOn)].map((otherId) => ({
-            kind: "waits_on" as const,
-            otherId,
-          }));
-          if (edges.length > 0) {
-            tx.insert(projectTaskEdges)
-              .values(edges.map((edge) => ({ projectId, path: file, ...edge })))
-              .run();
-          }
-          const named = [...new Set(labels)];
-          if (named.length > 0) {
-            tx.insert(projectTaskLabels)
-              .values(named.map((label) => ({ projectId, path: file, label })))
-              .run();
-          }
-          const scalars = Object.entries(fields);
-          if (scalars.length > 0) {
-            tx.insert(projectTaskFields)
-              .values(
-                scalars.map(([key, value]) => ({
-                  projectId,
-                  path: file,
-                  key,
-                  value,
-                }))
-              )
-              .run();
-          }
-        }
-      });
-    },
-    dropTaskIndex: (projectId, paths) => {
-      if (paths.length === 0) {
-        return;
-      }
-      db.delete(projectTasks)
-        .where(
-          and(
-            eq(projectTasks.projectId, projectId),
-            inArray(projectTasks.path, paths)
-          )
-        )
         .run();
     },
     createProject: ({ id, name, checkout, remote, caw = false, tapped }) =>
