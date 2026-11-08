@@ -10,15 +10,14 @@ import {
   keepsGoingOnExtraUsage,
   LIMITED_PROVIDERS,
   namedAccount,
-  openedAt,
   type RebalanceNotice,
   tokenWords,
   type WindowForecast,
   type WindowRef,
-  windowWords,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { openedAt, windowWords } from "@cawco/core/usage/windows";
 import { NEXT_TURN_ALLOWANCE_USD, usdWords } from "./admission";
 import {
   type AtLimitPorts,

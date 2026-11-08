@@ -22,7 +22,7 @@ type Used = Pick<LimitWindow, "percent" | "resetsAt">;
  * `monthly` window runs the calendar month to its reset ({@link windowSpan});
  * a group not here has no known length.
  */
-export const WINDOW_SPAN_MS: Readonly<Record<string, number>> = {
+const WINDOW_SPAN_MS: Readonly<Record<string, number>> = {
   session: 5 * HOUR_MS,
   weekly: 7 * DAY_MS,
 };
@@ -171,7 +171,7 @@ export function bearing<W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
  * its reset. Null for a window that is not a week, or whose opening is not
  * known.
  */
-export const paceLine = (window: Clocked, now: number): number | null => {
+const paceLine = (window: Clocked, now: number): number | null => {
   const opened = openedAt(window);
   const span = windowSpan(window);
   if (window.group !== "weekly" || opened === null || !span) {
@@ -265,15 +265,6 @@ export const spentWindow = <W extends Used>(
     }
   }
   return latest?.window;
-};
-
-/** When the account takes a session again on `windows`' terms: {@link spentWindow}'s reset; null when none is spent. */
-export const spentReset = (
-  windows: readonly Used[],
-  now: number
-): number | null => {
-  const window = spentWindow(windows, now);
-  return window ? windowResetAt(window) : null;
 };
 
 /**

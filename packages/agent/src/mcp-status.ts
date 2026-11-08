@@ -1,11 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
+import { readWithin } from "@cawco/core/bounded";
 import {
   type FleetMcpConfig,
   type FleetSyncReport,
   mcpFleetState,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/fleet";
 import { unhandled } from "@cawco/core/unhandled";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";

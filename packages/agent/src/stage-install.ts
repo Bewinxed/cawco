@@ -31,8 +31,8 @@ import {
   LOCKFILES,
   PACKAGE_MANAGERS,
   type PackageManager,
-  type WorkspaceRef,
-} from "@cawco/core";
+} from "@cawco/core/deps";
+import type { WorkspaceRef } from "@cawco/core/harness";
 import { workspaceStateDir } from "@cawco/core/paths";
 import { STAGE_INSTALL_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
