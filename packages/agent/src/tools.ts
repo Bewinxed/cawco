@@ -31,6 +31,7 @@ import {
   toolRuns,
   toolSpec,
 } from "@cawco/core/tools";
+import { versionSaid } from "@cawco/core/version-said";
 import { toolWords } from "@cawco/core/words/tools";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
@@ -125,9 +126,6 @@ export const bunOnlyNpm = (): string | undefined => {
   const found = everyBin(NPM);
   return found.every(isBunBinary) ? found[0] : undefined;
 };
-
-/** The first `x.y.z` a version command says is the version. */
-const VERSION_PATTERN = /\d+\.\d+\.\d+/u;
 
 /** The end of an installer's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
@@ -1047,7 +1045,7 @@ const probeVersion = async (
     .nothrow()
     .env(toolEnv());
   const said = `${ran.stdout.toString()}${ran.stderr.toString()}`;
-  return said.match(VERSION_PATTERN)?.[0];
+  return versionSaid(said);
 };
 
 /**
