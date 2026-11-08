@@ -13,11 +13,12 @@
  * tab whose artifact is gone is closed with `ARTIFACT_SESSION_REFUSED.gone`
  * instead, and says why.
  */
+
 import {
   ARTIFACT_GONE,
   ARTIFACT_SESSION_REFUSED,
-  type ArtifactSessionFrame,
-} from "@cawco/core/frames";
+} from "@cawco/core/artifact-session";
+import type { ArtifactSessionFrame } from "@cawco/core/frames";
 import { type HubSocket, sendFrame } from "./wire-socket";
 
 /** A tab's socket, which the hub closes once its artifact is gone. */

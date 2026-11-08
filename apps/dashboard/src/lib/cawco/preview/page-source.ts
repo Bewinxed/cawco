@@ -10,12 +10,12 @@
  * away.
  */
 
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import {
   PREVIEW_PING_PATH,
   type PreviewAddress,
   previewRoute,
-} from "@cawco/core/frames";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
+} from "@cawco/core/preview/routes";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { previewWords } from "@cawco/core/words/preview";
 import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
