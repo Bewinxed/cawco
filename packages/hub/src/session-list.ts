@@ -22,8 +22,11 @@
  * work. Never itself, never a continuation's summariser.
  */
 import { accountNameAmong } from "@cawco/core/accounts";
-import type { NeutralOrigin, NeutralUserMessage } from "@cawco/core/harness";
 import type { InstanceRow } from "@cawco/core/protocol";
+import type {
+  NeutralOrigin,
+  NeutralUserMessage,
+} from "@cawco/core/session-messages";
 import { refusedUntil } from "./at-limit";
 import type { DbShape, SentMessageRow } from "./db";
 import { redactSecrets } from "./secret-filter";

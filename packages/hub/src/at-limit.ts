@@ -22,8 +22,9 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
-import type { MoveEnded, NeutralOrigin } from "@cawco/core/harness";
 import { OVER_STATUSES } from "@cawco/core/protocol";
+import type { MoveEnded } from "@cawco/core/session/controls";
+import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import {

@@ -32,11 +32,11 @@ import {
   PACKAGE_MANAGERS,
   type PackageManager,
 } from "@cawco/core/deps";
-import type { WorkspaceRef } from "@cawco/core/harness";
 import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { STAGE_INSTALL_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { z } from "zod";
 import { runHubCommand } from "./hub-command";
 

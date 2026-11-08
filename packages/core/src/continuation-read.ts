@@ -21,7 +21,7 @@
  * WHOLE transcript by code, so identifiers are copied, never paraphrased, and
  * what a compaction forgot about files is still there.
  */
-import type { NeutralContentBlock, SessionMessage } from "./harness";
+import type { NeutralContentBlock, SessionMessage } from "./session-messages";
 import { FILE_CHANGE_TOOLS, toolNamesOf } from "./tool-names";
 import { askedWords } from "./transcript-rules";
 

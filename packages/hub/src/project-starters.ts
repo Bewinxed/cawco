@@ -47,7 +47,7 @@
  * (`starters.changed`).
  */
 import { createHash } from "node:crypto";
-import type { CommandResult } from "@cawco/core/harness";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import {
   type ProjectStarter,
   STARTER_PLACES,

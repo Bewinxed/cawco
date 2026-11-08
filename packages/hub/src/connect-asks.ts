@@ -38,12 +38,12 @@ import type {
   ConnectAnswer,
   ConnectAskFrame,
 } from "@cawco/core/frames";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import type {
   FleetMcpChange,
   FleetMcpTaken,
-  PermissionResult,
-} from "@cawco/core/harness";
-import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+} from "@cawco/core/session/controls";
+import type { PermissionResult } from "@cawco/core/session-messages";
 import { askWords } from "@cawco/core/words/asks";
 import { z } from "zod";
 import type { AskFacts } from "./fleet-mcp";

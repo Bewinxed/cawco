@@ -7,7 +7,6 @@
 import { mkdir, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
-import type { WorkspaceRef } from "@cawco/core/harness";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import {
   type DamagedRecord,
@@ -15,6 +14,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { reportDamaged } from "./damaged-records";
