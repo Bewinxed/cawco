@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { arch, platform, release } from "node:os";
-import { credentialAccountIds } from "@cawco/core/paths";
+import { credentialAccountIds } from "@cawco/core/paths/claude";
 import {
   type BlockedLogin,
   imageGenerationWords,

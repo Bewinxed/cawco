@@ -30,7 +30,7 @@ import {
   workspaceProjectFile,
   workspaceStateDir,
   workspacesDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { writeStateFile } from "@cawco/core/state-file";
 import { setProject } from "../boundary";
 import { reserveBrowser } from "./browsers";
