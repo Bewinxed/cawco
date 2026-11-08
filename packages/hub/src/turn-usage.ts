@@ -1,7 +1,7 @@
 import type {
   ClaudeModelUsage,
   NeutralResultMessage,
-} from "@cawco/core/harness";
+} from "@cawco/core/session-messages";
 import type { TurnUsageRow } from "./db/turn-usage";
 
 const FIELDS = [

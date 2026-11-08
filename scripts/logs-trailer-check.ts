@@ -57,7 +57,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { CommandResult } from "../packages/core/src/harness";
+import type { CommandResult } from "../packages/core/src/commands/controls";
 import { SAFE_GIT_SHELL } from "../packages/core/src/safe-git";
 import {
   LOGS_TRAILER,

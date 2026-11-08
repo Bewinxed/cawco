@@ -17,9 +17,9 @@
 import { realpath } from "node:fs/promises";
 import { relative } from "node:path";
 import { HARNESS_CONFIG } from "@cawco/core/clone-denies";
-import type { WorkspaceRef } from "@cawco/core/harness";
 import { GIT_VALUED_OPTIONS } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { workspaceDenies } from "@cawco/core/workspace-policy";
 
