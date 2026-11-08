@@ -55,7 +55,6 @@ import {
   type AskRecord,
   askAnsweredText,
   askLink,
-  askRecordedWords,
 } from "../../../packages/core/src/asks";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
@@ -69,6 +68,7 @@ import {
 } from "../../../packages/core/src/hub-request";
 import { httpProof } from "../../../packages/core/src/machine-key";
 import { unhandled } from "../../../packages/core/src/unhandled";
+import { askRecordedWords } from "../../../packages/core/src/words/ask-lines";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec } from "../kit";
