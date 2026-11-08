@@ -22,7 +22,7 @@ import {
   seenOf,
   seePin,
   sendHeld,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import {
   ARTIFACT_GONE,
   deviceDocName,
