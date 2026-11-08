@@ -40,7 +40,7 @@ import {
   type GeneratedImage,
   IMAGE_PROVIDER_MODELS,
 } from "../../../packages/core/src/image-generation";
-import { accountCredentialPath } from "../../../packages/core/src/paths";
+import { accountCredentialPath } from "../../../packages/core/src/paths/claude";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import type { Kit, Spec } from "../kit";
