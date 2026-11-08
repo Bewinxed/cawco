@@ -12,7 +12,8 @@
  * so and offers Send again.
  */
 import type { Account } from "@cawco/core/accounts";
-import type { HarnessKind, ModeAsk, SendRefusal } from "@cawco/core/harness";
+import type { ModeAsk, SendRefusal } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { nameOf, signinState } from "../accounts/model.svelte";
 import { signedInHere } from "../accounts/switch.svelte";
