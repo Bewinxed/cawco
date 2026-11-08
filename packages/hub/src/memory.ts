@@ -114,6 +114,7 @@ import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
 import type { DbShape, ProjectRow, SessionTaintRow } from "./db";
 import { useKey } from "./db/memory-facts";
 import { ProposalSchema } from "./db/stored-shapes";
+import type { Proposal, ProposalFile } from "./db/stored-types";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine, type PlacementRow } from "./jev-placement";
 import { boardTitle } from "./labels";
@@ -173,7 +174,7 @@ import {
   writeFolderFile,
   YOU,
 } from "./project-folder";
-import { type Applies, appliesNow, type ProposedFile } from "./proposal-base";
+import { type Applies, appliesNow } from "./proposal-base";
 import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
@@ -790,37 +791,6 @@ const notesIn = async (projectId: string, dir: string): Promise<Note[]> => {
   );
   return read.filter((note) => note !== undefined);
 };
-
-/** One file a proposal changes (proposal-base.ts). */
-export type ProposalFile = ProposedFile;
-
-/** A proposal as `memory/proposals/<id>.json` keeps it. */
-export interface Proposal {
-  /** The folder's commit when it was proposed. */
-  base: string;
-  /** Who proposed it: the curator, Caw, Jev's sort, or the hub (an archive, a withdrawal). */
-  by: string;
-  /** Every file it changes, in the order the card draws them. */
-  files: ProposalFile[];
-  id: string;
-  /**
-   * What the hub proposed it as, when its rejection says something to
-   * remember: an `archive` rejected keeps its lines as used now; a `rewrite`
-   * of a prose file rejected is not proposed again until the file changes.
-   */
-  kind?: "archive" | "rewrite";
-  /** The inbox notes it comes from. */
-  notes: string[];
-  projectId: string;
-  /** The proposing session. */
-  session: string;
-  time: string;
-  /** The `memory_propose` call that made it (Claude Code's `_meta`): where it is drawn. */
-  toolUseId?: string;
-  why: string;
-  /** A withdrawal's note: approved, it leaves for the archive, `withdrawn`. */
-  withdraws?: string;
-}
 
 /** Whether a kept proposal file reads as one (its files whole). */
 const wholeProposal = (parsed: Proposal): boolean =>
