@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AuthState } from "@cawco/core/harness";
+  import type { AuthState } from "@cawco/core/session-messages";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconSuccess, IconWarningTriangle } from "#lib/icons.js";
