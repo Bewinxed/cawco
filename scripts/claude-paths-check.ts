@@ -1,6 +1,6 @@
 /**
  * `bun run claude-paths:check`: no code builds a path into a Claude Code
- * config dir but core's owner of them (`packages/core/src/paths.ts`, with its
+ * config dir but core's owner of them (`packages/core/src/paths/claude.ts`, with its
  * browser-safe half `claude-dirs.ts`). Every string, template and regular
  * expression literal in the TypeScript, JavaScript and Svelte sources is
  * read (comments are not code), and one that names a `.claude` path fails
@@ -126,7 +126,7 @@ const hits = files
 
 if (hits.length > 0) {
   console.error(
-    `claude-paths:check: ${hits.length} path(s) into a Claude Code dir outside packages/core/src/paths.ts. Build them with its claudeHome / accountConfigDir / sessionConfigDir / userLayerPath / projectClaudeDir (or claude-dirs.ts's labels for a screen or a script), or add the file to ALLOWED in scripts/claude-paths-check.ts with the reason it may:`
+    `claude-paths:check: ${hits.length} path(s) into a Claude Code dir outside packages/core/src/paths/claude.ts. Build them with its claudeHome / accountConfigDir / sessionConfigDir / userLayerPath / projectClaudeDir (or claude-dirs.ts's labels for a screen or a script), or add the file to ALLOWED in scripts/claude-paths-check.ts with the reason it may:`
   );
   for (const hit of hits) {
     console.error(`  ${hit.file}:${hit.line}  ${hit.text}`);
