@@ -21,6 +21,7 @@
  * nobody has read for {@link IDLE_MS} is dropped.
  */
 
+import { isGone, unlessGone } from "@cawco/core/absent";
 import { inFlight } from "@cawco/core/loop-watch";
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import {
@@ -62,27 +63,13 @@ const IDLE_MS = 10 * 60 * 1000;
 /** How often idle indexes are looked for. */
 const SWEEP_MS = 60 * 1000;
 
-/** Whether `error` says the file is no longer there: a session deleted, or a retired workspace's transcripts with it. */
-const isGone = (error: unknown): boolean =>
-  (error as { code?: string } | null)?.code === "ENOENT";
-
 /**
  * What `read` answers, or `gone` when the file it reads is no longer there,
  * however far the read had got: a transcript deleted while it is read reads
  * as one never found.
  */
-export async function unlessGone<T>(
-  read: () => Promise<T>,
-  gone: T
-): Promise<T> {
-  try {
-    return await read();
-  } catch (error) {
-    if (isGone(error)) {
-      return gone;
-    }
-    throw error;
-  }
+export function readUnlessGone<T>(read: () => Promise<T>, gone: T): Promise<T> {
+  return read().catch(unlessGone(gone));
 }
 
 /**

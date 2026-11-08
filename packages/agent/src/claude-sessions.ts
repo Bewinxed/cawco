@@ -13,9 +13,11 @@
  * has keeps the newer copy under its name and the older beside it, set aside
  * the way Claude Code sets a transcript aside (`.superseded-<ms>`).
  */
+
 import type { Dirent } from "node:fs";
 import { cp, lstat, mkdir, readdir, rename, rm, rmdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { isGone } from "@cawco/core/absent";
 import {
   claudeConfigDirs,
   projectSlug,
@@ -37,15 +39,12 @@ const ORPHANED = ".orphaned-";
 /** One session's entries in one config dir, as paths relative to it. */
 type SessionIndex = Map<string, string[]>;
 
-const missing = (error: unknown): boolean =>
-  (error as { code?: string } | null)?.code === "ENOENT";
-
 /** A dir's entries; none when it is not there. */
 const entriesOf = async (dir: string): Promise<Dirent[]> => {
   try {
     return await readdir(dir, { withFileTypes: true });
   } catch (error) {
-    if (missing(error) || (error as { code?: string }).code === "ENOTDIR") {
+    if (isGone(error) || (error as { code?: string }).code === "ENOTDIR") {
       return [];
     }
     throw error;
