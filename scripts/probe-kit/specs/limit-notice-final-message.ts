@@ -30,8 +30,9 @@
  *
  *   bun scripts/probe-kit/run.ts limit-notice-final-message
  */
-import type { NeutralAssistantBlock } from "../../../packages/core/src/harness";
+
 import { NO_REPLY_TOOL } from "../../../packages/core/src/no-reply";
+import type { NeutralAssistantBlock } from "../../../packages/core/src/session-messages";
 import { turnState } from "../../../packages/hub/src/turn-state";
 import type { Kit, Spec } from "../kit";
 
