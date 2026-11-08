@@ -140,7 +140,7 @@ import { type ActionsDb, actionsDb } from "./actions";
 import type { AreaRow, AreasDb } from "./areas";
 import type { ArtifactListenersDb } from "./artifacts";
 import { type ArtifactsDb, artifactsDb, projectPage } from "./artifacts";
-import { type AsksDb, asksDb } from "./asks";
+import { type AskPartsDb, type AsksDb, askPartsDb, asksDb } from "./asks";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
@@ -181,7 +181,6 @@ import {
   agentTools,
   areas,
   artifacts,
-  askPushes,
   chosenModes,
   claudeContextWindows,
   completedTurns,
@@ -227,7 +226,6 @@ import {
   type OpenSubagent,
   openrouterConnection,
   type PriorConversation,
-  parkedAsks,
   planChanges,
   plugins,
   projectAccounts,
@@ -747,17 +745,6 @@ interface HubStore {
   readonly areas: AreasDb;
   /** Artifacts and their documents' update logs (artifacts/). */
   readonly artifacts: ArtifactsDb;
-  /**
-   * The asks the push outlet took (push.ts `onAsk`), by request id, kept
-   * across a restart: `take` is true only the first time, `drop` forgets
-   * one whose ask settled.
-   */
-  readonly askPushes: {
-    readonly drop: (requestId: string) => void;
-    /** Drops every mark but those of `parked`; answers the request ids that went. */
-    readonly keepOnly: (parked: readonly string[]) => string[];
-    readonly take: (requestId: string, at: Date) => boolean;
-  };
   /** What sessions asked the person, and what the hub carried out (asks.ts). */
   readonly asks: AsksDb;
   /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
@@ -1684,15 +1671,6 @@ interface HubStore {
     machineId: string,
     named: readonly string[]
   ) => OwnedInstanceRow[];
-  /**
-   * The asks the hub holds parked (`pending.ts`), kept across its restarts:
-   * read once as it boots, written as each is parked and dropped as it ends.
-   */
-  readonly parkedAsks: {
-    readonly drop: (requestId: string) => void;
-    readonly list: () => Envelope[];
-    readonly save: (requestId: string, envelope: Envelope) => void;
-  };
   readonly patchInstance: (
     id: string,
     patch: {
@@ -2693,7 +2671,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = PresenceDb &
+export type DbShape = AskPartsDb &
+  PresenceDb &
   SessionIdentityDb &
   Pick<Revocations, "revokedAmong" | "onCredentialsRevoked"> &
   ArtifactListenersDb &
@@ -4726,6 +4705,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...askPartsDb(core),
     ...presenceDb(core),
     ...sessionIdentityDb(core),
     ...core.artifactListeners,
@@ -6382,29 +6362,6 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .returning({ id: instances.id })
         .all().length > 0,
-    parkedAsks: {
-      drop: (requestId) => {
-        db.delete(parkedAsks).where(eq(parkedAsks.requestId, requestId)).run();
-      },
-      list: () =>
-        db
-          .select({ envelope: parkedAsks.envelope })
-          .from(parkedAsks)
-          .all()
-          .map((row) => row.envelope),
-      save: (requestId, envelope) => {
-        const row = {
-          requestId,
-          instanceId: envelope.instanceId ?? null,
-          machineId: envelope.machineId,
-          envelope,
-        };
-        db.insert(parkedAsks)
-          .values(row)
-          .onConflictDoUpdate({ target: parkedAsks.requestId, set: row })
-          .run();
-      },
-    },
     markInstanceAttaching: (id) =>
       db
         .update(instances)
@@ -10106,29 +10063,6 @@ const make = async (path: string): Promise<DbShape> => {
     ingress: ingressDb(db),
     relays: relaysDb(db),
     asks: asksDb(db),
-    askPushes: {
-      take: (requestId, at) =>
-        db
-          .insert(askPushes)
-          .values({ requestId, takenAt: at })
-          .onConflictDoNothing()
-          .returning()
-          .all().length > 0,
-      drop: (requestId) => {
-        db.delete(askPushes).where(eq(askPushes.requestId, requestId)).run();
-      },
-      keepOnly: (parked) =>
-        db
-          .delete(askPushes)
-          .where(
-            parked.length === 0
-              ? undefined
-              : notInArray(askPushes.requestId, [...parked])
-          )
-          .returning()
-          .all()
-          .map((row) => row.requestId),
-    },
     sshMachines: sshMachinesDb(db, hubId),
     memoryFacts: memoryFactsDb(db),
     trackers: trackersDb(db),
