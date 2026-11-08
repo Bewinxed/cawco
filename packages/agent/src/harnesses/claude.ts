@@ -47,6 +47,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { isGone } from "@cawco/core/absent";
 import type { AccountIdentity, AccountKind } from "@cawco/core/accounts";
+import { identityOf } from "@cawco/core/accounts";
 import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_CHECK_ACCOUNT,
@@ -56,14 +57,14 @@ import {
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_LOGIN,
-  identityOf,
-} from "@cawco/core/accounts";
+} from "@cawco/core/accounts/controls";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import type { CutCommand } from "@cawco/core/commands/controls";
 import {
   HARNESS_TOOLS,
   PERSON_AND_READ_TOOLS,
@@ -77,45 +78,14 @@ import {
   READ_SKILL_FILES,
   READ_SKILL_FOLDER,
 } from "@cawco/core/fleet";
-import type {
-  AuthState,
-  CutCommand,
-  EndedTask,
-  FleetMcpChange,
-  FleetMcpTakeAnswer,
-  FleetMcpTaken,
-  MachineHarnessReport,
-  MoveEnded,
-  NeutralMessage,
-  NeutralSessionInfo,
-  SentMessage,
-  SessionMessage,
-  UserAnswers,
-  UserQuestion,
-  UserQuestionAnswered,
-  UserQuestionResult,
-} from "@cawco/core/harness";
+import type { MachineHarnessReport } from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
   BOUNDARY_RELAUNCH,
   byPerson,
-  CONTROL_CONTEXT_USAGE,
-  CONTROL_FLEET_SETTINGS,
-  CONTROL_FOLDER_COMMANDS,
-  CONTROL_INTERRUPT,
-  CONTROL_MCP_FLEET_CHANGED,
-  CONTROL_MCP_FLEET_HEAL,
-  CONTROL_READ_SESSION_CONTEXT,
-  CONTROL_SET_EFFORT,
-  CONTROL_SET_MODEL,
-  CONTROL_SET_PERMISSION_MODE,
-  CONTROL_WITHDRAW_SEND,
-  CONVERSATION_RESET,
   EFFORT_READ,
   GATEWAY_RELAUNCH,
   INSTALL_SESSION_CREDENTIAL,
-  MESSAGES_HELD,
-  MESSAGES_READ,
   offeredMode,
   RATE_LIMIT_READ,
   SESSION_DIR_READ,
@@ -139,7 +109,43 @@ import {
 import { mcpGatewayPort } from "@cawco/core/ports";
 import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
+import type {
+  EndedTask,
+  FleetMcpChange,
+  FleetMcpTakeAnswer,
+  FleetMcpTaken,
+  MoveEnded,
+} from "@cawco/core/session/controls";
+import {
+  CONTROL_CONTEXT_USAGE,
+  CONTROL_FLEET_SETTINGS,
+  CONTROL_FOLDER_COMMANDS,
+  CONTROL_INTERRUPT,
+  CONTROL_MCP_FLEET_CHANGED,
+  CONTROL_MCP_FLEET_HEAL,
+  CONTROL_READ_SESSION_CONTEXT,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
+  CONTROL_SET_PERMISSION_MODE,
+  CONTROL_WITHDRAW_SEND,
+} from "@cawco/core/session/controls";
 import { sessionEnvironment } from "@cawco/core/session-env";
+import type {
+  AuthState,
+  NeutralMessage,
+  NeutralSessionInfo,
+  SentMessage,
+  SessionMessage,
+  UserAnswers,
+  UserQuestion,
+  UserQuestionAnswered,
+  UserQuestionResult,
+} from "@cawco/core/session-messages";
+import {
+  CONVERSATION_RESET,
+  MESSAGES_HELD,
+  MESSAGES_READ,
+} from "@cawco/core/session-messages";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { resumeCursor } from "@cawco/core/stream";
 import { HOUR_MS } from "@cawco/core/time";
@@ -1442,7 +1448,7 @@ const sdkMode = (
 
 /** A permission answer in the SDK's words: any `setMode` it carries names the CLI's mode. */
 const sdkPermissionResult = (
-  result: import("@cawco/core/harness").PermissionResult
+  result: import("@cawco/core/session-messages").PermissionResult
 ): PermissionResult =>
   (result.behavior === "allow" && result.updatedPermissions
     ? {
@@ -4469,7 +4475,7 @@ class ClaudeSession implements HarnessSession {
 
   resolvePermission(
     requestId: string,
-    result: import("@cawco/core/harness").PermissionResult
+    result: import("@cawco/core/session-messages").PermissionResult
   ): void {
     const held = this.#permissions.get(requestId);
     if (!held) {

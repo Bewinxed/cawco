@@ -14,7 +14,7 @@
  */
 import type { BriefTarget } from "@cawco/core/fleet";
 import { briefTakes } from "@cawco/core/fleet";
-import type { NeutralMessage } from "@cawco/core/harness";
+import type { NeutralMessage } from "@cawco/core/session-messages";
 import type { DbShape } from "./db";
 
 /** The delegate a brief is for, in a few words. */
