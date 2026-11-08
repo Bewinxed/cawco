@@ -46021,6 +46021,9 @@
               "y"
             ]
           },
+          "tag": {
+            "type": "string"
+          },
           "classes": {
             "type": "array",
             "items": {
@@ -46077,9 +46080,6 @@
               "padding",
               "position"
             ]
-          },
-          "tag": {
-            "type": "string"
           }
         },
         "required": [
@@ -59216,13 +59216,13 @@
             "description": "What the rule is called in the list, and in the reply the session reads.",
             "type": "string"
           },
-          "repeat": {
-            "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
-            "type": "boolean"
-          },
           "pattern": {
             "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
             "type": "string"
+          },
+          "repeat": {
+            "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
+            "type": "boolean"
           },
           "reply": {
             "description": "What the session is sent when the rule fires.",
