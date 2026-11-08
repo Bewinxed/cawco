@@ -74,7 +74,7 @@ import {
   isHubPreview,
 } from "@cawco/core/hub-previews";
 import { listenOrEnd } from "@cawco/core/listeners";
-import { SOCAT_BACKLOG } from "@cawco/core/socat";
+import { SOCAT_BACKLOG } from "./socat";
 
 /** The relay's port inside a Linux workspace's sandbox, beside srt's 3128 (HTTP) and 1080 (SOCKS) there. */
 const RELAY_PORT = 3129;
