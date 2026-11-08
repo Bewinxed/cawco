@@ -6,9 +6,9 @@
  */
 
 import type { OnCap, ProjectCap } from "./areas";
-import type { PlaceLfsRow } from "./harness";
 import type { HarnessKind, OfferedMode, PermissionMode } from "./harness/kinds";
 import type { ItemEnd } from "./work-items";
+import type { PlaceLfsRow } from "./workspace/controls";
 
 /**
  * Why the project's conversation can't start when no machine is online, and
