@@ -30,7 +30,7 @@ import {
 } from "@cawco/core/fleet";
 import type { FleetHarnessConfig } from "@cawco/core/harness-config";
 import type { FleetHook } from "@cawco/core/hooks";
-import { workspaceProjectFile } from "@cawco/core/paths";
+import { workspaceProjectFile } from "@cawco/core/paths/workspace";
 import { readRecord } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
