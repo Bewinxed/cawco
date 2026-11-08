@@ -33,12 +33,12 @@ import {
   hostScratchReady,
   removeHostScratch,
 } from "../../../packages/agent/src/host-scratch";
+import { withHostLine } from "../../../packages/core/src/injected";
+import { workWords } from "../../../packages/core/src/words/work";
 import type {
   HostOutputListed,
   WorkspaceOutputs,
-} from "../../../packages/core/src/harness";
-import { withHostLine } from "../../../packages/core/src/injected";
-import { workWords } from "../../../packages/core/src/words/work";
+} from "../../../packages/core/src/workspace/controls";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import type { Kit, Spec } from "../kit";
 

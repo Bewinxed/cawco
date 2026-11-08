@@ -11,6 +11,8 @@
  * or fails. The live tail — the text and reasoning being streamed, the call in
  * flight — is {@link TranscriptTail}, and is all that moves between frames.
  */
+
+import type { HarnessKind, PermissionMode } from "./harness/kinds";
 import type {
   ModeAsk,
   NeutralStatus,
@@ -20,8 +22,7 @@ import type {
   SessionMessage,
   SlashCommand,
   UserQuestionResult,
-} from "./harness";
-import type { HarnessKind, PermissionMode } from "./harness/kinds";
+} from "./session-messages";
 import type { ToolStatus } from "./tool-presentation";
 
 /** What a block is: the row kind a renderer draws it as. */
@@ -83,7 +84,7 @@ export interface BlockMetadata {
   >;
   compactError?: string;
   /** {@link compactError} typed, as its harness typed the error ({@link import("./harness").CompactionFailure}). */
-  compactFailure?: import("./harness").CompactionFailure;
+  compactFailure?: import("./session-messages").CompactionFailure;
   /**
    * A compaction boundary read back from a harness that stores how it ended
    * (opencode): `failed` with the harness's words in `compactError`.
@@ -118,7 +119,7 @@ export interface BlockMetadata {
    * typed where its normaliser read it: what a reader draws it from, never
    * its `content`, which keeps its words for the shipped app.
    */
-  harnessNote?: import("./harness").HarnessNote;
+  harnessNote?: import("./session-messages").HarnessNote;
   hookName?: string;
   /** A stored transcript can name an image it no longer carries, hence the optional src. */
   images?: Array<{ mediaType: string; src?: string }>;
@@ -325,7 +326,7 @@ export interface TranscriptFacts {
     trigger: "manual" | "auto";
     result?: "success" | "failed";
     error?: string;
-    failure?: import("./harness").CompactionFailure;
+    failure?: import("./session-messages").CompactionFailure;
   } | null;
   /** The last turn came back an error — the SDK's `is_error`. */
   lastTurnFailed: boolean;
