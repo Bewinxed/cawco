@@ -7,9 +7,10 @@
  * The landing gate installs nothing of its own: a project declares its
  * install as a step of its gate (hub gate-file.ts).
  *
- * This module imports nothing, so scripts/lib/deps.ts loads it in a checkout
- * with no dependencies.
+ * This module imports only `shell-quote.ts`, which imports nothing, so
+ * scripts/lib/deps.ts loads it in a checkout with no dependencies.
  */
+import { shellQuote } from "./shell-quote";
 
 /**
  * bun's install that never writes the lockfile, as every pick of
@@ -51,17 +52,16 @@ const YARN_BERRY_TEST =
  * ({@link YARN_BERRY_TEST}).
  */
 const installPick = (lockfile: (typeof LOCKFILES)[number]): string => {
-  const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
   switch (lockfile) {
     case "bun.lock":
     case "bun.lockb":
-      return `install=${word(BUN_FROZEN)}`;
+      return `install=${shellQuote(BUN_FROZEN)}`;
     case "pnpm-lock.yaml":
-      return `install=${word("pnpm install --frozen-lockfile")}`;
+      return `install=${shellQuote("pnpm install --frozen-lockfile")}`;
     case "package-lock.json":
-      return `install=${word("npm ci")}`;
+      return `install=${shellQuote("npm ci")}`;
     case "yarn.lock":
-      return `if ${YARN_BERRY_TEST}; then install=${word(YARN_IMMUTABLE)}; else install=${word(YARN_FROZEN)}; fi`;
+      return `if ${YARN_BERRY_TEST}; then install=${shellQuote(YARN_IMMUTABLE)}; else install=${shellQuote(YARN_FROZEN)}; fi`;
     default:
       return lockfile satisfies never;
   }
@@ -105,13 +105,12 @@ export const DEPS_INSTALLING = "installing: ";
  * the checkout's root.
  */
 export const depsScript = (): string => {
-  const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
   const picks = LOCKFILES.map(
     (lock, index) =>
       `${index ? "elif" : "if"} [ -f ${lock} ]; then lock=${lock}; ${installPick(lock)}`
   ).join("\n");
   return [
-    `${picks}\nelif [ -f package.json ]; then lock=package.json; install=${word(BUN_FROZEN)}\nelse exit 0\nfi`,
+    `${picks}\nelif [ -f package.json ]; then lock=package.json; install=${shellQuote(BUN_FROZEN)}\nelse exit 0\nfi`,
     `inputs="$({ git hash-object "$lock"; git -c core.quotePath=false ls-files -- ':(glob)**/package.json' | git hash-object --stdin-paths; } | git hash-object --stdin)"`,
     `stamp="$(cat ${DEPS_STAMP} 2>/dev/null)"`,
     `[ "$stamp" = "$inputs" ] && exit 0`,
