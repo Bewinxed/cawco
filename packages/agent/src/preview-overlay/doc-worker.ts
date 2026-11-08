@@ -18,7 +18,7 @@
  * Built into the overlay's bundle as text (core preview-proxy.ts
  * `bundleOverlay`), and started from it as a blob (artifact.ts).
  */
-import { honourDeletions, lostWrites } from "@cawco/core/comments";
+import { honourDeletions, lostWrites } from "@cawco/core/comments/model";
 import {
   ARTIFACT_GONE,
   RESYNC_MS,
