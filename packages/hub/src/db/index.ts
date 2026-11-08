@@ -56,7 +56,6 @@ import type {
   Envelope,
   InstanceStatus,
   RunKind,
-  SendPayload,
   SessionCommands,
   SessionEndIntent,
   SessionLimits,
@@ -70,7 +69,6 @@ import {
   type LastErrorKind,
 } from "@cawco/core/relaunch";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
-import type { NeutralUserMessage } from "@cawco/core/session-messages";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { DAY_MS } from "@cawco/core/time";
 import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
@@ -235,6 +233,7 @@ import {
   workspaces,
 } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { type SendsDb, sendsDb } from "./sends";
 import type { Revocations } from "./session-identity";
 import { type SessionIdentityDb, sessionIdentityDb } from "./session-identity";
 import { type SessionLinesDb, sessionLinesDb } from "./session-lines";
@@ -242,7 +241,6 @@ import { type SessionPlansDb, sessionPlansDb } from "./session-plans";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
-import type { SendHold } from "./stored-types";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type TaskIndexDb, taskIndexDb } from "./task-index";
 import type { TaskLinksDb } from "./task-links";
@@ -267,9 +265,6 @@ const CATALOG_PROVES_GONE_HARNESSES = harnessesWith(
 const ACCOUNT_DIR_HARNESSES = harnessesWith(
   (traits) => traits.accountModel === "dir"
 );
-
-/** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
-const SENDS_FOR_BATCH = 500;
 /**
  * Statuses a live process can be wrongly filed under: a demotion while its
  * machine was unreachable, a spawn never confirmed, a nap its daemon has
@@ -462,8 +457,6 @@ export const listedAt = (
   row.updatedAt.getTime() > now - STALE_AFTER_MS;
 
 export type AgentAuth = (typeof agents.$inferSelect)["auth"];
-
-export type SentMessageRow = typeof sentMessages.$inferSelect;
 
 /** What folding a session's former rows into it did, for the hub's log. */
 interface FoldedSession {
@@ -725,8 +718,6 @@ interface HubStore {
   readonly clearEndConfirmation: (id: string) => void;
   /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
   readonly close: () => void;
-  /** The session's turn ended. */
-  readonly closeTurn: (id: string) => void;
   /** A receipt for the current row's decision; deletes are finalized here. */
   readonly confirmInstanceEnd: (id: string, reason?: string) => void;
   /** Connections and the projects that grant them (connections.ts). */
@@ -883,8 +874,6 @@ interface HubStore {
   readonly forgetProject: ForgetDb["forget"];
   /** Every former id, by the id its session has now ({@link instanceIdOf}). */
   readonly formerIds: () => Record<string, string>;
-  /** When a session last started again fresh; null when it never did. */
-  readonly freshStartOf: (id: string) => number | null;
   readonly getFleetHook: (id: string) => FleetHook | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
   readonly getFleetMemory: () =>
@@ -922,12 +911,6 @@ interface HubStore {
     parentInstanceId: string,
     group: string
   ) => WorkItemRow[];
-  /**
-   * The cut turn `from` was handed back at `at`, which is now the session's
-   * open turn. False when the row no longer holds `from`: another hand-back
-   * or a turn took its place.
-   */
-  readonly handBackTurn: (id: string, from: number, at: number) => boolean;
   /** Records briefer documents as handed to a session, each at its hash. */
   readonly handBriefings: (
     instanceId: string,
@@ -959,11 +942,6 @@ interface HubStore {
     derivedTitle?: string;
     at: Date;
   }) => boolean;
-  /**
-   * A pending send no process took, owed again whole (`envelope`) until the
-   * session's next start; false when it is no longer pending.
-   */
-  readonly holdSend: (uuid: string, envelope: Envelope<SendPayload>) => boolean;
   /** Who may call the hub: the pairing setting, the person's devices, the machines' keys (hub-auth.ts). */
   readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
@@ -998,26 +976,12 @@ interface HubStore {
   readonly itemSessionsOfParents: (parentInstanceIds: string[]) => string[];
   /** The listed sessions whose keep-alive is on: the only ones it schedules. */
   readonly keepAliveInstances: () => PublicInstanceRow[];
-  /** Keeps a pending send whole, as its machine was handed it. */
-  readonly keepEnvelope: (
-    uuid: string,
-    envelope: Envelope<SendPayload>
-  ) => void;
   /** A skill about to be deleted: its files kept in its history first, as a hook's are. */
   readonly keepSkillVersion: (name: string) => void;
   /** The items whose landing's gate passed on `tree` (WorkLanding `gate`). */
   readonly landedOnTree: (tree: string) => WorkItemRow[];
   /** The work items, live or ended, whose session's `finish_item` turn has not been heard to end (`last_turn_at`). */
   readonly lastTurnWorkItems: () => WorkItemRow[];
-  /**
-   * What `id` was last sent, for `list_sessions` (session-facts.ts): the
-   * newest turn it read, and the person's newest message to it in any state
-   * (when the person last interacted with it). Null for none.
-   */
-  readonly latestSends: (id: string) => {
-    person: SentMessageRow | null;
-    read: SentMessageRow | null;
-  };
   /**
    * The directory a row was launched in, which every spawn of it uses;
    * `"unknown"` when its machine had no record of its conversation; undefined
@@ -1034,8 +998,6 @@ interface HubStore {
    * first (`line_anchors`).
    */
   readonly lineAnchorsOf: (instanceId: string) => Map<string, string[]>;
-  /** Keys a send to the id its harness stores it under. */
-  readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
    * Every machine, in the shape everything downstream reads them: the `fleet`
    * column is null until a machine has synced once, and `AgentRow` says absent.
@@ -1196,10 +1158,6 @@ interface HubStore {
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
-  readonly migrateSendsOnce: (
-    name: string,
-    rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
-  ) => number | null;
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;
   /** Every machine by its id and hostname, in {@link listAgents}' order: what a machine's name is read from. */
@@ -1218,11 +1176,6 @@ interface HubStore {
     | { named: false; row: PublicInstanceRow }
     | undefined;
   /**
-   * The session replied at `at`: every send it has read so far has its
-   * answer ({@link personUnanswered}). Sends it has not read stay owed.
-   */
-  readonly noteAnswered: (id: string, at: Date) => void;
-  /**
    * The name the session's first user message gives it, for a row nobody named.
    * Write-once and never over a given title: a spawn's headline, or a custom
    * title arriving later, always wins. Returns whether it took, so the caller
@@ -1231,8 +1184,6 @@ interface HubStore {
   readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
   readonly noteEndFailure: (id: string, error: string) => void;
   readonly noteEndReason: (id: string, reason: string) => void;
-  /** Records that a session started again fresh, now. */
-  readonly noteFreshStart: (id: string, at: number) => void;
   /**
    * The effort the session's agent read back from its harness (`EFFORT_READ`).
    * Returns whether the row moved, so a reading repeated at every turn's end
@@ -1274,21 +1225,6 @@ interface HubStore {
     projectId: string;
     taskId: string;
   }) => void;
-  /**
-   * The session's turn ended at `at`, on the hub's clock (`turnEndedAt`). A
-   * `silent` turn (it ended on no_reply_needed, saying nothing) leaves
-   * nothing unseen: when the owner had seen it through its last end, they
-   * have seen it through this one (`seenAt`), so no screen lists it as news.
-   * One whose last end is still unseen stays news, as it was. `wakesItself`:
-   * the turn ended with work of its own that will start it again (core
-   * `waitsOnItself`).
-   */
-  readonly noteTurnEnded: (
-    id: string,
-    at: Date,
-    silent: boolean,
-    wakesItself: boolean
-  ) => void;
   /**
    * The person wrote to the session at `at` (a send of theirs the hub
    * accepted): its `wroteAt`. False when the hub keeps no row for it.
@@ -1354,30 +1290,8 @@ interface HubStore {
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
-  /**
-   * The session's turn is under way, heard at `at`: kept when no turn of
-   * this launch is ({@link instances.turnOpenAt}). Returns whether it moved.
-   */
-  readonly openTurn: (id: string, at: number) => boolean;
-  /**
-   * A pending send its process went away without reading, owed again from
-   * the envelope its record kept ({@link sentMessages.envelope}). False when
-   * it is no longer pending or kept none (a record from before envelopes
-   * were kept).
-   */
-  readonly oweAgain: (uuid: string) => boolean;
   /** The moves sessions owe to their next launch, one per session (owed-moves.ts). */
   readonly owedMoves: OwedMovesDb;
-  /** The sends still owed to their machine ({@link sentMessages.owed}), pending, in the order accepted: a session's, or a machine's. */
-  readonly owedSends: (
-    of: { instanceId: string } | { machineId: string }
-  ) => SentMessageRow[];
-  /**
-   * The sessions with a send owed to their machine whose hold is one of
-   * `holds`, or none written yet (its keeping never said why): the ids
-   * alone, by the pending sends' index, no send read whole.
-   */
-  readonly owedSessionsHeld: (holds: readonly SendHold[]) => string[];
   /** What a machine is owed, in the order it was asked for. */
   readonly owedSpawns: (
     machineId: string
@@ -1451,16 +1365,6 @@ interface HubStore {
       continuedInto?: string;
     }
   ) => PublicInstanceRow | undefined;
-  /** Every send still pending (accepted, not yet read by its session), each session's oldest first. */
-  readonly pendingSends: () => SentMessageRow[];
-  /**
-   * The person's last message to the session, when it has no reply after it:
-   * `read`, the session has it, or `pending`, it waits to reach it. His last
-   * words are his newest send that reached it or waits to (a failed, replaced
-   * or cancelled one never did), a turn's, not a note or a slash command,
-   * which asks the harness and not the session. Null when none is owed.
-   */
-  readonly personUnanswered: (id: string) => "read" | "pending" | null;
   /** Host mode's preview passes, one per browser (preview-access.ts). */
   readonly previewPasses: PreviewPassesDb;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
@@ -1739,9 +1643,6 @@ interface HubStore {
     worktree: import("@cawco/core/protocol").ScratchWorktree,
     dir: MachinePath
   ) => void;
-  readonly recordSend: (
-    send: typeof sentMessages.$inferInsert
-  ) => SentMessageRow;
   /**
    * A machine that re-joined under a new id (its id follows its hostname,
    * core machine-id.ts) is the machine it was: every row that named `from`
@@ -1783,18 +1684,6 @@ interface HubStore {
   readonly runningDelegateCounts: () => Map<string, number>;
   /** The listed sessions of one harness that are running. */
   readonly runningInstancesOf: (harness: HarnessKind) => PublicInstanceRow[];
-  /** One send's record, by its uuid. */
-  readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
-  /**
-   * The sends among these ids, matched by the send's uuid or by the id its
-   * harness stored it under.
-   */
-  readonly sendsFor: (ids: string[]) => SentMessageRow[];
-  /** A session's sends in these states, oldest accepted first. */
-  readonly sendsIn: (
-    instanceId: string,
-    states: SentMessageRow["state"][]
-  ) => SentMessageRow[];
   /** Every session id on `machineId`, and nothing else of them: a read of thousands of rows' every column held the hub's thread (hub-restart-load). */
   readonly sessionIdsOn: (machineId: string) => string[];
   /** The fleet's session limits; none set reads as `{}`. */
@@ -2019,8 +1908,6 @@ interface HubStore {
   readonly takeMcpAuthorization: (
     state: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
-  /** Takes a send's owed envelope, once: the envelope, or undefined when another took it first. */
-  readonly takeOwedSend: (uuid: string) => Envelope<SendPayload> | undefined;
   /** Takes one owed start off the books; true for exactly one caller. */
   readonly takeOwedSpawn: (id: string) => boolean;
   /** The task a comment written under the id its device chose went on (`task_comment_ids`). */
@@ -2066,12 +1953,6 @@ interface HubStore {
   /** Forgets where a line taken back stood. */
   readonly unanchorLine: (instanceId: string, lineId: string) => void;
   /**
-   * Pending sends handed to a machine before the hub kept each whole
-   * ({@link sentMessages.envelope}): none once {@link keepEnvelope} has
-   * given each its own, which a hub start does once.
-   */
-  readonly unkeptSends: () => SentMessageRow[];
-  /**
    * The machine's sessions that nothing has ever put a name to, however old
    * they are — a stored conversation the hub could name off the machine's own
    * catalog, and the only rows worth spending a catalog read on. Empty is the
@@ -2108,29 +1989,6 @@ interface HubStore {
       >
     >
   ) => void;
-  /** One change to a send's record — the hub's only kind of write to one. */
-  readonly updateSend: (
-    uuid: string,
-    change: Partial<
-      Pick<
-        SentMessageRow,
-        | "state"
-        | "reason"
-        | "refusal"
-        | "anchor"
-        | "replacedBy"
-        | "body"
-        | "harnessId"
-        | "held"
-        | "acceptedAt"
-        | "delivery"
-        | "envelope"
-        | "hold"
-        | "instanceId"
-        | "readAt"
-      >
-    >
-  ) => SentMessageRow | undefined;
   /** Moves a work item; the hub is its only writer. */
   readonly updateWorkItem: (
     id: string,
@@ -2244,7 +2102,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = SessionLinesDb &
+export type DbShape = SendsDb &
+  SessionLinesDb &
   UsageDb &
   DelegateEventsDb &
   MovesDb &
@@ -2475,13 +2334,6 @@ const HUB_PLACE_MACHINE = "hub";
 
 /** A fleet MCP server's detail between saving a new config and the server's first answer. */
 const MCP_NOT_YET_REACHED = "The hub has not reached this server yet.";
-
-/**
- * `instances.turn_open_at` of a session from before the hub kept the turn it
- * had open (migration `turn_open_at`): whether that turn ended is its harness's
- * transcript's word, not the hub's.
- */
-export const TURN_UNRECORDED = -1;
 
 /** Where a place stands in its project's list: the primary checkout, other checkouts, the hub's folder, workspaces. */
 const placeRank = (place: PlaceRow): number => {
@@ -4020,6 +3872,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...sendsDb(core),
     ...sessionLinesDb(core),
     ...usageDb(core),
     ...delegateEventsDb(core),
@@ -5162,34 +5015,6 @@ const make = async (path: string): Promise<DbShape> => {
         .onConflictDoNothing()
         .run();
     },
-    migrateSendsOnce: (name, rewrite) =>
-      db.transaction((tx) => {
-        if (
-          tx
-            .select()
-            .from(dataMigrations)
-            .where(eq(dataMigrations.name, name))
-            .get()
-        ) {
-          return null;
-        }
-        let changed = 0;
-        for (const send of tx
-          .select({ uuid: sentMessages.uuid, body: sentMessages.body })
-          .from(sentMessages)
-          .all()) {
-          const body = send.body ? rewrite(send.body) : null;
-          if (body) {
-            tx.update(sentMessages)
-              .set({ body })
-              .where(eq(sentMessages.uuid, send.uuid))
-              .run();
-            changed += 1;
-          }
-        }
-        tx.insert(dataMigrations).values({ name, at: new Date() }).run();
-        return changed;
-      }),
     foldFormerSessions: (owedAgain) => {
       const open = db
         .select()
@@ -8050,276 +7875,6 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(projects).where(eq(projects.id, dupId)).run();
         return { places, sessions, workItems: items.length };
       }),
-    recordSend: (send) =>
-      db.insert(sentMessages).values(send).returning().get(),
-    sendRecord: (uuid) =>
-      db.select().from(sentMessages).where(eq(sentMessages.uuid, uuid)).get(),
-    pendingSends: () =>
-      db
-        .select()
-        .from(sentMessages)
-        .where(eq(sentMessages.state, "pending"))
-        .orderBy(asc(sentMessages.acceptedAt))
-        .all(),
-    sendsIn: (instanceId, states) =>
-      db
-        .select()
-        .from(sentMessages)
-        .where(
-          and(
-            eq(sentMessages.instanceId, instanceId),
-            inArray(sentMessages.state, states)
-          )
-        )
-        .orderBy(asc(sentMessages.acceptedAt))
-        .all(),
-    owedSessionsHeld: (holds) =>
-      db
-        .selectDistinct({ instanceId: sentMessages.instanceId })
-        .from(sentMessages)
-        .where(
-          and(
-            eq(sentMessages.state, "pending"),
-            isNotNull(sentMessages.owed),
-            or(
-              isNull(sentMessages.hold),
-              inArray(sentMessages.hold, [...holds])
-            )
-          )
-        )
-        .all()
-        .map((row) => row.instanceId),
-    // By the sessions' ids, so SQLite finds each one's pending sends by its
-    // index (`sent_messages_state`): joined to its sessions, it read every
-    // send the hub ever kept, at each register (hub-restart-load).
-    owedSends: (of) =>
-      db
-        .select()
-        .from(sentMessages)
-        .where(
-          and(
-            "instanceId" in of
-              ? eq(sentMessages.instanceId, of.instanceId)
-              : inArray(
-                  sentMessages.instanceId,
-                  db
-                    .select({ id: instances.id })
-                    .from(instances)
-                    .where(eq(instances.machineId, of.machineId))
-                ),
-            eq(sentMessages.state, "pending"),
-            isNotNull(sentMessages.owed)
-          )
-        )
-        .orderBy(asc(sentMessages.acceptedAt))
-        .all(),
-    holdSend: (uuid, envelope) =>
-      db
-        .update(sentMessages)
-        .set({ owed: envelope })
-        .where(
-          and(eq(sentMessages.uuid, uuid), eq(sentMessages.state, "pending"))
-        )
-        .returning({ uuid: sentMessages.uuid })
-        .all().length === 1,
-    oweAgain: (uuid) =>
-      db
-        .update(sentMessages)
-        .set({ owed: sql`${sentMessages.envelope}` })
-        .where(
-          and(
-            eq(sentMessages.uuid, uuid),
-            eq(sentMessages.state, "pending"),
-            isNotNull(sentMessages.envelope)
-          )
-        )
-        .returning({ uuid: sentMessages.uuid })
-        .all().length === 1,
-    unkeptSends: () =>
-      db
-        .select()
-        .from(sentMessages)
-        .where(
-          and(
-            eq(sentMessages.state, "pending"),
-            isNull(sentMessages.envelope),
-            isNull(sentMessages.owed),
-            isNotNull(sentMessages.body)
-          )
-        )
-        .all(),
-    keepEnvelope: (uuid, envelope) => {
-      db.update(sentMessages)
-        .set({ envelope })
-        .where(
-          and(eq(sentMessages.uuid, uuid), eq(sentMessages.state, "pending"))
-        )
-        .run();
-    },
-    noteFreshStart: (id, at) => {
-      db.update(instances)
-        .set({ freshStartAt: at })
-        .where(eq(instances.id, id))
-        .run();
-    },
-    openTurn: (id, at) =>
-      db
-        .update(instances)
-        .set({ turnOpenAt: at })
-        .where(
-          and(
-            eq(instances.id, id),
-            or(
-              isNull(instances.turnOpenAt),
-              sql`${instances.turnOpenAt} < coalesce(${instances.spawnedAt}, 0)`
-            )
-          )
-        )
-        .returning({ id: instances.id })
-        .all().length === 1,
-    closeTurn: (id) => {
-      db.update(instances)
-        .set({ turnOpenAt: null })
-        .where(and(eq(instances.id, id), isNotNull(instances.turnOpenAt)))
-        .run();
-    },
-    // `updatedAt` deliberately untouched: a turn's end is not the session moving.
-    noteTurnEnded: (id, at, silent, wakesItself) => {
-      const [was] = silent
-        ? db
-            .select({
-              seenAt: instances.seenAt,
-              turnEndedAt: instances.turnEndedAt,
-            })
-            .from(instances)
-            .where(eq(instances.id, id))
-            .all()
-        : [];
-      const seenThrough =
-        was !== undefined &&
-        (was.turnEndedAt === null ||
-          (was.seenAt !== null &&
-            was.seenAt.getTime() >= was.turnEndedAt.getTime())) &&
-        !(was.seenAt && was.seenAt.getTime() >= at.getTime());
-      db.update(instances)
-        .set({
-          turnEndedAt: at,
-          wakesItself,
-          ...(seenThrough ? { seenAt: at } : {}),
-        })
-        .where(eq(instances.id, id))
-        .run();
-    },
-    noteAnswered: (id, at) => {
-      db.update(sentMessages)
-        .set({ answeredAt: at })
-        .where(
-          and(
-            eq(sentMessages.instanceId, id),
-            eq(sentMessages.state, "read"),
-            isNull(sentMessages.answeredAt)
-          )
-        )
-        .run();
-    },
-    personUnanswered: (id) => {
-      const [last] = db
-        .select({
-          answeredAt: sentMessages.answeredAt,
-          body: sentMessages.body,
-          state: sentMessages.state,
-        })
-        .from(sentMessages)
-        .where(
-          and(
-            eq(sentMessages.instanceId, id),
-            inArray(sentMessages.state, ["pending", "read"]),
-            eq(sentMessages.mode, "turn"),
-            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'human'`
-          )
-        )
-        .orderBy(desc(sentMessages.acceptedAt))
-        .limit(1)
-        .all();
-      if (last?.answeredAt !== null) {
-        return null;
-      }
-      const words = last.body.message.content;
-      if (typeof words === "string" && words.startsWith("/")) {
-        return null;
-      }
-      return last.state === "read" ? "read" : "pending";
-    },
-    latestSends: (id) => {
-      const [read] = db
-        .select()
-        .from(sentMessages)
-        .where(
-          and(
-            eq(sentMessages.instanceId, id),
-            eq(sentMessages.mode, "turn"),
-            isNotNull(sentMessages.readAt)
-          )
-        )
-        .orderBy(desc(sentMessages.readAt))
-        .limit(1)
-        .all();
-      const [person] = db
-        .select()
-        .from(sentMessages)
-        .where(
-          and(
-            eq(sentMessages.instanceId, id),
-            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'human'`
-          )
-        )
-        .orderBy(desc(sentMessages.acceptedAt))
-        .limit(1)
-        .all();
-      return { read: read ?? null, person: person ?? null };
-    },
-    handBackTurn: (id, from, at) =>
-      db
-        .update(instances)
-        .set({ turnOpenAt: at })
-        .where(and(eq(instances.id, id), eq(instances.turnOpenAt, from)))
-        .returning({ id: instances.id })
-        .all().length === 1,
-    freshStartOf: (id) =>
-      db
-        .select({ at: instances.freshStartAt })
-        .from(instances)
-        .where(eq(instances.id, id))
-        .get()?.at ?? null,
-    takeOwedSend: (uuid) => {
-      const owed = db
-        .select({ owed: sentMessages.owed })
-        .from(sentMessages)
-        .where(eq(sentMessages.uuid, uuid))
-        .get()?.owed;
-      if (!owed) {
-        return;
-      }
-      const taken = db
-        .update(sentMessages)
-        .set({ owed: null, hold: null })
-        .where(and(eq(sentMessages.uuid, uuid), isNotNull(sentMessages.owed)))
-        .returning({ uuid: sentMessages.uuid })
-        .all();
-      return taken.length > 0 ? owed : undefined;
-    },
-    updateSend: (uuid, change) =>
-      db
-        .update(sentMessages)
-        // A send no longer pending is handed on no more: what it was is its body.
-        .set(
-          change.state && change.state !== "pending"
-            ? { ...change, envelope: null, owed: null, hold: null }
-            : change
-        )
-        .where(eq(sentMessages.uuid, uuid))
-        .returning()
-        .get(),
     beginWorkspaceCreate: (id, machineId) => {
       db.insert(workspaceCreates).values({ id, machineId }).run();
     },
@@ -8663,32 +8218,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(workspaces.id, id))
         .returning()
         .get(),
-    sendsFor: (ids) => {
-      const rows: SentMessageRow[] = [];
-      // A long transcript names more ids than SQLite binds in one statement.
-      for (let at = 0; at < ids.length; at += SENDS_FOR_BATCH) {
-        const batch = ids.slice(at, at + SENDS_FOR_BATCH);
-        rows.push(
-          ...db
-            .select()
-            .from(sentMessages)
-            .where(
-              or(
-                inArray(sentMessages.uuid, batch),
-                inArray(sentMessages.harnessId, batch)
-              )
-            )
-            .all()
-        );
-      }
-      return rows;
-    },
-    linkSend: (uuid, harnessId) => {
-      db.update(sentMessages)
-        .set({ harnessId })
-        .where(eq(sentMessages.uuid, uuid))
-        .run();
-    },
     accounts: accountsDb(db),
     areas: areasStore,
     turnUsage: turnUsageDb(db),
