@@ -27,10 +27,10 @@
  *   already minted lapse at their TTL.
  */
 import { createHmac, randomBytes } from "node:crypto";
-import type { ChoiceEntry } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
 import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
+import type { ChoiceEntry } from "@cawco/core/choices";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
 import { received } from "@cawco/core/stored-json";
 import { RelayPortsSchema, RelayReachSchema } from "@cawco/core/stored-shapes";

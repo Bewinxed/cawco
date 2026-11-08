@@ -10,7 +10,8 @@
  * goes, so no URL a caller hands the hub can carry the secret out.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { CAWCO_ENV, CAWCO_HUB_PORT } from "@cawco/core";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { CAWCO_HUB_PORT } from "@cawco/core/protocol";
 
 const WS_SCHEME = /^ws/u;
 const WS_PATH_SUFFIX = /\/ws$/u;

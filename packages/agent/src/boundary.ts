@@ -101,12 +101,11 @@ import {
 import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
-import type { WorkspaceRef } from "@cawco/core";
-import { CAWCO_ENV, WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { GUARDED_CONFIG, protectedFindTests } from "@cawco/core/clone-denies";
 import { isGitDir, isGitDirSync } from "@cawco/core/git-dir";
 import {
@@ -117,6 +116,8 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
+import type { WorkspaceRef } from "@cawco/core/harness";
+import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core/harness";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import {
   currentEndpoint,

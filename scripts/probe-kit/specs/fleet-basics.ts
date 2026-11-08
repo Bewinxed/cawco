@@ -29,12 +29,12 @@ import {
   syncNotice,
 } from "../../../apps/dashboard/src/lib/cawco/convergence";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type {
   FleetItemStatus,
   FleetSyncOutcome,
   FleetSyncReport,
-} from "../../../packages/core/src/index";
+} from "../../../packages/core/src/fleet";
+import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { noAccountRefusal } from "../../../packages/hub/src/placement";
 import { MACHINE, until } from "../../scratch-fleet";

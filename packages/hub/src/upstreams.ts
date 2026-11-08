@@ -5,7 +5,8 @@
  * (scripts/scratch-fleet-stand-ins.ts); no installed hub can.
  */
 
-import { CONNECTION_SERVICES, TOOL_CATALOG } from "@cawco/core";
+import { TOOL_CATALOG } from "@cawco/core/tools";
+import { CONNECTION_SERVICES } from "@cawco/core/words/connections";
 
 /** GitHub's REST API, which the pollers, the relay and the publisher call. */
 export const GITHUB_API = "https://api.github.com";
