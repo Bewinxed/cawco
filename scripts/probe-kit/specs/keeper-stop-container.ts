@@ -61,12 +61,14 @@
  *
  *   bun scripts/probe-kit/run.ts keeper-stop-container
  */
+
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   keeperJob,
   type UnitStop,
 } from "../../../packages/agent/src/keeper-jobs";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { until } from "../../scratch-fleet";
 import {
   cgroupOf,
@@ -75,7 +77,6 @@ import {
   hostRefusal,
   type KeeperUnit,
   keeperUnitOf,
-  quoted,
   registerChildren,
   run,
   startChild,
@@ -149,7 +150,7 @@ const compose = async (
   const script = [
     `echo "PC|inv=\${INVOCATION_ID:-none}|end"`,
     // biome-ignore lint/plugin/no-system-path: the shell inside the container, whose /bin is a link to the host's /usr bound at /usr.
-    `${podman.map(quoted).join(" ")} run -d --name ${quoted(name)} --network none -v /usr:/usr:ro --rootfs ${quoted(rootfs)} /bin/sh -c ${quoted(PID1)} >/dev/null 2>"$HOME/podman-run.err"`,
+    `${podman.map(shellQuote).join(" ")} run -d --name ${shellQuote(name)} --network none -v /usr:/usr:ro --rootfs ${shellQuote(rootfs)} /bin/sh -c ${shellQuote(PID1)} >/dev/null 2>"$HOME/podman-run.err"`,
     `echo "PC|run=$?|end"`,
     "exec sleep 600",
   ].join("; ");

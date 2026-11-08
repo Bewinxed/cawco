@@ -54,6 +54,7 @@
  *
  *   bun scripts/probe-kit/run.ts typed-causes
  */
+
 import {
   chmod,
   copyFile,
@@ -66,6 +67,7 @@ import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -136,7 +138,7 @@ const git = (cwd: string, ...args: string[]) =>
       GIT_COMMITTER_NAME: "probe",
       GIT_COMMITTER_EMAIL: "probe@cawco.invalid",
     },
-    ["git", ...args.map((arg) => `'${arg.replaceAll("'", `'\\''`)}'`)].join(" ")
+    ["git", ...args.map(shellQuote)].join(" ")
   );
 
 /** A: a signalled process, and a conversation gone, by how the process ended. */

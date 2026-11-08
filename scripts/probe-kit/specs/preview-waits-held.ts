@@ -22,8 +22,10 @@
  *
  *   bun scripts/probe-kit/run.ts preview-waits-held
  */
+
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { downOf } from "../../../packages/core/src/preview-proxy";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, pressIn, type Spec } from "../kit";
@@ -54,12 +56,9 @@ const PAGES: Record<
   B: { name: "held-b", port: PORT_B, title: "Held page B", word: WORD_B },
 };
 
-/** `word` as one single-quoted shell word. */
-const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
-
 /** What serves a delegate's preview: a page saying `word` on the `PORT` the stage gives it. */
 const served = (word: string): string =>
-  `bun -e ${quoted(
+  `bun -e ${shellQuote(
     `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${word}</title></head><body><h1 id="word">${word}</h1></body></html>`)};Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch:()=>new Response(page,{headers:{"content-type":"text/html"}})});`
   )}`;
 

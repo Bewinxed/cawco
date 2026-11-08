@@ -13,6 +13,7 @@ import type {
 } from "@anthropic-ai/sandbox-runtime";
 import { DENIED_RESOLVED_ADDRESSES } from "@cawco/core/boundary-reach";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
+import { shellQuote } from "@cawco/core/shell-quote";
 import type { Policy } from "@cawco/core/workspace-judge";
 import { systemProgram } from "@cawco/core/workspace-needs";
 
@@ -194,9 +195,6 @@ export const srtSettings = (
   bwrapPath: place.bwrap,
 });
 
-/** `text` as one bash word. */
-const bashWord = (text: string): string => `'${text.replaceAll("'", "'\\''")}'`;
-
 /**
  * The bwrap a Linux workspace's srt runs, by srt's own `bwrapPath` setting
  * ("absolute path to the bwrap (bubblewrap) binary", sandbox-config.js): the
@@ -220,7 +218,7 @@ export const readOnlyDeniesBwrap = (
   real: string
 ): string => `#!${systemProgram("bash")}
 set -u
-real=${bashWord(real)}
+real=${shellQuote(real)}
 words=("$@")
 count=$#
 head=("$@")
