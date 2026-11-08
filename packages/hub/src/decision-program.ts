@@ -80,7 +80,7 @@ export const PROGRAM_FILE = "page.oui";
 /** The longest program a page may be. Our bound: 21 cards with their media are about 20 KiB. */
 export const PROGRAM_MAX = 128 * 1024;
 
-/** Where the host page's bundle is served on every preview origin (core decision-host.ts). */
+/** Where the host page's bundle is served on every preview origin (hub decision-host.ts). */
 export const DECISION_ASSETS = "/__cawco/decision/";
 
 const MAX_PROBLEMS = 8;
@@ -1073,7 +1073,7 @@ export const buildProgram = async (
 export const scriptJson = (id: string, value: unknown): string =>
   `<script type="application/json" id="${id}">${JSON.stringify(value).replaceAll("<", "\\u003c")}</script>`;
 
-/** The house faces' sheet on every preview origin (core decision-host.ts): a program's page links it, an HTML page's kit CSS imports it. */
+/** The house faces' sheet on every preview origin (hub decision-host.ts): a program's page links it, an HTML page's kit CSS imports it. */
 export const FACES_SHEET = `${DECISION_ASSETS}faces.css`;
 /**
  * The faces a decision page's first paint sets, preloaded from its head as
@@ -1083,11 +1083,11 @@ export const FACES_SHEET = `${DECISION_ASSETS}faces.css`;
  * page's words moved 41px as they swapped in.
  */
 export const FACE_PRELOADS = facePreloads(DECISION_ASSETS);
-/** The plain CawCo icon every decision page names (core decision-host.ts `icon.png`): a page in a tab of its own asks for no `/favicon.ico`, which its origin doesn't serve. */
+/** The plain CawCo icon every decision page names (hub decision-host.ts `icon.png`): a page in a tab of its own asks for no `/favicon.ico`, which its origin doesn't serve. */
 export const PAGE_ICON = `${DECISION_ASSETS}icon.png`;
 /**
  * An HTML page's dials (its `{{DIALS}}`, decision-page.ts): the host's dials
- * entry on every preview origin (core decision-host.ts), after a stand-in
+ * entry on every preview origin (hub decision-host.ts), after a stand-in
  * `cawcoDials` that holds each call until the entry, a deferred module,
  * draws it on the design graph's own dial controls in a shadow root of its
  * own, on a sheet only that root loads: the page's own elements take none

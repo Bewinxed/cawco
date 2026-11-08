@@ -12,7 +12,7 @@
  * The panels draw in a shadow root of their own, as the preview overlay
  * does in every page (agent preview-overlay page.ts): its host takes none
  * of the page's styles (`all: initial`), the house's sheet stands inside it
- * alone (`dials.css`, core page-css.ts `shadowSheet`), and the page's own
+ * alone (`dials.css`, hub page-css.ts `shadowSheet`), and the page's own
  * elements take none of it, so a page draws the same with `{{DIALS}}` and
  * without. Nor do the dials take the page's root: their rem is the
  * browser's font size (core dials-root.ts `DIALS_REM`), and script reads

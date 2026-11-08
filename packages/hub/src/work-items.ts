@@ -57,7 +57,6 @@ import {
   type ForgeVerdict,
   type ForgeWrite,
 } from "@cawco/core/forge-post";
-import { type HeldInput, handedInputs } from "@cawco/core/handed-input";
 import type {
   ChangedPath,
   ChangeVersion,
@@ -150,7 +149,6 @@ import { artifactLink, sessionLink, todoLink } from "@cawco/core/references";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { StageCloneFrame } from "@cawco/core/stage";
-import { received } from "@cawco/core/stored-json";
 import { WorkspaceArchivedSchema } from "@cawco/core/stored-shapes";
 import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -194,6 +192,7 @@ import {
   projectGate,
   projectShip,
 } from "./gate-file";
+import { type HeldInput, handedInputs } from "./handed-input";
 import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
 import { byId } from "./handles";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -232,6 +231,7 @@ import {
 } from "./project-folder";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { shipLanded } from "./ship";
+import { received } from "./stored-json";
 import type { Todo } from "./task-file";
 import type { TodoChanges } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";
@@ -842,7 +842,7 @@ export interface WorkItemRequest {
    */
   host?: boolean;
   /**
-   * What its parent hands it (core handed-input.ts), written into its
+   * What its parent hands it (hub handed-input.ts), written into its
    * workspace's `$TMPDIR/inputs/` before the brief that names them: files
    * on the parent's machine by absolute path (agent inputs.ts), and what
    * the hub holds by name, resolved here (handed-inputs.ts). Checked as
@@ -6492,7 +6492,7 @@ export const createWorkItems = ({
   };
 
   /**
-   * What `entries` hands on (core handed-input.ts), before anything is cut:
+   * What `entries` hands on (hub handed-input.ts), before anything is cut:
    * none for none. Each entry is checked against the core's shapes; paths
    * are admitted on `reader`'s machine ({@link admitPaths}), every other
    * entry resolved by the hub ({@link resolveHeld}); two that would land
@@ -10517,7 +10517,7 @@ export const createWorkItems = ({
     },
 
     /**
-     * A handoff with inputs (core handed-input.ts), sent where handoff's own
+     * A handoff with inputs (hub handed-input.ts), sent where handoff's own
      * relations reach ({@link inputsGo}): the inputs written, then
      * `sendLanded` called with what landed, which hands the message that names them to
      * the send path and answers what became of it. For a receiver whose
