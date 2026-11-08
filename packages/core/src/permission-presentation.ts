@@ -13,6 +13,8 @@
  */
 
 import type { ProjectAtLimit } from "./accounts";
+import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./ask-tools";
+import type { SourceFacts } from "./asks";
 import { askStanceLine } from "./asks";
 import {
   SHELL_TOOLS,
@@ -20,7 +22,6 @@ import {
   WEB_SEARCH_TOOLS,
 } from "./delegate-types";
 import { type MemoryScope, scopeWords } from "./fleet";
-import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./frames";
 import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
@@ -94,35 +95,6 @@ export type AdminGroup =
   | "rules"
   | "skills"
   | "subagents";
-
-/**
- * Where an install fetches from, as the hub read it when the call was
- * proposed (hub source-facts.ts): a skill's source, a marketplace's.
- */
-export interface SourceFacts {
-  /** The source as read: `github.com/owner/repo`, `npm package`, `/path on machine`. */
-  at: string;
-  /** When it first came out: the repository's creation, the package's first publish (ISO). */
-  since?: string;
-  /**
-   * A skill read from a folder on a machine before the person is asked: what
-   * its SKILL.md declares and every file the install carries, by path.
-   */
-  skill?: {
-    description: string;
-    /** Every file, by path, with the hash of its content. */
-    files: { hash: string; path: string }[];
-    /** The hash of every file together: what the approval pins. */
-    hash: string;
-    name: string;
-  };
-  /** The repository's GitHub stars. */
-  stars?: number;
-  /** Why there are no facts: a source that carries none, or the registry's answer. */
-  unknown?: string;
-  /** The package's npm downloads in the last week. */
-  weeklyDownloads?: number;
-}
 
 export interface PresentationContext {
   /** The asking session's name. */
