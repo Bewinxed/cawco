@@ -623,12 +623,6 @@ export const PROVIDER_RETRY = "provider_retry";
  */
 export const MCP_NOT_CONNECTED = "mcp_not_connected";
 
-const FINAL_STOP = /\.$/u;
-
-/** What a session's transcript and its model are told of a server that did not connect ({@link MCP_NOT_CONNECTED}). */
-export const mcpNotConnectedLine = (name: string, why: string): string =>
-  `${name} didn't connect: ${why.trim().replace(FINAL_STOP, "")}. This session runs without its tools.`;
-
 /**
  * The `system` subtype saying the agent stopped a session that failed the same
  * way {@link REPEATED_FAILURE_LIMIT} times in a row with no send in between —
