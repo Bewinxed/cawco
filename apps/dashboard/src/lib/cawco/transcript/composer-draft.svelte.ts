@@ -10,7 +10,7 @@
  * across a reload through `draft-store.ts`.
  */
 
-import { eachFileOnce } from "@cawco/core/comments";
+import { eachFileOnce } from "@cawco/core/comments/model";
 import { detach } from "@cawco/core/detach";
 import type { StarterPlace } from "@cawco/core/starters";
 import { SvelteSet } from "svelte/reactivity";
