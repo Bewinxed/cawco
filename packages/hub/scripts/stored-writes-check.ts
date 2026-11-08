@@ -95,7 +95,7 @@ law(
   "Law B",
   nested.startsWith("planted.models was written") &&
     nested.includes(
-      "`[].bogus`, which ModelInfo (packages/core/src/harness.ts)"
+      "`[].bogus`, which ModelInfo (packages/core/src/harness/kinds.ts)"
     ) &&
     rows() === 0,
   `${nested}; ${rows()} row(s)`
