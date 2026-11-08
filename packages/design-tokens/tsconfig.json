@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/packages/design-tokens"
+  },
+  "include": ["**/*", "schemas/**/*.json"],
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "../core" }]
+}
