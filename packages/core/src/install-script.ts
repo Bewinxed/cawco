@@ -4,6 +4,7 @@ import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { CAWCO_HUB_PORT, CAWCO_LOCAL_DASHBOARD_PORT } from "./protocol";
 import { RELEASE_PUBLIC_KEY } from "./release-key";
+import { shellQuote } from "./shell-quote";
 import { connectWords } from "./words/connect";
 import { systemProgram } from "./workspace-needs";
 
@@ -15,9 +16,6 @@ export interface InstallJoin {
   /** The build the hub offers its fleet: its update channel, and that channel's newest (hub binary-updates.ts `offer`). */
   offer: { channel: "stable" | "nightly"; version: string };
 }
-
-const shellQuote = (value: string): string =>
-  `'${value.replaceAll("'", `'\\''`)}'`;
 
 /**
  * The one installer, for a first machine or a machine joining a hub: it
