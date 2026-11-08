@@ -13,7 +13,10 @@
  */
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { socketPathProblem, workspaceDoorDir } from "@cawco/core/paths";
+import {
+  socketPathProblem,
+  workspaceDoorDir,
+} from "@cawco/core/paths/workspace";
 import { darwinSocketRoot, ownSocketRoot } from "@cawco/core/socket-root";
 import { harnessMcpUrl } from "./delegation";
 
