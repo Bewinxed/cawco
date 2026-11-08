@@ -53,6 +53,7 @@ export * from "./frames";
 export * from "./harness";
 // A project's Claude Code settings, OpenCode plugins and pi extensions, placed
 // as its MCP servers are, and refused the same way at the hub and the machine.
+export * from "./harness/kinds";
 export * from "./harness-config";
 // Hooks the fleet keeps: the lifecycle event, the matcher, and the script the
 // machines run. The matcher's three-way reading lives here so the editor's test
