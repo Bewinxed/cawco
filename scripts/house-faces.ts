@@ -1,5 +1,5 @@
 /**
- * Writes `src/house-faces.json`: what each house face draws (house-faces.ts),
+ * Writes `packages/core/src/house-faces.json`: what each house face draws (core house-faces.ts),
  * read with fontkit from the woff2 pieces every surface serves, which is
  * what a browser takes from them, with each file's own version string.
  * Fails when the pieces don't hold the whole file: a code point of the file
@@ -24,7 +24,6 @@ import courierNew from "@capsizecss/metrics/courierNew";
 import { fromBuffer } from "@capsizecss/unpack";
 import { create, type Font } from "fontkit";
 import subsetFont from "subset-font";
-import { formatText, formattedAlike } from "../../../scripts/fmt";
 import {
   cutHouseFaces,
   type FaceCoverage,
@@ -40,9 +39,11 @@ import {
   pairsOf,
   readHouseFaces,
   subsetOptions,
-} from "../src/house-faces";
+} from "../packages/core/src/house-faces";
+import { formatText, formattedAlike } from "./fmt";
 
-const OUT = new URL("../src/house-faces.json", import.meta.url).pathname;
+const OUT = new URL("../packages/core/src/house-faces.json", import.meta.url)
+  .pathname;
 
 const fail = (line: string): never => {
   console.error(`house faces: ${line}`);
