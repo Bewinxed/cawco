@@ -40,10 +40,10 @@
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { OVERLAY_PATH } from "../../../packages/core/src/frames";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import { downOf } from "../../../packages/core/src/preview-proxy";
-import { PAGE_SILENT_MS } from "../../../packages/core/src/preview-reach";
+import { downOf } from "../../../packages/core/src/preview/proxy";
+import { PAGE_SILENT_MS } from "../../../packages/core/src/preview/reach";
+import { OVERLAY_PATH } from "../../../packages/core/src/preview/routes";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { previewWords } from "../../../packages/core/src/words/preview";

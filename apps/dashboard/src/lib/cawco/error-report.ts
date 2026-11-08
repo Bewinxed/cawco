@@ -14,8 +14,8 @@
  * faults.ts), so `artifact_read` says them.
  */
 
-import { PREVIEW_ERRORS_PATH } from "@cawco/core/frames";
 import { hubRequest } from "@cawco/core/hub-request";
+import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
 
 const WINDOW_MS = 60_000;
 const FIRST_FRAME = /^\s*at\s|@/u;
