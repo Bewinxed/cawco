@@ -11,18 +11,24 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
+import type { AskAnswer } from "@cawco/core/asks";
+import {
+  AGENT_RESTARTING,
+  mergeHolds,
+  type RestartHold,
+  waitingWords,
+} from "@cawco/core/binary-updates";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
+import {
+  CONTROL_READ_CONTINUATION,
+  type ContinuationReadOptions,
+  readContinuation,
+} from "@cawco/core/continuation-read";
+import { SHELL_TOOLS } from "@cawco/core/delegate-types";
+import { detach } from "@cawco/core/detach";
 import type {
-  AgentBusyReport,
-  AskAnswer,
-  AsleepFrame,
-  CarrySessionOutcome,
-  CarrySessionRequest,
-  CatalogMovedFrame,
-  ControlPayload,
-  ControlResultFrame,
-  CutCommand,
-  DaemonPermissionRequestFrame,
-  Envelope,
   FleetAck,
   FleetConvergeFrame,
   FleetDelta,
@@ -31,45 +37,56 @@ import type {
   FleetItemState,
   FleetItemStatus,
   FleetMcpServer,
-  FleetMcpTakeAnswer,
-  FleetReportFrame,
   FleetSyncReport,
+  PlacedFleetConfig,
+} from "@cawco/core/fleet";
+import {
+  FLEET_DELTA,
+  FLEET_STATUS,
+  PLACED_SECTIONS,
+  placedApart,
+  worstFleetState,
+} from "@cawco/core/fleet";
+import { readingLines, shortDetail } from "@cawco/core/fleet-fault-reason";
+import type { FleetItemKind } from "@cawco/core/fleet-items";
+import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
+import type {
+  AsleepFrame,
+  CatalogMovedFrame,
+  ControlResultFrame,
+  DaemonPermissionRequestFrame,
+  FleetReportFrame,
   FramePayload,
-  FrameProvenance,
-  FsPayload,
+} from "@cawco/core/frames";
+import {
+  ARTIFACT_PICTURE,
+  type HarnessFailed,
+  type HarnessUnanswered,
+} from "@cawco/core/frames";
+import type {
+  AgentBusyReport,
+  CarrySessionOutcome,
+  CarrySessionRequest,
+  CutCommand,
+  FleetMcpTakeAnswer,
   GitChanges,
-  HarnessKind,
-  IngestMark,
-  LaunchGrant,
   MoveEnded,
   NeutralMessage,
   NeutralResultMessage,
   NeutralSessionInfo,
   PermissionResult,
-  PlacedFleetConfig,
-  SendPayload,
-  SessionAddress,
-  SessionPulse,
-  SpawnPayload,
   SpinOffHeld,
-  StopPayload,
-  WindowAsk,
   WorkInFlight,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
-  AGENT_BUSY,
-  alreadyIngested,
   BOUNDARY_RELAUNCH,
-  CAWCO_SCRATCH_TAG,
   CLI_OUTDATED,
   COMPACT_RELAUNCH,
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
   CONTROL_ABANDON,
-  CONTROL_BEGIN_TOOL_SIGNIN,
   CONTROL_CARRY_SESSIONS,
-  CONTROL_COMPLETE_TOOL_SIGNIN,
   CONTROL_FLEET_SETTINGS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
@@ -80,7 +97,6 @@ import {
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
   CONTROL_QUERIES,
-  CONTROL_READ_CONTINUATION,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_RESTLESS,
@@ -99,76 +115,63 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
-  type ContinuationReadOptions,
   cacheHit,
-  type DeliveryMark,
-  deriveTitleFromFirstMessage,
-  FLEET_DELTA,
-  FLEET_STATUS,
-  GENERATE_IMAGE,
-  type HarnessFailed,
-  type HarnessUnanswered,
   holdingWords,
   INSTALL_SESSION_CREDENTIAL,
-  isGitUrl,
   LEAK_ENDED,
   LEAK_FOUND,
   type LeakFound,
   LIMIT_REACHED,
   type LimitHolder,
-  lastErrorKindOf,
   limitSentence,
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
-  MOVE_STEPS,
-  machineLabel,
-  PLACED_SECTIONS,
-  PREVIEW_FOLDERS,
-  PREVIEW_START,
-  PREVIEW_STOP,
-  PREVIEW_WEIGHT,
-  placedApart,
   promptCacheUsage,
   RATE_LIMIT_READ,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
-  RESOLVE_PERMISSION,
   ROOM_HELD,
-  readContinuation,
-  readDelivered,
-  readIngested,
-  repoPath,
-  resumeCursor,
   roomHeldSentence,
   SESSION_DIR_READ,
-  SHELL_TOOLS,
   unknownControlWords,
   VERIFY_SESSION_CREDENTIAL,
-  WITHDRAW_PERMISSION,
   WORKSPACE_GIT_TIMEOUT_MS,
   type WorkspaceRef,
-  withWorktreeLine,
-  workWords,
-  worstFleetState,
-} from "@cawco/core";
-import {
-  AGENT_RESTARTING,
-  mergeHolds,
-  type RestartHold,
-  waitingWords,
-} from "@cawco/core/binary-updates";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
-import { detach } from "@cawco/core/detach";
-import { readingLines, shortDetail } from "@cawco/core/fleet-fault-reason";
-import type { FleetItemKind } from "@cawco/core/fleet-items";
-import { secretValuesOf, withoutSecrets } from "@cawco/core/fleet-secrets";
-import { ARTIFACT_PICTURE } from "@cawco/core/frames";
+} from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { GENERATE_IMAGE } from "@cawco/core/image-generation";
+import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
+import { machineLabel } from "@cawco/core/machine-names";
 import { measureMemoryRoom } from "@cawco/core/machine-room";
+import { MOVE_STEPS } from "@cawco/core/move";
 import { sessionScratchDir } from "@cawco/core/paths";
+import type {
+  ControlPayload,
+  Envelope,
+  FsPayload,
+  IngestMark,
+  LaunchGrant,
+  SendPayload,
+  SessionAddress,
+  SessionPulse,
+  SpawnPayload,
+  StopPayload,
+} from "@cawco/core/protocol";
+import {
+  AGENT_BUSY,
+  type DeliveryMark,
+  isGitUrl,
+  PREVIEW_FOLDERS,
+  PREVIEW_START,
+  PREVIEW_STOP,
+  PREVIEW_WEIGHT,
+  repoPath,
+} from "@cawco/core/protocol";
+import { lastErrorKindOf } from "@cawco/core/relaunch";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   processLimitSentence,
@@ -176,9 +179,23 @@ import {
   type SessiondLimit,
 } from "@cawco/core/sessiond";
 import { isDamagedRecord } from "@cawco/core/state-file";
+import type { FrameProvenance } from "@cawco/core/stream";
+import {
+  alreadyIngested,
+  readDelivered,
+  readIngested,
+  resumeCursor,
+} from "@cawco/core/stream";
+import { deriveTitleFromFirstMessage } from "@cawco/core/title";
+import {
+  CONTROL_BEGIN_TOOL_SIGNIN,
+  CONTROL_COMPLETE_TOOL_SIGNIN,
+} from "@cawco/core/tools";
 import { getToolGlance } from "@cawco/core/transcript-rules";
+import type { WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { turnWords } from "@cawco/core/words/turns";
+import { workWords } from "@cawco/core/words/work";
 import { Effect } from "effect";
 import { recordAgentState } from "./agent-state";
 import { drawArtifact } from "./artifact-picture";
@@ -5664,7 +5681,7 @@ export class SessionSupervisor {
 
   readonly #mcpLauncherStates = new Map<
     string,
-    import("@cawco/core").FleetItemState
+    import("@cawco/core/fleet").FleetItemState
   >();
 
   /**
@@ -6433,7 +6450,7 @@ export class SessionSupervisor {
         )
       );
     }
-    type State = import("@cawco/core").FleetItemState;
+    type State = import("@cawco/core/fleet").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
     const mcpByHarness: NonNullable<FleetSyncReport["mcpByHarness"]> = {};
     const mcpHarnesses = new Set(

@@ -132,6 +132,8 @@ export default {
         "scripts/lib/tool-call.fixtures.ts",
         // scripts/check.ts:538
         "scripts/runtime-bundles-check.ts",
+        // scripts/check.ts, beside css-scope-check.ts
+        "scripts/browser-core-check.ts",
         // scripts/check.ts:555
         "scripts/style-residual-check.ts",
         // scripts/check.ts:556
@@ -347,14 +349,8 @@ export default {
     "packages/core": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
-      entry: [
-        // Never imported: `golar tsc -b` reads it, the drift proof of its stored-shapes.ts (packages/hub/scripts/stored-shapes.ts).
-        "src/stored-shapes.proof.ts",
-        // A Worker started from its path: src/loop-watch.ts `WATCHDOG_URL`.
-        "src/loop-watch-worker.ts",
-        // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the request door's proof (src/hub-request.ts).
-        "src/hub-request.fixtures.ts",
-      ],
+      // A wire type a frame or a schema names beside it stays exported: `tsc -b` refuses an unexported type an exported one names (TS4023), and they are named schemas in openapi.json.
+      ignoreExportsUsedInFile: { interface: true, type: true },
     },
     "packages/cli": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
