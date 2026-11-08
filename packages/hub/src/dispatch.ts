@@ -138,7 +138,8 @@ import type {
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, status, t } from "elysia";
-import type { DbShape, WorkItemRow } from "./db";
+import type { DbShape } from "./db";
+import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { Origin } from "./db/schema";
 import type { WorkBudget } from "./db/stored-types";
