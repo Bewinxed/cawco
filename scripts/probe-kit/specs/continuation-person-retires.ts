@@ -33,7 +33,7 @@
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { writePin } from "../../../packages/core/src/comments";
+import { writePin } from "../../../packages/core/src/comments/model";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import {
