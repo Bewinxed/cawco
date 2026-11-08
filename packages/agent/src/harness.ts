@@ -36,6 +36,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import type { FleetPart } from "./fleet-parts";
+import type { KeeperRefused } from "./sessiond-client";
 
 /**
  * What a turn carries to its harness beside its words: the texts it folds in
@@ -68,33 +69,6 @@ export class SessionAddressRefused extends Error {}
  * failure, with the reason — an end, not a recovery the hub retries.
  */
 export class HeldProcessRefused extends Error {}
-
-/**
- * The machine's session keeper (sessiond) refused to pass a session's process
- * its input: a write or the end of its stdin, for a process it does not hold
- * alive. Nothing the refused bytes carried reached the harness, and nothing
- * more will: the session fails with this, in its start failure's words, and
- * keeps what it was sent for its next start.
- */
-export class KeeperRefused extends Error {
-  /**
-   * The pid of the process the input was for, as its keeper listed it when
-   * the session took it, when known: the process the session lets go of,
-   * and ends (session.ts `#refusedInput`). The id alone may name its next
-   * process by then.
-   */
-  readonly pid: number | undefined;
-  readonly procId: string;
-  readonly reason: string;
-  constructor(procId: string, reason: string, pid?: number) {
-    super(
-      `This session's process could not be reached: the process that keeps this machine's sessions running refused its input (${reason}).`
-    );
-    this.procId = procId;
-    this.reason = reason;
-    this.pid = pid;
-  }
-}
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
