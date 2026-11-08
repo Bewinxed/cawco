@@ -61,7 +61,6 @@ import type {
 } from "@cawco/core";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import {
-  ASK_ORIGIN,
   type AskedPermit,
   type AskedQuestion,
   type AskRecord,
@@ -81,6 +80,7 @@ import {
 } from "@cawco/core/asks";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
+import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
 import { settledQuestionResult } from "@cawco/core/question";
 import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
