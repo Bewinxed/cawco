@@ -32,15 +32,13 @@
  * not anything a session can change by leaving a header out.
  */
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { pageOrigin } from "@cawco/core/browser-gate";
 import {
-  artifactToolWords,
   type CallerKind,
-  connectWords,
   type DeviceKind,
   type HubAuthFrame,
   type HubAuthMode,
   type HubAuthState,
-  INSTALL_CODE_HEADER,
   MACHINE_PROOF_HEADER,
   MACHINE_PROOF_SKEW_MS,
   type OwnerDevice,
@@ -51,9 +49,11 @@ import {
   type PairingRequest,
   type PairingStart,
   type WaitingMachine,
-} from "@cawco/core";
-import { pageOrigin } from "@cawco/core/browser-gate";
+} from "@cawco/core/hub-auth";
+import { INSTALL_CODE_HEADER } from "@cawco/core/install";
 import { httpProof, sameMac, socketProof } from "@cawco/core/machine-key";
+import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { connectWords } from "@cawco/core/words/connect";
 import { Elysia, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import { recordHubEvent } from "./hub-record";

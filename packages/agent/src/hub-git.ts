@@ -52,7 +52,7 @@ import { realpathSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
-import type { WorkspaceRef } from "@cawco/core";
+import type { WorkspaceRef } from "@cawco/core/harness";
 import { listenOrEnd } from "@cawco/core/listeners";
 import {
   hubCredentialSocket,

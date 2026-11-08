@@ -23,7 +23,6 @@
  * taken then held their skeletons.
  */
 
-import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core";
 import {
   PICTURE_LIMITS,
   PICTURE_PAGE_SCROLLER,
@@ -31,6 +30,7 @@ import {
   PREVIEW_LOCKED_MESSAGE,
 } from "@cawco/core/frames";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
+import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/protocol";
 import type { Frame, Page } from "playwright-core";
 import {
   greet,

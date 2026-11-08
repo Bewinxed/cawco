@@ -26,16 +26,17 @@
  *
  * The person's words go into every message verbatim, step by step.
  */
+
+import { detach } from "@cawco/core/detach";
 import {
-  type InstanceRow,
   PLAN_WAKE_QUIET_MS,
   PLAN_WAKING_EDITS,
   type PlanEdit,
   type PlanReceiver,
   type SessionPlan,
-  sessionLink,
-} from "@cawco/core";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/plan";
+import type { InstanceRow } from "@cawco/core/protocol";
+import { sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import type { DbShape, PlanChangeRow } from "./db";

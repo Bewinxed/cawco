@@ -1,8 +1,19 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
 
+import type { AccountBorrowFrame } from "./accounts";
+import type { ActionsFrame } from "./actions";
+import type { ArtifactKind } from "./artifact-kinds";
+import type { ArtifactNeedsFrame } from "./artifact-needs";
 import type { AskAnswer } from "./asks";
-import type { BrowserKey, ListedBrowser } from "./browser";
 import type {
+  BrowserFrame,
+  BrowserHandedBackFrame,
+  BrowserKey,
+  BrowserListFrame,
+  ListedBrowser,
+} from "./browser";
+import type {
+  FleetConvergeFrame,
   FleetMcpServer,
   FleetPlugin,
   FleetSkillMeta,
@@ -10,7 +21,9 @@ import type {
   MarketplaceLink,
   MarketplaceRead,
 } from "./fleet";
+import type { FleetWatchNoticesFrame } from "./fleet-watch";
 import type {
+  CommandQueueFrame,
   CutCommand,
   ModeAsk,
   NeutralMessage,
@@ -18,28 +31,33 @@ import type {
   SendRecord,
 } from "./harness";
 import type { HarnessKind } from "./harness/kinds";
+import type { HubAuthFrame } from "./hub-auth";
+import type { InstallsFrame } from "./install";
+import type { LawsBrokenFrame } from "./invariant";
+import type { MoveJob, MoveProgressFrame, MovesFrame } from "./move";
+import type { DeskAlertFrame, PersonFrame } from "./notifications";
+import type { PermissionPresentation } from "./permission-presentation";
 import type {
   AgentRow,
-  ArtifactKind,
   BuildInfo,
   ContinuationJob,
   DelegateEvent,
   InstanceRow,
-  LastErrorKind,
   PreviewSource,
   SessionPulse,
   Verb,
   WorkItemSummary,
-} from "./index";
-import type { MoveJob } from "./move";
-import type { PermissionPresentation } from "./permission-presentation";
-import type { StageState } from "./stage";
+} from "./protocol";
+import type { LastErrorKind } from "./relaunch";
+import type { StageCloneFrame, StageFrame, StageState } from "./stage";
+import type { StartersChangedFrame } from "./starters";
+import type { RelayFrame, RelayJourneyFrame } from "./stream-relay";
 import {
   onTailnet,
   type TailnetHttps,
   type TailnetOrigin,
 } from "./tailnet-https";
-import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage";
+import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage/types";
 
 export interface FleetMcpFrame {
   kind: "fleet_mcp";
@@ -481,7 +499,7 @@ export interface SendFrame {
 export interface HeldSendFrame {
   instanceId: string;
   kind: "held_send";
-  send: import("./index").SendPayload;
+  send: import("./protocol").SendPayload;
 }
 
 /**
@@ -532,7 +550,7 @@ export interface InstancesFrame {
    * are off and `noticesSeen` is not a record of anything until it is reset
    * (hub notices.ts). Null when the record reads whole.
    */
-  noticesDamaged?: import("./index").DamagedHubRecord | null;
+  noticesDamaged?: import("./protocol").DamagedHubRecord | null;
   /** The notice ids a person acknowledged, on any tab or device (hub notices.ts). */
   noticesSeen: string[];
   /**
@@ -556,7 +574,7 @@ export interface InstancesDeltaFrame {
   /** Hub-originated: only changed rows and metadata; pulses travel separately. */
   kind: "instances_delta";
   /** Present when it moved: the damaged notices record, or null once it is reset. */
-  noticesDamaged?: import("./index").DamagedHubRecord | null;
+  noticesDamaged?: import("./protocol").DamagedHubRecord | null;
   noticesSeen?: string[];
   /** Present when it moved: the fleet's preview mode ({@link InstancesFrame.previewSettings}). */
   previewSettings?: PreviewSettings;
@@ -822,7 +840,7 @@ export interface ScratchWorktreeFrame {
   instanceId: string;
   kind: "scratch_worktree";
   processGeneration: string;
-  worktree: import("./index").ScratchWorktree;
+  worktree: import("./protocol").ScratchWorktree;
 }
 
 export interface PulseFrame {
@@ -1045,7 +1063,7 @@ export interface DelegateEventFrame {
 export type FramePayload =
   | FleetMcpFrame
   | FleetReportFrame
-  | import("./fleet").FleetConvergeFrame
+  | FleetConvergeFrame
   | PreviewFrame
   | MessageFrame
   | SendFrame
@@ -1071,48 +1089,48 @@ export type FramePayload =
   | QuestionsMovedFrame
   | DecisionsChangedFrame
   | BlocksChangedFrame
-  | import("./starters").StartersChangedFrame
+  | StartersChangedFrame
   | ProjectsChangedFrame
   /** Hub-originated: the hub restarts for an update now, and is back within a deadline. */
   | HubRestartFrame
   | TailnetHttpsFrame
   | FleetFetchFrame
   | ProjectCapFrame
-  | import("./actions").ActionsFrame
-  | import("./hub-auth").HubAuthFrame
+  | ActionsFrame
+  | HubAuthFrame
   /** Hub-originated: every install and the draft, whole, on each change. */
-  | import("./install").InstallsFrame
+  | InstallsFrame
   | ProjectStopFrame
   | DelegateEventFrame
   /** Hub-originated: every open fleet-watch notice, whole, on each change. */
-  | import("./fleet-watch").FleetWatchNoticesFrame
+  | FleetWatchNoticesFrame
   /** Hub-originated: every artifact waiting on the person, and their notices, whole, on each change. */
-  | import("./artifact-needs").ArtifactNeedsFrame
+  | ArtifactNeedsFrame
   /** Hub-originated: every law the hub caught broken, whole, on each break. */
-  | import("./invariant").LawsBrokenFrame
+  | LawsBrokenFrame
   /** Hub-originated: the person's presence and the machines that count toward it. */
-  | import("./notifications").PersonFrame
+  | PersonFrame
   /** Hub-originated: something that needs the person, shown on the desk tab they use. */
-  | import("./notifications").DeskAlertFrame
+  | DeskAlertFrame
   /** Hub-originated: every project move, whole, on each change. */
-  | import("./move").MovesFrame
+  | MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */
-  | import("./move").MoveProgressFrame
+  | MoveProgressFrame
   /** Daemon-originated: a running command's wait for a shared machine slot. */
-  | import("./harness").CommandQueueFrame
+  | CommandQueueFrame
   /** Daemon-originated: a workspace's stage changed (live components). */
-  | import("./stage").StageFrame
+  | StageFrame
   /** Daemon-originated: a place's stage clone is cut and in step (live components). */
-  | import("./stage").StageCloneFrame
+  | StageCloneFrame
   /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
-  | import("./accounts").AccountBorrowFrame
+  | AccountBorrowFrame
   /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
-  | import("./browser").BrowserFrame
+  | BrowserFrame
   /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
-  | import("./browser").BrowserHandedBackFrame
+  | BrowserHandedBackFrame
   /** Hub-originated: every browser of the fleet, whole, on each change. */
-  | import("./browser").BrowserListFrame
+  | BrowserListFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
-  | import("./stream-relay").RelayFrame
+  | RelayFrame
   /** Hub-originated: the stream relay's journey, whole, on each change. */
-  | import("./stream-relay").RelayJourneyFrame;
+  | RelayJourneyFrame;
