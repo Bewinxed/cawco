@@ -52,10 +52,10 @@ import {
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
   STREAM_RELAY_TLS_PORT,
-  STREAM_RELAY_WORDS,
   streamRelayUrls,
 } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
+import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";

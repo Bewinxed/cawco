@@ -17,7 +17,6 @@
  * ending without it lapses the grant (hub asks.ts `turnEnded`).
  */
 import { z } from "zod";
-import { clockWords, dayWords } from "./accounts";
 import { canonicalJson } from "./canonical-json";
 import { markerTag, readMarkerTag } from "./injected";
 import { sessionLink } from "./references";
@@ -211,10 +210,6 @@ export const FULL_SEND_ANSWER = {
 /** A new ask's id. */
 export const newAskId = (): string => `ask_${crypto.randomUUID()}`;
 
-/** What an approve ask's call answers at once, in one paragraph. */
-export const askRecordedWords = (ask: { id: string; link: string }): string =>
-  `Recorded as ${ask.link}: it waits on the person. Carry on with work that doesn't depend on it; the answer arrives as a message that names it. Don't ask it again, and don't do it another way. With nothing else to do, end your turn: the answer wakes you.`;
-
 /** What an ask is called where its link names it: "approval of admin_hooks_write", "question: Keep /v1?". */
 const askLabel = (asked: AskRecord["asked"]): string =>
   asked.kind === "question"
@@ -224,22 +219,6 @@ const askLabel = (asked: AskRecord["asked"]): string =>
 /** An ask's link, in the session that asked it. */
 export const askLink = (ask: Pick<AskRecord, "asked" | "instanceId">): string =>
   sessionLink(ask.instanceId, askLabel(ask.asked));
-
-/** What a question's `ask` call answers at once: what waits on the answer, or what goes ahead. */
-export const askQuestionWords = (link: string, asked: AskedQuestion): string =>
-  asked.blocks
-    ? `Asked as ${link}; ${asked.waiting ?? ""} waits on the person's answer. Don't do that work or anything that rests on it until the answer arrives as a message naming it. Do only work independent of it; with none left, end your turn: the answer wakes you.`
-    : `Asked as ${link}. Go ahead with ${asked.meanwhile ?? ""}; if their answer differs, it arrives as a message naming it and you change course.`;
-
-/** The line a question's card and push carry: whether work waits on it. */
-export const askStanceLine = (asked: {
-  blocks: boolean;
-  meanwhile?: string;
-  waiting?: string;
-}): string =>
-  asked.blocks
-    ? `Blocks work · ${asked.waiting ?? ""} is paused until you answer`
-    : `Work goes on · ${asked.meanwhile ?? ""}`;
 
 /**
  * How an answered ask went, as its message's marker says it: an approve
@@ -439,36 +418,6 @@ export const parseAskAnswered = (
     OUTCOMES.has(outcome)
     ? { id, kind, outcome: outcome as AskOutcome }
     : null;
-};
-
-/** Who gave an answer, as a refusal names them. */
-const answererWords = (by: AskAnswer): string => {
-  if (by.name) {
-    return by.name;
-  }
-  switch (by.via) {
-    case "page":
-      return "a dashboard";
-    case "app":
-      return "the app";
-    case "session":
-      return "a session";
-    case "harness":
-      return "the harness";
-    case "fullSend":
-      return "Full Send";
-    default:
-      return by.via satisfies never;
-  }
-};
-
-/** Why a second answer to an ask is refused. */
-export const askClosedWords = (ask: AskRecord): string => {
-  if (ask.answer) {
-    const { at, by } = ask.answer;
-    return `That ask was already answered by ${answererWords(by)} at ${dayWords(at)} ${clockWords(at)}.`;
-  }
-  return `That ask was withdrawn: ${ask.withdrawn?.why ?? "its session ended"}.`;
 };
 
 /**
