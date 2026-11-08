@@ -11,12 +11,7 @@
  * fleet.ts's (`syncSkillFiles`, `syncMemory`), given each harness's paths.
  */
 
-import { writeStateFile } from "@cawco/core/state-file";
-import { readJson } from "../fleet";
-
-/** Written whole and moved into place — a half-written config is a broken machine. */
-export const writeJson = (path: string, value: unknown): Promise<void> =>
-  writeStateFile(path, JSON.stringify(value, null, 2));
+import { readJson } from "../json-file";
 
 /** What this harness's fleet directory was last synced to, by skill hash. */
 export interface FleetSidecar {

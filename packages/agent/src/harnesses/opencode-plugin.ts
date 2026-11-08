@@ -104,11 +104,10 @@ import {
   OPEN_ITEMS_TOOL,
   TOOL_DOOR,
 } from "../delegation";
-import { readJson } from "../fleet";
+import { readJson, writeJson } from "../json-file";
 import { GATE_PREFIX } from "../mcp-gate";
 import { hostKeyFile } from "../mcp-host";
 import { MCP_CONNECT_MS } from "../mcp-status";
-import { writeJson } from "./fleet-common";
 import { CAWCO_PLUGIN_ID, SEND_NOW_METADATA } from "./opencode-client";
 import { opencodeCredentialFile } from "./opencode-credentials";
 
