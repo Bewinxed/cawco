@@ -17,7 +17,7 @@ import { type FSWatcher, watch } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename } from "node:path";
 import type { NeutralSessionInfo } from "@cawco/core/harness";
-import { catalogIndexPath } from "@cawco/core/paths";
+import { catalogIndexPath } from "@cawco/core/paths/cawco";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
