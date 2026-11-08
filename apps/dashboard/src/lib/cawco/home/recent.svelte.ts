@@ -41,8 +41,9 @@
  * read from it by its harness), else its start (`createdAt`): an agent's
  * reply never moves a row.
  */
-import type { NeutralSessionInfo } from "@cawco/core/harness";
+
 import { personsOwn } from "@cawco/core/protocol";
+import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { epochOf } from "../board.svelte";

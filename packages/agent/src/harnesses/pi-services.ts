@@ -2,7 +2,7 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts";
+import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
 import type {
   FleetHoldings,
   FleetItemState,
@@ -10,21 +10,7 @@ import type {
   FleetSyncReport,
   PlacedFleetConfig,
 } from "@cawco/core/fleet";
-import type {
-  AuthState,
-  HarnessCapabilities,
-  HarnessReport,
-  NeutralAssistantBlock,
-  NeutralContentBlock,
-  NeutralSessionInfo,
-  SessionMessage,
-  StoredRun,
-} from "@cawco/core/harness";
-import {
-  CONTROL_FOLDER_COMMANDS,
-  CONTROL_MODEL_CATALOG,
-  type SupportedCommands,
-} from "@cawco/core/harness";
+import type { HarnessCapabilities, HarnessReport } from "@cawco/core/harness";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { isEffortLevel } from "@cawco/core/harness/kinds";
 import {
@@ -32,7 +18,20 @@ import {
   piMemoryFile,
   piSkillsDir,
 } from "@cawco/core/paths/harnesses";
+import {
+  CONTROL_FOLDER_COMMANDS,
+  CONTROL_MODEL_CATALOG,
+} from "@cawco/core/session/controls";
 import { hostEnvironment } from "@cawco/core/session-env";
+import type {
+  AuthState,
+  NeutralAssistantBlock,
+  NeutralContentBlock,
+  NeutralSessionInfo,
+  SessionMessage,
+  StoredRun,
+  SupportedCommands,
+} from "@cawco/core/session-messages";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import {

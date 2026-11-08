@@ -24,7 +24,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { CommandResult } from "@cawco/core/harness";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import type {
   DesignOfferState,
   ProjectNote,
