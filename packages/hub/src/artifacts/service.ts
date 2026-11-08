@@ -86,7 +86,6 @@ import {
   type CommentAttachment,
   carryChanges,
   heldNoteOf,
-  inkSection,
   type MarkPictures,
   newAnswer,
   notedLine,
@@ -133,6 +132,7 @@ import {
   parse,
 } from "@cawco/core/find-match";
 import type { InkGroup } from "@cawco/core/ink";
+import { inkSection } from "@cawco/core/ink";
 import {
   faultsAt,
   faultsWith,

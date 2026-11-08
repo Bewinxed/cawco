@@ -3,8 +3,8 @@
  * (`UsageSummary`, `UsageLimitsResponse`); this module reads them.
  */
 
+import type { ProjectCap } from "@cawco/core/areas";
 import { type HubSent, hubRequest } from "@cawco/core/hub-request";
-import type { ProjectCap } from "@cawco/core/project-conversation";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type {
   ClaudeExtraUsage,
