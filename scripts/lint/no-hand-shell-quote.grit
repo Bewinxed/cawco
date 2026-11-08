@@ -1,0 +1,12 @@
+language js
+
+// A value is quoted for a shell through shellQuote, the one primitive
+// (packages/core/src/shell-quote.ts): nine copies of a security rule must
+// agree. boundary-judge.ts is a plain script that imports only Bun's and
+// node's built-ins, so it keeps its own.
+`$_.replaceAll("'", $with)` as $hit where {
+  $with <: or { r"\"'\\\\''\"", r"`'\\\\''`" },
+  $filename <: not includes "packages/core/src/shell-quote.ts",
+  $filename <: not includes "packages/agent/src/boundary-judge.ts",
+  register_diagnostic(span=$hit, message="Quote a shell word with shellQuote from @cawco/core/shell-quote, the one rule every caller shares.")
+}

@@ -122,6 +122,7 @@ import { dirname, join, resolve } from "node:path";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import {
   listedPid,
   ownPid,
@@ -228,9 +229,6 @@ const processList = (): { argv: string; pid: number; ppid: number }[] =>
 const signalOwn = (pid: Pid, sig: NodeJS.Signals): boolean =>
   pid !== ownPid() && signal(pid, sig) === "sent";
 
-/** One shell word for `value`. */
-const quoted = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
-
 /** One add as a reviewer reads it in a PASS or FAIL line. */
 const seen = (job: SshJoinJob) =>
   `${job.state} ${JSON.stringify(job.problem)}, exit ${job.exitCode}, hub ${job.hubUrl}; lines ${JSON.stringify(job.lines.slice(-12))}`;
@@ -266,11 +264,11 @@ old=$(${systemProgram("cat")} "$binary/agent.pid" 2>/dev/null || :)
 running=0
 case "$old" in
   ''|*[!0-9]*) ;;
-  *) if [ "$old" -gt 1 ] && ${systemProgram("grep")} -qa ${quoted(agent)} "/proc/$old/cmdline" 2>/dev/null; then running=1; fi ;;
+  *) if [ "$old" -gt 1 ] && ${systemProgram("grep")} -qa ${shellQuote(agent)} "/proc/$old/cmdline" 2>/dev/null; then running=1; fi ;;
 esac
-. ${quoted(agentEnv)}
-cd ${quoted(root)} || exit 1
-${quoted(process.execPath)} ${quoted(keep)} "$hub" || exit 1
+. ${shellQuote(agentEnv)}
+cd ${shellQuote(root)} || exit 1
+${shellQuote(process.execPath)} ${shellQuote(keep)} "$hub" || exit 1
 # With keep-running, an agent that runs is left be, as a first install's
 # \`systemctl --user enable --now\` leaves a unit that is already active.
 if [ "$running" = 1 ] && [ -e "$binary/keep-running" ]; then
@@ -279,10 +277,10 @@ else
   [ "$running" = 1 ] && ${systemProgram("kill")} "$old"
   config="$XDG_CONFIG_HOME"
   [ -e "$binary/keyless" ] && config="$binary/keyless-config"
-  XDG_CONFIG_HOME="$config" CAWCO_HUB_URL="ws://\${hub#http://}/ws" ${systemProgram("setsid")} ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
+  XDG_CONFIG_HOME="$config" CAWCO_HUB_URL="ws://\${hub#http://}/ws" ${systemProgram("setsid")} ${shellQuote(process.execPath)} ${shellQuote(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
   echo $! > "$binary/agent.pid"
 fi
-${quoted(process.execPath)} ${quoted(wait)} "$hub" && { echo "cawco-install: joined as ${BOX}"; exit 0; }
+${shellQuote(process.execPath)} ${shellQuote(wait)} "$hub" && { echo "cawco-install: joined as ${BOX}"; exit 0; }
 echo "cawco (ssh-reach stand-in): the agent did not come online at $hub; its last lines:" >&2
 ${systemProgram("tail")} -n 40 "$binary/agent.log" >&2
 exit 1
@@ -413,7 +411,7 @@ async function furnish(fleet: KitFleet, offered: string): Promise<Box> {
   writeFileSync(
     agentEnv,
     Object.entries(machineEnv)
-      .map(([name, value]) => `export ${name}=${quoted(value)}\n`)
+      .map(([name, value]) => `export ${name}=${shellQuote(value)}\n`)
       .join("")
   );
   // The installer's own wait for the machine to be online (CLI
@@ -463,8 +461,8 @@ socket.addEventListener("close", (event) => {
 });
 `
   );
-  const sourced = `. ${quoted(agentEnv)};`;
-  const asMachine = `${sourced} ${quoted(process.execPath)}`;
+  const sourced = `. ${shellQuote(agentEnv)};`;
+  const asMachine = `${sourced} ${shellQuote(process.execPath)}`;
   writeFileSync(
     join(binary, "installation.json"),
     `{"role":"agent","hubUrl":"http://not-joined.invalid","installedVersion":"${offered}"}\n`
@@ -490,18 +488,18 @@ socket.addEventListener("close", (event) => {
   writeFileSync(
     boxScript,
     `#!${systemProgram("sh")}
-D=${quoted(dir)}
+D=${shellQuote(dir)}
 { ${systemProgram("curl")} -sS -m 5 http://127.0.0.1:${hubPort}/health; echo " exit $?"; } > "$D/reach-hub.txt" 2>&1
 { ${systemProgram("curl")} -sS -m 5 -o /dev/null https://github.com/; echo " exit $?"; } > "$D/reach-github.txt" 2>&1
 for port in ${OPEN} ${CLOSED} ${GATEWAY}; do
   ${systemProgram("sshd")} -D -f "$D/sshd-$port.conf" -E "$D/sshd-$port.log" &
 done
-${quoted(process.execPath)} ${quoted(join(root, "scripts/probe-kit/ssh-target.ts"))} "$(${systemProgram("cat")} "$D/target.json")" > "$D/target.log" 2>&1 &
+${shellQuote(process.execPath)} ${shellQuote(join(root, "scripts/probe-kit/ssh-target.ts"))} "$(${systemProgram("cat")} "$D/target.json")" > "$D/target.log" 2>&1 &
 for port in ${OPEN} ${CLOSED} ${GATEWAY} ${PASSWORD_PORT}; do
   ${systemProgram("socat")} UNIX-LISTEN:"$D/ssh-$port.sock",fork,unlink-early TCP:127.0.0.1:$port &
 done
 ${systemProgram("socat")} TCP-LISTEN:${mockPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:"$D/${MOCK_SOCKET}" &
-( . ${quoted(agentEnv)}; cd "$D" && TMPDIR=${quoted(keeperTmp)} exec ${quoted(process.execPath)} ${quoted(join(root, SESSIOND_ENTRY))} ) > "$D/sessiond.log" 2> "$D/sessiond.err" &
+( . ${shellQuote(agentEnv)}; cd "$D" && TMPDIR=${shellQuote(keeperTmp)} exec ${shellQuote(process.execPath)} ${shellQuote(join(root, SESSIOND_ENTRY))} ) > "$D/sessiond.log" 2> "$D/sessiond.err" &
 echo $! > "$D/sessiond.pid"
 echo up > "$D/box-up"
 wait
@@ -1026,7 +1024,7 @@ async function refusalEnds(
   const asked = `[hub-auth] refused anonymous GET /api/agents/${BOX}`;
   const waitingRun = box.enter(
     OPEN,
-    `${box.asMachine} ${quoted(box.wait)} http://127.0.0.1:${port}`
+    `${box.asMachine} ${shellQuote(box.wait)} http://127.0.0.1:${port}`
   );
   const polling = await until(
     "the installer's wait asking the hub",
@@ -1074,7 +1072,7 @@ async function refusalEnds(
     : "";
   const knocked = await box.enter(
     OPEN,
-    `${box.asMachine} ${quoted(join(box.dir, "knock.ts"))} ws://127.0.0.1:${port}/ws ${BOX}`
+    `${box.asMachine} ${shellQuote(join(box.dir, "knock.ts"))} ws://127.0.0.1:${port}/ws ${BOX}`
   );
   const words = knocked.out.split("\n");
   const after = await logLines(fleet);
@@ -1201,7 +1199,7 @@ async function strangerHeld(
 ): Promise<void> {
   const knocking = box.enter(
     OPEN,
-    `${box.asMachine} ${quoted(join(box.dir, "knock.ts"))} ws://127.0.0.1:${port}/ws ${STRANGER}`
+    `${box.asMachine} ${shellQuote(join(box.dir, "knock.ts"))} ws://127.0.0.1:${port}/ws ${STRANGER}`
   );
   const held = await until(
     "the knock held for the person",
@@ -1457,7 +1455,7 @@ async function foreignHeld(
   );
   const started = await box.enter(
     OPEN,
-    `${systemProgram("sshd")} -f ${quoted(conf)} -E ${quoted(join(box.dir, "foreign-sshd.log"))}`
+    `${systemProgram("sshd")} -f ${shellQuote(conf)} -E ${shellQuote(join(box.dir, "foreign-sshd.log"))}`
   );
   const foreign = await until(
     "the person's sshd listening",
@@ -1556,7 +1554,7 @@ async function credentials(
   const fileBare = await code(file);
   const fileKeyed = await box.enter(
     OPEN,
-    `ASK=${via}${file} sh -c ${quoted(`${box.asMachine} ${quoted(join(box.dir, "ask-file.ts"))}`)}`
+    `ASK=${via}${file} sh -c ${shellQuote(`${box.asMachine} ${shellQuote(join(box.dir, "ask-file.ts"))}`)}`
   );
   await check(
     "i: through the forward, a box process with no key is refused (401) an owner route and an attached file; with the machine's key the file comes whole",
@@ -1579,7 +1577,7 @@ async function credentials(
     mkdirSync(dirname(bare), { recursive: true });
     await Bun.$`git init -q --bare ${bare}`.quiet();
   }
-  const helper = `!${quoted(process.execPath)} ${quoted(join(box.root, "packages/cli/src/cli.ts"))} git-credential`;
+  const helper = `!${shellQuote(process.execPath)} ${shellQuote(join(box.root, "packages/cli/src/cli.ts"))} git-credential`;
   const work = join(box.home, `clone-${id}`);
   // As a terminal checkout on the box does: the agent's environment, and
   // git asking `cawco git-credential` for the hub's origin, the helper list
@@ -1590,15 +1588,15 @@ async function credentials(
     [
       "set -e",
       box.sourced,
-      `g() { git -c credential.helper= -c ${quoted(`credential.helper=${helper}`)} -c user.name=probe -c user.email=probe@ssh-reach-box "$@"; }`,
-      `g clone -q ${via}/git/${id}.git ${quoted(work)}`,
-      `cd ${quoted(work)}`,
+      `g() { git -c credential.helper= -c ${shellQuote(`credential.helper=${helper}`)} -c user.name=probe -c user.email=probe@ssh-reach-box "$@"; }`,
+      `g clone -q ${via}/git/${id}.git ${shellQuote(work)}`,
+      `cd ${shellQuote(work)}`,
       'g commit -q --allow-empty -m "from the box"',
       "g push -q origin HEAD:refs/heads/main",
       "",
     ].join("\n")
   );
-  const pushed = await box.enter(OPEN, `sh ${quoted(script)}`);
+  const pushed = await box.enter(OPEN, `sh ${shellQuote(script)}`);
   const landed = existsSync(bare)
     ? (
         await Bun.$`git --git-dir=${bare} log --format=%s -1 main`
