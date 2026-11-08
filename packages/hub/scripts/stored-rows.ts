@@ -1,5 +1,5 @@
 /**
- * Every row of every stored JSON column (core stored-json.ts `storedJson`)
+ * Every row of every stored JSON column (hub stored-json.ts `storedJson`)
  * in a hub database, read as the hub reads it: parsed and checked against
  * the column's schema. A row that fails is a migration missing, since the hub
  * would throw reading it. Used by scripts/stored-json-check.ts on any
@@ -9,6 +9,8 @@
  * environment (CAWCO_DB_PATH), which the caller sets first.
  */
 import type { Database } from "bun:sqlite";
+import { is } from "drizzle-orm";
+import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import {
   isStoredShapeError,
   primaryKeyOf,
@@ -16,9 +18,7 @@ import {
   type StoredShape,
   storedShapeOf,
   undeclaredKeys,
-} from "@cawco/core/stored-json";
-import { is } from "drizzle-orm";
-import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+} from "../src/stored-json";
 
 /** One column's failing rows: how many, and the first by its primary key, with what zod said of it. */
 interface StoredFailure {
@@ -54,7 +54,7 @@ export interface StoredRows {
    * Keys rows hold that their column's type does not declare: written
    * before its writes were checked (2026-10-26) or refused one
    * (2026-11-04), or a key taken out of the type since. A read strips them;
-   * a write is refused them (core stored-json.ts `checkStored`).
+   * a write is refused them (hub stored-json.ts `checkStored`).
    */
   undeclared: StoredUndeclared[];
   /** Sealed values the given key did not open: read as no secret, as the hub reads them. */

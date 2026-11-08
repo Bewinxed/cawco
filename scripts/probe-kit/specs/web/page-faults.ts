@@ -25,7 +25,6 @@
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decisionHostFile } from "../../../../packages/core/src/decision-host";
 import {
   OVERLAY_PATH,
   PREVIEW_ERRORS_PATH,
@@ -47,6 +46,7 @@ import { createArtifactDocs } from "../../../../packages/hub/src/artifacts/docs"
 import type { ArtifactRead } from "../../../../packages/hub/src/artifacts/service";
 import { takeErrorReport } from "../../../../packages/hub/src/dashboard-errors";
 import type { ArtifactsDb } from "../../../../packages/hub/src/db/artifacts";
+import { decisionHostFile } from "../../../../packages/hub/src/decision-host";
 import { buildDecisionPage } from "../../../../packages/hub/src/decision-page";
 import { DECISION_ASSETS } from "../../../../packages/hub/src/decision-program";
 import type { HubLifetimeShape } from "../../../../packages/hub/src/lifetime";
