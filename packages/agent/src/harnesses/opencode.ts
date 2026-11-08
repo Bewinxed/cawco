@@ -57,7 +57,6 @@ import {
   CUSTODY_HELD,
   cleanStartRefusal,
   offeredMode,
-  opencodeSignInFaultWords,
 } from "@cawco/core/harness";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
@@ -96,6 +95,7 @@ import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { contactWords } from "@cawco/core/words/contact";
+import { opencodeSignInFaultWords } from "@cawco/core/words/harness-lines";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type {
   CredentialCreateInput,
