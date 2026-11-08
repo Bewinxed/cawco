@@ -54,15 +54,15 @@ import {
 import type { HubRepoKey } from "@cawco/core/hub-repo";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
+import { isSecretFileName } from "@cawco/core/paths/host-policy";
 import {
   forgetWorkspaceTmp,
-  isSecretFileName,
   workspaceCacheDir,
   workspaceCarriesDir,
   workspaceScratchDir,
   workspacesDir,
   workspaceTmpDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { commandLine, processLineage } from "@cawco/core/process-identity";
 import { runCaptured } from "@cawco/core/run-captured";
 import {
@@ -2113,7 +2113,7 @@ const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
 };
 
 /**
- * The folders in the workspaces' cache (paths.ts `workspaceCacheDir`) that
+ * The folders in the workspaces' cache (paths/workspace.ts `workspaceCacheDir`) that
  * belong to workspace `id` alone, its copy at `clone`, each built from it and
  * read by nothing else:
  * - on Linux, the folder its `node_modules` links to, `modules/<id>`
