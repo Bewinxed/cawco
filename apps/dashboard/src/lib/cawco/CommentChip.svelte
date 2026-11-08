@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { newAnswer, type Pin } from "@cawco/core/comments";
+  import { newAnswer, type Pin } from "@cawco/core/comments/model";
   import { pinName } from "@cawco/core/pin-name";
   /**
    * A comment pin's chip, wherever the dashboard draws one, and the one way
