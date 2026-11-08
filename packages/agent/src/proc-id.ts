@@ -18,7 +18,7 @@ export type SessionProcKind = {
   [K in HarnessKind]: (typeof OWN_PROCESS)[K] extends true ? K : never;
 }[HarnessKind];
 /** Whether `kind` names a harness whose every session is a keeper process of its own. */
-export const isSessionProcKind = (kind: string): kind is SessionProcKind =>
+const isSessionProcKind = (kind: string): kind is SessionProcKind =>
   HARNESSES.some((harness) => harness === kind && OWN_PROCESS[harness]);
 /** {@link SessionProcKind}'s members, in {@link HARNESSES}' order. */
 export const SESSION_PROC_KINDS: readonly SessionProcKind[] =
@@ -29,12 +29,6 @@ export type ProcId =
   | { kind: "boundary"; id: string }
   | { kind: "judge" }
   | { kind: "opencode-server" };
-
-/** A session's own keeper process, as {@link parseProcId} reads it. */
-export type SessionProc = Extract<ProcId, { instanceId: string }>;
-/** Whether `id` is a session's own keeper process ({@link isSessionProcKind}). */
-export const isSessionProc = (id: ProcId): id is SessionProc =>
-  isSessionProcKind(id.kind);
 
 const JUDGE_PREFIX = "judge-";
 
@@ -93,4 +87,13 @@ export function parseProcId(procId: string): ProcId {
     return { kind: "pi", instanceId: procId.slice(3) };
   }
   return { kind: "claude", instanceId: procId };
+}
+
+/** A keeper child that is a session's, with whose: every other child (a boundary, a judge, a server) is the machine's. */
+export type SessionProc = Extract<ProcId, { instanceId: string }>;
+
+/** `procId` as a session's child, when it is one. */
+export function sessionOfProc(procId: string): SessionProc | undefined {
+  const proc = parseProcId(procId);
+  return "instanceId" in proc ? proc : undefined;
 }
