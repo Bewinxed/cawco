@@ -25,9 +25,9 @@
  *   the stage host beside the canvas page (agent stage-host/build.ts), the
  *   dashboard from its own build (its vite.config.ts `houseFaces`).
  * - What each face draws is kept as data in `house-faces.json`, read from
- *   the pieces as served. `bun run faces` in packages/core writes it
+ *   the pieces as served. `bun run faces` writes it
  *   (scripts/house-faces.ts), holding the pieces to the whole file;
- *   `faces:check` says when it is stale.
+ *   `bun run faces:check` says when it is stale.
  * - A program's words are drawn in the sans face, so {@link undrawn} reads
  *   them against its coverage; the hub refuses a program with a character
  *   it lacks (hub decision-program.ts).
