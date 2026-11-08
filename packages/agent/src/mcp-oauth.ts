@@ -4,8 +4,8 @@ import {
   TOOL_CALL_KEY_HEADER,
 } from "@cawco/core/binary-updates";
 import { portHolder } from "@cawco/core/live-processes";
+import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
-import { mcpGatewayPort } from "@cawco/core/protocol";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import { GATE_PATH } from "./mcp-gate";
