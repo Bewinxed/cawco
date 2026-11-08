@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+  import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
   import { modelRun } from "@cawco/core/model-names";
   /**
    * Model (§1.6, §2.9): harness tabs, one search/custom-id field, the model

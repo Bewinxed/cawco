@@ -1,5 +1,5 @@
 import { type MemoryRole, modelMatches } from "./fleet";
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import { markerTag, readMarkerTag } from "./injected";
 
 /**
