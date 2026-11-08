@@ -81,6 +81,7 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
@@ -251,14 +252,17 @@ import { laidOver } from "./fleet-report";
 import { expandHome, runFs } from "./fs";
 import type {
   Harness,
+  HarnessContext,
   HarnessSession,
-  SessiondAdoption,
-  SessiondAwareContext,
+  KeeperHarness,
+  ServerHarness,
   TranscriptSpan,
 } from "./harness";
 import {
   HarnessRecoveryRefused,
   HeldProcessRefused,
+  isKeeperHarness,
+  isServerHarness,
   ReattachFailed,
   SessionAddressRefused,
 } from "./harness";
@@ -286,7 +290,7 @@ import {
   stopPreview,
   stopPreviews,
 } from "./preview";
-import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
+import { parseProcId, type SESSION_PROC_KINDS, sessionOfProc } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { removeTree } from "./remove-tree";
 import { arrive, keepAnswer } from "./request-record";
@@ -312,6 +316,18 @@ import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
 import { beginToolSignin, completeToolSignin } from "./tool-signin";
 import { installTool, probeTools } from "./tools";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
+
+/** Every harness whose sessions live in a server that outlives the agent. */
+const serverAdapters = (): ServerHarness[] =>
+  harnesses().filter(isServerHarness);
+
+/** The sessions those servers say are running: their own word on their turns ({@link ServerCustody.busyInstances}). */
+const serverBusyInstances = async (): Promise<string[]> =>
+  (
+    await Promise.all(
+      serverAdapters().map((adapter) => adapter.custody.busyInstances())
+    )
+  ).flat();
 
 /** The controls that change a session's setting: each names it as its one argument. */
 const SETTING_CONTROLS: ReadonlySet<string> = new Set([
@@ -913,9 +929,11 @@ export class SessionSupervisor {
       }
       return totals;
     });
-    adapterFor("opencode").setCustodyReadiness?.(() =>
-      this.harnessCustodyReady("opencode")
-    );
+    for (const adapter of serverAdapters()) {
+      adapter.custody.setCustodyReadiness(() =>
+        this.harnessCustodyReady(adapter.kind)
+      );
+    }
     onFleetMcpMoved(() => this.#reportFleet());
     keeperLimits.on("limit", (message) => this.#limitReached(message));
     watchLeaks({
@@ -936,23 +954,23 @@ export class SessionSupervisor {
     rows: { id: string; sessionId: string | null; cwd: string }[],
     claimed: string[]
   ): Promise<{ id: string; present: boolean | null }[]> {
-    const adapter = adapterFor("opencode");
+    const server = serverAdapters()[0]?.custody;
     return await Promise.all(
       rows.map(async (row) => {
         try {
           if (row.sessionId) {
-            if (!adapter.sessionPresent) {
+            if (!server) {
               throw new Error("No complete server-session reading available.");
             }
             return {
               id: row.id,
-              present: await adapter.sessionPresent(row.sessionId, row.cwd),
+              present: await server.sessionPresent(row.sessionId, row.cwd),
             };
           }
-          if (!adapter.unclaimedRunners) {
+          if (!server) {
             throw new Error("No complete runner reading available.");
           }
-          const reading = await adapter.unclaimedRunners(row.cwd, claimed);
+          const reading = await server.unclaimedRunners(row.cwd, claimed);
           return { id: row.id, present: reading.count === 0 ? false : null };
         } catch {
           return { id: row.id, present: null };
@@ -1650,7 +1668,7 @@ export class SessionSupervisor {
   get sessionAddresses(): SessionAddress[] {
     const addresses = new Map<string, SessionAddress>();
     for (const [instanceId, session] of this.#sessions) {
-      if (session.harness === "opencode" && session.sessionId) {
+      if (traitsOf(session.harness).custody === "server" && session.sessionId) {
         addresses.set(instanceId, {
           instanceId,
           sessionId: session.sessionId,
@@ -1665,7 +1683,9 @@ export class SessionSupervisor {
         processGeneration: pending.generation,
       });
     }
-    for (const address of adapterFor("opencode").sessionAddresses?.() ?? []) {
+    for (const address of serverAdapters().flatMap((adapter) =>
+      adapter.custody.sessionAddresses()
+    )) {
       addresses.set(address.instanceId, {
         ...address,
         processGeneration: this.#generations.get(address.instanceId),
@@ -1813,14 +1833,14 @@ export class SessionSupervisor {
    * (awake.ts).
    */
   async turnsRunning(): Promise<string[]> {
-    const opencode = (await adapterFor("opencode").busyInstances?.()) ?? [];
+    const serverBusy = await serverBusyInstances();
     return [
       ...new Set([
         ...[...this.#busy].filter(
-          (id) => this.#sessions.get(id)?.harness !== "opencode"
+          (id) => traitsOf(this.#sessions.get(id)?.harness).custody !== "server"
         ),
         ...this.#turnPending,
-        ...opencode,
+        ...serverBusy,
       ]),
     ];
   }
@@ -2098,9 +2118,8 @@ export class SessionSupervisor {
     if (held) {
       return held;
     }
-    if (session.harness === "opencode") {
-      const busy =
-        serverBusy ?? (await adapterFor("opencode").busyInstances?.()) ?? [];
+    if (traitsOf(session.harness).custody === "server") {
+      const busy = serverBusy ?? (await serverBusyInstances());
       if (busy.includes(instanceId)) {
         return { why: "the opencode server reports its turn running" };
       }
@@ -2314,7 +2333,7 @@ export class SessionSupervisor {
    */
   async #restless(ids: string[]): Promise<Record<string, string>> {
     const restless: Record<string, string> = {};
-    const serverBusy = (await adapterFor("opencode").busyInstances?.()) ?? [];
+    const serverBusy = await serverBusyInstances();
     for (const instanceId of ids) {
       if (this.#queues.has(instanceId)) {
         restless[instanceId] = "something sent to it is still on its way";
@@ -2617,7 +2636,7 @@ export class SessionSupervisor {
     if (carried.length === 0) {
       return;
     }
-    const serverBusy = (await adapterFor("opencode").busyInstances?.()) ?? [];
+    const serverBusy = await serverBusyInstances();
     const now = Date.now();
     for (const [instanceId, session] of carried) {
       const outdated = await session.outdated?.();
@@ -2966,19 +2985,18 @@ export class SessionSupervisor {
         return;
       }
       // Its process ending refuses what it was asked: its closing says so.
-      const alive = await (adapter as Partial<SessiondAdoption>)
-        .custodyCandidates?.()
-        .then(({ procs }) =>
-          procs.some((held) => {
-            const id = parseProcId(held.procId);
-            return (
-              held.alive &&
-              (id.kind === "claude" || id.kind === "pi") &&
-              id.instanceId === instanceId
-            );
-          })
-        )
-        .catch(() => undefined);
+      const alive = isKeeperHarness(adapter)
+        ? await adapter.custody
+            .candidates()
+            .then(({ procs }) =>
+              procs.some(
+                (held) =>
+                  held.alive &&
+                  sessionOfProc(held.procId)?.instanceId === instanceId
+              )
+            )
+            .catch(() => undefined)
+        : undefined;
       if (alive === false || this.#sessions.get(instanceId) !== session) {
         return;
       }
@@ -3176,25 +3194,20 @@ export class SessionSupervisor {
         // A resume can also arrive after a failed custody attachment. Read
         // sessiond and join adoption before allowing the normal absent-process
         // spawn; an attachment failure never authorises replacing a held child.
-        const candidate = adapter as Harness & Partial<SessiondAdoption>;
-        if (
-          candidate.custodyCandidates &&
-          candidate.adopt &&
-          candidate.turnRunning
-        ) {
-          const welcome = await candidate.custodyCandidates();
-          const proc = welcome.procs.find((held) => {
-            const identity = parseProcId(held.procId);
-            return (
+        if (isKeeperHarness(adapter)) {
+          const welcome = await adapter.custody.candidates();
+          const proc = welcome.procs.find(
+            (held) =>
               held.alive &&
-              (identity.kind === "claude" || identity.kind === "pi") &&
-              identity.instanceId === instanceId
-            );
-          });
+              sessionOfProc(held.procId)?.instanceId === instanceId
+          );
           if (proc) {
-            const running = await candidate.turnRunning(instanceId, proc.head);
+            const running = await adapter.custody.turnRunning(
+              instanceId,
+              proc.head
+            );
             await this.#adoptClaimed(
-              candidate as Harness & SessiondAdoption,
+              adapter,
               {
                 spec: { ...payload, cwd: workdir },
                 proc,
@@ -3522,7 +3535,7 @@ export class SessionSupervisor {
     recovery: boolean,
     spill?: string,
     sessionCredential?: string
-  ): Promise<{ boundary: Boundary | undefined; ctx: SessiondAwareContext }> {
+  ): Promise<{ boundary: Boundary | undefined; ctx: HarnessContext }> {
     // A work item's spawn names its workspace and its project, the
     // workspace's: its boundary reads that project's folder.
     const boundary = await boundaryFor(
@@ -3612,7 +3625,7 @@ export class SessionSupervisor {
     browser?: () => Promise<BrowserDoor>,
     containerEnv?: Readonly<Record<string, string>>,
     hostTmp?: string
-  ): SessiondAwareContext {
+  ): HarnessContext {
     const boundary = bounded?.boundary;
     if (!processGeneration) {
       throw new Error("The hub did not supply this process's generation.");
@@ -4004,7 +4017,7 @@ export class SessionSupervisor {
    * came back unread for 40 minutes (2026-10-13).
    */
   #holdChild(
-    claude: Harness & SessiondAdoption,
+    adapter: KeeperHarness,
     spec: SpawnPayload,
     proc: Claimed["proc"],
     ingested: Record<string, IngestMark>
@@ -4014,7 +4027,7 @@ export class SessionSupervisor {
     this.#attaching.set(instanceId, stop);
     this.#turnPending.add(instanceId);
     const job = (this.#queues.get(instanceId) ?? Promise.resolve())
-      .then(() => this.#attachHeld(claude, spec, proc, ingested, stop.signal))
+      .then(() => this.#attachHeld(adapter, spec, proc, ingested, stop.signal))
       .catch((problem: unknown) => {
         warn(`custody ${instanceId}: its attach failed: ${errorText(problem)}`);
       })
@@ -4029,7 +4042,7 @@ export class SessionSupervisor {
 
   /** {@link #holdChild}'s attach, run from the session's queue. */
   async #attachHeld(
-    claude: Harness & SessiondAdoption,
+    adapter: KeeperHarness,
     spec: SpawnPayload,
     proc: Claimed["proc"],
     ingested: Record<string, IngestMark>,
@@ -4044,7 +4057,7 @@ export class SessionSupervisor {
     this.#adopting.set(instanceId, claim.promise);
     try {
       const running = await custodyProbe(
-        claude.turnRunning(instanceId, proc.head),
+        adapter.custody.turnRunning(instanceId, proc.head),
         stopped
       );
       this.#turnPending.delete(instanceId);
@@ -4055,7 +4068,7 @@ export class SessionSupervisor {
         this.#emitPulse(instanceId, true);
       }
       await this.#adoptClaimed(
-        claude,
+        adapter,
         { spec, proc, running, settle: claim.resolve },
         ingested,
         stopped
@@ -4064,7 +4077,7 @@ export class SessionSupervisor {
       if (!this.#sessions.has(instanceId) && this.#busy.delete(instanceId)) {
         this.#emitPulse(instanceId, true);
       }
-      await this.#heldNotAttached(claude, spec, proc, problem, stopped);
+      await this.#heldNotAttached(adapter, spec, proc, problem, stopped);
     } finally {
       if (this.#adopting.get(instanceId) === claim.promise) {
         this.#adopting.delete(instanceId);
@@ -4081,7 +4094,7 @@ export class SessionSupervisor {
    * attaches it again from its own reading).
    */
   async #heldNotAttached(
-    claude: Harness & SessiondAdoption,
+    adapter: KeeperHarness,
     spec: SpawnPayload,
     proc: Claimed["proc"],
     problem: unknown,
@@ -4094,17 +4107,14 @@ export class SessionSupervisor {
       );
       return;
     }
-    const alive = await claude.custodyCandidates().then(
+    const alive = await adapter.custody.candidates().then(
       ({ procs }) =>
-        procs.some((held) => {
-          const id = parseProcId(held.procId);
-          return (
+        procs.some(
+          (held) =>
             held.alive &&
             held.pid === proc.pid &&
-            (id.kind === "claude" || id.kind === "pi") &&
-            id.instanceId === instanceId
-          );
-        }),
+            sessionOfProc(held.procId)?.instanceId === instanceId
+        ),
       () => undefined
     );
     if (alive === false) {
@@ -4159,14 +4169,14 @@ export class SessionSupervisor {
 
   /** {@link #attachHeld}'s attach of one held child, its turn decided. */
   async #adoptClaimed(
-    claude: Harness & SessiondAdoption,
+    adapter: KeeperHarness,
     { spec, proc, running, settle }: Claimed,
     ingested: Record<string, IngestMark>,
     stopped?: AbortSignal
   ): Promise<void> {
     if (!(await isDirectory(spec.cwd))) {
       this.#recoveryUnavailable(
-        { ...spec, harness: claude.kind, reattachOnly: true },
+        { ...spec, harness: adapter.kind, reattachOnly: true },
         "The recovery directory is no longer available."
       );
       return;
@@ -4197,13 +4207,13 @@ export class SessionSupervisor {
     const { ctx } = await this.#sessionContext(
       spec,
       spec.cwd,
-      claude,
+      adapter,
       holder,
       spec.workspace ?? (await cloneHolding(spec.cwd)),
       true
     );
     // Read off its keeper, never asked of the child: this ends.
-    const session = await claude.adopt(spec, ctx, {
+    const session = await adapter.custody.adopt(spec, ctx, {
       ...(cursor === undefined ? {} : { afterSeq: cursor }),
       head: proc.head,
       turnRunning: running,
@@ -4212,7 +4222,7 @@ export class SessionSupervisor {
     // Attached: the live child is this session's process from here, running.
     this.#sessions.set(spec.instanceId, session);
     detach(
-      this.#dateActivity(spec.instanceId, claude, session, spec.cwd),
+      this.#dateActivity(spec.instanceId, adapter, session, spec.cwd),
       "dateActivity"
     );
     session.attached?.();
@@ -4227,7 +4237,7 @@ export class SessionSupervisor {
     await this.#settleAttached(
       spec.instanceId,
       session,
-      claude,
+      adapter,
       spec.permissionMode,
       spec.processGeneration,
       stopped
@@ -4250,7 +4260,7 @@ export class SessionSupervisor {
    * Three steps, and only the middle one decides what busy questions hear:
    *  1. CLAIM every row sessiond is holding, without yielding.
    *  2. DECIDE whether each claimed child is mid-turn, all at once, off the
-   *     runtime ({@link SessiondAdoption.turnRunning}). A running turn is in
+   *     runtime ({@link KeeperCustody.turnRunning}). A running turn is in
    *     `#busy` from then on — attached or not yet.
    *  3. ATTACH them one at a time. On obelisk this took 23 s for 138 rows
    *     (2026-10-01), and a busy answer that waited for it, or read `#busy`
@@ -4271,8 +4281,8 @@ export class SessionSupervisor {
     const adoption = adoptionOf(kind);
     return adoption
       ? {
-          keepers: () => adoption.custodyKeepers(),
-          read: (keeper) => adoption.custodyReading(keeper),
+          keepers: () => adoption.custody.keepers(),
+          read: (keeper) => adoption.custody.reading(keeper),
         }
       : undefined;
   }
@@ -4376,7 +4386,6 @@ export class SessionSupervisor {
    * child no session runs in (a judge) is said in this agent's log alone.
    */
   #limitReached(message: SessiondLimit): void {
-    const proc = parseProcId(message.procId);
     const { holder, instanceIds } = this.#touched(message.procId, message.pid);
     const content = limitSentence(holder, message.limit, message.max);
     warn(
@@ -4390,7 +4399,8 @@ export class SessionSupervisor {
         instanceId,
         harness:
           this.#placed.get(instanceId)?.harness ??
-          (proc.kind === "pi" ? "pi" : "claude"),
+          sessionOfProc(message.procId)?.kind ??
+          "claude",
         message: {
           type: "system",
           subtype: LIMIT_REACHED,
@@ -4414,10 +4424,10 @@ export class SessionSupervisor {
     pid: number
   ): { holder: LimitHolder; instanceIds: string[]; workspace?: string } {
     const proc = parseProcId(procId);
+    if ("instanceId" in proc) {
+      return { holder: "session", instanceIds: [proc.instanceId] };
+    }
     switch (proc.kind) {
-      case "claude":
-      case "pi":
-        return { holder: "session", instanceIds: [proc.instanceId] };
       case "boundary": {
         const placed = [...this.#placed].filter(
           ([, one]) => one.boundaryPid === pid
@@ -4433,7 +4443,9 @@ export class SessionSupervisor {
       case "opencode-server":
         return {
           holder: "opencode-server",
-          instanceIds: adapterFor("opencode").sessionsOn?.(procId) ?? [],
+          instanceIds: serverAdapters().flatMap((adapter) =>
+            adapter.custody.sessionsOn(procId)
+          ),
         };
       case "judge":
         return { holder: "session", instanceIds: [] };
@@ -5167,11 +5179,11 @@ export class SessionSupervisor {
       const kind = harness;
       let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
       let sharedConversation = false;
-      if (kind === "opencode") {
+      const custody = harnessOf(kind)?.custody;
+      if (custody?.kind === "server") {
         const key = sessionId ?? session?.sessionId;
         const directory = cwd ?? this.#resumable.get(instanceId)?.cwd;
-        const adapter = adapterFor("opencode");
-        if (!(directory && adapter.endSession)) {
+        if (!directory) {
           throw new Error(
             "OpenCode end requires the row's conversation and directory."
           );
@@ -5182,17 +5194,17 @@ export class SessionSupervisor {
             [...this.#sessions].some(
               ([id, held]) =>
                 id !== instanceId &&
-                held.harness === "opencode" &&
+                held.harness === kind &&
                 held.sessionId === key
             ) ||
             [...this.#resumable].some(
               ([id, held]) =>
                 id !== instanceId &&
-                held.adapter.kind === "opencode" &&
+                held.adapter.kind === kind &&
                 held.sessionKey === key
             );
           sharedConversation = shared;
-          await adapter.endSession(
+          await custody.endSession(
             key,
             directory,
             instanceId,
@@ -5200,18 +5212,13 @@ export class SessionSupervisor {
             forget === true
           );
           ended = {
-            harness: "opencode",
+            harness: kind,
             sessionId: key,
             resourcesClosed: true,
             ...(shared ? { reason: "conversation held by another row" } : {}),
           };
         } else {
-          if (!adapter.unclaimedRunners) {
-            throw new Error(
-              "OpenCode cannot supply a complete runner reading."
-            );
-          }
-          const reading = await adapter.unclaimedRunners(
+          const reading = await custody.unclaimedRunners(
             directory,
             claimedSessionIds
           );
@@ -5238,7 +5245,7 @@ export class SessionSupervisor {
             return;
           }
           ended = {
-            harness: "opencode",
+            harness: kind,
             resourcesClosed: true,
             reason: `no unclaimed runner in ${directory} at ${new Date(reading.readStartedAt).toISOString()}`,
           };
@@ -5254,7 +5261,7 @@ export class SessionSupervisor {
         await session.stop();
         this.#sessions.delete(instanceId);
       }
-      if (kind !== "opencode") {
+      if (custody?.kind !== "server") {
         await endHeld(instanceId);
         ended = { harness: kind, resourcesClosed: true };
       }
@@ -6884,11 +6891,12 @@ export class SessionSupervisor {
 async function carryHeld(): Promise<
   { alive: Set<string>; exited: Set<string> } | undefined
 > {
-  const adapter = adapterFor("claude") as Harness & Partial<SessiondAdoption>;
+  const adapter = adapterFor("claude");
   const at = Date.now();
-  const read = await readWithin(
-    CARRY_KEEPERS_MS,
-    () => adapter.custodyCandidates?.() ?? Promise.resolve({ procs: [] })
+  const read = await readWithin(CARRY_KEEPERS_MS, () =>
+    isKeeperHarness(adapter)
+      ? adapter.custody.candidates()
+      : Promise.resolve({ procs: [] })
   );
   let listing: { procs: { alive: boolean; procId: string }[] };
   switch (read.kind) {
@@ -6907,7 +6915,7 @@ async function carryHeld(): Promise<
   const listed = new Set<string>();
   for (const proc of listing.procs) {
     const identity = parseProcId(proc.procId);
-    if (identity.kind !== "claude") {
+    if (identity.kind !== adapter.kind) {
       continue;
     }
     listed.add(identity.instanceId);
@@ -6949,17 +6957,10 @@ async function workdirFor(payload: SpawnPayload): Promise<string | undefined> {
   throw new Error(`working directory does not exist: ${workdir}`);
 }
 
-/** The harness's adoption, when it keeps its children on sessiond. */
-function adoptionOf(
-  kind: HarnessKind
-): (Harness & SessiondAdoption) | undefined {
-  const candidate = adapterFor(kind) as Harness & Partial<SessiondAdoption>;
-  return typeof candidate.adopt === "function" &&
-    typeof candidate.custodyKeepers === "function" &&
-    typeof candidate.custodyReading === "function" &&
-    typeof candidate.turnRunning === "function"
-    ? (candidate as Harness & SessiondAdoption)
-    : undefined;
+/** The harness, when it keeps its children on sessiond ({@link KeeperCustody}). */
+function adoptionOf(kind: HarnessKind): KeeperHarness | undefined {
+  const adapter = adapterFor(kind);
+  return isKeeperHarness(adapter) ? adapter : undefined;
 }
 
 /**
@@ -7129,15 +7130,12 @@ function endHeld(instanceId: string, pid?: number): Promise<boolean> {
   return withKeepers(async (keepers) => {
     const children = keepers.flatMap(({ client }) =>
       client.procs
-        .filter((proc) => {
-          const id = parseProcId(proc.procId);
-          return (
+        .filter(
+          (proc) =>
             proc.alive &&
             (pid === undefined || proc.pid === pid) &&
-            (id.kind === "claude" || id.kind === "pi") &&
-            id.instanceId === instanceId
-          );
-        })
+            sessionOfProc(proc.procId)?.instanceId === instanceId
+        )
         .map((proc) => ({ client, child: proc }))
     );
     await Promise.all(
