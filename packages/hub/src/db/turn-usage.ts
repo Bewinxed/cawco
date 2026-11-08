@@ -1,4 +1,4 @@
-import type { ClaudeModelUsage } from "@cawco/core/harness";
+import type { ClaudeModelUsage } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
 import { and, asc, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
