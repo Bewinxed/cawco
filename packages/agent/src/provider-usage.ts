@@ -12,7 +12,7 @@
  * why ({@link ProviderAccountReading.error}); the hub keeps that reading.
  */
 import type { ProviderAccountReading } from "@cawco/core/accounts";
-import { credentialAccountIds } from "@cawco/core/paths";
+import { credentialAccountIds } from "@cawco/core/paths/claude";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import type { HarnessContext } from "./harness";
