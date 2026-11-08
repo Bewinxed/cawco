@@ -46,7 +46,7 @@ import { holdingWords } from "@cawco/core/harness";
 import { workspaceCarriesDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { shellQuote } from "./boundary";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { hostGit } from "./host-git";
 
 /** What a checkout holds that is nowhere else. */
