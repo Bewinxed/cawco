@@ -13,7 +13,7 @@
  * names none is drawn on every platform.
  */
 import type { TransformedToken } from "style-dictionary/types";
-import { TOKENS_EXTENSION } from "../../../packages/hub/src/dtcg-values";
+import { TOKENS_EXTENSION } from "../../../packages/design-tokens/src/dtcg-values";
 
 const SITE_GROUPS = new Set(["marketing"]);
 
