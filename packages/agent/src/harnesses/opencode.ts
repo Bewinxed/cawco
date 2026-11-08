@@ -108,7 +108,7 @@ import {
   opencodeDenyRules,
   sessionFleetDenials,
 } from "../denied-tools";
-import { memoryState, readJson, syncMemory } from "../fleet";
+import { memoryState, syncMemory } from "../fleet";
 import {
   hookStatesInSet,
   hookStatesOn,
@@ -130,6 +130,7 @@ import {
   ReattachFailed,
   SessionAddressRefused,
 } from "../harness";
+import { readJson, writeJson } from "../json-file";
 import { KeeperPool } from "../keepers";
 import { enterSpawn, inView, overlaySync, viewMember } from "../layer";
 import { isMachineAgent } from "../machine-agent";
@@ -158,7 +159,7 @@ import type { SessionQuery, StoredSession } from "../stores/opencode-reads";
 import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
 import { FULL_CAPABILITIES } from "./capabilities";
-import { type FleetSidecar, readSidecar, writeJson } from "./fleet-common";
+import { type FleetSidecar, readSidecar } from "./fleet-common";
 import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
   answerOf,
