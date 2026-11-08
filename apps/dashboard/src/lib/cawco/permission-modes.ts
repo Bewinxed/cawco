@@ -11,14 +11,14 @@
  * none. Claude Code has more (`dontAsk`, `auto`) that no harness here is
  * offered; a session that reports one is named by it.
  */
+import type { HarnessReport } from "@cawco/core/harness";
 import {
   type HarnessKind,
-  type HarnessReport,
   type OfferedMode,
   PERMISSION_MODES,
   type PermissionMode,
   permissionModeNamed,
-} from "@cawco/core/harness";
+} from "@cawco/core/harness/kinds";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { speakerName } from "./transcript/speaker";
 
