@@ -4,7 +4,7 @@
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
 import { z } from "zod";
-import { ACCOUNT_HUES } from "./accounts";
+import { ACCOUNT_HUES } from "./accounts/kinds";
 import { BINARY_UPDATE_PHASES } from "./binary-updates";
 import { CONNECTION_AUTHS, CONNECTION_TRANSPORTS } from "./connections";
 import { SESSION_ROLES } from "./delegate-types";
@@ -1588,7 +1588,7 @@ export type CompactStageOutput = z.output<typeof CompactStageShape>;
 const AccountHueShape = declared(
   z.enum(ACCOUNT_HUES),
   "AccountHue",
-  "packages/core/src/accounts.ts"
+  "packages/core/src/accounts/kinds.ts"
 );
 export type AccountHueOutput = z.output<typeof AccountHueShape>;
 
@@ -1785,7 +1785,7 @@ export type AccountOverageOutput = z.output<typeof AccountOverageShape>;
 const CompactMethodShape = declared(
   z.enum(["native", "summary", "whole"]),
   "CompactMethod",
-  "packages/core/src/accounts.ts"
+  "packages/core/src/accounts/kinds.ts"
 );
 export type CompactMethodOutput = z.output<typeof CompactMethodShape>;
 
@@ -2546,7 +2546,7 @@ export type SkillFileOutput = z.output<typeof SkillFileShape>;
 const IngestMarkShape = declared(
   z.object({ epoch: z.string(), srcSeq: z.number() }),
   "IngestMark",
-  "packages/core/src/stream.ts"
+  "packages/core/src/protocol.ts"
 );
 export type IngestMarkOutput = z.output<typeof IngestMarkShape>;
 
