@@ -195,7 +195,7 @@ export interface SpawnPayload {
    */
   hostScratch?: string;
   /** Hub ingest cursor for a recovery sent after the registration handover. */
-  ingested?: import("./stream").IngestMark;
+  ingested?: import("./protocol").IngestMark;
   instanceId: string;
   /**
    * The fleet's role-scoped memory documents this session loads, in path
@@ -544,7 +544,7 @@ export interface HeartbeatAckPayload {
    * The hub's delivery mark for each instance the beat names
    * (stream.ts `DeliveryMark`): what the agent may stop keeping.
    */
-  delivered: Record<string, import("./stream").DeliveryMark>;
+  delivered: Record<string, import("./protocol").DeliveryMark>;
   keepAwake: string[];
   /**
    * Every workspace on the machine with a live work item (starting or
@@ -1549,90 +1549,6 @@ export const RESTART_LOST =
 export const SERVER_STOPPED_MID_TURN =
   "The opencode server stopped before this turn finished; its reply is incomplete.";
 
-/**
- * `frames`: everything a session produces, flowing agent→hub→dashboard. The
- * `frame` kind is a neutral message; `raw` on it carries the harness's own
- * event verbatim.
- */
-export type FramePayload =
-  | import("./frames").FleetMcpFrame
-  | import("./frames").FleetReportFrame
-  | import("./fleet").FleetConvergeFrame
-  | import("./frames").PreviewFrame
-  | import("./frames").MessageFrame
-  | import("./frames").SendFrame
-  | import("./frames").RejectedFrame
-  | import("./frames").HeldSendFrame
-  | import("./frames").TakenSendFrame
-  | import("./frames").InstancesFrame
-  | import("./frames").InstancesDeltaFrame
-  | import("./frames").PermissionRequestFrame
-  | import("./frames").PermissionSettledFrame
-  | import("./frames").UsageFrame
-  | import("./frames").StoppedFrame
-  | import("./frames").AsleepFrame
-  | import("./frames").RecoveryUnavailableFrame
-  | import("./frames").ControlResultFrame
-  | import("./frames").ErrorFrame
-  | import("./frames").SessionAddressFrame
-  | import("./frames").ScratchWorktreeFrame
-  | import("./frames").PulseFrame
-  | import("./frames").WorkItemFrame
-  | import("./frames").ProjectOfferFrame
-  | import("./frames").TasksChangedFrame
-  | import("./frames").QuestionsMovedFrame
-  | import("./frames").DecisionsChangedFrame
-  | import("./frames").BlocksChangedFrame
-  | import("./starters").StartersChangedFrame
-  | import("./frames").ProjectsChangedFrame
-  /** Hub-originated: the hub restarts for an update now, and is back within a deadline. */
-  | import("./frames").HubRestartFrame
-  | import("./frames").TailnetHttpsFrame
-  | import("./frames").FleetFetchFrame
-  | import("./frames").ProjectCapFrame
-  | import("./actions").ActionsFrame
-  | import("./hub-auth").HubAuthFrame
-  /** Hub-originated: every install and the draft, whole, on each change. */
-  | import("./install").InstallsFrame
-  | import("./frames").ProjectStopFrame
-  | import("./frames").DelegateEventFrame
-  /** Hub-originated: every open fleet-watch notice, whole, on each change. */
-  | import("./fleet-watch").FleetWatchNoticesFrame
-  /** Hub-originated: every artifact waiting on the person, and their notices, whole, on each change. */
-  | import("./artifact-needs").ArtifactNeedsFrame
-  /** Hub-originated: every law the hub caught broken, whole, on each break. */
-  | import("./invariant").LawsBrokenFrame
-  /** Hub-originated: the person's presence and the machines that count toward it. */
-  | import("./notifications").PersonFrame
-  /** Hub-originated: something that needs the person, shown on the desk tab they use. */
-  | import("./notifications").DeskAlertFrame
-  /** Hub-originated: every project move, whole, on each change. */
-  | import("./move").MovesFrame
-  /** Daemon-originated: how far a move's clone or large files are. */
-  | import("./move").MoveProgressFrame
-  /** Daemon-originated: a running command's wait for a shared machine slot. */
-  | import("./harness").CommandQueueFrame
-  /** Daemon-originated: a workspace's stage changed (live components). */
-  | import("./stage").StageFrame
-  /** Daemon-originated: a place's stage clone is cut and in step (live components). */
-  | import("./stage").StageCloneFrame
-  /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
-  | import("./accounts").AccountBorrowFrame
-  /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
-  | import("./browser").BrowserFrame
-  /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
-  | import("./browser").BrowserHandedBackFrame
-  /** Hub-originated: every browser of the fleet, whole, on each change. */
-  | import("./browser").BrowserListFrame
-  /** Daemon-originated: the stream relay on the machine, whole, on each change. */
-  | import("./stream-relay").RelayFrame
-  /** Hub-originated: the stream relay's journey, whole, on each change. */
-  | import("./stream-relay").RelayJourneyFrame
-  /** Hub-originated: Recent's stored transcripts, whole, on each change. */
-  | StoredFrame
-  /** Daemon-originated: the machine's stored transcripts moved. */
-  | import("./frames").CatalogMovedFrame;
-
 export const CAWCO_HUB_PORT = 3456;
 
 /**
@@ -1966,3 +1882,33 @@ export const CONFIGURE_BINARY_UPDATES = "configureBinaryUpdates";
 
 /** Returns a machine that is waiting to install back to `available`: the person changed their mind. */
 export const CANCEL_BINARY_UPDATE = "cancelBinaryUpdate";
+
+/**
+ * The hub's word on how far it has ingested one instance: the last line it
+ * turned into a frame. Handed back on the register ack so a reattaching agent
+ * replays exactly the gap the hub names — the mark is the hub's own, so the
+ * agent's death loses nothing it needs.
+ */
+export interface IngestMark {
+  epoch: string;
+  srcSeq: number;
+}
+
+/**
+ * THE DELIVERY LEDGER: an agent process's own count of the frames it has
+ * sent one session (`epoch`, random at the agent's start; `seq`, 1 up), as
+ * a frame's `sent` stamp and as the hub's mark of the last one it took.
+ *
+ * The ingest ledger ({@link IngestMark}) counts sessiond lines, which a
+ * returning agent replays from sessiond's ring; it says nothing of a frame
+ * the agent made itself, or of a harness with no ring behind it (opencode).
+ * This one counts every frame the agent sends, so a link that dropped while
+ * both ends stayed up loses none: the agent keeps what the hub has not
+ * acknowledged (agent outbox.ts) and sends it again behind the mark the hub
+ * hands back, and the hub refuses what it already took
+ * ({@link alreadyDelivered}).
+ */
+export interface DeliveryMark {
+  epoch: string;
+  seq: number;
+}

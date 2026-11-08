@@ -17,6 +17,7 @@
 
 import type { CarrySessionRequest } from "./harness";
 import type { HubPreviewOrigins } from "./hub-previews";
+import type { DeliveryMark, IngestMark } from "./protocol";
 import type { TailnetServing } from "./tailnet-https";
 
 /**
@@ -483,36 +484,6 @@ export type StreamClientMessage =
 export interface FrameProvenance {
   srcEpoch: string;
   srcSeq: number;
-}
-
-/**
- * The hub's word on how far it has ingested one instance: the last line it
- * turned into a frame. Handed back on the register ack so a reattaching agent
- * replays exactly the gap the hub names — the mark is the hub's own, so the
- * agent's death loses nothing it needs.
- */
-export interface IngestMark {
-  epoch: string;
-  srcSeq: number;
-}
-
-/**
- * THE DELIVERY LEDGER: an agent process's own count of the frames it has
- * sent one session (`epoch`, random at the agent's start; `seq`, 1 up), as
- * a frame's `sent` stamp and as the hub's mark of the last one it took.
- *
- * The ingest ledger ({@link IngestMark}) counts sessiond lines, which a
- * returning agent replays from sessiond's ring; it says nothing of a frame
- * the agent made itself, or of a harness with no ring behind it (opencode).
- * This one counts every frame the agent sends, so a link that dropped while
- * both ends stayed up loses none: the agent keeps what the hub has not
- * acknowledged (agent outbox.ts) and sends it again behind the mark the hub
- * hands back, and the hub refuses what it already took
- * ({@link alreadyDelivered}).
- */
-export interface DeliveryMark {
-  epoch: string;
-  seq: number;
 }
 
 /** `register`'s ack, with the ledger the returning agent reattaches against. */
