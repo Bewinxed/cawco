@@ -227,6 +227,9 @@ import { fleetMcpAt } from "../fleet-mcp-set";
 import type { FleetPart } from "../fleet-parts";
 import { type FleetPlaceSet, placeSetAt } from "../fleet-place-set";
 import { sessionGitEnv } from "../git-credential";
+// Type-only, and deliberately so: `session.ts` imports the harness registry
+// this file is part of, so a value import here would close a module cycle.
+import type { SessiondAwareContext } from "../harness";
 import {
   type Harness,
   type HarnessContext,
@@ -254,9 +257,6 @@ import {
 import { probeStarted } from "../probe-count";
 import { parseProcId, procIdFor } from "../proc-id";
 import { redactText } from "../redaction";
-// Type-only, and deliberately so: `session.ts` imports the harness registry
-// this file is part of, so a value import here would close a module cycle.
-import type { SessiondAwareContext } from "../session";
 import {
   acknowledgeSessionCredential,
   CredentialUnknown,
