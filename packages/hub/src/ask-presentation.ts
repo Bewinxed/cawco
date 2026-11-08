@@ -8,7 +8,6 @@
  */
 import type { SourceFacts } from "@cawco/core/asks";
 import type { PermissionRequestFrame } from "@cawco/core/frames";
-import type { PermissionResult } from "@cawco/core/harness";
 import {
   type AdminGroup,
   presentPermission,
@@ -16,6 +15,7 @@ import {
 } from "@cawco/core/permission-presentation";
 import type { Envelope } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
+import type { PermissionResult } from "@cawco/core/session-messages";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
 import { boardTitle } from "./labels";

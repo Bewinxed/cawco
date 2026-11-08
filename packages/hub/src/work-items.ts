@@ -41,6 +41,7 @@ import {
   AGENT_RESTARTED_MID_REQUEST,
   AGENT_RESTARTING,
 } from "@cawco/core/binary-updates";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
 import {
   ANY_TYPE,
@@ -57,61 +58,7 @@ import {
   type ForgeVerdict,
   type ForgeWrite,
 } from "@cawco/core/forge-post";
-import type {
-  ChangedPath,
-  ChangeVersion,
-  CommandResult,
-  HostOutputListed,
-  InputFile,
-  InputNamed,
-  InputsAdmitted,
-  InputsLanded,
-  InputsPlace,
-  InputsRead,
-  NeutralOrigin,
-  SendRefusal,
-  WorkspaceArchive,
-  WorkspaceChanges,
-  WorkspaceCheckout,
-  WorkspaceCommit,
-  WorkspaceConflict,
-  WorkspaceCut,
-  WorkspaceFirstSession,
-  WorkspaceHolding,
-  WorkspaceOutputs,
-  WorkspaceRef,
-  WorkspaceUnlanded,
-  WorkspaceWorkEnd,
-} from "@cawco/core/harness";
-import {
-  byPerson,
-  CONTROL_CLONE_HOLDING,
-  CONTROL_HOST_OUTPUTS,
-  CONTROL_HOST_SCRATCH_REMOVE,
-  CONTROL_INPUTS_ADMIT,
-  CONTROL_INPUTS_COPY,
-  CONTROL_INPUTS_READ,
-  CONTROL_INPUTS_WRITE,
-  CONTROL_WORKSPACE_APPLY,
-  CONTROL_WORKSPACE_ARCHIVE,
-  CONTROL_WORKSPACE_AT,
-  CONTROL_WORKSPACE_BOUNDARY,
-  CONTROL_WORKSPACE_BUNDLE,
-  CONTROL_WORKSPACE_CHANGES,
-  CONTROL_WORKSPACE_CLONES,
-  CONTROL_WORKSPACE_CREATE,
-  CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_OUTPUTS,
-  CONTROL_WORKSPACE_WORK_END,
-  holdingWords,
-  INPUTS_DIR,
-  INPUTS_LIMIT_BYTES,
-  knowsNotControl,
-  OUTPUTS_DIR,
-  sizeWords,
-  type TurnWakes,
-  waitsOnItself,
-} from "@cawco/core/harness";
+import { byPerson } from "@cawco/core/harness";
 import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
 import { WORK_ITEM_ORIGIN } from "@cawco/core/harness/kinds";
 import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
@@ -147,6 +94,9 @@ import type {
 } from "@cawco/core/protocol";
 import { artifactLink, sessionLink, todoLink } from "@cawco/core/references";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { knowsNotControl } from "@cawco/core/session/controls";
+import type { NeutralOrigin, SendRefusal } from "@cawco/core/session-messages";
+import { type TurnWakes, waitsOnItself } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import { WorkspaceArchivedSchema } from "@cawco/core/stored-shapes";
@@ -156,6 +106,54 @@ import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
 import { workWords } from "@cawco/core/words/work";
 import { isWorkspaceNeedsRefusal } from "@cawco/core/words/workspace-needs";
+import type {
+  ChangedPath,
+  ChangeVersion,
+  HostOutputListed,
+  InputFile,
+  InputNamed,
+  InputsAdmitted,
+  InputsLanded,
+  InputsPlace,
+  InputsRead,
+  WorkspaceArchive,
+  WorkspaceChanges,
+  WorkspaceCheckout,
+  WorkspaceCommit,
+  WorkspaceConflict,
+  WorkspaceCut,
+  WorkspaceFirstSession,
+  WorkspaceHolding,
+  WorkspaceOutputs,
+  WorkspaceRef,
+  WorkspaceUnlanded,
+  WorkspaceWorkEnd,
+} from "@cawco/core/workspace/controls";
+import {
+  CONTROL_CLONE_HOLDING,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
+  CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_WRITE,
+  CONTROL_WORKSPACE_APPLY,
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
+  CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
+  CONTROL_WORKSPACE_CLONES,
+  CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
+  CONTROL_WORKSPACE_WORK_END,
+  holdingWords,
+  INPUTS_DIR,
+  INPUTS_LIMIT_BYTES,
+  OUTPUTS_DIR,
+  sizeWords,
+} from "@cawco/core/workspace/controls";
 import {
   excludedPaths,
   IGNORED_STATUS,
