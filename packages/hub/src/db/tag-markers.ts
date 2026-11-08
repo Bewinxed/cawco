@@ -7,7 +7,8 @@
  * (`data_migrations`, db `migrateSendsOnce`). The line a reader reads stays
  * as it was; the tag goes before it, as a marker is written now.
  */
-import { markerTag, type NeutralUserMessage, readMarkerTag } from "@cawco/core";
+import type { NeutralUserMessage } from "@cawco/core/harness";
+import { markerTag, readMarkerTag } from "@cawco/core/injected";
 
 /** The migration's name, as `data_migrations` keeps it. */
 export const TAG_MARKERS = "tag-markers";

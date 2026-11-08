@@ -40,7 +40,7 @@ export const BLOCK_WIDTHS = ["narrow", "wide"] as const;
 export type BlockWidth = (typeof BLOCK_WIDTHS)[number];
 
 /** What a custom view's block id starts with: `view:<name>`. */
-export const VIEW_BLOCK = "view:";
+const VIEW_BLOCK = "view:";
 
 /**
  * A block's id: a built-in block's word (`routines`, `sources`, `board`), or
@@ -72,7 +72,7 @@ export interface BuiltInBlock {
  * among when it is kept. A task view's page holds the view; the Routines
  * page its three parts.
  */
-export const BLOCK_BUILT_INS: Record<BlockPage, BuiltInBlock[]> = {
+const BLOCK_BUILT_INS: Record<BlockPage, BuiltInBlock[]> = {
   board: [{ block: "board", width: "wide" }],
   table: [{ block: "table", width: "wide" }],
   pipeline: [{ block: "pipeline", width: "wide" }],

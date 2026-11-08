@@ -29,17 +29,14 @@ import {
   type Socket,
 } from "node:net";
 import { dirname, relative } from "node:path";
-import {
-  type BuildInfo,
-  type ChildLimit,
-  type SessionLimits,
-  SessionRing,
-} from "@cawco/core";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
+import type { ChildLimit } from "@cawco/core/harness";
 import { LineSplitter } from "@cawco/core/lines";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { PacedWriter } from "@cawco/core/paced-write";
+import type { BuildInfo, SessionLimits } from "@cawco/core/protocol";
+import { SessionRing } from "@cawco/core/ring";
 import { serverEnvironment, sessionEnvironment } from "@cawco/core/session-env";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.

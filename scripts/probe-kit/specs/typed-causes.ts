@@ -146,7 +146,7 @@ const signalled = async (kit: Kit): Promise<void> => {
   const { processEnded } =
     await import("../../../packages/agent/src/harnesses/claude");
   const { CLAUDE_CONVERSATION_GONE, ...core } =
-    (await import("../../../packages/core/src/index")) as typeof import("../../../packages/core/src/index") & {
+    (await import("../../../packages/core/src/relaunch")) as typeof import("../../../packages/core/src/relaunch") & {
       lastErrorKindOf?: (error: unknown) => string | undefined;
     };
   let listener:
@@ -322,7 +322,7 @@ const providerLimit = async (kit: Kit, scratch: string): Promise<void> => {
   try {
     const { startPiHost } =
       await import("../../../packages/agent/src/harnesses/pi-runtime");
-    const core = (await import("../../../packages/core/src/index")) as {
+    const core = (await import("../../../packages/core/src/relaunch")) as {
       providerLimitRefused?: (errors: readonly string[]) => boolean;
     };
     const ctx = {
@@ -941,8 +941,9 @@ const credential = async (kit: Kit): Promise<void> => {
  */
 const lastErrorKinds = async (kit: Kit, scratch: string): Promise<void> => {
   const { Database } = await import("bun:sqlite");
-  const { CLAUDE_CONVERSATION_GONE, RESTART_LOST, relaunchOf } =
-    await import("../../../packages/core/src/index");
+  const { CLAUDE_CONVERSATION_GONE, relaunchOf } =
+    await import("../../../packages/core/src/relaunch");
+  const { RESTART_LOST } = await import("../../../packages/core/src/protocol");
   const dbPath = join(scratch, "hub", "hub.db");
   await mkdir(join(scratch, "hub"), { recursive: true });
   await writeFile(
@@ -1047,7 +1048,7 @@ const lastErrorKinds = async (kit: Kit, scratch: string): Promise<void> => {
     );
     // K: a restore the hub refused stands refused by its kind, not by
     // whether the refusal's words are the same again.
-    const core = (await import("../../../packages/core/src/index")) as {
+    const core = (await import("../../../packages/core/src/relaunch")) as {
       startRefused?: (row: object) => boolean;
     };
     const refusalWords = "Das Konto ist auf diesem Rechner abgemeldet.";

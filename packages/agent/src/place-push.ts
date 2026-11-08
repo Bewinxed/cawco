@@ -10,7 +10,7 @@
  * and bytes, and the hub repository its origin names when it has one, and
  * pushes nothing.
  */
-import { type PlacePush, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
+import { type PlacePush, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/harness";
 import { hubRepoOfUrl } from "@cawco/core/hub-repo";
 import { useHubCredentialHelper } from "./git-credential";
 import { hubGitEnv, hubRepo, isHubRemote } from "./move";

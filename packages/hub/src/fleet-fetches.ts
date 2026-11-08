@@ -5,7 +5,7 @@
  * `linkMarketplace`); dashboards learn what came of it from the frame, and an
  * agent's admin tool (admin-tools.ts) from here, in the same process.
  */
-import type { FleetFetchFrame } from "@cawco/core";
+import type { FleetFetchFrame } from "@cawco/core/frames";
 
 /** What one announcement carries: the frame less its kind. */
 export type FetchNews = Omit<FleetFetchFrame, "kind" | "instanceId">;

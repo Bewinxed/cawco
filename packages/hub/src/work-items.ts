@@ -35,17 +35,33 @@
  * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
 
+import type { EndedBy } from "@cawco/core/accounts";
+import { CODE_MODE_TOOL } from "@cawco/core/ask-tools";
+import {
+  AGENT_RESTARTED_MID_REQUEST,
+  AGENT_RESTARTING,
+} from "@cawco/core/binary-updates";
+import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
+import {
+  ANY_TYPE,
+  type MayStart,
+  mayStartType,
+  narrowMayStart,
+  sessionMayStart,
+  startsAny,
+} from "@cawco/core/delegate-types";
+import { detach } from "@cawco/core/detach";
+import type { BriefTarget } from "@cawco/core/fleet";
+import {
+  CONTROL_FORGE_POST,
+  type ForgeVerdict,
+  type ForgeWrite,
+} from "@cawco/core/forge-post";
+import { type HeldInput, handedInputs } from "@cawco/core/handed-input";
 import type {
-  BriefTarget,
   ChangedPath,
   ChangeVersion,
-  CheckoutMove,
   CommandResult,
-  DeclaredStep,
-  DelegateType,
-  EndedBy,
-  Envelope,
-  HarnessKind,
   HostOutputListed,
   InputFile,
   InputNamed,
@@ -53,19 +69,8 @@ import type {
   InputsLanded,
   InputsPlace,
   InputsRead,
-  InstanceRow,
-  InstanceStatus,
-  LandsMode,
-  NamedSpawn,
   NeutralOrigin,
-  PermissionMode,
-  PlanStep,
-  RunsOnCapability,
-  SendPayload,
   SendRefusal,
-  SessionRole,
-  SpawnPayload,
-  WorkItemSummary,
   WorkspaceArchive,
   WorkspaceChanges,
   WorkspaceCheckout,
@@ -78,12 +83,9 @@ import type {
   WorkspaceRef,
   WorkspaceUnlanded,
   WorkspaceWorkEnd,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
-  ANY_TYPE,
-  artifactLink,
   byPerson,
-  CODE_MODE_TOOL,
   CONTROL_CLONE_HOLDING,
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
@@ -102,53 +104,49 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
-  type DashboardReach,
-  handoffMarker,
   holdingWords,
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
-  inputsOnce,
-  isWorkspaceNeedsRefusal,
   knowsNotControl,
-  type MayStart,
-  machineCalled,
-  mayStartType,
-  NO_REPLY_TOOL,
-  narrowMayStart,
   OUTPUTS_DIR,
-  sessionLink,
-  sessionMayStart,
   sizeWords,
-  startsAny,
   type TurnWakes,
-  todoLink,
-  WORK_ITEM_ORIGIN,
-  type WorkspaceLanding,
   waitsOnItself,
+} from "@cawco/core/harness";
+import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
+import { WORK_ITEM_ORIGIN } from "@cawco/core/harness/kinds";
+import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
+import {
+  type DashboardReach,
+  handoffMarker,
+  inputsOnce,
+  type WorkspaceLanding,
   withDashboardLine,
   withHostLine,
   withInputsLine,
   withLandingLine,
   withWorkspaceLine,
-  workWords,
-} from "@cawco/core";
-import {
-  AGENT_RESTARTED_MID_REQUEST,
-  AGENT_RESTARTING,
-} from "@cawco/core/binary-updates";
-import { detach } from "@cawco/core/detach";
-import {
-  CONTROL_FORGE_POST,
-  type ForgeVerdict,
-  type ForgeWrite,
-} from "@cawco/core/forge-post";
-import { type HeldInput, handedInputs } from "@cawco/core/handed-input";
+} from "@cawco/core/injected";
+import { machineCalled } from "@cawco/core/machine-names";
 import {
   isMachinePath,
   type MachinePath,
   MachinePathRefused,
 } from "@cawco/core/machine-path";
+import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { ownCommitsShell } from "@cawco/core/own-commits";
+import type { PlanStep } from "@cawco/core/plan";
+import type { DeclaredStep, RunsOnCapability } from "@cawco/core/project-gate";
+import type {
+  Envelope,
+  InstanceRow,
+  InstanceStatus,
+  NamedSpawn,
+  SendPayload,
+  SpawnPayload,
+  WorkItemSummary,
+} from "@cawco/core/protocol";
+import { artifactLink, sessionLink, todoLink } from "@cawco/core/references";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import { received } from "@cawco/core/stored-json";
@@ -157,6 +155,8 @@ import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
+import { workWords } from "@cawco/core/words/work";
+import { isWorkspaceNeedsRefusal } from "@cawco/core/words/workspace-needs";
 import {
   excludedPaths,
   IGNORED_STATUS,

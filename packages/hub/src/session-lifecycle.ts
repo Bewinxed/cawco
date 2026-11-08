@@ -4,7 +4,7 @@ import type {
   NamedStop,
   SessionCustody,
   SessionEndIntent,
-} from "@cawco/core";
+} from "@cawco/core/protocol";
 import type { DbShape } from "./db";
 
 interface Snapshot {
