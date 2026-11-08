@@ -25,6 +25,7 @@
  * Anything the judge cannot decide is refused: a path it cannot resolve, a
  * call whose input is not an object, a policy file it cannot read.
  */
+
 import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -327,6 +328,16 @@ const opencodeSession = (policy: Policy, call: Call): Policy => ({
     : policy.denyRead,
 });
 
+/** What each harness adds to the policy for its own sessions; see {@link sessionPolicy}. */
+const SESSION_POLICY: Record<
+  HarnessKind,
+  ((policy: Policy, call: Call) => Policy) | undefined
+> = {
+  claude: (policy, call) => claudeSession(policy, call.transcript),
+  opencode: opencodeSession,
+  pi: undefined,
+};
+
 /**
  * The policy a call is judged by: the workspace's, with what the harness
  * itself keeps for the session to read back. Claude: {@link claudeSession}.
@@ -334,13 +345,8 @@ const opencodeSession = (policy: Policy, call: Call): Policy => ({
  * session's own folder, which the policy already reads.
  */
 const sessionPolicy = (policy: Policy, call: Call): Policy => {
-  if (call.harness === "claude") {
-    return claudeSession(policy, call.transcript);
-  }
-  if (call.harness === "opencode") {
-    return opencodeSession(policy, call);
-  }
-  return policy;
+  const session = SESSION_POLICY[call.harness];
+  return session ? session(policy, call) : policy;
 };
 
 /** A path field of a built-in tool, and what reading or writing it is. */
