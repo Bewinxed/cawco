@@ -31,8 +31,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { z } from "zod";
 import { type Deleter, projectPage } from "./artifacts";
 import { artifacts } from "./schema";
-
-type Tx = Parameters<Parameters<BunSQLiteDatabase["transaction"]>[0]>[0];
+import type { Tx } from "./tx";
 
 /** A value as the record keeps it: SQLite's text, numbers and nulls as they are, a blob as base64. */
 const CellSchema = z.union([
