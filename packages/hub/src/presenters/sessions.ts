@@ -4,21 +4,20 @@
  * `stop_delegate` take; a spawn's own link carries its full id, which the
  * transcript's delegate card is keyed by (core transcript-rules.ts).
  */
+import { type DelegateType, startsAny } from "@cawco/core/delegate-types";
+import type { GeneratedImage } from "@cawco/core/image-generation";
+import { pauseClock } from "@cawco/core/protocol";
 import {
   artifactLink,
-  type DelegateType,
-  delegateTypesWords as delegateTypesUiWords,
-  type GeneratedImage,
   machineLink,
-  pauseClock,
-  delegatePeekWords as peek,
   planLink,
   sessionLink,
-  startsAny,
-  workWords,
-} from "@cawco/core";
+} from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
+import { delegateTypesWords as delegateTypesUiWords } from "@cawco/core/words/delegate-types";
+import { delegatePeekWords as peek } from "@cawco/core/words/delegates";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
+import { workWords } from "@cawco/core/words/work";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import {
   type DelegateList,

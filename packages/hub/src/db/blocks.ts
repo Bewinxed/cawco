@@ -1,4 +1,4 @@
-import type { BlockPage, BlockPlace } from "@cawco/core";
+import type { BlockPage, BlockPlace } from "@cawco/core/blocks";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { projectBlocks, viewProposals } from "./schema";

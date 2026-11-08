@@ -6,13 +6,10 @@
  * (`estimateTokens`, the continuation's measure). `bun run roles:check`
  * prints each and fails over {@link ROLE_TOOL_BUDGET}.
  */
-import {
-  estimateTokens,
-  type InstanceRow,
-  KIND_SEED,
-  SESSION_ROLES,
-  type SessionRole,
-} from "@cawco/core";
+import { estimateTokens } from "@cawco/core/continuation";
+import { KIND_SEED } from "@cawco/core/decides";
+import { SESSION_ROLES, type SessionRole } from "@cawco/core/delegate-types";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { createActions } from "./actions";
 import { createBrowserAsks } from "./browser-tools";
 import { createCaw } from "./caw";

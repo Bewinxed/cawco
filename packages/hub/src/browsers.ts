@@ -42,7 +42,7 @@
  * person took it never started one; one whose session ends while it stands
  * keeps it until the person, or the machine, hands back.
  */
-import type { InstanceRow } from "@cawco/core";
+
 import {
   BROWSER_HANDBACK,
   BROWSER_REMOVE,
@@ -62,6 +62,7 @@ import {
   type ListedBrowser,
   SHIELD_WORDS,
 } from "@cawco/core/browser";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { Elysia, t } from "elysia";

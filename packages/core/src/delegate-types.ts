@@ -206,7 +206,7 @@ export const delegateTypeProblem = (
  * answers at once and keeps the question. Claude Code's `AskUserQuestion`;
  * OpenCode's `question`; pi has none.
  */
-export const NATIVE_TOOLS = {
+const NATIVE_TOOLS = {
   subagents: { claude: ["Task", "Agent"], opencode: ["subagent"], pi: [] },
   todos: {
     claude: [
@@ -379,8 +379,6 @@ const harnessToolsOf = (
 
 /** The shell tools, by every harness's name: what a session's turn runs commands with, and what web-reads.ts reads a command of. */
 export const SHELL_TOOLS = harnessToolsOf("shell", "powershell");
-/** The PowerShell tools, by every harness's name: shells whose lines a POSIX reader cannot read. */
-export const POWERSHELL_TOOLS = harnessToolsOf("powershell");
 /** The harnesses' own web fetch tools, by every harness's name: a URL argument decides whether one read the web. */
 export const WEB_FETCH_TOOLS = harnessToolsOf("fetch");
 /** The harnesses' own web search tools, by every harness's name: always a read of the web. */
@@ -657,7 +655,7 @@ export const piToolsFor = (
  * {@link piToolsFor}). A name nothing would enforce is refused rather than
  * stored as a promise.
  */
-export const denyToolsProblem = (
+const denyToolsProblem = (
   harness: HarnessKind,
   names: readonly string[]
 ): string | undefined => {
