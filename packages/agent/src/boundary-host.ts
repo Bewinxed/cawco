@@ -45,8 +45,9 @@
  * the system programs it names, `workspace-needs.ts` and its words, with
  * `words/helpers.ts`), socat backlog (`socat.ts`), hub preview origins
  * (`hub-previews.ts`), git dir test (`git-dir.ts`), safe git
- * (`safe-git.ts`) with its shell quoting (`shell-quote.ts`), srt's refusal line (`srt-refusal.ts`) and state files
- * (`state-file.ts`), the signal wall's sending half (`signal-wall.ts`,
+ * (`safe-git.ts`) with its shell quoting (`shell-quote.ts`), srt's refusal
+ * line (`srt-refusal.ts`) and state files (`state-file.ts`, with the test for
+ * an absent path, `absent.ts`), the signal wall's sending half (`signal-wall.ts`,
  * through sandbox-end.ts and state-file.ts), and the agent's own proxy relay
  * (`proxy-relay.ts`, with the listener that ends its process when it cannot
  * listen, `listeners.ts` and `detach.ts`) and sandbox end (`sandbox-end.ts`):
