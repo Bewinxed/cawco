@@ -60,11 +60,11 @@ import {
   type BrowserState,
   isBrowserKey,
   type ListedBrowser,
-  SHIELD_WORDS,
 } from "@cawco/core/browser";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
+import { SHIELD_WORDS } from "@cawco/core/words/browser";
 import { Elysia, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";

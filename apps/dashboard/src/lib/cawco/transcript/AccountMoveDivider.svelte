@@ -34,11 +34,11 @@
    * per session by the row (`disclosureAt`), so a row the list builds again
    * comes back open.
    */
+  import type { AccountMove } from "@cawco/core/accounts";
   import {
-    type AccountMove,
     accountMoveWords,
     accountRunWords,
-  } from "@cawco/core/accounts";
+  } from "@cawco/core/words/account-lines";
   // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
   // The Solar Duotone Rule).
   import { IconChevronRight as IconChevron, IconTransfer } from "#lib/icons.js";
