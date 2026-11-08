@@ -1060,14 +1060,6 @@ export interface SessionCommands {
  */
 export type SessionOrigin = "person" | "delegate" | "project" | "check";
 
-/** Every {@link SessionOrigin}, in the order the type names them. */
-export const SESSION_ORIGINS = [
-  "person",
-  "delegate",
-  "project",
-  "check",
-] as const satisfies readonly SessionOrigin[];
-
 export interface InstanceRow {
   /**
    * The account the session runs on (`instances.account_id`): placed once as

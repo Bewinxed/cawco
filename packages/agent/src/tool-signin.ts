@@ -1,13 +1,13 @@
 import { homedir } from "node:os";
+import { readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import {
   type ToolSigninChallenge,
   type ToolSigninSpec,
   type ToolSpec,
   type ToolStatus,
   toolSpec,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
 import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";

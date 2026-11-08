@@ -1,4 +1,4 @@
-import type { MoveEnded } from "@cawco/core";
+import type { MoveEnded } from "@cawco/core/harness";
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { moveEndings } from "./schema";

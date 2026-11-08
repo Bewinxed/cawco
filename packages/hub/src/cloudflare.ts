@@ -13,8 +13,8 @@
  * `CAWCO_CLOUDFLARE_IPS`): no request then leaves the machine.
  */
 import { BlockList, isIPv4 } from "node:net";
-import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { DAY_MS } from "@cawco/core/time";
 
 const API = "https://api.cloudflare.com/client/v4";

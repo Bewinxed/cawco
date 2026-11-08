@@ -53,6 +53,13 @@
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
+import type {
+  SendBack,
+  Stage,
+  StageMove,
+  StageView,
+} from "@cawco/core/task-views";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import {
   STAGE_KINDS as KINDS,
   MOVERS,
@@ -64,14 +71,7 @@ import {
   type StageIcon,
   type StageKind,
   type StagesTemplate,
-} from "@cawco/core";
-import type {
-  SendBack,
-  Stage,
-  StageMove,
-  StageView,
-} from "@cawco/core/task-views";
-import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+} from "@cawco/core/views";
 
 export interface Stages {
   moves: StageMove[];
