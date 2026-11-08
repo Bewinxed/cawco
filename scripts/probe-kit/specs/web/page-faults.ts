@@ -26,10 +26,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  OVERLAY_PATH,
-  PREVIEW_ERRORS_PATH,
-} from "../../../../packages/core/src/frames";
-import {
   faultsAt,
   faultsWith,
   type PageFault,
@@ -40,7 +36,11 @@ import {
   injectOverlay,
   OVERLAY_KEY,
   overlayResponse,
-} from "../../../../packages/core/src/preview-proxy";
+} from "../../../../packages/core/src/preview/proxy";
+import {
+  OVERLAY_PATH,
+  PREVIEW_ERRORS_PATH,
+} from "../../../../packages/core/src/preview/routes";
 import { artifactToolWords } from "../../../../packages/core/src/words/artifact-tools";
 import { createArtifactDocs } from "../../../../packages/hub/src/artifacts/docs";
 import type { ArtifactRead } from "../../../../packages/hub/src/artifacts/service";
