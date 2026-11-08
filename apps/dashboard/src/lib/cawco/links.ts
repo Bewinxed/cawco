@@ -1,4 +1,5 @@
-import type { HarnessKind, NeutralSessionInfo } from "@cawco/core/harness";
+import type { NeutralSessionInfo } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
