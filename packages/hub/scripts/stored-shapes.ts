@@ -9,9 +9,14 @@
  * The TypeScript types stay the one hand-written source: the OpenAPI
  * document the Swift client is built from reads their declared names
  * (scripts/openapi.ts, typescript-json-schema), and a `z.infer` alias has no
- * name it can read. So each schema is made from its type, and the file
- * proves at compile time that each schema's output is exactly its type
- * ({@link PROOF}): a type changed without running this fails the build.
+ * name it can read. So each schema is made from its type, and a
+ * `stored-shapes.proof.ts` beside each generated file proves at compile time
+ * that each schema's output is exactly its type ({@link PROOF}): a type
+ * changed without running this fails the typecheck. Nothing imports a proof
+ * ({@link refuseProofImports}); it lives in its package's tsconfig `include`.
+ * So the generated files themselves name no store or feature module, and a
+ * store's value import of its schema makes no cycle: the proof is the one
+ * file that reads both sides.
  *
  * What it makes schemas for: every `XSchema` a file in packages/ imports
  * from either file (`PlanStepSchema` for the exported type `PlanStep`), and
@@ -44,6 +49,7 @@ const DASH_OUT = join(DASH_SRC, "lib/cawco/stored-shapes.ts");
 /** Every generated file: core's first, which the others import. */
 const OUTS = DASHBOARD ? [DASH_OUT] : [CORE_OUT, HUB_OUT, AGENT_OUT];
 const HUB_SRC = join(HUB, "src/");
+const HUB_DB = join(HUB_SRC, "db/");
 const CORE_SRC = join(ROOT, "packages/core/src/");
 const SDK =
   /node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/(.+)\.d\.ts$/u;
@@ -56,6 +62,9 @@ const SHAPE_NAME = /\b\w+Shape\b/gu;
 const SCHEMA_NAME = /\b\w+Schema\b/gu;
 const SHAPES_IMPORT =
   /import\s*\{([^}]*)\}\s*from\s*"(?:@cawco\/core|#lib(?:\/[\w.-]+)*|\.{1,2}(?:\/[\w.-]+)*)\/stored-shapes(?:\.js)?"/gu;
+/** A file that imports a proof: there must be none, or a store's import of its schema could pull the proof in and the cycle back with it. */
+const PROOF_IMPORT = /from\s*"[^"]*stored-shapes\.proof(?:\.js)?"/u;
+const PROOF_FILE = /\/stored-shapes\.proof\.ts$/u;
 const TEST_FILE = /\.test\.ts$/u;
 const ZOD_OUTPUT = /^z\.(?:infer|output)$/u;
 
@@ -110,14 +119,24 @@ const listed = Bun.spawnSync(
   .split("\n")
   .filter((path) => SCANNED.test(path) && !TEST_FILE.test(path))
   .map((path) => join(ROOT, path))
-  .filter((path) => !OUTS.includes(path));
+  .filter((path) => !(OUTS.includes(path) || PROOF_FILE.test(path)));
 const roots = new Set<string>();
 /** Each `XSchema` or `XShape` a file outside the generated ones imports: the names a generated file exports. */
 const imported = new Set<string>();
 /** Core's files, and every file that reads a schema: the program the types are read from. */
 const programFiles: string[] = [];
+/** Refuses a run when a file imports a generated proof ({@link PROOF_IMPORT}). */
+const refuseProofImports = (file: string, text: string): void => {
+  if (PROOF_IMPORT.test(text)) {
+    throw new Error(
+      `stored-shapes: ${relative(ROOT, file)} imports a stored-shapes.proof file; nothing may import a proof, the typecheck reads it through its package's tsconfig include`
+    );
+  }
+};
 for (const file of listed) {
-  const matches = [...readFileSync(file, "utf8").matchAll(SHAPES_IMPORT)];
+  const text = readFileSync(file, "utf8");
+  refuseProofImports(file, text);
+  const matches = [...text.matchAll(SHAPES_IMPORT)];
   if (
     file.endsWith(".ts") &&
     (file.startsWith(CORE_SRC) || matches.length > 0)
@@ -274,6 +293,20 @@ const referenceName = (node: ts.Node): ts.Node | undefined => {
   return ts.isImportTypeNode(node) ? node.qualifier : undefined;
 };
 
+/**
+ * A hub's stored type is declared under packages/hub/src/db/ (stored-types.ts,
+ * or a table file): declared in a feature module, the db layer and its
+ * generated schemas would have to import the feature for it.
+ */
+const refuseOutsideDb = (declaration: Declaration): void => {
+  const file = declaration.getSourceFile().fileName;
+  if (file.startsWith(HUB_SRC) && !file.startsWith(HUB_DB)) {
+    throw new Error(
+      `stored-shapes: ${declaration.name.text} (${where(declaration)}) is a stored type declared outside the db layer; declare it in packages/hub/src/db/stored-types.ts`
+    );
+  }
+};
+
 /** Each declaration after every one it reads (a schema's const reads its parts'). */
 const reach = (declaration: Declaration): void => {
   if (order.includes(declaration)) {
@@ -285,6 +318,7 @@ const reach = (declaration: Declaration): void => {
     );
   }
   claim(declaration);
+  refuseOutsideDb(declaration);
   visiting.add(declaration);
   if (!zodSource(declaration)) {
     const visit = (node: ts.Node): void => {
@@ -322,13 +356,21 @@ const outOf = (declaration: ts.Node): string => {
   return file.startsWith(AGENT_SRC) ? AGENT_OUT : CORE_OUT;
 };
 
-/** What one generated file imports: values its schemas read, and the types it proves them against, by declaring file. */
+/**
+ * What one generated file reads, by declaring file: the values its schemas
+ * read, the types the file itself names (a hub schema's annotation, a
+ * brand), and the types its proof proves them against.
+ */
 interface Needs {
+  proven: Map<string, Set<string>>;
   types: Map<string, Set<string>>;
   values: Map<string, Set<string>>;
 }
 const needs = new Map<string, Needs>(
-  OUTS.map((out) => [out, { types: new Map(), values: new Map() }])
+  OUTS.map((out) => [
+    out,
+    { proven: new Map(), types: new Map(), values: new Map() },
+  ])
 );
 /** The file whose schemas are being made. */
 let target = CORE_OUT;
@@ -734,12 +776,18 @@ const schemaOf = (node: ts.TypeNode, scope: Scope): string => {
   return refuse(node, ts.SyntaxKind[node.kind]);
 };
 
+/** How a generated file names the declared type it proves a schema against. */
+const alias = (name: string) => `${name}Type`;
+
 const declarationSchema = (declaration: Declaration): string => {
   const name = declaration.name.text;
   const written = WRITTEN[name];
   if (written) {
     for (const [value, from] of written.values) {
       add("values", from, value);
+    }
+    if (written.schema.includes(alias(name))) {
+      add("types", declaration.getSourceFile().fileName, name);
     }
     return written.schema;
   }
@@ -774,9 +822,6 @@ const declarationSchema = (declaration: Declaration): string => {
     : `${own}.shape`;
   return `${first}${rest.map((base) => `.extend(${base}.shape)`).join("")}.extend(${fields})`;
 };
-
-/** How a generated file names the declared type it proves a schema against. */
-const alias = (name: string) => `${name}Type`;
 
 /** One schema as made: its type's name, where that type is declared, and the schema's expression. */
 interface Made {
@@ -815,8 +860,13 @@ for (const declaration of order) {
   const name = declaration.name.text;
   target = outOf(declaration);
   if (isExported(declaration) || roots.has(name)) {
-    add("types", declaration.getSourceFile().fileName, name);
+    add("proven", declaration.getSourceFile().fileName, name);
     proved.get(target)?.push(name);
+    // The hub's columns are typed by the declared name, which the OpenAPI
+    // document reads; its types live in the db layer, so this names no feature.
+    if (target === HUB_OUT && imported.has(`${name}Schema`)) {
+      add("types", declaration.getSourceFile().fileName, name);
+    }
   }
   let schema = declarationSchema(declaration);
   if (target !== CORE_OUT) {
@@ -854,22 +904,35 @@ for (const declaration of order) {
 /**
  * One schema's lines. The shape is the schema as made, whose combinators
  * (`.extend`, `.shape`, `.partial`) other schemas use; `XSchema` is the same
- * schema typed as `X`, so a column or a read of it is typed by the declared
- * name, which the OpenAPI document reads. Each is exported only when a file
- * outside this one imports it by that name. On the machine's side the shape
- * is recorded as made from its type (core stored-types.ts `declared`), so a
- * write a stored column refuses a key names the type to declare it in; the
- * dashboard's own file stores in the browser, and records none.
+ * schema. Each is exported only when a file outside this one imports it by
+ * that name. In the hub's file `XSchema` is typed as `X`, so a column of it
+ * is typed by the declared name, which the OpenAPI document reads; the
+ * agent's, core's and the dashboard's name no declared type, since those are
+ * their stores' and features' own. `XOutput` is what a proved shape outputs,
+ * exported for the proof. On the machine's side the shape is recorded as
+ * made from its type (core stored-types.ts `declared`), so a write a stored
+ * column refuses a key names the type to declare it in; the dashboard's own
+ * file stores in the browser, and records none.
  */
-const linesOf = ({ name, schema, declaredIn }: Made): string => {
-  const expression = DASHBOARD
-    ? schema
-    : `declared(${schema}, ${JSON.stringify(name)}, ${JSON.stringify(declaredIn)})`;
-  const shape = `${imported.has(`${name}Shape`) ? "export " : ""}const ${name}Shape = ${expression};`;
-  return imported.has(`${name}Schema`)
-    ? `${shape}\nexport const ${name}Schema: z.ZodType<${alias(name)}> = ${name}Shape;`
-    : shape;
-};
+const linesOf =
+  (out: string) =>
+  ({ name, schema, declaredIn }: Made): string => {
+    const expression = DASHBOARD
+      ? schema
+      : `declared(${schema}, ${JSON.stringify(name)}, ${JSON.stringify(declaredIn)})`;
+    const lines = [
+      `${imported.has(`${name}Shape`) ? "export " : ""}const ${name}Shape = ${expression};`,
+    ];
+    if (imported.has(`${name}Schema`)) {
+      lines.push(
+        `export const ${name}Schema${out === HUB_OUT ? `: z.ZodType<${alias(name)}>` : ""} = ${name}Shape;`
+      );
+    }
+    if ((proved.get(out) ?? []).includes(name)) {
+      lines.push(`export type ${name}Output = z.output<typeof ${name}Shape>;`);
+    }
+    return lines.join("\n");
+  };
 
 /* ---------------------------------------------------------- the file */
 
@@ -914,11 +977,22 @@ const byLocalName = (a: string, b: string): number => {
   return x < y ? -1 : Number(x > y);
 };
 
-/** `out`'s import lines: zod, then each module's types and values. */
-const importsOf = (out: string, { types, values }: Needs): string[] => {
-  const bySpecifier = new Map<string, { named: string[]; typed: string[] }>([
-    ["zod", { named: ["z"], typed: [] }],
-  ]);
+/** `out`'s import lines: zod, then each module's types and values. `shapes`: the outputs a proof reads from the generated file itself. */
+const importsOf = (
+  out: string,
+  {
+    types,
+    values,
+    shapes,
+  }: {
+    shapes?: string[];
+    types: Map<string, Set<string>>;
+    values: Map<string, Set<string>>;
+  }
+): string[] => {
+  const bySpecifier = new Map<string, { named: string[]; typed: string[] }>(
+    shapes ? [] : [["zod", { named: ["z"], typed: [] }]]
+  );
   const at = (file: string) => {
     const from = specifierOf(file, out);
     const entry = bySpecifier.get(from) ?? { named: [], typed: [] };
@@ -932,6 +1006,9 @@ const importsOf = (out: string, { types, values }: Needs): string[] => {
     at(file).typed.push(
       ...[...names].map((name) => `${name} as ${alias(name)}`)
     );
+  }
+  if (shapes) {
+    at(out).typed.push(...shapes);
   }
   return [...bySpecifier]
     .toSorted(([a], [b]) => rank(a) - rank(b) || (a < b ? -1 : Number(a > b)))
@@ -952,24 +1029,50 @@ const importsOf = (out: string, { types, values }: Needs): string[] => {
     ]);
 };
 
+const emptyNeeds: Needs = {
+  proven: new Map(),
+  types: new Map(),
+  values: new Map(),
+};
+
 const textOf = (out: string): string => {
-  const own = needs.get(out) ?? { types: new Map(), values: new Map() };
-  const names = proved.get(out) ?? [];
+  const own = needs.get(out) ?? emptyNeeds;
   return `/**
  * Generated by \`bun run stored-shapes\` (packages/hub/scripts/stored-shapes.ts)
  * from the types CawCo stores as JSON: never edited by hand. Each schema's
- * output is proved below to be its type exactly.
+ * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
 ${importsOf(out, own).join("\n")}
 
-${(made.get(out) ?? []).map(linesOf).join("\n\n")}
+${(made.get(out) ?? []).map(linesOf(out)).join("\n\n")}
+`;
+};
+
+/** `out`'s proof: every schema of an exported type, proved against that type. Read by the typecheck, imported by nothing. */
+const proofTextOf = (out: string): string => {
+  const own = needs.get(out) ?? emptyNeeds;
+  const names = proved.get(out) ?? [];
+  const lines = importsOf(out, {
+    types: own.proven,
+    values: new Map(),
+    shapes: names.map((name) => `${name}Output`),
+  });
+  return `/**
+ * Generated by \`bun run stored-shapes\` (packages/hub/scripts/stored-shapes.ts):
+ * never edited by hand, never imported. Each schema in stored-shapes.ts proved
+ * to be the declared type it is made from. Read by the typecheck through its
+ * package's tsconfig \`include\`.
+ */
+${lines.join("\n")}
 
 ${PROOF}
 
 /** Every schema of an exported type, proved against that type. */
-prove<[${names.map((name) => `Same<z.output<typeof ${name}Shape>, ${alias(name)}>`).join(", ")}]>();
+prove<[${names.map((name) => `Same<${name}Output, ${alias(name)}>`).join(", ")}]>();
 `;
 };
+
+const proofPath = (out: string): string => out.replace(TS_FILE, ".proof.ts");
 
 // The repository's formatter (scripts/fmt.ts), outside this package's
 // project, so loaded by its path at run time.
@@ -984,12 +1087,15 @@ if (!(
 }
 const { formatText } = fmt;
 const outputs = await Promise.all(
-  OUTS.map(async (out) => {
-    const formatted: unknown = await formatText(out, textOf(out));
+  OUTS.flatMap((out) => [
+    { path: out, text: textOf(out) },
+    { path: proofPath(out), text: proofTextOf(out) },
+  ]).map(async ({ path, text }) => {
+    const formatted: unknown = await formatText(path, text);
     if (typeof formatted !== "string") {
       throw new Error("stored-shapes: formatText answered no text");
     }
-    return { out, formatted };
+    return { out: path, formatted };
   })
 );
 let stale = false;
