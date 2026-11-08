@@ -9,7 +9,7 @@ import postcss from "postcss";
 import {
   CssEvaluator,
   type CssToken,
-} from "../../../packages/hub/src/design-css";
+} from "../../../packages/design-tokens/src/design-css";
 
 const refs = (value: string) => value.replace(/var\(--([\w-]+)\)/gu, "{$1}");
 
