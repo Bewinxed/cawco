@@ -69,35 +69,70 @@ export const mcpUsageName = (server: string): string =>
 /** pi's form of a server's name in its tools': `-` too as `_` (pi docs/mcp.md). */
 const piForm = (name: string): string => name.replace(/[^A-Za-z0-9_]/gu, "_");
 
-/**
- * The MCP server a tool's name says answered it, as {@link mcpUsageName}
- * keeps it; undefined for a tool of no server. `known` is the servers'
- * usage names: OpenCode's `<server>_<tool>` is read by the longest of them
- * it starts with, and pi's prefix, which lost each `-`, is given back the
- * name of the server it stands for.
- */
-const serverOf = (
-  tool: string,
-  harness: HarnessKind,
-  known: readonly string[]
+/** A server's name as Claude Code's `mcp__<server>__` prefix (and pi's) writes it. */
+const prefixedServer = (tool: string): string | undefined =>
+  MCP_TOOL.exec(tool)?.[1];
+
+/** A slash command's skill, when the session's `init` listed it. */
+const commandSkill = (
+  words: string,
+  known: Set<string>
 ): string | undefined => {
-  if (harness === "opencode") {
-    let found: string | undefined;
-    for (const server of known) {
-      if (
-        tool.startsWith(`${server}_`) &&
-        server.length > (found?.length ?? 0)
-      ) {
-        found = server;
+  const command = COMMAND_NAME.exec(words)?.[1];
+  return command && known.has(command) ? command : undefined;
+};
+
+/** How one harness's calls name the server that answered them and the skill they load. */
+interface CallNaming {
+  /**
+   * The MCP server a tool's name says answered it, as {@link mcpUsageName}
+   * keeps it; undefined for a tool of no server. `known` is the servers'
+   * usage names.
+   */
+  server: (tool: string, known: readonly string[]) => string | undefined;
+  /** A skill loaded by a call other than the `Skill` and `skill` tools. */
+  skillCall?: (
+    tool: string,
+    input: Record<string, unknown>
+  ) => string | undefined;
+  /** The skill a user turn's words load. */
+  turnSkill: (words: string, known: Set<string>) => string | undefined;
+}
+
+const CALL_NAMING: Record<HarnessKind, CallNaming> = {
+  claude: { server: prefixedServer, turnSkill: commandSkill },
+  // OpenCode's `<server>_<tool>`, read by the longest known server it starts with.
+  opencode: {
+    server: (tool, known) => {
+      let found: string | undefined;
+      for (const server of known) {
+        if (
+          tool.startsWith(`${server}_`) &&
+          server.length > (found?.length ?? 0)
+        ) {
+          found = server;
+        }
       }
-    }
-    return found;
-  }
-  const server = MCP_TOOL.exec(tool)?.[1];
-  if (server === undefined || harness !== "pi") {
-    return server;
-  }
-  return known.find((name) => piForm(name) === server) ?? server;
+      return found;
+    },
+    turnSkill: commandSkill,
+  },
+  // pi's prefix lost each `-`, so it is given back the name of the server it
+  // stands for; a skill is loaded by reading its SKILL.md, and a turn names
+  // one as an expanded `/skill:x`.
+  pi: {
+    server: (tool, known) => {
+      const server = prefixedServer(tool);
+      return server === undefined
+        ? undefined
+        : (known.find((name) => piForm(name) === server) ?? server);
+    },
+    skillCall: (tool, input) =>
+      tool === "read" && typeof input.path === "string"
+        ? SKILL_FILE.exec(input.path)?.[1]
+        : undefined,
+    turnSkill: (words) => PI_SKILL.exec(words)?.[1],
+  },
 };
 
 /** The skill a call loads, if it is one: by each harness's way of loading one. */
@@ -112,9 +147,7 @@ const skillOf = (
   if (tool === "skill" && typeof input.name === "string") {
     return input.name;
   }
-  if (harness === "pi" && tool === "read" && typeof input.path === "string") {
-    return SKILL_FILE.exec(input.path)?.[1];
-  }
+  return CALL_NAMING[harness].skillCall?.(tool, input);
 };
 
 /** How a session's calls are read: its harness, and the servers it may name. */
@@ -143,7 +176,10 @@ function usesInBlocks(blocks: unknown, reading: Reading): CapabilityUse[] {
       continue;
     }
     uses.push({ kind: "tool", name: block.name });
-    const server = serverOf(block.name, reading.harness, reading.servers);
+    const server = CALL_NAMING[reading.harness].server(
+      block.name,
+      reading.servers
+    );
     if (server) {
       uses.push({ kind: "mcp", name: server });
     }
@@ -171,12 +207,7 @@ function turnSkill(
   known: Set<string>,
   harness: HarnessKind
 ): string | undefined {
-  const words = wordsOf(content);
-  if (harness === "pi") {
-    return PI_SKILL.exec(words)?.[1];
-  }
-  const command = COMMAND_NAME.exec(words)?.[1];
-  return command && known.has(command) ? command : undefined;
+  return CALL_NAMING[harness].turnSkill(wordsOf(content), known);
 }
 
 /** Folds one session's uses into its per-day rows, ready for `capabilityCalls.add`. */
