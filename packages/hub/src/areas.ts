@@ -33,8 +33,9 @@ import {
 import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
 import { Elysia, status, t } from "elysia";
-import type { DbShape, ProjectRow } from "./db";
+import type { DbShape } from "./db";
 import type { AreaDeleted, AreaSettingsChange } from "./db/areas";
+import type { ProjectRow } from "./db/projects";
 import {
   areaFolder,
   deleteFolderFile,
