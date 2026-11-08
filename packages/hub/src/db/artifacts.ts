@@ -1,5 +1,5 @@
-import { type SourceKey, sourceKeyOf } from "@cawco/core/preview-upstream";
-import type { PreviewSource } from "@cawco/core/protocol";
+import type { PreviewSource } from "@cawco/core/preview/protocol";
+import { type SourceKey, sourceKeyOf } from "@cawco/core/preview/upstream";
 import { isPlace } from "@cawco/core/workspace-policy";
 import {
   and,
