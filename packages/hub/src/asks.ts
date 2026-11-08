@@ -59,11 +59,8 @@ import {
   type AskRecord,
   type AskResult,
   askAnsweredText,
-  askClosedWords,
   askLink,
   askOutcome,
-  askQuestionWords,
-  askRecordedWords,
   FULL_SEND_ANSWER,
   HUB_RESTARTED,
   isAdminWrite,
@@ -81,6 +78,11 @@ import type {
   PermissionResult,
   UserAnswers,
 } from "@cawco/core/session-messages";
+import {
+  askClosedWords,
+  askQuestionWords,
+  askRecordedWords,
+} from "@cawco/core/words/ask-lines";
 import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
 import type { DbShape } from "./db";

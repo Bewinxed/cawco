@@ -15,14 +15,13 @@
 import type { ProjectAtLimit } from "./accounts";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./ask-tools";
 import type { SourceFacts } from "./asks";
-import { askStanceLine } from "./asks";
 import type { StartingSet } from "./delegate-types";
 import {
   SHELL_TOOLS,
   WEB_FETCH_TOOLS,
   WEB_SEARCH_TOOLS,
 } from "./delegate-types";
-import { type MemoryScope, scopeWords } from "./fleet";
+import type { MemoryScope } from "./fleet";
 import { cardOfMcpWrite } from "./fleet-secrets";
 import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
@@ -30,6 +29,8 @@ import { questionsOf } from "./question";
 import { looksSecret, SECRET_KEY } from "./secret-shapes";
 import { DAY_MS } from "./time";
 import { areaWords } from "./words/areas";
+import { askStanceLine } from "./words/ask-lines";
+import { scopeWords } from "./words/memory-scope";
 import { projectAccountWords } from "./words/project-account";
 import {
   projectSettingsWords,
@@ -260,12 +261,6 @@ const setChangeWords = (
     setTables: tables,
   };
 };
-
-/** Who asks and where, as an ask's head names them: "Caw · cockpit". */
-export const askerLine = (presentation: PermissionPresentation): string =>
-  presentation.project
-    ? `${presentation.asker} · ${presentation.project}`
-    : presentation.asker;
 
 /** The settings groups an admin write names things in. */
 export type AdminGroup =

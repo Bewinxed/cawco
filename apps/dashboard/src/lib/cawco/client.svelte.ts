@@ -80,7 +80,7 @@ import {
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import type { LawBroken } from "@cawco/core/invariant";
-import { machineFaultWords, machineLabel } from "@cawco/core/machine-names";
+import { machineLabel } from "@cawco/core/machine-names";
 import type { MoveJob } from "@cawco/core/move";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { PlaceProject } from "@cawco/core/place-nesting";
@@ -176,6 +176,7 @@ import { announcingParts, clientLine } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { askWords } from "@cawco/core/words/asks";
 import { machineWords } from "@cawco/core/words/machine";
+import { machineFaultWords } from "@cawco/core/words/machine-names";
 import { offerWords } from "@cawco/core/words/offers";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
