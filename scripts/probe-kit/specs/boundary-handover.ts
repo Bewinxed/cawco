@@ -249,7 +249,7 @@ const seenWith = (fleet: Fleet, marker: RegExp, from: number) =>
     240_000
   ).catch(() => undefined);
 
-/** Project `id`'s folder on the fleet's hub: `projects/` beside its database (core paths.ts `hubProjectsDir`). */
+/** Project `id`'s folder on the fleet's hub: `projects/` beside its database (core paths/hub.ts `hubProjectsDir`). */
 const projectFolderOf = (fleet: Fleet, id: string): string =>
   join(fleet.sandbox, "hub", "projects", id);
 

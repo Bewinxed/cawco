@@ -107,7 +107,7 @@ export const workspaceGhLeg = async (
   const { openGithubDoor, closeGithubDoor } =
     await import("../../packages/agent/src/github-door");
   const { workspaceStateDir, workspaceReadOnlyDir } =
-    await import("../../packages/core/src/paths");
+    await import("../../packages/core/src/paths/workspace");
   const stood = await standExecutor(kit, "s", at);
   if (!stood) {
     globalThis.fetch = realFetch;

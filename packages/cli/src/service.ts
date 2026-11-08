@@ -20,7 +20,7 @@ import {
   launchdProgram,
   removeLaunchdLog,
 } from "@cawco/core/launchd";
-import { hubDbPath } from "@cawco/core/paths";
+import { hubDbPath } from "@cawco/core/paths/hub";
 import type { AgentRow } from "@cawco/core/protocol";
 import {
   CAWCO_HUB_PORT,
