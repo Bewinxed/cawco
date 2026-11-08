@@ -69,7 +69,7 @@
  */
 
 import { humanSize } from "./attachments";
-import type { DocMap, MapDoc } from "./doc-maps";
+import { type DocMap, type MapDoc, PIN_MAPS } from "./doc-maps";
 import { type FileSpot, fileSpotDetail, readFileSpot } from "./file-spot";
 import { fnv1a } from "./fnv1a";
 import type { PreviewElement } from "./index";
@@ -439,21 +439,6 @@ export interface PinResolve {
 
 /** The hub's stamps of a pin's deliveries (`deliveries`), the hub's alone. */
 export type PinDelivery = Pick<Pin, "heard" | "notSent" | "sentAt">;
-
-/**
- * The maps a pin is written across ({@link Pin}'s parts): `pins` its head,
- * `places` where it stands, `resolves` its resolve, `looks` the person's
- * last look (`seenAt`), `deliveries` the hub's stamps, `entries` its
- * thread, one key per entry (`<pin>:<entry>`).
- */
-export const PIN_MAPS = [
-  "pins",
-  "places",
-  "resolves",
-  "looks",
-  "deliveries",
-  "entries",
-] as const;
 
 /** An entry's key in `entries`: its pin's id and its own. */
 const entryKey = (pin: string, entry: string): string => `${pin}:${entry}`;
