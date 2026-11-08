@@ -8,7 +8,11 @@ import {
 } from "@cawco/core/accounts";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import { accountConfigDir, accountIds, accountsRoot } from "@cawco/core/paths";
+import {
+  accountConfigDir,
+  accountIds,
+  accountsRoot,
+} from "@cawco/core/paths/claude";
 import {
   bootId,
   ProcessMarkerSchema,

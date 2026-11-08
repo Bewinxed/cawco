@@ -314,7 +314,7 @@ export default {
         {
           cwd: kit.out,
           // The listing reads every OpenCode database on the machine (core
-          // paths.ts `opencodeDatabases`): the data home's, each account
+          // paths/harnesses.ts `opencodeDatabases`): the data home's, each account
           // server's under the sessiond's session-identity dir, each view's
           // under HOME. All three are the run's own here, so only <db> is
           // listed; with the host's, its real sessions joined the count

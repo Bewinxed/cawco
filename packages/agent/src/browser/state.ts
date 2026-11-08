@@ -36,7 +36,7 @@ import {
 } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
 import { lockBy, openLockFile, unlock } from "@cawco/core/flock";
-import { cawcoDataDir } from "@cawco/core/paths";
+import { cawcoDataDir } from "@cawco/core/paths/cawco";
 import {
   isDamagedRecord,
   readRecord,

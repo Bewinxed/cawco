@@ -127,7 +127,7 @@ const spec: Spec = {
     const { closeGitDoor, gitDoorEnv, gitHelperDirOf, openGitDoor } =
       await import("../../../packages/agent/src/hub-git");
     const { workspaceProjectFile } =
-      await import("../../../packages/core/src/paths");
+      await import("../../../packages/core/src/paths/workspace");
 
     const http = serveGitHttp(join(scratch, "srv"), HOST_LOGIN);
     const originUrl = await http.bare(ORIGIN);
