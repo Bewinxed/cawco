@@ -21,7 +21,9 @@
  *
  * Every entry is a plain JSON value in its map.
  */
+
 import type { Anchor, PageAnchor } from "./comments";
+import { chainWords, wholePage } from "./comments";
 
 export const INK_LIMITS = {
   /** Elements one group names it marks. Our call. */
@@ -107,4 +109,48 @@ export function inkProblem(
     }
   }
   return null;
+}
+
+/**
+ * A stroke group no pin stands on, as a delivery says it: what it is drawn
+ * over (its element by selector, source and text, and every element it
+ * encloses when it marks more than one; or a canvas's element), and its box
+ * in the page; `picture` when the delivery carries its crop.
+ */
+export function inkSection(
+  group: InkGroup,
+  context: { picture: boolean; url: string }
+): string {
+  const { anchor, page } = group;
+  const what = group.illustration ? "Illustration" : "Ink";
+  const box = `- Box: ${Math.round(page.w)} × ${Math.round(page.h)} px at ${Math.round(page.x)}, ${Math.round(page.y)} in the page`;
+  const over = (group.over ?? []).map(
+    (one) =>
+      `  - ${one.selector}${one.text?.trim() ? ` ${JSON.stringify(one.text.trim().slice(0, 80))}` : ""}`
+  );
+  const lines =
+    "selector" in anchor
+      ? [
+          `## ${what} over ${wholePage(anchor) ? "the page as a whole" : anchor.selector}`,
+          ...(over.length > 1 ? ["- Encloses:", ...over] : []),
+          ...(anchor.frames?.length
+            ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
+            : []),
+          ...(anchor.source?.file
+            ? [
+                `- Source: ${anchor.source.file}${anchor.source.line ? `:${anchor.source.line}` : ""}`,
+              ]
+            : []),
+          ...(chainWords(anchor) ? [`- Inside: ${chainWords(anchor)}`] : []),
+          `- Page: ${context.url}`,
+          ...(anchor.text?.trim()
+            ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
+            : []),
+          box,
+        ]
+      : [`## ${what} on the canvas's element ${anchor.element}`];
+  if (context.picture) {
+    lines.push("- In its picture, with the ink on it.");
+  }
+  return lines.join("\n");
 }
