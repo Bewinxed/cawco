@@ -1218,6 +1218,12 @@ export interface WorkItemDeps {
    */
   readonly sendWakes: (instanceId: string) => boolean;
   /**
+   * Of the artifacts a workspace serves, those its retirement still waits
+   * on (artifacts service `servedOwed`): each still asked of the person or
+   * a parent, or shown on a page that still is ({@link owedFrom}).
+   */
+  readonly servedOwed?: (served: readonly ArtifactRow[]) => ArtifactRow[];
+  /**
    * Where a reader opens a session in the dashboard: the link a pull request
    * carries back, and each landed commit's `Agent-Logs-Url` trailer.
    */
@@ -2612,6 +2618,7 @@ export const createWorkItems = ({
   types,
   untellYou,
   waitingOnPerson,
+  servedOwed,
   makingFrom,
   workspaceChanged,
   workPlace,
@@ -4359,8 +4366,8 @@ export const createWorkItems = ({
    * THE ONE READ OF WHAT A WORKSPACE SERVES: the artifacts, any session's,
    * whose row names it (db artifacts.ts `previewing`: a port preview or a
    * sheet naming it, a folder preview inside its clone or scratch dir), a
-   * held next version among them. Its retirement waits while any stands
-   * ({@link previewedBy}); its archive or discard, on purpose, refuses
+   * held next version among them. Its retirement waits on those still owed
+   * ({@link owedFrom}); its archive or discard, on purpose, refuses
    * while any of them, or a decision page showing one, waits on the person
    * ({@link waitingFrom}). A Linux view's path is the person's folder, so a
    * folder preview there is not the workspace's; a port preview naming it
@@ -4383,15 +4390,28 @@ export const createWorkItems = ({
   };
 
   /**
-   * What a workspace serves ({@link servedFrom}), in words, or nothing. On
-   * 2026-10-15 a workspace was retired while it served the owner's two
-   * open previews. Retirement waits for every one ({@link holdOn}); an
-   * archive or discard on purpose refuses only on those waiting on the
-   * person ({@link waitingFrom}), and ends the served servers of the rest,
-   * whose rows stay, reading as a server that isn't running.
+   * What a workspace serves that its retirement still waits on (artifacts
+   * service `servedOwed`): everything it serves, but for what a decision
+   * page showed and the person has since answered. On 2026-11-08 a page's
+   * answer left the workspaces behind it standing for as long as their
+   * artifacts' rows stood, which is until someone deletes them.
+   */
+  const owedFrom = (workspace: WorkspaceRow): ArtifactRow[] => {
+    const served = servedFrom(workspace);
+    return servedOwed ? servedOwed(served) : served;
+  };
+
+  /**
+   * What a workspace serves and still owes ({@link owedFrom}), in words, or
+   * nothing. On 2026-10-15 a workspace was retired while it served the
+   * owner's two open previews. Retirement waits for every one ({@link
+   * holdOn}); an archive or discard on purpose refuses only on those
+   * waiting on the person ({@link waitingFrom}), and ends the served
+   * servers of the rest, whose rows stay, reading as a server that isn't
+   * running.
    */
   const previewedBy = (workspace: WorkspaceRow): string | undefined => {
-    const shown = [...new Set(servedFrom(workspace).map((one) => one.name))];
+    const shown = [...new Set(owedFrom(workspace).map((one) => one.name))];
     if (shown.length > 0) {
       return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
     }
@@ -10814,10 +10834,10 @@ export const createWorkItems = ({
     },
 
     /**
-     * The artifacts workspace `id` serves ({@link servedFrom}), each once by
-     * its artifact's own id and title (a held next version by the artifact
-     * it is held for): what holds its retirement, as `stop_delegate` names
-     * it. Empty for a workspace the hub does not hold.
+     * The artifacts workspace `id` serves that still hold its retirement
+     * ({@link owedFrom}), each once by its artifact's own id and title (a
+     * held next version by the artifact it is held for): what
+     * `stop_delegate` names. Empty for a workspace the hub does not hold.
      */
     serving: (id: string): { id: string; title: string }[] => {
       const [workspace] = db.workspacesNamed(id);
@@ -10825,7 +10845,7 @@ export const createWorkItems = ({
         return [];
       }
       const titled = new Map<string, string>();
-      for (const row of servedFrom(workspace)) {
+      for (const row of owedFrom(workspace)) {
         titled.set(row.heldFor ?? row.id, row.title);
       }
       return [...titled].map(([one, title]) => ({ id: one, title }));

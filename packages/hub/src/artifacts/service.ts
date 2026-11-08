@@ -166,6 +166,7 @@ import {
   type SheetWeight,
   type SheetWrite,
   type SheetWritten,
+  STAGE_IDLE_MS,
   type StageError,
   type StageFrame,
   type StageOpened,
@@ -1522,6 +1523,14 @@ const sheetOf = (
   };
 };
 
+/**
+ * How often a server of a preview waiting on the person is asked to stay up
+ * ({@link Artifacts.keepWaitingUp}): a third of what sleeps it, so two asks
+ * can fail before it does (agent stage.ts `IDLE_MS`, shortened the same way
+ * in a probe's scratch fleet).
+ */
+const KEEP_UP_MS = Number(process.env.CAWCO_STAGE_IDLE_MS || STAGE_IDLE_MS) / 3;
+
 /** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
 const servedOf = (
   row: Pick<ArtifactRow, "kind" | "source">
@@ -2233,7 +2242,9 @@ export interface ArtifactServiceDeps {
    */
   workspaceReach: (url: string, machineId: string) => Promise<string | null>;
   /** The workspaces an id or its prefix names, each with the machine it is on. */
-  workspaces: (needle: string) => { id: string; machineId: string }[];
+  workspaces: (
+    needle: string
+  ) => { id: string; machineId: string; state: string }[];
 }
 
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
@@ -2364,6 +2375,51 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const facts = factsOf(row);
     return !(facts.draft || facts.handed);
   };
+
+  /** Whether `row` waits on the person as a workspace's archive reads it: Needs you's rule, or a `try` he hasn't sent ({@link unsentTry}). */
+  const waitsOnPerson = (row: ArtifactRow): boolean =>
+    pendingFor(row) !== null || unsentTry(row);
+
+  /** Every decision page, by the artifact each of its Canvas and Preview pieces shows. */
+  const pagesShowing = (): Map<string, ArtifactRow[]> => {
+    const shown = new Map<string, ArtifactRow[]>();
+    for (const page of db.asking()) {
+      if (page.kind !== "page") {
+        continue;
+      }
+      for (const id of mediaOf(page)) {
+        shown.set(id, [...(shown.get(id) ?? []), page]);
+      }
+    }
+    return shown;
+  };
+
+  /** The served preview waiting on the person for each server on a machine in `online`, by its workspace and port: waiting itself, or on a decision page that does, its workspace active to run it in. */
+  const waitingServers = (
+    online: ReadonlySet<string>
+  ): Map<string, ArtifactRow> => {
+    const pages = pagesShowing();
+    const servers = new Map<string, ArtifactRow>();
+    for (const row of db.asking()) {
+      const served = servedOf(row);
+      if (!(served && row.machineId && online.has(row.machineId))) {
+        continue;
+      }
+      const waits =
+        pendingFor(row) !== null ||
+        (pages.get(row.id) ?? []).some(waitsOnPerson);
+      if (
+        waits &&
+        deps.workspaces(served.workspace).some((one) => one.state === "active")
+      ) {
+        servers.set(`${served.workspace}@${served.port}`, row);
+      }
+    }
+    return servers;
+  };
+
+  /** When each waiting server was last asked to stay up, by its workspace and port ({@link keepWaitingUp}). */
+  const keptUpAt = new Map<string, number>();
 
   const summaryOf = (row: ArtifactRow): ArtifactSummary => {
     const pending = pendingFor(row);
@@ -7922,10 +7978,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const asks = new Map<string, ArtifactRow>();
       for (const one of served) {
-        if (
-          one.heldFor === null &&
-          (pendingFor(one) !== null || unsentTry(one))
-        ) {
+        if (one.heldFor === null && waitsOnPerson(one)) {
           asks.set(one.id, one);
         }
       }
@@ -7939,6 +7992,63 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       }
       return [...asks.values()];
+    },
+
+    /**
+     * Of `served` (work-items.ts `servedFrom`), those its workspace's
+     * retirement still waits on (work-items.ts `owedFrom`). One waiting on
+     * the person itself is owed; one a decision page shows is otherwise
+     * owed only while a page showing it waits on him, or is handed up to a
+     * parent that hasn't opened it: a preview handed up and put on a page
+     * stays `handed` for good, its parent never opening it alone. Once
+     * every page showing it is answered (or went: `withMedia`), what the
+     * workspace serves asks nothing more of anyone, and it retires (the
+     * owner's rule, tsk-302, 2026-11-08). One on no page holds as it
+     * stands, as a preview always has: nothing says it is done with but
+     * its deletion.
+     */
+    servedOwed: (served: readonly ArtifactRow[]): ArtifactRow[] => {
+      if (served.length === 0) {
+        return [];
+      }
+      const pages = pagesShowing();
+      return served.filter((one) => {
+        if (waitsOnPerson(one)) {
+          return true;
+        }
+        const showing = pages.get(one.heldFor ?? one.id) ?? [];
+        return showing.length === 0
+          ? !withMedia(one, factsOf(one)).media
+          : showing.some((page) => waitsOnPerson(page) || factsOf(page).handed);
+      });
+    },
+
+    /**
+     * Keeps up the server of each served preview on a machine in `online`
+     * that waits on the person, itself or by a decision page showing it:
+     * started or woken as a page going out warms it (`serveFirst`), which
+     * also restarts its idle time (agent stage.ts `used`), so it never
+     * sleeps under a page he has yet to answer. On 2026-11-08 the frames of
+     * plan page fdbe3bf8 were asleep when he opened it. Each server is
+     * asked once per {@link KEEP_UP_MS}, a third of what puts it to sleep:
+     * the stage logs a line for a use after a quiet minute (the workspace
+     * sweep, workspace-retire.ts, comes every minute and would say so every
+     * minute). One whose workspace is not active has nothing to run in.
+     */
+    keepWaitingUp: (online: ReadonlySet<string>): void => {
+      const up = waitingServers(online);
+      for (const key of keptUpAt.keys()) {
+        if (!up.has(key)) {
+          keptUpAt.delete(key);
+        }
+      }
+      const now = Date.now();
+      for (const [key, row] of up) {
+        if (now - (keptUpAt.get(key) ?? 0) >= KEEP_UP_MS) {
+          keptUpAt.set(key, now);
+          detach(serveFirst(row.source, row.machineId), "keeping a preview up");
+        }
+      }
     },
 
     sourceSeen: (id: string, gone: string | null): void => {

@@ -26126,6 +26126,9 @@ export const createServer = (
     // or discard (work-items.ts `waitingFrom`); the artifacts service is
     // made above.
     waitingOnPerson: (served) => artifacts.waitingOnPerson(served),
+    // What it serves that its retirement still waits on (work-items.ts
+    // `owedFrom`); released as the person answers the page that showed it.
+    servedOwed: (served) => artifacts.servedOwed(served),
     makingFrom: (id) => artifacts.makingFrom(id),
     startHeld: startHeldWords,
     // The design check (design-verify.ts), made further down; nothing
@@ -27880,6 +27883,7 @@ export const createServer = (
   // A workspace lives as long as its work item; the sweep settles what no
   // event reached (workspace-retire.ts).
   const workspaceRetire = createWorkspaceRetire({
+    keepUp: (online) => artifacts.keepWaitingUp(online),
     lifetime,
     machineName,
     online: onlineMachines,

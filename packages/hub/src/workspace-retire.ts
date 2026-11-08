@@ -2,7 +2,7 @@
  * A workspace lives exactly as long as its work item (work-items.ts
  * `settle`). When the item ends, the hub settles its workspace: once nothing
  * holds it (a session of its items attached, an artifact showing what it
- * serves), its machine closes its boundary, reads on the host what its clone
+ * serves that still waits on someone), its machine closes its boundary, reads on the host what its clone
  * holds that is nowhere else, and either deletes it all (retired: its work
  * landed, itself or through a workspace cut from it, or there was none) or
  * keeps it (held: the session that started its work is told, and continues
@@ -23,7 +23,9 @@
  * what no event reached (a hub restarted, a machine away at the time): every
  * {@link RETIRE_SWEEP_MS}, each active workspace on every online machine is
  * settled, and each archived one whose clone its machine still has is closed
- * again (work-items.ts `closeLeftClones`).
+ * again (work-items.ts `closeLeftClones`). The same look keeps up the server
+ * of each preview waiting on the person, which would otherwise sleep once its
+ * idle half hour ran out (artifacts service `keepWaitingUp`).
  */
 import type { HubLifetimeShape } from "./lifetime";
 import type { HeldWork, WorkItems } from "./work-items";
@@ -47,6 +49,8 @@ export interface RetireSweep {
 }
 
 export interface WorkspaceRetireDeps {
+  /** Keeps up the servers of the previews waiting on the person on `online` machines (artifacts service `keepWaitingUp`). */
+  keepUp: (online: ReadonlySet<string>) => void;
   lifetime: HubLifetimeShape;
   machineName: (machineId: string) => string;
   /** The machines connected now. */
@@ -60,7 +64,15 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   /** One look at every online machine; `asked`, someone asked for it, so a workspace whose settle failed is tried now. */
   const sweepOnce = async (asked: boolean): Promise<RetireSweep> => {
     const done: RetireSweep = { failed: [], held: [], kept: [], retired: [] };
-    for (const machineId of deps.online()) {
+    const online = deps.online();
+    try {
+      deps.keepUp(new Set(online));
+    } catch (error) {
+      console.warn(
+        `[workspace-retire] keeping the waiting previews up failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    for (const machineId of online) {
       const settled = await deps.workItems.settleOn(machineId, asked);
       for (const { workspace, outcome } of settled) {
         switch (outcome.kind) {
