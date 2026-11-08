@@ -275,10 +275,11 @@
 
 <TooltipProvider>
   <div
-    class="@container/shell contain-layout relative flex h-(--frame-h) flex-col bg-surface-shelf text-ink-strong [--shell-h:var(--frame-h)]"
+    class="@container/shell contain-layout relative flex h-(--frame-h) flex-col bg-surface-shelf text-ink-strong"
     data-hang-layer={layer.id}
     data-working-area
     style:--frame-h={`${frameH}px`}
+    style:--shell-h={`${frameH}px`}
     {@attach relayInFrames}
   >
     <div
