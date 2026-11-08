@@ -296,8 +296,6 @@
     // This page's own origin, however the panel reached it: through a preview
     // name its address has no port of its own.
     origin: location.origin,
-    // The route a panel takes to its frame on a proxied name is the whole origin (core `previewRoute`); a port alone reads as :80 there.
-    origin: location.origin,
     port,
     revision: "working-area-1",
     source: { port, path: untrack(() => path) },

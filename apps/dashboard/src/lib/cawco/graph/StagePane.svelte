@@ -126,7 +126,7 @@
 <section
   data-slot="stage"
   aria-label={name}
-  class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-page shadow-tile timeline-scope-transcript-head"
+  class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-surface-page timeline-scope-transcript-head"
 >
   <!-- The field: the frame holding the stage page fills it; the page is
        its own scroller, its own page and gutter round the drawing. -->
