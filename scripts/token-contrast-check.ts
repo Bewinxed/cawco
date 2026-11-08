@@ -9,7 +9,7 @@
  *
  * The values come from the token build itself: `buildTokens` over
  * design/tokens/cawco.resolver.json and the build's own evaluator
- * (packages/hub/src/design-css.ts, on colorjs.io), which resolves
+ * (packages/design-tokens/src/design-css.ts, on colorjs.io), which resolves
  * `light-dark()`, `color-mix()` and relative `oklch(from …)` as the cascade
  * does. Over that this check only paints: a colour with alpha (a wash, a
  * glyph at its breath floor) is laid over what stands under it, source-over
@@ -28,7 +28,10 @@ import { join } from "node:path";
 import Color from "colorjs.io";
 import { ACCOUNT_HUES } from "../packages/core/src/accounts/kinds";
 import { STATUS_PAIRS } from "../packages/core/src/views";
-import { buildTokens, evaluatorOf } from "../packages/hub/src/design-tokens";
+import {
+  buildTokens,
+  evaluatorOf,
+} from "../packages/design-tokens/src/design-tokens";
 
 const DIR = join(import.meta.dir, "../design/tokens");
 const TEXT = 4.5;
