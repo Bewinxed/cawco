@@ -11,6 +11,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { ARTIFACT_PICTURE } from "@cawco/core/artifact-picture";
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
 import {
@@ -57,11 +58,8 @@ import type {
   DaemonPermissionRequestFrame,
   FleetReportFrame,
   FramePayload,
-} from "@cawco/core/frames";
-import {
-  ARTIFACT_PICTURE,
-  type HarnessFailed,
-  type HarnessUnanswered,
+  HarnessFailed,
+  HarnessUnanswered,
 } from "@cawco/core/frames";
 import type {
   AgentBusyReport,
@@ -144,6 +142,12 @@ import { inFlight } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
 import { MOVE_STEPS } from "@cawco/core/move";
 import { sessionScratchDir } from "@cawco/core/paths";
+import {
+  PREVIEW_FOLDERS,
+  PREVIEW_START,
+  PREVIEW_STOP,
+  PREVIEW_WEIGHT,
+} from "@cawco/core/preview/protocol";
 import type {
   ControlPayload,
   Envelope,
@@ -160,10 +164,6 @@ import {
   AGENT_BUSY,
   type DeliveryMark,
   isGitUrl,
-  PREVIEW_FOLDERS,
-  PREVIEW_START,
-  PREVIEW_STOP,
-  PREVIEW_WEIGHT,
   repoPath,
 } from "@cawco/core/protocol";
 import { lastErrorKindOf } from "@cawco/core/relaunch";
