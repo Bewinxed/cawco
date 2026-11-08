@@ -10,6 +10,7 @@
  * compiles it (hub canvas-host.ts `SHEETS`), and index.html links it.
  */
 import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
+import { kitTokensCss } from "@cawco/design-tokens/kit-tokens" with { type: "macro" };
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
@@ -28,7 +29,6 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import type { Map as YMap } from "yjs";
-import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with { type: "text" };
 import {
   heardFromHost,
   toHost as postToHost,
@@ -75,7 +75,7 @@ const UI_OPTIONS = {
 // touches), ahead of the page's stylesheet: their `light-dark()`s follow
 // the host's `color-scheme` (`scheme` below).
 const tokenSheet = document.createElement("style");
-tokenSheet.textContent = tokensCss;
+tokenSheet.textContent = kitTokensCss();
 document.head.prepend(tokenSheet);
 
 const media = (query: string) => {
