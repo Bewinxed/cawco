@@ -1,6 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import type { HarnessKind } from "@cawco/core/harness";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { namedModels } from "@cawco/core/model-names";
   /**
    * Which model answers — for a session that is running, and for one that is

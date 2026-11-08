@@ -1,6 +1,6 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
 
-import type { HarnessKind } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { AgentRow } from "@cawco/core/protocol";
 import { configurePage } from "@cawco/core/words/configure";
