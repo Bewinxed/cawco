@@ -21,7 +21,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { machineId } from "@cawco/core/machine-id";
-import { workspaceProjectFile } from "@cawco/core/paths";
+import { workspaceProjectFile } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";

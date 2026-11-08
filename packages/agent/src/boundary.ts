@@ -122,37 +122,30 @@ import {
   currentKeeper,
   machineEndpoint,
 } from "@cawco/core/keepers";
+import { sessionIdentityDir } from "@cawco/core/paths/cawco";
+import { fleetHooksDir, fleetMcpInstallsDir } from "@cawco/core/paths/fleet";
 import {
-  AGENT_SOCKET_ENV,
   darwinUserDirs,
-  fleetHooksDir,
-  fleetMcpInstallsDir,
+  userGitConfigDir,
+  workspaceCaches,
+} from "@cawco/core/paths/host-policy";
+import {
   forgetWorkspaceTmp,
-  hostCaEnv,
   linkWorkspaceTmp,
   scratchSocketProblem,
-  sessionIdentityDir,
-  userGitConfigDir,
   workspaceAccountsFile,
   workspaceCacheDir,
-  workspaceCacheEnv,
-  workspaceCaches,
   workspaceClaudeTmpDir,
   workspaceDoorDir,
-  workspaceMaestroEnv,
-  workspaceMaestroHome,
   workspacePolicyFile,
   workspaceProjectFile,
   workspaceReadOnlyDir,
-  workspaceRuntimeDir,
   workspaceScratchDir,
   workspaceSpillsFile,
   workspaceStateDir,
   workspacesDir,
   workspaceTmpDir,
-  workspaceXdgDirs,
-  workspaceXdgEnv,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/preview/hub-previews";
 import {
   commandLine as commandLineOf,
@@ -199,6 +192,16 @@ import {
 import { rgPath } from "@vscode/ripgrep-universal";
 import { z } from "zod";
 import { recordAgentState } from "./agent-state";
+import {
+  AGENT_SOCKET_ENV,
+  hostCaEnv,
+  workspaceCacheEnv,
+  workspaceMaestroEnv,
+  workspaceMaestroHome,
+  workspaceRuntimeDir,
+  workspaceXdgDirs,
+  workspaceXdgEnv,
+} from "./boundary-env";
 import {
   MEMBERSHIP_PREFIX,
   membershipName,
@@ -7463,7 +7466,7 @@ const makeDirs = async (id: string): Promise<void> => {
 };
 
 /**
- * The runtime dir every command runs with (paths.ts `workspaceRuntimeDir`),
+ * The runtime dir every command runs with (agent boundary-env.ts `workspaceRuntimeDir`),
  * mode 0700 whatever the umask: pnpm takes no other for its store locks, and
  * one other users can write to it ignores. Every workspace writes the cache,
  * so it is opened without following a link (a link a workspace planted

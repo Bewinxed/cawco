@@ -143,7 +143,7 @@ import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
 import { MOVE_STEPS } from "@cawco/core/move";
-import { sessionScratchDir } from "@cawco/core/paths";
+import { sessionScratchDir } from "@cawco/core/paths/workspace";
 import {
   PREVIEW_FOLDERS,
   PREVIEW_START,
