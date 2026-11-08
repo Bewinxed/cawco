@@ -5,7 +5,7 @@ import {
   PREVIEW_STOP,
   type PreviewDown,
 } from "@cawco/core/preview/protocol";
-import { DOWN_WORDS, isFolderGone } from "@cawco/core/preview/proxy";
+import { isFolderGone } from "@cawco/core/preview/proxy";
 import {
   type ServingPreview,
   type SourceKey,
@@ -15,6 +15,7 @@ import {
 } from "@cawco/core/preview/upstream";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { originOfKey } from "./db/previews";
 import {
