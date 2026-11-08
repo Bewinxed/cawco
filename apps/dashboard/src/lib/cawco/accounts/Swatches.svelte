@@ -1,6 +1,6 @@
 <script lang="ts">
   /** The seven account colours; the chosen one ringed. */
-  import type { AccountHue } from "@cawco/core/accounts";
+  import type { AccountHue } from "@cawco/core/accounts/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { hueVar } from "./model.svelte";
 
