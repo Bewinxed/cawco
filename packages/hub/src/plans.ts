@@ -32,11 +32,10 @@
  * revision. One queue per session orders every read and send, so a snapshot
  * and the deltas after it never cross.
  */
+import type { ArtifactNeed } from "@cawco/core/artifact-needs";
+import { detach } from "@cawco/core/detach";
+import { awayNotesOf } from "@cawco/core/injected";
 import {
-  type ArtifactNeed,
-  artifactLink,
-  awayNotesOf,
-  type InstanceRow,
   type OrphanedComments,
   type PlanChange,
   type PlanComment,
@@ -47,13 +46,12 @@ import {
   type PlanStep,
   planNeedsOf,
   type SessionPlan,
-  stepLink,
   stepNamesArtifact,
-  waitArtifact,
-  waitTarget,
-} from "@cawco/core";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/plan";
+import type { InstanceRow } from "@cawco/core/protocol";
+import { artifactLink, stepLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
+import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
 import { Elysia } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape, PlanChangeRow } from "./db";

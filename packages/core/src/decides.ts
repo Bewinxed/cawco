@@ -177,9 +177,6 @@ export const BUILT_IN_KINDS = [
   "tools",
 ] as const;
 export type BuiltInKind = (typeof BUILT_IN_KINDS)[number];
-/** A kind's id: a built-in one or the slug of one he added. */
-export type DecisionKind = string;
-
 /** The kinds' seed rows. */
 export const KIND_SEED: Kind[] = BUILT_IN_KINDS.map((id, position) => ({
   id,
@@ -200,7 +197,7 @@ export const DEFAULT_ROUTES: Record<BuiltInKind, BuiltInMember> = {
 };
 
 /** Each flock member's pose until he picks one. */
-export const DEFAULT_POSES: Record<FlockMember, CawPoseId> = {
+const DEFAULT_POSES: Record<FlockMember, CawPoseId> = {
   caw: "ready",
   advisor: "chart",
   practice: "sheets",
