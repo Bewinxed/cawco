@@ -561,7 +561,7 @@ export interface RegisterAckPayload {
   /**
    * Every Claude session this hub has a row for on the machine, each with
    * the account its row runs on (null for none). The machine carries each
-   * one's data into that account's dir (core paths.ts `sessionConfigDir`)
+   * one's data into that account's dir (core paths/claude.ts `sessionConfigDir`)
    * once its account sweep is done, leaving any whose process runs: data a
    * row's account change left in another dir is where its row says after
    * every start of the machine's agent.
