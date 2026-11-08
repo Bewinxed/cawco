@@ -25,8 +25,10 @@
  * - A task you filed, or the hub, a routine or a hand edit did, has no
  *   agent to hear it: you decide what comes next yourself.
  */
-import { type InstanceRow, taskLink } from "@cawco/core";
+
 import { detach } from "@cawco/core/detach";
+import type { InstanceRow } from "@cawco/core/protocol";
+import { taskLink } from "@cawco/core/references";
 import { noticeWords } from "@cawco/core/words/notices";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";

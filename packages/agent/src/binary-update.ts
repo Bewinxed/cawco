@@ -19,7 +19,6 @@
  */
 import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { UpdateReport } from "@cawco/core";
 import {
   archiveAnswered,
   type SignedRelease,
@@ -71,6 +70,7 @@ import {
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
+import type { UpdateReport } from "@cawco/core/protocol";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import {
   type CUT_CODES,
