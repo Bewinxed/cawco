@@ -28,7 +28,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 
 type Access = "read" | "write";
 
