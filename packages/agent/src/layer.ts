@@ -72,14 +72,14 @@ import {
 } from "node:fs/promises";
 import { constants, homedir, release } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
+import { cloneDenies } from "@cawco/core/clone-denies";
 import type {
   ChangedPath,
   ChangeVersion,
   WorkspaceChanges,
   WorkspaceConflict,
   WorkspaceKind,
-} from "@cawco/core";
-import { cloneDenies } from "@cawco/core/clone-denies";
+} from "@cawco/core/harness";
 import { claudeHome, workspacesDir } from "@cawco/core/paths";
 import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
