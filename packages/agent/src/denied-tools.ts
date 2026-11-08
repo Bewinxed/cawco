@@ -33,7 +33,7 @@
  * Both read {@link resolvedFleetDenials} — the single source — so they cannot
  * drift from each other.
  */
-import { clockWords } from "@cawco/core/accounts";
+
 import {
   OWN_LIST_DENIED,
   opencodeToolsFor,
@@ -43,6 +43,7 @@ import {
 import { userLayerPath } from "@cawco/core/paths/claude";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { clockWords } from "@cawco/core/words/account-lines";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
 const SETTINGS = userLayerPath("settings.json");

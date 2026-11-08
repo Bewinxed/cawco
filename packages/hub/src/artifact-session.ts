@@ -14,11 +14,9 @@
  * instead, and says why.
  */
 
-import {
-  ARTIFACT_GONE,
-  ARTIFACT_SESSION_REFUSED,
-} from "@cawco/core/artifact-session";
+import { ARTIFACT_SESSION_REFUSED } from "@cawco/core/artifact-session";
 import type { ArtifactSessionFrame } from "@cawco/core/frames";
+import { ARTIFACT_GONE } from "@cawco/core/words/artifact-session";
 import { type HubSocket, sendFrame } from "./wire-socket";
 
 /** A tab's socket, which the hub closes once its artifact is gone. */
