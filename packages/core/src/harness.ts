@@ -32,6 +32,7 @@ import {
   PLAN_ORIGIN,
   permissionModeNamed,
 } from "./harness/kinds";
+import { traitsOf } from "./harness/traits";
 import type { AuthState, NeutralOrigin } from "./session-messages";
 import { harnessWords } from "./words/harness";
 
@@ -109,7 +110,7 @@ export interface SessionCredentialInstall {
  * clean.
  */
 export const cleanStartRefusal = (harness: HarnessKind): string | undefined =>
-  harness === "opencode" ? harnessWords.openCodeNotClean : undefined;
+  traitsOf(harness).cleanStart ? undefined : harnessWords.openCodeNotClean;
 
 /**
  * `mode` as one CawCo offers, or none when none was named. One it does not
