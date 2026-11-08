@@ -24,12 +24,15 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
-import { CONTROL_PLACE_PUSH, type PlacePush } from "@cawco/core/harness";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
 import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import {
+  CONTROL_PLACE_PUSH,
+  type PlacePush,
+} from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
 import type { Connections } from "./connections";
 import type { DbShape, PlaceRow, ProjectRow } from "./db";

@@ -29,28 +29,8 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
-import type {
-  CarryRestored,
-  CommandResult,
-  WorkspaceArchive,
-  WorkspaceArchived,
-  WorkspaceChanges,
-  WorkspaceCheckout,
-  WorkspaceCommit,
-  WorkspaceConflict,
-  WorkspaceCut,
-  WorkspaceHolding,
-  WorkspaceKind,
-  WorkspaceOutputs,
-  WorkspaceRef,
-  WorkspaceUnlanded,
-} from "@cawco/core/harness";
-import {
-  holdingWords,
-  holdsNothing,
-  WORKSPACE_GIT_TIMEOUT_MS,
-} from "@cawco/core/harness";
 import type { HubRepoKey } from "@cawco/core/hub-repo";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
@@ -81,6 +61,26 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import type {
+  CarryRestored,
+  WorkspaceArchive,
+  WorkspaceArchived,
+  WorkspaceChanges,
+  WorkspaceCheckout,
+  WorkspaceCommit,
+  WorkspaceConflict,
+  WorkspaceCut,
+  WorkspaceHolding,
+  WorkspaceKind,
+  WorkspaceOutputs,
+  WorkspaceRef,
+  WorkspaceUnlanded,
+} from "@cawco/core/workspace/controls";
+import {
+  holdingWords,
+  holdsNothing,
+  WORKSPACE_GIT_TIMEOUT_MS,
+} from "@cawco/core/workspace/controls";
 import {
   refuseShortOfWorkspace,
   systemProgram,
