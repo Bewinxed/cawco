@@ -1,4 +1,4 @@
-import type { AccountMove } from "@cawco/core";
+import type { AccountMove } from "@cawco/core/accounts";
 import type { ContextFill, FiledRecords } from "@cawco/core/context-filing";
 import { and, asc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";

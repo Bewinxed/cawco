@@ -19,12 +19,12 @@
  * clears them all.
  */
 import {
-  type HarnessKind,
   type NeutralMessage,
   type NeutralStreamMessage,
   type NeutralSystemMessage,
   STREAM_SO_FAR,
-} from "@cawco/core";
+} from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 
 /** Which loop a frame speaks for: a subagent's Task call, or the main loop (`""`). */
 const threadOf = (message: { parent_tool_use_id?: string | null }): string =>

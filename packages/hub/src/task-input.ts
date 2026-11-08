@@ -17,7 +17,8 @@
  *   back. A live attempt hears a comment at once on its own path
  *   (jev-tasks.ts), under its own switch.
  */
-import { ACT_ORIGIN, taskLink } from "@cawco/core";
+import { ACT_ORIGIN } from "@cawco/core/harness/kinds";
+import { taskLink } from "@cawco/core/references";
 import { noticeWords } from "@cawco/core/words/notices";
 import type { Caw, YourAct, YourWords } from "./caw";
 import type { DbShape } from "./db";

@@ -30,14 +30,14 @@ import { Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
-// The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
-// for `node:os`, and the core barrel is imported by the browser bundle.
-import type { SessionLimits } from "@cawco/core";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { answers } from "@cawco/core/keepers";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
+// The protocol lives in its own module on purpose: `sessiond.ts` reaches for
+// `node:os`, and the dashboard's browser bundle must not import it.
+import type { SessionLimits } from "@cawco/core/protocol";
 import { standalone } from "@cawco/core/runtime";
 import {
   notAliveReason,

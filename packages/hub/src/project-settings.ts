@@ -69,22 +69,24 @@
 import {
   type Account,
   accountNameAmong,
-  type InstanceRow,
   PROJECT_AT_LIMIT,
-  PROJECT_LANDS,
-  PROJECT_SETTING_KINDS,
-  type ProjectNote,
-  type ProjectSettingChange,
-  projectSettingsWords,
-  projectSettingWords,
-  publishedWords,
-  type SettingSource,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
+import type { SettingSource } from "@cawco/core/areas";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
 import { hubRepoSegment } from "@cawco/core/hub-repo";
+import {
+  PROJECT_LANDS,
+  PROJECT_SETTING_KINDS,
+  type ProjectSettingChange,
+  projectSettingWords,
+  publishedWords,
+} from "@cawco/core/permission-presentation";
+import type { ProjectNote } from "@cawco/core/project-conversation";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
+import { projectSettingsWords } from "@cawco/core/words/project-settings";
 import { z } from "zod";
 import type { Areas } from "./areas";
 import type { Connections } from "./connections";

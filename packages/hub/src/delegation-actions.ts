@@ -10,42 +10,43 @@
  * `customTools`), and this file is the body they share.
  */
 
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
+import { delegateTypeProblem } from "@cawco/core/delegate-types";
+import type { ForgeWrite } from "@cawco/core/forge-post";
+import type { PermissionResult } from "@cawco/core/harness";
 import type {
-  DelegateType,
-  Envelope,
-  GeneratedImage,
   HarnessKind,
-  ImageGenerationRequest,
-  InstanceRow,
-  LandsMode,
-  MayStart,
   PermissionMode,
-  PermissionResult,
-  SendPayload,
-  SpawnPayload,
-} from "@cawco/core";
+  SessionChosenMode,
+} from "@cawco/core/harness/kinds";
+import type {
+  GeneratedImage,
+  ImageGenerationRequest,
+} from "@cawco/core/image-generation";
+import { IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core/image-generation";
+import type { LandsMode } from "@cawco/core/injected";
+import { handoffMarker, withInputsLine } from "@cawco/core/injected";
 import {
-  artifactLink,
-  delegateTypeProblem,
-  handoffMarker,
-  IMAGE_GENERATION_TIMEOUT_MS,
   machineCalled,
   machineLabel,
   machinesCalled,
-  pauseClock,
-  QUESTION_DISMISSED,
-  relaunchOf,
-  type SessionChosenMode,
-  sessionLink,
-  withInputsLine,
-  workWords,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { ForgeWrite } from "@cawco/core/forge-post";
+} from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type {
+  Envelope,
+  InstanceRow,
+  SendPayload,
+  SpawnPayload,
+} from "@cawco/core/protocol";
+import { pauseClock } from "@cawco/core/protocol";
+import { QUESTION_DISMISSED } from "@cawco/core/question";
+import { artifactLink, sessionLink } from "@cawco/core/references";
+import { relaunchOf } from "@cawco/core/relaunch";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { contextWords } from "@cawco/core/words/context";
+import { workWords } from "@cawco/core/words/work";
 import type { Started } from "./call-cuts";
 import type {
   SendHold,
