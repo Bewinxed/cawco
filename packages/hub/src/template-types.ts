@@ -19,7 +19,7 @@
  * - brand: `brand`.
  * - design: `explorer`, `builder`.
  */
-import { STAGES_TEMPLATES, type StagesTemplate } from "@cawco/core";
+import { STAGES_TEMPLATES, type StagesTemplate } from "@cawco/core/views";
 import { skillText, TEMPLATE_SKILLS } from "./bundled-skills";
 import { type Stages, templateStages } from "./stages";
 

@@ -17,14 +17,11 @@
  */
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
-import {
-  INPUTS_LIMIT_BYTES,
-  type InstanceRow,
-  type SessionAttachment,
-} from "@cawco/core";
 import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import { type HeldInput, inputFileName } from "@cawco/core/handed-input";
+import { INPUTS_LIMIT_BYTES } from "@cawco/core/harness";
+import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import {
   ArtifactRefusal,
   type Artifacts,

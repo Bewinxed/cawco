@@ -224,8 +224,6 @@ export interface AccountIdentity {
  */
 export type AtPlanLimit = "move" | "extra-usage";
 
-export const AT_PLAN_LIMIT: readonly AtPlanLimit[] = ["move", "extra-usage"];
-
 export interface Account {
   /** What its sessions do at a plan limit while its extra usage is on ({@link AtPlanLimit}). */
   atPlanLimit: AtPlanLimit;

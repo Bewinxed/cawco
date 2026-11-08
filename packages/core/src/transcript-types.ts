@@ -64,7 +64,7 @@ export interface BlockMetadata {
   /** An artifact responses note's artifact ({@link import("./harness").ARTIFACT_RESPONSES}): what its line opens. */
   artifactId?: string;
   /** That artifact's kind, which picks its line's glyph. */
-  artifactKind?: import("./index").ArtifactKind;
+  artifactKind?: import("./artifact-kinds").ArtifactKind;
   /** The words its line says before the artifact's title, by the notice it draws (core `ARTIFACT_NOTICES`): "Comments on", "Fix tray handed you". */
   artifactLead?: string;
   /** That artifact's title, as its line says it. */

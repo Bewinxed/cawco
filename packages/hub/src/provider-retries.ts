@@ -18,7 +18,7 @@
  * `#retry`); a retry at the limit of an account of CawCo's is the at-limit
  * controller's, whose harness ends the turn on it (server.ts).
  */
-import { workWords } from "@cawco/core";
+import { workWords } from "@cawco/core/words/work";
 import type { DbShape, WorkItemRow } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { isLive } from "./work-items";
