@@ -78,7 +78,6 @@ import type {
   SpawnPayload,
   StoppedCommands,
 } from "@cawco/core/protocol";
-import { RESTART_LOST, stoppedWords } from "@cawco/core/protocol";
 import {
   CLAUDE_CONVERSATION_GONE,
   type LastErrorKind,
@@ -100,6 +99,8 @@ import type {
   UsageTotals,
 } from "@cawco/core/usage/types";
 import type { StagesTemplate } from "@cawco/core/views";
+import { stoppedWords } from "@cawco/core/words/machine-pause";
+import { RESTART_LOST } from "@cawco/core/words/session-ends";
 import {
   and,
   asc,
