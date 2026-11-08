@@ -1,3 +1,4 @@
+import { shellQuote } from "./shell-quote";
 import { tetherWords } from "./words/tether";
 import { systemProgram } from "./workspace-needs";
 
@@ -56,7 +57,7 @@ export const TETHER_UNLED = 125;
  * none.
  */
 const TETHER = `kill -s 0 -- "-$$" 2>/dev/null || {
-  echo '${tetherWords.unled.replaceAll("'", "'\\''")}' >&2
+  echo ${shellQuote(tetherWords.unled)} >&2
   exit ${TETHER_UNLED}
 }
 exec 3<&0
