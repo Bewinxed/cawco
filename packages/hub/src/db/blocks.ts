@@ -2,11 +2,10 @@ import type { BlockPage, BlockPlace } from "@cawco/core/blocks";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { projectBlocks, viewProposals } from "./schema";
+import type { Tx } from "./tx";
 
 type BlockRow = typeof projectBlocks.$inferSelect;
 type ProposalRow = typeof viewProposals.$inferSelect;
-
-type Tx = Parameters<Parameters<BunSQLiteDatabase["transaction"]>[0]>[0];
 
 /**
  * Replaces one page's rows with `blocks` in their order; a block named here
