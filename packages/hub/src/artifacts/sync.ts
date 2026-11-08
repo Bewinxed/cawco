@@ -26,14 +26,14 @@
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
   type ArtifactChoices,
   CHOICE_LIMITS,
   type ChoiceEntry,
   choiceEntryProblem,
   settledWriteProblem,
-} from "@cawco/core";
-import { CANVAS_LIMITS } from "@cawco/core/canvas";
+} from "@cawco/core/choices";
 import {
   COMMENT_LIMITS,
   goneProblem,
