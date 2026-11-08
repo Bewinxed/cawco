@@ -641,21 +641,26 @@
     data-slot="browser-well"
     data-stream={host ? STREAM_OF[host] : undefined}
     data-stream-state={live ? streamState.kind : (browser?.state ?? "unknown")}
-    {@attach frameSize((node: HTMLElement) => {
-      const style = getComputedStyle(node);
-      const px = (value: string) => Number.parseFloat(value) || 0;
-      room = {
-        w:
-          node.clientWidth -
-          px(style.paddingInlineStart) -
-          px(style.paddingInlineEnd),
-        h:
-          node.clientHeight -
-          px(style.paddingBlockStart) -
-          px(style.paddingBlockEnd),
-        gap: px(style.rowGap),
-      };
-    })}
+    {@attach frameSize(
+      (node: HTMLElement) => {
+        const style = getComputedStyle(node);
+        const px = (value: string) => Number.parseFloat(value) || 0;
+        return {
+          w:
+            node.clientWidth -
+            px(style.paddingInlineStart) -
+            px(style.paddingInlineEnd),
+          h:
+            node.clientHeight -
+            px(style.paddingBlockStart) -
+            px(style.paddingBlockEnd),
+          gap: px(style.rowGap),
+        };
+      },
+      (value) => {
+        room = value;
+      }
+    )}
   >
     <!-- The screen: the stream's own box, at its own shape. Zoomed on a
          phone it scrolls: the page drawn twice its size, a drag panning it. -->
@@ -759,9 +764,12 @@
         class="flex w-(--screen-w) min-w-0 items-center gap-space-2"
         data-slot="browser-foot"
         style:--screen-w="{screen.w}px"
-        {@attach frameSize((node: HTMLElement) => {
-          footH = node.offsetHeight;
-        })}
+        {@attach frameSize(
+          (node: HTMLElement) => node.offsetHeight,
+          (value) => {
+            footH = value;
+          }
+        )}
       >
         <div class="flex min-w-0 flex-1">
           <BrowserAddress {mine} origin={browser?.origin ?? null} />

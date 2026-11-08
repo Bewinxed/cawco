@@ -353,9 +353,12 @@
     <div
       class="absolute inset-x-0 top-[calc(--spacing(2)+1px)] z-2 flex flex-col px-4 pt-[calc(--spacing(2)-1px)]"
       data-slot="drawer-head"
-      {@attach frameSize((node: HTMLElement) => {
-        room = node.offsetHeight;
-      })}
+      {@attach frameSize(
+        (node: HTMLElement) => node.offsetHeight,
+        (value) => {
+          room = value;
+        }
+      )}
     >
       {@render grabbed()}
       <div class={head.head()} data-slot="drawer-header">

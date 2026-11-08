@@ -95,9 +95,12 @@
     {#if item.note}
       <span
         id={noteId}
-        {@attach frameSize((node: HTMLElement) => {
-          cut = node.scrollHeight > node.clientHeight + 1;
-        })}
+        {@attach frameSize(
+          (node: HTMLElement) => node.scrollHeight > node.clientHeight + 1,
+          (value) => {
+            cut = value;
+          }
+        )}
         class={[
           "line-clamp-2 min-w-0 type-meta text-pretty wrap-anywhere",
           kept ? "text-selected-ink" : "text-ink-muted",

@@ -132,12 +132,18 @@
    */
   let restWidth = $state(0);
   let pendingWidth = $state(0);
-  const measureRest = frameSize<HTMLElement>((node) => {
-    restWidth = node.getBoundingClientRect().width;
-  });
-  const measurePending = frameSize<HTMLElement>((node) => {
-    pendingWidth = node.getBoundingClientRect().width;
-  });
+  const measureRest = frameSize(
+    (node: HTMLElement) => node.getBoundingClientRect().width,
+    (value) => {
+      restWidth = value;
+    }
+  );
+  const measurePending = frameSize(
+    (node: HTMLElement) => node.getBoundingClientRect().width,
+    (value) => {
+      pendingWidth = value;
+    }
+  );
   const slack = $derived(
     (Math.max(restWidth, pendingWidth) - (pending ? pendingWidth : restWidth)) /
       2

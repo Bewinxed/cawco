@@ -1774,9 +1774,12 @@
     class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
     data-arriving={arriving || reading || undefined}
     {lang}
-    {@attach frameSize((node: HTMLElement) => {
-      surface = node.clientWidth;
-    })}
+    {@attach frameSize(
+      (node: HTMLElement) => node.clientWidth,
+      (value) => {
+        surface = value;
+      }
+    )}
   >
     <!-- The page: the stage, and on a desk the room beside it, running to
          the surface's top under the panel's floating head and clearing it
@@ -1791,14 +1794,22 @@
         !desk && drawerShown ? "pb-(--drawer-cover)" : "pb-space-2",
       ]}
       style:--drawer-cover="{cover}px"
-      {@attach frameSize((node: HTMLElement) => {
-        const style = getComputedStyle(node);
-        headFoot = node.offsetTop + Number.parseFloat(style.paddingTop);
-        splitWidth =
-          node.clientWidth -
-          Number.parseFloat(style.paddingInlineStart) -
-          Number.parseFloat(style.paddingInlineEnd);
-      })}
+      {@attach frameSize(
+        (node: HTMLElement) => {
+          const style = getComputedStyle(node);
+          return {
+            foot: node.offsetTop + Number.parseFloat(style.paddingTop),
+            split:
+              node.clientWidth -
+              Number.parseFloat(style.paddingInlineStart) -
+              Number.parseFloat(style.paddingInlineEnd),
+          };
+        },
+        (value) => {
+          headFoot = value.foot;
+          splitWidth = value.split;
+        }
+      )}
     >
       <!-- The stage, and on a desk the room beside it: one resizable split.
            The stage's pane stays while the room comes and goes, so the
@@ -1901,9 +1912,12 @@
                 <header
                   class="absolute inset-x-0 top-0 z-2 flex h-c-head-room min-w-0 items-center ps-space-4 pe-space-2"
                   data-slot="room-head"
-                  {@attach frameSize((node: HTMLElement) => {
-                    roomHeadRoom = node.offsetHeight;
-                  })}
+                  {@attach frameSize(
+                    (node: HTMLElement) => node.offsetHeight,
+                    (value) => {
+                      roomHeadRoom = value;
+                    }
+                  )}
                 >
                   {@render faces(false)}
                 </header>
@@ -1940,9 +1954,12 @@
         data-slot="room-layer"
         class="pointer-events-none absolute inset-0 overflow-clip"
         bind:this={roomLayer}
-        {@attach frameSize((node: HTMLElement) => {
-          layerHeight = node.clientHeight;
-        })}
+        {@attach frameSize(
+          (node: HTMLElement) => node.clientHeight,
+          (value) => {
+            layerHeight = value;
+          }
+        )}
       >
         <Drawer.Root
           bind:activeSnapPoint={
@@ -1999,9 +2016,12 @@
               <div
                 class="absolute inset-x-space-4 top-0 z-2 flex min-w-0 items-center pb-space-3"
                 data-slot="drawer-faces"
-                {@attach frameSize((node: HTMLElement) => {
-                  drawerRoom = node.offsetHeight;
-                })}
+                {@attach frameSize(
+                  (node: HTMLElement) => node.offsetHeight,
+                  (value) => {
+                    drawerRoom = value;
+                  }
+                )}
               >
                 {@render faces(true)}
               </div>

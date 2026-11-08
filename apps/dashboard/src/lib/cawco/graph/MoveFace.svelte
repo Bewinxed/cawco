@@ -1108,10 +1108,13 @@
                     class="absolute inset-0 overflow-x-clip type-code leading-none num"
                     aria-hidden="true"
                     data-slot="ruler-lane"
-                    {@attach frameSize((node: HTMLElement) => {
-                      lane = node.clientWidth;
-                      rulerLane = node;
-                    })}
+                    {@attach frameSize(
+                      (node: HTMLElement) => [node.clientWidth, node] as const,
+                      ([width, node]) => {
+                        lane = width;
+                        rulerLane = node;
+                      }
+                    )}
                   >
                     {#each marks as mark (mark)}
                       <span

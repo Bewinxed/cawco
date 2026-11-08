@@ -215,9 +215,12 @@
    * ("ResizeObserver loop completed with undelivered notifications").
    */
   let laidWidth = $state(0);
-  const measurePane = frameSize<HTMLElement>((node) => {
-    laidWidth = node.clientWidth;
-  });
+  const measurePane = frameSize(
+    (node: HTMLElement) => node.clientWidth,
+    (value) => {
+      laidWidth = value;
+    }
+  );
   const phone = $derived(laidWidth > 0 && laidWidth < 900);
   /** The side surface is the bottom drawer, not the split; null until the pane is measured (layoutPolicy.sideDrawer). */
   const drawer = $derived(layoutPolicy.sideDrawer(laidWidth));

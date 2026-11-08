@@ -394,10 +394,17 @@
       "h-full min-h-0 overflow-auto bg-surface-page p-space-5 scroll-timeline-transcript-head",
       dark ? "scheme-dark" : "scheme-light",
     ]}
-    {@attach frameSize((node: HTMLElement) => {
-      room = node.clientWidth;
-      gutter = 2 * Number.parseFloat(getComputedStyle(node).paddingInlineStart);
-    })}
+    {@attach frameSize(
+      (node: HTMLElement) =>
+        [
+          node.clientWidth,
+          2 * Number.parseFloat(getComputedStyle(node).paddingInlineStart),
+        ] as const,
+      ([width, inset]) => {
+        room = width;
+        gutter = inset;
+      }
+    )}
   >
     <div aria-hidden="true" class="h-(--stage-room,0px)"></div>
     <!-- The box the drawing stands in is its size after its scale, so a
@@ -411,14 +418,21 @@
         class="w-(--drawing) max-w-none origin-top-left scale-(--fit)"
         data-cawco-story={standing}
         style="--drawing: {width}px; --fit: {fit}; {varsSet}"
-        {@attach frameSize((node: HTMLElement) => {
-          tall = node.offsetHeight;
-          const form = node.firstElementChild;
-          const most = form
-            ? Number.parseFloat(getComputedStyle(form).maxWidth)
-            : Number.NaN;
-          held = Number.isFinite(most) ? most : null;
-        })}
+        {@attach frameSize(
+          (node: HTMLElement) => {
+            const form = node.firstElementChild;
+            const most = form
+              ? Number.parseFloat(getComputedStyle(form).maxWidth)
+              : Number.NaN;
+            return {
+              tall: node.offsetHeight,
+              held: Number.isFinite(most) ? most : null,
+            };
+          },
+          (measured) => {
+            ({ tall, held } = measured);
+          }
+        )}
       >
         <!-- A pick sets the next story's args on the form where it stands,
              as the stage does for a reach within one states file (agent

@@ -2513,9 +2513,12 @@
    * list out again.
    */
   let viewHeight = $state(0);
-  const measureView = frameSize<HTMLElement>((node) => {
-    viewHeight = node.clientHeight;
-  });
+  const measureView = frameSize(
+    (node: HTMLElement) => node.clientHeight,
+    (value) => {
+      viewHeight = value;
+    }
+  );
   /** virtua's imperative handle: its sizes, its cache, and `scrollToIndex` for
       a row that is not the tail (the tray's reveal). */
   let list = $state<VirtualizerHandle | undefined>();

@@ -17,7 +17,8 @@
  * A scroller is read when it or one of its parts changes size (one
  * ResizeObserver, frameObserver), and when anything is put in or taken out
  * inside it (one MutationObserver over the document, each change read on
- * its nearest scroller), in the next frame.
+ * its nearest scroller), inside the next delivery, and written in the frame
+ * after.
  */
 import { frameObserver } from "../frame-observer";
 
@@ -32,29 +33,51 @@ const runs = (node: Element): boolean =>
 /** Starts the watch over `root`; hands back its stop. */
 export function watchEdgeFades(root: ParentNode = document): () => void {
   const watched = new Set<Element>();
+  /** Scrollers to read in the next delivery. */
   const due = new Set<Element>();
-  let frame = 0;
-  const read = () => {
-    frame = 0;
-    for (const node of due) {
-      if (node.isConnected) {
-        node.toggleAttribute("data-fade-runs", runs(node));
+  /** What the delivery read, written in the next frame. */
+  const verdicts = new Map<Element, boolean>();
+  /**
+   * Read inside the delivery, on the layout the frame has just done; written
+   * in the next frame (frameObserver `read`). Read in a frame callback of
+   * its own instead, a second frame after the resize, every scroller's
+   * `scrollHeight` laid the page out there under the frame's other writes
+   * (a rail drag on nightly 7148: 2ms a frame).
+   */
+  const sizes = frameObserver(
+    () => {
+      for (const [node, runsPast] of verdicts) {
+        if (
+          node.isConnected &&
+          node.hasAttribute("data-fade-runs") !== runsPast
+        ) {
+          node.toggleAttribute("data-fade-runs", runsPast);
+        }
       }
+      verdicts.clear();
+    },
+    {
+      read: (entries) => {
+        for (const { target } of entries) {
+          const scroller = watched.has(target) ? target : target.parentElement;
+          if (scroller && watched.has(scroller)) {
+            due.add(scroller);
+          }
+        }
+        for (const node of due) {
+          if (node.isConnected) {
+            verdicts.set(node, runs(node));
+          }
+        }
+        due.clear();
+      },
     }
-    due.clear();
-  };
+  );
+  /** A scroller read in the next delivery, though nothing in it resized (a part put in or taken out). */
   const soon = (node: Element) => {
     due.add(node);
-    frame ||= requestAnimationFrame(read);
+    sizes.readNext();
   };
-  const sizes = frameObserver((changed) => {
-    for (const node of changed) {
-      const scroller = watched.has(node) ? node : node.parentElement;
-      if (scroller && watched.has(scroller)) {
-        soon(scroller);
-      }
-    }
-  });
   const watch = (node: Element) => {
     if (watched.has(node)) {
       return;
@@ -128,6 +151,5 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
   return () => {
     changes.disconnect();
     sizes.disconnect();
-    cancelAnimationFrame(frame);
   };
 }

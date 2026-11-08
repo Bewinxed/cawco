@@ -135,9 +135,12 @@
   let chosenHeight = $state(44);
   // Read now, and a change in the next frame (frameSize): the fill stands
   // on it.
-  const chosen = frameSize<HTMLElement>((node) => {
-    chosenHeight = node.offsetHeight;
-  });
+  const chosen = frameSize(
+    (node: HTMLElement) => node.offsetHeight,
+    (value) => {
+      chosenHeight = value;
+    }
+  );
 
   /**
    * The chosen model's run settings glide from the row it leaves to the one

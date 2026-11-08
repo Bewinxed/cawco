@@ -162,9 +162,12 @@
   data-slot="find-places"
   data-compact={compact || undefined}
   class="group/places flex min-h-0 flex-auto flex-col"
-  {@attach frameSize((node: HTMLElement) => {
-    compact = node.offsetWidth < COMPACT_PX;
-  })}
+  {@attach frameSize(
+    (node: HTMLElement) => node.offsetWidth < COMPACT_PX,
+    (value) => {
+      compact = value;
+    }
+  )}
 >
   {#if nothing}
     <div class="px-space-4 py-space-6 group-data-compact/places:py-space-4">

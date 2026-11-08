@@ -354,11 +354,17 @@
 <div
   class="relative h-c-badge-h w-full select-none"
   data-slot="run-lane"
-  {@attach frameSize((node: HTMLElement) => {
-    wide = node.clientWidth;
-    grip =
-      node.querySelector<HTMLElement>("[data-run-end]")?.offsetWidth ?? grip;
-  })}
+  {@attach frameSize(
+    (node: HTMLElement) =>
+      [
+        node.clientWidth,
+        node.querySelector<HTMLElement>("[data-run-end]")?.offsetWidth ?? grip,
+      ] as const,
+    ([width, end]) => {
+      wide = width;
+      grip = end;
+    }
+  )}
 >
   {#each track.runs as run, at (run.id)}
     {@const span = spanOf(run)}

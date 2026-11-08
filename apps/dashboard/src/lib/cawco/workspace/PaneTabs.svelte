@@ -306,9 +306,12 @@
    * switch changed the card's content.
    */
   let detailsHeight = $state(0);
-  const measureDetails = frameSize<HTMLElement>((node) => {
-    detailsHeight = node.offsetHeight;
-  });
+  const measureDetails = frameSize(
+    (node: HTMLElement) => node.offsetHeight,
+    (value) => {
+      detailsHeight = value;
+    }
+  );
   let restoreFocus = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   /**

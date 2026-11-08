@@ -128,9 +128,12 @@
    * that delivery.
    */
   let laidWidth = $state(0);
-  const measureSplit = frameSize<HTMLElement>((node) => {
-    laidWidth = node.clientWidth;
-  });
+  const measureSplit = frameSize(
+    (node: HTMLElement) => node.clientWidth,
+    (value) => {
+      laidWidth = value;
+    }
+  );
   /** The surface's floor (SIDE_FLOOR_PX), as a share of the panes' room; null until measured. */
   const sideMin = $derived(
     laidWidth > DIVIDER ? (SIDE_FLOOR_PX / (laidWidth - DIVIDER)) * 100 : null

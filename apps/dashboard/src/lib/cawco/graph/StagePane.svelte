@@ -134,11 +134,18 @@
     data-slot="stage-field"
     class="relative min-h-0 min-w-0 flex-1 bg-surface-page"
     style:--stage-room="{room}px"
-    {@attach frameSize((node: HTMLElement) => {
-      const own = node.closest<HTMLElement>('[data-slot="stage"]');
-      panel = own?.offsetWidth ?? 0;
-      edge = own ? own.offsetWidth - node.clientWidth : 0;
-    })}
+    {@attach frameSize(
+      (node: HTMLElement) => {
+        const own = node.closest<HTMLElement>('[data-slot="stage"]');
+        return {
+          panel: own?.offsetWidth ?? 0,
+          edge: own ? own.offsetWidth - node.clientWidth : 0,
+        };
+      },
+      (measured) => {
+        ({ panel, edge } = measured);
+      }
+    )}
   >
     {@render frame()}
   </div>
@@ -155,9 +162,12 @@
   <div
     data-slot="stage-head"
     class="pointer-events-none absolute inset-x-0 top-0 z-1 flex min-w-0 flex-col px-space-4"
-    {@attach frameSize((node: HTMLElement) => {
-      room = node.offsetHeight;
-    })}
+    {@attach frameSize(
+      (node: HTMLElement) => node.offsetHeight,
+      (value) => {
+        room = value;
+      }
+    )}
   >
     <!-- Unclipped: the glass's focus ring and the view card's join stand
          out past its box. -->

@@ -117,9 +117,12 @@
   let shownTip = $state(0);
   /** The label's width, which the tip glides to: read as it mounts, and a change in the next frame (frameSize). */
   let tipWidth = $state(0);
-  const measureTip = frameSize<HTMLElement>((node) => {
-    tipWidth = node.offsetWidth;
-  });
+  const measureTip = frameSize(
+    (node: HTMLElement) => node.offsetWidth,
+    (width) => {
+      tipWidth = width;
+    }
+  );
   $effect(() => {
     if (tip >= 0) {
       shownTip = tip;

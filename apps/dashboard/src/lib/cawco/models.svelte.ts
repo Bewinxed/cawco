@@ -117,15 +117,25 @@ function accountRows(): HarnessModel[] {
     });
 }
 
-/** The reported catalog, Claude rows carrying the window the hub saw a turn report. */
-function catalog(): HarnessModel[] {
-  return reported().map((row) => {
+/**
+ * The reported catalog, Claude rows carrying the window the hub saw a turn
+ * report: built once each time what it is read from changes. Built on each
+ * call instead, every delegate row a transcript mounted as it scrolled
+ * rebuilt every machine's and every account's rows for its model's name
+ * (`modelLabel`; nightly 7148: 15ms of a long conversation's wheel).
+ */
+const catalogRows = $derived.by(() =>
+  reported().map((row) => {
     const window =
       row.harness === "claude"
         ? store.claudeWindows[row.resolvedModel ?? row.value]
         : undefined;
     return window ? { ...row, contextWindow: window } : row;
-  });
+  })
+);
+
+function catalog(): HarnessModel[] {
+  return catalogRows;
 }
 
 /**

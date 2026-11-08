@@ -526,9 +526,12 @@
    * mounts, and a change in the next frame (frameSize).
    */
   let countWidth = $state(0);
-  const measureCount = frameSize<HTMLElement>((node) => {
-    countWidth = node.offsetWidth;
-  });
+  const measureCount = frameSize(
+    (node: HTMLElement) => node.offsetWidth,
+    (value) => {
+      countWidth = value;
+    }
+  );
   /** What the failure chip and its gap take from the working zone. */
   const failRoom = $derived(
     failures.length === 0

@@ -92,9 +92,12 @@
   let grid = $state<HTMLElement | null>(null);
   /** The grid's width: read as it mounts, and a change in the next frame (frameSize). */
   let gridWidth = $state(0);
-  const measureGrid = frameSize<HTMLElement>((node) => {
-    gridWidth = node.clientWidth;
-  });
+  const measureGrid = frameSize(
+    (node: HTMLElement) => node.clientWidth,
+    (value) => {
+      gridWidth = value;
+    }
+  );
   /** The tokens the grid is laid by, in px, read once the grid is drawn. */
   let px = $state<{
     four: number;

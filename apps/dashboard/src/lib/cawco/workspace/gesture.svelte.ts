@@ -497,12 +497,22 @@ export function createSwipe(
     action(node: HTMLElement, enabled = true) {
       let live = enabled;
       root = node;
-      // Read now, and a change in the next frame (frameObserver).
-      const read = () => {
-        width = node.clientWidth;
-      };
-      read();
-      const sizes = frameObserver(read);
+      // Read as it mounts, then taken from each report's own size inside the
+      // delivery (frameObserver `read`): the stack has no padding, border or
+      // scrollbar, so its content box is its client width. Read back off
+      // the node in the next frame's callbacks instead, it laid the page out
+      // there on every frame the stack resized, under whatever those
+      // callbacks had written (a rail drag on nightly 7148: 27ms of style
+      // over 1,240 elements a frame, the most of any one call).
+      width = node.clientWidth;
+      const sizes = frameObserver(null, {
+        read: (entries) => {
+          const size = entries.at(-1)?.contentBoxSize[0];
+          if (size) {
+            width = size.inlineSize;
+          }
+        },
+      });
       sizes.observe(node);
 
       // The panes stand where their transforms put them; the stack itself

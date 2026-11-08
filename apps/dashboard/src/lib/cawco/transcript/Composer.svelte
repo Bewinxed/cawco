@@ -411,25 +411,63 @@
       "position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;inset-block-start:0;inset-inline-start:-9999px";
     probe.textContent = HINT;
     node.after(probe);
-    const fit = () => {
+    /** The probe dressed as the field's hint is: its face and its tracking. */
+    let dressed = "";
+    const dress = (font: string, tracking: string) => {
+      dressed = `${font}|${tracking}`;
+      probe.style.font = font;
+      probe.style.letterSpacing = tracking;
+    };
+    /** Which hint the field's room holds, read only: the probe dressed already. */
+    const measure = () => {
       const style = getComputedStyle(node);
-      probe.style.font = style.font;
-      probe.style.letterSpacing = style.getPropertyValue("--hint-track");
       const room =
         node.clientWidth -
         Number.parseFloat(style.paddingInlineStart) -
         Number.parseFloat(style.paddingInlineEnd);
       // Laid out, as the room is: a panel rising out of its scale shows the
       // probe narrower than the hint will stand.
-      hint =
-        probe.getBoundingClientRect().width / layoutScale(node) <= room
-          ? HINT
-          : HINT_SHORT;
+      return {
+        font: style.font,
+        tracking: style.getPropertyValue("--hint-track"),
+        hint:
+          probe.getBoundingClientRect().width / layoutScale(node) <= room
+            ? HINT
+            : HINT_SHORT,
+      };
     };
-    // Fitted now, so the first frame has its hint, and a change in the next
-    // frame (frameObserver): the hint's words are the field's.
+    const fit = () => {
+      const style = getComputedStyle(node);
+      dress(style.font, style.getPropertyValue("--hint-track"));
+      ({ hint } = measure());
+    };
+    // Fitted now, so the first frame has its hint. A resize is read inside
+    // the delivery, on the layout the frame has just done, and written in
+    // the next frame (frameObserver `read`): read in the next frame's
+    // callbacks instead, every frame of a rail drag laid the page out for
+    // it. A face that changed since the probe was dressed dresses it there,
+    // and is read again in the next delivery.
     fit();
-    const sizes = frameObserver(fit);
+    let measured: ReturnType<typeof measure> | null = null;
+    const sizes = frameObserver(
+      () => {
+        if (!measured) {
+          return;
+        }
+        const { font, tracking } = measured;
+        if (`${font}|${tracking}` !== dressed) {
+          dress(font, tracking);
+          sizes.readNext();
+        }
+        ({ hint } = measured);
+        measured = null;
+      },
+      {
+        read: () => {
+          measured = measure();
+        },
+      }
+    );
     sizes.observe(node);
     // The body face may land after the first measure, at a new width.
     let live = true;
@@ -873,23 +911,52 @@
    */
   let laidOut = { drop: 0, wrap: 0 };
   function scrollCue(node: HTMLElement) {
-    const cue = () => {
-      const hidden = node.scrollHeight - node.clientHeight;
-      cueTop = hidden > 1 && node.scrollTop > 1;
-      cueBottom = hidden > 1 && node.scrollTop < hidden - 1;
+    /** The field's scroll and wrap, read only. */
+    const read = () => ({
+      scrollHeight: node.scrollHeight,
+      clientHeight: node.clientHeight,
+      scrollTop: node.scrollTop,
+      wrap: wrapOf(node),
+    });
+    const take = ({
+      scrollHeight,
+      clientHeight,
+      scrollTop,
+      wrap,
+    }: ReturnType<typeof read>) => {
+      const hidden = scrollHeight - clientHeight;
+      cueTop = hidden > 1 && scrollTop > 1;
+      cueBottom = hidden > 1 && scrollTop < hidden - 1;
       laidOut = {
-        drop: scrollDrop(node.scrollHeight, node.clientHeight, node.scrollTop),
-        wrap: wrapOf(node),
+        drop: scrollDrop(scrollHeight, clientHeight, scrollTop),
+        wrap,
       };
     };
+    const cue = () => take(read());
     let frame = 0;
     $effect(() => {
       track(draft.text);
       frame = requestAnimationFrame(cue);
     });
-    // A resize in the next frame (frameObserver): the cues are the field's
-    // edges, drawn on it. A scroll lays nothing out, and is read at once.
-    const sizes = frameObserver(cue);
+    // A resize is read inside the delivery, on the layout the frame has
+    // just done, and taken in the next frame (frameObserver `read`): the
+    // cues are the field's edges, drawn on it. Read in the next frame's
+    // callbacks instead, every frame of a rail drag laid the page out for
+    // it. A scroll lays nothing out, and is read at once.
+    let resized: ReturnType<typeof read> | null = null;
+    const sizes = frameObserver(
+      () => {
+        if (resized) {
+          take(resized);
+          resized = null;
+        }
+      },
+      {
+        read: () => {
+          resized = read();
+        },
+      }
+    );
     sizes.observe(node);
     node.addEventListener("scroll", cue, { passive: true });
     return () => {
@@ -3177,18 +3244,27 @@
   const LAYER_GROUND =
     "linear-gradient(to top, var(--surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--surface-recess-clear))";
   let panel = $state(0);
-  const measurePanel = frameSize<HTMLElement>((node) => {
-    panel = node.clientHeight;
-  });
+  const measurePanel = frameSize(
+    (node: HTMLElement) => node.clientHeight,
+    (value) => {
+      panel = value;
+    }
+  );
   let lift = $state(0);
-  const measureLift = frameSize<HTMLElement>((node) => {
-    lift = node.clientHeight;
-  });
+  const measureLift = frameSize(
+    (node: HTMLElement) => node.clientHeight,
+    (value) => {
+      lift = value;
+    }
+  );
   /** The plan's ring's width: the delegate tray's row keeps clear of it. */
   let ringWidth = $state(0);
-  const measureRing = frameSize<HTMLElement>((node) => {
-    ringWidth = node.clientWidth;
-  });
+  const measureRing = frameSize(
+    (node: HTMLElement) => node.clientWidth,
+    (value) => {
+      ringWidth = value;
+    }
+  );
   /**
    * Each conversation's offer as it is laid out, by id, kept as it stands
    * whether shown or not: handed the next conversation, the stack is the
@@ -3197,9 +3273,12 @@
    */
   const offerHeights: Record<string, number> = $state({});
   const measureOffer = (id: string) =>
-    frameSize<HTMLElement>((node) => {
-      offerHeights[id] = node.clientHeight;
-    });
+    frameSize(
+      (node: HTMLElement) => node.clientHeight,
+      (value) => {
+        offerHeights[id] = value;
+      }
+    );
   const stack = $derived(offerHeights[showing] ?? 0);
 
   /** The rows with an offer to stand on the tray row, and those with a tray. */
@@ -3824,9 +3903,12 @@
             class="basis-full min-w-0 group-data-asking/dock:invisible"
             inert={askOpen}
             transition:unfold
-            {@attach frameSize((node: HTMLElement) => {
-              findLineH = node.offsetHeight;
-            })}
+            {@attach frameSize(
+              (node: HTMLElement) => node.offsetHeight,
+              (value) => {
+                findLineH = value;
+              }
+            )}
           >
             <FindLine {find} />
           </div>

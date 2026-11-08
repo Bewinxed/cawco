@@ -99,10 +99,13 @@
   const coarse = new MediaQuery("(pointer: coarse)");
   let roomW = $state(0);
   let roomH = $state(0);
-  const measureRoom = frameSize<HTMLElement>((node) => {
-    roomW = node.clientWidth;
-    roomH = node.clientHeight;
-  });
+  const measureRoom = frameSize(
+    (node: HTMLElement) => ({ w: node.clientWidth, h: node.clientHeight }),
+    ({ w, h }) => {
+      roomW = w;
+      roomH = h;
+    }
+  );
   /**
    * Where the pill stands: near the well's foot (`?at=foot`), on a page
    * that scrolls under the card (`?at=scroll`: the pill moves with it, as

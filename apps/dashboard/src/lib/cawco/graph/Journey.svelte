@@ -69,13 +69,18 @@
       bringIntoView(row, { at: "nearest" });
     }
   });
-  const relaid = frameSize((node: HTMLElement) => {
-    const scroller = node.parentElement;
-    const row = scroller ? rowOf(scroller, kept) : null;
-    if (scroller && row && !touched) {
-      placeOpen(scroller, row);
+  // The list relaid places its open row again: a scroll, so it runs in
+  // the next frame with the writes (frameSize's `take`), not in the delivery.
+  const relaid = frameSize(
+    (node: HTMLElement) => node,
+    (node) => {
+      const scroller = node.parentElement;
+      const row = scroller ? rowOf(scroller, kept) : null;
+      if (scroller && row && !touched) {
+        placeOpen(scroller, row);
+      }
     }
-  });
+  );
   /** His own scroll, press or key in the list: its place is his. */
   const heard = (node: HTMLElement) => {
     const leave = () => {

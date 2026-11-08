@@ -32,13 +32,41 @@
       }
     };
   };
+  /** Tabs whose first report has been drawn: a resize after it is read in `read`. */
+  const drawnOnce = new WeakSet<Element>();
+  /** The drawings a delivery's reads answered, made in the next frame. */
+  const resized: (() => void)[] = [];
   const watchFold = (el: Element, tab: Folded): (() => void) => {
     folded.set(el, tab);
     // A first report's drawing is answered to the shared delivery, which
-    // runs it once every site there has read (frameObserver).
-    foldSizes ??= frameObserver((targets) => measureAll(targets)(), {
-      first: (entries) => measureAll(entries.map((entry) => entry.target)),
-    });
+    // runs it once every site there has read (frameObserver). A resize
+    // after it is read there too, on the layout the frame has just done,
+    // and drawn in the next frame: read in the next frame's callbacks
+    // instead, every frame of a rail drag laid the page out for it.
+    foldSizes ??= frameObserver(
+      () => {
+        for (const draw of resized.splice(0)) {
+          draw();
+        }
+      },
+      {
+        read: (entries) => {
+          const again = entries
+            .map((entry) => entry.target)
+            .filter((target) => drawnOnce.has(target));
+          if (again.length > 0) {
+            resized.push(measureAll(again));
+          }
+        },
+        first: (entries) => {
+          const targets = entries.map((entry) => entry.target);
+          for (const target of targets) {
+            drawnOnce.add(target);
+          }
+          return measureAll(targets);
+        },
+      }
+    );
     foldSizes.observe(el);
     return () => {
       folded.delete(el);

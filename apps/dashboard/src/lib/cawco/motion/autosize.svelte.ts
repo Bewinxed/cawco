@@ -151,15 +151,28 @@ export function autosize(
         done();
       }
     };
-    const fit = () => {
-      width = node.offsetWidth;
-      twin.style.width = `${width}px`;
+    /** What a fit reads off the field itself: its width, padding, border and ceiling. */
+    const readField = () => {
       // Its padding as the field resolves it, in px. The twin stands out of
       // flow, so a padding the stylesheet gives in percent (or a calc with
       // one, as design.css `pe-measure`) resolves against another box there
       // and would wrap the twin's text at another width than the field's.
       const style = getComputedStyle(node);
-      twin.style.padding = `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`;
+      return {
+        width: node.offsetWidth,
+        padding: `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`,
+        border: node.offsetHeight - node.clientHeight,
+        cap: Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY,
+      };
+    };
+    /** The field as a resize's delivery read it, for the refit it asked for. */
+    let readAtResize: ReturnType<typeof readField> | null = null;
+    const fit = () => {
+      const field = readAtResize ?? readField();
+      readAtResize = null;
+      ({ width } = field);
+      twin.style.width = `${width}px`;
+      twin.style.padding = field.padding;
       if (area) {
         (twin as HTMLTextAreaElement).value = area.value;
       } else {
@@ -171,15 +184,12 @@ export function autosize(
             : [document.createTextNode(" ")])
         );
       }
-      const border = node.offsetHeight - node.clientHeight;
-      natural = twin.scrollHeight + border;
+      natural = twin.scrollHeight + field.border;
       measured?.(natural);
       const folded = fold(natural);
       // Set no taller than the ceiling, so the glide runs over the height
       // the field shows rather than spending its start past the ceiling.
-      const cap =
-        Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY;
-      const next = folded ? "" : `${Math.min(natural, cap)}px`;
+      const next = folded ? "" : `${Math.min(natural, field.cap)}px`;
       // Marked before the height is written, so the style that starts the
       // change already has the fold's clock.
       const turning = wasFolded !== undefined && folded !== wasFolded;
@@ -213,13 +223,25 @@ export function autosize(
     node.addEventListener("input", fit);
     // A narrower field wraps into more lines. Refit on the next frame:
     // resizing the field inside its own observer's callback would report
-    // the resize back to that observer in the same frame. The observer's
-    // own box says how wide it is; asking the field would lay it out again.
+    // the resize back to that observer in the same frame. The field itself
+    // is read here, inside the delivery, on the layout the frame has just
+    // done, which costs no layout of its own; read in the next frame's
+    // callbacks instead, every frame of a rail drag laid the page out three
+    // times for it (nightly 7148: 7ms a frame). An empty field is one line
+    // at any width, and is not refit for one.
     // biome-ignore lint/style/noRestrictedGlobals: writes nothing: a new width asks `later` (nextFrame) for the refit, in the next frame with the field's other requests
     const sizes = new ResizeObserver(([entry]) => {
-      if (Math.abs(entry.borderBoxSize[0].inlineSize - width) > 0.5) {
-        later.request(false);
+      const inline = entry.borderBoxSize[0].inlineSize;
+      if (Math.abs(inline - width) <= 0.5) {
+        return;
       }
+      const empty = area ? area.value === "" : !node.textContent;
+      if (empty && width > 0) {
+        width = inline;
+        return;
+      }
+      readAtResize = readField();
+      later.request(false);
     });
     sizes.observe(node);
     return () => {

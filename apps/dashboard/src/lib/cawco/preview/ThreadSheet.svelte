@@ -91,9 +91,12 @@
 
   let host = $state<HTMLDivElement>();
   let room = $state(0);
-  const measured = frameSize<HTMLDivElement>((node) => {
-    room = node.offsetHeight;
-  });
+  const measured = frameSize(
+    (node: HTMLDivElement) => node.offsetHeight,
+    (value) => {
+      room = value;
+    }
+  );
   /** The stops as vaul takes them: px of the room as measured. */
   const stops = $derived(
     SHARES.map((share) => `${Math.round(room * share)}px`)

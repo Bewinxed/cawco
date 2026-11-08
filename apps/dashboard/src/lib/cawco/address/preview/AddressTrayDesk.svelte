@@ -195,9 +195,12 @@
             />
             {#if tray.open}
               <div
-                {@attach frameSize<HTMLElement>((node) => {
-                  floatHeight = node.offsetHeight;
-                })}
+                {@attach frameSize(
+                  (node: HTMLElement) => node.offsetHeight,
+                  (value) => {
+                    floatHeight = value;
+                  }
+                )}
                 class="absolute end-0 top-0 z-1 w-c-address-tray-w max-w-full"
                 data-slot="address-float"
               >

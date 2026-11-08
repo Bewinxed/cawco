@@ -167,9 +167,12 @@
           <div
             class={cn(head.head(), "absolute inset-x-0 top-0 z-2 px-4 pt-4")}
             data-slot="sheet-header"
-            {@attach frameSize((node: HTMLElement) => {
-              room = node.offsetHeight;
-            })}
+            {@attach frameSize(
+              (node: HTMLElement) => node.offsetHeight,
+              (value) => {
+                room = value;
+              }
+            )}
           >
             <!-- Close leads, before the title, a bare symbol in a glass
                  group of its own (DESIGN.md, Sheet; HIG, Sheets: a

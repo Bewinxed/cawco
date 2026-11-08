@@ -138,9 +138,12 @@
   <div
     class="absolute inset-x-0 top-0 z-2 flex flex-col"
     data-slot="output-head"
-    {@attach frameSize((node: HTMLElement) => {
-      headHeight = node.offsetHeight;
-    })}
+    {@attach frameSize(
+      (node: HTMLElement) => node.offsetHeight,
+      (value) => {
+        headHeight = value;
+      }
+    )}
   >
     <!-- One row with no ground (DESIGN.md, The Title Bars Follow Liquid Glass
        Rule): the install's name, then Stop install and Close, each a bare

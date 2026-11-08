@@ -370,9 +370,12 @@
     const frame = requestAnimationFrame(readMark);
     return () => cancelAnimationFrame(frame);
   });
-  const measureWell = frameSize<HTMLElement>((node) => {
-    well = { w: node.clientWidth, h: node.clientHeight };
-  });
+  const measureWell = frameSize<HTMLElement, { w: number; h: number }>(
+    (node) => ({ w: node.clientWidth, h: node.clientHeight }),
+    (value) => {
+      well = value;
+    }
+  );
   /** A pill on the page pressed: its thread opens, beside it on a desk, in the Comments sheet on a phone. */
   function openFromPage(one: Pin) {
     openPin = one.id;

@@ -896,8 +896,13 @@
     const toward = travel && rects.at(tabs.order.indexOf(travel.toward));
     const { width } = rects.viewport;
     const track = node;
-    if (!(scrollable && track && rect && width > 0)) {
+    // A track whose tabs all fit has nowhere to scroll, and nothing to
+    // place: read there anyway, its scroll and its tokens laid the page out
+    // in the frame's callbacks on every frame the track resized (a rail
+    // drag on nightly 7148: 3ms a frame).
+    if (!(scrollable && track && rect && width > 0 && overflows)) {
       place = null;
+      rideFrom = null;
       return;
     }
     place = () => {

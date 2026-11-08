@@ -825,9 +825,12 @@
   <div
     class="absolute inset-x-0 top-0 z-2 flex flex-col"
     data-slot="rail-head"
-    {@attach frameSize((node: HTMLElement) => {
-      headHeight = node.offsetHeight;
-    })}
+    {@attach frameSize(
+      (node: HTMLElement) => node.offsetHeight,
+      (value) => {
+        headHeight = value;
+      }
+    )}
   >
     <!-- One row: Close leading on the sheet, the centred title, the glass;
        searching, the field and its Cancel. The title names a part of the

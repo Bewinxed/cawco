@@ -60,9 +60,12 @@
   const LIVE = { w: FORMS.tablet, h: (FORMS.tablet * 10) / 16 };
   /** The view's width, which the live page scales to: read as it mounts, and a change in the next frame (frameSize). */
   let viewWidth = $state(0);
-  const measureView = frameSize<HTMLElement>((view) => {
-    viewWidth = view.clientWidth;
-  });
+  const measureView = frameSize(
+    (view: HTMLElement) => view.clientWidth,
+    (value) => {
+      viewWidth = value;
+    }
+  );
 </script>
 
 <div

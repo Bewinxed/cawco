@@ -99,10 +99,13 @@
    */
   let canvasWidth = $state(0);
   let canvasHeight = $state(0);
-  const measureCanvas = frameSize<HTMLElement>((node) => {
-    canvasWidth = node.clientWidth;
-    canvasHeight = node.clientHeight;
-  });
+  const measureCanvas = frameSize(
+    (node: HTMLElement) => [node.clientWidth, node.clientHeight] as const,
+    ([width, height]) => {
+      canvasWidth = width;
+      canvasHeight = height;
+    }
+  );
   /** The least zoom at which a card's smallest text (--text-meta) is 11px. */
   let floor = $state(1);
   let fitter = $state<ReturnType<typeof TaskCanvasFit>>();

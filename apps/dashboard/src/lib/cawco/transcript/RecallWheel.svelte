@@ -220,9 +220,12 @@
   let ghosts = $state<HTMLElement>();
   /** The query chip's width: read as it mounts, and a change in the next frame (frameSize). */
   let chipWidth = $state(0);
-  const measureChip = frameSize<HTMLElement>((node) => {
-    chipWidth = node.offsetWidth;
-  });
+  const measureChip = frameSize(
+    (node: HTMLElement) => node.offsetWidth,
+    (value) => {
+      chipWidth = value;
+    }
+  );
   /** The row on the line. */
   let pick = $state(0);
   $effect(() => {

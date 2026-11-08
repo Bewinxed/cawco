@@ -65,24 +65,46 @@ export interface FrameObserver {
 }
 
 /**
- * An element's size, as a Svelte attachment: `take` reads it as the element
- * mounts, so the first frame painted is laid out from it, and again in the
- * next frame after each resize (frameObserver). The dashboard's one way to
- * hold a box's size in state: Svelte's dimension bindings (`bind:clientWidth`
- * and its kin, lint: none stands unexempted) are ResizeObservers that write
- * inside the delivery, and WebKit reported "ResizeObserver loop completed
- * with undelivered notifications" when what they wrote laid the page out
- * again (PaneTabs' card height, c4313c3d8).
+ * An element's size, as a Svelte attachment: `measure` reads it and `take`
+ * writes what it read into state. Both run as the element mounts, so the
+ * first frame painted is laid out from it. After each resize `measure`
+ * reads inside the delivery, on the layout the frame has just done, which
+ * costs no layout of its own, and `take` writes in the next frame
+ * (frameObserver `read`). The dashboard's one way to hold a box's size in
+ * state: Svelte's dimension bindings (`bind:clientWidth` and its kin, lint:
+ * none stands unexempted) are ResizeObservers that write inside the
+ * delivery, and WebKit reported "ResizeObserver loop completed with
+ * undelivered notifications" when what they wrote laid the page out again
+ * (PaneTabs' card height, c4313c3d8). Read in the next frame's callbacks
+ * instead, beside the other sites' writes, a pane's width laid the page out
+ * on every frame of a rail drag (conversation-frames: 80 forced style
+ * passes, 950ms at 4x).
  *
- * `take` only reads the element and writes state: its first read is
- * untracked, so nothing it reads re-runs the attachment.
+ * `measure` only reads the element; `take` only writes state. Both are
+ * untracked as the element mounts, so nothing they read re-runs the
+ * attachment.
  */
-export function frameSize<T extends Element>(
-  take: (node: T) => void
+export function frameSize<T extends Element, V>(
+  measure: (node: T) => V,
+  take: (value: V) => void
 ): Attachment<T> {
   return (node) => {
-    untrack(() => take(node));
-    const sized = frameObserver(() => take(node));
+    untrack(() => take(measure(node)));
+    let measured: { value: V } | null = null;
+    const sized = frameObserver(
+      () => {
+        if (measured) {
+          const { value } = measured;
+          measured = null;
+          take(value);
+        }
+      },
+      {
+        read: () => {
+          measured = { value: measure(node) };
+        },
+      }
+    );
     sized.observe(node);
     return () => sized.disconnect();
   };
@@ -387,6 +409,31 @@ if (Native && typeof window !== "undefined") {
 }
 
 /**
+ * The sites whose answer is due in the next frame, each by the call that
+ * gives it, in the order they asked. One frame callback answers them all:
+ * a callback a site, a rail drag that resized forty observed boxes asked
+ * for forty callbacks every frame (the owner's trace of nightly 7148: 1,702
+ * of them in 6.9s).
+ */
+const due = new Map<object, () => void>();
+let dueFrame = 0;
+
+const answerDue = () => {
+  dueFrame = 0;
+  const now = [...due.values()];
+  due.clear();
+  // One site's failure is reported as its own and answers the rest, as
+  // when each answer was a frame callback of its own.
+  for (const answer of now) {
+    try {
+      answer();
+    } catch (error) {
+      reportError(error);
+    }
+  }
+};
+
+/**
  * `answer` null: a site that does all it does inside the delivery
  * (`inside`), with no answer in the next frame.
  */
@@ -394,16 +441,19 @@ export function frameObserver(
   answer: ((changed: Element[]) => void) | null,
   options: Inside = {}
 ): FrameObserver {
-  let frame = 0;
   const changed = new Set<Element>();
+  const me = {};
+  const respond = () => {
+    const targets = [...changed];
+    changed.clear();
+    answer?.(targets);
+  };
   const request = () => {
-    if (frame === 0 && answer) {
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        const targets = [...changed];
-        changed.clear();
-        answer(targets);
-      });
+    if (answer && !due.has(me)) {
+      due.set(me, respond);
+      if (dueFrame === 0) {
+        dueFrame = requestAnimationFrame(answerDue);
+      }
     }
   };
   const site: Site = {
@@ -428,8 +478,7 @@ export function frameObserver(
       changed.delete(target);
     },
     disconnect: () => {
-      cancelAnimationFrame(frame);
-      frame = 0;
+      due.delete(me);
       held.releaseAll();
       changed.clear();
       askedToRead.delete(site);

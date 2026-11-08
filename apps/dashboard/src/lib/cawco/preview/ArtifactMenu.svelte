@@ -106,21 +106,30 @@
   let clamped = $state(false);
   /** The box's width when the two lines first cut the title. */
   let clampedAt = 0;
-  const measureClamp = frameSize<HTMLElement>((node) => {
-    // Held once cut until the box grows past the chevron's room: the chevron
-    // leaving the words could uncut them, and drawn inline again it would
-    // cut them again; the head's fit widening the box (a control gone to
-    // More) tries the words inline again.
-    const width = node.clientWidth;
-    if (clamped) {
-      if (width > clampedAt + numberOf("--icon-sm") + numberOf("--space-1")) {
-        clamped = false;
+  const measureClamp = frameSize<
+    HTMLElement,
+    { cut: boolean; room: number; width: number }
+  >(
+    (node) => ({
+      width: node.clientWidth,
+      cut: node.scrollHeight > node.clientHeight + 1,
+      room: numberOf("--icon-sm") + numberOf("--space-1"),
+    }),
+    ({ width, cut, room }) => {
+      // Held once cut until the box grows past the chevron's room: the
+      // chevron leaving the words could uncut them, and drawn inline again
+      // it would cut them again; the head's fit widening the box (a control
+      // gone to More) tries the words inline again.
+      if (clamped) {
+        if (width > clampedAt + room) {
+          clamped = false;
+        }
+      } else if (cut) {
+        clamped = true;
+        clampedAt = width;
       }
-    } else if (node.scrollHeight > node.clientHeight + 1) {
-      clamped = true;
-      clampedAt = width;
     }
-  });
+  );
   $effect(() => {
     if (shown.title) {
       untrack(() => {

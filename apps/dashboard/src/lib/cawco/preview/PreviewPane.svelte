@@ -2030,10 +2030,13 @@
    */
   let roomW = $state(0);
   let roomH = $state(0);
-  const measureRoom = frameSize<HTMLElement>((node) => {
-    roomW = node.clientWidth;
-    roomH = node.clientHeight;
-  });
+  const measureRoom = frameSize(
+    (node: HTMLElement) => [node.clientWidth, node.clientHeight] as const,
+    ([width, height]) => {
+      roomW = width;
+      roomH = height;
+    }
+  );
   /**
    * The pin whose card is drawn: the open one, beside its pill once the
    * page has said where that stands (`pinHeard`; at once as the foot sheet,

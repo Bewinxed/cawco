@@ -51,9 +51,12 @@
   };
 
   const measured: Attachment<HTMLElement> = (node) => {
-    const stop = frameSize((box: HTMLElement) => {
-      onheight?.(box.offsetHeight);
-    })(node);
+    const stop = frameSize(
+      (box: HTMLElement) => box.offsetHeight,
+      (height) => {
+        onheight?.(height);
+      }
+    )(node);
     return () => {
       stop?.();
       onheight?.(0);

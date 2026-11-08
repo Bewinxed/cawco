@@ -301,17 +301,29 @@ interface Nest {
 
 const nests = new Map<Element, Nest>();
 let nestSizes: FrameObserver | null = null;
+/** What the size observer read inside its delivery, written in the next frame. */
+const nestReads: NestReads = [];
 /** Lists drawn in this update, measured together before rows are read. */
 const drawnNow = new Set<Element>();
 /** Where the last list under each parent, and of each kind, stood. */
 const byHost = new WeakMap<Element, Record<string, string>>();
 const byKind = new Map<string, Record<string, string>>();
 
-function measureNests(lists: Iterable<Element>): void {
-  const measured = [...lists].map((list) => {
+/** Each list's insets, read; `writeNests` puts them on. */
+type NestReads = (readonly [Nest, Measured | null] | null)[];
+
+function readNests(lists: Iterable<Element>): NestReads {
+  return [...lists].map((list) => {
     const nest = nests.get(list);
     return nest ? ([nest, nest.measure()] as const) : null;
   });
+}
+
+function measureNests(lists: Iterable<Element>): void {
+  writeNests(readNests(lists));
+}
+
+function writeNests(measured: NestReads): void {
   for (const each of measured) {
     if (!each?.[1]) {
       continue;
@@ -419,9 +431,16 @@ export function nestFrom(
     // content box, and watching that would hear its own write back as a
     // second resize.
     // A list's first measure is the draw's (`settleDrawn`, before rows are
-    // read); a resize after it in the next frame (frameObserver): its insets
-    // lay the lists in it out again.
-    nestSizes ??= frameObserver(measureNests);
+    // read); a resize after it is read inside the delivery, on the layout
+    // the frame has just done, and written in the next frame
+    // (frameObserver `read`): its insets lay the lists in it out again.
+    // Read in the next frame's callbacks instead, every frame of a rail
+    // drag laid the page out there for it (nightly 7148: 4ms a frame).
+    nestSizes ??= frameObserver(() => writeNests(nestReads.splice(0)), {
+      read: (entries) => {
+        nestReads.push(...readNests(entries.map((entry) => entry.target)));
+      },
+    });
     nestSizes.observe(node, { box: "border-box" });
     return () => {
       nests.delete(node);

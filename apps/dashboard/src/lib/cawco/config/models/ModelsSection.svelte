@@ -169,9 +169,12 @@
   });
   /** The key's status lines' height, which their box glides to: read as it mounts, and a change in the next frame (frameSize). */
   let keyHeight = $state(0);
-  const measureKey = frameSize<HTMLElement>((node) => {
-    keyHeight = node.clientHeight;
-  });
+  const measureKey = frameSize(
+    (node: HTMLElement) => node.clientHeight,
+    (value) => {
+      keyHeight = value;
+    }
+  );
 
   /**
    * OpenRouter returns only to https (its OAuth `callback_url` takes "https
@@ -392,9 +395,12 @@
   });
   /** OpenRouter's status lines' height, which their box glides to: read as it mounts, and a change in the next frame (frameSize). */
   let openrouterHeight = $state(0);
-  const measureOpenrouter = frameSize<HTMLElement>((node) => {
-    openrouterHeight = node.clientHeight;
-  });
+  const measureOpenrouter = frameSize(
+    (node: HTMLElement) => node.clientHeight,
+    (value) => {
+      openrouterHeight = value;
+    }
+  );
 
   /**
    * OpenRouter's redirect lands here with `?code=`: exchange it, then strip it

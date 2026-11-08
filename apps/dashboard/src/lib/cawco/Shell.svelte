@@ -838,9 +838,11 @@
 
   const followPanes: Attachment<HTMLElement> = (slot) => {
     const written = new WeakMap<HTMLElement, string>();
-    const place = () => {
+    /** Where each column goes, read off the groups as they are laid out. */
+    const measure = (): [HTMLElement, string, string][] => {
       const areaLeft = layoutLeft(slot);
       const areaRight = areaLeft + slot.offsetWidth;
+      const places: [HTMLElement, string, string][] = [];
       for (const col of slot.querySelectorAll<HTMLElement>(
         ':scope > [data-slot="col"]'
       )) {
@@ -851,19 +853,40 @@
           continue;
         }
         const left = layoutLeft(group);
-        const x = `${left - areaLeft}px`;
-        const w = `${Math.max(0, Math.min(group.offsetWidth, areaRight - left))}px`;
+        places.push([
+          col,
+          `${left - areaLeft}px`,
+          `${Math.max(0, Math.min(group.offsetWidth, areaRight - left))}px`,
+        ]);
+      }
+      return places;
+    };
+    const write = (places: [HTMLElement, string, string][]) => {
+      for (const [col, x, w] of places) {
         if (written.get(col) === `${x} ${w}`) {
           continue;
         }
         written.set(col, `${x} ${w}`);
-        col.style.setProperty("--col-x", x);
-        col.style.setProperty("--col-w", w);
+        // The box's own start and width, not custom properties: one of
+        // those, inherited by every tab in the column, restyled them all
+        // when it changed (a rail drag on nightly 7148, 151 elements a
+        // frame, laid out again under the swipe's read).
+        col.style.insetInlineStart = x;
+        col.style.width = w;
       }
     };
-    // Placed by the effect below as the groups stand, and a change in the
-    // next frame (frameObserver): the columns' widths are the bar's layout.
-    const sizes = frameObserver(place);
+    const place = () => write(measure());
+    // Placed by the effect below as the groups stand; a change is measured
+    // inside the delivery, on the layout the frame has just done, and
+    // written in the next frame (frameObserver `read`). Measured in the next
+    // frame's callbacks instead, it laid the page out there on every frame
+    // of a rail drag, under the other callbacks' writes.
+    let measured: [HTMLElement, string, string][] = [];
+    const sizes = frameObserver(() => write(measured), {
+      read: () => {
+        measured = measure();
+      },
+    });
     sizes.observe(slot);
     // A column that comes or goes is a group that does: watch the groups the
     // columns stand over.
@@ -1347,22 +1370,22 @@
             >
               {#each barLeaves as leaf, i (leaf.id)}
                 <!-- Each group's tabs, standing over the group they belong
-                   to: its box follows the group's (followPanes: left and
-                   width, --col-x and --col-w). The divider between two
+                   to: its box follows the group's (followPanes writes its
+                   inline start and width, which nothing under it inherits:
+                   custom properties there restyled every tab in it on each
+                   frame of a rail drag). The divider between two
                    groups goes on up through the bar as the line between
                    their columns, where the grid's own stands (the 1px
                    between the groups): the column's shadow, outside its
                    box. -->
                 <div
                   data-slot="col"
-                  class="group/col absolute inset-y-0 start-(--col-start) w-(--col-size) flex min-w-0 overflow-hidden data-seam:shadow-(--seam-line)"
+                  class="group/col absolute inset-y-0 start-0 w-full flex min-w-0 overflow-hidden data-seam:shadow-(--seam-line)"
                   data-col={leaf.id}
                   data-focused={(groupsApart &&
                     workspace.focusedLeafId === leaf.id) ||
                     undefined}
                   data-seam={i > 0 || undefined}
-                  style:--col-start="var(--col-x, 0px)"
-                  style:--col-size="var(--col-w, 100%)"
                   style:--seam-line="-1px 0 0 var(--border-hairline)"
                 >
                   <!-- The group the keyboard belongs to, as the group says

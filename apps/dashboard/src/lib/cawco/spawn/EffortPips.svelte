@@ -28,13 +28,19 @@
 
   /** The chip's width and the track's: read as each mounts, and a change in the next frame (frameSize). */
   let knobWidth = $state(0);
-  const measureKnob = frameSize<HTMLElement>((node) => {
-    knobWidth = node.offsetWidth;
-  });
+  const measureKnob = frameSize(
+    (node: HTMLElement) => node.offsetWidth,
+    (width) => {
+      knobWidth = width;
+    }
+  );
   let trackWidth = $state(0);
-  const measureTrack = frameSize<HTMLElement>((node) => {
-    trackWidth = node.clientWidth;
-  });
+  const measureTrack = frameSize(
+    (node: HTMLElement) => node.clientWidth,
+    (width) => {
+      trackWidth = width;
+    }
+  );
   /** Transitions wait for the chip's first measurement, so nothing slides in from zero. */
   let ready = $state(false);
   $effect(() => {

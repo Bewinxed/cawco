@@ -41,9 +41,12 @@
 
   const room = headRoom();
   const sized: Attachment<HTMLElement> = (node) => {
-    const stop = frameSize((one: HTMLElement) => {
-      room.height = one.offsetHeight;
-    })(node);
+    const stop = frameSize(
+      (one: HTMLElement) => one.offsetHeight,
+      (value) => {
+        room.height = value;
+      }
+    )(node);
     return () => {
       stop?.();
       room.height = null;
