@@ -66,7 +66,7 @@ import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { askWords } from "@cawco/core/words/asks";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
-import type { DesignProposalFile } from "./db/schema";
+import type { DesignProposalFile } from "./db/stored-types";
 import { type BuiltTokens, buildTokens } from "./design-tokens";
 import { tokensIn } from "./dtcg-resolver";
 import { boardTitle } from "./labels";
