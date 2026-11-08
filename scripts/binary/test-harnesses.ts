@@ -44,6 +44,7 @@ import type {
   Harness,
   SessiondAdoption,
 } from "../../packages/agent/src/harness";
+import { neutralSubagentChange } from "../../packages/agent/src/harnesses/neutral-subagents";
 import { KeeperPool } from "../../packages/agent/src/keepers";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
 import {
@@ -329,6 +330,7 @@ for (const kind of HARNESSES) {
   };
   const adapter: Harness = {
     custody: { kind: "keeper", ...adoption },
+    subagentChange: neutralSubagentChange,
     ...(kind === "claude" ? claudeFleet : {}),
     kind,
     auth: "unauthenticated",
