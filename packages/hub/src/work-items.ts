@@ -148,6 +148,7 @@ import type {
 } from "@cawco/core/protocol";
 import { artifactLink, sessionLink, todoLink } from "@cawco/core/references";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { shellQuote } from "@cawco/core/shell-quote";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import { received } from "@cawco/core/stored-json";
 import { WorkspaceArchivedSchema } from "@cawco/core/stored-shapes";
@@ -205,7 +206,6 @@ import {
   land,
   landingQueue,
   pushBranch,
-  quote,
   type Refusal,
   reportedCommits,
   reportedDiffstat,
@@ -1841,7 +1841,7 @@ const outputsProbe = (outputs: string[]): string =>
   outputs
     .map(
       (path) =>
-        `p=${quote(path)}; if [ -L "$p" ]; then echo "link $p"; elif [ -d "$p" ]; then find "$p" -type l | while IFS= read -r f; do echo "link $f"; done; find "$p" -type f | while IFS= read -r f; do echo "size $(wc -c < "$f" | tr -d ' ') $f"; done; [ -n "$(find "$p" -type f | head -n 1)" ] || echo "missing $p"; elif [ ! -f "$p" ]; then echo "missing $p"; else echo "size $(wc -c < "$p" | tr -d ' ') $p"; fi`
+        `p=${shellQuote(path)}; if [ -L "$p" ]; then echo "link $p"; elif [ -d "$p" ]; then find "$p" -type l | while IFS= read -r f; do echo "link $f"; done; find "$p" -type f | while IFS= read -r f; do echo "size $(wc -c < "$f" | tr -d ' ') $f"; done; [ -n "$(find "$p" -type f | head -n 1)" ] || echo "missing $p"; elif [ ! -f "$p" ]; then echo "missing $p"; else echo "size $(wc -c < "$p" | tr -d ' ') $p"; fi`
     )
     .join("; ");
 
@@ -1850,7 +1850,7 @@ const outputsProbe = (outputs: string[]): string =>
  * workspace's root a line: the file itself, or every file under a folder.
  */
 const outputFilesCommand = (path: string): string =>
-  `p=${quote(path)}; if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort; else echo "$p"; fi`;
+  `p=${shellQuote(path)}; if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort; else echo "$p"; fi`;
 
 /** `$TMPDIR/outputs/` as a delegate is told of it (core `OUTPUTS_DIR`). */
 const SCRATCH_OUTPUTS = `$TMPDIR/${OUTPUTS_DIR}/`;
@@ -5104,7 +5104,7 @@ export const createWorkItems = ({
         return { workspaceId: id, changed, dirty: changed, ahead: 0 };
       }
       const skip = handedOver(workspace).map(
-        (path) => ` ${quote(`:(exclude,literal)${path}`)}`
+        (path) => ` ${shellQuote(`:(exclude,literal)${path}`)}`
       );
       const lines = (name: string): string =>
         `{ [ -z "$${name}" ] || printf '%s\\n' "$${name}"; } | wc -l`;
@@ -5867,11 +5867,11 @@ export const createWorkItems = ({
         made,
         source.id,
       ]);
-      const branch = quote(workspace.branch);
+      const branch = shellQuote(workspace.branch);
       const set = await command(
         workspace.machineId,
         workspace.path,
-        `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${quote(`origin/${workspace.base}`)} ${branch}`,
+        `${SAFE_GIT_SHELL}git checkout --quiet -B ${branch} && git branch --quiet --set-upstream-to=${shellQuote(`origin/${workspace.base}`)} ${branch}`,
         GIT_TIMEOUT_MS,
         refOf(workspace),
         // A checkout: one that left a path the boundary keeps other than
@@ -5910,7 +5910,7 @@ export const createWorkItems = ({
     const moved = await command(
       workspace.machineId,
       workspace.path,
-      `${SAFE_GIT_SHELL}git checkout --quiet --detach ${quote(at)}`,
+      `${SAFE_GIT_SHELL}git checkout --quiet --detach ${shellQuote(at)}`,
       GIT_TIMEOUT_MS,
       refOf(workspace),
       { moves: at }
@@ -6275,7 +6275,7 @@ export const createWorkItems = ({
     const there = await command(
       workspace.machineId,
       "/",
-      `test -d ${quote(`${workspace.path}/.git`)}`,
+      `test -d ${shellQuote(`${workspace.path}/.git`)}`,
       GIT_TIMEOUT_MS
     );
     return there.exitCode === 0 ? workspace : undefined;
@@ -7805,7 +7805,7 @@ export const createWorkItems = ({
     const outputs = item.outputs ?? [];
     const pathspec =
       outputs.length > 0
-        ? ` -- .${outputs.map((path) => ` ${quote(`:(exclude,literal)${path}`)}`).join("")}`
+        ? ` -- .${outputs.map((path) => ` ${shellQuote(`:(exclude,literal)${path}`)}`).join("")}`
         : "";
     const status = (
       await read("its uncommitted files", statusCommand(outputs))
@@ -8150,11 +8150,11 @@ export const createWorkItems = ({
     // with each file's hash.
     const hashed =
       outputs.length > 0
-        ? ` && for p in ${outputs.map(quote).join(" ")}; do if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort | while IFS= read -r f; do echo "$f $(git hash-object -- "$f")"; done | git hash-object --stdin; else git hash-object -- "$p"; fi || exit 1; done`
+        ? ` && for p in ${outputs.map(shellQuote).join(" ")}; do if [ -d "$p" ]; then find "$p" -type f | LC_ALL=C sort | while IFS= read -r f; do echo "$f $(git hash-object -- "$f")"; done | git hash-object --stdin; else git hash-object -- "$p"; fi || exit 1; done`
         : "";
     const declared =
       inputPaths.length > 0
-        ? ` && for path in ${inputPaths.map(quote).join(" ")}; do git rev-parse --verify -q "HEAD:$path" || echo absent; done`
+        ? ` && for path in ${inputPaths.map(shellQuote).join(" ")}; do git rev-parse --verify -q "HEAD:$path" || echo absent; done`
         : "";
     const read = await runIn(workspace, item)(
       `left=$(${statusCommand(outputs)}) && test -z "$left" && git rev-parse --verify 'HEAD^{tree}'${hashed}${declared}`,
@@ -8967,7 +8967,7 @@ export const createWorkItems = ({
         continue;
       }
       const read = await runIn(workspace, item)(
-        `base64 < "$TMPDIR/${OUTPUTS_DIR}/"${quote(one.path)}`,
+        `base64 < "$TMPDIR/${OUTPUTS_DIR}/"${shellQuote(one.path)}`,
         GIT_TIMEOUT_MS
       );
       if (read.exitCode !== 0) {
@@ -9005,7 +9005,7 @@ export const createWorkItems = ({
     const files: { path: string; content: Uint8Array }[] = [];
     for (const path of listed.stdout.split("\n").filter(Boolean)) {
       const read = await runIn(workspace, item)(
-        `base64 < ${quote(path)}`,
+        `base64 < ${shellQuote(path)}`,
         GIT_TIMEOUT_MS
       );
       if (read.exitCode !== 0) {
@@ -9105,7 +9105,7 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<void> => {
-    const target = quote(`origin/${workspace.base}`);
+    const target = shellQuote(`origin/${workspace.base}`);
     let [row] = db.workspacesNamed(workspace.id);
     while (row?.cutFrom && !row.cutFrom.landed) {
       const from = row.cutFrom;
@@ -9270,7 +9270,7 @@ export const createWorkItems = ({
     item: WorkItemRow
   ): Promise<string[]> => {
     const diff = await runIn(workspace, item)(
-      changedPathsCommand(quote(`origin/${workspace.base}`)),
+      changedPathsCommand(shellQuote(`origin/${workspace.base}`)),
       GIT_TIMEOUT_MS
     );
     if (diff.exitCode !== 0) {
@@ -9391,7 +9391,7 @@ export const createWorkItems = ({
   ): Promise<TargetMap | GateRefusal> => {
     const ref = touched.includes(path) ? "HEAD" : `origin/${workspace.base}`;
     const shown = await runIn(workspace, item)(
-      `git show ${quote(`${ref}:${path}`)}`,
+      `git show ${shellQuote(`${ref}:${path}`)}`,
       GIT_TIMEOUT_MS
     );
     const map =
