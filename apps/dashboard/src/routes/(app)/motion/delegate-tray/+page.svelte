@@ -18,7 +18,8 @@
    * efforts: its mode chip opens the picker, Full Send's question in it,
    * and its effort chip the sibling the picker's surface glides to.
    */
-  import { CAPABILITIES_NONE, PERMISSION_MODES } from "@cawco/core/harness";
+  import { CAPABILITIES_NONE } from "@cawco/core/harness";
+  import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { onMount } from "svelte";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";

@@ -8,7 +8,7 @@
  * compacts it later on its own. What the person reads of it is the hub's
  * {@link ContextLine}s in its transcript.
  */
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 
 /** A session's context as its harness last reported it, and where that harness compacts it on its own: the reading a filing fired at. */
 export interface ContextFill {
