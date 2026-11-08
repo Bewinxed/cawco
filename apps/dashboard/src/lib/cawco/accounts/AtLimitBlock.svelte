@@ -19,7 +19,7 @@
     COMPACT_METHODS,
     type CompactMethod,
   } from "@cawco/core/accounts";
-  import { HARNESSES } from "@cawco/core/harness";
+  import { HARNESSES } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
