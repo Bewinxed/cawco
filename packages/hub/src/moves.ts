@@ -36,7 +36,6 @@ import {
   type MoveEstimate,
   type MoveInspection,
   type MoveJob,
-  type MoveLargeFile,
   type MoveLfsResult,
   type MoveProgressFrame,
   type MoveRemoteAuth,
@@ -54,11 +53,7 @@ import {
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
-import {
-  type MachinePath,
-  MachinePathRefused,
-  machinePath,
-} from "@cawco/core/machine-path";
+import { MachinePathRefused, machinePath } from "@cawco/core/machine-path";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { received } from "@cawco/core/stored-json";
@@ -76,6 +71,7 @@ import {
   type PlaceRow,
   type ProjectRow,
 } from "./db";
+import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
@@ -87,57 +83,6 @@ export class MoveAway extends Error {
     super("a machine this move needs is away");
     this.machineId = machineId;
   }
-}
-
-/** Everything a job has learned and decided, as its record keeps it. */
-export interface MoveState {
-  /** The person said "Move it": in New session, or on the parked ask. */
-  approved?: boolean;
-  /** Set when `approval` is a step: what "Move it" does. */
-  ask?: MoveAsk;
-  /** The ask parked for a yes nobody gave in New session: its request id. */
-  askId?: string;
-  /** The uncommitted large files the approval sends to LFS. */
-  bigFiles: MoveLargeFile[];
-  bytes: number;
-  /**
-   * The source's `origin` URL carries a credential. It is never kept here:
-   * each target step that reaches the remote has the source read it for
-   * that one call ({@link remoteAuthFor}).
-   */
-  cloneCredential?: true;
-  /** The outside remote's URL, as the source's `origin` names it, with no credential in it. */
-  cloneUrl?: string;
-  error?: MoveError;
-  from: MoveJob["from"];
-  ignoredSecrets: string[];
-  ignores: boolean;
-  kept?: string;
-  lfs?: MoveLfsResult;
-  lfsFile?: MoveJob["lfsFile"];
-  moved?: string;
-  progress?: MoveJob["progress"];
-  /** The first prompt's send, so it goes once whatever restarts. */
-  promptUuid: string;
-  /** The source's root commit: the target's checkout is that repository, recorded as it is added. */
-  root?: string;
-  /** The snapshot taken, or (no snapshot step) the source's HEAD to check out. */
-  snapshot?: MoveSnapshotResult;
-  /** The branch a snapshot goes to. */
-  snapshotBranch: string;
-  sourceHome: string;
-  sourceMachineId: string;
-  sourcePath: string;
-  stayed?: string;
-  steps: MoveStep[];
-  /** A Cancel that the machine running the step has not heard yet: told at its register. */
-  stopOn?: string;
-  /** Once cancelled: the step it stopped at. */
-  stoppedAt?: MoveStep;
-  targetHome: string;
-  targetInstanceId: string;
-  targetMachineId: string;
-  targetPath: MachinePath;
 }
 
 export interface MovesDeps {

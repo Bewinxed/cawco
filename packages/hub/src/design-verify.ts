@@ -63,7 +63,7 @@ import type {
   DesignFinding,
   DesignPick,
   WorkItemSubmission,
-} from "./db/schema";
+} from "./db/stored-types";
 import { designShaped } from "./design-offers";
 import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
