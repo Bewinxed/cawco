@@ -24,7 +24,7 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import type { ChildLimit } from "./harness";
 import type { BuildInfo, SessionLimits } from "./index";
-import { darwinSocketRoot, SESSIOND_LINK, shortLink } from "./paths";
+import { darwinSocketRoot, shortLink } from "./socket-root";
 import type { CommandAckStage } from "./stream";
 
 /**
@@ -432,7 +432,7 @@ export const sessiondEndpoint = (): string => {
 
 /**
  * macOS: sessiond's dir `~/.cawco` by its short name
- * (`/private/tmp/cawco-<uid>/c-<home hash>`, paths.ts `shortLink`), made or made again
+ * (`/private/tmp/cawco-<uid>/c-<home hash>`, socket-root.ts `shortLink`), made or made again
  * first. Every derivation of the endpoint passes here, and sessiond itself
  * calls it for an endpoint its unit names there, so after a restart clears
  * `/private/tmp` whichever side starts first makes the name again.
@@ -448,6 +448,9 @@ export const sessiondLinkDir = (): string =>
  */
 const sessiondHomeDir = (home: string = homedir()): string =>
   resolve(home, ".cawco");
+
+/** The short name of sessiond's dir (`~/.cawco`) on macOS ({@link shortLink}). */
+const SESSIOND_LINK = "c";
 
 /**
  * The short name's own name: `c-` and its HOME's first 8 hex of sha256, as
