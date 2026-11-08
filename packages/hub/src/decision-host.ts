@@ -29,17 +29,17 @@
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
+import { agentReact } from "@cawco/core/agent-react";
+import { readBuildInfo } from "@cawco/core/build-info";
+import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
+import { bundled } from "@cawco/core/bundled";
+import { unlayeredRules } from "@cawco/core/css-layers";
+import { DIALS_REM, DIALS_ROOT } from "@cawco/core/dials-root";
+import { houseFaceSheet } from "@cawco/core/house-faces";
+import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { SveltePlugin } from "bun-plugin-svelte";
-import { agentReact } from "./agent-react";
-import { readBuildInfo } from "./build-info";
-import { refuseSchemeLowering } from "./bundle-css-guard";
-import { bundled } from "./bundled";
-import { unlayeredRules } from "./css-layers";
-import { DIALS_REM, DIALS_ROOT } from "./dials-root";
 import { hostFiles, writeHostFiles } from "./host-build";
-import { houseFaceSheet } from "./house-faces";
 import { compileSheets, pageFiles, shadowSheet } from "./page-css";
-import { embeddedFile, standalone } from "./runtime";
 
 const HOST_DIR = new URL(
   "../../../apps/dashboard/src/lib/cawco/decisions/host/",
@@ -95,8 +95,8 @@ const appEnv: Bun.BunPlugin = {
 /** A compiled component's import of the Svelte runtime: `import 'svelte/…'` or `from 'svelte/…'`, either quote. */
 const SVELTE_IMPORT = /(\bfrom |\bimport )["'](svelte\/[^"']+)["']/gu;
 
-/** The core package's own folder: unplugin-icons finds its icon sets (`@iconify-json/*`) from it. */
-const CORE_DIR = new URL("../", import.meta.url).pathname;
+/** The hub package's own folder: unplugin-icons finds its icon sets (`@iconify-json/*`) from it. */
+const HUB_DIR = new URL("../", import.meta.url).pathname;
 
 /**
  * The house's icons as the dashboard names them (`~icons/<set>/<name>`,
@@ -115,7 +115,7 @@ async function iconsPlugin(): Promise<Bun.BunPlugin> {
   ]);
   return iconIdsOnly(
     icons.bun({
-      collectionsNodeResolvePath: CORE_DIR,
+      collectionsNodeResolvePath: HUB_DIR,
       compiler: {
         extension: "js",
         compiler: (svg: string) => {
