@@ -138,7 +138,8 @@ import type {
 import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow, WorkItemRow } from "./db";
-import type { Origin, WorkBudget } from "./db/schema";
+import type { Origin } from "./db/schema";
+import type { WorkBudget } from "./db/stored-types";
 import { needsDesignSystem } from "./design-offers";
 import type { JevAccess } from "./jev";
 import {

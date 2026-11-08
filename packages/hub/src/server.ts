@@ -722,12 +722,9 @@ import { createConnectAsks, type FleetMcpTook } from "./connect-asks";
 import { connectionRoutes, createConnections } from "./connections";
 import {
   asksOpening,
-  type ContinuationSource,
-  type ContinueRequest,
   finishedAnswer,
   gitSection,
   openingMessage,
-  type PreparedContinuation,
   summariserPrompt,
 } from "./continuation";
 import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
@@ -767,12 +764,15 @@ import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
+import type { PriorConversation, TrashKind } from "./db/schema";
 import type {
   ContinuationAsker,
-  PriorConversation,
+  ContinuationSource,
+  ContinueRequest,
+  PreparedContinuation,
+  SendHold,
   StoredSendRefusal,
-  TrashKind,
-} from "./db/schema";
+} from "./db/stored-types";
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
@@ -797,11 +797,7 @@ import {
 } from "./decisions";
 import { delegateTypesRoutes } from "./delegate-types";
 import { createDelegateWaits, type NoticeMark } from "./delegate-waits";
-import type {
-  DelegateResult,
-  SendDelivery,
-  SendHold,
-} from "./delegation-actions";
+import type { DelegateResult, SendDelivery } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree, treeSessions } from "./delegation-tree";
 import {
