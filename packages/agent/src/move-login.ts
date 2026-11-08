@@ -7,7 +7,7 @@ import {
   type HomeLogin,
   type HomeLoginMoved,
   sameIdentity,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
 import { readWithin } from "@cawco/core/bounded";
 import {
   accountClaudeJson,
