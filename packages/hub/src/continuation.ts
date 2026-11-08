@@ -6,88 +6,12 @@
  */
 import {
   blocksOf,
-  type EffortLevel,
   type Extracted,
   type GitChanges,
-  type HarnessKind,
-  type PermissionMode,
-  type SendAttachment,
-  type SendPayload,
   type SessionMessage,
   SUMMARY_CAP_TOKENS,
 } from "@cawco/core";
-
-/** The session being continued, as the header names it. */
-export interface ContinuationSource {
-  cwd: string;
-  harness: HarnessKind;
-  instanceId: string;
-  model: string;
-  title: string;
-}
-
-/** What "continue in new session" is asked: who summarises, what starts. */
-export interface ContinueRequest {
-  /**
-   * The new session opens on the messages it was asked alone (the
-   * person's, and a delegate's parent's brief and hand-offs:
-   * {@link Extracted.asks}), verbatim and in order ({@link asksOpening}):
-   * nothing is summarised, and nothing the agent said or did is carried.
-   */
-  asksOnly?: true;
-  /**
-   * What rides the new session's opening message beside its words, as a
-   * send carries it: texts and the hub's files, and images (base64). Kept
-   * with the job until the opening goes; the summariser never sees them.
-   */
-  attachments?: SendAttachment[];
-  images?: SendPayload["images"];
-  note?: string;
-  /**
-   * Who writes the summary; absent, the source's provider's policy (core
-   * `Compaction.summarizer`). Unread with {@link asksOnly}, which writes
-   * none. Absent `model`: the harness's own default. Absent `account`:
-   * placed as any start is.
-   */
-  summarizer?: { harness: HarnessKind; model?: string; account?: string };
-  /** The same options a dashboard spawn sends; machine and cwd default to the source's. */
-  target: {
-    /** The account it runs on; absent, placed as any start is. */
-    account?: string;
-    bootstrap?: { repo: string; baseDir: string };
-    cwd?: string;
-    effort?: EffortLevel;
-    harness: HarnessKind;
-    machineId?: string;
-    /** Absent: the harness's own default. */
-    model?: string;
-    /**
-     * The mode asked for; none asked, the mode of the session that caused
-     * the job as it starts (server.ts `continuationCauseMode`), settled by
-     * the hub's one rule (`settleMode`).
-     */
-    permissionMode?: PermissionMode;
-    projectId?: string;
-    scratch?: { worktree?: boolean; baseCwd?: string };
-  };
-}
-
-/**
- * A continuation's inputs as read when it was asked for: the source, what was
- * extracted from it, the summariser's prompt (none when there is nothing
- * before the tail) and the sizes the fit was judged by. Kept with the job, so
- * a job resumed after a restart hands on exactly what it was started with.
- */
-export interface PreparedContinuation {
-  compacted: boolean;
-  entries: { live: number; whole: number; scope: number };
-  extracted: Extracted;
-  liveContextTokens: number;
-  openingTokens: number;
-  prompt?: string;
-  source: ContinuationSource & { machineId: string };
-  summariseInputTokens: number;
-}
+import type { ContinuationSource } from "./db/stored-types";
 
 /** Lines of git output the artifact index carries before it says how many it cut. */
 const GIT_LINES_SHOWN = 200;
