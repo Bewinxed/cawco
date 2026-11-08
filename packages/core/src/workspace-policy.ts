@@ -57,22 +57,27 @@ import {
   protectedFindTests,
 } from "./clone-denies";
 import type { WorkspaceRef } from "./harness";
+import { xdgDataHome } from "./paths/cawco";
 import {
   accountConfigDir,
   claudeConfigDirs,
   claudeHome,
+  USER_LAYER_DIRS,
+  USER_LAYER_FILES,
+} from "./paths/claude";
+import { fleetSyncedPaths } from "./paths/fleet";
+import {
   credentialStores,
   darwinDeveloperBundle,
   darwinUserDirs,
-  fleetSyncedPaths,
   hostToolCaches,
-  hubProjectsDir,
   isSecretFileName,
-  USER_LAYER_DIRS,
-  USER_LAYER_FILES,
   userGitConfigDir,
-  workspaceAccountsFile,
   workspaceCaches,
+} from "./paths/host-policy";
+import { hubProjectsDir } from "./paths/hub";
+import {
+  workspaceAccountsFile,
   workspaceDoorDir,
   workspaceProjectFile,
   workspaceReadOnlyDir,
@@ -80,8 +85,7 @@ import {
   workspaceSpillDir,
   workspaceSpillsFile,
   workspacesDir,
-  xdgDataHome,
-} from "./paths";
+} from "./paths/workspace";
 import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { hostEnvironment } from "./session-env";
 import { readRecord } from "./state-file";
@@ -1099,7 +1103,7 @@ export const workspacePolicy = async (
       userGitConfigDir(),
       ...hostToolCaches(),
       ...(await darwinDeveloperBundle()),
-      // The JDK Maestro runs on (paths.ts `workspaceMaestroEnv`), wherever
+      // The JDK Maestro runs on (agent boundary-env.ts `workspaceMaestroEnv`), wherever
       // it is installed, under home included.
       ...(javaHome ? [javaHome] : []),
       binaryRoot(),

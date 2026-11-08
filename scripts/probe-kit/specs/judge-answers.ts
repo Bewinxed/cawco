@@ -199,7 +199,7 @@ const run = async (kit: Kit) => {
   await mkdir(join(home, "run"), { recursive: true, mode: 0o700 });
   const { executorUnsandboxed } =
     await import("../../../packages/agent/src/boundary");
-  const paths = await import("../../../packages/core/src/paths");
+  const paths = await import("../../../packages/core/src/paths/workspace");
   const { workspacePolicy } =
     await import("../../../packages/core/src/workspace-policy");
   const bun = Bun.which("bun") ?? process.execPath;
