@@ -19,9 +19,9 @@
 import { z } from "zod";
 import { clockWords, dayWords } from "./accounts";
 import { canonicalJson } from "./canonical-json";
-import type { UserAnswers, UserQuestion } from "./harness";
 import { markerTag, readMarkerTag } from "./injected";
 import { sessionLink } from "./references";
+import type { UserAnswers, UserQuestion } from "./session-messages";
 
 export type AskState = "open" | "answered" | "withdrawn";
 

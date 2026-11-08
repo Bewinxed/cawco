@@ -21,7 +21,7 @@ import {
   identityOf,
 } from "@cawco/core/accounts";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
-import type { AuthState, MachineHarnessReport } from "@cawco/core/harness";
+import type { MachineHarnessReport } from "@cawco/core/harness";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
 import {
   accountClaudeJson,
@@ -36,6 +36,7 @@ import {
   userLayerPath,
 } from "@cawco/core/paths/claude";
 import { hostEnvironment } from "@cawco/core/session-env";
+import type { AuthState } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import { idle } from "./auth";
