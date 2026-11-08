@@ -317,7 +317,7 @@ export type Deleter = Pick<BunSQLiteDatabase, "delete" | "select">;
  * (`dropArtifacts`) to tell `onArtifactsGone` of them once the write is
  * done.
  */
-export const dropArtifactRows = (
+const dropArtifactRows = (
   tx: Deleter,
   where: SQL | undefined
 ): GoneArtifact[] => {
@@ -339,12 +339,14 @@ export const dropArtifactRows = (
 
 export const artifactsDb = (
   db: BunSQLiteDatabase,
-  /** {@link dropArtifactRows}, its ids told once the write is done (db index.ts `dropArtifacts`). */
-  drop: (tx: Deleter, where: SQL | undefined) => void,
-  /** A source moved by {@link ArtifactsDb.resource}, told once the write is done (db index.ts `onSourceMoved`). */
-  moved: (move: SourceMoved) => void,
-  /** A row made or changed by {@link ArtifactsDb.create} or {@link ArtifactsDb.update} (db index.ts `onArtifactsWritten`). */
-  written: () => void
+  {
+    /** {@link dropArtifactRows}, its ids told once the write is done ({@link artifactEvents}). */
+    dropArtifacts: drop,
+    /** A source moved by {@link ArtifactsDb.resource}, told once the write is done ({@link artifactEvents}). */
+    sourceMoved: moved,
+    /** A row made or changed by {@link ArtifactsDb.create} or {@link ArtifactsDb.update} ({@link artifactEvents}). */
+    artifactsWritten: written,
+  }: ArtifactEvents
 ): ArtifactsDb => ({
   componentsOn: (machineId) =>
     db
@@ -701,3 +703,154 @@ export const artifactsDb = (
       .where(eq(artifactUpdates.artifactId, id))
       .get()?.count ?? 0,
 });
+
+export interface ArtifactListenersDb {
+  /**
+   * `listener` hears the artifacts that went, each with the preview origin
+   * its row pointed at, a next version held for one included, once the
+   * write that deleted them is done: the service's discard, a session's
+   * delete, a project's delete or fold (`dropArtifacts`, the one way an
+   * artifact row goes).
+   */
+  readonly onArtifactsGone: (listener: (gone: GoneArtifact[]) => void) => void;
+  /**
+   * `listener` hears that an artifact row was made, changed or deleted,
+   * as the write happens: every write of the table is one of these
+   * (`artifactsDb` create and update, `dropArtifacts`). Needs you's lane
+   * reads again on it (artifacts/lane.ts `moved`).
+   */
+  readonly onArtifactsWritten: (listener: () => void) => void;
+  /**
+   * `listener` hears each artifact whose source moved to another key, with
+   * what served it before, once the write that moved it is done: the one
+   * write of an artifact's machine and source (artifacts.ts `resource`),
+   * so the preview serving its origin follows the row (hub
+   * preview-service.ts), as `onArtifactsGone` ends it.
+   */
+  readonly onSourceMoved: (listener: (move: SourceMoved) => void) => void;
+}
+
+/** What every write of an artifact row tells, and who hears it. */
+export interface ArtifactEvents {
+  /** What the store hands on as its own members (`onArtifactsGone` and the rest). */
+  readonly artifactListeners: ArtifactListenersDb;
+  /** Tells whoever hears of a row written (`onArtifactsWritten`). */
+  readonly artifactsWritten: () => void;
+  /** {@link dropArtifactRows}, its ids told once the write is done: the one way an artifact row goes. */
+  readonly dropArtifacts: (tx: Deleter, where: SQL | undefined) => void;
+  /** Tells whoever hears of a source moved (`onSourceMoved`). */
+  readonly sourceMoved: (move: SourceMoved) => void;
+}
+
+export const artifactEvents = (db: BunSQLiteDatabase): ArtifactEvents => {
+  /** Who hears of an artifact row written ({@link DbShape.onArtifactsWritten}). */
+  const writtenListeners = new Set<() => void>();
+
+  const artifactsWritten = (): void => {
+    for (const listener of writtenListeners) {
+      listener();
+    }
+  };
+
+  /** Who hears of the artifacts that went ({@link DbShape.onArtifactsGone}). */
+  const goneListeners = new Set<(gone: GoneArtifact[]) => void>();
+
+  /** Artifacts a write deleted, not yet told: each one's preview origin by its id. */
+  let goneNoted: Map<string, string> | undefined;
+
+  /**
+   * The artifacts noted gone, told once the write is done (a microtask:
+   * every transaction here runs synchronously, so none is open then), and
+   * only those no row answers to: a write rolled back deleted nothing.
+   */
+  const tellGone = (): void => {
+    const noted = [...(goneNoted ?? [])].map(([id, origin]) => ({
+      id,
+      origin,
+    }));
+    goneNoted = undefined;
+    const kept = new Set<string>();
+    for (let at = 0; at < noted.length; at += 500) {
+      for (const row of db
+        .select({ id: artifacts.id })
+        .from(artifacts)
+        .where(
+          inArray(
+            artifacts.id,
+            noted.slice(at, at + 500).map((one) => one.id)
+          )
+        )
+        .all()) {
+        kept.add(row.id);
+      }
+    }
+    const gone = noted.filter((one) => !kept.has(one.id));
+    if (gone.length === 0) {
+      return;
+    }
+    for (const listener of goneListeners) {
+      try {
+        listener(gone);
+      } catch (error) {
+        console.error("[artifacts] telling a delete failed", error);
+      }
+    }
+  };
+
+  /**
+   * Every artifact `where` names deleted, its held next versions with it
+   * (artifacts.ts {@link dropArtifactRows}), and noted for
+   * {@link DbShape.onArtifactsGone}: the one way an artifact row goes, a
+   * session's, a project's or the service's discard.
+   */
+  const dropArtifacts = (tx: Deleter, where: SQL | undefined): void => {
+    const gone = dropArtifactRows(tx, where);
+    if (gone.length === 0) {
+      return;
+    }
+    artifactsWritten();
+    if (!goneNoted) {
+      goneNoted = new Map();
+      queueMicrotask(tellGone);
+    }
+    for (const { id, origin } of gone) {
+      goneNoted.set(id, origin);
+    }
+  };
+
+  /** Who hears of the sources that moved ({@link DbShape.onSourceMoved}). */
+  const movedListeners = new Set<(move: SourceMoved) => void>();
+
+  /**
+   * A source moved (artifacts.ts `resource`), told once the write is done:
+   * a microtask, as {@link tellGone}'s, so no transaction is open then.
+   */
+  const sourceMoved = (move: SourceMoved): void => {
+    queueMicrotask(() => {
+      for (const listener of movedListeners) {
+        try {
+          listener(move);
+        } catch (error) {
+          console.error("[artifacts] telling a source move failed", error);
+        }
+      }
+    });
+  };
+
+  return {
+    artifactsWritten,
+    dropArtifacts,
+    sourceMoved,
+    artifactListeners: {
+      onArtifactsGone: (listener) => {
+        goneListeners.add(listener);
+      },
+      onArtifactsWritten: (listener) => {
+        writtenListeners.add(listener);
+      },
+      onSourceMoved: (listener) => {
+        movedListeners.add(listener);
+      },
+    },
+  };
+};
