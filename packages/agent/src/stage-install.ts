@@ -33,7 +33,7 @@ import {
   type PackageManager,
 } from "@cawco/core/deps";
 import type { WorkspaceRef } from "@cawco/core/harness";
-import { workspaceStateDir } from "@cawco/core/paths";
+import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { STAGE_INSTALL_MS } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
