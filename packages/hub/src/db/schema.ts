@@ -1,7 +1,6 @@
 import type {
   AccountHue,
   AccountKind,
-  AccountMove,
   AccountProvider,
   AccountSetupStep,
   AtPlanLimit,
@@ -28,7 +27,6 @@ import type {
   LimitWindow,
   MachineState,
   MemoryRole,
-  ModeAsk,
   MoveStage,
   OfferedMode,
   OnCap,
@@ -43,7 +41,6 @@ import type {
   RuleWatch,
   SendMode,
   SendPayload,
-  SendRefusal,
   SendState,
   SessionEffort,
   SessionEndIntent,
@@ -114,7 +111,6 @@ import {
 import type { StreamRelayState } from "@cawco/core/stream-relay";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { HOUR_MS } from "@cawco/core/time";
-import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -131,7 +127,6 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
-import type { SendHold } from "../delegation-actions";
 import { hubSecrets, openOrNull } from "../secret-box";
 import {
   AuthorizationServerMetadataSchema,
@@ -158,6 +153,7 @@ import {
   WorkLandingSchema,
   WorkspaceFromSchema,
 } from "./stored-shapes";
+import type { SendHold } from "./stored-types";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 /** A time column a row's insert stamps with now, unless given one. */
@@ -643,17 +639,6 @@ export const projects = sqliteTable("projects", {
   }),
   createdAt: stampedNow("created_at"),
 });
-
-/**
- * What a work item may spend before the hub stops it: dollars (the usage its
- * machine reports for its session), turns its session ends, and minutes of
- * wall time since it started. Each is optional; one reached fails the item.
- */
-export interface WorkBudget {
-  minutes?: number;
-  turns?: number;
-  usd?: number;
-}
 
 /** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
 export type Tracker = import("@cawco/core").Tracker;
@@ -1425,23 +1410,6 @@ export const workspaces = sqliteTable("workspaces", {
 });
 
 /**
- * Where a workspace cut `from` another started ({@link workspaces.cutFrom}):
- * that workspace, and its HEAD then, which this one's clone took.
- */
-export interface WorkspaceFrom {
-  /** The source's HEAD as this clone took it. */
-  commit: string;
-  /**
-   * Whether this workspace's landing put every patch of that commit's work
-   * on the base branch (work-items.ts `vouchLanded`): then the source holds
-   * none of it as its own, and an archive is told so (core
-   * `WorkspaceArchive.landed`).
-   */
-  landed: boolean;
-  workspace: string;
-}
-
-/**
  * Who began a piece of work, or a turn of Caw's: `you`, the person's own
  * words; `event`, anything else (Caw on / Caw off).
  */
@@ -1471,71 +1439,6 @@ export type WorkItemState = import("@cawco/core").WorkItemState;
  *   run again, then the push.
  */
 export type LandingPhase = "completing" | "gating" | "turn";
-
-/**
- * What a live work item's session cannot be started again without, found
- * missing as the hub would start it (a wake, a restart's resume): its
- * delegate type, its machine, or the account it runs on ({@link workItems}
- * `blocked`). The item is blocked, never failed for it, and goes on once
- * the missing thing is back (work-items.ts `blockIfMissing`).
- */
-export interface ItemBlock {
-  kind: "type" | "machine" | "account";
-  /** The missing thing as a person names it: the type's name, the machine's, the account's. */
-  name: string;
-  /** When the hub found it missing, epoch ms. */
-  since: number;
-}
-
-/**
- * A landing gate command that passed on a tree, with the stage it ran in
- * (`at finish_item`, `while gating on top of main`, `in its turn to land on
- * main`), for the line of a step its pass lets skip ({@link workItems}
- * `gatePasses`, keyed by what it passed on: work-items.ts `passKey`).
- */
-export interface GatePass {
-  command: string;
-  stage: string;
-}
-
-/** What a work item's landing put where ({@link workItems} `landed`). */
-export interface WorkLanding {
-  /**
-   * When it was pushed (ms), for a push to a branch of its own: the newest
-   * is the commit the hub's next push there leases on (work-items.ts
-   * `lastBranchPush`). Unset on landings on the base, and on branch pushes
-   * before 2026-10-19.
-   */
-  at?: number;
-  /**
-   * The landing gate's passes on the tree that landed: that tree (`git
-   * rev-parse <sha>^{tree}`) and each step's command that passed on it, as
-   * written in gate.md. What a release asks the hub of a commit's tree
-   * (`GET /api/landing-gate`): a tree the gate passed is not checked again
-   * there. Unset on landings before 2026-10-23, and where git could not name
-   * the tree.
-   */
-  gate?: { passed: string[]; tree: string };
-  /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
-  onto: string | null;
-  sha: string;
-}
-
-/** What a delegate hands in with `finish_item`. */
-export interface WorkItemSubmission {
-  blocked?: { command: string; error: string };
-  findings?: { title: string; detail: string }[];
-  /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
-  headline: string;
-  /**
-   * Ship the work once it lands on main: the project's declared ship command
-   * (gate.md `Ship:`, ship.ts) runs on the hub's machine with these end-user
-   * release notes.
-   */
-  ship?: { notes: string };
-  /** The full report: what was done, and the real output of every command that proves it. */
-  summary: string;
-}
 
 /**
  * One piece of delegated work: a brief, run by one session in one workspace,
@@ -1933,21 +1836,6 @@ export const delegateEvents = sqliteTable(
   ]
 );
 
-/**
- * One record per message sent to a session (`SendRecord`, @cawco/core): what
- * was sent, when the hub took it, and where it stands. The hub is the only
- * writer of `state`; every change is stored here before any screen hears of
- * it, so a reload and a hub restart read the same record the live stream
- * carried.
- */
-/**
- * What refused a send, as its row keeps it: a `SendRefusal`, or no
- * permission mode to wake its session on (`mode-ask`), which goes out as the
- * record's `modeAsk` and never as its refusal: the apps read `SendRefusal`
- * closed (server.ts `toSendRecord`).
- */
-export type StoredSendRefusal = SendRefusal | ({ kind: "mode-ask" } & ModeAsk);
-
 export const sentMessages = sqliteTable(
   "sent_messages",
   {
@@ -2009,7 +1897,7 @@ export const sentMessages = sqliteTable(
      */
     owed: storedJson(SendEnvelopeSchema)("owed"),
     /**
-     * Why an owed send waits (delegation-actions.ts `SendHold`), written as
+     * Why an owed send waits (stored-types.ts `SendHold`), written as
      * it is kept and again at each look that keeps it; each hold's words
      * name what releases it (`HOLD_WORDS`). Null once it is handed.
      */
@@ -3212,12 +3100,6 @@ export type TrashKind =
   | "connection"
   | "harnessConfig";
 
-/** One table's rows, as the driver reads them: every column, sealed ones still sealed. */
-export interface TrashedRows {
-  rows: Record<string, string | number | null>[];
-  table: string;
-}
-
 /**
  * A deleted config item, kept whole for its undo window (JOURNEY.md Flow 5:
  * "an undo affordance after the fact rather than a confirm dialog before
@@ -3701,33 +3583,6 @@ export const continuations = sqliteTable("continuations", {
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
-
-/**
- * Who asked for a continuation: a person (the dashboard's or the app's
- * "Continue in new session", or the API with no session named), a session's
- * `continue_session`, a comment on a task whose ended attempt's session
- * is cold (jev-tasks.ts, Attach or spawn), or a move that goes on from a
- * summary.
- */
-export type ContinuationAsker =
-  | { kind: "person" }
-  | { kind: "session"; id: string }
-  | { kind: "task"; id: string }
-  | {
-      /**
-       * Its provider's compaction policy, as its move to account `to`
-       * (core `Compaction` `summary`, server.ts `continueAsMove`): `stopped`
-       * says what stopped it there (its limit, its refused sign-in), or
-       * false ahead of a limit; `move` is the line the move would have
-       * written whole, under the id `line`, which a summary that fails
-       * writes as the native compaction it falls back to.
-       */
-      kind: "move";
-      line: string;
-      move: AccountMove;
-      stopped: false | "limit" | "signin";
-      to: string;
-    };
 
 /**
  * What kind of line the hub keeps in a session's transcript:
@@ -4222,20 +4077,6 @@ export const lfsRefusals = sqliteTable(
   (table) => [primaryKey({ columns: [table.projectId, table.endpoint] })]
 );
 
-/** One must-fix finding of a design check, tied to an element (design-verify.ts). */
-export interface DesignFinding {
-  file: string;
-  line: number;
-  problem: string;
-  selector: string;
-}
-
-/** The variant a design check judged to hold to the system best, and why. */
-export interface DesignPick {
-  variant: string;
-  why: string;
-}
-
 /**
  * A design check (design-verify.ts): one round of a verifier session judging
  * an attempt's design-shaped result, its whole working tree at one moment,
@@ -4278,13 +4119,6 @@ export const designChecks = sqliteTable(
   },
   (table) => [index("design_checks_item").on(table.itemId)]
 );
-
-/** One file of a design proposal as its card draws it: before and after, text. */
-export interface DesignProposalFile {
-  after: string;
-  before: string;
-  path: string;
-}
 
 /**
  * An agent's change to a project's design system, waiting for the person
@@ -5144,51 +4978,6 @@ export const routineRuns = sqliteTable(
 );
 
 /**
- * An `app` connection's registration (connections.ts): a GitHub App the hub
- * registered from a manifest (its id, slug, private key, client and webhook
- * secrets, and once installed its installation), or a Linear OAuth app's
- * client id and secret.
- */
-export type ConnectionAppSecret =
-  | {
-      appId: string;
-      clientId?: string;
-      clientSecret?: string;
-      /** Set once GitHub's setup redirect names it and the app's JWT reads it. */
-      installationId?: string;
-      privateKey: string;
-      service: "github";
-      slug?: string;
-      webhookSecret?: string;
-    }
-  | { clientId: string; clientSecret: string; service: "linear" };
-
-/** What a connection's sealed `secret` holds. */
-export interface ConnectionSecret {
-  app?: ConnectionAppSecret;
-  client?: import("@modelcontextprotocol/sdk/shared/auth.js").OAuthClientInformationMixed;
-  /**
-   * A `device` connection's code sign-in under way: the device code the hub
-   * polls GitHub with, the code the person enters and where, when it lapses
-   * (epoch ms), and the least seconds between two polls.
-   */
-  device?: {
-    deviceCode: string;
-    expiresAt: number;
-    interval: number;
-    userCode: string;
-    verificationUri: string;
-  };
-  /** A `gh` connection's machine and account, whose gh the token (`key`) is read from. */
-  gh?: { host: string; login: string; machineId: string };
-  key?: string;
-  /** A GitHub App's organization, which its sign-in registers it under again when restarted from its row. */
-  org?: string;
-  tokens?: OAuthTokens;
-  verifier?: string;
-}
-
-/**
  * A connection (Projects spec §5.5, connections.ts): an outside service's MCP
  * server the hub signs in to and calls for sessions. Its key, or its OAuth
  * tokens, client and the verifier of a sign-in under way, are its `secret`,
@@ -5450,20 +5239,6 @@ export const connectorPollItems = sqliteTable(
 );
 
 /**
- * Where a tracker binding's poll stands (tracker.ts): the newest change it
- * took in, of issues and of their comments, and GitHub's ETag for each list
- * as it last asked it.
- */
-export interface TrackerCursor {
-  commentsEtag: string | null;
-  /** The newest comment taken in, ms. */
-  commentsSince: number;
-  etag: string | null;
-  /** The newest issue change taken in, ms. */
-  since: number;
-}
-
-/**
  * A project's tracker (Projects spec D2, §5.2; tracker.ts): the connection
  * it signs in with, the repository or team its tasks' issues are in, and
  * where its poll stands. One per project; none while the project keeps its
@@ -5498,26 +5273,6 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
   githubProjectReason: text("github_project_reason"),
 });
-
-/**
- * What a task and its issue last agreed on (tracker.ts): each field the
- * tracker is the record of, and the stage that agreed with the issue's
- * state. A side whose value moved off it changed that field.
- */
-export interface TrackerSynced {
-  description: string;
-  labels: string[];
-  /** The stage the task stood in when they agreed. */
-  stage: string;
-  /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
-  state: string;
-  /**
-   * GitHub: the Status option its Project item stood in (null: not on the
-   * Project, or no Status); absent until the binding had a Project.
-   */
-  status?: string | null;
-  title: string;
-}
 
 /**
  * A task linked to its issue by the tracker sync (tracker.ts): what the
