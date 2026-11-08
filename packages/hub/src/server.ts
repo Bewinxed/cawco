@@ -22,13 +22,11 @@ import {
   type AccountProvider,
   type AccountReport,
   type AccountSigninResult,
-  accountMoveSentence,
   accountNameAmong,
   accountProvidersOf,
   atProviderLimit,
   CLAUDE_PROVIDER,
   type Compaction,
-  clockWords,
   DEFAULT_COMPACTION,
   type EndedBy,
   type HomeCredential,
@@ -51,10 +49,8 @@ import {
   providerChoices,
   type RebalanceNotice,
   type RefusalVerdict,
-  rebalanceWords,
   sameIdentity,
   strategiesFor,
-  tokenWords,
 } from "@cawco/core/accounts";
 import {
   CONTROL_ACCOUNT_LENT,
@@ -93,14 +89,12 @@ import {
 } from "@cawco/core/artifact-needs";
 import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
 import {
-  ARTIFACT_GONE,
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
 } from "@cawco/core/artifact-session";
 import {
   ASK_USER_QUESTION,
   RESOLVE_PERMISSION,
-  unshownAskMessage,
   WITHDRAW_PERMISSION,
 } from "@cawco/core/ask-tools";
 import {
@@ -160,7 +154,6 @@ import {
   type CommandQueueFrame,
   type CommandRun,
   QUEUE_WAIT_MAX_MS,
-  queueWords,
 } from "@cawco/core/commands/controls";
 import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import { compressAnswer } from "@cawco/core/compress-answer";
@@ -368,9 +361,7 @@ import { writeMachineKey } from "@cawco/core/machine-key";
 import {
   type MachineFault,
   machineCalled,
-  machineFaultWords,
   machineLabel,
-  machineSilenceWords,
 } from "@cawco/core/machine-names";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import {
@@ -449,7 +440,6 @@ import { artifactLink, sessionLink, taskLink } from "@cawco/core/references";
 import {
   asLastErrorKind,
   CLAUDE_CONVERSATION_GONE,
-  continuedInWords,
   type LastErrorKind,
   type Relaunch,
   relaunchOf,
@@ -599,10 +589,18 @@ import { windowWords } from "@cawco/core/usage/windows";
 import { STAGES_TEMPLATES, type StagesTemplate } from "@cawco/core/views";
 import { waitArtifact } from "@cawco/core/wait-targets";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
+import {
+  accountMoveSentence,
+  clockWords,
+  rebalanceWords,
+  tokenWords,
+} from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
+import { ARTIFACT_GONE } from "@cawco/core/words/artifact-session";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
+import { unshownAskMessage } from "@cawco/core/words/ask-lines";
 import { configurePage } from "@cawco/core/words/configure";
 import { connectWords } from "@cawco/core/words/connect";
 import { containerWords } from "@cawco/core/words/containers";
@@ -613,12 +611,21 @@ import { harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
+import {
+  machineFaultWords,
+  machineSilenceWords,
+} from "@cawco/core/words/machine-names";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
-import { type RelaunchFor, relaunchWords } from "@cawco/core/words/relaunch";
+import { queueWords } from "@cawco/core/words/queue";
+import {
+  continuedInWords,
+  type RelaunchFor,
+  relaunchWords,
+} from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
