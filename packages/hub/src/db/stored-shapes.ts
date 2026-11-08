@@ -49,26 +49,22 @@ import {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { z } from "zod";
 import type {
-  ContinuationSource as ContinuationSourceType,
-  ContinueRequest as ContinueRequestType,
-  PreparedContinuation as PreparedContinuationType,
-} from "../continuation";
-import type { InstallsRecord as InstallsRecordType } from "../installs";
-import type {
-  ProposalFile as ProposalFileType,
-  Proposal as ProposalType,
-} from "../memory";
-import type { MoveState as MoveStateType } from "../moves";
-import type { ProposedFile as ProposedFileType } from "../proposal-base";
-import type {
   ConnectionAppSecret as ConnectionAppSecretType,
   ConnectionSecret as ConnectionSecretType,
   ContinuationAsker as ContinuationAskerType,
+  ContinuationSource as ContinuationSourceType,
+  ContinueRequest as ContinueRequestType,
   DesignFinding as DesignFindingType,
   DesignPick as DesignPickType,
   DesignProposalFile as DesignProposalFileType,
   GatePass as GatePassType,
+  InstallsRecord as InstallsRecordType,
   ItemBlock as ItemBlockType,
+  MoveState as MoveStateType,
+  PreparedContinuation as PreparedContinuationType,
+  ProposalFile as ProposalFileType,
+  Proposal as ProposalType,
+  ProposedFile as ProposedFileType,
   StoredSendRefusal as StoredSendRefusalType,
   TrackerCursor as TrackerCursorType,
   TrackerSynced as TrackerSyncedType,
@@ -77,7 +73,7 @@ import type {
   WorkItemSubmission as WorkItemSubmissionType,
   WorkLanding as WorkLandingType,
   WorkspaceFrom as WorkspaceFromType,
-} from "./schema";
+} from "./stored-types";
 
 const OAuthMetadataShape = declared(
   OAuthMetadataPublished,
@@ -118,7 +114,7 @@ const ConnectionAppSecretShape = declared(
     }),
   ]),
   "ConnectionAppSecret",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 
 const OAuthClientInformationShape = declared(
@@ -170,7 +166,7 @@ const ConnectionSecretShape = declared(
     verifier: z.string().optional(),
   }),
   "ConnectionSecret",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const ConnectionSecretSchema: z.ZodType<ConnectionSecretType> =
   ConnectionSecretShape;
@@ -193,7 +189,7 @@ const ContinuationAskerShape = declared(
     }),
   ]),
   "ContinuationAsker",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const ContinuationAskerSchema: z.ZodType<ContinuationAskerType> =
   ContinuationAskerShape;
@@ -230,7 +226,7 @@ const ContinueRequestShape = declared(
     }),
   }),
   "ContinueRequest",
-  "packages/hub/src/continuation.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const ContinueRequestSchema: z.ZodType<ContinueRequestType> =
   ContinueRequestShape;
@@ -243,7 +239,7 @@ const DesignFindingShape = declared(
     selector: z.string(),
   }),
   "DesignFinding",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const DesignFindingSchema: z.ZodType<DesignFindingType> =
   DesignFindingShape;
@@ -251,14 +247,14 @@ export const DesignFindingSchema: z.ZodType<DesignFindingType> =
 const DesignPickShape = declared(
   z.object({ variant: z.string(), why: z.string() }),
   "DesignPick",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const DesignPickSchema: z.ZodType<DesignPickType> = DesignPickShape;
 
 const DesignProposalFileShape = declared(
   z.object({ after: z.string(), before: z.string(), path: z.string() }),
   "DesignProposalFile",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
   DesignProposalFileShape;
@@ -266,7 +262,7 @@ export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
 const GatePassShape = declared(
   z.object({ command: z.string(), stage: z.string() }),
   "GatePass",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const GatePassSchema: z.ZodType<GatePassType> = GatePassShape;
 
@@ -277,7 +273,7 @@ const ItemBlockShape = declared(
     since: z.number(),
   }),
   "ItemBlock",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const ItemBlockSchema: z.ZodType<ItemBlockType> = ItemBlockShape;
 
@@ -316,7 +312,7 @@ export const MoveStateShape = declared(
     targetPath: MachinePathShape,
   }),
   "MoveState",
-  "packages/hub/src/moves.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 
 const OAuthProtectedResourceMetadataShape = declared(
@@ -354,7 +350,7 @@ const ContinuationSourceShape = declared(
     title: z.string(),
   }),
   "ContinuationSource",
-  "packages/hub/src/continuation.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 
 const PreparedContinuationShape = declared(
@@ -373,7 +369,7 @@ const PreparedContinuationShape = declared(
     summariseInputTokens: z.number(),
   }),
   "PreparedContinuation",
-  "packages/hub/src/continuation.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const PreparedContinuationSchema: z.ZodType<PreparedContinuationType> =
   PreparedContinuationShape;
@@ -384,7 +380,7 @@ const StoredSendRefusalShape = declared(
     z.intersection(z.object({ kind: z.literal("mode-ask") }), ModeAskShape),
   ]),
   "StoredSendRefusal",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const StoredSendRefusalSchema: z.ZodType<StoredSendRefusalType> =
   StoredSendRefusalShape;
@@ -397,7 +393,7 @@ const TrackerCursorShape = declared(
     since: z.number(),
   }),
   "TrackerCursor",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const TrackerCursorSchema: z.ZodType<TrackerCursorType> =
   TrackerCursorShape;
@@ -412,7 +408,7 @@ const TrackerSyncedShape = declared(
     title: z.string(),
   }),
   "TrackerSynced",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const TrackerSyncedSchema: z.ZodType<TrackerSyncedType> =
   TrackerSyncedShape;
@@ -425,7 +421,7 @@ const TrashedRowsShape = declared(
     table: z.string(),
   }),
   "TrashedRows",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const TrashedRowsSchema: z.ZodType<TrashedRowsType> = TrashedRowsShape;
 
@@ -436,7 +432,7 @@ const WorkBudgetShape = declared(
     usd: z.number().optional(),
   }),
   "WorkBudget",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const WorkBudgetSchema: z.ZodType<WorkBudgetType> = WorkBudgetShape;
 
@@ -451,7 +447,7 @@ const WorkItemSubmissionShape = declared(
     summary: z.string(),
   }),
   "WorkItemSubmission",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const WorkItemSubmissionSchema: z.ZodType<WorkItemSubmissionType> =
   WorkItemSubmissionShape;
@@ -466,14 +462,14 @@ const WorkLandingShape = declared(
     sha: z.string(),
   }),
   "WorkLanding",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const WorkLandingSchema: z.ZodType<WorkLandingType> = WorkLandingShape;
 
 const WorkspaceFromShape = declared(
   z.object({ commit: z.string(), landed: z.boolean(), workspace: z.string() }),
   "WorkspaceFrom",
-  "packages/hub/src/db/schema.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const WorkspaceFromSchema: z.ZodType<WorkspaceFromType> =
   WorkspaceFromShape;
@@ -489,7 +485,7 @@ const InstallsRecordShape = declared(
     ),
   }),
   "InstallsRecord",
-  "packages/hub/src/installs.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
   InstallsRecordShape;
@@ -497,13 +493,13 @@ export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
 const ProposedFileShape = declared(
   z.object({ before: z.string(), content: z.string(), path: z.string() }),
   "ProposedFile",
-  "packages/hub/src/proposal-base.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 
 const ProposalFileShape = declared(
   ProposedFileShape,
   "ProposalFile",
-  "packages/hub/src/memory.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 
 const ProposalShape = declared(
@@ -522,7 +518,7 @@ const ProposalShape = declared(
     withdraws: z.string().optional(),
   }),
   "Proposal",
-  "packages/hub/src/memory.ts"
+  "packages/hub/src/db/stored-types.ts"
 );
 export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
 
