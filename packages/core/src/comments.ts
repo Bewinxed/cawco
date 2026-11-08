@@ -72,7 +72,7 @@ import { humanSize } from "./attachments";
 import { type DocMap, type MapDoc, PIN_MAPS } from "./doc-maps";
 import { type FileSpot, fileSpotDetail, readFileSpot } from "./file-spot";
 import { fnv1a } from "./fnv1a";
-import type { PreviewElement } from "./protocol";
+import type { PreviewElement } from "./preview/protocol";
 import type { Interaction } from "./stage";
 import { fileViewerWords } from "./words/file-viewer";
 
