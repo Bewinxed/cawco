@@ -26,18 +26,14 @@ import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
-import {
-  type HarnessContext,
-  type HarnessSession,
-  KeeperRefused,
-  type TurnExtras,
-} from "../harness";
+import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import { KeeperPool } from "../keepers";
 import { enterSpawn } from "../layer";
 import type { McpGate } from "../mcp-gate";
 import { procIdFor } from "../proc-id";
 import type { SessiondAwareContext } from "../session";
 import {
+  KeeperRefused,
   procEpoch,
   refusalReason,
   type SessiondClient,
