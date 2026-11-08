@@ -15,7 +15,7 @@ import {
 import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { CHOICE_LIMITS } from "@cawco/core/choices";
-import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
   CANVAS_SPEC_LIMITS,

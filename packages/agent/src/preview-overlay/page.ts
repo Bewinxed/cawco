@@ -8,18 +8,21 @@ import {
   ANCHOR_IDENTITIES,
   type AnchorFound,
   type ChainLink,
+  findAnchor,
+  generatedId,
+  type PageAnchor,
+  type PinnedElement,
+  PREVIEW_SCHEMES,
+  stableSelector,
+} from "@cawco/core/comments/anchor";
+import {
   COMMENT_LIMITS,
   type CommentAttachment,
   type CommentTarget,
   commentOn,
   deletePin,
-  findAnchor,
-  generatedId,
   type MarkPicture,
-  type PageAnchor,
   type Pin,
-  type PinnedElement,
-  PREVIEW_SCHEMES,
   type PreviewMode,
   pinUnsent,
   previewMode,
@@ -27,9 +30,8 @@ import {
   readPins,
   replyToPin,
   resolvePin,
-  stableSelector,
   withdrawPin,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
