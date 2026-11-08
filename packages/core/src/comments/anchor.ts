@@ -89,20 +89,6 @@ export interface ChainLink {
   line: number;
 }
 
-/** A chain as a delivery says it: `IconAgent (Who.svelte:82:11) › story Agent (Who.stories.ts:5:14)`. */
-export const chainWords = (anchor: PageAnchor): string | null => {
-  const { chain, sheet } = anchor;
-  if (!chain?.length) {
-    return null;
-  }
-  return chain
-    .map((link, i) => {
-      const story = sheet && i === chain.length - 1 ? "story " : "";
-      return `${story}${link.component} (${link.file}:${link.line}:${link.column})`;
-    })
-    .join(" › ");
-};
-
 /** A canvas's mark stands on one of its elements, by id. */
 interface CanvasAnchor {
   element: string;
