@@ -4,7 +4,7 @@
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
 import { ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
-import { HARNESSES, WIRE_PERMISSION_MODES } from "@cawco/core/harness";
+import { HARNESSES, WIRE_PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import {
   PLAN_EDIT_KINDS,
   PLAN_STEP_PRIORITIES,
