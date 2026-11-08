@@ -75,7 +75,7 @@ import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-/** The log the stand-in writes, in the fleet HOME's workspaces' cache (core paths.ts `workspaceCacheDir`). */
+/** The log the stand-in writes, in the fleet HOME's workspaces' cache (core paths/workspace.ts `workspaceCacheDir`). */
 const LOG_NAME = "stand-in-bun.log";
 /** What the stand-in answers `bun --revision` with: a commit no real bun names, so its node shim dir is its own. */
 const STAND_IN_SHA = "5ca1ab1e0";

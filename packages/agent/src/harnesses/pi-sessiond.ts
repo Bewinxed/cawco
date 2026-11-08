@@ -17,7 +17,7 @@ import {
   MESSAGES_HELD,
   MESSAGES_READ,
 } from "@cawco/core/harness";
-import { workspaceSpillDir } from "@cawco/core/paths";
+import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { mcpGatewayPort } from "@cawco/core/protocol";
 import { standalone } from "@cawco/core/runtime";

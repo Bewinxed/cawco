@@ -91,7 +91,7 @@ import {
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
-import { hubDbPath } from "@cawco/core/paths";
+import { hubDbPath } from "@cawco/core/paths/hub";
 import {
   markerIsLive,
   ownIdentity,

@@ -24,7 +24,7 @@ import {
   SESSION_ENTRIES,
   type SessionEntry,
   sessionConfigDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/claude";
 
 /** Claude Code names every session by a UUID; a name that starts with one is that session's. */
 const SESSION_ID =

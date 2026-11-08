@@ -54,11 +54,11 @@ import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core/harness";
 import { listenOrEnd } from "@cawco/core/listeners";
+import { hubCredentialSocket } from "@cawco/core/paths/hub";
 import {
-  hubCredentialSocket,
   workspaceDoorDir,
   workspaceReadOnlyDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import {
   GIT_LOCALE,
   repositoryConfigProblem,
