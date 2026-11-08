@@ -53,9 +53,6 @@ export const run = async (argv: string[]): Promise<Ran> => {
   return { code, out: out.trim(), err: err.trim() };
 };
 
-/** `s` as one word to sh. */
-export const quoted = (s: string): string => `'${s.replaceAll("'", "'\\''")}'`;
-
 /** A process's start time in clock ticks (`/proc/<pid>/stat` field 22); undefined once it is gone. */
 export const startedAt = async (pid: number): Promise<string | undefined> => {
   const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => "");
