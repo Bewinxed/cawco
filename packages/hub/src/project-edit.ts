@@ -24,7 +24,8 @@ import {
 } from "@cawco/core/accounts";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { projectAccountWords } from "@cawco/core/words/project-account";
-import type { DbShape, ProjectRow } from "./db";
+import type { DbShape } from "./db";
+import type { ProjectRow } from "./db/projects";
 
 /** As long as a name `POST /api/projects` takes. */
 const PROJECT_NAME_LIMIT = 200;
