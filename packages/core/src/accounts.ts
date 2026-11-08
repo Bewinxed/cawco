@@ -15,6 +15,12 @@
  * Browser-safe: types and pure functions only.
  */
 
+import {
+  type AccountHue,
+  type CompactMethod,
+  PLACEMENT_STRATEGIES,
+  type PlacementStrategy,
+} from "./accounts/kinds";
 import { RESTART_WAIT_CAP_MS } from "./binary-updates";
 import type { HarnessKind } from "./harness/kinds";
 import { MINUTE_MS } from "./time";
@@ -180,23 +186,6 @@ export const providerChoices = (
 };
 
 /**
- * Every account colour, in the order a new account takes the first one no
- * account wears: seven, so seven accounts (six Claude logins and the opencode
- * Go plan, say) are told apart at a glance.
- */
-export const ACCOUNT_HUES = [
-  "amber",
-  "blue",
-  "cyan",
-  "green",
-  "orange",
-  "rose",
-  "violet",
-] as const;
-/** The colour an account is drawn in: the `--account-<name>` token. */
-export type AccountHue = (typeof ACCOUNT_HUES)[number];
-
-/**
  * Who an account is: an email in an organization, the organization known by
  * its id (`orgId`), never its name, which is a display name: an org renamed
  * is the same org, and two orgs can share a name. Claude: as `claude auth
@@ -324,37 +313,11 @@ export interface AccountSignin {
   state: SigninState;
 }
 
-/** How a provider's new sessions choose among its accounts. */
-export type PlacementStrategy =
-  "pinned" | "fill-first" | "spread" | "soonest-reset";
-
-export const PLACEMENT_STRATEGIES: readonly PlacementStrategy[] = [
-  "pinned",
-  "fill-first",
-  "spread",
-  "soonest-reset",
-];
-
 export interface StrategyChoice {
   /** The account `pinned` names; ignored by the other strategies. */
   pinnedAccountId?: string;
   strategy: PlacementStrategy;
 }
-
-/**
- * How a session's context is made small as it moves to another organization,
- * whose cache it can't read: its harness's own `/compact` after a turn that
- * files its open items (`native`), a fresh conversation of the same session
- * opened on a summary {@link Compaction.summarizer} writes (`summary`), or
- * nothing, the conversation moved as it is (`whole`).
- */
-export type CompactMethod = "native" | "summary" | "whole";
-
-export const COMPACT_METHODS: readonly CompactMethod[] = [
-  "native",
-  "summary",
-  "whole",
-];
 
 /**
  * How a session is compacted when it moves, by the moment the hub moves it
