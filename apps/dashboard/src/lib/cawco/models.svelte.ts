@@ -7,8 +7,8 @@
  * why ({@link models}`.unread`).
  */
 
-import type { HarnessKind, ModelInfo } from "@cawco/core/harness";
-import { isEffortLevel } from "@cawco/core/harness";
+import type { HarnessKind, ModelInfo } from "@cawco/core/harness/kinds";
+import { isEffortLevel } from "@cawco/core/harness/kinds";
 import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
