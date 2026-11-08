@@ -29,7 +29,7 @@
 
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { bringIntoView } from "@cawco/core/bring-into-view";
-import type { HarnessKind } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   CAW_NO_MACHINE,
   type CawInitiated,

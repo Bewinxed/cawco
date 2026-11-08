@@ -4,7 +4,7 @@
  * as the app's TranscriptView names it, wherever the transcript stands (the
  * session's pane, a task attempt's).
  */
-import { harnessNamed } from "@cawco/core/harness";
+import { harnessNamed } from "@cawco/core/harness/kinds";
 import { accountsWords } from "@cawco/core/words/accounts";
 
 /** A stored listing's older name for opencode. */

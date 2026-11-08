@@ -22,12 +22,12 @@
  * - Two rows still alike (OpenCode and pi list one model from several
  *   providers) are told apart by provider, else by id.
  */
+import type { HarnessReport } from "./harness";
 import {
   type HarnessKind,
-  type HarnessReport,
   harnessNamed,
   type ModelInfo,
-} from "./harness";
+} from "./harness/kinds";
 import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
 import { decidesWords } from "./words/decides";
