@@ -8,11 +8,8 @@
  */
 
 import { type AvailableCommand, classifyCommand } from "@cawco/core/fleet";
-import type {
-  HarnessKind,
-  SlashCommand,
-  SupportedCommands,
-} from "@cawco/core/harness";
+import type { SlashCommand, SupportedCommands } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { hubRequest } from "@cawco/core/hub-request";
 import { hubCall } from "#lib/cawco/hub-read.js";
 
