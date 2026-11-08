@@ -3,7 +3,7 @@
  * checkout, or a workspace clone this agent cut) take of the project's rows
  * there, beside the trees placed inside the folder itself (its
  * `.claude/skills`, `.claude/rules/cawco`). One file per place, in a dir of
- * CawCo's own (core paths.ts `fleetPlacesDir`), named by the place key
+ * CawCo's own (core paths/fleet.ts `fleetPlacesDir`), named by the place key
  * (core `placeKeyOf`): the fleet's converge writes each place's
  * (fleet.ts `converge`, session.ts `#syncFleet`), a workspace's cut writes
  * its clone's alone (session.ts `placeClone`), and an archive removes it
@@ -18,7 +18,7 @@
 import { readdir, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type FleetMcpConfig, placeKeyOf } from "@cawco/core/fleet";
-import { fleetPlacesDir } from "@cawco/core/paths";
+import { fleetPlacesDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { SetHarnessConfig, SetHook } from "./fleet-harness-set";
 import { FleetPlaceSetShape } from "./stored-shapes";

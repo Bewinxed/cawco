@@ -135,7 +135,7 @@ import {
   CONTROL_MOVE_SNAPSHOT,
 } from "@cawco/core/move";
 import type { MachineActivity } from "@cawco/core/notifications";
-import { userLayerPath } from "@cawco/core/paths";
+import { userLayerPath } from "@cawco/core/paths/claude";
 import type {
   AdmissionPayload,
   BuildInfo,

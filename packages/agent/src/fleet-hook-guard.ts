@@ -21,7 +21,7 @@
  */
 import { join } from "node:path";
 import type { HookCommandHandler, HookHandler } from "@cawco/core/hooks";
-import { fleetHooksDir } from "@cawco/core/paths";
+import { fleetHooksDir } from "@cawco/core/paths/fleet";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { systemProgram } from "@cawco/core/workspace-needs";
 

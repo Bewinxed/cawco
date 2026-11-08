@@ -126,7 +126,7 @@ const MAX_LINES = 40;
  * row. A socket's path holds at most 107 bytes, and `ssh` binds it under a
  * 17-byte temporary name first: one beside a database on a long path was
  * refused ("unix_listener: path … too long for Unix domain socket"). So,
- * as the fleet's other sockets (core paths.ts `workspaceDoorDir`): a dir of
+ * as the fleet's other sockets (core paths/workspace.ts `workspaceDoorDir`): a dir of
  * its own under `$XDG_RUNTIME_DIR` on Linux, under the user's own socket
  * root on macOS, beside the database on a Linux with no runtime dir.
  */
