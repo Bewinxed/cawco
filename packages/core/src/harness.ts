@@ -32,6 +32,7 @@ import {
   PLAN_ORIGIN,
   permissionModeNamed,
 } from "./harness/kinds";
+import { traitsOf } from "./harness/traits";
 import type { AuthState, NeutralOrigin } from "./session-messages";
 import { harnessWords } from "./words/harness";
 
@@ -99,13 +100,6 @@ export interface SessionCredentialInstall {
   instanceId: string;
 }
 
-/** Each harness's refusal of a clean start ({@link cleanStartRefusal}), none where it can. */
-const CLEAN_START_REFUSAL: Record<HarnessKind, string | undefined> = {
-  claude: undefined,
-  opencode: harnessWords.openCodeNotClean,
-  pi: undefined,
-};
-
 /**
  * Why `harness` can't start a session clean (core `SpawnPayload.clean`), or
  * undefined when it can. Claude Code and pi start each session with what its
@@ -116,7 +110,7 @@ const CLEAN_START_REFUSAL: Record<HarnessKind, string | undefined> = {
  * clean.
  */
 export const cleanStartRefusal = (harness: HarnessKind): string | undefined =>
-  CLEAN_START_REFUSAL[harness];
+  traitsOf(harness).cleanStart ? undefined : harnessWords.openCodeNotClean;
 
 /**
  * `mode` as one CawCo offers, or none when none was named. One it does not

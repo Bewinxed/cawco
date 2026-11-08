@@ -1,6 +1,7 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
 
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { AgentRow } from "@cawco/core/protocol";
 import { configurePage } from "@cawco/core/words/configure";
@@ -44,10 +45,14 @@ export function signInWarning(
   harness: HarnessKind = "claude"
 ): string | undefined {
   const report = machine.harnesses?.find((one) => one.harness === harness);
-  if (harness === "claude" && report?.installed && report.authReason) {
+  if (
+    traitsOf(harness).accountModel === "dir" &&
+    report?.installed &&
+    report.authReason
+  ) {
     return report.authReason;
   }
-  if (harness !== "claude") {
+  if (traitsOf(harness).accountModel !== "dir") {
     const said = [
       report?.authReason,
       ...(report?.signInFaults ?? []).map((fault) => fault.words),
