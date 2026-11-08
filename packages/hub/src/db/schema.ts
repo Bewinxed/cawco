@@ -4395,7 +4395,7 @@ export const artifacts = sqliteTable(
     name: text("name").notNull(),
     /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */
     does: text("does")
-      .$type<import("@cawco/core/protocol").ArtifactDoes>()
+      .$type<import("@cawco/core/artifact-kinds").ArtifactDoes>()
       .notNull()
       .default("judge"),
     /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
