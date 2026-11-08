@@ -14,7 +14,6 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
 import { delegateTypeProblem } from "@cawco/core/delegate-types";
 import type { ForgeWrite } from "@cawco/core/forge-post";
-import type { PermissionResult } from "@cawco/core/harness";
 import type {
   HarnessKind,
   PermissionMode,
@@ -42,6 +41,7 @@ import type {
 import { QUESTION_DISMISSED } from "@cawco/core/question";
 import { artifactLink, sessionLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
+import type { PermissionResult } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { contextWords } from "@cawco/core/words/context";

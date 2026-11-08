@@ -42,16 +42,16 @@ import {
   setCommandQueue,
 } from "../../../packages/agent/src/hub-command";
 import {
-  openLockFile,
-  tryLock,
-  unlock,
-} from "../../../packages/core/src/flock";
-import {
   type CommandQueueFrame,
   type CommandResult,
   type CommandRun,
   queueWords,
-} from "../../../packages/core/src/harness";
+} from "../../../packages/core/src/commands/controls";
+import {
+  openLockFile,
+  tryLock,
+  unlock,
+} from "../../../packages/core/src/flock";
 import {
   HEAVY_NICE,
   HEAVY_SLOT_ENV,
