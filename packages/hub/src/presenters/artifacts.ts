@@ -10,7 +10,6 @@
 
 import { pinStandsOn } from "@cawco/core/comments/deliver";
 import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
-import { decidedByLine } from "@cawco/core/decides";
 import { artifactLink } from "@cawco/core/references";
 import {
   type CanvasSpec,
@@ -19,6 +18,7 @@ import {
   STAGE_RENDER_MS,
 } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { decidedByLine } from "@cawco/core/words/decides-lines";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import type { movesSaid, renderSaid } from "../artifacts/component";
 import type {
