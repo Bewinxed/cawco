@@ -226,6 +226,11 @@ export const artifactToolWords = {
   answersKeptAtMerge: (id: string, keys: readonly string[]) =>
     `[artifacts] ${id}: its next version's merge kept the person's answers on ${keys.join(", ")}, written after the version was made`,
   /** The hub's log: the person's marks woke the project's Caw, their writer taking no input. */
-  marksWokeCaw: (session: string, project: string, why: string) =>
-    `[artifacts] the person's marks on session ${session}'s artifact woke project ${project}'s Caw: the session takes no input now (${why})`,
+  marksToHandler: (
+    session: string,
+    project: string,
+    handler: string,
+    why: string
+  ) =>
+    `[artifacts] the person's marks on session ${session}'s artifact went to project ${project}'s handler ${handler}: the session takes no input now (${why})`,
 };

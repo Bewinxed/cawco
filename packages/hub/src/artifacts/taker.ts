@@ -24,30 +24,31 @@ export const takesNoInput = (
     ? noticeWords.sessionEnded
     : refusal(session.id);
 
-/** Where it goes: the writer, the session that delegated it, the project's Caw, or no one. */
-export type ArtifactTaker<C> =
+/** Where it goes: the writer, the session that delegated it, the artifact's handler, or no one. */
+export type ArtifactTaker =
   | { session: InstanceRow; to: "writer" }
   | { session: InstanceRow; to: "parent"; why: string }
-  | { caw: C; projectId: string; to: "caw"; why: string }
+  | { projectId: string; to: "handler"; why: string }
   | { to: "none" };
 
 /**
  * Its writer while it takes input ({@link takesNoInput}); once it takes
- * none (or no session holds it), the session that delegated it while that one does, which holds it
- * (service.ts `answerable`, open_items), else the project's Caw (projects
- * plan §5.8: "wakes the session that wrote the page, or Caw if it has
- * ended"). `none` when no one can: the writer keeps what was not taken,
- * with why. `refusal` answers why a session takes no input, or nothing.
+ * none (or no session holds it), the session that delegated it while that
+ * one does, which holds it (service.ts `answerable`, open_items), else, for
+ * a project's artifact, its handler (hub handlers.ts: the one that lives,
+ * or a fresh one; the owner's card "What a trigger wakes", over projects
+ * plan §5.8's "or Caw if it has ended"), never the project's conversation.
+ * `none` when no one can: the writer keeps what was not taken, with why.
+ * `refusal` answers why a session takes no input, or nothing.
  */
-export const artifactTaker = <C>(
+export const artifactTaker = (
   writer: InstanceRow | undefined,
   artifact: { projectId: string | null },
   at: {
-    caw: C | undefined;
     instance: (id: string) => InstanceRow | undefined;
     refusal: (id: string) => string | undefined;
   }
-): ArtifactTaker<C> => {
+): ArtifactTaker => {
   const refused = writer ? takesNoInput(writer, at.refusal) : undefined;
   if (writer && refused === undefined) {
     return { to: "writer", session: writer };
@@ -59,7 +60,7 @@ export const artifactTaker = <C>(
   if (parent && takesNoInput(parent, at.refusal) === undefined) {
     return { to: "parent", session: parent, why };
   }
-  return artifact.projectId && at.caw
-    ? { to: "caw", caw: at.caw, projectId: artifact.projectId, why }
+  return artifact.projectId
+    ? { to: "handler", projectId: artifact.projectId, why }
     : { to: "none" };
 };

@@ -83,8 +83,9 @@ export function sessionStatus(
 
 /**
  * A project's conversation's mark is Caw at what it is doing: the session
- * its project's row names (`conversationInstanceId`), which the project's
- * events reach. Null for any other session, which is never named Caw.
+ * its project's row names (`conversationInstanceId`), which the person's
+ * words reach (its continuation, once Continued). Null for any other
+ * session, which is never named Caw.
  */
 export const cawOf = (id: string): CawStatus | null => {
   const projectId = cawco.rowOf(id)?.projectId;

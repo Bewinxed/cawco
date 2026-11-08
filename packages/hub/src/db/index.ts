@@ -28,6 +28,7 @@ import type {
   FleetSyncReport,
   FleetVersioned,
   FleetWatchNotice,
+  HandledKind,
   HarnessConfigKind,
   HarnessKind,
   HarnessReport,
@@ -186,6 +187,7 @@ import {
   artifacts,
   askPushes,
   capabilityUsageDaily,
+  cardSettlings,
   chosenModes,
   claudeContextWindows,
   completedTurns,
@@ -596,10 +598,14 @@ interface AdoptedChildren {
   /** Its artifacts, by the session that holds or made them. */
   artifacts: number;
   asks: number;
+  /** The projects whose conversation it was: their conversation is the new session now. */
+  conversations: string[];
   items: number;
   queuedItems: number;
   queuedStarts: number;
   sessions: string[];
+  /** Decision cards it was settling for a member (card_settlings), unsettled, its now. */
+  settlings: number;
 }
 
 /**
@@ -1152,6 +1158,15 @@ export interface DbShape {
     docs: readonly { path: string; hash: string }[]
   ) => void;
   /**
+   * handled_by: the handlers started for one thing of a project (hub
+   * handlers.ts), newest first.
+   */
+  readonly handledBy: (
+    projectId: string,
+    kind: HandledKind,
+    id: string
+  ) => WorkItemRow[];
+  /**
    * What names the skill a row is: the row's own name, and the name its
    * stored SKILL.md declares (skills.ts `resolveSkill`'s `held`).
    */
@@ -1330,6 +1345,8 @@ export interface DbShape {
   readonly listToolPolicies: () => ToolPolicy[];
   /** Every machine's latest OpenCode Go reading. */
   readonly listUsageLimits: () => UsageLimitRow[];
+  /** Every handler whose item is live (starting or running), for the idle sweep. */
+  readonly liveHandlers: () => WorkItemRow[];
   /** The listed sessions running or starting on one machine. */
   readonly liveInstancesOn: (machineId: string) => PublicInstanceRow[];
   /** Where each live top-level mainline session works, and no more of it. */
@@ -6272,13 +6289,36 @@ const make = async (path: string): Promise<DbShape> => {
         if (carriedArtifacts > 0) {
           artifactsWritten();
         }
+        // Every role the source held goes with its work: the project whose
+        // conversation it was names the new session, and the cards it was
+        // settling for a member are the new session's to settle.
+        const conversations = tx
+          .update(projects)
+          .set({ conversationInstanceId: to })
+          .where(eq(projects.conversationInstanceId, from))
+          .returning({ id: projects.id })
+          .all()
+          .map((row) => row.id);
+        const settlings = tx
+          .update(cardSettlings)
+          .set({ instanceId: to })
+          .where(
+            and(
+              eq(cardSettlings.instanceId, from),
+              isNull(cardSettlings.settledAt)
+            )
+          )
+          .returning({ card: cardSettlings.card })
+          .all().length;
         return {
           artifacts: carriedArtifacts,
+          conversations,
           sessions,
           items: moved.length,
           queuedItems,
           queuedStarts,
           asks,
+          settlings,
         };
       }),
     dataMigrated: (name) =>
@@ -8806,6 +8846,30 @@ const make = async (path: string): Promise<DbShape> => {
           and(eq(workItems.projectId, projectId), isNotNull(workItems.taskId))
         )
         .orderBy(desc(workItems.createdAt), desc(workItems.id))
+        .all(),
+    handledBy: (projectId, kind, id) =>
+      db
+        .select()
+        .from(workItems)
+        .where(
+          and(
+            eq(workItems.projectId, projectId),
+            eq(workItems.handlesKind, kind),
+            eq(workItems.handlesId, id)
+          )
+        )
+        .orderBy(desc(workItems.createdAt), desc(workItems.id))
+        .all(),
+    liveHandlers: () =>
+      db
+        .select()
+        .from(workItems)
+        .where(
+          and(
+            isNotNull(workItems.handlesKind),
+            inArray(workItems.state, ["starting", "running"])
+          )
+        )
         .all(),
     projectWorkItems: (projectId) =>
       db

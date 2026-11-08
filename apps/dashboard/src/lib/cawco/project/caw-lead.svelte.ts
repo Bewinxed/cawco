@@ -365,7 +365,7 @@ export class CawLead {
    * (client `configureCaw`).
    */
   readonly project = $derived.by(() => this.#row());
-  /** Whether the project's events reach a conversation; null until the project is read. */
+  /** Whether Caw is on for the project (triggers start handlers); null until the project is read. */
   readonly on = $derived(this.project ? this.project.eventsOn : null);
   /** His harness and model (null: the harness's default), the project's settings. */
   readonly harness = $derived(this.project?.cawHarness ?? null);
@@ -374,11 +374,12 @@ export class CawLead {
    * The conversation his panel shows: the project's conversation, the one
    * its row names (`conversationInstanceId`), as the hub names it (caw.ts
    * `setConversation`: a start of the hub's own, or one his panel or Ask Caw
-   * started, conversation.ts `makeHis`) and every surface reads it
-   * (isProjectConversation: the one his events reach, his asks named
-   * Caw). A session merely in the project (a New Session start there, a
-   * session the hub is deleting) is not his. Null while it names none, or
-   * names one the board no longer lists.
+   * started, conversation.ts `makeHis`; a Continue moves it to the
+   * continuation, db `adoptChildren`) and every surface reads it
+   * (isProjectConversation: the one the person's words reach, its asks
+   * named Caw). A session merely in the project (a New Session start
+   * there, a handler, a session the hub is deleting) is not his. Null while
+   * it names none, or names one the board no longer lists.
    */
   readonly conversation = $derived.by((): BoardRow | null => {
     const named = this.project?.conversationInstanceId;

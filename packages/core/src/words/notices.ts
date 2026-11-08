@@ -49,19 +49,15 @@ export const noticeWords = {
   ended: "· ended",
   /** A project made from a session's offer, told to its conversation to be set up (hub caw.ts `setup`). */
   setupFromOffer: "Asked Caw to set up the project you made",
-  /** A decision page's "I'm done picking", told to the session that holds it (hub decisions.ts). */
-  donePicking: (title: string) => `Told you're done picking on “${title}”`,
   /** Why an ended session (stopping, stopped, discarded) takes nothing the person does on its artifacts, in a sentence's middle. */
   sessionEnded: "it has ended",
   /** What the session that delegated a page is told with the person's words on it once its writer takes no input. */
   handedToParent: (writer: string, id: string) =>
     `Its session “${writer}” takes no input now, so this page is yours, the session that delegated it: read the person's picks and notes with artifact_read({ id: "${id}" }).`,
-  /** A page whose every question has his answer, sent by the hub to the project's Caw because its writer takes no input. */
-  answeredPage: (title: string) => `Every question answered on “${title}”`,
-  /** Why Caw is woken for it. */
-  answeredPageTrigger:
-    "every question on a decision page is answered and the session that wrote it takes no input",
-  /** What Caw is told with it: the page is its now, and how to read it. */
+  /** Why the page's handler is told of it: every question answered, its writer taking no input. */
+  answeredPageTrigger: (page: string) =>
+    `Every question on the decision page ${page} is answered, and the session that wrote it takes no input.`,
+  /** What the page's handler is told with it: the page is its now, and how to read it. */
   answeredPageYours: (
     title: string,
     id: string,
@@ -71,10 +67,6 @@ export const noticeWords = {
     `Every question on “${title}” has the person's answer, and ${writer ? `the session that wrote it, ${writer}, takes no input now (${why})` : "no session holds it"}, so it is yours: read his picks and notes with artifact_read({ id: "${id}" }).`,
   /** A decided page's Make tasks, asked of the session that holds it. */
   makeTasks: (title: string) => `Asked to make tasks from “${title}”`,
-  /** A task the person added at the board, told to the project's conversation (hub task-input.ts). */
-  taskAdded: (task: string) => `Told Caw you added ${task}`,
-  /** To-dos the person added to a task, told to the project's conversation (hub task-input.ts). */
-  todosAdded: (task: string) => `Told Caw your to-dos on ${task}`,
   /** The person's approval of a task, told to the session that filed it (hub task-approval.ts). */
   approved: (title: string) => `Told you approved “${title}”`,
   /** The person's Retry on failed work, from the tray (hub server.ts `retryFromTray`). */

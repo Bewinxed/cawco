@@ -338,13 +338,14 @@ export interface ProjectRow {
   /** The model its Caw runs; null: its harness's default. */
   cawModel: string | null;
   /**
-   * Its Caw's session, once the hub has started one; null before and after
-   * one is retired. Read again on `projects.changed`, which the hub sends as
-   * it changes (caw.ts `setLead`).
+   * Its newest conversation, the one the person's words reach, once the hub
+   * has started one; null before and after one is retired. A Continue moves
+   * it to the continuation. Read again on `projects.changed`, which the hub
+   * sends as it changes (caw.ts `setConversation`, db `adoptChildren`).
    */
   conversationInstanceId: string | null;
   createdAt: string;
-  /** Its events reach its conversation (made with Caw: on). */
+  /** Caw is on: triggers on its things start handlers (made with Caw: on). */
   eventsOn: boolean;
   id: string;
   /** Where its attempts land when their task says nothing. */
@@ -7212,7 +7213,8 @@ export const configureCaw = async (
 /**
  * Session `instanceId`, started in his panel, is the project's conversation
  * now (hub caw.ts `name`): the one the project's row names, which his panel
- * shows and his events reach. The answer's name stands on the row at once.
+ * shows and the person's words from elsewhere reach (a Continue moves the
+ * name to its continuation). The answer's name stands on the row at once.
  */
 /**
  * How the person's start of a project's conversation goes, as the hub says

@@ -1,7 +1,7 @@
 /**
  * Routines (Projects spec §5.5, P3): a prompt the hub runs on a cron schedule
- * in a time zone, as a fresh delegate of the routine's type or as a message
- * to the project's conversation.
+ * in a time zone, as a fresh delegate of the routine's type or as a run of
+ * the routine's handler (handlers.ts).
  *
  * - **Once per slot.** A routine's schedule is one column, `next_slot`. A
  *   tick, for each routine whose `next_slot` is due, runs ONE transaction
@@ -35,18 +35,20 @@
  *   retried once at once (same slot, attempt 2), and a
  *   second failure needs you (a push, and a note in its project's
  *   conversation); anything else is delivered. A delegate run's delivered
- *   result is its report to the project's lead: a send to the project's
- *   conversation (caw.ts `tell`, kind `routine-report`) that wakes Caw, as
- *   any delegate's report wakes the session that started it; with Caw off
- *   or past the project's cap it is a note saying why he did not hear it.
+ *   result goes to the routine's handler (handlers.ts, kind
+ *   `routine-report`: the one that lives, or a fresh one, briefed with the
+ *   run's headline then its report; the owner's card "What a trigger
+ *   wakes", over PRD §5.5's "reports to the project's lead"); with Caw off
+ *   or past the project's cap it is a note saying why no handler heard it.
  *   The memory curator's result is a note: it reaches you as a memory
  *   proposal. A routine in no project pushes it to you.
- * - **Conversation runs** are a send to the project's conversation (caw.ts
- *   `tell`), as any event is, and run on. Caw answers with
- *   `routine_result` under the same output contract, settled the same way,
- *   save that a delivered result, his own words, is a note.
- *   The turn that read the wake (server.ts `changeSend`) ending without that
- *   answer fails the run; so does a wake his session never reads.
+ * - **Conversation runs** go to the routine's handler (handlers.ts), never
+ *   the project's conversation: a fresh one is briefed with the run, one
+ *   that lives is sent it. It answers with `routine_result` under the same
+ *   output contract, settled the same way, save that a delivered result, its
+ *   own words, is a note. The turn that read the run (a fresh handler's
+ *   first; a live one's that read the send, server.ts `changeSend`) ending
+ *   without that answer fails the run; so does a send it never reads.
  * - **Event runs**: an inbound event a route sends here (ingress.ts) runs the
  *   routine once, slot `event:<event id>`, the event carried after the
  *   routine's prompt as untrusted data. An event is a delivery, never
@@ -103,6 +105,7 @@ import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { WorkBudget } from "./db/schema";
+import type { Handled, Trigger } from "./handlers";
 import { byHandle } from "./handles";
 import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
@@ -314,8 +317,8 @@ export type RoutineActor = "owner" | InstanceRow;
 export interface RoutineDeps {
   /** Whether any machine is connected now. */
   readonly anyOnline: () => boolean;
-  /** A routine's notes and sends to the project's conversation (caw.ts). */
-  readonly caw: Pick<Caw, "notice" | "tell">;
+  /** A routine's notes in the project's conversation (caw.ts). */
+  readonly caw: Pick<Caw, "notice">;
   /**
    * A curator run's inbox, made ready (memory.ts): `none` when no note is
    * left to curate, else the brief it reads; Jev failing throws.
@@ -344,6 +347,8 @@ export interface RoutineDeps {
   readonly push: Pick<Push, "routine" | "routineMade">;
   /** Why the project's spend cap keeps its Caw from waking, or nothing (project-caps.ts). */
   readonly quiets: (projectId: string) => string | undefined;
+  /** A trigger on a routine, to its handler (handlers.ts `trigger`). */
+  readonly trigger: (projectId: string, trigger: Trigger) => Promise<Handled>;
   /** The delegate types a project's sessions see (the fleet's without one). */
   readonly types: (projectId?: string | null) => DelegateType[];
   readonly workItems: Pick<WorkItems, "archive" | "spentBy" | "startForHub">;
@@ -573,8 +578,8 @@ const contractOf = (
 const leadContract = (runId: string): string =>
   `## Your answer\n\nWhen you are done, call routine_result with run "${runId}". Its result is this run's output, read by the hub: ${ANSWERS} Call it before your turn ends: a turn that ends without it fails the run.`;
 
-/** A conversation run's end when Caw's turn that took its wake ends with no `routine_result`. */
-const NO_RESULT = "Caw ended its turn without saying how the run went";
+/** A conversation run's end when the handler's turn that took it ends with no `routine_result`. */
+const NO_RESULT = "Its handler ended its turn without saying how the run went";
 
 /** How a run ended, as its answer or its work item says. */
 export interface RunEnd {
@@ -585,8 +590,6 @@ export interface RunEnd {
 
 /** What {@link surfaceRun} tells and where. */
 export interface SurfaceDeps {
-  /** The project's conversation, Caw (caw.ts `tell`). */
-  readonly caw: Pick<Caw, "tell">;
   /** A line in the project's conversation's transcript, waking nobody. */
   readonly note: (
     routine: RoutineRow,
@@ -601,20 +604,22 @@ export interface SurfaceDeps {
   ) => { session: string; summary: string | null } | undefined;
   /** Starts the run's second attempt at its slot. */
   readonly retry: (routine: RoutineRow, run: RoutineRunRow) => void;
+  /** A trigger on the routine, to its handler (handlers.ts `trigger`). */
+  readonly trigger: (projectId: string, trigger: Trigger) => Promise<Handled>;
 }
 
 /**
  * What a run came to, told. A delivered result of a project's delegate run
- * reports to the project's lead, Caw, and wakes him, as every delegate's
- * report wakes the session that started it; with Caw off (or past the
- * project's cap) it is a note saying why he did not hear it. A conversation
- * run's result and the memory curator's are notes ({@link reportsToLead}).
+ * goes to the routine's handler (handlers.ts), its headline then its
+ * report; with Caw off (or past the project's cap) it is a note saying why
+ * no handler heard it. A conversation run's result and the memory
+ * curator's are notes ({@link reportsToLead}).
  * A routine in no project
  * pushes its result to you. A first failure is retried at once; a second one
  * is raised to you. Answers whether it needs you.
  */
 export const surfaceRun = (
-  { caw, note, push, reportOf, retry }: SurfaceDeps,
+  { trigger, note, push, reportOf, retry }: SurfaceDeps,
   routine: RoutineRow,
   run: RoutineRunRow,
   end: RunEnd,
@@ -646,26 +651,26 @@ export const surfaceRun = (
         routine,
         run,
         "delivered",
-        `${words}\n\nCaw did not hear this result: ${why}`
+        `${words}\n\nNo handler heard this result: ${why}`
       );
     const report = reportOf(run);
     const label = slotLabel(run.slot, routine.timeZone);
-    caw
-      .tell(projectId, {
-        by: "event",
-        kind: "routine-report",
-        trigger: `the routine ${routineLink(routine.id, routine.name)}, its ${label} run${report ? ` in ${report.session}` : ""}, delivered its result`,
-        text: `Run ${run.id}. The routine's prompt:\n\n${routine.prompt}\n\n## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}`,
-      })
-      .then(
-        (told) => {
-          if (!told.woke) {
-            unheard(told.why);
-          }
-        },
-        (error: unknown) =>
-          unheard(error instanceof Error ? error.message : String(error))
-      );
+    trigger(projectId, {
+      kind: "routine-report",
+      thing: { kind: "routine", id: routine.id },
+      name: `the routine ${routineLink(routine.id, routine.name)}`,
+      context: `The routine ${routineLink(routine.id, routine.name)} ran at ${label}${report ? ` in ${report.session}` : ""} (run ${run.id}) and delivered its result.`,
+      delta: `## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}\n\n## The routine's prompt\n\n${routine.prompt}`,
+      who: report ? report.session : "the routine",
+    }).then(
+      (told) => {
+        if (!told.woke) {
+          unheard(told.why);
+        }
+      },
+      (error: unknown) =>
+        unheard(error instanceof Error ? error.message : String(error))
+    );
     return false;
   }
   if (end.outcome !== "failed") {
@@ -691,6 +696,7 @@ export const surfaceRun = (
 export const createRoutines = ({
   anyOnline,
   caw,
+  trigger,
   curatorBrief,
   db,
   hubCheckout,
@@ -1167,10 +1173,12 @@ export const createRoutines = ({
     });
 
   /**
-   * A conversation run: one send to the project's conversation (caw.ts
-   * `tell`), starting it in the run's mode when it has none. It runs until
-   * the conversation's `routine_result` for it, or until the turn that took
-   * it ends without one ({@link turnEnded}).
+   * A conversation run: to the routine's handler (handlers.ts), never the
+   * project's conversation: a fresh one, in the run's mode, briefed with the
+   * run, whose first turn is the run's; or the one that lives, sent the run,
+   * whose turn that reads it is ({@link sendLeft}). It runs until the
+   * handler's `routine_result` for it, or until that turn ends without one
+   * ({@link turnEnded}).
    */
   const fireLead = async (
     routine: RoutineRow,
@@ -1188,25 +1196,33 @@ export const createRoutines = ({
     const route = run.slot.startsWith(EVENT_SLOT)
       ? db.ingress.event(run.slot.slice(EVENT_SLOT.length))?.routeId
       : undefined;
-    const woke = await caw.tell(projectId, {
-      by: "event",
+    const woke = await trigger(projectId, {
       kind: "routine-run",
       routine: routine.id,
       ...(route ? { route } : {}),
-      trigger: `the routine ${routineLink(routine.id, routine.name)}, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}`,
-      text: `Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${leadContract(run.id)}`,
+      thing: { kind: "routine", id: routine.id },
+      name: `the routine ${routineLink(routine.id, routine.name)}`,
+      context: `The routine ${routineLink(routine.id, routine.name)} fired its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}, run ${run.id}.`,
+      delta: `Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${leadContract(run.id)}`,
+      who: "the routine's schedule",
     });
     if (woke.woke) {
-      store.setRun(run.id, { state: "running" });
+      if (woke.started) {
+        // A fresh handler's first turn is the run's.
+        store.setRun(run.id, { state: "running", instanceId: woke.instanceId });
+        armed.add(woke.instanceId);
+      } else {
+        store.setRun(run.id, { state: "running" });
+      }
       return;
     }
     const gate = projectGate(routine);
     if (!gate) {
-      // Caw on and under his cap, and his session refused the wake.
+      // Caw on and under his cap, and no handler took the run.
       settle(run.id, {
         outcome: "failed",
         output: null,
-        reason: "Caw's session did not take the wake",
+        reason: `No handler took the run: ${woke.why}`,
         usd: null,
       });
       return;
@@ -1334,7 +1350,7 @@ export const createRoutines = ({
   ): boolean =>
     surfaceRun(
       {
-        caw,
+        trigger,
         note,
         push,
         reportOf: (ran) => {

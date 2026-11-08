@@ -5,10 +5,12 @@
  * (plans.ts `edit`); this decides where it goes:
  *
  * - **Who hears it** ({@link receiverOf}): the session whose plan it is; a
- *   delegate's plan, the session that delegated it, which decides what
- *   reaches the delegate; a task attempt's plan, the project's Caw, who
- *   dispatched the task and decides whether to tell the attempt, start a new
- *   one, or reshape the task.
+ *   delegate's plan (a task attempt's included), the session that delegated
+ *   it, which decides what reaches the delegate: for an attempt nobody named
+ *   a parent for, the task's handler (handlers.ts), never the project's
+ *   conversation (the owner's card "What a trigger wakes", over PRD §5.2's
+ *   "a task attempt's plan answers to Caw"). A change kept for Caw before
+ *   (`caw:<project>`) goes to a handler of the first plan it names.
  * - **When**: a receiver mid-turn hears every change at once, the one send
  *   path a person's message takes into a busy session, which folds it in at
  *   its next step. An idle one is started by a reword, an add, a removal or
@@ -49,6 +51,7 @@ import {
   type WrittenStep,
 } from "./plans";
 import { FolderRefusal, refused } from "./project-folder";
+import { isHubParent } from "./work-items";
 
 /** What became of a message to a session about its plan's changes. */
 export type PlanTold =
@@ -79,6 +82,16 @@ export interface PlanChangesDeps {
    * session that cannot. Its id; throws why it could not start.
    */
   goOnFrom: (row: InstanceRow, opening: string) => Promise<string>;
+  /**
+   * The person's changes kept for Caw before handlers (`caw:<project>`), to
+   * a handler of the plan `instanceId` (handlers.ts `trigger`): undefined
+   * once one has them, else why not.
+   */
+  handle: (
+    projectId: string,
+    instanceId: string,
+    text: string
+  ) => Promise<string | undefined>;
   lifetime: HubLifetimeShape;
   plans: Plans;
   /**
@@ -90,8 +103,6 @@ export interface PlanChangesDeps {
   sendUnread: (uuid: string) => boolean;
   /** The person's words to a session, through the one send path (`PLAN_ORIGIN`). */
   tell: (instanceId: string, text: string) => PlanTold;
-  /** The person's words to a project's conversation (caw.ts `tell`, by you): undefined once it has them, else why not. */
-  wakeCaw: (projectId: string, text: string) => Promise<string | undefined>;
 }
 
 /** A session as a message names it: its link, its title the label. */
@@ -114,25 +125,20 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   };
 
   /**
-   * Who hears a change to `row`'s plan: a task attempt's, the project's Caw;
-   * a delegate's, the session that delegated it; any other, the session.
+   * Who hears a change to `row`'s plan: a delegate's (an attempt's too), the
+   * session that delegated it; any other, the session.
    */
   const receiverOf = (row: InstanceRow): PlanReceiver => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
-    if (item?.taskId && item.projectId) {
-      return { kind: "caw", projectId: item.projectId };
-    }
-    if (item && row.parentInstanceId) {
+    if (item && row.parentInstanceId && !isHubParent(row.parentInstanceId)) {
       return { kind: "session", instanceId: row.parentInstanceId };
     }
     return { kind: "session", instanceId: row.id };
   };
 
-  /** The session that runs a receiver now: the session, or the project's Caw's. */
+  /** The session that runs a receiver now: the session; none for a change kept for Caw. */
   const sessionOfReceiver = (to: PlanReceiver): string | undefined =>
-    to.kind === "session"
-      ? to.instanceId
-      : (db.project(to.projectId)?.conversationInstanceId ?? undefined);
+    to.kind === "session" ? to.instanceId : undefined;
 
   /**
    * The message that tells `to` of `rows`, each plan's changes under the
@@ -172,7 +178,8 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   ): { next: string; whose: string } => {
     const [owner] = db.getInstancesByIds([instanceId]);
     const who = owner ? named(owner) : "a session since removed";
-    if (to.kind === "caw") {
+    const item = owner?.workItemId ? db.workItem(owner.workItemId) : undefined;
+    if (to.kind === "caw" || item?.taskId) {
       return {
         whose: `the plan of ${who}, an attempt at a task of this project`,
         next: "The attempt has not heard this. Decide whether to tell it (handoff), start a new attempt, or reshape the task.",
@@ -256,10 +263,14 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       const ids = rows.map((row) => row.id);
       const text = message(to, rows);
       if (to.kind === "caw") {
-        // Told before the wake goes, so the wake's own send folds none of
+        // Told before the handler hears it, so its own send folds none of
         // them in again (server.ts `tellPlanFirst`); undone if it is refused.
         db.closePlanChanges(ids, { at: new Date() });
-        const why = await deps.wakeCaw(to.projectId, text);
+        const why = await deps.handle(
+          to.projectId,
+          rows[0]?.instanceId ?? "",
+          text
+        );
         if (why !== undefined) {
           db.closePlanChanges(ids, { undelivered: why });
         }
@@ -297,19 +308,11 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
 
   /**
    * What `instanceId` is owed of its plans' changes, as words a note ahead
-   * of its next turn carries, the changes then told: a session's own, and,
-   * when it is a project's Caw, his project's. Undefined when it is owed
-   * nothing.
+   * of its next turn carries, the changes then told. Undefined when it is
+   * owed nothing.
    */
   const foldInto = (instanceId: string): string | undefined => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    const keys = [
-      receiverKey({ kind: "session", instanceId }),
-      ...(row?.projectId &&
-      db.project(row.projectId)?.conversationInstanceId === instanceId
-        ? [receiverKey({ kind: "caw", projectId: row.projectId })]
-        : []),
-    ];
+    const keys = [receiverKey({ kind: "session", instanceId })];
     const words: string[] = [];
     for (const key of keys) {
       const rows = db.untoldPlanChanges(key);

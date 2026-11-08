@@ -40639,6 +40639,13 @@
               "$ref": "#/components/schemas/BuiltOn"
             }
           },
+          "handlers": {
+            "description": "The handlers that took its triggers (its comments, moves, reports), newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskHandler"
+            }
+          },
           "heldBy": {
             "description": "The ancestor whose live attempt coordinates it, holding it from the hub's dispatch; null when none.",
             "type": [
@@ -40647,7 +40654,7 @@
             ]
           },
           "lastAttemptFailed": {
-            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nproject's conversation for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
+            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\ntask's handler for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
             "type": "boolean"
           },
           "lastAttemptStopped": {
@@ -40757,6 +40764,7 @@
           "duplicateOf",
           "fields",
           "foundIn",
+          "handlers",
           "heldBy",
           "id",
           "labels",
@@ -41081,6 +41089,48 @@
           "label",
           "since",
           "target"
+        ]
+      },
+      "TaskHandler": {
+        "description": "One handler that took a trigger on the task (hub handlers.ts: a fresh\nsession the hub started for it while no live session was on it), as the\ntask shows it: its session, how it stands, and what it did.",
+        "type": "object",
+        "properties": {
+          "endedAt": {
+            "description": "When it ended, ms epoch; null while it lives.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "headline": {
+            "description": "What it did, in a line: its `finish_item`'s headline, else its last turn's first line.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instanceId": {
+            "description": "Its session.",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "When it started, ms epoch.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkItemState"
+          },
+          "workItemId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "endedAt",
+          "headline",
+          "instanceId",
+          "startedAt",
+          "state",
+          "workItemId"
         ]
       },
       "TaskWait": {
@@ -41411,6 +41461,13 @@
               "$ref": "#/components/schemas/BuiltOn"
             }
           },
+          "handlers": {
+            "description": "The handlers that took its triggers (its comments, moves, reports), newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskHandler"
+            }
+          },
           "heldBy": {
             "description": "The ancestor whose live attempt coordinates it, holding it from the hub's dispatch; null when none.",
             "type": [
@@ -41419,7 +41476,7 @@
             ]
           },
           "lastAttemptFailed": {
-            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nproject's conversation for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
+            "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\ntask's handler for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
             "type": "boolean"
           },
           "lastAttemptStopped": {
@@ -41540,6 +41597,7 @@
           "extra",
           "foundIn",
           "group",
+          "handlers",
           "hash",
           "heldBy",
           "id",

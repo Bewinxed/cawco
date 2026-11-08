@@ -1,6 +1,6 @@
 ---
 name: project-github-event
-description: Handle a GitHub event no route took (a pull request, an issue, a comment) in a project's conversation. Use when a CawCo message's context line names this skill.
+description: Handle a GitHub event no route took (a pull request, an issue, a comment) for a project, as its handler. Use when a CawCo message's context line names this skill.
 ---
 
 # A GitHub event

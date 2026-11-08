@@ -1,12 +1,12 @@
 /**
  * `bun scripts/routine-report-check.ts`: a project routine's delegate run
- * reports its delivered result to the project's lead, Caw, and wakes him
- * (hub routines.ts `surfaceRun`), as every delegate reports to the session
- * that started it.
+ * reports its delivered result to the routine's handler (hub routines.ts
+ * `surfaceRun`, handlers.ts), never the project's conversation.
  *
- * - A delivered result: one `tell`, kind `routine-report`, and no note.
- * - `NO_REPLY` (outcome `silent`): no `tell`, no note, no push.
- * - A `tell` that answers `woke: false`: a note naming why.
+ * - A delivered result: one trigger, kind `routine-report`, on the
+ *   routine, its headline then its report, and no note.
+ * - `NO_REPLY` (outcome `silent`): no trigger, no note, no push.
+ * - A trigger no handler took (`woke: false`): a note naming why.
  * - A first failure retries; a second one notes, pushes and needs you.
  * - A routine in no project pushes its result; a conversation run's result
  *   and the memory curator's are notes.
@@ -14,19 +14,20 @@
  * Run by `bun run check` (scripts/check.ts); it fails naming each case
  * whose answer differs.
  */
-import type { Caw } from "../packages/hub/src/caw";
+
 import type {
   RoutineRow,
   RoutineRunRow,
 } from "../packages/hub/src/db/routines";
+import type { Handled, Trigger } from "../packages/hub/src/handlers";
 import {
   type RunEnd,
   type SurfaceDeps,
   surfaceRun,
 } from "../packages/hub/src/routines";
 
-type Told = Awaited<ReturnType<Caw["tell"]>>;
-type TellEvent = Parameters<Caw["tell"]>[1];
+type Told = Handled;
+type TellEvent = Trigger;
 
 const routine = (fields: Partial<RoutineRow> = {}): RoutineRow => ({
   id: "rtn-1",
@@ -93,11 +94,9 @@ const drive = async (
     needsYou: false,
   };
   const deps: SurfaceDeps = {
-    caw: {
-      tell: (_projectId, event) => {
-        did.tells.push(event);
-        return Promise.resolve(told);
-      },
+    trigger: (_projectId, event) => {
+      did.tells.push(event);
+      return Promise.resolve(told);
     },
     note: (_routine, _run, phase, body) => {
       did.notes.push({ phase, ...(body === undefined ? {} : { body }) });
@@ -128,7 +127,12 @@ const drive = async (
   return did;
 };
 
-const WOKE: Told = { woke: true, instanceId: "caw-1", send: "send-1" };
+const WOKE: Told = {
+  woke: true,
+  instanceId: "handler-1",
+  itemId: "wi-2",
+  started: true,
+};
 const OFF: Told = { woke: false, why: "the project's Caw is off" };
 
 const wrong: string[] = [];
@@ -142,13 +146,15 @@ const expect = (name: string, ok: boolean, got: unknown) => {
   const did = await drive(DELIVERED, WOKE);
   const [event] = did.tells;
   expect(
-    "a delivered result tells Caw once, kind routine-report, carrying the result and report",
+    "a delivered result goes to the routine's handler once, kind routine-report, its result then its report",
     did.tells.length === 1 &&
       event?.kind === "routine-report" &&
-      event.by === "event" &&
-      event.text.includes(DELIVERED.output ?? "") &&
-      event.text.includes("three are past due") &&
-      event.trigger.includes("cawco:routine/rtn-1") &&
+      event.thing.kind === "routine" &&
+      event.thing.id === "rtn-1" &&
+      event.delta.includes(DELIVERED.output ?? "") &&
+      event.delta.indexOf(DELIVERED.output ?? "") <
+        event.delta.indexOf("three are past due") &&
+      event.context.includes("cawco:routine/rtn-1") &&
       did.notes.length === 0 &&
       did.pushes.length === 0 &&
       !did.needsYou,
@@ -173,7 +179,7 @@ const expect = (name: string, ok: boolean, got: unknown) => {
   const did = await drive(DELIVERED, OFF);
   const [noted] = did.notes;
   expect(
-    "a tell that does not wake Caw notes the result and why",
+    "a trigger no handler took notes the result and why",
     did.tells.length === 1 &&
       did.notes.length === 1 &&
       noted?.phase === "delivered" &&
@@ -255,5 +261,5 @@ if (wrong.length > 0) {
   process.exit(1);
 }
 console.log(
-  "routine-report-check: 8 cases: delivered tells Caw, NO_REPLY silent, unheard noted with why, failures unchanged, no-project pushed, conversation and curator noted"
+  "routine-report-check: 8 cases: delivered goes to its handler, NO_REPLY silent, unheard noted with why, failures unchanged, no-project pushed, conversation and curator noted"
 );

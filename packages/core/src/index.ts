@@ -45,6 +45,8 @@ export * from "./fleet";
 // Fleet watch: its signals, limits, words and frames (Projects spec §5.3).
 export * from "./fleet-watch";
 export * from "./frames";
+// A handler: the fresh session a trigger on a project's thing starts when no live session is on it.
+export * from "./handlers";
 // The harness-neutral spine (2026-08 rework). CawCo owns these types; the
 // harness adapters (claude, opencode, pi) translate their native events into
 // them, the hub peeks them, the dashboard folds them. See harness.ts for the

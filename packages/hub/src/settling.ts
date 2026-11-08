@@ -107,10 +107,14 @@ export interface SettlingDeps {
   readonly seen: (artifactId: string, card: string) => void;
   /** Files and spawns a work item (work-items.ts `start`): what dispatch starts an attempt through. */
   readonly start: (request: WorkItemRequest) => Promise<WorkItemStart>;
-  /** Tells the project's conversation a `decision` event (caw.ts `tell`): its session, or why it didn't take it. */
+  /**
+   * Caw's cards, to their handler (handlers.ts `trigger`, kind `decision`,
+   * the page's cards its thing): its session, or why none took them. Never
+   * the project's conversation.
+   */
   readonly tellCaw: (
     projectId: string,
-    event: { text: string; trigger: string }
+    event: { artifactId: string; text: string; trigger: string }
   ) => Promise<{ instanceId: string } | { why: string }>;
   /** Whether session `id` is live and its prompt cache warm (keep-alive.ts `cacheWarmNow`). */
   readonly warm: (id: string) => boolean;
@@ -395,7 +399,7 @@ export const createSettling = (deps: SettlingDeps) => {
     ...on,
   });
 
-  /** Caw's cards: one `decision` event to the project's conversation. */
+  /** Caw's cards: one `decision` trigger to their handler. */
   const toCaw = async (
     fleet: FleetDecides,
     asker: InstanceRow,
@@ -403,6 +407,7 @@ export const createSettling = (deps: SettlingDeps) => {
   ): Promise<RouteState> => {
     const projectId = page.row.projectId as string;
     const told = await deps.tellCaw(projectId, {
+      artifactId: page.row.id,
       trigger: decidesWords.decisionTrigger(
         decisionLink(page.row.id, page.cards[0]?.id ?? "", page.row.title)
       ),
@@ -625,22 +630,16 @@ export const createSettling = (deps: SettlingDeps) => {
     );
   };
 
-  /** Whether `settler` is `member`'s session for the card: the ledger's, or Caw's conversation. */
+  /**
+   * Whether `settler` is `member`'s session for the card: the ledger's (for
+   * Caw, the handler its cards went to). The project's conversation settles
+   * none of them for being the project's.
+   */
   const mayRun = (
     settler: InstanceRow,
-    row: ArtifactRow,
     member: Member,
     kept: CardSettlingRow | undefined
-  ): boolean => {
-    if (kept?.instanceId === settler.id && kept.route === member.id) {
-      return true;
-    }
-    return (
-      member.type === "caw" &&
-      !!row.projectId &&
-      deps.project(row.projectId)?.conversationInstanceId === settler.id
-    );
-  };
+  ): boolean => kept?.instanceId === settler.id && kept.route === member.id;
 
   /**
    * Each open card of `page` sorted ({@link sort}), the ledger rows that
@@ -770,7 +769,7 @@ export const createSettling = (deps: SettlingDeps) => {
         writerOnly(settler, row, name);
         return signed;
       }
-      if (mayRun(settler, row, member, kept)) {
+      if (mayRun(settler, member, kept)) {
         return signed;
       }
       throw new SettleRefusal(

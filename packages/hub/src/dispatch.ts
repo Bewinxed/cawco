@@ -16,11 +16,11 @@
  * - **Who it reports to.** A work item needs a parent session. `task_start`,
  *   or `delegate` naming the task, from any session of the project that
  *   orchestrates (`parentProblem`: a worker, or a delegate that may start
- *   any type) makes that session the parent; the
- *   project's conversation, Caw (caw.ts), takes the reports of every attempt
- *   nobody asked for, its session started for the first one while Caw is
- *   on. With Caw off there is no conversation to take them: such an attempt
- *   does not start.
+ *   any type) makes that session the parent; the task's handler
+ *   (handlers.ts: the one that lives, or one started for it while Caw is
+ *   on) takes the report of an attempt nobody named a parent for, never the
+ *   project's conversation. With Caw off no handler starts to take it: such
+ *   an attempt does not start, unless you start it yourself.
  * - **The frontier** (tasks.ts `onFrontier`): the ready tasks (in a `todo`
  *   stage, every wait of theirs and their `part_of` chain settled, no live
  *   attempt, no coordinator holding them; task-waits.ts settles each) that
@@ -38,7 +38,7 @@
  *   (`work_items.waited_on`): a card answered differently since tells its
  *   live session once, and a done task shows it was built on it. A failed or
  *   stopped attempt is its starter's business: its report goes to the
- *   session that started it, the project's conversation for the dispatcher's own (work-items
+ *   session that started it, the task's handler for the dispatcher's own (work-items
  *   `reportees`), who retries it or moves on. It never waits for the person,
  *   and only a person's own start's failure reaches his phone (push.ts).
  * - **Dispatch** starts the frontier on its own, only for a project with
@@ -50,8 +50,8 @@
  *   back the issues of openers the tracker does not vouch for), or filed
  *   straight into one, starts an
  *   attempt (of the task's own type when it names one, else that type),
- *   reporting to the session that moved it or else the project's conversation. A start that
- *   cannot go, the conversation's own start among them, is remembered on the task
+ *   reporting to the session that moved it or else the task's handler. A start that
+ *   cannot go, the handler's own start among them, is remembered on the task
  *   and shown on its card. A hook obeys `max_attempts`: at the cap its start is queued
  *   (`queued_task_starts`) and runs, oldest first and before the frontier,
  *   as a slot frees. A start you or a session ask for is not capped.
@@ -195,16 +195,6 @@ export interface DispatchDeps {
    * `contextFor`): AGENTS.md and the knowledge files it needs, or "".
    */
   readonly context: (projectId: string, task: TaskView) => Promise<string>;
-  /**
-   * The project's conversation, started now if it has none (caw.ts
-   * `conversationFor`): for your ask on or off, for the dispatcher's own
-   * (`event`) only while its switch is on; undefined otherwise. The attempts
-   * the hub starts report to it, as any delegate's do to its parent.
-   */
-  readonly conversationFor: (
-    projectId: string,
-    by: Origin
-  ) => Promise<InstanceRow | undefined>;
   readonly db: Pick<
     DbShape,
     | "accounts"
@@ -213,6 +203,7 @@ export interface DispatchDeps {
     | "listAgents"
     | "listProjects"
     | "project"
+    | "handledBy"
     | "projectAttempts"
     | "queuedTaskStarts"
     | "queueTaskStart"
@@ -228,6 +219,18 @@ export interface DispatchDeps {
    * `needsDesignSystem`).
    */
   readonly designSection: (clone: CloneRef) => Promise<string>;
+  /**
+   * The task's handler, the one that lives or one started now (caw.ts
+   * `handlerFor`, handlers.ts): for your start on or off, for the
+   * dispatcher's own (`event`) only while Caw is on; undefined otherwise.
+   * The attempts nobody named a parent for report to it, as any delegate's
+   * do to its parent: never to the project's conversation.
+   */
+  readonly handlerFor: (
+    projectId: string,
+    task: Pick<TaskView, "id" | "title">,
+    by: Origin
+  ) => Promise<InstanceRow | undefined>;
   /** Runs the safety net until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /**
@@ -363,7 +366,7 @@ const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
 };
 
 const NO_LEAD =
-  "Turn the project's events on so its conversation takes the report, name a session of the project that orchestrates, or start it with task_start from one.";
+  "Turn Caw on for the project so a handler of the task takes the report, name a session of the project that orchestrates, or start it with task_start from one.";
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
@@ -761,7 +764,7 @@ const pauseOf = (
     return "Dispatch is off: attempts start only when a session or you start them.";
   }
   if (!project.eventsOn) {
-    return "The project's events are off, so no conversation takes the reports of the attempts the hub starts; they start only when a session or you start them.";
+    return "Caw is off for the project, so no handler takes the reports of the attempts the hub starts; they start only when a session or you start them.";
   }
   if (now.stagesProblems.length > 0) {
     return `stages.md does not read. ${now.stagesProblems.join(" ")}`;
@@ -828,7 +831,7 @@ export const createDispatcher = ({
   context,
   db,
   designSection,
-  conversationFor,
+  handlerFor,
   lifetime,
   pauses,
   placement,
@@ -869,14 +872,15 @@ export const createDispatcher = ({
   const instance = (id: string): InstanceRow | undefined =>
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
 
-  /** The project's conversation, started now when it has none; undefined while its switch is off. */
-  const conversationOf = async (
+  /** The task's handler, started now when none lives; undefined while Caw is off (your own start excepted). */
+  const handlerOf = async (
     project: ProjectRow,
+    task: Pick<TaskView, "id" | "title">,
     by: Origin = "event"
   ): Promise<InstanceRow | undefined> => {
     const row =
       by === "you" || project.eventsOn
-        ? await conversationFor(project.id, by)
+        ? await handlerFor(project.id, task, by)
         : undefined;
     return row && !parentProblem(row, project.id) ? row : undefined;
   };
@@ -1560,30 +1564,25 @@ export const createDispatcher = ({
     }
     const { project, ready } = look;
     let slots = project.maxAttempts - look.live;
-    let reportsTo: InstanceRow | undefined;
-    try {
-      reportsTo = await conversationOf(project);
-    } catch (error) {
-      // The tasks this look would have started say why they did not.
-      const why = failure(error).message;
-      const waiting = await Promise.all(
-        ready.slice(0, slots).map((id) => tasks.get(projectId, id))
-      );
-      for (const task of waiting) {
-        note(
-          projectId,
-          task,
-          `It is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
-        );
-      }
-      return;
-    }
-    if (!reportsTo) {
-      return;
-    }
     for (const id of ready) {
       if (slots <= 0) {
         break;
+      }
+      const task = await tasks.get(projectId, id);
+      let reportsTo: InstanceRow | undefined;
+      try {
+        reportsTo = await handlerOf(project, task);
+      } catch (error) {
+        // The task says why it did not start.
+        note(
+          projectId,
+          task,
+          `It is ready to start, but its handler, who takes the report of the attempt the hub starts, did not start: ${failure(error).message}`
+        );
+        continue;
+      }
+      if (!reportsTo) {
+        return;
       }
       try {
         const started = await startAttempt(projectId, id, reportsTo, {
@@ -1607,10 +1606,10 @@ export const createDispatcher = ({
 
   /**
    * The session a hook's attempt reports to: the one that moved the task in
-   * when it can take reports, else the project's conversation. With neither, or a conversation whose
-   * session did not start (no account signed in, say), the reason is
-   * remembered on the task, so its card says why it did not start; `how`
-   * opens that sentence ("tsk-3 entered extract, which runs brand").
+   * when it can take reports, else the task's handler. With neither, or a
+   * handler whose session did not start (no account signed in, say), the
+   * reason is remembered on the task, so its card says why it did not start;
+   * `how` opens that sentence ("tsk-3 entered extract, which runs brand").
    */
   const hookParent = async (
     project: ProjectRow,
@@ -1622,25 +1621,25 @@ export const createDispatcher = ({
     if (mover && !parentProblem(mover, project.id)) {
       return mover;
     }
-    let caw: InstanceRow | undefined;
+    let handler: InstanceRow | undefined;
     try {
-      caw = await conversationOf(project);
+      handler = await handlerOf(project, task);
     } catch (error) {
       note(
         project.id,
         task,
-        `${how}, but Caw, who takes its report, did not start: ${failure(error).message}`
+        `${how}, but its handler, who takes its report, did not start: ${failure(error).message}`
       );
       return;
     }
-    if (!caw) {
+    if (!handler) {
       note(
         project.id,
         task,
         `${how}, but no session can take the attempt's report. ${NO_LEAD}`
       );
     }
-    return caw;
+    return handler;
   };
 
   /**
@@ -2159,7 +2158,7 @@ export const createDispatcher = ({
       offLine(
         "judged",
         projectId,
-        `${task.id}'s attempt ${short(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the project's conversation, which did not do the work`
+        `${task.id}'s attempt ${short(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the task's handler, which did not do the work`
       );
       placement.judgeByLead(
         projectId,
@@ -2179,17 +2178,19 @@ export const createDispatcher = ({
 
   /**
    * Who an attempt you start from the dashboard reports to: the session
-   * named, or the project's Caw, started for it on or off (it is your work);
-   * refused when neither can take reports.
+   * named, or the task's handler, started for it on or off (it is your
+   * work); refused when neither can take reports.
    */
   const reporter = async (
     projectId: string,
+    ref: string,
     parentInstanceId: string | undefined
   ): Promise<InstanceRow> => {
     const project = projectOf(projectId);
     if (!parentInstanceId) {
+      const task = await tasks.get(projectId, ref);
       return (
-        (await conversationOf(project, "you")) ??
+        (await handlerOf(project, task, "you")) ??
         refuse(409, `Nobody can take this attempt's report. ${NO_LEAD}`)
       );
     }
@@ -2235,12 +2236,12 @@ export const createDispatcher = ({
    * left (a move into a `runs:` stage queues one again).
    */
   /**
-   * The lead's verdict that a landed attempt it was woken to judge (Jev off,
-   * events on: {@link judgeCriteria}'s `conversation`) did not meet its
-   * acceptance criteria is its move of the task back to a todo stage. That
-   * move stamps the attempt unmet, as Jev's own verdict does, so the task
-   * counts it failed and stays off the frontier until task_retry. Told by:
-   * the project's conversation moving a task with acceptance criteria into
+   * The verdict of the task's handler that a landed attempt it was woken to
+   * judge (Jev off, Caw on: {@link judgeCriteria}'s `conversation`) did not
+   * meet its acceptance criteria is its move of the task back to a todo
+   * stage. That move stamps the attempt unmet, as Jev's own verdict does, so
+   * the task counts it failed and stays off the frontier until task_retry.
+   * Told by: a handler of the task moving it, with acceptance criteria, into
    * a todo stage while its newest attempt is done, landed whole (no
    * follow-up `error`) and not stamped yet.
    */
@@ -2248,11 +2249,13 @@ export const createDispatcher = ({
     event: Extract<TaskEvent, { kind: "moved" }>
   ): Promise<void> => {
     const { actor, projectId, id, to } = event;
-    if (
-      actor.mover !== "session" ||
-      !actor.instanceId ||
-      actor.instanceId !== db.project(projectId)?.conversationInstanceId
-    ) {
+    const mover = actor.mover === "session" ? actor.instanceId : undefined;
+    if (!(
+      mover &&
+      db
+        .handledBy(projectId, "task", id)
+        .some((item) => item.instanceId === mover)
+    )) {
       return;
     }
     const [newest] = db
@@ -2333,7 +2336,7 @@ export const createDispatcher = ({
       return startAttempt(
         projectId,
         ref,
-        await reporter(projectId, parentInstanceId),
+        await reporter(projectId, ref, parentInstanceId),
         { retry: true, origin: "you" }
       );
     },
@@ -2456,7 +2459,7 @@ export const createDispatcher = ({
       return startAttempt(
         projectId,
         ref,
-        await reporter(projectId, parentInstanceId),
+        await reporter(projectId, ref, parentInstanceId),
         { origin: "you" }
       );
     },

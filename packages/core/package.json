@@ -215,6 +215,7 @@
     "./words/task-review": "./src/words/task-review.ts",
     "./words/judged": "./src/words/judged.ts",
     "./words/project-conversation": "./src/words/project-conversation.ts",
+    "./words/handlers": "./src/words/handlers.ts",
     "./words/views": "./src/words/views.ts",
     "./words/workspace-needs": "./src/words/workspace-needs.ts",
     ".": {

@@ -285,7 +285,10 @@ export const standIn = (
         stops: { running: () => [], stop: () => undefined },
         spawn: () => Promise.resolve(),
         task: () => Promise.reject(new Error("measuring")),
-        conversationStarted: () => undefined,
+        cawOn: () => undefined,
+        cold: () => undefined,
+        compress: () => Promise.reject(new Error("measuring")),
+        handle: () => Promise.resolve({ woke: false, why: "measuring" }),
         turnEnded: () => undefined,
         views: {} as never,
         workPlace: () => ({ kind: "none", why: "measuring", fix: "" }),
@@ -294,6 +297,7 @@ export const standIn = (
       createRoutines({
         anyOnline: () => false,
         caw: {} as never,
+        trigger: () => Promise.reject(new Error("measuring")),
         curatorBrief: () => Promise.reject(new Error("measuring")),
         db: {} as never,
         hubCheckout: () => Promise.reject(new Error("measuring")),
@@ -316,7 +320,7 @@ export const standIn = (
         jevAccess: () => undefined,
         lifetime,
         routines: {} as never,
-        tell: () => Promise.reject(new Error("measuring")),
+        handle: () => Promise.reject(new Error("measuring")),
       }).tools(actor),
     actionTools: (actor) =>
       createActions({
@@ -384,7 +388,7 @@ export const standIn = (
         send: () => undefined,
         spawn: () => Promise.reject(new Error("measuring")),
         stop: () => undefined,
-        tell: () => Promise.reject(new Error("measuring")),
+        handle: () => Promise.reject(new Error("measuring")),
       }).tools(actor),
     // The hub's own tools, from the one list the server gives sessions.
     hubTools: createHubTools({

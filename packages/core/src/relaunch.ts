@@ -92,14 +92,10 @@ export const continuedWords = (continuedInto: string): string =>
 /**
  * Where a continued session's work went, as its page says it in its
  * composer's place (the words before the new session's title, a link to
- * it), and as the hub refuses a person's message to it: a moved
- * conversation points onward, it never takes a message on silently.
+ * it): a moved conversation points onward, and what is sent to it goes on
+ * to the new session (hub server.ts `toContinuation`).
  */
 export const CONTINUED_IN = "Continued in";
-
-/** {@link CONTINUED_IN} with the new session's title, as one sentence. */
-export const continuedInWords = (title: string): string =>
-  `${CONTINUED_IN} ${title}`;
 
 export const relaunchOf = (row: {
   continuedInto?: string | null;

@@ -25,12 +25,10 @@
     "Start it again": 2
   },
   "scripts/probe-kit/specs/comment-delivery.ts": {
-    "Caw couldn't take them": 1,
     "Comments aren't reaching the agent": 1,
     "Comments on": 2,
     "gone from the page": 1,
-    "not sent": 1,
-    "the project's Caw couldn't take them": 1
+    "not sent": 1
   },
   "scripts/probe-kit/specs/comment-link.ts": {
     "Comments aren't reaching the agent": 1
@@ -76,6 +74,9 @@
   },
   "scripts/probe-kit/specs/handed-inputs.ts": {
     "a workspace's boundary reaches public hosts only": 1
+  },
+  "scripts/probe-kit/specs/handler-triggers.ts": {
+    "what you wrote on": 1
   },
   "scripts/probe-kit/specs/host-lfs.ts": {
     "Project details › Large files": 1

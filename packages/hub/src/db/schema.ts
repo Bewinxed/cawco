@@ -17,6 +17,7 @@ import type {
   EffortLevel,
   Envelope,
   FleetScope,
+  HandledKind,
   HarnessConfigKind,
   HarnessKind,
   HarnessReport,
@@ -491,32 +492,31 @@ export const projects = sqliteTable("projects", {
    */
   tracker: text("tracker").$type<Tracker>().notNull().default("cawco"),
   /**
-   * The project's conversation (§5.3): the session its events reach, which
-   * the hub starts on the first event while `caw` is on (caw.ts). The
-   * attempts the dispatcher starts on its own report to it. Null: no session
-   * yet, and nothing is dispatched without someone asking.
+   * The project's conversation (§5.3): the session the person's words reach
+   * (a Continue moves it to the continuation, db `adoptChildren`), which
+   * the hub starts on the person's first words (caw.ts `say`). Nothing else
+   * wakes it for being the project's. Null: no session yet.
    */
   conversationInstanceId: text("conversation_instance_id"),
   /**
-   * Whether the project's events reach a conversation: on, the hub sends
-   * each to its conversation, starting one when none runs (caw.ts). On for
-   * projects made with Caw; off for every project from before it, and off
-   * means nothing for the project wakes a model.
+   * Caw is on: a trigger on a thing of the project with no live session on
+   * it starts a handler (handlers.ts). On for projects made with Caw; off
+   * for every project from before it, and off means nothing for the project
+   * wakes a model but the person's words.
    */
   eventsOn: integer("events_on", { mode: "boolean" }).notNull().default(false),
   /**
-   * Whether the project's conversation reads what the person writes on its
-   * tasks (task-input.ts): a comment, a to-do or a task they add, gathered
-   * over a quiet spell and read as one. Their words, so it reaches the
-   * conversation whether its events are on or off.
+   * Whether the task's handler reads what the person writes on a task with
+   * no running attempt (task-input.ts): a comment, a to-do or a task they
+   * add, gathered over a quiet spell and read as one; while Caw is on.
    */
   hearsTasks: integer("hears_tasks", { mode: "boolean" })
     .notNull()
     .default(true),
   /**
-   * Whether the person's comment on a task reaches its attempt (jev-tasks.ts
-   * Attach or fresh): a live attempt reads it; an ended one's session takes
-   * it, goes on compressed with it, or a fresh attempt starts.
+   * Whether the person's comment on a task reaches its running attempt
+   * (task-input.ts), which reads it at its next step; an attempt that has
+   * ended is never woken for it: the task's handler is.
    */
   attemptsHearComments: integer("attempts_hear_comments", { mode: "boolean" })
     .notNull()
@@ -1792,11 +1792,27 @@ export const workItems = sqliteTable(
      * session that has history): its spend is the session's past this.
      */
     spendBaseUsd: real("spend_base_usd").notNull().default(0),
+    /**
+     * A handler's thing (core `HandledThing`): the kind of thing of its
+     * project it was started for, when the item is a handler (the fresh
+     * session a trigger on that thing starts while no live session is on
+     * it, hub handlers.ts). Null for every other item.
+     */
+    handlesKind: text("handles_kind").$type<HandledKind>(),
+    /** That thing's id in its project (a task's `tsk-12`, an artifact's id); null with {@link handlesKind}. */
+    handlesId: text("handles_id"),
   },
   (table) => [
     index("work_items_workspace").on(table.workspaceId, table.state),
     index("work_items_parent").on(table.parentInstanceId, table.state),
     index("work_items_task").on(table.projectId, table.taskId),
+    // handled_by: a thing's handlers, newest first.
+    index("work_items_handled_by").on(
+      table.projectId,
+      table.handlesKind,
+      table.handlesId,
+      table.createdAt
+    ),
   ]
 );
 
@@ -3708,6 +3724,12 @@ export type ContinuationAsker =
   | { kind: "person" }
   | { kind: "session"; id: string }
   | { kind: "task"; id: string }
+  /**
+   * The hub, before a send to a standing session that is cold (caw.ts
+   * `warmed`): `why` it was, its cache gone cold or its context past its
+   * window's share (core `STANDING_CONTEXT_SHARE`).
+   */
+  | { kind: "cold"; why: string }
   | {
       /**
        * Its provider's compaction policy, as its move to account `to`

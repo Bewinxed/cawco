@@ -20,8 +20,9 @@
  * (b) The source ends stopped, its row naming the new session as the one
  *     its work went on in.
  * (c) The delegate is the new session's: its parent is the new session.
- * (d) A person's message to the source afterwards is refused: it never
- *     wakes, and the source stays stopped.
+ * (d) A person's message to the source afterwards goes to the new session
+ *     and is read there (the owner's card "What a trigger wakes": a
+ *     Continue moves every role); the source never wakes and stays stopped.
  * (e) The page is the new session's, as the session that holds it and as
  *     its maker.
  * (f) The person's comment on the page (a pin written into its doc, as the
@@ -206,13 +207,25 @@ export default {
     );
 
     const after = await fleet.send(source, "Are you still there?");
-    await delay(5000);
-    const sent = fleet.sendRow(after);
+    const sent = await until(
+      "the message to the source read",
+      () =>
+        fleet.query<{ instance_id: string; state: string }>(
+          "SELECT instance_id, state FROM sent_messages WHERE uuid = ?",
+          after
+        )[0],
+      (row) => row?.state === "read",
+      60_000
+    ).catch(() => fleet.sendRow(after));
+    await delay(2000);
     const still = stored(fleet, source);
     check(
-      "d: a person's message to the source afterwards is not read there, and the source stays stopped",
-      sent?.state !== "read" && still?.status === "stopped",
-      `send ${JSON.stringify(sent)}; source ${JSON.stringify(still)}`
+      "d: a person's message to the source afterwards goes to the new session and is read there, and the source stays stopped",
+      sent?.state === "read" &&
+        "instance_id" in sent &&
+        sent.instance_id === target &&
+        still?.status === "stopped",
+      `send ${JSON.stringify(sent)}; source ${JSON.stringify(still)}; target ${target}`
     );
 
     const [page] = fleet.query<{

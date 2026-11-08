@@ -267,7 +267,6 @@ import {
   configurePage,
   connectWords,
   contextFitRefusal,
-  continuedInWords,
   DEFAULT_COMPACTION,
   DELEGATE_SUMMARIES_LIMIT,
   DELEGATE_WAIT_ORIGIN,
@@ -407,6 +406,7 @@ import {
   SEND_STATES,
   SESSION_DIR_READ,
   STAGES_TEMPLATES,
+  STANDING_CONTEXT_SHARE,
   STREAM_SO_FAR,
   type StagesTemplate,
   type StoppedCommands,
@@ -582,6 +582,7 @@ import { artifactWords } from "@cawco/core/words/artifacts";
 import { containerWords } from "@cawco/core/words/containers";
 import { contextWords } from "@cawco/core/words/context";
 import { turnCutWords } from "@cawco/core/words/cuts";
+import { handlerWords } from "@cawco/core/words/handlers";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
@@ -828,6 +829,7 @@ import { gateRoutes } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
 import { createHandedInputs } from "./handed-inputs";
+import { createHandlers, type Handled } from "./handlers";
 import { handleId, isHandle } from "./handles";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
@@ -1804,6 +1806,8 @@ const askerWords = (by: ContinuationAsker): string => {
       return `session ${by.id} (continue_session)`;
     case "task":
       return `your comment on ${by.id} (attach or spawn)`;
+    case "cold":
+      return `the hub before a send, as it was ${by.why}`;
     case "move":
       return `its move to ${by.to}, as its provider's compaction policy says`;
     case "person":
@@ -6010,17 +6014,6 @@ export const createServer = (
     | { gone?: true; reason: string; refusal?: StoredSendRefusal }
     | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
-    // A person's words to a session a continuation took the work item of
-    // are refused, in the words its page says in its composer's place: they
-    // never go on to the new session unseen ({@link toContinuation}).
-    if (row?.continuedInto && origin.kind === "human") {
-      const [now] = db.getInstancesByIds([continuationNow(row.id)]);
-      return {
-        reason: continuedInWords(
-          now ? sessionName(now) : row.continuedInto.slice(0, 8)
-        ),
-      };
-    }
     if (row?.lastErrorKind === "conversation-gone") {
       return { reason: CLAUDE_CONVERSATION_GONE, gone: true };
     }
@@ -6356,9 +6349,10 @@ export const createServer = (
    */
   /**
    * The context line a send for a delegate's report or question opens with
-   * when `parent` is its project's conversation (caw.ts `eventContext`):
-   * where it runs, what `trigger` happened, the skill. Undefined for any
-   * other session.
+   * when `parent` is one of Caw's sessions in its project (its conversation,
+   * or a handler: handlers.ts), whose delegates it started (caw.ts
+   * `eventContext`): where it runs, what `trigger` happened, the skill.
+   * Undefined for any other session.
    */
   const conversationContext = (
     parent: { id: string },
@@ -6366,7 +6360,10 @@ export const createServer = (
   ): string | undefined => {
     const [row] = db.getInstancesByIds([parent.id]);
     const project = row?.projectId ? db.project(row.projectId) : undefined;
-    return row && project && isProjectConversation(row, db.project)
+    const handler = row?.workItemId
+      ? db.workItem(row.workItemId)?.handlesKind
+      : undefined;
+    return row && project && (isProjectConversation(row, db.project) || handler)
       ? eventContext(project, row.cwd, "delegate-report", trigger)
       : undefined;
   };
@@ -9815,7 +9812,7 @@ export const createServer = (
     asked: Envelope<SendPayload>,
     ahead = false
   ): SentMessageRow | undefined => {
-    const envelope = toContinuation(byIdNow(asked), "refused");
+    const envelope = toContinuation(byIdNow(asked));
     if (!envelope) {
       return;
     }
@@ -9857,20 +9854,17 @@ export const createServer = (
    * THE RULE FOR A CONTINUED SESSION'S MAIL: a send to a session a
    * continuation took the work item of never reaches it, and never wakes it
    * (core `relaunchOf` refuses it). It goes to the session its work goes on
-   * in ({@link continuationNow}), from whoever sent it, as `byIdNow` does
-   * for a former id; but the hub's word to its process alone
-   * ({@link aboutItsProcess}) is dropped, as that process is gone. A
-   * person's words sent now (`person: "refused"`) stay addressed to it, and
-   * {@link inputRefusal} refuses them with where its work went, as its page
-   * says in its composer's place: a person's message is never moved to
-   * another session unseen. Only what was queued for it before the move
-   * (`"carried"`, {@link moveOwedSend}) goes on, the person's too, its row
-   * there saying it was replaced. Undefined when dropped; unchanged for any
-   * other session.
+   * in ({@link continuationNow}), from whoever sent it, the person's words
+   * included (the owner's card "What a trigger wakes": a Continue moves
+   * every role, so the person's words to the project's conversation reach
+   * its continuation), as `byIdNow` does for a former id; but the hub's
+   * word to its process alone ({@link aboutItsProcess}) is dropped, as that
+   * process is gone. What was queued for it before the move goes on too
+   * ({@link moveOwedSend}), its row there saying it was replaced. Undefined
+   * when dropped; unchanged for any other session.
    */
   const toContinuation = (
-    envelope: Envelope<SendPayload>,
-    person: "refused" | "carried"
+    envelope: Envelope<SendPayload>
   ): Envelope<SendPayload> | undefined => {
     const named = envelope.payload.instanceId;
     const now = continuationNow(named);
@@ -9878,9 +9872,6 @@ export const createServer = (
       return envelope;
     }
     const { message } = envelope.payload;
-    if (person === "refused" && message.origin.kind === "human") {
-      return envelope;
-    }
     if (aboutItsProcess(message)) {
       console.info(
         `[continuation] ${named.slice(0, 8)} was continued in ${now.slice(0, 8)}: the hub's ${isKeepAlive(message) ? "keep-alive ping" : `${message.origin.kind === "system" ? message.origin.name : ""} word`} to its process is dropped, as that process never runs again.`
@@ -9910,7 +9901,7 @@ export const createServer = (
     if (owed === undefined) {
       return;
     }
-    const moved = toContinuation(owed, "carried");
+    const moved = toContinuation(owed);
     if (!moved) {
       changeSend(send, { state: "cancelled" });
       return;
@@ -14521,37 +14512,43 @@ export const createServer = (
    * conversation gone, its finished work's workspace archived or taken over
    * by a later item; artifacts/taker.ts `takesNoInput`): the marks go to
    * whoever can act on them, the session that delegated it while that one
-   * takes input, else the project's Caw, as the projects plan's §5.8 says
-   * for a page whose writer ended ("wakes the session that wrote the page,
-   * or Caw if it has ended"). With neither, they go to the writer, woken,
-   * and its send records why when it is not taken.
+   * takes input, else the artifact's handler (handlers.ts: the one that
+   * lives, or a fresh one; the owner's card "What a trigger wakes", over the
+   * projects plan's §5.8 "or Caw if it has ended"), never the project's
+   * conversation. With neither, they go to the writer, woken, and its send
+   * records why when it is not taken.
    *
-   * Answers whether someone took them: a send the session accepted, or Caw
-   * woken. When no one did (the send refused, Caw's wake refused), the
+   * Answers whether someone took them: a send the session accepted, or a
+   * handler. When no one did (the send refused, no handler took them), the
    * writer's transcript keeps the event as not sent, with why
    * ({@link recordUndelivered}, as deliverSend keeps a refused send), and
-   * the marks stay owed for the next delivery.
+   * the marks stay owed for the next delivery (Caw off: they wait there).
    */
   const deliverArtifactMarks: ArtifactServiceDeps["deliverMarks"] = (
     instance,
     artifact,
     delivery
   ) =>
-    artifactInOrder(`${artifact.id}:marks`, () => {
+    artifactInOrder(`${artifact.id}:marks`, async () => {
       const taker = takerOf(instance, artifact);
       switch (taker.to) {
         case "writer":
+          return marksToSession(
+            await ownerUnderCap(instance),
+            artifact,
+            delivery
+          );
         case "none":
           return marksToSession(instance, artifact, delivery);
         case "parent":
-          return marksToSession(taker.session, artifact, {
+          return marksToSession(await ownerUnderCap(taker.session), artifact, {
             ...delivery,
             text: `${delivery.text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${taker.why}), so these come to you, the session that delegated it: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
           });
-        case "caw":
-          return marksToCaw(
-            taker.caw,
+        case "handler":
+          return marksToHandler(
             instance,
+            artifact,
             taker.projectId,
             taker.why,
             delivery
@@ -14563,28 +14560,28 @@ export const createServer = (
   /** Who takes what the person did on an artifact `writer` made (artifacts/taker.ts). */
   const takerOf = (writer: InstanceRow | undefined, artifact: ArtifactRow) =>
     artifactTaker(writer, artifact, {
-      caw: lead,
       instance: (id) => db.getInstancesByIds([id])[0],
       refusal: artifactRefusal,
     });
   /** Why a send of the person's marks or answers to session `id` is refused, or nothing. */
   const artifactRefusal = (id: string): string | undefined =>
     inputRefusal(id, { kind: "system", name: ARTIFACT_ORIGIN })?.reason;
-  /** {@link deliverArtifactMarks} to the project's Caw: woken with them, or the writer's transcript says why not. */
-  const marksToCaw = async (
-    their: Caw,
+  /** {@link deliverArtifactMarks} to the artifact's handler: it took them, or the writer's transcript says why not. */
+  const marksToHandler = async (
     instance: InstanceRow,
+    artifact: ArtifactRow,
     projectId: string,
     why: string,
     { text, images, attachments }: MarksDelivery
   ): Promise<MarksOutcome> => {
-    const woke = await their
-      .tell(projectId, {
-        by: "act",
+    const handled = await handlers
+      .trigger(projectId, {
         kind: "person-request",
-        origin: { name: ARTIFACT_ORIGIN },
-        trigger: `the person marked an artifact ${sessionName(instance)} made, and that session takes no input now (${why.replace(CLOSING_STOP, "")})`,
-        text: `${text}\n\nThese come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
+        thing: { kind: "artifact", id: artifact.id },
+        name: `the ${artifact.kind} ${artifactLink(artifact.id, artifact.title || artifact.name)}`,
+        context: `The person marked the ${artifact.kind} ${artifactLink(artifact.id, artifact.title || artifact.name)}, made by ${sessionLink(instance.id, sessionName(instance))}, which takes no input now (${why.replace(CLOSING_STOP, "")}).`,
+        delta: `${text}\n\nThese come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
+        who: "you",
         ...(images.length > 0 || attachments.length > 0
           ? {
               carried: {
@@ -14594,21 +14591,22 @@ export const createServer = (
             }
           : {}),
       })
-      .catch((error: unknown) => ({
-        woke: false as const,
+      .catch((error: unknown): Handled => ({
+        woke: false,
         why: error instanceof Error ? error.message : String(error),
       }));
-    if (woke.woke) {
+    if (handled.woke) {
       console.log(
-        artifactToolWords.marksWokeCaw(
+        artifactToolWords.marksToHandler(
           instance.id,
           projectId,
+          handled.instanceId,
           why.replace(CLOSING_STOP, "")
         )
       );
       return { ok: true };
     }
-    const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.why.replace(CLOSING_STOP, "")}.`;
+    const reason = `This session takes no input now, and no handler took them: ${handled.why.replace(CLOSING_STOP, "")}.`;
     recordUndelivered(instance, text, images, reason, attachments);
     return { ok: false, reason };
   };
@@ -15153,11 +15151,15 @@ export const createServer = (
     },
     pageCards: (artifactId, cards) => artifacts.pageCards(artifactId, cards),
     project: (id) => db.project(id),
-    tellCaw: async (projectId, event) => {
-      const told = await caw.tell(projectId, {
-        by: "event",
+    tellCaw: async (projectId, { artifactId, text, trigger }) => {
+      const page = db.artifacts.get(artifactId);
+      const told = await handlers.trigger(projectId, {
         kind: "decision",
-        ...event,
+        thing: { kind: "card", id: artifactId },
+        name: `the cards of ${artifactLink(artifactId, page?.title || page?.name || artifactId)}`,
+        context: trigger,
+        delta: text,
+        who: "Who decides",
       });
       return told.woke ? { instanceId: told.instanceId } : { why: told.why };
     },
@@ -15188,16 +15190,22 @@ export const createServer = (
     signal: async (to, artifact, responses) => {
       let heard: string;
       if ("session" in to) {
-        await signalResponses(to.session, artifact, responses);
-        heard = to.session.id;
+        const owner = await ownerUnderCap(to.session);
+        await signalResponses(owner, artifact, responses);
+        heard = owner.id;
       } else {
-        ({ instanceId: heard } = await caw.tellYours(to.caw.projectId, {
-          by: "act",
+        const handled = await handlers.trigger(to.handler.projectId, {
           kind: "person-request",
-          trigger: to.caw.trigger,
-          origin: { name: ACT_ORIGIN, line: to.caw.line },
-          text: to.caw.text,
-        }));
+          thing: { kind: "artifact", id: artifact.id },
+          name: `the ${artifact.kind} ${artifactLink(artifact.id, artifact.title || artifact.name)}`,
+          context: to.handler.trigger,
+          delta: to.handler.text,
+          who: "you",
+        });
+        if (!handled.woke) {
+          throw handled.thrown ?? new Error(handled.why);
+        }
+        heard = handled.instanceId;
       }
       // A setup page sent is the approval of the AGENTS.md and delegate
       // types the session that hears it writes from it (caw.ts `setupSent`).
@@ -15214,18 +15222,19 @@ export const createServer = (
         case "writer":
         case "parent":
           return { session: taker.session };
-        case "caw":
+        case "handler":
           return {
-            caw: {
+            handler: {
               projectId: taker.projectId,
-              line: noticeWords.answeredPage(artifact.title),
               text: noticeWords.answeredPageYours(
                 artifact.title,
                 artifact.id,
                 writer ? sessionName(writer) : null,
                 taker.why
               ),
-              trigger: noticeWords.answeredPageTrigger,
+              trigger: noticeWords.answeredPageTrigger(
+                artifactLink(artifact.id, artifact.title || artifact.name)
+              ),
             },
           };
         case "none":
@@ -15296,13 +15305,16 @@ export const createServer = (
       const state = followupState(row);
       return !cacheWarmNow(row, state.midTurn, state.lastTurnAt);
     },
-    // Caw answers the pins of his project's sessions whose writer ended, and
-    // reads every page of his project (decisions.ts).
-    ledProjects: (instance) =>
-      db
+    // Caw's sessions in a project (its conversation, its live handlers)
+    // read every page of it; a handler answers the pins of its sessions
+    // whose writer ended (decisions.ts, handlers.ts).
+    ledProjects: (instance) => [
+      ...db
         .listProjects()
         .filter((project) => project.conversationInstanceId === instance.id)
         .map((project) => project.id),
+      ...handlers.handlesIn(instance.id),
+    ],
     // A delegation tree reads its sessions' artifacts (delegation-tree.ts).
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.listAgents(),
@@ -19317,6 +19329,7 @@ export const createServer = (
         cause = askedBy.id;
         break;
       case "task":
+      case "cold":
       case "move":
         cause = row.sourceInstanceId;
         break;
@@ -19524,6 +19537,9 @@ export const createServer = (
     if (by.kind === "task") {
       return `your comment on ${by.id}`;
     }
+    if (by.kind === "cold") {
+      return `the hub, as it was ${by.why}`;
+    }
     if (by.kind === "person") {
       return "you";
     }
@@ -19728,8 +19744,13 @@ export const createServer = (
       (id) => db.getInstancesByIds([id])[0]
     );
     console.log(
-      `[continuation] The new session${target ? ` ${sessionName(target)}` : ""} takes on ${source ? sessionName(source) : "its source"}'s live work: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s), ${adopted.artifacts} artifact(s). Their reports, and what is said on its artifacts, go to it from now on.`
+      `[continuation] The new session${target ? ` ${sessionName(target)}` : ""} takes on ${source ? sessionName(source) : "its source"}'s live work: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s), ${adopted.artifacts} artifact(s), ${adopted.settlings} card(s) to settle${adopted.conversations.length > 0 ? `, and the conversation of ${adopted.conversations.length} project(s)` : ""}. Their reports, and what is said on its artifacts, go to it from now on.`
     );
+    // The project whose conversation it was names the new session: every
+    // surface reads the project's conversation again.
+    if (adopted.conversations.length > 0) {
+      projectsChanged();
+    }
     const machines = new Set(
       db
         .getInstancesByIds([to, ...adopted.sessions])
@@ -26363,6 +26384,10 @@ export const createServer = (
       fleetChanged();
     },
     attempts: db.projectAttempts,
+    handlers: (projectId) =>
+      db
+        .projectWorkItems(projectId)
+        .filter((item) => item.handlesKind === "task"),
     commentSaid: db.taskCommentSaid,
     noteComment: db.noteTaskComment,
     saveResult: (workItemId, taskResult) => {
@@ -26724,7 +26749,38 @@ export const createServer = (
     workItems.pauseChanged(machineId);
     publishInstances(machineId);
   };
-  // Each project's conversation: a session its events reach (caw.ts).
+  // Handlers (handlers.ts): the fresh session a trigger on a project's
+  // thing starts while no live session is on it, one per thing, ended once
+  // it has been idle with nothing open.
+  const handlers = createHandlers({
+    caps,
+    db,
+    idle: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const state = row ? followupState(row) : undefined;
+      return {
+        busy: state?.midTurn ?? false,
+        lastTurnAt: state?.lastTurnAt ? Date.parse(state.lastTurnAt) : null,
+      };
+    },
+    lifetime,
+    mode: (project, trigger) => caw.modeFor(project, trigger),
+    openAsk: (instanceId) => {
+      if (
+        db.asks.openOf(instanceId).length > 0 ||
+        pending.list().some((ask) => ask.instanceId === instanceId)
+      ) {
+        return "an ask of its is open";
+      }
+      return waitingNow().has(instanceId)
+        ? "it waits on the person"
+        : undefined;
+    },
+    place: (project) => caw.placeFor(project),
+    send: (envelope) => deliverToSession(byIdNow(envelope), false),
+    workItems,
+  });
+  // Each project's conversation: the session the person's words reach (caw.ts).
   const caw = createCaw({
     blocks,
     caps,
@@ -26754,13 +26810,16 @@ export const createServer = (
     // The conversation ended a turn: the project's starters are asked again
     // (project-starters.ts).
     answered: (projectId) => projectStarters.conversationAnswered(projectId),
-    // A conversation's start drains the inbound events that waited for it.
-    // Ingress is made further down; nothing starts one before the hub is up.
-    conversationStarted: (projectId) => {
+    // Caw turned on drains the inbound events that waited while it was off.
+    // Ingress is made further down; nothing turns one on before the hub is up.
+    cawOn: (projectId) => {
       if (githubWaits) {
         detach(githubWaits.drain(projectId), "drain a project's inbox");
       }
     },
+    cold: (row) => standingCold(row),
+    compress: (row, why) => compressStanding(row, why),
+    handle: (projectId, trigger) => handlers.trigger(projectId, trigger),
     // The project's conversation, started as any session is, in the mode
     // its payload names (caw.ts `startOf`: the project's, else the one you
     // last chose for its harness on that machine), or refused, saying so,
@@ -26933,7 +26992,8 @@ export const createServer = (
         kind: "hub",
         why: "fleet watch's triage stopped it",
       }),
-    tell: async (projectId, event) => (await caw.tell(projectId, event)).woke,
+    handle: async (projectId, trigger) =>
+      (await handlers.trigger(projectId, trigger)).woke,
   });
   const dispatcher = createDispatcher({
     // A brief a session wrote waits for the fleet's guidance, as a delegate's does.
@@ -26952,24 +27012,34 @@ export const createServer = (
     db,
     lifetime,
     tasks,
-    conversationFor: (projectId, by) => caw.conversationFor(projectId, by),
+    handlerFor: (projectId, task, by) => caw.handlerFor(projectId, task, by),
     workPlace: workPlaceOf,
     pauses: (projectId) => caps.pauses(projectId),
     placement: {
       access: () => jevAccess(db),
       typesFor: (projectId) => projectTypes.typesFor(projectId),
       judgeByLead: (projectId, task, item, text) => {
-        caw
-          .tell(projectId, {
-            by: "event",
+        handlers
+          .trigger(projectId, {
             kind: "attempt-judgement",
-            trigger: `${sessionLink(item.instanceId, item.title)}, an attempt at ${taskLink(projectId, task.id, task.title)}, passed its checks`,
-            text,
+            thing: { kind: "task", id: task.id },
+            name: `${task.id} ${task.title}`,
+            context: `${sessionLink(item.instanceId, item.title)}, an attempt at ${taskLink(projectId, task.id, task.title)}, passed its checks.`,
+            delta: text,
+            who: "the hub",
           })
-          .catch((error: unknown) =>
-            console.warn(
-              `[dispatch] ${task.id}'s acceptance criteria did not reach Caw: ${error instanceof Error ? error.message : String(error)}`
-            )
+          .then(
+            (handled) => {
+              if (!handled.woke) {
+                console.warn(
+                  `[dispatch] ${task.id}'s acceptance criteria reached no handler: ${handled.why}`
+                );
+              }
+            },
+            (error: unknown) =>
+              console.warn(
+                `[dispatch] ${task.id}'s acceptance criteria reached no handler: ${error instanceof Error ? error.message : String(error)}`
+              )
           );
       },
     },
@@ -26978,9 +27048,18 @@ export const createServer = (
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
   tasks.listen(caw.taskChanged);
-  // What the person writes on a task, to the project's conversation
+  // What the person writes on a task, to its running attempt or its handler
   // (task-input.ts), gathered over a quiet spell and read as one.
-  tasks.listen(createTaskInput({ caw, db, tasks }).taskChanged);
+  tasks.listen(
+    createTaskInput({
+      db,
+      handle: (projectId, trigger) => handlers.trigger(projectId, trigger),
+      refused: (row) =>
+        workItems.refusal(row, { kind: "human" })?.reason ?? undefined,
+      sendYours: (row, said) => sendYours(row, said),
+      tasks,
+    }).taskChanged
+  );
   // Every dashboard showing the project reads its tasks again, whoever moved
   // them; one showing the task the change names reads it again too.
   tasks.listen((event) =>
@@ -27075,9 +27154,9 @@ export const createServer = (
         },
       });
     },
-    // The person's words or act to the project's conversation (caw.ts `tellYours`).
+    // The person's words or act to the project's newest conversation (caw.ts `say`).
     tellConversation: (projectId, said) =>
-      caw.tellYours(
+      caw.say(
         projectId,
         said.by === "you"
           ? {
@@ -27363,15 +27442,17 @@ export const createServer = (
       return state === "pending" || state === "failed";
     },
     tell: tellPlan,
-    wakeCaw: async (projectId, text) => {
-      const woke = await caw.tell(projectId, {
-        by: "act",
+    handle: async (projectId, instanceId, text) => {
+      const [owner] = db.getInstancesByIds([instanceId]);
+      const handled = await handlers.trigger(projectId, {
         kind: "person-request",
-        origin: { name: PLAN_ORIGIN },
-        trigger: "the person changed the project's plan",
-        text,
+        thing: { kind: "session", id: instanceId },
+        name: `the plan of ${sessionLink(instanceId, owner ? sessionName(owner) : "a session")}`,
+        context: `The person changed the plan of ${sessionLink(instanceId, owner ? sessionName(owner) : "a session")}.`,
+        delta: text,
+        who: "you",
       });
-      return woke.woke ? undefined : woke.why;
+      return handled.woke ? undefined : handled.why;
     },
   });
   planChanges.resume();
@@ -27404,46 +27485,37 @@ export const createServer = (
   // Your approval of a task, to the agent that filed it (task-approval.ts).
   tasks.listen(
     createTaskApproval({
-      caw,
       db,
+      handle: (projectId, trigger) => handlers.trigger(projectId, trigger),
       tasks,
       sendYours,
       refused: (row) => inputRefusal(row.id, { kind: "human" })?.reason,
     }).taskChanged
   );
   /**
-   * Attach or spawn's cold branch (§5.3, jev-tasks.ts): task `taskId`'s
-   * ended attempt's session `row`, its cache cold, compressed and continued
-   * in a new session in the attempt's own workspace, which takes on the
-   * attempt as every continuation takes on its source's item, and opens on
-   * `comment` as its next step. The source is only read: it takes no filing
-   * turn. Our own call: the summary is written on the source's harness at
-   * its default model, and the new session runs on the source's harness and
-   * model, in its mode. Answers the new session's id and how the job ends
-   * (nothing once it started, else why not); throws why it could not begin.
+   * A standing session that is cold, compressed before a send reaches it
+   * (caw.ts `warmed`, the owner's card "What a trigger wakes"): its summary
+   * written on its harness at its default model, its work going on in a new
+   * session on its harness and model, folded into one session, which takes
+   * every role it held (db `adoptChildren`). Answers the new session's id
+   * once it started; throws why it did not.
    */
-  const continueAttempt = async (
+  const compressStanding = async (
     row: InstanceRow,
-    taskId: string,
-    comment: string
-  ): Promise<{
-    ended: Promise<string | undefined>;
-    targetInstanceId: string;
-  }> => {
+    why: string
+  ): Promise<string> => {
     const release = await cloneForContinuation(row.id);
     let job: ContinuationRow;
     try {
-      const prepared = await prepareContinuation(row.id, comment);
-      const { harness } = prepared.source;
+      const prepared = await prepareContinuation(row.id);
       const request: ContinueRequest = {
         summarizer: summarizerOf(row),
         target: {
-          harness,
+          harness: prepared.source.harness,
           ...(row.model ? { model: row.model } : {}),
         },
-        note: comment,
       };
-      const asker: ContinuationAsker = { kind: "task", id: taskId };
+      const asker: ContinuationAsker = { kind: "cold", why };
       const refusal = await continuationRefusal(prepared, request, asker);
       if (refusal) {
         throw new Error(refusal);
@@ -27452,37 +27524,81 @@ export const createServer = (
     } finally {
       release();
     }
-    return {
-      targetInstanceId: job.targetInstanceId,
-      ended: settledContinuation(job.id).then((settled) => {
-        if (settled?.stage === "started") {
-          return;
-        }
-        return settled?.stage === "cancelled"
+    const settled = await settledContinuation(job.id);
+    if (settled?.stage !== "started") {
+      throw new Error(
+        settled?.stage === "cancelled"
           ? CONTINUATION_CANCELLED
-          : (settled?.error ?? "the continuation failed");
-      }),
-    };
+          : (settled?.error ?? "the continuation failed")
+      );
+    }
+    return job.targetInstanceId;
+  };
+  /**
+   * A live session on a thing (an artifact's writer, the session that
+   * delegated it), ready for a trigger on that thing: itself, or, with its
+   * context past its window's share ({@link contextOverCap}), its
+   * continuation once compressed, which holds every role it held (the
+   * owner's card "What a trigger wakes": a standing session over its token
+   * cap is compressed before a send reaches it). Its cache gone cold alone
+   * compresses no such session: it is waiting on this very trigger, and its
+   * re-read costs what a summary would. A compression that fails leaves
+   * the send to it as it is, saying why in the log.
+   */
+  const ownerUnderCap = async (row: InstanceRow): Promise<InstanceRow> => {
+    const over = contextOverCap(row);
+    if (over === undefined) {
+      return row;
+    }
+    try {
+      const next = await compressStanding(row, over);
+      return db.getInstancesByIds([next])[0] ?? row;
+    } catch (error) {
+      console.warn(
+        `[handlers] ${row.id.slice(0, 8)} is ${over}, and was not compressed before a send: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return row;
+    }
+  };
+  /** Why a session's context is past its token cap (core `STANDING_CONTEXT_SHARE`), or nothing; an unknown window holds none. */
+  const contextOverCap = (row: InstanceRow): string | undefined => {
+    const [kept] = db.getInstancesByIds([row.id]);
+    if (!kept) {
+      return;
+    }
+    const window = contextWindowNow(kept);
+    const share = STANDING_CONTEXT_SHARE[kept.harness as HarnessKind];
+    const cap = window && share ? Math.floor(window * share) : undefined;
+    return window && cap !== undefined && (kept.contextTokens ?? 0) > cap
+      ? handlerWords.overCap(kept.contextTokens ?? 0, cap, share, window)
+      : undefined;
+  };
+  /**
+   * Why a standing session is cold now (caw.ts `warmed`), or nothing: its
+   * prompt cache cold as the cold check reads it (keep-alive.ts
+   * `cacheWarmNow`), or its context past its harness window's share (core
+   * `STANDING_CONTEXT_SHARE`), the window as the fleet knows it (never a
+   * guess: an unknown window holds no token cap).
+   */
+  const standingCold = (row: InstanceRow): string | undefined => {
+    const [kept] = db.getInstancesByIds([row.id]);
+    if (!kept) {
+      return;
+    }
+    const state = followupState(kept);
+    if (!cacheWarmNow(kept, state.midTurn, state.lastTurnAt)) {
+      return handlerWords.cacheCold;
+    }
+    return contextOverCap(kept);
   };
   // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
-  // as a task is filed; Attach or spawn as you comment on a task (a live
-  // attempt reads your comment as any message of yours); phone requests.
+  // as a task is filed; phone requests. Your comment on a task goes to its
+  // running attempt or its handler (task-input.ts).
   const jevTasks = createJevTasks({
     caw,
-    continueAttempt,
     db,
     dispatcher,
     tasks,
-    refused: (row) =>
-      workItems.refusal(row, { kind: "human" })?.reason ?? undefined,
-    warmth: (row) => {
-      const state = followupState(row);
-      return {
-        warm: cacheWarmNow(row, state.midTurn, state.lastTurnAt),
-        idle: !state.midTurn,
-      };
-    },
-    sendYours,
   });
   tasks.listen(jevTasks.taskChanged);
   /**
@@ -27790,6 +27906,7 @@ export const createServer = (
   // Routines (routines.ts): prompts the hub runs on a schedule, once per slot.
   const routines = createRoutines({
     caw,
+    trigger: (projectId, trigger) => handlers.trigger(projectId, trigger),
     // A curator run's inbox, sorted first (memory.ts).
     curatorBrief: (projectId) => projectMemory.curatorBrief(projectId),
     db,
@@ -27969,8 +28086,8 @@ export const createServer = (
     jevAccess: () => jevAccess(db),
     lifetime,
     routines,
-    // An event no route took, one send to the project's conversation.
-    tell: (projectId, event) => caw.tell(projectId, event),
+    // An event no route took, to its handler (handlers.ts).
+    handle: (projectId, trigger) => handlers.trigger(projectId, trigger),
     // A pull request or run a task waits on moved: its project looks again.
     waitsMoved: (projectId) => {
       detach(tasks.waitsMoved(projectId), "task waits moved");
@@ -39616,7 +39733,9 @@ export const createServer = (
                   routines.said(
                     message.instanceId,
                     admitted.message,
-                    !!framed && isProjectConversation(framed, db.project)
+                    !!framed &&
+                      (isProjectConversation(framed, db.project) ||
+                        !!handlers.handlesIn(framed.id).length)
                   );
                 }
               }

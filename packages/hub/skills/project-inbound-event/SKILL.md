@@ -1,6 +1,6 @@
 ---
 name: project-inbound-event
-description: Handle an inbound event no route took (a connector poll's item, a relay's delivery) in a project's conversation. Use when a CawCo message's context line names this skill.
+description: Handle an inbound event no route took (a connector poll's item, a relay's delivery) for a project, as its handler. Use when a CawCo message's context line names this skill.
 ---
 
 # An inbound event

@@ -5,7 +5,7 @@ description: Set up a project with the person — its name, what it is for, its 
 
 # Setting a project up
 
-A setup is one decision page, `setup`, that you open early and draft on, your questions asked as they come up, and that the person sends once. The project's board draws the page as you write it: what it is for, then each stage as a column the person changes where it stands, and Set up in the board's draft bar. Your open questions stand on the board on a desk and in your conversation on a phone. Nothing is written into the project before they send it: no stages.md, no delegate types, no AGENTS.md, no template. Their Send approves the whole page, so what you write from it goes in directly.
+A setup is one decision page, `setup`, that you open early and draft on, your questions asked as they come up, and that the person sends once. The project's board draws the page as you write it: what it is for, then each stage as a column the person changes where it stands, and Set up in the board's draft bar. Your open questions stand on the board on a desk and in this session on a phone; their answers come back to this session. Nothing is written into the project before they send it: no stages.md, no delegate types, no AGENTS.md, no template. Their Send approves the whole page, so what you write from it goes in directly.
 
 Where the page stands depends on whether the project is set up (it has stages.md or a template), and every way to it lands there, your `artifact_create` and `artifact_show` included; it never opens in a panel:
 

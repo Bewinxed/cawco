@@ -187,18 +187,38 @@ export interface BuiltOn {
   target: string;
 }
 
+/**
+ * One handler that took a trigger on the task (hub handlers.ts: a fresh
+ * session the hub started for it while no live session was on it), as the
+ * task shows it: its session, how it stands, and what it did.
+ */
+export interface TaskHandler {
+  /** When it ended, ms epoch; null while it lives. */
+  endedAt: number | null;
+  /** What it did, in a line: its `finish_item`'s headline, else its last turn's first line. */
+  headline: string | null;
+  /** Its session. */
+  instanceId: string;
+  /** When it started, ms epoch. */
+  startedAt: number;
+  state: WorkItemState;
+  workItemId: string;
+}
+
 /** What a task's attempts and edges say about it, worked out on every read. */
 export interface TaskFlags {
   /** Its attempts, newest first. */
   attempts: TaskAttempt[];
   /** A done task's cards and pins that moved since its attempt was dispatched on them. */
   builtOn: BuiltOn[];
+  /** The handlers that took its triggers (its comments, moves, reports), newest first. */
+  handlers: TaskHandler[];
   /** The ancestor whose live attempt coordinates it, holding it from the hub's dispatch; null when none. */
   heldBy: string | null;
   /**
    * Its newest attempt failed, and it is not done or dropped since. The
    * failure is its starter's business (the session that started it, or the
-   * project's conversation for the dispatcher's), who hears the report: never the person's
+   * task's handler for the dispatcher's), who hears the report: never the person's
    * Needs you. It keeps the task off the dispatcher's frontier until someone
    * starts or retries it.
    */

@@ -72,8 +72,9 @@ import { Gone, readWithin } from "@cawco/core/bounded";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
-import { isProjectConversation, type ProjectEvent } from "./caw";
+import { isProjectConversation } from "./caw";
 import type { DbShape } from "./db";
+import type { Trigger } from "./handlers";
 import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
 import { sentence, tool } from "./mcp-tool";
@@ -177,9 +178,9 @@ const clip = (text: string, limit: number): string =>
 type Steward =
   | { kind: "session"; id: string; name: string }
   | {
+      /** A handler of the stuck session (handlers.ts): it has no parent to steer it. */
       kind: "caw";
       projectId: string;
-      conversationId: string | null;
       name: "Caw";
     }
   | { kind: "you"; name: "you" };
@@ -254,6 +255,8 @@ export interface FleetWatchDeps {
   >;
   /** Ends a session (a triage run that decided, or ran out of time). */
   end: (instanceId: string) => void;
+  /** A trigger on the stuck session, to its handler (handlers.ts `trigger`); false when none took it (Caw is off). */
+  handle: (projectId: string, trigger: Trigger) => Promise<boolean>;
   /** Cuts a session's turn; it keeps its state. */
   interrupt: (instanceId: string) => void;
   lifetime: HubLifetimeShape;
@@ -277,8 +280,6 @@ export interface FleetWatchDeps {
   ) => Promise<void>;
   /** Stops a session's process. */
   stop: (instanceId: string) => void;
-  /** One send to a project's conversation (caw.ts `tell`); false when it did not take it (its switch is off). */
-  tell: (projectId: string, event: ProjectEvent) => Promise<boolean>;
 }
 
 export const createFleetWatch = (deps: FleetWatchDeps) => {
@@ -407,40 +408,33 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
 
   // --- stewards ----------------------------------------------------------------
 
-  /** Its parent, else the project's conversation when the parent is it or it has none in the project, else you. */
+  /**
+   * Its parent while it has one, else, in a project, a handler of it
+   * (handlers.ts: the owner's card "What a trigger wakes", over PRD §5.3's
+   * "else the project's conversation"), else you. Caw's own sessions (the
+   * project's conversation, a handler) are steered by you: a session never
+   * judges itself.
+   */
   const stewardOf = (row: InstanceRow): Steward => {
-    // The project's conversation: a session never judges itself, so its steward is you.
-    if (isProjectConversation(row, db.project)) {
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    if (isProjectConversation(row, db.project) || item?.handlesKind) {
       return { kind: "you", name: "you" };
     }
-    const project = row.projectId ? db.project(row.projectId) : undefined;
-    const caw: Steward | undefined = project
-      ? {
-          kind: "caw",
-          projectId: project.id,
-          conversationId: project.conversationInstanceId,
-          name: "Caw",
-        }
-      : undefined;
     const parent = row.parentInstanceId
       ? rowOf(row.parentInstanceId)
       : undefined;
     if (parent && parent.status !== "discarded") {
-      if (caw && isProjectConversation(parent, db.project)) {
-        return caw;
-      }
       return { kind: "session", id: parent.id, name: deps.name(parent) };
     }
-    return caw ?? { kind: "you", name: "you" };
+    const project = row.projectId ? db.project(row.projectId) : undefined;
+    return project
+      ? { kind: "caw", projectId: project.id, name: "Caw" }
+      : { kind: "you", name: "you" };
   };
 
-  /** The steward's session, for its line: its parent, or the project's conversation. */
-  const stewardSession = (steward: Steward): string | null => {
-    if (steward.kind === "session") {
-      return steward.id;
-    }
-    return steward.kind === "caw" ? steward.conversationId : null;
-  };
+  /** The steward's session, for its line: its parent; a handler has none until it starts. */
+  const stewardSession = (steward: Steward): string | null =>
+    steward.kind === "session" ? steward.id : null;
 
   // --- signals and episodes ----------------------------------------------------
 
@@ -746,7 +740,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const { steward } = triage;
     let stewardWords = "the person (no session steers it)";
     if (steward.kind === "caw") {
-      stewardWords = "Caw, the project's conversation";
+      stewardWords = "Caw: a handler the hub starts for it";
     } else if (steward.kind === "session") {
       stewardWords = `${steward.name}, the session that started it`;
     }
@@ -812,11 +806,13 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       return;
     }
     deps
-      .tell(steward.projectId, {
-        by: "event",
+      .handle(steward.projectId, {
         kind: "fleet-watch",
-        trigger: `fleet watch judged ${sessionLink(row.id, name)}: ${line}`,
-        text: content,
+        thing: { kind: "session", id: row.id },
+        name: sessionLink(row.id, name),
+        context: `Fleet watch judged ${sessionLink(row.id, name)}: ${line}.`,
+        delta: content,
+        who: "fleet watch",
       })
       .then((woken) => {
         if (!woken) {

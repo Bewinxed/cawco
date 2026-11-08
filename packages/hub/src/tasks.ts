@@ -103,6 +103,7 @@ import type {
   StageView,
   TaskAttempt,
   TaskFlags,
+  TaskHandler,
   TaskHistory,
   TaskList,
   TaskReviewRead,
@@ -399,6 +400,20 @@ export interface TaskStore {
     id: string
   ) => { projectId: string; taskId: string } | undefined;
   readonly drop: (projectId: string, paths: string[]) => void;
+  /** Every handler of one of the project's tasks (hub handlers.ts), newest first. */
+  readonly handlers: (
+    projectId: string
+  ) => Pick<
+    WorkItemRow,
+    | "createdAt"
+    | "endedAt"
+    | "handlesId"
+    | "headline"
+    | "id"
+    | "instanceId"
+    | "result"
+    | "state"
+  >[];
   readonly index: (projectId: string) => TaskIndexRow[];
   /** The tasks that link an item (`task_read`'s `link`): a URL, or `#12` in the project's repository; a refusal in words. */
   readonly linked: (projectId: string, link: string) => string[] | string;
@@ -414,7 +429,7 @@ export interface TaskStore {
   }) => void;
   readonly project: (id: string) =>
     | {
-        /** Its events reach its conversation, which takes the reports of attempts nobody asked for. */
+        /** Caw is on: triggers start handlers, the task's taking the reports of attempts nobody asked for. */
         eventsOn: boolean;
         /** It starts attempts on its own (dispatch.ts), while its events are on. */
         dispatch: boolean;
@@ -1605,6 +1620,33 @@ export const createTasks = (store: TaskStore) => {
     return byTask;
   };
 
+  /** The project's tasks' handlers, by task, newest first. */
+  const handlersByTask = (projectId: string): Map<string, TaskHandler[]> => {
+    const byTask = new Map<string, TaskHandler[]>();
+    for (const item of store.handlers(projectId)) {
+      if (item.handlesId) {
+        byTask.set(item.handlesId, [
+          ...(byTask.get(item.handlesId) ?? []),
+          {
+            workItemId: item.id,
+            instanceId: item.instanceId,
+            state: item.state,
+            startedAt: item.createdAt.getTime(),
+            endedAt: item.endedAt?.getTime() ?? null,
+            headline:
+              item.headline?.trim() ||
+              item.result
+                ?.split("\n")
+                .find((line) => line.trim())
+                ?.trim() ||
+              null,
+          },
+        ]);
+      }
+    }
+    return byTask;
+  };
+
   /** The project's attempts the hub sent back unmet (work_items `unmetAt`), by id. */
   const unmetIn = (projectId: string): Set<string> =>
     new Set(
@@ -1626,6 +1668,7 @@ export const createTasks = (store: TaskStore) => {
   interface FlagContext {
     attempts: Map<string, TaskAttempt[]>;
     byId: Map<string, TaskIndexRow>;
+    handlers: Map<string, TaskHandler[]>;
     /** Each task's parts, by id. */
     partsOf: Map<string, string[]>;
     /** The tasks whose hook start waits for a slot. */
@@ -1664,6 +1707,7 @@ export const createTasks = (store: TaskStore) => {
     }
     return {
       attempts: attemptsByTask(projectId),
+      handlers: handlersByTask(projectId),
       unmet: unmetIn(projectId),
       byId,
       partsOf,
@@ -1788,6 +1832,7 @@ export const createTasks = (store: TaskStore) => {
       ) ?? null;
     return {
       attempts,
+      handlers: context.handlers.get(task.id) ?? [],
       liveAttempt,
       waits,
       heldBy,

@@ -1,11 +1,11 @@
 ---
 name: project-routine-report
-description: Handle a routine's delegate run reporting its result to a project's conversation. Use when a CawCo message's context line names this skill.
+description: Handle a routine's delegate run reporting its result, as the routine's handler. Use when a CawCo message's context line names this skill.
 ---
 
 # A routine's report
 
-The send is the result of a routine's run, from a delegate the hub started on the routine's schedule: the routine's prompt, the run's result (its `finish_item` headline), then its full report when it wrote one. The context line links the routine and the run's session. You are the run's lead. The routine's prompt is the person's word for this run's work, and only that: whatever else the result raises is **work nobody asked for**.
+The send is the result of a routine's run, from a delegate the hub started on the routine's schedule: the run's result (its `finish_item` headline), its full report when it wrote one, then the routine's prompt. The context line links the routine and the run's session. You are the routine's handler. The routine's prompt is the person's word for this run's work, and only that: whatever else the result raises is **work nobody asked for**.
 
 1. **Read the result against the routine's prompt.** Done when you can say, for each thing the result reports, whether it is new and whether anyone must act on it. Check the board with `task_read({ q })` for a task that already holds a finding: a routine reports the same thing run after run.
 2. **Act on each new thing:**
