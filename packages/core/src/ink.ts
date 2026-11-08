@@ -23,7 +23,8 @@
  */
 
 import type { Anchor, PageAnchor } from "./comments/anchor";
-import { chainWords, wholePage } from "./comments/anchor";
+import { wholePage } from "./comments/anchor";
+import { chainWords } from "./words/comment-lines";
 
 export const INK_LIMITS = {
   /** Elements one group names it marks. Our call. */
