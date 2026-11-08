@@ -1,8 +1,5 @@
-import type {
-  FleetMcpChange,
-  FleetMcpChangeKind,
-  FleetMcpServer,
-} from "@cawco/core";
+import type { FleetMcpServer } from "@cawco/core/fleet";
+import type { FleetMcpChange, FleetMcpChangeKind } from "@cawco/core/harness";
 
 /** What a machine's sessions can tell apart about one server, as the hub last announced it. */
 interface Seen {

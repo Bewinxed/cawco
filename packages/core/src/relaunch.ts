@@ -1,8 +1,7 @@
 /**
  * How a session with no process comes back, and why a failed one never
  * does: its failure's kind, the words a person reads, and the relaunch every
- * revive decides by. Imported alone by a reader of it; core's index
- * re-exports it.
+ * revive decides by.
  */
 
 /**
