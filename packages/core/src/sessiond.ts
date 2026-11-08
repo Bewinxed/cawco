@@ -220,7 +220,7 @@ export interface SessiondWelcome {
    * Linux, cgroup v2: the cgroup this keeper starts its children under, as
    * `/proc/<pid>/cgroup` names it (its `children` group, or its own when it
    * makes none). A start's room is read under the memory limits at and above
-   * it (core machine-room.ts `measureMemoryRoom`). Absent elsewhere.
+   * it (agent machine-room.ts `measureMemoryRoom`). Absent elsewhere.
    */
   cgroup?: string;
   epoch: string;

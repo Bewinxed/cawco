@@ -40,9 +40,9 @@ import {
   type SessionMessage,
   unknownControlWords,
 } from "../../../packages/core/src/harness";
-import { TranscriptBuilder } from "../../../packages/core/src/transcript";
 import type { TranscriptBlock } from "../../../packages/core/src/transcript-types";
 import { placesHeard } from "../../../packages/hub/src/find-places";
+import { TranscriptBuilder } from "../../../packages/hub/src/transcript";
 import { TranscriptIndex } from "../../../packages/jsonl-parser/src/fts5";
 import type { Kit, Spec } from "../kit";
 

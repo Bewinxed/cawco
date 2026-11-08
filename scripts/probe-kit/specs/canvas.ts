@@ -424,7 +424,7 @@ const runSpec = async (kit: Kit) => {
     previewHost !== null && elsewhere.length === 0,
     `preview origin ${previewHost ?? "none named"}; elsewhere: ${elsewhere.slice(0, 6).join(" | ") || "none"}`
   );
-  // Excalidraw's UI face is in the sheet itself (core canvas-host.ts
+  // Excalidraw's UI face is in the sheet itself (hub canvas-host.ts
   // `INLINED_FONTS`), so no page fetches it.
   const assistant = on.offOrigin.filter((url) =>
     new URL(url).pathname.includes("/canvas/fonts/Assistant/")

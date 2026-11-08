@@ -44,12 +44,12 @@ import {
   type SDKSessionMessage,
 } from "../../../packages/agent/src/harnesses/claude-transcript";
 import type { SessionMessage } from "../../../packages/core/src/harness";
-import { TranscriptBuilder } from "../../../packages/core/src/transcript";
 import type {
   TranscriptBlock,
   TranscriptEvent,
   WindowAsk,
 } from "../../../packages/core/src/transcript-types";
+import { TranscriptBuilder } from "../../../packages/hub/src/transcript";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import type { Kit, Spec } from "../kit";
 
