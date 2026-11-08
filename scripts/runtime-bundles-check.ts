@@ -11,7 +11,7 @@
  */
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { builtFiles } from "../packages/core/src/file-viewer";
-import { loadOverlay } from "../packages/core/src/preview-proxy";
+import { loadOverlay } from "../packages/core/src/preview/proxy";
 import { buildCanvasHost } from "../packages/hub/src/canvas-host";
 import { buildDecisionHost } from "../packages/hub/src/decision-host";
 

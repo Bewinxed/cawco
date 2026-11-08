@@ -27,10 +27,10 @@ import {
   PICTURE_LIMITS,
   PICTURE_PAGE_SCROLLER,
   PICTURE_VIEW,
-  PREVIEW_LOCKED_MESSAGE,
-} from "@cawco/core/frames";
-import { DOWN_WORDS } from "@cawco/core/preview-proxy";
-import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/protocol";
+} from "@cawco/core/artifact-picture";
+import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/preview/protocol";
+import { DOWN_WORDS } from "@cawco/core/preview/proxy";
+import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
 import type { Frame, Page } from "playwright-core";
 import {
   greet,
