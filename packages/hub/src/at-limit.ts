@@ -19,7 +19,7 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
-import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
@@ -383,18 +383,12 @@ export const fileDue = (how: {
  */
 export const WHOLE_MOVE_NOTICE_MS = 5 * MINUTE_MS;
 
-/** Whether each harness's own `/compact` runs a move's compaction (core `AccountMove.compactBy`): every one's but Claude Code's, whose is the move's own. */
-const OWN_COMPACT: Record<HarnessKind, boolean> = {
-  claude: false,
-  opencode: true,
-  pi: true,
-};
-const compactsOwn = (
+/** Whether `harness` is one whose compaction after a move the hub runs ({@link HarnessTraits.compactedByHub}), which `compactBy` names. */
+const compactedByHub = (
   harness: string
-): harness is Exclude<HarnessKind, "claude"> => {
-  const kind = harnessNamed(harness);
-  return kind !== undefined && OWN_COMPACT[kind];
-};
+): harness is NonNullable<
+  Extract<AccountMove, { kind: "moved" }>["compactBy"]
+> => traitsOf(harness).compactedByHub;
 
 /**
  * `move`, a move's line, as one `plan` compacts says it: natively, its
@@ -412,7 +406,7 @@ export const compactedLine = (
         ...move,
         compact: "filing",
         ...(plan.when === "before" ? { compactFirst: true as const } : {}),
-        ...(compactsOwn(harness) ? { compactBy: harness } : {}),
+        ...(compactedByHub(harness) ? { compactBy: harness } : {}),
       }
     : move;
 
