@@ -3,7 +3,7 @@
  * (USAGE-SPEC.md §4.1). Pure types only; no runtime imports.
  */
 
-import type { HarnessKind } from "../harness";
+import type { HarnessKind } from "../harness/kinds";
 import { HOUR_MS } from "../time";
 
 /** Whether CawCo scans each harness's usage and limits (agent usage/scanner.ts): Claude Code's and OpenCode's; pi's not yet. */

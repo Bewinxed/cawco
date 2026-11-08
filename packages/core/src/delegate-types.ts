@@ -12,7 +12,7 @@ import {
   HARNESSES,
   type HarnessKind,
   harnessNamed,
-} from "./harness";
+} from "./harness/kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
 import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
