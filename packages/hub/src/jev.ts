@@ -21,14 +21,9 @@
  * in parallel"). Plain `fetch`, no SDK.
  */
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type {
-  JevAnswer,
-  JevQuestion,
-  JevResult,
-  JevText,
-} from "@cawco/core/jev";
 import { secondsOf } from "@cawco/core/time";
 import type { DbShape } from "./db";
+import type { JevAnswer, JevQuestion, JevResult, JevText } from "./jev-types";
 import { TYPESAFE_URL } from "./upstreams";
 
 type JevRoute = "typesafe" | "openrouter";
