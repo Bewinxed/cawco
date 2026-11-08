@@ -12,8 +12,9 @@
  * What a session was handed is kept in the hub's database
  * (`memory_briefings`), so a hub restart does not hand it twice.
  */
-import type { BriefTarget, NeutralMessage } from "@cawco/core";
-import { briefTakes } from "@cawco/core";
+import type { BriefTarget } from "@cawco/core/fleet";
+import { briefTakes } from "@cawco/core/fleet";
+import type { NeutralMessage } from "@cawco/core/harness";
 import type { DbShape } from "./db";
 
 /** The delegate a brief is for, in a few words. */

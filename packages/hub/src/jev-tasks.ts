@@ -27,8 +27,9 @@
  *   stage). Off: the project's conversation reads the sentence. The push's own buttons are
  *   not this and always work.
  */
-import { taskLink } from "@cawco/core";
+
 import { detach } from "@cawco/core/detach";
+import { taskLink } from "@cawco/core/references";
 import { Elysia, status, t } from "elysia";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
