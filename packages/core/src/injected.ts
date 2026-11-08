@@ -18,8 +18,9 @@
  * read. Messages stored before the tag were given it once, by the hub's
  * migration over its stored sends (hub db/tag-markers.ts).
  */
-import { INPUTS_DIR } from "./harness";
-import type { ArtifactKind, CarryRestored } from "./index";
+
+import type { ArtifactKind } from "./artifact-kinds";
+import { type CarryRestored, INPUTS_DIR } from "./harness";
 import { NO_REPLY_TOOL } from "./no-reply";
 import type { PlanWait } from "./plan";
 import { artifactLink, stepLink } from "./references";
@@ -529,7 +530,7 @@ export type PresenceSaid = {
 );
 
 /** A wait as the recap names it: the step's chip, labelled by its words, then its page's chip; the page alone when no step names it. */
-export const waitLine = ({ artifact, session, step }: PlanWait): string =>
+const waitLine = ({ artifact, session, step }: PlanWait): string =>
   step
     ? `- ${stepLink(session, step.id, step.content)} waits on ${artifactLink(artifact.id, artifact.title)}`
     : `- ${artifactLink(artifact.id, artifact.title)}, which no step names`;
@@ -597,15 +598,6 @@ const whereTheyAre = (said: PresenceSaid): string => {
     }
   }
 };
-
-/**
- * `text` with the person's presence after it, in a `<system-reminder>`
- * block: the session reads it, and a transcript's text and Find leave it
- * out (jsonl-parser text.ts drops every such block). After the text, so a
- * marker's tag still opens the message.
- */
-export const withPresenceLine = (text: string, said: PresenceSaid): string =>
-  withReminder(text, [presenceLine(said)]);
 
 /**
  * `text` with CawCo's `lines` to the agent after it, in one
@@ -778,7 +770,7 @@ export const artifactHandedNotice = ({
     : `${markerTag("artifact-handed", { from, id, kind, name, title, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, artifact ${next}, which decision pages, artifact_read and artifact_browse have now.`;
 
 /** A handed-up artifact's notice read back into who handed what, and the next version a change waits as. */
-export function parseArtifactHanded(text: string): ArtifactHanded | null {
+function parseArtifactHanded(text: string): ArtifactHanded | null {
   const tag = tagOf(text, "artifact-handed");
   if (!tag) {
     return null;
@@ -835,7 +827,7 @@ export interface ArtifactNotice extends ArtifactComments {
  * (`artifact-notice-drawn`, transcript-rules.ts `sendRow`). A new builder on
  * that origin adds its kind here.
  */
-export const ARTIFACT_NOTICES: readonly {
+const ARTIFACT_NOTICES: readonly {
   lead: (
     named: ArtifactComments & { from?: string; next?: string | undefined }
   ) => string;

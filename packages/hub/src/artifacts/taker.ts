@@ -3,7 +3,7 @@
  * `deliverArtifactMarks`) and the answers the hub sends itself
  * (artifacts/service.ts `sendAnswered`) alike, one rule for both.
  */
-import { ENDED_STATUSES, type InstanceRow } from "@cawco/core";
+import { ENDED_STATUSES, type InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 
 /** A reason's closing full stop, dropped where it is quoted inside a sentence. */

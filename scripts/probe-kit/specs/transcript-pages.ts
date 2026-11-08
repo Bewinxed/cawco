@@ -31,15 +31,17 @@
  */
 import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import {
   CONTROL_READ_TRANSCRIPT_WINDOW,
   type SessionMessage,
-  type TranscriptPage,
-  type TranscriptWindow,
-  type WindowAsk,
-} from "../../../packages/core/src";
-import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+} from "../../../packages/core/src/harness";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import type {
+  TranscriptPage,
+  TranscriptWindow,
+  WindowAsk,
+} from "../../../packages/core/src/transcript-types";
 import { delay, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import type { Kit, KitFleet, Spec } from "../kit";
