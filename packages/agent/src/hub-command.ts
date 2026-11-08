@@ -10,7 +10,6 @@ import {
   QUEUE_SLOTS,
   QUEUE_WAIT_MAX_MS,
   type QueueSlot,
-  queueWords,
 } from "@cawco/core/commands/controls";
 import {
   BACKGROUND_SHELL,
@@ -29,6 +28,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { DAY_MS } from "@cawco/core/time";
+import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import {
