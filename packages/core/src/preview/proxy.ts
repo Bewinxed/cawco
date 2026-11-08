@@ -3,10 +3,11 @@ import { STATUS_CODES } from "node:http";
 import { dirname, join } from "node:path";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
-import { refuseSchemeLowering } from "./bundle-css-guard";
-import { bundled } from "./bundled";
-import { dataUrlBytes, deskCaptures } from "./captures";
-import { OVERLAY_PATH } from "./frames";
+import { refuseSchemeLowering } from "../bundle-css-guard";
+import { bundled } from "../bundled";
+import { dataUrlBytes, deskCaptures } from "../captures";
+import { embeddedFile, standalone } from "../runtime";
+import { previewWords } from "../words/preview";
 import { HOP_BY_HOP_HEADERS } from "./hop-headers";
 import {
   PREVIEW_DOWN_META,
@@ -14,8 +15,7 @@ import {
   PREVIEW_WHY_META,
   type PreviewDown,
 } from "./protocol";
-import { embeddedFile, standalone } from "./runtime";
-import { previewWords } from "./words/preview";
+import { OVERLAY_PATH } from "./routes";
 
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/iu;
 const HTML_OPEN = /<html(\s[^>]*)?\s*>/iu;
@@ -45,8 +45,10 @@ function buildOverlay(): Promise<string> {
 async function bundleDocWorker(): Promise<string> {
   const result = await bundled("The overlay's doc worker", {
     entrypoints: [
-      new URL("../../agent/src/preview-overlay/doc-worker.ts", import.meta.url)
-        .pathname,
+      new URL(
+        "../../../agent/src/preview-overlay/doc-worker.ts",
+        import.meta.url
+      ).pathname,
     ],
     target: "browser",
     minify: true,
@@ -64,7 +66,7 @@ async function bundleDocWorker(): Promise<string> {
 export async function bundleOverlay(): Promise<string> {
   const result = await bundled("The preview overlay", {
     entrypoints: [
-      new URL("../../agent/src/preview-overlay/overlay.ts", import.meta.url)
+      new URL("../../../agent/src/preview-overlay/overlay.ts", import.meta.url)
         .pathname,
     ],
     target: "browser",

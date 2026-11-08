@@ -34,7 +34,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
 import { bundled } from "../packages/core/src/bundled";
-import { bundleOverlay } from "../packages/core/src/preview-proxy";
+import { bundleOverlay } from "../packages/core/src/preview/proxy";
 import { publishedFile } from "../packages/core/src/runtime";
 import { canvasHostAssets } from "../packages/hub/src/canvas-host";
 import { decisionHostAssets } from "../packages/hub/src/decision-host";
