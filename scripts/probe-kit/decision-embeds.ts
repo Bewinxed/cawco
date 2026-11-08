@@ -1,6 +1,6 @@
 /**
  * Decision pages drawn as the person sees them, with no hub: the decision
- * host bundle the hub serves (core decision-host.ts) draws each program in
+ * host bundle the hub serves (hub decision-host.ts) draws each program in
  * the page the hub builds around it (hub decision-program.ts
  * `programHost`), and each `Preview` of a component canvas is that states
  * file drawn live by the dashboard's own stage (stage-host/host.ts, started
@@ -16,7 +16,6 @@ import {
   buildStageHost,
   HOST_RUNTIME_ENV,
 } from "../../packages/agent/src/stage-host/build";
-import { decisionHostFile } from "../../packages/core/src/decision-host";
 import { OVERLAY_PATH } from "../../packages/core/src/frames";
 import {
   injectOverlay,
@@ -28,6 +27,7 @@ import {
   type EmbedShape,
   storiesKey,
 } from "../../packages/core/src/stage";
+import { decisionHostFile } from "../../packages/hub/src/decision-host";
 import {
   DECISION_ASSETS,
   FACE_PRELOADS,

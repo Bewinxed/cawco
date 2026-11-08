@@ -87,7 +87,6 @@ import type { Rule, RuleState, RuleStats } from "@cawco/core/rules";
 import { ruleSettings } from "@cawco/core/rules";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
-import { nameStoredRowsFrom } from "@cawco/core/stored-json";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
@@ -134,6 +133,7 @@ import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import { hubId } from "../hub-id";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
+import { nameStoredRowsFrom } from "../stored-json";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import { type AreaRow, type AreasDb, areasDb } from "./areas";
@@ -491,7 +491,7 @@ export type ContinuationRow = typeof continuations.$inferSelect;
  * prompt, its summary and its open items: what is read of every job on
  * every send and every board publish ({@link DbShape.continuationSlips}).
  * `prepared` runs to megabytes for a long session, and its column parses
- * and checks it whole on every read (core stored-json.ts), so a read that
+ * and checks it whole on every read (hub stored-json.ts), so a read that
  * needs a job's session, stage and ids never selects it.
  */
 export type ContinuationSlip = Pick<
@@ -3238,7 +3238,7 @@ const make = async (path: string): Promise<DbShape> => {
   const db = drizzle(path);
   const taskLinksOf = taskLinksDb(db);
   // A stored JSON value that fails its schema names its row: the database
-  // says which row holds that column's text (core stored-json.ts).
+  // says which row holds that column's text (hub stored-json.ts).
   nameStoredRowsFrom((table, keys, column, raw) => {
     const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
     const select = (keys.length > 0 ? keys.map((key) => key.name) : ["rowid"])
