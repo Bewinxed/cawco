@@ -23,6 +23,7 @@ import {
   artifactStopHref,
   setupLanding,
 } from "@cawco/core/artifact-needs";
+import { PICTURE_VIEW } from "@cawco/core/artifact-picture";
 import { fileHash, type SendAttachment } from "@cawco/core/attachments";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -102,7 +103,6 @@ import {
   matchOf,
   parse,
 } from "@cawco/core/find-match";
-import { PICTURE_VIEW, type PreviewAddress } from "@cawco/core/frames";
 import {
   artifactCommentsNotice,
   artifactErrorsNotice,
@@ -119,7 +119,13 @@ import {
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
 import type { PlanStep } from "@cawco/core/plan";
-import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
+import type {
+  PreviewDown,
+  PreviewSource,
+  ShownFailure,
+} from "@cawco/core/preview/protocol";
+import { type FolderWeight, pageHash } from "@cawco/core/preview/proxy";
+import type { PreviewAddress } from "@cawco/core/preview/routes";
 import {
   type AgentRow,
   ARTIFACT_NAME,
@@ -135,9 +141,6 @@ import {
   DESK_CAPTURES_PER_PAGE,
   type InstanceRow,
   localDashboardPort,
-  type PreviewDown,
-  type PreviewSource,
-  type ShownFailure,
 } from "@cawco/core/protocol";
 import {
   artifactLink,

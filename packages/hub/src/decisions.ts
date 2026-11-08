@@ -65,7 +65,7 @@ import {
   type RecordCard,
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
-import { pageHash } from "@cawco/core/preview-proxy";
+import { pageHash } from "@cawco/core/preview/proxy";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { Elysia, status, t } from "elysia";
