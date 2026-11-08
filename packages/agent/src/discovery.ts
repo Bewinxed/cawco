@@ -1,12 +1,8 @@
 import { existsSync } from "node:fs";
-import {
-  CAWCO_ENV,
-  CAWCO_HUB_PORT,
-  CAWCO_MDNS_TYPE,
-  readEnv,
-} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { fetchHub, hubRequest } from "@cawco/core/hub-request";
+import { CAWCO_HUB_PORT, CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
 import { Bonjour, type Service } from "bonjour-service";

@@ -66,8 +66,10 @@
  *   connection's sign-in or scope is what refused: a sign-in refused marks
  *   the connection too. The next sync tries again.
  */
+
+import { detach } from "@cawco/core/detach";
+import type { Stage, TaskSummary } from "@cawco/core/task-views";
 import {
-  connectionsWords,
   type GithubProject,
   type GithubProjectsView,
   type IssueTracker,
@@ -77,9 +79,8 @@ import {
   type TrackerSyncState,
   type TrackerTarget,
   type TrackerView,
-} from "@cawco/core";
-import { detach } from "@cawco/core/detach";
-import type { Stage, TaskSummary } from "@cawco/core/task-views";
+} from "@cawco/core/trackers";
+import { connectionsWords } from "@cawco/core/words/connections";
 import { Elysia, status, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { TrackerCursor, TrackerSynced } from "./db/stored-types";

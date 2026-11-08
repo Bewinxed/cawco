@@ -9,7 +9,7 @@
  * started after it: a harness can refuse a conversation whose tools change
  * partway.
  */
-import { CAWCO_SERVER, type StartingSet } from "@cawco/core";
+import { CAWCO_SERVER, type StartingSet } from "@cawco/core/delegate-types";
 import { BUNDLED_SKILLS } from "./bundled-skills";
 
 /** What a session's set is resolved from, as it starts. */

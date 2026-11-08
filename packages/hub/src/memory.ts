@@ -94,19 +94,21 @@
  * - **What past sessions said** is `find` (find-tool.ts), the dashboard's
  *   Find, over every machine's transcripts: no store of its own here.
  */
-import {
-  DELEGATE_TYPE_PROPOSAL_TOOL,
-  type Envelope,
-  frontMatterBlock,
-  type InstanceRow,
-  MEMORY_PROPOSAL_TOOL,
-  type NeutralMessage,
-  type NeutralOrigin,
-  type PermissionResult,
-  type ProjectNote,
-} from "@cawco/core";
+
+import { frontMatterBlock } from "@cawco/core/fleet";
+import type {
+  NeutralMessage,
+  NeutralOrigin,
+  PermissionResult,
+} from "@cawco/core/harness";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
+import {
+  DELEGATE_TYPE_PROPOSAL_TOOL,
+  MEMORY_PROPOSAL_TOOL,
+} from "@cawco/core/permission-presentation";
+import type { ProjectNote } from "@cawco/core/project-conversation";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
 import { Elysia, t } from "elysia";

@@ -30,7 +30,7 @@
  * he picked first. Its row leaves the member's open cards, and its record
  * counts as decided only what the member settled itself.
  */
-import type { DelegateType, InstanceRow } from "@cawco/core";
+
 import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
 import {
   BUILT_IN,
@@ -43,6 +43,8 @@ import {
   routeLine,
 } from "@cawco/core/decides";
 import { type DecisionCard, pickMade } from "@cawco/core/decisions";
+import type { DelegateType } from "@cawco/core/delegate-types";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { decisionLink, sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";

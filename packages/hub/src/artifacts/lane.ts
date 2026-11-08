@@ -21,7 +21,7 @@ import {
   type ArtifactNeedsFrame,
   type ArtifactNeedsRead,
   unparked,
-} from "@cawco/core";
+} from "@cawco/core/artifact-needs";
 import type { HubLifetimeShape, HubTimer } from "../lifetime";
 
 /** How long after a move the lane is read: a Send's doc writes land as one. Our call. */

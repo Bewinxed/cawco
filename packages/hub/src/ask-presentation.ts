@@ -6,19 +6,20 @@
  * Stamped onto the ask's payload as it parks (pending.ts `presentWith`), so a
  * memory write's diff is the change from what the fleet held at that moment.
  */
+
+import type { SourceFacts } from "@cawco/core/asks";
+import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
+import type { PermissionRequestFrame } from "@cawco/core/frames";
+import type { PermissionResult } from "@cawco/core/harness";
 import {
   type AdminGroup,
-  type Envelope,
-  type PermissionRequestFrame,
-  type PermissionResult,
   presentPermission,
-  questionsOf,
   redact,
   type SetOwner,
   type SetStanding,
-  type SourceFacts,
-} from "@cawco/core";
-import { maskMcpConfig, openUrl } from "@cawco/core/fleet-secrets";
+} from "@cawco/core/permission-presentation";
+import type { Envelope } from "@cawco/core/protocol";
+import { questionsOf } from "@cawco/core/question";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
 import { boardTitle } from "./labels";
