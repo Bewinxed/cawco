@@ -6,7 +6,6 @@
  */
 import { type DelegateType, startsAny } from "@cawco/core/delegate-types";
 import type { GeneratedImage } from "@cawco/core/image-generation";
-import { pauseClock } from "@cawco/core/protocol";
 import {
   artifactLink,
   machineLink,
@@ -17,6 +16,7 @@ import { contextWords } from "@cawco/core/words/context";
 import { delegateTypesWords as delegateTypesUiWords } from "@cawco/core/words/delegate-types";
 import { delegatePeekWords as peek } from "@cawco/core/words/delegates";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
+import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import {
