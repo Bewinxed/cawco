@@ -85,7 +85,6 @@ import {
   MCP_NOT_CONNECTED,
   MESSAGES_READ,
   MESSAGES_STORED,
-  mcpNotConnectedLine,
   PROVIDER_RETRY,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
@@ -95,7 +94,10 @@ import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { configurePage } from "@cawco/core/words/configure";
-import { SERVER_STOPPED_MID_TURN } from "@cawco/core/words/session-ends";
+import {
+  mcpNotConnectedLine,
+  SERVER_STOPPED_MID_TURN,
+} from "@cawco/core/words/session-ends";
 import type {
   FormInfo,
   ModelInfo as OpencodeModel,

@@ -41,11 +41,10 @@ import {
   runHubCommand,
   setCommandQueue,
 } from "../../../packages/agent/src/hub-command";
-import {
-  type CommandQueueFrame,
-  type CommandResult,
-  type CommandRun,
-  queueWords,
+import type {
+  CommandQueueFrame,
+  CommandResult,
+  CommandRun,
 } from "../../../packages/core/src/commands/controls";
 import {
   openLockFile,
@@ -58,6 +57,7 @@ import {
   machinePlace,
   type SlotPlace,
 } from "../../../packages/core/src/heavy-slots";
+import { queueWords } from "../../../packages/core/src/words/queue";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");

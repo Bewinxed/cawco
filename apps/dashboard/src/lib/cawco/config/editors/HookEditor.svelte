@@ -4,10 +4,10 @@
     HOOK_EVENTS,
     hookEventInfo,
     hookProblem,
-    hookSentence,
     hookTakesMatcher,
   } from "@cawco/core/hooks";
   import { machineLabel } from "@cawco/core/machine-names";
+  import { hookSentence } from "@cawco/core/words/hooks";
   import { untrack } from "svelte";
   import {
     appear,
