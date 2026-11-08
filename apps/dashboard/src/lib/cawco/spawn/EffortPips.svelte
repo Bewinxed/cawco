@@ -4,7 +4,7 @@
    * one object, and the fill's right end is the value. The chip snaps to the
    * level nearest the pointer; its centre sits at kw/2 + f * (width - kw).
    */
-  import type { EffortLevel } from "@cawco/core/harness";
+  import type { EffortLevel } from "@cawco/core/harness/kinds";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";

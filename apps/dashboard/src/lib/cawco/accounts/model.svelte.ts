@@ -23,7 +23,7 @@ import {
   type RebalanceNotice,
   type SigninState,
 } from "@cawco/core/accounts";
-import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords as words } from "@cawco/core/words/accounts";
 import { cawco } from "../client.svelte";

@@ -6,7 +6,7 @@
  * and hydration draw one tree. Nothing here is reactive: the server imports
  * it without the client store and its module-level `$state`.
  */
-import type { HarnessKind } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { z } from "zod";
 import { SessionContextSchema } from "#lib/cawco/stored-shapes.js";
 

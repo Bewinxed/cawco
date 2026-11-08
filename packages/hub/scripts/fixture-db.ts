@@ -20,7 +20,7 @@ import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { HARNESSES } from "@cawco/core/harness";
+import { HARNESSES } from "@cawco/core/harness/kinds";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS } from "@cawco/core/time";
 import { hubInProcess } from "./hub-in-process";
