@@ -14,7 +14,8 @@
  * storyboards these are. The lanes' clocks and fills are illustrations of a
  * strategy, not anybody's readings.
  */
-import { type CompactMethod, DEFAULT_AT_LIMIT } from "@cawco/core/accounts";
+import { DEFAULT_AT_LIMIT } from "@cawco/core/accounts";
+import type { CompactMethod } from "@cawco/core/accounts/kinds";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { ease } from "../motion/curves.svelte";
 
