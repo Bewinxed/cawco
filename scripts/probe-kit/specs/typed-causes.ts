@@ -945,7 +945,8 @@ const lastErrorKinds = async (kit: Kit, scratch: string): Promise<void> => {
   const { Database } = await import("bun:sqlite");
   const { CLAUDE_CONVERSATION_GONE, relaunchOf } =
     await import("../../../packages/core/src/relaunch");
-  const { RESTART_LOST } = await import("../../../packages/core/src/protocol");
+  const { RESTART_LOST } =
+    await import("../../../packages/core/src/words/session-ends");
   const dbPath = join(scratch, "hub", "hub.db");
   await mkdir(join(scratch, "hub"), { recursive: true });
   await writeFile(
