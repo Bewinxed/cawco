@@ -19,13 +19,13 @@ import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { StageKind } from "@cawco/core/views";
-import type { ProjectRow } from "./db";
 import type {
   FindArtifactRow,
   FindInstanceRow,
   FindRoutineRow,
   FindWorkItemRow,
 } from "./db/find";
+import type { ProjectRow } from "./db/projects";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 
 /** One thing the names part can answer with, before a query scores it. */
