@@ -2726,7 +2726,11 @@ export class SessionSupervisor {
    * the subagent count, not the rail's tool line.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: folds every neutral frame shape (assistant tool_use, user tool_result, …) into the pulse in one pass
-  #foldPulse(instanceId: string, message: NeutralMessage): void {
+  #foldPulse(
+    instanceId: string,
+    adapter: Harness,
+    message: NeutralMessage
+  ): void {
     const main = !(
       "parent_tool_use_id" in message && message.parent_tool_use_id
     );
@@ -2765,37 +2769,21 @@ export class SessionSupervisor {
       this.#emitPulse(instanceId, false);
       return;
     }
-    if (message.type === "system") {
-      const taskId = message.task_id;
-      const running = this.#pulseSubagents.get(instanceId);
-      if (
-        message.subtype === "task_started" ||
-        message.subtype === "task_progress"
-      ) {
-        // `subagent_type` is what separates a real Task/Agent subagent from a
-        // plain Bash task — only the former counts in the rail's subagent badge.
-        if (message.subagent_type && taskId) {
-          if (running) {
-            running.add(taskId);
-          } else {
-            this.#pulseSubagents.set(instanceId, new Set([taskId]));
-          }
-          this.#emitPulse(instanceId, false);
-        }
-      } else if (message.subtype === "task_notification") {
-        if (taskId && running?.has(taskId)) {
-          running.delete(taskId);
-          this.#emitPulse(instanceId, false);
-        }
-      } else if (message.subtype === "task_updated") {
-        const status = message.patch?.status;
-        const terminal =
-          status === "completed" || status === "failed" || status === "killed";
-        if (taskId && terminal && running?.has(taskId)) {
-          running.delete(taskId);
-          this.#emitPulse(instanceId, false);
-        }
+    const change = adapter.subagentChange(message);
+    if (!change) {
+      return;
+    }
+    const running = this.#pulseSubagents.get(instanceId);
+    if (change.kind === "started") {
+      if (running) {
+        running.add(change.taskId);
+      } else {
+        this.#pulseSubagents.set(instanceId, new Set([change.taskId]));
       }
+      this.#emitPulse(instanceId, false);
+    } else if (running?.has(change.taskId)) {
+      running.delete(change.taskId);
+      this.#emitPulse(instanceId, false);
     }
   }
 
@@ -3055,7 +3043,7 @@ export class SessionSupervisor {
     message: NeutralMessage
   ): void {
     if (
-      kind === "claude" &&
+      harnessOf(kind)?.relaunchesOnManualCompact &&
       session &&
       message.type === "system" &&
       message.subtype === "compact_boundary" &&
@@ -3557,7 +3545,7 @@ export class SessionSupervisor {
     // workspace's: its boundary reads that project's folder.
     const boundary = await boundaryFor(
       place,
-      spec.harness === "claude"
+      traitsOf(spec.harness).accountModel === "dir"
         ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
         : undefined,
       spec.workspace ? spec.projectId : undefined,
@@ -3744,7 +3732,7 @@ export class SessionSupervisor {
         // rebuilt from a replay, and a line the hub already has still tells
         // this agent what its own session is doing.
         if (!keepAlive) {
-          this.#foldPulse(instanceId, message);
+          this.#foldPulse(instanceId, adapter, message);
           this.#streams.note(instanceId, adapter.kind, message);
         }
         // AT MOST ONCE. The hub's mark is the hub's word, so a line at or below
@@ -3999,7 +3987,7 @@ export class SessionSupervisor {
     message: NeutralMessage,
     keepAlive: boolean
   ): void {
-    if (harness !== "claude" || message.type !== "result") {
+    if (!traitsOf(harness).keepAlive || message.type !== "result") {
       return;
     }
     const usage = promptCacheUsage(message);
@@ -5081,7 +5069,7 @@ export class SessionSupervisor {
         );
       }
       if (
-        session.harness !== "claude" ||
+        !traitsOf(session.harness).keepAlive ||
         this.#busy.has(instanceId) ||
         [...this.#openAsks.values()].some(
           (ask) => "instanceId" in ask && ask.instanceId === instanceId
@@ -5198,16 +5186,13 @@ export class SessionSupervisor {
       let sharedConversation = false;
       const custody = harnessOf(kind)?.custody;
       if (custody?.kind === "server") {
-        const key = sessionId ?? session?.sessionId;
-        const directory = cwd ?? this.#resumable.get(instanceId)?.cwd;
-        if (!directory) {
-          throw new Error(
-            "OpenCode end requires the row's conversation and directory."
-          );
-        }
-        if (key) {
-          const shared =
-            claimedSessionIds.includes(key) ||
+        const stopped = await custody.stop({
+          claimed: claimedSessionIds,
+          directory: cwd ?? this.#resumable.get(instanceId)?.cwd,
+          forget: forget === true,
+          instanceId,
+          key: sessionId ?? session?.sessionId,
+          sharedElsewhere: (key) =>
             [...this.#sessions].some(
               ([id, held]) =>
                 id !== instanceId &&
@@ -5219,54 +5204,29 @@ export class SessionSupervisor {
                 id !== instanceId &&
                 held.adapter.kind === kind &&
                 held.sessionKey === key
-            );
-          sharedConversation = shared;
-          await custody.endSession(
-            key,
-            directory,
+            ),
+        });
+        if (stopped.waiting) {
+          this.sink({
+            kind: "error",
+            verb: "stop",
             instanceId,
-            shared ? [...claimedSessionIds, key] : claimedSessionIds,
-            forget === true
-          );
-          ended = {
-            harness: kind,
-            sessionId: key,
-            resourcesClosed: true,
-            ...(shared ? { reason: "conversation held by another row" } : {}),
-          };
-        } else {
-          const reading = await custody.unclaimedRunners(
-            directory,
-            claimedSessionIds
-          );
-          if (reading.count > 0) {
-            const message =
-              "End intent is waiting for unclaimed server runners.";
+            processGeneration,
+            message: stopped.waiting.message,
+            endReason: stopped.waiting.endReason,
+          });
+          if (requestId) {
             this.sink({
-              kind: "error",
-              verb: "stop",
+              kind: "control_result",
               instanceId,
-              processGeneration,
-              message,
-              endReason: `waiting: ${reading.count} unclaimed runner(s) in ${directory}`,
+              requestId,
+              ok: false,
+              error: stopped.waiting.message,
             });
-            if (requestId) {
-              this.sink({
-                kind: "control_result",
-                instanceId,
-                requestId,
-                ok: false,
-                error: message,
-              });
-            }
-            return;
           }
-          ended = {
-            harness: kind,
-            resourcesClosed: true,
-            reason: `no unclaimed runner in ${directory} at ${new Date(reading.readStartedAt).toISOString()}`,
-          };
+          return;
         }
+        ({ ended, sharedConversation } = stopped);
         this.#sessions.delete(instanceId);
         this.#forgetPulse(instanceId);
       } else if (session) {
@@ -5661,7 +5621,7 @@ export class SessionSupervisor {
     this.#healing = this.#healing.then(async () => {
       for (const { instanceId, mcp, settings } of asks) {
         const session = this.#sessions.get(instanceId);
-        if (session?.harness !== "claude") {
+        if (!(session && harnessOf(session.harness)?.healsFleetMcp)) {
           continue;
         }
         if (mcp) {
@@ -6937,7 +6897,7 @@ export class SessionSupervisor {
       return this.#workInFlight(instanceId);
     }
     const session = this.#session(instanceId);
-    if (method === "withdrawSend" && session.harness !== "claude") {
+    if (method === "withdrawSend" && !traitsOf(session.harness).withdrawSend) {
       return "started";
     }
     // A credential the hub installs in a live session is known before the
