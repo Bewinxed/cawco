@@ -39,13 +39,13 @@ import type {
   SendPayload,
   SpawnPayload,
 } from "@cawco/core/protocol";
-import { pauseClock } from "@cawco/core/protocol";
 import { QUESTION_DISMISSED } from "@cawco/core/question";
 import { artifactLink, sessionLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { contextWords } from "@cawco/core/words/context";
+import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
 import type { Started } from "./call-cuts";
 import type {
