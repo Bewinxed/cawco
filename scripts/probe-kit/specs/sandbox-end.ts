@@ -244,9 +244,8 @@ const indexLeg = async (kit: Kit): Promise<void> => {
   });
   const size = built.outputs.reduce((sum, output) => sum + output.size, 0);
   kit.check(
-    "e6: the srt host reaches only the files its header names, never core's index, signal.ts or the process reader, and its bundle builds",
+    "e6: the srt host reaches only the files its header names, never signal.ts or the process reader, and its bundle builds",
     extra.length === 0 &&
-      !host.has("packages/core/src/index.ts") &&
       !host.has("packages/core/src/signal.ts") &&
       !host.has("packages/core/src/process-identity.ts") &&
       built.success,

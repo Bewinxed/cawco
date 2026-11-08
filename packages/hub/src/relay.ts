@@ -52,18 +52,17 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
-import {
-  CAWCO_ENV,
-  type InstanceRow,
-  RELAY_PROVIDERS,
-  type RelayProvider,
-  type RelayView,
-  readEnv,
-} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
 import { octokitAnswer } from "@cawco/core/octokit-answer";
+import type { InstanceRow } from "@cawco/core/protocol";
+import {
+  RELAY_PROVIDERS,
+  type RelayProvider,
+  type RelayView,
+} from "@cawco/core/relays";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";

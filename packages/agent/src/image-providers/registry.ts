@@ -1,4 +1,7 @@
-import { DEFAULT_IMAGE_PROVIDER, type ImageProviderId } from "@cawco/core";
+import {
+  DEFAULT_IMAGE_PROVIDER,
+  type ImageProviderId,
+} from "@cawco/core/image-generation";
 import { antigravity } from "./antigravity";
 import { chatgpt } from "./chatgpt";
 import { geminiApi } from "./gemini-api";
