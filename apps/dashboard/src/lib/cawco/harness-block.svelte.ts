@@ -15,6 +15,7 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { HARNESS_TOOL } from "@cawco/core/harness";
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import {
   type HarnessRefusalKind,
   harnessRefusal,
@@ -107,7 +108,8 @@ const harnessBlocksOf = (machine: Machine): HarnessBlock[] =>
  */
 export const machineBlocksOf = (machine: Machine): HarnessBlock[] =>
   harnessBlocksOf(machine).filter(
-    (block) => block.harness === "claude" || block.kind === "version"
+    (block) =>
+      traitsOf(block.harness).requiredOnEveryMachine || block.kind === "version"
   );
 
 /**
