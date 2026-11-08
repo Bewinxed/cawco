@@ -34,7 +34,7 @@ import {
   CALLS_MAX_DAYS,
   type CapabilityCallsReport,
 } from "./capability-calls";
-import type { DesignFinding, DesignPick } from "./db/schema";
+import type { DesignFinding, DesignPick } from "./db/stored-types";
 import {
   DESIGN_WRITE_FILES,
   type DesignFileIn,
