@@ -34,7 +34,7 @@ import {
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
   userLayerPath,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/claude";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";

@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { cawcoDataDir } from "@cawco/core/paths";
+import { cawcoDataDir } from "@cawco/core/paths/cawco";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { writeStateFile } from "@cawco/core/state-file";

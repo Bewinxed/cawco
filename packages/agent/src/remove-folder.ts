@@ -12,11 +12,8 @@ import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
 import type { FolderRemoved, RemoveFolder } from "@cawco/core/harness";
-import {
-  cawcoConfigDir,
-  cawcoDataDir,
-  workspaceCarriesDir,
-} from "@cawco/core/paths";
+import { cawcoConfigDir, cawcoDataDir } from "@cawco/core/paths/cawco";
+import { workspaceCarriesDir } from "@cawco/core/paths/workspace";
 import { removeTree } from "./remove-tree";
 
 /** Whether `inner` is `outer` or inside it. */
