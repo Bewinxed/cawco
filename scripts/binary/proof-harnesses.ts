@@ -335,7 +335,7 @@ for (const kind of HARNESSES) {
       }
       return session(kept, instanceId, ctx, proc.client);
     },
-    custodyCandidates: async () => {
+    candidates: async () => {
       await keepers.current();
       return {
         procs: (await keepers.held()).filter(
@@ -343,11 +343,11 @@ for (const kind of HARNESSES) {
         ),
       };
     },
-    custodyKeepers: async () => {
+    keepers: async () => {
       await keepers.current();
       return await keepers.endpoints();
     },
-    custodyReading: async (keeper) => {
+    reading: async (keeper) => {
       const reading = await keepers.read(keeper);
       return reading.kind === "listed"
         ? {
@@ -362,7 +362,7 @@ for (const kind of HARNESSES) {
     turnRunning: () => Promise.resolve(false),
   };
   const adapter: Harness = {
-    ...adoption,
+    custody: { kind: "keeper", ...adoption },
     ...(kind === "claude" ? claudeFleet : {}),
     kind,
     auth: "unauthenticated",

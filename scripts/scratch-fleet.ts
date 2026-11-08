@@ -36,7 +36,7 @@ import {
 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
-import { parseProcId } from "../packages/agent/src/proc-id";
+import { sessionOfProc } from "../packages/agent/src/proc-id";
 import { HTTP_PROXY_VARS } from "../packages/agent/src/proxy-relay";
 import { removeTree, removeTreeSync } from "../packages/agent/src/remove-tree";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
@@ -2438,14 +2438,10 @@ async function standUp(
       await SessiondClient.connect(sessiondSocket)
     );
     try {
-      const pid = client.procs.find((proc) => {
-        const id = parseProcId(proc.procId);
-        return (
-          proc.alive &&
-          (id.kind === "claude" || id.kind === "pi") &&
-          id.instanceId === instanceId
-        );
-      })?.pid;
+      const pid = client.procs.find(
+        (proc) =>
+          proc.alive && sessionOfProc(proc.procId)?.instanceId === instanceId
+      )?.pid;
       // None while sessiond holds no process for it.
       return pid === undefined ? undefined : listedPid(pid);
     } finally {
