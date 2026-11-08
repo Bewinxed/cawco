@@ -65,6 +65,7 @@ import {
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { InstallsRecordSchema } from "./db/stored-shapes";
+import type { InstallsRecord } from "./db/stored-types";
 import {
   ASKPASS_ENV,
   beforeSsh,
@@ -178,15 +179,6 @@ interface Run {
   readonly halted: () => void;
   stopped: boolean;
   tunnel: TunnelOpen | null;
-}
-
-export interface InstallsRecord {
-  draft: InstallDraft | null;
-  /** `keys` is absent from a record written before the hub kept it: none known. */
-  installs: (Omit<Install, "keys"> & {
-    code?: string | null;
-    keys?: Install["keys"];
-  })[];
 }
 
 /** A machine as the fleet lists it. */
