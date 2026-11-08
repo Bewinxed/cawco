@@ -58,13 +58,13 @@ import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import http2 from "node:http2";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import type { HopByHopHeader } from "../../../packages/core/src/hop-headers";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import type { HopByHopHeader } from "../../../packages/core/src/preview/hop-headers";
+import { PREVIEW_WHY_META } from "../../../packages/core/src/preview/protocol";
 import {
   processArgs,
   processLineage,
 } from "../../../packages/core/src/process-identity";
-import { PREVIEW_WHY_META } from "../../../packages/core/src/protocol";
 import type { RenderReport } from "../../../packages/core/src/stage";
 import {
   leasePortRange,
@@ -312,7 +312,7 @@ async function hubListener(
     await import("../../../packages/hub/src/preview");
   const { originOfKey } = await import("../../../packages/hub/src/db/previews");
   const { sourceKeyOf } =
-    await import("../../../packages/core/src/preview-upstream");
+    await import("../../../packages/core/src/preview/upstream");
   // The canvas's row, as the hub reads it off its origin on every request.
   const row = {
     id: crypto.randomUUID(),
@@ -621,7 +621,7 @@ async function chain(
     await import("../../../packages/agent/src/preview");
   const { embedKey } = await import("../../../packages/hub/src/preview");
   const { sourceKeyOf } =
-    await import("../../../packages/core/src/preview-upstream");
+    await import("../../../packages/core/src/preview/upstream");
   // The canvas's own origin's key, which the machine keys its listener by.
   const instanceId = embedKey(crypto.randomUUID());
   const workspace = crypto.randomUUID();

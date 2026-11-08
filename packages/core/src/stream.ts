@@ -16,8 +16,8 @@
  */
 
 import type { CarrySessionRequest } from "./harness";
-import type { HubPreviewOrigins } from "./hub-previews";
 import type { PlanDelta, PlanFollow, PlanResync, PlanSnapshot } from "./plan";
+import type { HubPreviewOrigins } from "./preview/hub-previews";
 import type { DeliveryMark, IngestMark } from "./protocol";
 import type { TailnetServing } from "./tailnet-https";
 

@@ -6,12 +6,12 @@
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { cawcoDataDir } from "@cawco/core/paths";
 import {
   HUB_PREVIEWS_FILE,
   hubPreviewOriginsOf,
   originsFor,
-} from "@cawco/core/hub-previews";
-import { cawcoDataDir } from "@cawco/core/paths";
+} from "@cawco/core/preview/hub-previews";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** Where the agent keeps the hub's preview origins: what each workspace's relay reads. */
