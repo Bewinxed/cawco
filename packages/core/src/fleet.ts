@@ -10,14 +10,14 @@
 import { userLayerLabel } from "./claude-dirs";
 import { everyOf } from "./every-of";
 import type { FleetPlacement, FleetScope } from "./fleet-placement";
+import type { HarnessKind } from "./harness/kinds";
+import type { FleetHarnessConfig } from "./harness-config";
+import type { FleetHook } from "./hooks";
 import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
-} from "./harness";
-import type { HarnessKind } from "./harness/kinds";
-import type { FleetHarnessConfig } from "./harness-config";
-import type { FleetHook } from "./hooks";
+} from "./session-messages";
 import type { ToolPlatform } from "./tools";
 import { areaWords } from "./words/areas";
 import { configurePage } from "./words/configure";

@@ -32,11 +32,9 @@
 import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import {
-  CONTROL_READ_TRANSCRIPT_WINDOW,
-  type SessionMessage,
-} from "../../../packages/core/src/harness";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { CONTROL_READ_TRANSCRIPT_WINDOW } from "../../../packages/core/src/session/controls";
+import type { SessionMessage } from "../../../packages/core/src/session-messages";
 import type {
   TranscriptPage,
   TranscriptWindow,
