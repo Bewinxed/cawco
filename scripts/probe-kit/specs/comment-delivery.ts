@@ -85,10 +85,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import {
-  notedLine,
-  wroteLine,
-} from "../../../packages/core/src/comments/deliver";
-import {
   COMMENT_LIMITS,
   type Pin,
 } from "../../../packages/core/src/comments/model";
@@ -96,6 +92,10 @@ import { heldNoteProblem } from "../../../packages/core/src/comments/validate";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/relaunch";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
+import {
+  notedLine,
+  wroteLine,
+} from "../../../packages/core/src/words/comment-lines";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, ToolCalls, toolReply } from "../../tool-calls";

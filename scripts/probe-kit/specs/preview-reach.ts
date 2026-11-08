@@ -56,11 +56,13 @@ import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   INSTANT_REFUSAL_MS,
   type PreviewUnreached,
-  previewsNeedWords,
-  previewUnreachedWords,
 } from "../../../packages/core/src/preview/reach";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { previewWords } from "../../../packages/core/src/words/preview";
+import {
+  previewsNeedWords,
+  previewUnreachedWords,
+} from "../../../packages/core/src/words/preview-reach";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Engine, type Kit, kitsOwnMessage, open, type Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
