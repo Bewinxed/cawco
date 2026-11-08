@@ -13,16 +13,16 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  type HostOutputListed,
-  OUTPUTS_DIR,
-  type WorkspaceOutputs,
-} from "@cawco/core/harness";
-import {
   forgetWorkspaceTmp,
   linkWorkspaceTmp,
   workspaceScratchDir,
 } from "@cawco/core/paths/workspace";
 import { workWords } from "@cawco/core/words/work";
+import {
+  type HostOutputListed,
+  OUTPUTS_DIR,
+  type WorkspaceOutputs,
+} from "@cawco/core/workspace/controls";
 import { removeTree } from "./remove-tree";
 
 /** A workspace id as the hub makes one (`crypto.randomUUID()`): nothing else names a folder under the scratch root. */
