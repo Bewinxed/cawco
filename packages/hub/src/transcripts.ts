@@ -31,11 +31,6 @@ import {
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { SessionCommands, SessionTooling } from "@cawco/core/protocol";
 import type { SessionStreamFrame } from "@cawco/core/stream";
-import {
-  type HubLine,
-  TRANSCRIPT_PAGE,
-  TranscriptBuilder,
-} from "@cawco/core/transcript";
 import type {
   TranscriptEvent,
   TranscriptPage,
@@ -44,6 +39,7 @@ import type {
 } from "@cawco/core/transcript-types";
 import type { TurnCut } from "@cawco/core/turn-cuts";
 import type { HubLifetimeShape } from "./lifetime";
+import { type HubLine, TRANSCRIPT_PAGE, TranscriptBuilder } from "./transcript";
 
 /**
  * Where the next older window of a transcript is read: in which of its

@@ -1,7 +1,7 @@
 /**
  * What a session hands another by name lands as files in the receiver's
  * `$TMPDIR/inputs/`, written by the hub, with no file the caller writes
- * (core handed-input.ts `HandedInput`, hub handed-inputs.ts
+ * (hub handed-input.ts `HandedInput`, hub handed-inputs.ts
  * `createHandedInputs`, work-items.ts `readInputs` and `handIn`). On a
  * scratch fleet (real hub, agent and sessiond; Claude Code, OpenCode and pi
  * against the mock model) and the built dashboard at the desk, read from the

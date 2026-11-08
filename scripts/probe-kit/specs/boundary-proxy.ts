@@ -59,9 +59,9 @@ import {
   RELAY_STEP,
   startProxyRelay,
 } from "../../../packages/agent/src/proxy-relay";
+import { SOCAT_BACKLOG } from "../../../packages/agent/src/socat";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid, signalGroup } from "../../../packages/core/src/signal";
-import { SOCAT_BACKLOG } from "../../../packages/core/src/socat";
 import type {
   ArtifactList,
   Browsed,
