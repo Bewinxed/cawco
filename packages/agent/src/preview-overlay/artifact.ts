@@ -57,7 +57,7 @@ import {
   resolvePin,
   writeAgain,
   writePin,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
 import type { MapDoc } from "@cawco/core/doc-maps";
 import { PIN_MAPS } from "@cawco/core/doc-maps";
