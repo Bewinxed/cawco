@@ -22,8 +22,8 @@
 import { join } from "node:path";
 import type { HookCommandHandler, HookHandler } from "@cawco/core/hooks";
 import { fleetHooksDir } from "@cawco/core/paths";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { systemProgram } from "@cawco/core/workspace-needs";
-import { shellQuote } from "./boundary";
 
 /** The perl the guard runs on: the one every boundary's runner runs on (boundary.ts), on the agent's PATH. */
 const perl = (): string => systemProgram("perl");
