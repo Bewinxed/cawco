@@ -31,7 +31,7 @@ import {
   type FleetSkillMeta,
   type FleetSyncReport,
 } from "@cawco/core/fleet";
-import type { HarnessKind } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { isHarnessConfigKind } from "@cawco/core/harness-config";
 import { fleetFaultWords } from "@cawco/core/words/fleet-faults";
 
