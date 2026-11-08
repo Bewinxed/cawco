@@ -29,7 +29,7 @@ import type {
 import type {
   CommentAttachment as CommentAttachmentType,
   ThreadEntry as ThreadEntryType,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import type {
   ArtifactSessionFrame as ArtifactSessionFrameType,
   BrowserAskFrame as BrowserAskFrameType,
