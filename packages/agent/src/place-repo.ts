@@ -28,18 +28,18 @@
 import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
 import {
-  credentialIn,
-  LARGE_FILE_BYTES,
   PLACE_REPO_LIMIT_BYTES,
   type PlaceLeftOut,
   type PlaceLfsMade,
   type PlaceLfsRow,
   type PlaceRepo,
   WORKSPACE_GIT_TIMEOUT_MS,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/harness";
+import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { credentialIn } from "@cawco/core/secret-text";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";

@@ -26,8 +26,11 @@
  */
 import { lstat, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { CONTROL_REPO_ROOT, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import {
+  CONTROL_REPO_ROOT,
+  WORKSPACE_GIT_TIMEOUT_MS,
+} from "@cawco/core/harness";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";

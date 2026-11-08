@@ -1,8 +1,7 @@
 /**
  * How a session with no process comes back, and why a failed one never
  * does: its failure's kind, the words a person reads, and the relaunch every
- * revive decides by. Imported alone by a reader of it; core's index
- * re-exports it.
+ * revive decides by.
  */
 
 /**
@@ -86,7 +85,7 @@ export type Relaunch =
   | { kind: "refused"; reason: string };
 
 /** Why a session whose work a continuation took on never runs again. */
-export const continuedWords = (continuedInto: string): string =>
+const continuedWords = (continuedInto: string): string =>
   `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
 
 /**

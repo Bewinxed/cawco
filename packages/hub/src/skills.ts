@@ -9,15 +9,15 @@ import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { readWithin } from "@cawco/core/bounded";
+import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import { hashFiles } from "@cawco/core/file-hash";
 import {
   frontMatterBlock,
   SKILL_SKIPPED_DIRS,
   type SkillFile,
   skillDescription,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
-import { projectClaudeRelative } from "@cawco/core/claude-dirs";
-import { hashFiles } from "@cawco/core/file-hash";
+} from "@cawco/core/fleet";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";

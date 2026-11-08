@@ -1,4 +1,7 @@
-import type { ImageProviderId, ImageQuality } from "@cawco/core";
+import type {
+  ImageProviderId,
+  ImageQuality,
+} from "@cawco/core/image-generation";
 
 /** One reference image, admitted through the workspace's gate and read. */
 export interface ReferenceImage {
