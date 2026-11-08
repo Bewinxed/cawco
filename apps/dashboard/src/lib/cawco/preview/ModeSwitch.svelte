@@ -7,7 +7,7 @@
    * segments). Where the head has no room for its three segments it is
    * ModeButton instead.
    */
-  import { type PreviewMode, previewMode } from "@cawco/core/comments";
+  import { type PreviewMode, previewMode } from "@cawco/core/comments/model";
   import { previewWords } from "@cawco/core/words/preview";
   import { BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import {

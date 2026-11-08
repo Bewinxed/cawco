@@ -31,7 +31,8 @@
  * (`cawco:change-pressed`).
  */
 import { bringIntoView } from "@cawco/core/bring-into-view";
-import { type PageAnchor, readPins } from "@cawco/core/comments";
+import type { PageAnchor } from "@cawco/core/comments/anchor";
+import { readPins } from "@cawco/core/comments/model";
 import {
   type Anchorable,
   anchorable,

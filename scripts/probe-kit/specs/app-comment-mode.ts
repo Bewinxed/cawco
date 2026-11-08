@@ -30,7 +30,7 @@
  */
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import type { Pin } from "../../../packages/core/src/comments";
+import type { Pin } from "../../../packages/core/src/comments/model";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import {

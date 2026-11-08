@@ -1,4 +1,5 @@
-import { type Pin, type PinnedElement, wholePage } from "./comments";
+import { type PinnedElement, wholePage } from "./comments/anchor";
+import type { Pin } from "./comments/model";
 
 /** A pin on the page as a whole (core `wholePage`), by name. Our call. */
 const PAGE_WORDS = "Whole page";

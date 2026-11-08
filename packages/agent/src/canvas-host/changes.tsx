@@ -30,7 +30,7 @@ import {
   type ChangedItem,
   seeChanges,
   seenOf,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import { commentWords } from "@cawco/core/words/comments";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
