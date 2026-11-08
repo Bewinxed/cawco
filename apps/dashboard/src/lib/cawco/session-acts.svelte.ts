@@ -13,7 +13,7 @@
  *
  * Nothing here throws: a failure is the fault on the row.
  */
-import type { NeutralSessionInfo } from "@cawco/core/harness";
+import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { SvelteMap } from "svelte/reactivity";
 import {
   answeredOr,
