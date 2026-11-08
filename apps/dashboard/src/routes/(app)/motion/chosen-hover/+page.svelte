@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Pin } from "@cawco/core/comments";
+  import type { Pin } from "@cawco/core/comments/model";
   /**
    * The controls that mark a chosen or current item, each with one item
    * chosen and one not, for the chosen-hover probe: the new-session chips'
