@@ -59,40 +59,25 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { EndedBy } from "@cawco/core/accounts";
+import type { AttemptResult, ResultArtifact } from "@cawco/core/deliverables";
+import { detach } from "@cawco/core/detach";
 import {
-  type AttemptResult,
-  CLOSED_STAGE_KINDS,
-  type EndedBy,
   type ExternalComment,
   type ExternalRef,
-  externalItemWords,
-  type InstanceRow,
-  type IssueTracker,
-  LANDS_MODES,
-  type LandsMode,
-  type Mover,
-  markdownLink,
-  OFFERED_TEMPLATES,
-  PERMISSION_MODES,
-  type ProjectStarter,
-  type ResultArtifact,
   refOfUrl,
-  STAGES_TEMPLATES,
-  STARTER_PLACES,
-  type StageKind,
-  type StagesTemplate,
-  type StarterPlace,
   type TaskLinkSummary,
-  type TaskMover,
-  taskLink,
-  taskLinkWords,
-  taskTarget,
-  todoProgress,
-  type WaitTarget,
-  waitHandle,
-  waitTarget,
-} from "@cawco/core";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/external-items";
+import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
+import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+import { todoProgress } from "@cawco/core/plan";
+import type { InstanceRow } from "@cawco/core/protocol";
+import { markdownLink, taskLink } from "@cawco/core/references";
+import {
+  type ProjectStarter,
+  STARTER_PLACES,
+  type StarterPlace,
+} from "@cawco/core/starters";
 import type { TaskEdge } from "@cawco/core/task-edges";
 import type {
   BuiltOn,
@@ -111,7 +96,25 @@ import type {
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
+import type { IssueTracker } from "@cawco/core/trackers";
+import {
+  CLOSED_STAGE_KINDS,
+  type Mover,
+  OFFERED_TEMPLATES,
+  STAGES_TEMPLATES,
+  type StageKind,
+  type StagesTemplate,
+  type TaskMover,
+} from "@cawco/core/views";
+import {
+  taskTarget,
+  type WaitTarget,
+  waitHandle,
+  waitTarget,
+} from "@cawco/core/wait-targets";
+import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
+import { taskLinkWords } from "@cawco/core/words/task-links";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker } from "./db/schema";

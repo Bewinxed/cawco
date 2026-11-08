@@ -52,16 +52,16 @@ import {
   type SessiondClient,
 } from "../../packages/agent/src/sessiond-client";
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
+import { CAWCO_ENV } from "../../packages/core/src/cawco-env";
 import {
   CAPABILITIES_NONE,
+  type MachineHarnessReport,
   MESSAGES_READ,
 } from "../../packages/core/src/harness";
-import { HARNESSES } from "../../packages/core/src/harness/kinds";
 import {
-  CAWCO_ENV,
+  HARNESSES,
   type HarnessKind,
-  type MachineHarnessReport,
-} from "../../packages/core/src/index";
+} from "../../packages/core/src/harness/kinds";
 import { claudeHome } from "../../packages/core/src/paths";
 import { sessionEnvironment } from "../../packages/core/src/session-env";
 

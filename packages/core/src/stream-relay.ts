@@ -60,7 +60,7 @@ export const isStreamRelayPort = (port: number): boolean =>
  * developers.cloudflare.com/realtime/sfu/https-api/). A scratch fleet names
  * its own stand-in (`CAWCO_STUN_SERVER`).
  */
-export const STUN_SERVER = "stun:stun.cloudflare.com:3478";
+const STUN_SERVER = "stun:stun.cloudflare.com:3478";
 
 /**
  * The STUN server this process names: a scratch fleet's stand-in where
@@ -196,10 +196,6 @@ export interface RelayRuntimeRead {
  * reached from outside without the person. Answers the URLs that answered.
  */
 export const RELAY_PROVE = "relay.prove";
-export interface RelayProveArgs {
-  urls: string[];
-}
-
 /**
  * The relay's ICE server URLs: TURN over UDP and TCP on 3478, and with a DNS
  * name TURN over TLS on 5349. A browser whose runtime forwards only TCP, or
@@ -348,8 +344,6 @@ export type RelayStep =
 /** The runtime step: what the machine's container runtime must let the relay do. */
 export type RuntimeStep = Extract<RelayStep, { step: "runtime" }>;
 
-export type RelayStepKind = RelayStep["step"];
-
 /** One port's last STUN answer, as Settings' chips show it. */
 export interface RelayPortChip {
   error?: string;
@@ -490,17 +484,17 @@ export const RELAY_DNS_NAME =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/iu;
 
 /** The ports the relay answers on, by whether a name stands: its chips' and its tick's words. */
-export const portsWords = (named: boolean): string =>
+const portsWords = (named: boolean): string =>
   named ? "udp 3478, tcp 3478, tls 5349" : "udp 3478, tcp 3478";
 
 /** "17 Jan": a certificate's end, in this screen's zone. */
-export const relayDay = (at: number): string =>
+const relayDay = (at: number): string =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(
     at
   );
 
 /** "today 14:02", else "17 Jan, 14:02": when a proof landed, in this screen's zone. */
-export const relayWhen = (at: number, now = Date.now()): string => {
+const relayWhen = (at: number, now = Date.now()): string => {
   const time = new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",

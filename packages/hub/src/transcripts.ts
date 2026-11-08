@@ -21,24 +21,27 @@
  * carries: a client that fetched a page at `seq` applies the events after it
  * and has exactly what the hub has.
  */
+import type { FramePayload } from "@cawco/core/frames";
 import {
-  type FramePayload,
-  type HarnessKind,
-  type HubLine,
   type NeutralMessage,
   type SendRecord,
-  type SessionCommands,
   type SessionMessage,
-  type SessionStreamFrame,
-  type SessionTooling,
   STREAM_SO_FAR,
+} from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { SessionCommands, SessionTooling } from "@cawco/core/protocol";
+import type { SessionStreamFrame } from "@cawco/core/stream";
+import {
+  type HubLine,
   TRANSCRIPT_PAGE,
   TranscriptBuilder,
-  type TranscriptEvent,
-  type TranscriptPage,
-  type TranscriptStreamFrame,
-  type TranscriptWhere,
-} from "@cawco/core";
+} from "@cawco/core/transcript";
+import type {
+  TranscriptEvent,
+  TranscriptPage,
+  TranscriptStreamFrame,
+  TranscriptWhere,
+} from "@cawco/core/transcript-types";
 import type { TurnCut } from "@cawco/core/turn-cuts";
 import type { HubLifetimeShape } from "./lifetime";
 

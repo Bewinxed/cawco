@@ -1,4 +1,5 @@
-import type { Envelope, ErrorFrame, Verb } from "@cawco/core";
+import type { ErrorFrame } from "@cawco/core/frames";
+import type { Envelope, Verb } from "@cawco/core/protocol";
 import { Context, Effect, Layer } from "effect";
 import { HubLifetime, type HubLifetimeShape } from "./lifetime";
 import { type HubSocket, sendFrame } from "./wire-socket";
