@@ -85,12 +85,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import {
-  COMMENT_LIMITS,
-  heldNoteProblem,
   notedLine,
-  type Pin,
   wroteLine,
-} from "../../../packages/core/src/comments";
+} from "../../../packages/core/src/comments/deliver";
+import {
+  COMMENT_LIMITS,
+  type Pin,
+} from "../../../packages/core/src/comments/model";
+import { heldNoteProblem } from "../../../packages/core/src/comments/validate";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/relaunch";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";

@@ -46,7 +46,7 @@
  */
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { messageAuth } from "y-websocket";
-import type { Pin } from "../../../packages/core/src/comments";
+import type { Pin } from "../../../packages/core/src/comments/model";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
