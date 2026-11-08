@@ -1,7 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { PREVIEW_PING_PATH, type PreviewSource } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
   type BrowserKey,
@@ -9,6 +8,7 @@ import {
   isBrowserKey,
 } from "@cawco/core/browser";
 import { PREVIEW_RELAYED_HEADER } from "@cawco/core/browser-gate";
+import { PREVIEW_PING_PATH } from "@cawco/core/frames";
 import {
   asksUpgrade,
   cachePreview,
@@ -38,6 +38,7 @@ import {
 } from "@cawco/core/preview-proxy";
 import { PREVIEW_HELD_HEADER } from "@cawco/core/preview-reach";
 import type { ServingPreview, SourceKey } from "@cawco/core/preview-upstream";
+import type { PreviewSource } from "@cawco/core/protocol";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
 import { wakeBrowser } from "./browser/browsers";
