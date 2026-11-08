@@ -5,11 +5,8 @@
  * and a session whose own record is damaged (end it). In memory: the machine
  * says them again on every beat, so the hub holds only its last word.
  */
-import {
-  type DamagedRecordReport,
-  type DamagedRow,
-  damagedWords,
-} from "@cawco/core/protocol";
+import type { DamagedRecordReport, DamagedRow } from "@cawco/core/protocol";
+import { damagedWords } from "@cawco/core/words/damaged";
 
 /** A machine's damaged records off its 15s beat; undefined on a beat that carries none. */
 export const peekDamagedRecords = (

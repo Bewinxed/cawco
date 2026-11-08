@@ -109,23 +109,6 @@ export const machinePlatform = (machine: {
   (machine.os.split("-")[0] || undefined);
 
 /**
- * The port an agent serves its MCP gateway on when `CAWCO_MCP_PORT` names
- * none: every production machine. Read it through `mcpGatewayPort()`, never
- * directly.
- *
- * Below Linux's ephemeral range, 32768–60999 (kernel ip-sysctl.rst,
- * `ip_local_port_range`), where a socket the kernel gives a port to could
- * hold it first: one of the agent's own did, on 2026-10-26, while the
- * gateway sat in that range. IANA's registry lists it inside
- * `,14035-14140,,Unassigned,,,,,,,,`, and nmap-services has no line for
- * 14060, TCP or UDP, so its scans never found it open (both read
- * 2026-10-26). Just below the browsers' ports (browser.ts `BROWSER_PORTS`).
- * A running session's config names the port it was launched on: one on
- * another port is relaunched at rest (core harness.ts `GATEWAY_RELAUNCH`).
- */
-export const CAWCO_MCP_DEFAULT_PORT = 14_060;
-
-/**
  * Where CawCo publishes its shared OAuth client: a metadata document, and the
  * page that hands a sign-in back to the install that started it. Used only for
  * a provider that identifies clients by such a document and has no dynamic
