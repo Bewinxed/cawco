@@ -12,7 +12,7 @@
  */
 import { dirname, resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
-import type { TailwindTheme } from "../../../packages/hub/src/design-tokens";
+import type { TailwindTheme } from "../../../packages/design-tokens/src/design-tokens";
 
 const APP_CSS = "src/app.css";
 /** The house's own `@utility` definitions, which app.css imports. */
