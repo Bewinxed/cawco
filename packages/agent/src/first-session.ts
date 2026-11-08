@@ -15,9 +15,11 @@
  * - pi and OpenCode: CawCo's own folder for the session's instance id
  *   (core `workspaceSpillDir`).
  */
+
 import { readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { projectSlug, sessionConfigDir } from "@cawco/core/paths/claude";
 import {
   workspaceSpillDir,
@@ -104,7 +106,7 @@ export const firstSpill = async (
   if (!first) {
     return;
   }
-  if (first.harness !== "claude") {
+  if (traitsOf(first.harness).accountModel !== "dir") {
     return workspaceSpillDir(id, first.instanceId);
   }
   if (first.resume) {
