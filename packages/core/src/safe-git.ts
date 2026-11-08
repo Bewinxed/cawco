@@ -25,6 +25,7 @@
  * never a link.
  */
 import { join } from "node:path";
+import { shellQuote } from "./shell-quote";
 
 /** The flags that go right after `git`. */
 export const SAFE_GIT_FLAGS: readonly string[] = [
@@ -71,8 +72,6 @@ export const SAFE_GIT_ENV: Readonly<Record<string, string>> = {
   ...GIT_LOCALE,
 };
 
-const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
-
 /**
  * {@link SAFE_GIT_ENV} and `git` with {@link SAFE_GIT_FLAGS}, as the start of
  * a shell command: `${SAFE_GIT} status --porcelain`. In a command line of
@@ -80,10 +79,10 @@ const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
  */
 export const SAFE_GIT = [
   ...Object.entries(SAFE_GIT_ENV).map(
-    ([name, value]) => `${name}=${quote(value)}`
+    ([name, value]) => `${name}=${shellQuote(value)}`
   ),
   "git",
-  ...SAFE_GIT_FLAGS.map(quote),
+  ...SAFE_GIT_FLAGS.map(shellQuote),
 ].join(" ");
 
 /**
@@ -93,11 +92,11 @@ export const SAFE_GIT = [
  */
 export const SAFE_GIT_SHELL = `git() { ${[
   ...Object.entries(SAFE_GIT_ENV).map(
-    ([name, value]) => `${name}=${quote(value)}`
+    ([name, value]) => `${name}=${shellQuote(value)}`
   ),
   "command",
   "git",
-  ...SAFE_GIT_FLAGS.map(quote),
+  ...SAFE_GIT_FLAGS.map(shellQuote),
 ].join(" ")} "$@"; }; `;
 
 /**

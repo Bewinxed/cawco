@@ -45,7 +45,7 @@
  * the system programs it names, `workspace-needs.ts` and its words, with
  * `words/helpers.ts`), socat backlog (`socat.ts`), hub preview origins
  * (`hub-previews.ts`), git dir test (`git-dir.ts`), safe git
- * (`safe-git.ts`), srt's refusal line (`srt-refusal.ts`) and state files
+ * (`safe-git.ts`) with its shell quoting (`shell-quote.ts`), srt's refusal line (`srt-refusal.ts`) and state files
  * (`state-file.ts`), the signal wall's sending half (`signal-wall.ts`,
  * through sandbox-end.ts and state-file.ts), and the agent's own proxy relay
  * (`proxy-relay.ts`, with the listener that ends its process when it cannot
@@ -87,6 +87,7 @@ import { isGitDirSync } from "@cawco/core/git-dir";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { srtRefusedLine } from "@cawco/core/srt-refusal";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
@@ -98,8 +99,6 @@ import {
   startProxyRelay,
 } from "./proxy-relay";
 import { endSandbox, parentOf } from "./sandbox-end";
-
-const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 /**
  * Address space no command dials by an address literal. srt judges only the
@@ -678,7 +677,7 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
         "cawco-boundary",
         fifo,
       ]
-        .map(quote)
+        .map(shellQuote)
         .join(" ")
     );
   } catch (error) {
