@@ -17,7 +17,7 @@
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { workspaceDoorDir } from "@cawco/core/paths";
+import { workspaceDoorDir } from "@cawco/core/paths/workspace";
 import { hostGhToken } from "./host-gh";
 import { socketPlace } from "./tool-door";
 

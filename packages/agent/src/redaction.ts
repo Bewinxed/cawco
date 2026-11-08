@@ -30,7 +30,7 @@ import {
   jsonSizeEstimate,
   textPieces,
 } from "@cawco/core/json-stream";
-import { sessionIdentityDir } from "@cawco/core/paths";
+import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import type { Envelope } from "@cawco/core/protocol";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
