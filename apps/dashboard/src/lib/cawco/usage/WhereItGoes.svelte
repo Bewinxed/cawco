@@ -22,6 +22,7 @@
    * (motion/relay-boxes) so an old row never overflows into the group below.
    */
   import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import { traitsOf } from "@cawco/core/harness/traits";
   import type {
     UsageGroupBy,
     UsageSummary,
@@ -152,7 +153,7 @@
   function itemOf(v: View, row: UsageSummaryRow): Item {
     const total = v.summary.totals.costUsd;
     const share = total > 0 ? row.costUsd / total : 0;
-    const approx = v.harness === "claude" ? "~" : "";
+    const approx = traitsOf(v.harness).costMeaning === "estimated" ? "~" : "";
     return {
       id: `${v.grouping}:${String(row.key)}`,
       machineId: v.grouping === "session" ? (row.machine?.id ?? "") : FLAT,
@@ -313,7 +314,9 @@
     const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
     const head = [
       v.grouping === "model" ? "Model" : "Machine",
-      v.harness === "claude" ? "API price (USD)" : "Spend (USD)",
+      traitsOf(v.harness).costMeaning === "estimated"
+        ? "API price (USD)"
+        : "Spend (USD)",
       "Input",
       "Output",
       "Cache write",
@@ -475,7 +478,7 @@
     </div>
   {/if}
 
-  {#if harness === "claude"}
+  {#if traitsOf(harness).costMeaning === "estimated"}
     <p data-slot="note" class="type-meta text-ink-muted">
       ~ is the API price of work the plan already covers.
     </p>
