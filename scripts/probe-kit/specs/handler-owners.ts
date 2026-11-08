@@ -19,6 +19,9 @@
  *   conversation.
  * - d. A delegate's report reaches its parent, read there; no handler
  *   starts for it.
+ * - d2. A delegate's report to a parent past its token cap (half its
+ *   model's window) waits on the parent's compression and is read by its
+ *   continuation; the over-cap parent is sent nothing.
  *
  * Before handlers (2026-11-08) b2's pin, and c's answers with no live
  * asker or parent, went to the project's conversation.
@@ -30,6 +33,7 @@ import { Doc } from "yjs";
 import type { InstanceRow } from "../../../packages/core/src";
 import { writePin } from "../../../packages/core/src/comments";
 import { hubRequest } from "../../../packages/core/src/hub-request";
+import { handlerWords } from "../../../packages/core/src/words/handlers";
 import { artifactTaker } from "../../../packages/hub/src/artifacts/taker";
 import {
   MACHINE,
@@ -47,44 +51,64 @@ const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 /** The delegate's brief carries this; its report carries {@link DONE}. */
 const TAG = "HO-DELEGATE";
 const DONE = "HO-DELEGATE-DONE";
+/** A context past the cap: 900k tokens on a 1M window (core `STANDING_CONTEXT_SHARE`, half). */
+const OVER_CAP_TOKENS = 900_000;
+const WINDOW_TOKENS = 1_000_000;
 /** A report as its parent reads it (core `reportMarker`). */
 const REPORT = "[Report from delegate ";
 
 const calls = new ToolCalls("HO-CALL");
-let searched = false;
-let finished = false;
+/** Where each delegate stands: it searched for finish_item, and it finished. */
+const delegates = new Map<string, { finished: boolean; searched: boolean }>();
+/** The second delegate's brief, to a parent over its token cap; its report carries {@link CAPPED_DONE}. */
+const CAPPED = "HO-CAPPED";
+const CAPPED_DONE = "HO-CAPPED-DONE";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
-/** The delegate finishes at once; a writer calls what it is asked; everyone else says "ok". */
-const respond = (request: Seen): Reply => {
-  if (!request.tools) {
-    return text("Probe title");
+/** A delegate's next step: load finish_item, then finish with `done`. */
+const finishing = (request: Seen, tag: string, done: string): Reply => {
+  const state = delegates.get(tag) ?? { finished: false, searched: false };
+  delegates.set(tag, state);
+  if (state.finished) {
+    return text("Done.");
   }
-  if (request.all.includes(`${TAG}:`) && !request.all.includes(REPORT)) {
-    if (finished) {
-      return text("Done.");
-    }
-    if (!(request.toolNames.includes("mcp__cawco__finish_item") || searched)) {
-      searched = true;
-      return {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: "select:mcp__cawco__finish_item", max_results: 1 },
-        },
-      };
-    }
-    finished = true;
+  if (!(
+    request.toolNames.includes("mcp__cawco__finish_item") || state.searched
+  )) {
+    state.searched = true;
     return {
       everyMs: 5,
       words: [],
       tool: {
-        name: "mcp__cawco__finish_item",
-        input: { headline: DONE, summary: `${DONE}: nothing to change.` },
+        name: "ToolSearch",
+        input: { query: "select:mcp__cawco__finish_item", max_results: 1 },
       },
     };
+  }
+  state.finished = true;
+  return {
+    everyMs: 5,
+    words: [],
+    tool: {
+      name: "mcp__cawco__finish_item",
+      input: { headline: done, summary: `${done}: nothing to change.` },
+    },
+  };
+};
+
+/** Each delegate finishes at once; a writer calls what it is asked; everyone else says "ok". */
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return text("Probe title");
+  }
+  if (!request.all.includes(REPORT)) {
+    if (request.all.includes(`${TAG}:`)) {
+      return finishing(request, TAG, DONE);
+    }
+    if (request.all.includes(`${CAPPED}:`)) {
+      return finishing(request, CAPPED, CAPPED_DONE);
+    }
   }
   return calls.reply(request) ?? text("ok");
 };
@@ -306,6 +330,83 @@ const spec: Spec = {
         (row) => row.instance_id === parent && row.state === "read"
       ) && anyHandler.length === 0,
       `item ${started.workItemId}; sends ${JSON.stringify(reported)}; handlers ${JSON.stringify(anyHandler)}`
+    );
+
+    // d2. A report to a parent over its token cap reaches its continuation.
+    const capped = await fleet.spawn(
+      "claude",
+      "Shop front planner",
+      fleet.repo,
+      {
+        projectId: project.id,
+      }
+    );
+    const said = await fleet.send(capped, "Say ok.");
+    await until(
+      "the planner's turn read and ended",
+      () => ({ send: fleet.sendRow(said), row: fleet.instance(capped) }),
+      ({ send, row }) => send?.state === "read" && !row?.turn_open_at,
+      180_000
+    );
+    await until(
+      "the planner's turn over",
+      () => fleet.instance(capped),
+      (row) => !row?.turn_open_at,
+      60_000
+    ).catch(() => undefined);
+    fleet.write(
+      "UPDATE instances SET model = ?, context_tokens = ? WHERE id = ?",
+      MODEL.claude,
+      OVER_CAP_TOKENS,
+      capped
+    );
+    fleet.write(
+      "INSERT OR REPLACE INTO claude_context_windows (model, context_window, observed_at) VALUES (?, ?, ?)",
+      MODEL.claude,
+      WINDOW_TOKENS,
+      Date.now()
+    );
+    await fleet.api(
+      hubRequest("POST /api/work-items", {
+        body: {
+          parentInstanceId: capped,
+          title: "Check the delivery zones",
+          prompt: `${CAPPED}: check the delivery zones, then finish.`,
+          harness: "claude",
+          model: MODEL.claude,
+          host: true,
+        },
+      })
+    );
+    const job = await until(
+      "the planner compressed",
+      () =>
+        fleet.query<{ asked_by: string; target_instance_id: string }>(
+          "SELECT asked_by, target_instance_id FROM continuations WHERE source_instance_id = ? ORDER BY rowid DESC",
+          capped
+        )[0],
+      Boolean,
+      240_000
+    ).catch(() => undefined);
+    const continuation = job?.target_instance_id ?? "";
+    const toContinuation = await until(
+      "the report read by the planner's continuation",
+      () => sendsWith(fleet, CAPPED_DONE),
+      (rows) =>
+        rows.some(
+          (row) => row.instance_id === continuation && row.state === "read"
+        ),
+      240_000
+    ).catch(() => sendsWith(fleet, CAPPED_DONE));
+    check(
+      "d2: a delegate's report to a parent over its token cap waits on the parent's compression and is read by its continuation; the over-cap parent is sent nothing",
+      !!job &&
+        job.asked_by.includes(handlerWords.overCapLead) &&
+        toContinuation.some(
+          (row) => row.instance_id === continuation && row.state === "read"
+        ) &&
+        toContinuation.every((row) => row.instance_id !== capped),
+      `job ${JSON.stringify(job)}; sends ${JSON.stringify(toContinuation)}; parent ${capped}`
     );
   },
 };

@@ -6496,7 +6496,19 @@ export const createServer = (
     told: ReportTold = {}
   ): void => {
     for (const parent of workItems.reportees(delegate)) {
-      reportTo(parent, delegate, body, failed, told);
+      // A parent over its token cap is compressed before the report reaches
+      // it (the owner's card "What a trigger wakes"): the report waits on
+      // the compression and goes to its continuation, which holds the role.
+      if (contextOverCap(parent) === undefined) {
+        reportTo(parent, delegate, body, failed, told);
+        continue;
+      }
+      detach(
+        ownerUnderCap(parent).then((now) =>
+          reportTo(now, delegate, body, failed, told)
+        ),
+        "a report to a parent compressed first"
+      );
     }
   };
 
