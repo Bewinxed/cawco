@@ -90,6 +90,23 @@
     sheets();
   })();`;
 
+  /**
+   * Shown in CawCo's own panel, the overlay marks the page's root as headed,
+   * and a side card under that mark meets its edges (SideSurface). This
+   * drawing's card is the subject, so it keeps its float.
+   */
+  const keepFloat = () => {
+    const root = document.documentElement;
+    const lift = () => root.removeAttribute("data-cawco-headed");
+    lift();
+    const watch = new MutationObserver(lift);
+    watch.observe(root, {
+      attributes: true,
+      attributeFilter: ["data-cawco-headed"],
+    });
+    return () => watch.disconnect();
+  };
+
   /** Puts the relay in the panel's frame each time it loads (a load doesn't bubble, so this listens in capture). */
   const relayInFrames = (node: HTMLElement) => {
     const loaded = (event: Event) => {
@@ -327,6 +344,7 @@
     style:--frame-h={`${height}px`}
     style:--shell-h={`${height}px`}
     {@attach relayInFrames}
+    {@attach keepFloat}
   >
     <div
       data-slot="leaf"
