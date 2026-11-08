@@ -43,7 +43,7 @@ import {
   type SaidWindow,
   type SDKSessionMessage,
 } from "../../../packages/agent/src/harnesses/claude-transcript";
-import type { SessionMessage } from "../../../packages/core/src/harness";
+import type { SessionMessage } from "../../../packages/core/src/session-messages";
 import type {
   TranscriptBlock,
   TranscriptEvent,
