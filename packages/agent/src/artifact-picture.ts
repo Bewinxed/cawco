@@ -29,8 +29,8 @@ import {
   PICTURE_VIEW,
 } from "@cawco/core/artifact-picture";
 import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/preview/protocol";
-import { DOWN_WORDS } from "@cawco/core/preview/proxy";
 import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
+import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import type { Frame, Page } from "playwright-core";
 import {
   greet,
