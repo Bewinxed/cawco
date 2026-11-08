@@ -22,6 +22,7 @@ import {
   type PlacementStrategy,
 } from "./accounts/kinds";
 import type { HarnessKind } from "./harness/kinds";
+import { traitsOf } from "./harness/traits";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
 
@@ -935,7 +936,7 @@ export const providersOpenedBy = (
   provider: AccountProvider
 ): readonly string[] => {
   const opened = PROVIDERS_OPENED[provider] ?? [provider];
-  return harness === "opencode"
+  return traitsOf(harness).ownProviderIds
     ? opened.map((one) => OPENCODE_IDS[one] ?? one)
     : opened;
 };
@@ -959,7 +960,7 @@ export const accountProvidersOf = (
   harness: string,
   model: string | null | undefined
 ): AccountProvider[] => {
-  if (harness === "claude") {
+  if (traitsOf(harness).accountModel === "dir") {
     return [CLAUDE_PROVIDER];
   }
   const slash = model?.indexOf("/") ?? -1;
