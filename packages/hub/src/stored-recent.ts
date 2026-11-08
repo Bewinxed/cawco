@@ -18,7 +18,7 @@
  * Owner (2026-11-11): "don't u think that the machine's list that is
  * outside of cawco rarely changes? esp old ones?"
  */
-import type { NeutralSessionInfo } from "@cawco/core/harness";
+
 import { type MemberProject, projectAt } from "@cawco/core/project-membership";
 import type {
   InstanceRow,
@@ -26,6 +26,7 @@ import type {
   StoredTranscript,
 } from "@cawco/core/protocol";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
+import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 
 export interface StoredRecentDeps {
   /** Runs `run` once after `ms`, on the hub's lifetime. */
