@@ -1,5 +1,4 @@
 import type { Bounded } from "@cawco/core/bounded";
-import type { NeutralMessage } from "@cawco/core/harness";
 import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
 import type { Rule, RuleFacts, RuleTiming } from "@cawco/core/rules";
 import {
@@ -8,6 +7,7 @@ import {
   ruleMarker,
   ruleMatches,
 } from "@cawco/core/rules";
+import type { NeutralMessage } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import type { DbShape } from "./db";
 import { jevUnanswered } from "./jev";

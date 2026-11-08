@@ -12,10 +12,10 @@ import type {
   MomentAuthor,
 } from "@cawco/core/find";
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
-import type { NeutralSessionInfo } from "@cawco/core/harness";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { AgentRow } from "@cawco/core/protocol";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
+import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { StageKind } from "@cawco/core/views";
