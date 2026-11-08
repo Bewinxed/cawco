@@ -21,7 +21,7 @@
  */
 import type { AccountSignin } from "@cawco/core/accounts";
 import { machinesCalled } from "@cawco/core/machine-names";
-import type { ProjectRow } from "./db";
+import type { ProjectRow } from "./db/projects";
 import { onAccountMachines } from "./placement";
 import { fits, type MachineFacts, runsOnWords } from "./runs-on";
 
