@@ -35,7 +35,7 @@
  *
  * Then the agent is started again with no bun on its PATH (every dir holding
  * one left out, the stand-in removed). It runs on its own bun still, as
- * CawCo's own scripts do (agent boundary.ts `bunScriptRuntime`), so its
+ * CawCo's own scripts do (agent bun-runtime.ts `bunScriptRuntime`), so its
  * workspaces' boundaries start:
  *
  * - C, the merge checks: a second delegate commits and finishes; its
