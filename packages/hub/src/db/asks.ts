@@ -8,9 +8,11 @@
  */
 
 import type { AskAnswer, AskRecord, AskResult } from "@cawco/core/asks";
-import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import type { Envelope } from "@cawco/core/protocol";
+import { and, asc, eq, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { asks } from "./schema";
+import type { DbCore } from "./core";
+import { askPushes, asks, parkedAsks } from "./schema";
 
 type AskRow = typeof asks.$inferSelect;
 
@@ -230,5 +232,81 @@ export const asksDb = (db: BunSQLiteDatabase): AsksDb => {
           withdrawn: { at, by: "hub", why },
         });
       }),
+  };
+};
+
+export interface AskPartsDb {
+  /**
+   * The asks the push outlet took (push.ts `onAsk`), by request id, kept
+   * across a restart: `take` is true only the first time, `drop` forgets
+   * one whose ask settled.
+   */
+  readonly askPushes: {
+    readonly drop: (requestId: string) => void;
+    /** Drops every mark but those of `parked`; answers the request ids that went. */
+    readonly keepOnly: (parked: readonly string[]) => string[];
+    readonly take: (requestId: string, at: Date) => boolean;
+  };
+  /**
+   * The asks the hub holds parked (`pending.ts`), kept across its restarts:
+   * read once as it boots, written as each is parked and dropped as it ends.
+   */
+  readonly parkedAsks: {
+    readonly drop: (requestId: string) => void;
+    readonly list: () => Envelope[];
+    readonly save: (requestId: string, envelope: Envelope) => void;
+  };
+}
+
+export const askPartsDb = (core: DbCore): AskPartsDb => {
+  const { db } = core;
+
+  return {
+    parkedAsks: {
+      drop: (requestId) => {
+        db.delete(parkedAsks).where(eq(parkedAsks.requestId, requestId)).run();
+      },
+      list: () =>
+        db
+          .select({ envelope: parkedAsks.envelope })
+          .from(parkedAsks)
+          .all()
+          .map((row) => row.envelope),
+      save: (requestId, envelope) => {
+        const row = {
+          requestId,
+          instanceId: envelope.instanceId ?? null,
+          machineId: envelope.machineId,
+          envelope,
+        };
+        db.insert(parkedAsks)
+          .values(row)
+          .onConflictDoUpdate({ target: parkedAsks.requestId, set: row })
+          .run();
+      },
+    },
+    askPushes: {
+      take: (requestId, at) =>
+        db
+          .insert(askPushes)
+          .values({ requestId, takenAt: at })
+          .onConflictDoNothing()
+          .returning()
+          .all().length > 0,
+      drop: (requestId) => {
+        db.delete(askPushes).where(eq(askPushes.requestId, requestId)).run();
+      },
+      keepOnly: (parked) =>
+        db
+          .delete(askPushes)
+          .where(
+            parked.length === 0
+              ? undefined
+              : notInArray(askPushes.requestId, [...parked])
+          )
+          .returning()
+          .all()
+          .map((row) => row.requestId),
+    },
   };
 };
