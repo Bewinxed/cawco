@@ -28,7 +28,8 @@ import type {
   NeutralUserMessage,
 } from "@cawco/core/session-messages";
 import { refusedUntil } from "./at-limit";
-import type { DbShape, SentMessageRow } from "./db";
+import type { DbShape } from "./db";
+import type { SentMessageRow } from "./db/sends";
 import { redactSecrets } from "./secret-filter";
 
 export const SESSION_ROLES = ["main", "delegate", "all"] as const;
