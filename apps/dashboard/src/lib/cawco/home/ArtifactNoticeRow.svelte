@@ -14,9 +14,9 @@
   import {
     type ArtifactNeedNotice,
     needLinkOf,
-    noticePartWords,
   } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
+  import { noticePartWords } from "@cawco/core/words/artifact-needs";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import type { Component } from "svelte";
   import {
