@@ -27,7 +27,6 @@ import {
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/harness";
 import {
   type HubRepoKey,
   hubRepoOfUrl,
@@ -54,6 +53,7 @@ import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
+import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
 import {
   configEnv,

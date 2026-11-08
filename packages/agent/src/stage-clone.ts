@@ -57,7 +57,6 @@ import {
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
-import type { WorkspaceRef } from "@cawco/core/harness";
 import {
   workspaceScratchDir,
   workspaceStateDir,
@@ -68,6 +67,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { STAGE_CLONE_GIT_MS, type StageCloneFrame } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";

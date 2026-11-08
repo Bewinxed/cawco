@@ -29,6 +29,11 @@ import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { LARGE_FILE_BYTES } from "@cawco/core/move";
+import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
+import { writeStateFile } from "@cawco/core/state-file";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   PLACE_REPO_LIMIT_BYTES,
   type PlaceLeftOut,
@@ -36,12 +41,7 @@ import {
   type PlaceLfsRow,
   type PlaceRepo,
   WORKSPACE_GIT_TIMEOUT_MS,
-} from "@cawco/core/harness";
-import { LARGE_FILE_BYTES } from "@cawco/core/move";
-import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
-import { hostEnvironment } from "@cawco/core/session-env";
-import { writeStateFile } from "@cawco/core/state-file";
-import { unhandled } from "@cawco/core/unhandled";
+} from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
 import { configEnv } from "./git-credential";
 import { LFS_FILTERS } from "./move";

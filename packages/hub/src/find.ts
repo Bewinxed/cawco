@@ -56,9 +56,9 @@ import {
   type Query,
 } from "@cawco/core/find-match";
 import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
-import type { NeutralSessionInfo } from "@cawco/core/harness";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { AgentRow } from "@cawco/core/protocol";
+import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { StageKind } from "@cawco/core/views";

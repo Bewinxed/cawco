@@ -26,7 +26,7 @@ import type {
 import { placedOnly, scoped } from "@cawco/core/fleet";
 import type { FleetPlacement, FleetScope } from "@cawco/core/fleet-placement";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import type { HarnessReport, NeutralUserMessage } from "@cawco/core/harness";
+import type { HarnessReport } from "@cawco/core/harness";
 import type {
   EffortLevel,
   HarnessKind,
@@ -85,6 +85,7 @@ import {
 import type { Rule, RuleState, RuleStats } from "@cawco/core/rules";
 import { ruleSettings } from "@cawco/core/rules";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
+import type { NeutralUserMessage } from "@cawco/core/session-messages";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
