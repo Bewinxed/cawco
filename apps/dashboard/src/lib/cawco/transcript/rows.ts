@@ -8,10 +8,10 @@
 
 import type { AccountMove } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
-import { ASK_ORIGIN } from "@cawco/core/asks";
 import { connectAnswerOf, isConnectAskTool } from "@cawco/core/connect-ask";
 import type { ConnectAnswer } from "@cawco/core/frames";
 import { CAWCO_NOTICE } from "@cawco/core/harness";
+import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
 import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
 import type { ToolGlance } from "@cawco/core/transcript-types";
 import type { SubagentState } from "#lib/utils/flow-types.js";
