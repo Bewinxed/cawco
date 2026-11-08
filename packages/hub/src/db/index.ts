@@ -167,6 +167,7 @@ import {
   PROJECT_PAGES_MIGRATION_WHEN,
 } from "./merge-project-pages";
 import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
+import { type MovesDb, movesDb } from "./moves";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
 import { type PresenceDb, presenceDb } from "./presence";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
@@ -263,7 +264,7 @@ import { type SessionPlansDb, sessionPlansDb } from "./session-plans";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
-import type { MoveState, SendHold } from "./stored-types";
+import type { SendHold } from "./stored-types";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type TaskIndexDb, taskIndexDb } from "./task-index";
 import type { TaskLinksDb } from "./task-links";
@@ -435,11 +436,6 @@ export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
   subagents: OpenSubagent[];
 };
-/** A project move as moves.ts reads it: its state whole, the machines it names put back in it. */
-export type MoveRow = Omit<
-  typeof moves.$inferSelect,
-  "state" | "sourceMachineId" | "targetMachineId" | "stopOn"
-> & { state: MoveState };
 export type WorkItemRow = typeof workItems.$inferSelect;
 type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 /**
@@ -881,7 +877,6 @@ interface HubStore {
   readonly deleteMcpOauth: (name: string) => void;
   /** A fleet MCP relay session closed: its `initialize` params go. */
   readonly deleteMcpSession: (id: string) => void;
-  readonly deleteMove: (id: string) => void;
   /** Design checks and design proposals (design-verify.ts, design-system.ts). */
   readonly designChecks: DesignChecksDb;
   /** Caw's one design-system offer per project (design-offers.ts). */
@@ -1053,9 +1048,6 @@ interface HubStore {
   readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
   readonly ingress: IngressDb;
-  readonly insertMove: (
-    row: Omit<MoveRow, "createdAt" | "updatedAt">
-  ) => MoveRow;
   /** Look up a single non-discarded instance by its harness sessionId. */
   readonly instanceBySessionId: (
     sessionId: string
@@ -1291,12 +1283,6 @@ interface HubStore {
   readonly movedHereOf: (id: string) => MovedHere | null;
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;
-  /** One project move's record (moves.ts). */
-  readonly moveRow: (id: string) => MoveRow | undefined;
-  /** Every project move, oldest first. */
-  readonly moveRows: () => MoveRow[];
-  /** The project moves that name a machine: a Cancel it has not heard, or a step on it or reading from it. */
-  readonly moveRowsOn: (machineId: string) => MoveRow[];
   /** Every machine by its id and hostname, in {@link listAgents}' order: what a machine's name is read from. */
   readonly namedMachines: () => { hostname: string; machineId: string }[];
   /**
@@ -2041,7 +2027,6 @@ interface HubStore {
       >
     >
   ) => void;
-  readonly setProjectMoveDeclined: (id: string, at: Date | null) => void;
   /** The stage template a project last had applied: its starter skills follow it. */
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
@@ -2243,11 +2228,6 @@ interface HubStore {
       >
     >
   ) => void;
-  /** Moves one job; the row as it now is, or undefined when it is gone. */
-  readonly updateMove: (
-    id: string,
-    patch: Partial<Pick<MoveRow, "stage" | "state">>
-  ) => MoveRow | undefined;
   /** One change to a send's record — the hub's only kind of write to one. */
   readonly updateSend: (
     uuid: string,
@@ -2404,7 +2384,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = ContinuationsDb &
+export type DbShape = MovesDb &
+  ContinuationsDb &
   TaskIndexDb &
   SessionPlansDb &
   RulesDb &
@@ -2445,36 +2426,6 @@ const delegateEventOf = ({
     },
     createdAt: row.createdAt.toISOString(),
   }) as DelegateEvent;
-
-/** A move's machines out of its state, as their columns keep them. */
-const moveColumnsOf = ({
-  sourceMachineId,
-  targetMachineId,
-  stopOn,
-  ...state
-}: MoveState) => ({
-  state,
-  sourceMachineId,
-  targetMachineId,
-  stopOn: stopOn ?? null,
-});
-
-/** A stored move with its machines back in its state. */
-const moveOf = ({
-  sourceMachineId,
-  targetMachineId,
-  stopOn,
-  state,
-  ...row
-}: typeof moves.$inferSelect): MoveRow => ({
-  ...row,
-  state: {
-    ...state,
-    sourceMachineId,
-    targetMachineId,
-    ...(stopOn === null ? {} : { stopOn }),
-  },
-});
 
 /** A skill row as everything outside the hub reads it: the row, minus its files. */
 const skillMeta = (
@@ -4398,6 +4349,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...movesDb(core),
     ...continuationsDb(core),
     ...taskIndexDb(core),
     ...sessionPlansDb(core),
@@ -9526,63 +9478,6 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
           .map((row) => [row.model, row.contextWindow])
       ),
-    moveRows: () =>
-      db.select().from(moves).orderBy(moves.createdAt).all().map(moveOf),
-    moveRowsOn: (machineId) =>
-      db
-        .select()
-        .from(moves)
-        .where(
-          or(
-            eq(moves.stopOn, machineId),
-            eq(moves.targetMachineId, machineId),
-            eq(moves.sourceMachineId, machineId)
-          )
-        )
-        .orderBy(moves.createdAt)
-        .all()
-        .map(moveOf),
-    moveRow: (id) => {
-      const row = db.select().from(moves).where(eq(moves.id, id)).get();
-      return row && moveOf(row);
-    },
-    insertMove: ({ state, ...row }) => {
-      const now = new Date();
-      return moveOf(
-        db
-          .insert(moves)
-          .values({
-            ...row,
-            ...moveColumnsOf(state),
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning()
-          .get()
-      );
-    },
-    updateMove: (id, { state, ...patch }) => {
-      const row = db
-        .update(moves)
-        .set({
-          ...patch,
-          ...(state ? moveColumnsOf(state) : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(moves.id, id))
-        .returning()
-        .get();
-      return row && moveOf(row);
-    },
-    deleteMove: (id) => {
-      db.delete(moves).where(eq(moves.id, id)).run();
-    },
-    setProjectMoveDeclined: (id, at) => {
-      db.update(projects)
-        .set({ moveDeclinedAt: at })
-        .where(eq(projects.id, id))
-        .run();
-    },
     noteClaudeContextWindow: (model, contextWindow) => {
       db.insert(claudeContextWindows)
         .values({ model, contextWindow, observedAt: new Date() })
