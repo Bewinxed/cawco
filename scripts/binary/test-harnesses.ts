@@ -51,9 +51,9 @@ import {
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
 import {
   CAPABILITIES_NONE,
-  HARNESSES,
   MESSAGES_READ,
 } from "../../packages/core/src/harness";
+import { HARNESSES } from "../../packages/core/src/harness/kinds";
 import {
   CAWCO_ENV,
   type HarnessKind,

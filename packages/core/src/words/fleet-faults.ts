@@ -6,7 +6,7 @@
 
 import type { FleetReportSection } from "../fleet";
 import type { FaultReason } from "../fleet-fault-reason";
-import type { HarnessKind } from "../harness";
+import type { HarnessKind } from "../harness/kinds";
 import { type HarnessConfigKind, harnessConfigLabel } from "../harness-config";
 import { accountsWords } from "./accounts";
 import { andList } from "./helpers";

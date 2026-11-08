@@ -20,7 +20,7 @@
    * the settings' flow first.
    */
   import { BUILT_IN_MEMBERS, type Member } from "@cawco/core/decides";
-  import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+  import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
   import { unhandled } from "@cawco/core/unhandled";
   import { decidesWords } from "@cawco/core/words/decides";
   import AskHere from "#lib/cawco/AskHere.svelte";
