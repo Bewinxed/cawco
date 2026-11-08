@@ -49,27 +49,9 @@ const TURN_LINES: ReadonlySet<unknown> = new Set([
 /** The last turn marker in already-written bytes; no marker means unknown. */
 export class ChildActivity {
   #running: boolean | undefined;
-  readonly #kind: "claude" | "pi";
-
-  constructor(kind: "claude" | "pi") {
-    this.#kind = kind;
-  }
 
   read(line: RingLine | undefined): void {
     if (!line) {
-      return;
-    }
-    if (this.#kind === "pi") {
-      if (line.type === "busy" && typeof line.active === "boolean") {
-        this.#running = line.active;
-      } else if (
-        line.type === "reply" &&
-        typeof line.value?.busy === "boolean"
-      ) {
-        this.#running = line.value.busy;
-      } else if (line.type === "frame" && line.message?.type === "result") {
-        this.#running = false;
-      }
       return;
     }
     if (line.type === "result") {
