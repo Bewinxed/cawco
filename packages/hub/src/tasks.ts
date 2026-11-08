@@ -114,7 +114,8 @@ import type {
 import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
-import type { Tracker, WorkBudget } from "./db/schema";
+import type { Tracker } from "./db/schema";
+import type { WorkBudget } from "./db/stored-types";
 import { boardTitle } from "./labels";
 import {
   deleteFolderFile,
