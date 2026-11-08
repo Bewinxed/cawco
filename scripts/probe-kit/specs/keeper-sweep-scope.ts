@@ -43,9 +43,11 @@
  *
  *   bun scripts/probe-kit/run.ts keeper-sweep-scope
  */
+
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import {
@@ -54,7 +56,6 @@ import {
   fateOf,
   hostRefusal,
   keeperUnitOf,
-  quoted,
   run,
   startChild,
   startedAt,
@@ -110,12 +111,12 @@ const spec: Spec = {
       const moved = `trap 'echo TERM >> "$1"' TERM; echo $$ > "$0"; while :; do sleep 1; done`;
       const kept = `echo $$ > "$0"; while :; do sleep 1; done`;
       // A session of its own, then its parent (the subshell) exits at once.
-      const escaped = `( setsid ${systemProgram("sh")} -c ${quoted(kept)} ${quoted(escapedPid)} & )`;
+      const escaped = `( setsid ${systemProgram("sh")} -c ${shellQuote(kept)} ${shellQuote(escapedPid)} & )`;
       const script = [
         // systemd-run expands `$` in its arguments by default ("Use \"$$\" to pass a literal dollar
         // sign", systemd.service(5)): the shell's `$$` would reach it as `$`.
-        `systemd-run --user --scope --quiet --collect --expand-environment=no --unit=${quoted(scope)} -- ${systemProgram("sh")} -c ${quoted(moved)} ${quoted(movedPid)} ${quoted(termFile)} &`,
-        `${systemProgram("sh")} -c ${quoted(kept)} ${quoted(keptPid)} &`,
+        `systemd-run --user --scope --quiet --collect --expand-environment=no --unit=${shellQuote(scope)} -- ${systemProgram("sh")} -c ${shellQuote(moved)} ${shellQuote(movedPid)} ${shellQuote(termFile)} &`,
+        `${systemProgram("sh")} -c ${shellQuote(kept)} ${shellQuote(keptPid)} &`,
         escaped,
         "read line",
         "exit 0",
