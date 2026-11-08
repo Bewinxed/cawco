@@ -15,8 +15,9 @@
    * output (installs.svelte.ts `closeOutput`); with no window to come back
    * to, focus goes to where the install is parked (`parkedAt`).
    */
-  import { causeLine, type Install } from "@cawco/core/install";
+  import type { Install } from "@cawco/core/install";
   import { connectWords } from "@cawco/core/words/connect";
+  import { causeLine } from "@cawco/core/words/install";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";

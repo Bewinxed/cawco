@@ -7,16 +7,15 @@
  * copy.
  */
 import {
-  CHECK_WORDS,
   type Install,
   type InstallProblem,
   installerRan,
-  stepWords,
   targetHost,
 } from "@cawco/core/install";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
 import { connectWords } from "@cawco/core/words/connect";
+import { CHECK_WORDS, stepWords } from "@cawco/core/words/install";
 
 /** An IPv4 or IPv6 address, which has no first label to name a machine by. */
 const ADDRESS = /^[\d.]+$|:/u;

@@ -4,13 +4,11 @@ import {
   type AccountReading,
   type AccountSignin,
   accountNameAmong,
-  clockWords,
   keepsGoingOnExtraUsage,
   modelScope,
   type PlacementExplain,
   type ProviderRouting,
   type StrategyChoice,
-  spanWords,
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { SettingsInEffect } from "@cawco/core/areas";
@@ -28,6 +26,7 @@ import {
   windowUsed,
   windowWords,
 } from "@cawco/core/usage/windows";
+import { clockWords, spanWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
 import { configurePage } from "@cawco/core/words/configure";
