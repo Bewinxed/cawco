@@ -19,9 +19,9 @@
  * the opaque answer's "status is `0`, its headers are empty"), and whether
  * the hub itself reaches the same origin now ({@link PREVIEW_REACH_PATH}).
  */
-import { readWithin } from "./bounded";
-import { PREVIEW_PING_PATH } from "./frames";
+import { readWithin } from "../bounded";
 import { PREVIEW_DOWNS, type PreviewDown } from "./protocol";
+import { PREVIEW_PING_PATH } from "./routes";
 
 /**
  * Where the hub answers whether it reaches a preview origin itself:
