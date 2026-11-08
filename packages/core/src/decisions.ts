@@ -33,8 +33,8 @@
  */
 import type { ElementNode } from "@openuidev/lang-core";
 import type { ChoiceEntry, SettledBy } from "./choices";
-import { decidedByLine } from "./decides";
 import type { DecisionComponentName } from "./decisions-library";
+import { decidedByLine } from "./words/decides-lines";
 
 /** One option of a card, as the page labelled it. */
 export interface DecisionOption {
