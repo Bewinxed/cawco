@@ -19,7 +19,7 @@ import {
   dropRepeatedFiles,
   honourDeletions,
   splitWholePins,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS, mapsOf } from "@cawco/core/doc-maps";
 import { keepTuned, TUNED_MAP, type TunedRecord } from "@cawco/core/tuned";
