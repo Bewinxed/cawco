@@ -14,8 +14,52 @@
     if (url.endsWith("/api/preview-ticket")) {
       return Promise.resolve(Response.json({ ticket: "working-area" }));
     }
+    // Placeholder data: what a pane would read of the hub is seeded below, so
+    // a read of it stays in flight, and what the pane already shows stands.
+    if (new URL(url).pathname.startsWith("/api/")) {
+      return new Promise<Response>(() => undefined);
+    }
     return standFor(input, init);
   };
+
+  /** A comments doc with nothing in it: y-websocket's sync step 2 of an empty update, answered to each sync step 1. */
+  const EMPTY_SYNC = new Uint8Array([0, 1, 2, 0, 0]);
+
+  /** The pane's comments socket, answered here: the hub is never dialled. */
+  class CommentsStandIn {
+    binaryType = "arraybuffer";
+    readyState = 0;
+    onopen: ((event: Event) => void) | null = null;
+    onmessage: ((event: { data: ArrayBuffer }) => void) | null = null;
+    onclose: ((event: { code: number }) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+
+    constructor() {
+      setTimeout(() => {
+        this.readyState = 1;
+        this.onopen?.(new Event("open"));
+      });
+    }
+
+    send(data: ArrayBuffer | Uint8Array): void {
+      const said = new Uint8Array(data as ArrayBuffer);
+      if (said[0] === 0 && said[1] === 0) {
+        setTimeout(() => this.onmessage?.({ data: EMPTY_SYNC.slice().buffer }));
+      }
+    }
+
+    close(): void {
+      this.readyState = 3;
+      this.onclose?.({ code: 1000 });
+    }
+  }
+
+  globalThis.WebSocket = new Proxy(globalThis.WebSocket, {
+    construct: (socket, [url, protocols]) =>
+      String(url).includes("/ws/artifact/")
+        ? new CommentsStandIn()
+        : new socket(url, protocols),
+  });
 
   /**
    * What the preview overlay says between a stage page and its panel (the
@@ -249,6 +293,11 @@
       ask: untrack(() => ask),
     },
     artifacts: [ARTIFACT],
+    // This page's own origin, however the panel reached it: through a preview
+    // name its address has no port of its own.
+    origin: location.origin,
+    // The route a panel takes to its frame on a proxied name is the whole origin (core `previewRoute`); a port alone reads as :80 there.
+    origin: location.origin,
     port,
     revision: "working-area-1",
     source: { port, path: untrack(() => path) },
