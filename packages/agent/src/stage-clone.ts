@@ -58,7 +58,10 @@ import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import type { WorkspaceRef } from "@cawco/core/harness";
-import { workspaceScratchDir, workspaceStateDir } from "@cawco/core/paths";
+import {
+  workspaceScratchDir,
+  workspaceStateDir,
+} from "@cawco/core/paths/workspace";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";

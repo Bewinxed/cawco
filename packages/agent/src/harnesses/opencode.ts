@@ -72,16 +72,18 @@ import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
+import { xdgDataHome } from "@cawco/core/paths/cawco";
+import { credentialAccountIds } from "@cawco/core/paths/claude";
 import {
-  credentialAccountIds,
   opencodeAccountHome,
   opencodeDataDir,
   opencodeViewHome,
   opencodeViewsDir,
+} from "@cawco/core/paths/harnesses";
+import {
   workspaceScratchDir,
   workspaceSpillDir,
-  xdgDataHome,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { serverEnvironment } from "@cawco/core/session-env";

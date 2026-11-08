@@ -49,7 +49,7 @@ import {
   workspaceClaudeTmpDir,
   workspaceScratchDir,
   workspaceTmpDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { writeStateFile } from "@cawco/core/state-file";
 import { workWords } from "@cawco/core/words/work";
 import {
