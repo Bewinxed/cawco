@@ -9,7 +9,7 @@ import {
   type DamagedRecordReport,
   type DamagedRow,
   damagedWords,
-} from "@cawco/core";
+} from "@cawco/core/protocol";
 
 /** A machine's damaged records off its 15s beat; undefined on a beat that carries none. */
 export const peekDamagedRecords = (

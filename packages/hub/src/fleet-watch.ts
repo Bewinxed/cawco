@@ -48,27 +48,30 @@
  * decision that lands after the session moved on is recorded and not acted
  * on (its stale-verdict skip); and nothing here answers a permission.
  */
+
+import { Gone, readWithin } from "@cawco/core/bounded";
 import {
   decisionWords,
-  type Envelope,
   FLEET_WATCH_LIMITS,
   FLEET_WATCH_WAITS,
   type FleetWatchNotice,
   type FleetWatchSignal,
-  fleetWatchNudge,
-  type InstanceRow,
-  isMachineSilence,
-  type NeutralMessage,
-  NO_REPLY_TOOL,
-  type PermissionMode,
-  type SendPayload,
-  type SpawnPayload,
-  sessionLink,
   signalLine,
   TRIAGE_DECISIONS,
   type TriageDecision,
-} from "@cawco/core";
-import { Gone, readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/fleet-watch";
+import type { NeutralMessage } from "@cawco/core/harness";
+import type { PermissionMode } from "@cawco/core/harness/kinds";
+import { fleetWatchNudge } from "@cawco/core/injected";
+import { isMachineSilence } from "@cawco/core/machine-names";
+import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
+import type {
+  Envelope,
+  InstanceRow,
+  SendPayload,
+  SpawnPayload,
+} from "@cawco/core/protocol";
+import { sessionLink } from "@cawco/core/references";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";

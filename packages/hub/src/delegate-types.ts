@@ -9,14 +9,13 @@
  * (db/wal.ts).
  */
 import type { Database } from "bun:sqlite";
-import type { DelegateType } from "@cawco/core";
+import type { DelegateType } from "@cawco/core/delegate-types";
 import {
   ANY_TYPE,
   DEFAULT_DELEGATE_TYPES,
   delegateTypeProblem,
-  EFFORT_LEVELS,
-  HARNESSES,
-} from "@cawco/core";
+} from "@cawco/core/delegate-types";
+import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia, t } from "elysia";
 import { undoable } from "./db/trash";

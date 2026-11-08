@@ -8,7 +8,7 @@
  * item at a time" and act on the difference alone
  * (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/controllers.md).
  */
-import type { FleetReportSection } from "@cawco/core";
+import type { FleetReportSection } from "@cawco/core/fleet";
 import {
   type FleetItemKind,
   itemKind,

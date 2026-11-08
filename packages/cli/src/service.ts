@@ -3,18 +3,11 @@ import { mkdir } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { foreignIn, KeeperKept } from "@cawco/agent/keeper-jobs";
-import type { AgentRow } from "@cawco/core";
-import {
-  CAWCO_ENV,
-  CAWCO_HUB_PORT,
-  localDashboardPort,
-  mcpGatewayPort,
-  readEnv,
-} from "@cawco/core";
 import { AGENT_BUNDLE_ID } from "@cawco/core/agent-bundle";
 import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { withFetchCap } from "@cawco/core/fetch-cap";
 import { hubRequest } from "@cawco/core/hub-request";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
@@ -28,6 +21,12 @@ import {
   removeLaunchdLog,
 } from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths";
+import type { AgentRow } from "@cawco/core/protocol";
+import {
+  CAWCO_HUB_PORT,
+  localDashboardPort,
+  mcpGatewayPort,
+} from "@cawco/core/protocol";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";

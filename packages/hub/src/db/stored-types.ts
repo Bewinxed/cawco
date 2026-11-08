@@ -5,14 +5,18 @@
  * for them. Types only; `scripts/stored-shapes.ts` makes each schema from
  * these declarations and proves it equal in stored-shapes.proof.ts.
  */
+import type { AccountMove } from "@cawco/core/accounts";
+import type { SendAttachment } from "@cawco/core/attachments";
+import type { Extracted } from "@cawco/core/continuation-read";
+import type { ModeAsk, SendRefusal } from "@cawco/core/harness";
 import type {
-  AccountMove,
   EffortLevel,
-  Extracted,
   HarnessKind,
-  Install,
-  InstallDraft,
-  ModeAsk,
+  PermissionMode,
+} from "@cawco/core/harness/kinds";
+import type { Install, InstallDraft } from "@cawco/core/install";
+import type { MachinePath } from "@cawco/core/machine-path";
+import type {
   MoveAsk,
   MoveError,
   MoveJob,
@@ -20,12 +24,8 @@ import type {
   MoveLfsResult,
   MoveSnapshotResult,
   MoveStep,
-  PermissionMode,
-  SendAttachment,
-  SendPayload,
-  SendRefusal,
-} from "@cawco/core";
-import type { MachinePath } from "@cawco/core/machine-path";
+} from "@cawco/core/move";
+import type { SendPayload } from "@cawco/core/protocol";
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 /** The session being continued, as the header names it. */
