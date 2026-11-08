@@ -70,7 +70,7 @@ export const CHOICE_LIMITS = {
   perArtifact: 500,
 } as const;
 /** An id or option: no control characters, no spaces at either end. */
-export const CHOICE_ID = /^[^\s\p{Cc}](?:[^\p{Cc}]*[^\s\p{Cc}])?$/u;
+const CHOICE_ID = /^[^\s\p{Cc}](?:[^\p{Cc}]*[^\s\p{Cc}])?$/u;
 export const PAGE_HASH = /^[0-9a-f]{64}$/u;
 
 /** One change the page asks for: exactly one of options, note or value. */
@@ -220,10 +220,8 @@ export const changedEntry = (
 };
 
 /** Whether two picks hold the same options, in any order. */
-export const sameOptions = (
-  a: readonly string[],
-  b: readonly string[]
-): boolean => a.length === b.length && a.every((option) => b.includes(option));
+const sameOptions = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((option) => b.includes(option));
 
 /**
  * Why a person's write of `after` over `before` may not be kept for its

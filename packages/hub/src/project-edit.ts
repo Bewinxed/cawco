@@ -19,11 +19,10 @@
 import {
   type Account,
   accountNameAmong,
-  LANDS_MODES,
-  type LandsMode,
   PROJECT_AT_LIMIT,
   type ProjectAtLimit,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
+import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import type { DbShape, ProjectRow } from "./db";
 

@@ -50,7 +50,9 @@ export const FRAMES: Record<string, string[]> = {
     "TranscriptPage",
     "TranscriptStreamFrame",
   ],
-  "index.ts": [
+  // `FramePayload` is frames.ts's, found through this program; listed here so
+  // the schema keeps its order.
+  "protocol.ts": [
     "Envelope",
     "FramePayload",
     "SpawnPayload",

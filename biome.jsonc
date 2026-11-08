@@ -140,6 +140,17 @@
   "linter": {
     "rules": {
       "style": {
+        // Every import names the module that owns it (core has no index). The
+        // sheet override below restates this path beside its own, as an
+        // override's options replace these.
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+            },
+          },
+        },
         "useDefaultSwitchClause": "off",
         // Ultracite 8.1's: a numbered group is read by its index at the call
         // site, and naming 1,873 of them changes no match. Style, no defect.
@@ -254,7 +265,6 @@
         "apps/dashboard/src/lib/icons.ts",
         "apps/cawrier/src/index.ts",
         "packages/*/src/index.ts",
-        "packages/core/src/usage/index.ts",
         "packages/core/src/signal.ts",
         "packages/icons/src/marks.ts",
       ],
@@ -359,26 +369,6 @@
       },
     },
     {
-      // The dashboard imports core by subpath, so a page loads the modules it
-      // uses, not every module of core. The sheet override below restates
-      // this path beside its own, as an override's options replace these.
-      "includes": ["apps/dashboard/**"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "paths": {
-                  "@cawco/core": "@cawco/core is every module of core; import the subpath you need, like @cawco/core/stage.",
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    {
       // A comment card and its reply composer load no fleet store
       // (composer-weight's legs 1 and 2): the modules they draw from import
       // the store's types alone and draw a session through the host's
@@ -431,7 +421,7 @@
                   "$app/navigation": "The stage stubs $app/navigation; a story never needs it.",
                   "$app/state": "The stage stubs $app/state; a story never needs it.",
                   "$app/stores": "The stage stubs $app/stores; a story never needs it.",
-                  "@cawco/core": "@cawco/core is every module of core; import the subpath you need, like @cawco/core/stage.",
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
                 },
               },
             },

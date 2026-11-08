@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "node:fs";
-import type { HarnessKind, NeutralMessage } from "@cawco/core";
+import type { NeutralMessage } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { listClaudeFiles } from "@cawco/core/paths";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
