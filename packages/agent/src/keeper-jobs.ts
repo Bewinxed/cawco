@@ -36,10 +36,12 @@
  * child the keeper starts is a process group of its own, so what a session
  * started is not reached by a keeper's stop there.
  */
+
 import type { Dirent } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import type { KeptProcess } from "@cawco/core/binary-updates";
 import { type KeeperName, keeperService } from "@cawco/core/keepers";
 import {
@@ -98,16 +100,6 @@ export class KeeperKept extends Error {
     this.foreign = foreign;
   }
 }
-
-/** A read that found nothing there answers `none`; any other failure stands. */
-const unlessGone =
-  <T>(none: T) =>
-  (error: NodeJS.ErrnoException): T => {
-    if (error.code === "ENOENT") {
-      return none;
-    }
-    throw error;
-  };
 
 /** Every pid in cgroup `dir` and every cgroup beneath it; none once it is gone. */
 const pidsUnder = async (dir: string): Promise<number[]> => {
