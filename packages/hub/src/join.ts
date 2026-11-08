@@ -34,28 +34,27 @@ import {
 import { connect } from "node:net";
 import { homedir, hostname, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
-import {
-  connectWords,
-  DRAFT_LIMITS,
-  INSTALL_STEP_PREFIX,
-  type InstallSignIn,
-  type JoinAddress,
-  type JoinInfo,
-  SSH_ADD_RUNNING_HEADER,
-} from "@cawco/core";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
 import { readWithin } from "@cawco/core/bounded";
+import { DRAFT_LIMITS, type InstallSignIn } from "@cawco/core/install";
 import {
   generateInstallScript,
   type InstallJoin,
 } from "@cawco/core/install-script";
+import {
+  INSTALL_STEP_PREFIX,
+  type JoinAddress,
+  type JoinInfo,
+  SSH_ADD_RUNNING_HEADER,
+} from "@cawco/core/join";
 import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { connectWords } from "@cawco/core/words/connect";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
 import { z } from "zod";

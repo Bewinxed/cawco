@@ -57,6 +57,7 @@
  */
 import { createHash } from "node:crypto";
 import { networkInterfaces } from "node:os";
+import { machineLabel } from "@cawco/core/machine-names";
 import {
   AWAY_AFTER_DEFAULT_MS,
   AWAY_AFTER_MAX_MS,
@@ -67,7 +68,6 @@ import {
   MACHINE_TTL_MS,
   type MachineActivity,
   type MachineState,
-  machineLabel,
   type NotificationsClearedFrame,
   type Person,
   type PersonRead,
@@ -76,10 +76,10 @@ import {
   type PresenceBeat,
   type PresenceClient,
   type PresenceDevice,
-  presenceLogWords,
-} from "@cawco/core";
+} from "@cawco/core/notifications";
 import { plainAddress } from "@cawco/core/public-address";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { Elysia, t } from "elysia";
 import type { AwayStretch, DbShape, PresenceClientRow } from "./db";
 import { addressOf } from "./hub-auth";

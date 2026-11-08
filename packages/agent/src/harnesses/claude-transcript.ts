@@ -20,13 +20,12 @@
  * `AskUserQuestion` answers without a second pass.
  */
 
+import type { HarnessNote, NeutralSystemMessage } from "@cawco/core/harness";
 import {
-  type HarnessNote,
   interruptLine,
-  type NeutralSystemMessage,
   transcriptUserText,
-  type WindowAsk,
-} from "@cawco/core";
+} from "@cawco/core/transcript-rules";
+import type { WindowAsk } from "@cawco/core/transcript-types";
 import type { LocatedRecord } from "@cawco/jsonl-parser";
 import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
 import {
