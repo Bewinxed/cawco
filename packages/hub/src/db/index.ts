@@ -35,6 +35,7 @@ import type {
   SessionEffort,
 } from "@cawco/core/harness/kinds";
 import { CONTINUATION_ORIGIN } from "@cawco/core/harness/kinds";
+import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type {
   FleetHarnessConfig,
   HarnessConfigKind,
@@ -306,6 +307,17 @@ import { type TrimDb, trimDb } from "./trim";
 import { type TurnCutsDb, turnCutsDb } from "./turn-cuts";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 import { closeWal, useWal } from "./wal";
+
+/** The harnesses a removed machine's sessions can be recovered from: those in a server that outlives the agent. */
+const SERVER_HARNESSES = harnessesWith((traits) => traits.custody === "server");
+/** The harnesses whose stored conversation, missing from a machine's catalog, is gone. */
+const CATALOG_PROVES_GONE_HARNESSES = harnessesWith(
+  (traits) => traits.catalogProvesGone
+);
+/** The harnesses whose conversations live in an account's directory. */
+const ACCOUNT_DIR_HARNESSES = harnessesWith(
+  (traits) => traits.accountModel === "dir"
+);
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
@@ -5239,7 +5251,7 @@ const make = async (path: string): Promise<DbShape> => {
               .set({ machineRemoved: false })
               .where(eq(instances.id, row.id))
               .run();
-          } else if (complete && row.harness !== "opencode") {
+          } else if (complete && traitsOf(row.harness).listsAllConversations) {
             dropInstances(tx, [row.id]);
           }
         }
@@ -5310,7 +5322,7 @@ const make = async (path: string): Promise<DbShape> => {
               // A removed opencode session, which the reconcile recovers.
               and(
                 eq(instances.machineRemoved, true),
-                eq(instances.harness, "opencode")
+                inArray(instances.harness, SERVER_HARNESSES)
               )
             )
           )
@@ -5361,7 +5373,7 @@ const make = async (path: string): Promise<DbShape> => {
               ? row.endIntent
               : intent;
           const neverStarted =
-            row.harness === "opencode" &&
+            traitsOf(row.harness).startsWithoutConversation &&
             !row.sessionId &&
             !row.scratchWorktree &&
             next !== "discard";
@@ -6680,7 +6692,7 @@ const make = async (path: string): Promise<DbShape> => {
             and(
               eq(instances.machineId, machineId),
               eq(instances.machineRemoved, false),
-              eq(instances.harness, "claude"),
+              inArray(instances.harness, CATALOG_PROVES_GONE_HARNESSES),
               isNotNull(instances.sessionId),
               notInArray(instances.status, [
                 "stopping",
@@ -6751,7 +6763,7 @@ const make = async (path: string): Promise<DbShape> => {
         const resumes =
           !catalog ||
           row.sessionId === null ||
-          row.harness === "opencode" ||
+          !traitsOf(row.harness).listsAllConversations ||
           catalog.has(row.sessionId);
         // OpenCode's listing is a directory/project-filtered catalog, not a
         // proof of absence. Only recovery's keyed session.get can decide that
@@ -8253,7 +8265,7 @@ const make = async (path: string): Promise<DbShape> => {
           and(
             listedInstances(),
             eq(instances.machineId, machineId),
-            eq(instances.harness, "claude"),
+            inArray(instances.harness, ACCOUNT_DIR_HARNESSES),
             isNotNull(instances.sessionId)
           )
         )
