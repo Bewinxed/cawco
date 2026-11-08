@@ -286,23 +286,6 @@ export const browserMount = (key: BrowserKey): string =>
   `/__cawco/browser/${encodeURIComponent(key)}`;
 
 /**
- * What every agent's browser tool is told while the person holds the
- * browser privately (agent shield.ts): the gate's refusal of every
- * connection (423), and the line the project's other sessions are told (hub
- * browsers.ts). Whole, in the owner's words (ASD-STE100).
- */
-export const SHIELD_WORDS =
-  "The person took over this browser in CawCo. Do not use your browser tools. Your browser tools work again when the person presses Hand back.";
-
-/**
- * The close reason of a connection the take-over cuts (agent gate.ts
- * `closeAll`): a WebSocket carries 123 bytes at most, which
- * {@link SHIELD_WORDS} is past, so the cut says this whole and the tool's
- * next connection is refused with SHIELD_WORDS.
- */
-export const SHIELD_CLOSE_WORDS = "The person took over this browser.";
-
-/**
  * The close a local browser's view opens again at once (agent cdp-watch.ts):
  * what it shows moved, to another page in front or to a take-over's own
  * screencast. Never a refusal: the hub's are 4000 plus an HTTP status.

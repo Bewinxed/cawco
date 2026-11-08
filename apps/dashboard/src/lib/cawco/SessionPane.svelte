@@ -2,11 +2,11 @@
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { questionsOf } from "@cawco/core/question";
-  import { CONTINUED_IN } from "@cawco/core/relaunch";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { conversationWords } from "@cawco/core/words/project-conversation";
+  import { CONTINUED_IN } from "@cawco/core/words/relaunch";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
