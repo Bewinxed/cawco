@@ -24,9 +24,11 @@
  * dashboard's and the agent's `Wants=` on the hub's unit, launchd's
  * KeepAlive) refuses to open the file until the helper lets it go.
  */
+
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
+import { isGone } from "./absent";
 import { markerIsLive, ownIdentity } from "./process-identity";
 import { parseRecord } from "./state-file";
 
@@ -42,9 +44,6 @@ type Holder = z.infer<typeof HolderSchema>;
 
 /** How often a takeover that lost a race to another starting hub looks again. */
 const TRIES = 5;
-
-const absent = (error: unknown): boolean =>
-  (error as NodeJS.ErrnoException).code === "ENOENT";
 
 /** The lock's holder as written; an empty object for one half written or gone (stale). */
 const readHolder = async (file: string): Promise<Holder> => {
@@ -108,7 +107,7 @@ export const lockDatabase = async (path: string): Promise<void> => {
       try {
         await rename(lock, aside);
       } catch (error) {
-        if (!absent(error)) {
+        if (!isGone(error)) {
           throw error;
         }
         continue;
