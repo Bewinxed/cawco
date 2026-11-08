@@ -27,6 +27,7 @@ import {
   SAFE_GIT_SHELL,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { DAY_MS } from "@cawco/core/time";
 import { systemProgram } from "@cawco/core/workspace-needs";
@@ -638,15 +639,11 @@ const pathspecWords = async (
   workspace: WorkspaceRef,
   which: DenyPaths
 ): Promise<string> =>
-  (await denyPathspecs(workspace, which)).map(shellWord).join(" ");
+  (await denyPathspecs(workspace, which)).map(shellQuote).join(" ");
 
 /** worktree-guard.ts `shimPaths`'s `before`, as shell words: what a move is judged on before it runs. */
 const moveWords = async (workspace: WorkspaceRef): Promise<string> =>
-  (await shimPaths(workspace)).before.map(shellWord).join(" ");
-
-/** `text` as one shell word. */
-const shellWord = (text: string): string =>
-  `'${text.replaceAll("'", "'\\''")}'`;
+  (await shimPaths(workspace)).before.map(shellQuote).join(" ");
 
 /**
  * The harness project config that commits no branch of `workspace`'s
