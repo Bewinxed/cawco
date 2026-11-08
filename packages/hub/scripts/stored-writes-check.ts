@@ -21,7 +21,6 @@
  * Run by `bun run check` (scripts/check.ts, `stored-writes:check`); it fails on any law broken.
  */
 import { Database } from "bun:sqlite";
-import { isStoredShapeError, storedJson } from "@cawco/core/stored-json";
 import {
   DelegateEventPayloadSchema,
   ModelInfoSchema,
@@ -30,6 +29,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { integer, sqliteTable } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
+import { isStoredShapeError, storedJson } from "../src/stored-json";
 
 const planted = sqliteTable("planted", {
   id: integer("id").primaryKey(),
