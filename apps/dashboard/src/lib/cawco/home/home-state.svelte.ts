@@ -16,6 +16,7 @@
  */
 import type { ApprovedActionView } from "@cawco/core/actions";
 import { archiveRefusal } from "@cawco/core/archive";
+import type { ProjectCap } from "@cawco/core/areas";
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { ArtifactReason, ArtifactStop } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
@@ -25,7 +26,6 @@ import type { PairingRequest, WaitingMachine } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { Install } from "@cawco/core/install";
 import { machineLabel } from "@cawco/core/machine-names";
-import type { ProjectCap } from "@cawco/core/project-conversation";
 import {
   projectAt as projectHolding,
   topsIn,
