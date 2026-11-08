@@ -10,9 +10,12 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { DbCore } from "./core";
+import { PRESENCE_ID } from "./presence";
 import {
   artifactChanges,
   artifacts,
+  findSettings,
   instanceConversations,
   instances,
   projectTaskLabels,
@@ -358,3 +361,33 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         .map((row) => [row.id, row.branch])
     ),
 });
+
+export interface FindSettingsDb {
+  /** The person's Find settings (find-secrets.ts): "Hide secrets in Find", on until they turn it off. */
+  readonly findSettings: {
+    readonly hideSecrets: () => boolean;
+    readonly setHideSecrets: (on: boolean, at: Date) => void;
+  };
+}
+
+export const findSettingsDb = (core: DbCore): FindSettingsDb => {
+  const { db } = core;
+
+  return {
+    findSettings: {
+      hideSecrets: () =>
+        db
+          .select({ hideSecrets: findSettings.hideSecrets })
+          .from(findSettings)
+          .where(eq(findSettings.id, PRESENCE_ID))
+          .get()?.hideSecrets ?? true,
+      setHideSecrets: (on, at) => {
+        const set = { hideSecrets: on, changedAt: at };
+        db.insert(findSettings)
+          .values({ id: PRESENCE_ID, ...set })
+          .onConflictDoUpdate({ target: findSettings.id, set })
+          .run();
+      },
+    },
+  };
+};
