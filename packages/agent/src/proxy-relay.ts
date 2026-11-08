@@ -68,12 +68,12 @@
  */
 import { chmodSync, readFileSync, rmSync, statSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { listenOrEnd } from "@cawco/core/listeners";
 import {
   type HubPreviewOrigins,
   hubPreviewOriginsOf,
   isHubPreview,
-} from "@cawco/core/hub-previews";
-import { listenOrEnd } from "@cawco/core/listeners";
+} from "@cawco/core/preview/hub-previews";
 import { SOCAT_BACKLOG } from "./socat";
 
 /** The relay's port inside a Linux workspace's sandbox, beside srt's 3128 (HTTP) and 1080 (SOCKS) there. */

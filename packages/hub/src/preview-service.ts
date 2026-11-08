@@ -1,18 +1,18 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import { DOWN_WORDS, isFolderGone } from "@cawco/core/preview-proxy";
+import {
+  PREVIEW_START,
+  PREVIEW_STOP,
+  type PreviewDown,
+} from "@cawco/core/preview/protocol";
+import { DOWN_WORDS, isFolderGone } from "@cawco/core/preview/proxy";
 import {
   type ServingPreview,
   type SourceKey,
   sourceKeyOf,
   sourceMachine,
   type Upstream,
-} from "@cawco/core/preview-upstream";
-import {
-  PREVIEW_START,
-  PREVIEW_STOP,
-  type PreviewDown,
-} from "@cawco/core/protocol";
+} from "@cawco/core/preview/upstream";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
