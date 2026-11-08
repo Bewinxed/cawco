@@ -57,6 +57,7 @@
 import type { ResultArtifact } from "@cawco/core/deliverables";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
@@ -68,7 +69,6 @@ import type {
 import { designShaped } from "./design-offers";
 import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
-import { quote } from "./landing";
 import { hubActor, type Tasks } from "./tasks";
 import {
   isLive,
@@ -128,10 +128,10 @@ const RESTORE = (head: string, branch: string): string =>
   [
     SAFE_GIT_SHELL,
     "set -e",
-    `[ "$(git rev-parse HEAD)" = ${quote(head)} ] || exit 0`,
+    `[ "$(git rev-parse HEAD)" = ${shellQuote(head)} ] || exit 0`,
     `p="$TMPDIR/inputs/${PATCH}"`,
     'if [ -f "$p" ] && git apply -R --check --binary "$p" 2>/dev/null; then git apply -R --binary "$p"; fi',
-    `git checkout --quiet ${quote(branch)}`,
+    `git checkout --quiet ${shellQuote(branch)}`,
   ].join("\n");
 
 /** An artifact a chat asks a round of: what it is, and the workspace its stage runs in. */
@@ -406,7 +406,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       if (at.patch) {
         await command(
           workspace,
-          `rm -rf ${quote(at.patch.slice(0, at.patch.lastIndexOf("/")))}`
+          `rm -rf ${shellQuote(at.patch.slice(0, at.patch.lastIndexOf("/")))}`
         ).catch((error: unknown) =>
           console.warn(
             `[design-verify] ${short(check.itemId)}: ${at.patch} was not removed: ${error instanceof Error ? error.message : String(error)}`
