@@ -45,7 +45,7 @@
  *    comes back; with the page revised it goes to the moved tray.
  */
 import type { Frame, Page } from "playwright-core";
-import { bundleOverlay } from "../../../packages/core/src/preview-proxy";
+import { bundleOverlay } from "../../../packages/core/src/preview/proxy";
 import type { Kit, Spec } from "../kit";
 import { dragFromIcon } from "./ink";
 

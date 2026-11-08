@@ -33,7 +33,7 @@ import type {
   PageAnchor,
   PinnedElement,
 } from "@cawco/core/comments";
-import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/frames";
+import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/preview/routes";
 import { EMBED_ARRIVING, EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
 import { thrownBeforeLoad } from "./faults";
 import {
