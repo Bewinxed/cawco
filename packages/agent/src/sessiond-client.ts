@@ -40,7 +40,6 @@ import { PacedWriter } from "@cawco/core/paced-write";
 import type { SessionLimits } from "@cawco/core/protocol";
 import { standalone } from "@cawco/core/runtime";
 import {
-  notAliveReason,
   type ProcSpec,
   SESSIOND_RELEASE,
   SESSIOND_V1,
@@ -54,6 +53,7 @@ import {
 } from "@cawco/core/sessiond";
 import { SessiondServerMessageSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
+import { notAliveReason } from "@cawco/core/words/sessiond";
 import { z } from "zod";
 import { parseProcId } from "./proc-id";
 import { holdRestart } from "./restart";
