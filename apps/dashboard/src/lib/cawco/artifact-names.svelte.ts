@@ -20,7 +20,7 @@
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import type { ChoiceEntry } from "@cawco/core/choices";
-import type { Pin } from "@cawco/core/comments";
+import type { Pin } from "@cawco/core/comments/model";
 import { hubRequest } from "@cawco/core/hub-request";
 import { pinReference } from "@cawco/core/references";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
