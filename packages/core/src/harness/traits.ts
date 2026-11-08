@@ -225,3 +225,10 @@ export const traitsOf = (harness: unknown): HarnessTraits => {
 export const harnessesWith = (
   holds: (traits: HarnessTraits) => boolean
 ): HarnessKind[] => HARNESSES.filter((kind) => holds(HARNESS_TRAITS[kind]));
+
+/** The kinds whose sessions are a keeper's children, per the table. */
+export type KeeperHarnessKind = {
+  [K in HarnessKind]: (typeof HARNESS_TRAITS)[K]["custody"] extends "keeper"
+    ? K
+    : never;
+}[HarnessKind];

@@ -23,12 +23,7 @@ import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
-import type {
-  HarnessContext,
-  HarnessSession,
-  SessiondAwareContext,
-  TurnExtras,
-} from "../harness";
+import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import { KeeperPool } from "../keepers";
 import { enterSpawn } from "../layer";
 import type { McpGate } from "../mcp-gate";
@@ -369,7 +364,7 @@ class PiRemoteSession implements HarnessSession {
     if (message.type === "result") {
       message.wakes = { background: this.#background.size, scheduled: 0 };
     }
-    (this.#ctx as Partial<SessiondAwareContext>).line?.(this.#epoch, seq);
+    this.#ctx.line?.(this.#epoch, seq);
     this.#ctx.frame(message);
     // A turn of a host on another gate has ended: its boundary is where the
     // hub relaunches it onto this build's gate. Asked after the result, which
