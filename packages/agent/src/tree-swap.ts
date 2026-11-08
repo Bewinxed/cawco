@@ -39,7 +39,7 @@ import {
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { hashFiles } from "@cawco/core/file-hash";
 import type { SkillFile } from "@cawco/core/fleet";
-import { treeStoreOf } from "@cawco/core/paths";
+import { treeStoreOf } from "@cawco/core/paths/claude";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /**

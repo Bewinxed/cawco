@@ -24,7 +24,7 @@ import {
   type SlashCommand,
 } from "../../../packages/core/src/harness";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import { MACHINE, MODEL, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
