@@ -60,7 +60,6 @@ import {
   TRIAGE_DECISIONS,
   type TriageDecision,
 } from "@cawco/core/fleet-watch";
-import type { NeutralMessage } from "@cawco/core/harness";
 import type { PermissionMode } from "@cawco/core/harness/kinds";
 import { fleetWatchNudge } from "@cawco/core/injected";
 import { isMachineSilence } from "@cawco/core/machine-names";
@@ -72,6 +71,7 @@ import type {
   SpawnPayload,
 } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
+import type { NeutralMessage } from "@cawco/core/session-messages";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";

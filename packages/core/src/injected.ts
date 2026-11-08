@@ -20,12 +20,12 @@
  */
 
 import type { ArtifactKind } from "./artifact-kinds";
-import { type CarryRestored, INPUTS_DIR } from "./harness";
 import { NO_REPLY_TOOL } from "./no-reply";
 import type { PlanWait } from "./plan";
 import { artifactLink, stepLink } from "./references";
 import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
+import { type CarryRestored, INPUTS_DIR } from "./workspace/controls";
 
 /** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
 export interface MarkerTag {
