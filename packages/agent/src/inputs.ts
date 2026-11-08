@@ -33,7 +33,6 @@ import {
   resolve,
 } from "node:path";
 import {
-  INPUTS_COUNT_LIMIT,
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
   type InputFile,
@@ -84,6 +83,8 @@ interface Admitted {
   name: string;
   named: string;
   real: string;
+  /** Its bytes, as {@link resolved} found them. */
+  size: number;
 }
 
 /**
@@ -226,23 +227,25 @@ const readableFile = async (
       ? `${named} exists but its mode (${mode}) does not let you read it; make it readable (chmod), or copy it somewhere you can read and name the copy`
       : `${named} exists, and its mode (${mode}) lets you read it, but the system refused the read (access(2) said EACCES); copy it somewhere you can read and name the copy`;
   }
-  return { named, real, name, mode: info.mode % 0o1000 };
+  return { named, real, name, mode: info.mode % 0o1000, size: info.size };
 };
 
 /**
- * Every file of folder `named` (at `real`), at any depth, landing at
- * `<folder's name>/<its path in it>`: each judged as a file named alone is
- * ({@link resolved}, so a link in it to what the boundary hides is refused
- * as that file would be), a folder in it walked, a link in it to a folder
- * refused. Stops past {@link INPUTS_COUNT_LIMIT} files; refused when it
- * holds none.
+ * Every file of folder `named` (at `real`), at any depth, added to `tally`
+ * as it is found, landing at `<folder's name>/<its path in it>`: each judged
+ * as a file named alone is ({@link resolved}, so a link in it to what the
+ * boundary hides is refused as that file would be), a folder in it walked, a
+ * link in it to a folder refused. The walk stops at the first file
+ * {@link counted} refuses, so naming a whole home folder ends once its bytes
+ * pass the limit; refused when it holds no file. Answers why it may not go.
  */
 const admitFolder = async (
   named: string,
   real: string,
-  reach: Reach
-): Promise<Admitted[] | string> => {
-  const files: Admitted[] = [];
+  reach: Reach,
+  tally: Tally
+): Promise<string | undefined> => {
+  const before = tally.admitted.length;
   const walk = async (rel: string): Promise<string | undefined> => {
     const entries = (
       await readdir(join(real, rel), { withFileTypes: true })
@@ -261,9 +264,6 @@ const admitFolder = async (
     file: string,
     name: string
   ): Promise<string | undefined> => {
-    if (files.length >= INPUTS_COUNT_LIMIT) {
-      return workWords.inputsLimits.folder(named, INPUTS_COUNT_LIMIT);
-    }
     const one = await resolved(file, reach);
     if (typeof one === "string") {
       return one;
@@ -272,23 +272,21 @@ const admitFolder = async (
       return `${file} is ${one.info.isDirectory() ? "a link to a folder; name the folder it leads to" : "not a file"}`;
     }
     const admitted = await readableFile(file, one.real, one.info, name);
-    if (typeof admitted === "string") {
-      return admitted;
-    }
-    files.push(admitted);
+    return typeof admitted === "string" ? admitted : counted(tally, admitted);
   };
   const why = await walk("");
   if (why) {
     return why;
   }
-  return files.length > 0
-    ? files
+  return tally.admitted.length > before
+    ? undefined
     : `${named} is a folder with no file in it at any depth`;
 };
 
 /**
- * Why `named` may not go as an input, or the files it is when it may: a
- * file, or a folder's files ({@link admitFolder}), that exist, outside what
+ * Why `named` may not go as an input, or nothing when it may, the files it
+ * is added to `tally`: a file, or a folder's files ({@link admitFolder}),
+ * that exist, outside what
  * every boundary hides but its project's folder (workspace-policy.ts
  * `inputDenial`), and, for a parent that runs in a workspace, inside its
  * own clone, scratch dir or project folder (`roots`): it hands on only what
@@ -296,8 +294,9 @@ const admitFolder = async (
  */
 const admit = async (
   named: string,
-  reach: Reach
-): Promise<Admitted[] | string> => {
+  reach: Reach,
+  tally: Tally
+): Promise<string | undefined> => {
   if (!isAbsolute(named)) {
     return `${named} is not an absolute path; name each input by its absolute path on your machine`;
   }
@@ -306,13 +305,13 @@ const admit = async (
     return one;
   }
   if (one.info.isDirectory()) {
-    return admitFolder(named, one.real, reach);
+    return admitFolder(named, one.real, reach, tally);
   }
   if (!one.info.isFile()) {
     return `${named} is not a file or a folder`;
   }
   const file = await readableFile(named, one.real, one.info, basename(named));
-  return typeof file === "string" ? file : [file];
+  return typeof file === "string" ? file : counted(tally, file);
 };
 
 /**
@@ -394,14 +393,10 @@ const admitAll = async (
   )) {
     throw new Error("inputs must be a list of absolute paths");
   }
-  if (paths.length > INPUTS_COUNT_LIMIT) {
-    return workWords.inputsLimits.paths(paths.length, INPUTS_COUNT_LIMIT);
-  }
   const reach = await reachOf(bound, project);
   const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
   for (const path of paths as string[]) {
-    const files = await admit(path, reach);
-    const why = typeof files === "string" ? files : await counted(tally, files);
+    const why = await admit(path, reach, tally);
     if (why) {
       return why;
     }
@@ -409,7 +404,7 @@ const admitAll = async (
   return tally.admitted;
 };
 
-/** What the inputs admitted so far come to: the files, each by where it lands, and their bytes. */
+/** What the inputs admitted so far come to, across every path named: the files, each by where it lands, and their bytes. */
 interface Tally {
   admitted: Admitted[];
   bytes: number;
@@ -417,29 +412,21 @@ interface Tally {
 }
 
 /**
- * `files` added to `tally` one by one (a folder's each counts), or why one
- * may not go: two that would land under one name, more than {@link
- * INPUTS_COUNT_LIMIT} files or {@link INPUTS_LIMIT_BYTES} together.
+ * `one` added to `tally`, or why it may not go: two that would land under
+ * one name, or more than {@link INPUTS_LIMIT_BYTES} together. THE ONE byte
+ * check of paths, run on each file as it is found.
  */
-const counted = async (
-  tally: Tally,
-  files: Admitted[]
-): Promise<string | undefined> => {
-  for (const one of files) {
-    const twin = tally.named.get(one.name);
-    if (twin) {
-      return `${twin} and ${one.named} would both land as ${one.name} in the inputs folder; copy one to another name`;
-    }
-    tally.named.set(one.name, one.named);
-    if (tally.named.size > INPUTS_COUNT_LIMIT) {
-      return workWords.inputsLimits.files(INPUTS_COUNT_LIMIT);
-    }
-    tally.bytes += (await stat(one.real)).size;
-    if (tally.bytes > INPUTS_LIMIT_BYTES) {
-      return workWords.inputsLimits.bytes(INPUTS_LIMIT_BYTES / MIB);
-    }
-    tally.admitted.push(one);
+const counted = (tally: Tally, one: Admitted): string | undefined => {
+  const twin = tally.named.get(one.name);
+  if (twin) {
+    return `${twin} and ${one.named} would both land as ${one.name} in the inputs folder; copy one to another name`;
   }
+  tally.named.set(one.name, one.named);
+  tally.bytes += one.size;
+  if (tally.bytes > INPUTS_LIMIT_BYTES) {
+    return workWords.inputsLimits.bytes(INPUTS_LIMIT_BYTES / MIB);
+  }
+  tally.admitted.push(one);
 };
 
 const namedOf = ({ name, named, mode }: Admitted): InputNamed => ({
@@ -463,7 +450,7 @@ export const admitInputs = async (
     : { files: admitted.map(namedOf) };
 };
 
-/** {@link CONTROL_INPUTS_READ}: each of `paths` admitted ({@link admitAll}), then read whole. */
+/** {@link CONTROL_INPUTS_READ}: each of `paths` admitted ({@link admitAll}), then read whole, one at a time. */
 export const readInputs = async (
   paths: unknown,
   bound: unknown,
@@ -473,12 +460,13 @@ export const readInputs = async (
   if (typeof admitted === "string") {
     return { refused: admitted };
   }
-  const files = await Promise.all(
-    admitted.map(async (one): Promise<InputFile> => ({
+  const files: InputFile[] = [];
+  for (const one of admitted) {
+    files.push({
       ...namedOf(one),
       content: (await readFile(one.real)).toString("base64"),
-    }))
-  );
+    });
+  }
   return { files };
 };
 

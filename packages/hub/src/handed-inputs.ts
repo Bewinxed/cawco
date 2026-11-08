@@ -474,20 +474,20 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       );
     }
     // Each lands at its path in the project's folder, its folders kept:
-    // `inputs/assets/<item>/design-briefs/brief.md`.
-    return Promise.all(
-      paths.map(async (path) => ({
+    // `inputs/assets/<item>/design-briefs/brief.md`. Read one at a time: an
+    // item's outputs can be thousands of files.
+    const files: HandedFile[] = [];
+    for (const path of paths) {
+      const { bytes } = await folderRead(() =>
+        readFolderBytes(projectId, path, ASSET_LIMIT)
+      );
+      files.push({
         name: path,
-        bytes: Buffer.from(
-          (
-            await folderRead(() =>
-              readFolderBytes(projectId, path, ASSET_LIMIT)
-            )
-          ).bytes
-        ),
+        bytes: Buffer.from(bytes),
         from: `${path} in the project's folder`,
-      }))
-    );
+      });
+    }
+    return files;
   };
 
   /**

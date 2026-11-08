@@ -41,6 +41,26 @@ export const workWords = {
   inputsIn: (folder: string) =>
     `Files sent with this message are in ${folder}: `,
   /**
+   * One entry of a message's list of inputs: a file by its name, a folder
+   * once by its name and how many files it lands as, and where it was read
+   * when that is known (core injected.ts `inputsOnce`).
+   */
+  inputNamed: ({
+    files,
+    from,
+    name,
+  }: {
+    files: number;
+    from?: string;
+    name: string;
+  }) => {
+    const notes = [
+      ...(files > 1 ? [`${files} files`] : []),
+      ...(from ? [`from ${from}`] : []),
+    ];
+    return notes.length > 0 ? `${name} (${notes.join(", ")})` : name;
+  },
+  /**
    * A handoff's inputs refused for whom they would go to (hub work-items.ts
    * `handOff`): files go only where handoff's own relations reach.
    */
@@ -48,20 +68,12 @@ export const workWords = {
     `Inputs go only to your parent, a session you delegated or started, or your project's conversation; ${receiver} is none of them. Hand off without inputs.`,
   /**
    * The inputs' limits, as every refusal of them says them (hub
-   * work-items.ts `readInputs`, agent inputs.ts `admitAll`): `limit` is core
-   * `INPUTS_COUNT_LIMIT` or `INPUTS_LIMIT_BYTES` in MiB. The machine's
-   * refusals reach the caller under the hub's own `inputs: ` (work-items.ts
-   * `inputsRefused`), so `paths`, `files` and `bytes` do not say it again.
+   * work-items.ts `readInputs`, agent inputs.ts `admitAll`): `mib` is core
+   * `INPUTS_LIMIT_BYTES` in MiB. The machine's refusals reach the caller
+   * under the hub's own `inputs: ` (work-items.ts `inputsRefused`), so
+   * `bytes` does not say it again.
    */
   inputsLimits: {
-    entries: (named: number, limit: number) =>
-      `inputs: ${named} entries; one handoff or delegation carries ${limit} at most.`,
-    paths: (named: number, limit: number) =>
-      `${named} paths; one handoff or delegation carries ${limit} at most`,
-    folder: (folder: string, limit: number) =>
-      `${folder} holds more than ${limit} files, the most one handoff or delegation carries; name the files or a narrower folder`,
-    files: (limit: number) =>
-      `more than ${limit} files together, the most one handoff or delegation carries; name fewer files or a narrower folder`,
     bytes: (mib: number) =>
       `more than ${mib} MiB together, the most one handoff or delegation carries; commit larger data, or name its path and machine in the message`,
     held: (mib: number) =>

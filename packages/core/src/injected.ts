@@ -313,11 +313,53 @@ export const withHostLine = (
   );
 
 /**
+ * What was handed, as a message lists it: a file named alone once each, a
+ * folder once, by its top-level name (`src/`), with how many files it holds
+ * and where it was read, so a folder of thousands costs one entry. Files
+ * land under one top-level name when they came from one folder (agent
+ * inputs.ts `admitFolder`) or one held source (an item's `assets/`); one
+ * file that stands alone under it keeps its whole name.
+ */
+export const inputsOnce = (
+  inputs: readonly { from: string; name: string }[]
+): { files: number; from?: string; name: string }[] => {
+  const groups = new Map<
+    string,
+    { files: number; first: { from: string; name: string }; root?: string }
+  >();
+  for (const one of inputs) {
+    const slash = one.name.indexOf("/");
+    const rest = one.name.slice(slash + 1);
+    const root =
+      slash > 0 && one.from.endsWith(`/${rest}`)
+        ? one.from.slice(0, -(rest.length + 1))
+        : undefined;
+    const key = slash > 0 ? `${one.name.slice(0, slash)}\0${root}` : one.name;
+    const group = groups.get(key);
+    if (group) {
+      group.files += 1;
+    } else {
+      groups.set(key, { files: 1, first: one, ...(root ? { root } : {}) });
+    }
+  }
+  return [...groups.values()].map(({ files, first, root }) =>
+    files === 1
+      ? { files, from: first.from, name: first.name }
+      : {
+          files,
+          name: `${first.name.slice(0, first.name.indexOf("/"))}/`,
+          ...(root ? { from: root } : {}),
+        }
+  );
+};
+
+/**
  * `text` with the line that names the files handed with it right after any
  * hand-off marker: the folder they landed in, as the receiver names it
  * (`$TMPDIR/inputs/` in a work item's, an absolute path in a session's own,
  * core harness.ts `InputsPlace`), and where each was read on its sender's
- * machine. `text` as it is without any.
+ * machine, a folder named once ({@link inputsOnce}). `text` as it is
+ * without any.
  */
 export const withInputsLine = (
   text: string,
@@ -328,7 +370,7 @@ export const withInputsLine = (
     ? text
     : afterMarker(
         text,
-        `${workWords.inputsIn(folder)}${inputs.map(({ name, from }) => `${name} (from ${from})`).join(", ")}.`
+        `${workWords.inputsIn(folder)}${inputsOnce(inputs).map(workWords.inputNamed).join(", ")}.`
       );
 
 /**

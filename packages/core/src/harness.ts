@@ -2964,15 +2964,6 @@ export const OUTPUTS_DIR = "outputs";
  */
 export const INPUTS_LIMIT_BYTES = 64 * 1024 * 1024;
 
-/**
- * The most files one delegation's or handoff's inputs come to, a folder's
- * each counted, and the most entries its `inputs` may name: the hub's check
- * of the entries (work-items.ts `readInputs`) and the machine's of the
- * files (agent inputs.ts `admitAll`) hold the same number. The same as the
- * outputs one item may declare (work-items.ts `OUTPUTS_LIMIT`). Our call.
- */
-export const INPUTS_COUNT_LIMIT = 50;
-
 /** One input, admitted: its name in `inputs/`, where it is read, its permission bits. */
 export interface InputNamed {
   /** The absolute path it is read from on the parent's machine. */

@@ -14,14 +14,14 @@
  *   own inputs folder on the parent's machine (`~/.cawco/tmp/s-<id8>/inputs/`
  *   under the first machine's HOME; the file was under the second's), and
  *   the message that reaches the parent names that folder and the file.
- * - f4. Its parent's handoff to it with inputs past the count limit is
- *   refused in the limit's words, naming the limit.
+ * - f4. A folder of more files than one handoff once carried, handed with
+ *   that file, lands whole in the parent's inputs folder, and the message
+ *   names it once with its file count.
  *
  *   bun scripts/probe-kit/run.ts handoff-sends
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { INPUTS_COUNT_LIMIT } from "../../../packages/core/src/harness";
 import {
   hubRequest,
   type Sending,
@@ -55,6 +55,9 @@ const REPORT = "[Report from delegate ";
 const FILE = "slope-ledger.csv";
 /** What the file holds: only its bytes crossing can put it at the parent's. */
 const TOKEN = `handoff-sends-${crypto.randomUUID()}`;
+/** The folder the leaf hands beside the file, and how many files it holds: past the 50 that were once refused. */
+const SHOAL = "shoal";
+const SHOAL_FILES = 51;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -64,7 +67,7 @@ const useTool = (name: string, input: object): Reply => ({
 });
 
 /** Who the leaf hands off to, and the file it hands; set once they stand. */
-const plan = { parent: "", stranger: "", file: "" };
+const plan = { parent: "", stranger: "", file: "", shoal: "" };
 /** The leaf's steps done, and the answer its handoff got (at once or from the background). */
 const leaf: { handoff: ToolAnswer; searched: boolean; step: number } = {
   step: 0,
@@ -89,7 +92,7 @@ const respond = (request: Seen): Reply => {
       return useTool("mcp__cawco__handoff", {
         target: plan.parent,
         message: UP,
-        inputs: [plan.file],
+        inputs: [plan.file, plan.shoal],
       });
     case 1:
       if (!(
@@ -186,6 +189,11 @@ const spec: Spec = {
     plan.stranger = await fleet.spawn("claude", "Stranger", fleet.sandbox);
     plan.file = join(far.home, FILE);
     await writeFile(plan.file, TOKEN);
+    plan.shoal = join(far.home, SHOAL);
+    await mkdir(plan.shoal);
+    for (let at = 0; at < SHOAL_FILES; at += 1) {
+      await writeFile(join(plan.shoal, `${at}.txt`), `${TOKEN}-${at}`);
+    }
 
     const started = await fleet.api<Started>(
       hubRequest("POST /api/work-items", {
@@ -259,23 +267,19 @@ const spec: Spec = {
       `${state}; landed ${JSON.stringify(landed.slice(0, 80))} at ${folder}; answer ${(leaf.handoff.answered?.text ?? "none").slice(0, 400)}`
     );
 
-    const many = Array.from(
-      { length: INPUTS_COUNT_LIMIT + 1 },
-      (_, at) => `/nowhere/${at}`
+    const shoalAt = join(folder, SHOAL);
+    const shoal = await readdir(shoalAt).catch(() => [] as string[]);
+    const said = await Promise.all(
+      shoal.map((name) => readFile(join(shoalAt, name), "utf8"))
     );
-    const limitWords = workWords.inputsLimits.entries(
-      many.length,
-      INPUTS_COUNT_LIMIT
-    );
-    const over = await refusedHandoff(asParent, carries(limitWords), {
-      target: started.instanceId,
-      message: "PROBE-SENDS-OVER: too many.",
-      inputs: many,
-    });
+    const once = `${SHOAL}/ (${SHOAL_FILES} files, from ${plan.shoal})`;
     check(
-      "f4: a handoff with inputs past the count limit is refused in the limit's words, naming it",
-      over.refused && over.text.includes(limitWords),
-      `${over.status} ${over.text.slice(0, 400)}`
+      "f4: a folder past 50 files handed with a handoff lands whole in the receiver's inputs folder, and the message names it once with its count",
+      shoal.length === SHOAL_FILES &&
+        said.every((one) => one.startsWith(`${TOKEN}-`)) &&
+        (message ?? "").includes(once) &&
+        !(message ?? "").includes(`${SHOAL}/0.txt`),
+      `${shoal.length} landed at ${shoalAt}; message has "${once}": ${(message ?? "").includes(once)}`
     );
   },
 };

@@ -105,9 +105,9 @@ import {
   type DashboardReach,
   handoffMarker,
   holdingWords,
-  INPUTS_COUNT_LIMIT,
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
+  inputsOnce,
   isWorkspaceNeedsRefusal,
   knowsNotControl,
   type MayStart,
@@ -1755,8 +1755,7 @@ const folderPathOf = (raw: string): string | undefined => {
   }
 };
 
-/** Outputs one work item may name: as many as its inputs (core `INPUTS_COUNT_LIMIT`). */
-const OUTPUTS_LIMIT = INPUTS_COUNT_LIMIT;
+const OUTPUTS_LIMIT = 50;
 
 /**
  * A request's outputs as paths from the clone's root, each once; null for
@@ -6416,19 +6415,17 @@ export const createWorkItems = ({
     held: HeldInput[],
     reader: InstanceRow
   ): Promise<HandedFile[]> => {
-    const resolved = (
-      await Promise.all(
-        held.map(async (input) => {
-          try {
-            return await resolveHanded(reader, input);
-          } catch (error) {
-            throw error instanceof HandedInputRefusal
-              ? inputsRefused(error.message, { cause: error })
-              : error;
-          }
-        })
-      )
-    ).flat();
+    const each: HandedFile[][] = [];
+    for (const input of held) {
+      try {
+        each.push(await resolveHanded(reader, input));
+      } catch (error) {
+        throw error instanceof HandedInputRefusal
+          ? inputsRefused(error.message, { cause: error })
+          : error;
+      }
+    }
+    const resolved = each.flat();
     // What is made for its reader as it is written (a preview's pass) is a
     // few hundred bytes: what is in hand now is the whole of it that counts.
     const bytes = resolved.reduce(
@@ -6480,15 +6477,6 @@ export const createWorkItems = ({
     const checked = handedInputs(entries);
     if ("refused" in checked) {
       throw inputsRefused(checked.refused);
-    }
-    if (checked.inputs.length > INPUTS_COUNT_LIMIT) {
-      throw new WorkItemRefusal(
-        400,
-        workWords.inputsLimits.entries(
-          checked.inputs.length,
-          INPUTS_COUNT_LIMIT
-        )
-      );
     }
     const paths = checked.inputs.filter(
       (input): input is string => typeof input === "string"
@@ -6959,10 +6947,14 @@ export const createWorkItems = ({
     };
   };
 
-  /** What the caller's start text adds for inputs copied in: their names. */
+  /** What the caller's start text adds for inputs copied in: their names, a folder's once. */
   const inputsSaid = (inputs: Inputs): string =>
     inputs.files.length > 0
-      ? ` Copied ${counted(inputs.files.length, "input")} into its $TMPDIR/inputs/: ${inputs.files.map((input) => input.name).join(", ")}.`
+      ? ` Copied ${counted(inputs.files.length, "input")} into its $TMPDIR/inputs/: ${inputsOnce(
+          inputs.files
+        )
+          .map(({ files, name }) => workWords.inputNamed({ files, name }))
+          .join(", ")}.`
       : "";
 
   /** What the caller's start text adds for a group, owned files and a budget. */
