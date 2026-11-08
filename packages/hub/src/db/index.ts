@@ -119,7 +119,6 @@ import {
   lt,
   lte,
   ne,
-  not,
   notInArray,
   or,
   type SQL,
@@ -139,21 +138,15 @@ import { HubLifetime } from "../lifetime";
 import { nameStoredRowsFrom } from "../stored-json";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
-import { type AreaRow, type AreasDb, areasDb } from "./areas";
-import {
-  type ArtifactsDb,
-  artifactsDb,
-  type Deleter,
-  dropArtifactRows,
-  type GoneArtifact,
-  projectPage,
-  type SourceMoved,
-} from "./artifacts";
+import type { AreaRow, AreasDb } from "./areas";
+import type { ArtifactListenersDb } from "./artifacts";
+import { type ArtifactsDb, artifactsDb, projectPage } from "./artifacts";
 import { type AsksDb, asksDb } from "./asks";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
 import { type ConnectionsDb, connectionsDb } from "./connections";
+import { type DbCore, dbCore, SUPERVISOR_CONFIG_ID } from "./core";
 import { type DecidesDb, decidesDb } from "./decides";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
@@ -200,7 +193,6 @@ import {
   eventRoutes,
   findSettings,
   fleetAgents,
-  fleetDeniedTools,
   fleetHarnessConfig,
   fleetHookHistory,
   fleetHooks,
@@ -224,10 +216,7 @@ import {
   instanceConversations,
   instances,
   jevSettings,
-  limitCompactions,
   limitEvents,
-  limitHolds,
-  limitStops,
   lineAnchors,
   type MachineLineKind,
   marketplaces,
@@ -268,7 +257,6 @@ import {
   rules,
   type SessionLineKind,
   sentMessages,
-  sessionIdentities,
   sessionLimits,
   sessionLines,
   sessionPlans,
@@ -287,6 +275,8 @@ import {
   workspaces,
 } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import type { Revocations } from "./session-identity";
+import { type SessionIdentityDb, sessionIdentityDb } from "./session-identity";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
@@ -298,7 +288,6 @@ import {
   planWaitLinks,
   syncTaskLinks,
   type TaskLinksDb,
-  taskLinksDb,
 } from "./task-links";
 import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
@@ -306,6 +295,7 @@ import { type TrashDb, trashDb } from "./trash";
 import { type TreeStopsDb, treeStopsDb } from "./tree-stops";
 import { type TurnCutsDb, turnCutsDb } from "./turn-cuts";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
+import type { Tx } from "./tx";
 import { closeWal, useWal } from "./wal";
 
 /** The harnesses a removed machine's sessions can be recovered from: those in a server that outlives the agent. */
@@ -542,7 +532,6 @@ export type WorkspaceRow = Omit<
   typeof workspaces.$inferSelect,
   "path" | "repoRoot"
 > & { path: MachinePath; repoRoot: MachinePath };
-type SessionIdentityRow = typeof sessionIdentities.$inferSelect;
 
 /**
  * A session the returning daemon no longer carries. `resumes` is the whole
@@ -687,13 +676,10 @@ export interface HookVersionMaterial {
 /** A stored OpenCode Go reading, one per machine (USAGE-SPEC.md §6). */
 type UsageLimitRow = typeof usageLimits.$inferSelect;
 
-export interface DbShape {
+/** The store's own members and the stores it wires in. */
+interface HubStore {
   /** Accounts, where they are signed in, how they route, and their limits. */
   readonly accounts: AccountsDb;
-  readonly acknowledgeSessionIdentity: (
-    instanceId: string,
-    hash: string
-  ) => boolean;
   /** Approved actions: one exact tool call each, run once (actions.ts). */
   readonly actions: ActionsDb;
   /** A machine's active workspaces with a clone: an item there is live, or the hub has not settled it since. Never a host-scope row (schema.ts `workspaces.host`). */
@@ -1587,35 +1573,6 @@ export interface DbShape {
     reason: ProjectOfferRow["reason"];
     line: string;
   }) => boolean;
-  /**
-   * `listener` hears the artifacts that went, each with the preview origin
-   * its row pointed at, a next version held for one included, once the
-   * write that deleted them is done: the service's discard, a session's
-   * delete, a project's delete or fold (`dropArtifacts`, the one way an
-   * artifact row goes).
-   */
-  readonly onArtifactsGone: (listener: (gone: GoneArtifact[]) => void) => void;
-  /**
-   * `listener` hears that an artifact row was made, changed or deleted,
-   * as the write happens: every write of the table is one of these
-   * (`artifactsDb` create and update, `dropArtifacts`). Needs you's lane
-   * reads again on it (artifacts/lane.ts `moved`).
-   */
-  readonly onArtifactsWritten: (listener: () => void) => void;
-  /**
-   * `listener` hears the hashes of the credentials the hub revokes, once
-   * the write that revoked them is done and they no longer resolve: a
-   * session's end confirmed, a session gone, a credential replaced.
-   */
-  readonly onCredentialsRevoked: (listener: (hashes: string[]) => void) => void;
-  /**
-   * `listener` hears each artifact whose source moved to another key, with
-   * what served it before, once the write that moved it is done: the one
-   * write of an artifact's machine and source (artifacts.ts `resource`),
-   * so the preview serving its origin follows the row (hub
-   * preview-service.ts), as `onArtifactsGone` ends it.
-   */
-  readonly onSourceMoved: (listener: (move: SourceMoved) => void) => void;
   readonly openInstance: (instance: {
     id: string;
     machineId: string;
@@ -2225,17 +2182,6 @@ export interface DbShape {
     held: string[],
     complete: boolean
   ) => void;
-  /**
-   * Of these credential hashes, those no session identity answers to: each
-   * grants nothing here, which is the hub's word that it is revoked.
-   */
-  readonly revokedAmong: (hashes: readonly string[]) => string[];
-  /**
-   * Session `instanceId`'s credentials revoked, installed and on their way:
-   * its process is gone (asleep, or dead of a signal), so nothing it held
-   * grants again; its next launch mints its own (server.ts `grantLaunch`).
-   */
-  readonly revokeSessionIdentity: (instanceId: string) => void;
   /** Routines and their runs (routines.ts). */
   readonly routines: RoutinesDb;
   /** Where a rule stands with a session; absent means it has never fired there. */
@@ -2272,17 +2218,6 @@ export interface DbShape {
   readonly sentPlanChanges: (receiver: string) => PlanChangeRow[];
   /** What a harness session has cost, in dollars, by the usage its machine reported. */
   readonly sessionCostUsd: (sessionId: string) => number;
-  readonly sessionIdentity: (
-    instanceId: string
-  ) => SessionIdentityRow | undefined;
-  readonly sessionIdentityByHash: (
-    hash: string
-  ) => SessionIdentityRow | undefined;
-  readonly sessionIdentityError: (
-    instanceId: string,
-    error: string | null,
-    rejectPending?: boolean
-  ) => void;
   /** Every session id on `machineId`, and nothing else of them: a read of thousands of rows' every column held the hub's thread (hub-restart-load). */
   readonly sessionIdsOn: (machineId: string) => string[];
   /** The fleet's session limits; none set reads as `{}`. */
@@ -2500,7 +2435,6 @@ export interface DbShape {
   readonly splitContinuations: () => { sourceId: string; targetId: string }[];
   /** The machines the hub added over SSH, and the connection it holds to each (ssh-tunnels.ts). */
   readonly sshMachines: SshMachinesDb;
-  readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   /**
    * The row a fetch is about to resolve: a new one is stored with no files
    * yet; an existing one takes `enabled` and its placement now and keeps its
@@ -2811,6 +2745,11 @@ export interface DbShape {
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
+
+export type DbShape = SessionIdentityDb &
+  Pick<Revocations, "revokedAmong" | "onCredentialsRevoked"> &
+  ArtifactListenersDb &
+  HubStore;
 
 export class Db extends Context.Service<Db, DbShape>()("Db") {}
 
@@ -3206,9 +3145,6 @@ const folderOf = (path: string | null | undefined): string | undefined =>
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
 export const MEMORY_ID = "memory";
-
-/** The one row the fleet's choices ever take — same precedent as `MEMORY_ID`. */
-const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
 const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
@@ -3250,7 +3186,6 @@ export const hashHookMaterial = (hook: {
 const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
-  const taskLinksOf = taskLinksDb(db);
   // A stored JSON value that fails its schema names its row: the database
   // says which row holds that column's text (hub stored-json.ts).
   nameStoredRowsFrom((table, keys, column, raw) => {
@@ -3340,29 +3275,6 @@ const make = async (path: string): Promise<DbShape> => {
       .orderBy(fleetHarnessConfig.kind, fleetHarnessConfig.name)
       .all()
       .flatMap(harnessConfigOf);
-  const deniedToolNames = (): string[] =>
-    db
-      .select({ tool: fleetDeniedTools.tool })
-      .from(fleetDeniedTools)
-      .orderBy(sql`rowid`)
-      .all()
-      .map(({ tool }) => tool);
-  /** The areas and which project sits in which (db/areas.ts). */
-  const areasStore = areasDb(db);
-  /** The fleet's choices row, which drizzle 0032 writes on every hub. */
-  const supervisorChoices = (): typeof supervisorConfig.$inferSelect => {
-    const row = db
-      .select()
-      .from(supervisorConfig)
-      .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-      .get();
-    if (!row) {
-      throw new Error(
-        `supervisor_config has no '${SUPERVISOR_CONFIG_ID}' row: drizzle 0032 writes it, so this database did not migrate`
-      );
-    }
-    return row;
-  };
   /** Writes a change to a project's row; nothing for an empty one. */
   const setProject = (
     id: string,
@@ -3525,6 +3437,17 @@ const make = async (path: string): Promise<DbShape> => {
   // The fleet's delegate types: their own table, on this connection, the
   // hub's one writer to its file.
   const delegateTypes = makeDelegateTypes(db.$client);
+  const core: DbCore = dbCore(db);
+  const {
+    areasStore,
+    artifactsWritten,
+    deniedToolNames,
+    dropArtifacts,
+    dropInstances,
+    revokeIdentities,
+    supervisorChoices,
+    taskLinksOf,
+  } = core;
 
   /**
    * The hash a row of files is stored under: always its files' own
@@ -3615,8 +3538,6 @@ const make = async (path: string): Promise<DbShape> => {
   // exactly when its files do, which is also what fleetConfig's files kept
   // by hash rest on (`keptFiles`).
   rehashStoredFilesOnce();
-
-  type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
   /** A session's lines of one kind, in the order written. */
   const linesOf = (instanceId: string, kind: SessionLineKind) =>
@@ -3850,242 +3771,6 @@ const make = async (path: string): Promise<DbShape> => {
           aboveProjects(from, row.areaId ? [row.areaId] : [])
         )[0]
       : undefined;
-  };
-
-  /** Who hears of an artifact row written ({@link DbShape.onArtifactsWritten}). */
-  const writtenListeners = new Set<() => void>();
-  const artifactsWritten = (): void => {
-    for (const listener of writtenListeners) {
-      listener();
-    }
-  };
-
-  /** Who hears of the artifacts that went ({@link DbShape.onArtifactsGone}). */
-  const goneListeners = new Set<(gone: GoneArtifact[]) => void>();
-  /** Artifacts a write deleted, not yet told: each one's preview origin by its id. */
-  let goneNoted: Map<string, string> | undefined;
-
-  /**
-   * The artifacts noted gone, told once the write is done (a microtask:
-   * every transaction here runs synchronously, so none is open then), and
-   * only those no row answers to: a write rolled back deleted nothing.
-   */
-  const tellGone = (): void => {
-    const noted = [...(goneNoted ?? [])].map(([id, origin]) => ({
-      id,
-      origin,
-    }));
-    goneNoted = undefined;
-    const kept = new Set<string>();
-    for (let at = 0; at < noted.length; at += 500) {
-      for (const row of db
-        .select({ id: artifacts.id })
-        .from(artifacts)
-        .where(
-          inArray(
-            artifacts.id,
-            noted.slice(at, at + 500).map((one) => one.id)
-          )
-        )
-        .all()) {
-        kept.add(row.id);
-      }
-    }
-    const gone = noted.filter((one) => !kept.has(one.id));
-    if (gone.length === 0) {
-      return;
-    }
-    for (const listener of goneListeners) {
-      try {
-        listener(gone);
-      } catch (error) {
-        console.error("[artifacts] telling a delete failed", error);
-      }
-    }
-  };
-
-  /**
-   * Every artifact `where` names deleted, its held next versions with it
-   * (artifacts.ts {@link dropArtifactRows}), and noted for
-   * {@link DbShape.onArtifactsGone}: the one way an artifact row goes, a
-   * session's, a project's or the service's discard.
-   */
-  const dropArtifacts = (tx: Deleter, where: SQL | undefined): void => {
-    const gone = dropArtifactRows(tx, where);
-    if (gone.length === 0) {
-      return;
-    }
-    artifactsWritten();
-    if (!goneNoted) {
-      goneNoted = new Map();
-      queueMicrotask(tellGone);
-    }
-    for (const { id, origin } of gone) {
-      goneNoted.set(id, origin);
-    }
-  };
-
-  /** Who hears of the sources that moved ({@link DbShape.onSourceMoved}). */
-  const movedListeners = new Set<(move: SourceMoved) => void>();
-
-  /**
-   * A source moved (artifacts.ts `resource`), told once the write is done:
-   * a microtask, as {@link tellGone}'s, so no transaction is open then.
-   */
-  const sourceMoved = (move: SourceMoved): void => {
-    queueMicrotask(() => {
-      for (const listener of movedListeners) {
-        try {
-          listener(move);
-        } catch (error) {
-          console.error("[artifacts] telling a source move failed", error);
-        }
-      }
-    });
-  };
-
-  /** Who hears of the credentials the hub revokes ({@link DbShape.onCredentialsRevoked}). */
-  const revokedListeners = new Set<(hashes: string[]) => void>();
-  /** Hashes a write revoked, not yet told. */
-  let noted: Set<string> | undefined;
-
-  /**
-   * Of `hashes`, those no session identity answers to: what each names
-   * grants nothing here, the hub's word that it is revoked. One it never
-   * issued is among them.
-   */
-  const revokedAmong = (hashes: readonly string[]): string[] => {
-    const live = new Set<string>();
-    // Inside SQLite's bound on a statement's parameters, twice over.
-    for (let at = 0; at < hashes.length; at += 500) {
-      const chunk = hashes.slice(at, at + 500);
-      for (const row of db
-        .select({
-          credentialHash: sessionIdentities.credentialHash,
-          pendingHash: sessionIdentities.pendingHash,
-        })
-        .from(sessionIdentities)
-        .where(
-          or(
-            inArray(sessionIdentities.credentialHash, chunk),
-            inArray(sessionIdentities.pendingHash, chunk)
-          )
-        )
-        .all()) {
-        for (const hash of [row.credentialHash, row.pendingHash]) {
-          if (hash) {
-            live.add(hash);
-          }
-        }
-      }
-    }
-    return [...new Set(hashes)].filter((hash) => !live.has(hash));
-  };
-
-  const tellRevoked = (): void => {
-    const hashes = revokedAmong([...(noted ?? [])]);
-    noted = undefined;
-    if (hashes.length === 0) {
-      return;
-    }
-    for (const listener of revokedListeners) {
-      try {
-        listener(hashes);
-      } catch (error) {
-        console.error("[session-identity] telling a revocation failed", error);
-      }
-    }
-  };
-
-  /**
-   * Hashes the caller's write stops answering to. They are told once it is
-   * done, from a microtask (every transaction here runs synchronously, so
-   * none is open then), and only those that no longer resolve: a write
-   * rolled back revoked nothing, and nothing is told of it.
-   */
-  const noteRevoked = (hashes: readonly (string | null | undefined)[]) => {
-    for (const hash of hashes) {
-      if (!hash) {
-        continue;
-      }
-      if (!noted) {
-        noted = new Set();
-        queueMicrotask(tellRevoked);
-      }
-      noted.add(hash);
-    }
-  };
-
-  /**
-   * The credentials of `ids`' sessions revoked, inside the caller's
-   * transaction: what was installed and what was on its way. A session's
-   * credential grants while its process may run; once that process is gone
-   * (asleep, dead, its end confirmed) or the session leaves the hub, nothing
-   * it held grants again, and its next launch mints its own (server.ts
-   * `grantLaunch`).
-   */
-  const revokeIdentities = (tx: Tx, ids: readonly string[]): void => {
-    if (ids.length === 0) {
-      return;
-    }
-    noteRevoked(
-      tx
-        .delete(sessionIdentities)
-        .where(inArray(sessionIdentities.instanceId, [...ids]))
-        .returning({
-          credentialHash: sessionIdentities.credentialHash,
-          pendingHash: sessionIdentities.pendingHash,
-        })
-        .all()
-        .flatMap((row) => [row.credentialHash, row.pendingHash])
-    );
-  };
-
-  /**
-   * Deletes session rows and everything keyed to them, inside the caller's
-   * transaction — the one way a session leaves the hub, whether its machine
-   * went with it or it never started at all.
-   */
-  const dropInstances = (tx: Tx, ids: readonly string[]): void => {
-    if (ids.length === 0) {
-      return;
-    }
-    const list = [...ids];
-    revokeIdentities(tx, list);
-    // What belonged to those sessions goes with them.
-    tx.delete(delegateEvents)
-      .where(
-        or(
-          inArray(delegateEvents.instanceId, list),
-          inArray(delegateEvents.parentInstanceId, list)
-        )
-      )
-      .run();
-    tx.delete(ruleState).where(inArray(ruleState.instanceId, list)).run();
-    tx.delete(sentMessages).where(inArray(sentMessages.instanceId, list)).run();
-    tx.delete(limitHolds).where(inArray(limitHolds.instanceId, list)).run();
-    tx.delete(limitCompactions)
-      .where(inArray(limitCompactions.instanceId, list))
-      .run();
-    tx.delete(limitEvents).where(inArray(limitEvents.instanceId, list)).run();
-    tx.delete(limitStops).where(inArray(limitStops.instanceId, list)).run();
-    tx.delete(fleetWatchNotices)
-      .where(inArray(fleetWatchNotices.instanceId, list))
-      .run();
-    // What only pointed at one keeps its own history, pointing nowhere: a
-    // delegate whose parent went.
-    tx.update(instances)
-      .set({ parentInstanceId: null })
-      .where(inArray(instances.parentInstanceId, list))
-      .run();
-    // Their artifacts go with them, but a project's page: its life is its
-    // source's in the project's folder, so it stays with no session (the
-    // key's set null), its picks and places kept.
-    dropArtifacts(
-      tx,
-      and(inArray(artifacts.instanceId, list), not(projectPage))
-    );
-    tx.delete(instances).where(inArray(instances.id, list)).run();
   };
 
   /**
@@ -5095,6 +4780,10 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...sessionIdentityDb(core),
+    ...core.artifactListeners,
+    revokedAmong: core.revokedAmong,
+    onCredentialsRevoked: core.onCredentialsRevoked,
     close: () => closeWal(db.$client),
     delegateTypes,
     machinePathOn: (machineId, raw) => {
@@ -5503,100 +5192,6 @@ const make = async (path: string): Promise<DbShape> => {
         .values(row)
         .onConflictDoUpdate({ target: mcpToolListings.listing, set: row })
         .run();
-    },
-    sessionIdentity: (instanceId) =>
-      db
-        .select()
-        .from(sessionIdentities)
-        .where(eq(sessionIdentities.instanceId, instanceId))
-        .get(),
-    sessionIdentityByHash: (hash) =>
-      db
-        .select()
-        .from(sessionIdentities)
-        .where(
-          or(
-            eq(sessionIdentities.credentialHash, hash),
-            eq(sessionIdentities.pendingHash, hash)
-          )
-        )
-        .get(),
-    // Each write that replaces or clears a hash revokes the one it held.
-    stageSessionIdentity: (instanceId, pendingHash) =>
-      db.transaction((tx) => {
-        noteRevoked([
-          tx
-            .select({ pendingHash: sessionIdentities.pendingHash })
-            .from(sessionIdentities)
-            .where(eq(sessionIdentities.instanceId, instanceId))
-            .get()?.pendingHash,
-        ]);
-        tx.insert(sessionIdentities)
-          .values({ instanceId, pendingHash })
-          .onConflictDoUpdate({
-            target: sessionIdentities.instanceId,
-            set: { pendingHash, error: null },
-          })
-          .run();
-      }),
-    acknowledgeSessionIdentity: (instanceId, hash) =>
-      db.transaction((tx) => {
-        const before = tx
-          .select({ credentialHash: sessionIdentities.credentialHash })
-          .from(sessionIdentities)
-          .where(eq(sessionIdentities.instanceId, instanceId))
-          .get();
-        const changed = tx
-          .update(sessionIdentities)
-          .set({
-            credentialHash: hash,
-            pendingHash: null,
-            installedAt: new Date(),
-            error: null,
-          })
-          .where(
-            and(
-              eq(sessionIdentities.instanceId, instanceId),
-              eq(sessionIdentities.pendingHash, hash)
-            )
-          )
-          .returning({ instanceId: sessionIdentities.instanceId })
-          .get();
-        if (changed) {
-          noteRevoked([before?.credentialHash]);
-        }
-        return changed !== undefined;
-      }),
-    sessionIdentityError: (instanceId, error, rejectPending = false) =>
-      db.transaction((tx) => {
-        if (rejectPending) {
-          noteRevoked([
-            tx
-              .select({ pendingHash: sessionIdentities.pendingHash })
-              .from(sessionIdentities)
-              .where(eq(sessionIdentities.instanceId, instanceId))
-              .get()?.pendingHash,
-          ]);
-        }
-        tx.update(sessionIdentities)
-          .set({ error, ...(rejectPending ? { pendingHash: null } : {}) })
-          .where(eq(sessionIdentities.instanceId, instanceId))
-          .run();
-      }),
-    revokedAmong,
-    revokeSessionIdentity: (instanceId) =>
-      db.transaction((tx) => revokeIdentities(tx, [instanceId])),
-    onCredentialsRevoked: (listener) => {
-      revokedListeners.add(listener);
-    },
-    onArtifactsGone: (listener) => {
-      goneListeners.add(listener);
-    },
-    onArtifactsWritten: (listener) => {
-      writtenListeners.add(listener);
-    },
-    onSourceMoved: (listener) => {
-      movedListeners.add(listener);
     },
     getMcpServer: (name) => {
       const row = db
@@ -10532,7 +10127,7 @@ const make = async (path: string): Promise<DbShape> => {
     trackers: trackersDb(db),
     taskLinks: taskLinksOf,
     hubAuth: hubAuthDb(db),
-    artifacts: artifactsDb(db, dropArtifacts, sourceMoved, artifactsWritten),
+    artifacts: artifactsDb(db, core),
     find: findDb(db),
     findSettings: {
       hideSecrets: () =>
