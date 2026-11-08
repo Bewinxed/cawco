@@ -310,7 +310,7 @@ export interface SpawnPayload {
    * restore, revive and relaunch after it — and on no other session. A
    * machine that cannot hold the boundary refuses the spawn and says why.
    */
-  workspace?: import("./harness").WorkspaceRef;
+  workspace?: import("./workspace/controls").WorkspaceRef;
 }
 
 const TRAILING_SLASHES = /\/+$/u;
@@ -363,7 +363,7 @@ export interface SendPayload {
   /** The session it goes to. */
   instanceId: string;
   /** The user turn, under the uuid it keeps everywhere it is shown. */
-  message: import("./harness").SentMessage;
+  message: import("./session-messages").SentMessage;
   /**
    * Which page and tab sent it (the dashboard's `submitCommand`): the page's
    * client id and its tab's presence, which the hub's send line names, so a
@@ -693,7 +693,7 @@ export interface FsEntry {
  */
 export interface AgentRow {
   /** `unknown` until a daemon that probes has registered at least once. */
-  auth: import("./harness").AuthState | "unknown";
+  auth: import("./session-messages").AuthState | "unknown";
   binaryUpdate?: import("./binary-updates").BinaryUpdateState;
   /**
    * The cawco build this machine's daemon is running (NEW.md §12).

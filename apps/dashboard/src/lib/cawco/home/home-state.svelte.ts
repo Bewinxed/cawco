@@ -21,7 +21,6 @@ import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { ArtifactReason, ArtifactStop } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import type { NeutralSessionInfo } from "@cawco/core/harness";
 import type { PairingRequest, WaitingMachine } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { Install } from "@cawco/core/install";
@@ -31,6 +30,7 @@ import {
   topsIn,
 } from "@cawco/core/project-membership";
 import { questionsOf } from "@cawco/core/question";
+import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
