@@ -61,6 +61,7 @@ import type { WorkspaceRef } from "@cawco/core/harness";
 import { stagesCarriedPath } from "@cawco/core/paths";
 import { mcpGatewayPort, type PreviewSource } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
   AS_PAGE,
@@ -106,7 +107,6 @@ import {
   agentServerStarted,
   ensureBoundary,
   listeners,
-  shellQuote,
   workspaceNetworks,
 } from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
