@@ -10,12 +10,12 @@ import type {
   MarketplaceRead,
 } from "./fleet";
 import type {
-  HarnessKind,
   ModeAsk,
   NeutralMessage,
   PermissionUpdate,
   SendRecord,
 } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import type {
   AgentRow,
   ArtifactKind,

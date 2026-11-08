@@ -667,7 +667,7 @@ export function parseUndelivered(
  * artifacts/service.ts `send`, the page's `cawco.send`): the session reads
  * them itself, with `artifact_read` from `since`. Picks never travel as the
  * person's words. Sent under the system origin
- * {@link import("./harness").ARTIFACT_ORIGIN}; a transcript draws it as one
+ * {@link import("./harness/kinds").ARTIFACT_ORIGIN}; a transcript draws it as one
  * quiet line ({@link import("./harness").ARTIFACT_RESPONSES}).
  */
 export interface ArtifactResponses extends ArtifactComments {
@@ -700,7 +700,7 @@ export function parseArtifactResponses(text: string): ArtifactResponses | null {
  * artifacts/service.ts `deliverMarks`): the sections say each pin (its
  * number, id, anchor, source and words) and each loose stroke group, so the
  * session acts on them without reading first. Sent under the system origin
- * {@link import("./harness").ARTIFACT_ORIGIN}, like the picks' notice; a
+ * {@link import("./harness/kinds").ARTIFACT_ORIGIN}, like the picks' notice; a
  * transcript draws it as the same quiet line, "Comments on <title>".
  */
 export interface ArtifactComments {
@@ -755,7 +755,7 @@ export const artifactSavesNotice = (
  * change waits as that next version, which decision pages, artifact_read
  * and artifact_browse have at once, and the panel keeps the version opened
  * until the parent's artifact_show opens it; told once per held version. Sent under the system origin
- * {@link import("./harness").ARTIFACT_ORIGIN}; a transcript draws it as one
+ * {@link import("./harness/kinds").ARTIFACT_ORIGIN}; a transcript draws it as one
  * quiet note.
  */
 export interface ArtifactHanded extends ArtifactComments {
@@ -828,7 +828,7 @@ export interface ArtifactNotice extends ArtifactComments {
 
 /**
  * THE ARTIFACT NOTICES: every message CawCo sends a session under the system
- * origin {@link import("./harness").ARTIFACT_ORIGIN}, each with how it is read
+ * origin {@link import("./harness/kinds").ARTIFACT_ORIGIN}, each with how it is read
  * back and the words its row leads with. A transcript draws each as the one
  * quiet line ({@link import("./harness").ARTIFACT_RESPONSES}), never as the
  * person's words; a notice on that origin none of these reads is a broken law

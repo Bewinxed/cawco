@@ -14,7 +14,7 @@ import type {
   EffortLevel,
   HarnessKind,
   PermissionMode,
-} from "@cawco/core/harness";
+} from "@cawco/core/harness/kinds";
 import { type HubSent, hubRequest } from "@cawco/core/hub-request";
 import type { ContinuationJob } from "@cawco/core/protocol";
 import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
