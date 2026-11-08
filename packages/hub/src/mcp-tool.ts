@@ -17,7 +17,7 @@
  * carries one `_meta` mark ({@link ToolOptions.endsTurn}).
  */
 
-import { END_TURN_META } from "@cawco/core";
+import { END_TURN_META } from "@cawco/core/no-reply";
 import type {
   CallToolResult,
   ToolAnnotations,

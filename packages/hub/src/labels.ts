@@ -1,4 +1,4 @@
-import type { HarnessKind } from "@cawco/core";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 
 /**
  * How the hub names a session, everywhere it names one: peer frames, reports,

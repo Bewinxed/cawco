@@ -51,7 +51,6 @@
 import { join } from "node:path";
 import { $ } from "bun";
 import type { Page } from "playwright-core";
-import { machineLabel, placePickWords } from "../../../packages/core/src";
 import { readWithin } from "../../../packages/core/src/bounded";
 import {
   ARTIFACT_GONE,
@@ -59,6 +58,8 @@ import {
 } from "../../../packages/core/src/frames";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { machineLabel } from "../../../packages/core/src/machine-names";
+import { placePickWords } from "../../../packages/core/src/words/place";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {

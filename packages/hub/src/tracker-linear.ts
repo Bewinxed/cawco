@@ -23,8 +23,10 @@
  * - **Refusals** carry Linear's words: a scope it lacks is "Invalid scope:
  *   `write` required" (type `forbidden`).
  */
-import type { ExternalActor, TrackerTarget } from "@cawco/core";
+
 import { readWithin } from "@cawco/core/bounded";
+import type { ExternalActor } from "@cawco/core/external-items";
+import type { TrackerTarget } from "@cawco/core/trackers";
 import {
   LinearError,
   LinearErrorType,
