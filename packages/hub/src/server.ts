@@ -89,6 +89,12 @@ import {
   type ArtifactNeedsRead,
   unparked,
 } from "@cawco/core/artifact-needs";
+import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
+import {
+  ARTIFACT_GONE,
+  ARTIFACT_SESSION_PATH,
+  ARTIFACT_SESSION_REFUSED,
+} from "@cawco/core/artifact-session";
 import {
   ASK_USER_QUESTION,
   RESOLVE_PERMISSION,
@@ -233,6 +239,7 @@ import {
 } from "@cawco/core/forge-post";
 import type { ForgottenProject } from "@cawco/core/forgotten-project";
 import type {
+  ArtifactSessionFrame,
   AsleepFrame,
   CatalogMovedFrame,
   ErrorFrame,
@@ -240,18 +247,6 @@ import type {
   FramePayload,
   PermissionRequestFrame,
   PermissionSettledFrame,
-  PreviewAddress,
-} from "@cawco/core/frames";
-import {
-  ARTIFACT_GONE,
-  ARTIFACT_PICTURE,
-  ARTIFACT_SESSION_PATH,
-  ARTIFACT_SESSION_REFUSED,
-  type ArtifactSessionFrame,
-  PICTURE_LIMITS,
-  placeAtLink,
-  previewEnterUrl,
-  previewRoute,
 } from "@cawco/core/frames";
 import {
   type HandoverCommand,
@@ -417,11 +412,6 @@ import { harnessRefusal } from "@cawco/core/harness-refusal";
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import { HOOK_TEMPLATES, hookProblem } from "@cawco/core/hooks";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
-import {
-  type HubPreviewOrigins,
-  isHubPreview,
-  originsFor,
-} from "@cawco/core/hub-previews";
 import type { GeneratedImage } from "@cawco/core/image-generation";
 import {
   effectiveImageChoice,
@@ -476,8 +466,21 @@ import {
 import type { MoveProgressFrame, MoveRequest } from "@cawco/core/move";
 import { placeNesting } from "@cawco/core/place-nesting";
 import { planWaitsOf } from "@cawco/core/plan";
-import type { FolderWeight } from "@cawco/core/preview-proxy";
-import type { ServingPreview } from "@cawco/core/preview-upstream";
+import {
+  type HubPreviewOrigins,
+  isHubPreview,
+  originsFor,
+} from "@cawco/core/preview/hub-previews";
+import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
+import { PREVIEW_FOLDERS, PREVIEW_WEIGHT } from "@cawco/core/preview/protocol";
+import type { FolderWeight } from "@cawco/core/preview/proxy";
+import type { PreviewAddress } from "@cawco/core/preview/routes";
+import {
+  placeAtLink,
+  previewEnterUrl,
+  previewRoute,
+} from "@cawco/core/preview/routes";
+import type { ServingPreview } from "@cawco/core/preview/upstream";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type {
   AdmissionPayload,
@@ -499,8 +502,6 @@ import type {
   LaunchAsk,
   LaunchGrant,
   NamedSpawn,
-  PreviewDown,
-  PreviewSource,
   SendPayload,
   SessionAddress,
   SessionAttachments,
@@ -524,8 +525,6 @@ import {
   ENDED_STATUSES,
   MEDIA_LIMIT_BYTES,
   OVER_STATUSES,
-  PREVIEW_FOLDERS,
-  PREVIEW_WEIGHT,
   pauseClock,
   personsOwn,
   type RunKind,

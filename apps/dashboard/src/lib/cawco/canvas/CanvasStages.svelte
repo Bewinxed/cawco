@@ -15,7 +15,7 @@
   import {
     PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
-  } from "@cawco/core/frames";
+  } from "@cawco/core/preview/routes";
   import { commonWords } from "@cawco/core/words/common";
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";

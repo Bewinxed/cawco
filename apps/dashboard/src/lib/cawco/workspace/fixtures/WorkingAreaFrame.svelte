@@ -1,6 +1,9 @@
 <script lang="ts" module>
   import { type Pin, writePin } from "@cawco/core/comments";
-  import { PREVIEW_ENTER_PATH, PREVIEW_PING_PATH } from "@cawco/core/frames";
+  import {
+    PREVIEW_ENTER_PATH,
+    PREVIEW_PING_PATH,
+  } from "@cawco/core/preview/routes";
   import { Doc, encodeStateAsUpdate } from "yjs";
 
   /**

@@ -61,7 +61,6 @@ import type {
   FramePayload,
   HarnessFailed,
   HarnessUnanswered,
-  PreviewSettings,
   ProjectOfferAccepted,
   ProjectOfferSummary,
   ProjectStopFrame,
@@ -100,6 +99,7 @@ import type { MoveJob } from "@cawco/core/move";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { PlaceProject } from "@cawco/core/place-nesting";
 import type { SessionPlan } from "@cawco/core/plan";
+import type { PreviewSettings } from "@cawco/core/preview/routes";
 import type {
   CawInitiated,
   CawStart,
