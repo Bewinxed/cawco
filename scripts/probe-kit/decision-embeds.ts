@@ -16,12 +16,12 @@ import {
   buildStageHost,
   HOST_RUNTIME_ENV,
 } from "../../packages/agent/src/stage-host/build";
-import { OVERLAY_PATH } from "../../packages/core/src/frames";
 import {
   injectOverlay,
   OVERLAY_KEY,
   overlayResponse,
-} from "../../packages/core/src/preview-proxy";
+} from "../../packages/core/src/preview/proxy";
+import { OVERLAY_PATH } from "../../packages/core/src/preview/routes";
 import {
   type DecisionMedia,
   type EmbedShape,
