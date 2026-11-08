@@ -14,7 +14,6 @@ import {
   harnessNamed,
 } from "./harness/kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
-import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
 import { delegateTypesWords } from "./words/delegate-types";
 
@@ -706,6 +705,16 @@ export const piToolsFor = (
     (server, tool) => `mcp__${server}__${tool}`
   );
 
+/** How a denied-tool list maps onto a harness's own tool names; none for one whose settings name them. */
+const TOOLS_FOR: Record<
+  HarnessKind,
+  ((names: readonly string[]) => { unmapped: string[] }) | undefined
+> = {
+  claude: undefined,
+  opencode: opencodeToolsFor,
+  pi: piToolsFor,
+};
+
 /**
  * Why `harness` cannot carry this denied-tool list, in a sentence, or nothing
  * when it can. Claude denies by its own settings; OpenCode through its
@@ -718,22 +727,11 @@ const denyToolsProblem = (
   harness: HarnessKind,
   names: readonly string[]
 ): string | undefined => {
-  if (names.length === 0) {
+  const mapped = TOOLS_FOR[harness];
+  if (names.length === 0 || !mapped) {
     return undefined;
   }
-  let unmapped: readonly string[];
-  switch (harness) {
-    case "claude":
-      return undefined;
-    case "opencode":
-      ({ unmapped } = opencodeToolsFor(names));
-      break;
-    case "pi":
-      ({ unmapped } = piToolsFor(names));
-      break;
-    default:
-      return unhandled("harness", harness);
-  }
+  const { unmapped } = mapped(names);
   const label = accountsWords.harnesses[harness];
   return unmapped.length > 0
     ? `${label} has no tool for ${unmapped.map((name) => `“${name}”`).join(", ")}, so it cannot deny ${unmapped.length === 1 ? "it" : "them"}`
