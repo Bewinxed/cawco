@@ -56,7 +56,6 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
-import { octokitAnswer } from "@cawco/core/octokit-answer";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
   RELAY_PROVIDERS,
@@ -76,6 +75,7 @@ import { byHandle } from "./handles";
 import { type Ingress, valueAt } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
+import { octokitAnswer } from "./octokit-answer";
 import {
   relayCreatedWords,
   relayListWords,
