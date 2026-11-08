@@ -44,7 +44,7 @@ export const CLAUDE_DIR_NAME = CLAUDE_DIR;
 
 /**
  * Where the trees behind a dir of CawCo-written trees live: beside that dir,
- * `<parent>/.cawco-trees/<dir name>/` (paths.ts `treeStoreOf`). Each entry of
+ * `<parent>/.cawco-trees/<dir name>/` (paths/claude.ts `treeStoreOf`). Each entry of
  * the dir (a fleet skill, a vendored plugin) is a relative link into it,
  * swapped with one rename (agent tree-swap.ts), so a session never reads a
  * missing or half-written tree. Kept outside the dir itself because OpenCode
@@ -55,7 +55,7 @@ export const CLAUDE_DIR_NAME = CLAUDE_DIR;
  */
 export const TREE_STORE_DIR = ".cawco-trees";
 
-/** A project's skills dir, relative to the project: where Claude Code and OpenCode read its skills, and where the fleet places a project's skills (paths.ts `placedSkillsDir`). */
+/** A project's skills dir, relative to the project: where Claude Code and OpenCode read its skills, and where the fleet places a project's skills (paths/claude.ts `placedSkillsDir`). */
 export const PROJECT_SKILLS = projectClaudeRelative("skills");
 
 /**
@@ -69,5 +69,5 @@ export const PLACED_SYNCED: readonly string[] = [
   projectClaudeRelative(TREE_STORE_DIR),
 ];
 
-/** Where the fleet places a project's memory documents, relative to the project (paths.ts `placedMemoryDir`). */
+/** Where the fleet places a project's memory documents, relative to the project (paths/claude.ts `placedMemoryDir`). */
 export const PLACED_MEMORY = projectClaudeRelative("rules", "cawco");
