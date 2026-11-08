@@ -5,7 +5,6 @@ import {
   startsAny,
 } from "@cawco/core/delegate-types";
 import type { ForgeWrite } from "@cawco/core/forge-post";
-import { handedInputsListed } from "@cawco/core/handed-input";
 import {
   HARNESSES,
   type HarnessKind,
@@ -60,6 +59,7 @@ import {
   type ItemEnd,
 } from "./delegation-actions";
 import { decodeCursor } from "./find";
+import { handedInputsListed } from "./handed-input";
 import { type Presenter, sentence, tool } from "./mcp-tool";
 import {
   type AskChanged,
@@ -281,7 +281,7 @@ const handoffShape = () => ({
 });
 
 /**
- * `inputs` of delegate and handoff (core handed-input.ts): a path to a file
+ * `inputs` of delegate and handoff (hub handed-input.ts): a path to a file
  * or a folder on the caller's machine, or what the hub holds by name,
  * landing in the receiver's inputs folder (its `$TMPDIR/inputs/`, or a
  * session with no work item's own, work-items.ts `handOff`), a folder
