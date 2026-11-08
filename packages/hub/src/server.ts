@@ -450,11 +450,7 @@ import {
   withReminder,
   workWords,
 } from "@cawco/core";
-import {
-  ASK_ORIGIN,
-  FULL_SEND_ANSWER,
-  PROJECT_SETTINGS,
-} from "@cawco/core/asks";
+import { FULL_SEND_ANSWER, PROJECT_SETTINGS } from "@cawco/core/asks";
 import { readTrial } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
@@ -525,6 +521,7 @@ import {
   presenceOf,
 } from "@cawco/core/handover";
 import type { NeutralMessage } from "@cawco/core/harness";
+import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
 import { harnessRefusal } from "@cawco/core/harness-refusal";
 import {
   type HubPreviewOrigins,

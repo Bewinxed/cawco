@@ -10,11 +10,11 @@
 import { userLayerLabel } from "./claude-dirs";
 import { everyOf } from "./every-of";
 import type {
-  HarnessKind,
   McpHttpServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
 } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import type { FleetHarnessConfig } from "./harness-config";
 import type { FleetHook } from "./hooks";
 import type { ToolPlatform } from "./tools";

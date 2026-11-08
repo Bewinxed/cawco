@@ -16,7 +16,7 @@
  */
 
 import { RESTART_WAIT_CAP_MS } from "./binary-updates";
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import { MINUTE_MS } from "./time";
 import type { LimitWindow } from "./usage/types";
 import { accountsWords } from "./words/accounts";
@@ -90,7 +90,7 @@ export interface ProviderInfo {
 
 // Every harness has one: an `Extract` of its own, so the wire schema keeps naming it `HomeStore`.
 /** Where a credential moved into an account came from: a harness's own store on the machine. */
-export type HomeStore = Extract<import("./harness").HarnessKind, string>;
+export type HomeStore = Extract<import("./harness/kinds").HarnessKind, string>;
 
 /**
  * How an account of a kind signs in on a machine. `paste-code`: a link to
@@ -122,7 +122,7 @@ export const LIMITED_PROVIDERS: readonly AccountProvider[] = [
  */
 export interface ProviderChoice {
   /** The harnesses that use an account of it. */
-  harnesses: import("./harness").HarnessKind[];
+  harnesses: import("./harness/kinds").HarnessKind[];
   /** The account kind this row adds. */
   kind: AccountKind;
   /** Whether CawCo reads its limits ({@link LIMITED_PROVIDERS}). */
@@ -161,7 +161,7 @@ export const providerChoices = (
     },
   ];
   const rest = providers.flatMap((one): ProviderChoice[] => {
-    const harnesses: import("./harness").HarnessKind[] = [
+    const harnesses: import("./harness/kinds").HarnessKind[] = [
       ...(one.pi ? (["pi"] as const) : []),
       ...(one.opencode ? (["opencode"] as const) : []),
     ];
@@ -554,7 +554,7 @@ export interface SessionAccountRead {
  * the account offers, which the hub keeps as its catalog.
  */
 export interface AccountProbe extends SessionAccountRead {
-  models: import("./harness").ModelInfo[];
+  models: import("./harness/kinds").ModelInfo[];
 }
 
 /**
@@ -565,7 +565,7 @@ export interface AccountProbe extends SessionAccountRead {
 export interface AccountCatalog {
   accountId: string;
   defaultEfforts: Record<string, string>;
-  models: import("./harness").ModelInfo[];
+  models: import("./harness/kinds").ModelInfo[];
   readAt: number;
 }
 
@@ -1396,7 +1396,7 @@ export type AccountMove =
        */
       compactFirst?: true;
       /** The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less. */
-      compactBy?: Exclude<import("./harness").HarnessKind, "claude">;
+      compactBy?: Exclude<import("./harness/kinds").HarnessKind, "claude">;
       /**
        * The policy said to go on from a summary, which could not be written
        * for this move, in the hub's words: its harness's `/compact` ran
