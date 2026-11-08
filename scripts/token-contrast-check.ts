@@ -26,7 +26,7 @@
  */
 import { join } from "node:path";
 import Color from "colorjs.io";
-import { ACCOUNT_HUES } from "../packages/core/src/accounts";
+import { ACCOUNT_HUES } from "../packages/core/src/accounts/kinds";
 import { STATUS_PAIRS } from "../packages/core/src/views";
 import { buildTokens, evaluatorOf } from "../packages/hub/src/design-tokens";
 
