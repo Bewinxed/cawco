@@ -35,7 +35,7 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
-import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
   type Admission,
