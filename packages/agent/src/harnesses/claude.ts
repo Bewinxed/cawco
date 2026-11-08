@@ -288,6 +288,7 @@ import {
 } from "./claude-transcript";
 import { claudeCompactsAt, claudeEnvWindow } from "./compaction-points";
 import { keeperCustody } from "./keeper-custody";
+import { neutralSubagentChange } from "./neutral-subagents";
 import { tailLines } from "./transcript-tail";
 
 /**
@@ -4735,6 +4736,9 @@ const RING_START = 0;
 
 class ClaudeHarness implements Harness<"claude"> {
   readonly detectStartsNothing = true;
+  readonly healsFleetMcp = true;
+  readonly relaunchesOnManualCompact = true;
+  readonly subagentChange = neutralSubagentChange;
   readonly kind = "claude" as const;
   readonly capabilities = CLAUDE_CAPABILITIES;
   auth: AuthState = "authenticated";
@@ -5045,7 +5049,7 @@ class ClaudeHarness implements Harness<"claude"> {
     const { client } = held;
     for (let span = TURN_LOOK_LINES; ; span *= 4) {
       const from = Math.max(head - span, 0);
-      const activity = new ChildActivity("claude");
+      const activity = new ChildActivity();
       const read = await readRing(
         client,
         procIdFor("claude", instanceId),
