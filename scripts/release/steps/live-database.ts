@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { hubDbPath } from "../../../packages/core/src/paths";
+import { hubDbPath } from "../../../packages/core/src/paths/hub";
 import type { Runner } from "../binary-tests";
 import { alone } from "./shared";
 

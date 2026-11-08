@@ -28,7 +28,7 @@ import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { socketPathProblem } from "@cawco/core/paths";
+import { socketPathProblem } from "@cawco/core/paths/workspace";
 import { DOWN_WORDS } from "@cawco/core/preview/proxy";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";

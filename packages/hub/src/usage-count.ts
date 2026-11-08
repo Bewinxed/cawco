@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import type { NeutralMessage } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { listClaudeFiles } from "@cawco/core/paths";
+import { listClaudeFiles } from "@cawco/core/paths/claude";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";

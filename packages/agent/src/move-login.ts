@@ -14,7 +14,7 @@ import {
   accountConfigDir,
   claudeHome,
   claudeHomeJson,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/claude";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";

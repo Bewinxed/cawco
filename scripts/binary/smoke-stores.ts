@@ -18,7 +18,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SearchProcess } from "../../packages/agent/src/search/process";
 import { storeRead, storeWork } from "../../packages/agent/src/stores/client";
-import { claudeHome } from "../../packages/core/src/paths";
+import { claudeHome } from "../../packages/core/src/paths/claude";
 
 /** Transcripts written: more than one, so the index parses them on threads of its own. */
 const FILES = 4;

@@ -460,7 +460,7 @@ export interface WorkspaceArea {
   readonly kind: "clone" | "scratch";
 }
 
-/** Its scratch dir `.cawco/tmp/<id8>` (paths.ts `workspaceScratchDir`) and its clone `.worktrees/<repo>-<id8>` (agent workspace.ts), under home. */
+/** Its scratch dir `.cawco/tmp/<id8>` (paths/workspace.ts `workspaceScratchDir`) and its clone `.worktrees/<repo>-<id8>` (agent workspace.ts), under home. */
 const AREA =
   /^(?:\.cawco\/tmp\/([0-9a-f]{8})|\.worktrees\/[^/]+-([0-9a-f]{8}))(?:\/|$)/u;
 
