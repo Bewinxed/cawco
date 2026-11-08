@@ -59,8 +59,9 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
-import type { DbShape, WorkItemRow } from "./db";
+import type { DbShape } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
+import type { WorkItemRow } from "./db/project-work";
 import type {
   DesignFinding,
   DesignPick,

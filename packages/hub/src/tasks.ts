@@ -116,7 +116,7 @@ import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { Elysia, t } from "elysia";
-import type { WorkItemRow } from "./db";
+import type { WorkItemRow } from "./db/project-work";
 import type { Tracker } from "./db/schema";
 import type { WorkBudget } from "./db/stored-types";
 import type { TaskIndexRow } from "./db/task-index";
