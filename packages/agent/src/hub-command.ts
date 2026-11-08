@@ -11,8 +11,7 @@ import {
   QUEUE_WAIT_MAX_MS,
   type QueueSlot,
   queueWords,
-  type WorkspaceRef,
-} from "@cawco/core/harness";
+} from "@cawco/core/commands/controls";
 import {
   BACKGROUND_SHELL,
   HEAVY_SLOT_ENV,
@@ -30,6 +29,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { DAY_MS } from "@cawco/core/time";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import {
   agentCommandStarted,

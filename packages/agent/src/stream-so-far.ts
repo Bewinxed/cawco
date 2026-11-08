@@ -18,13 +18,14 @@
  * main loop's; a subagent's clears that subagent's; the turn's `result`
  * clears them all.
  */
+
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   type NeutralMessage,
   type NeutralStreamMessage,
   type NeutralSystemMessage,
   STREAM_SO_FAR,
-} from "@cawco/core/harness";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+} from "@cawco/core/session-messages";
 
 /** Which loop a frame speaks for: a subagent's Task call, or the main loop (`""`). */
 const threadOf = (message: { parent_tool_use_id?: string | null }): string =>
