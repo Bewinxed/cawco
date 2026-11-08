@@ -32,6 +32,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { until } from "@cawco/core/until";
 import { z } from "zod";
 
 /**
@@ -1519,14 +1520,14 @@ const loadLaunchAgent = async (
   // SIGTERM (sessiond, taking its children down) is still being torn down,
   // and bootstrapping it then fails with "5: Input/output error" and leaves it
   // stopped. So the label is waited out first.
-  const deadline = Date.now() + BOOTOUT_WAIT_MS;
-  while ((await run(["launchctl", "print", target])).exitCode === 0) {
-    if (Date.now() > deadline) {
-      throw new ServiceError(
-        `${target} was still loaded ${BOOTOUT_WAIT_MS / 1000}s after launchctl bootout, so it was not started again from the new plist. Check it with \`launchctl print ${target}\`, then run this again.`
-      );
-    }
-    await Bun.sleep(250);
+  const unloaded = await until(
+    async () => (await run(["launchctl", "print", target])).exitCode !== 0,
+    { deadline: Date.now() + BOOTOUT_WAIT_MS, every: 250 }
+  );
+  if (!unloaded) {
+    throw new ServiceError(
+      `${target} was still loaded ${BOOTOUT_WAIT_MS / 1000}s after launchctl bootout, so it was not started again from the new plist. Check it with \`launchctl print ${target}\`, then run this again.`
+    );
   }
 
   // Its start record is the run this bootstrap starts, or none (launchd.ts).
