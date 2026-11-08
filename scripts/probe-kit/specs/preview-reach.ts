@@ -58,7 +58,7 @@ import {
   type PreviewUnreached,
   previewsNeedWords,
   previewUnreachedWords,
-} from "../../../packages/core/src/preview-reach";
+} from "../../../packages/core/src/preview/reach";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { MACHINE, until } from "../../scratch-fleet";
