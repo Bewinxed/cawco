@@ -1,6 +1,6 @@
 /**
  * A timing leg counts only while the MACHINE is quiet: the whole machine's
- * CPU and memory contention (core machine-room.ts `machineGauge`: on Linux
+ * CPU and memory contention (agent machine-room.ts `machineGauge`: on Linux
  * PSI `/proc/pressure/cpu` and `/proc/pressure/memory`, "some" avg10, the
  * share of the last 10 s in which some task anywhere waited; on macOS the
  * 5 s run queue beyond the CPUs and the kernel's memory pressure level)
@@ -23,7 +23,7 @@ import {
   type MachinePressure,
   machineGauge,
   machinePressure,
-} from "../../packages/core/src/machine-room";
+} from "../../packages/agent/src/machine-room";
 
 /** How often the pressure is read while waiting for it to fall. */
 const POLL_MS = 5000;

@@ -1,6 +1,6 @@
 /**
  * A timing leg waits until the MACHINE is quiet, not only its own cgroup
- * (quiet.ts `quietLeg`, core machine-room.ts `machinePressure`). On the host,
+ * (quiet.ts `quietLeg`, agent machine-room.ts `machinePressure`). On the host,
  * from a shell outside every workspace: the load is a user unit of its own
  * (`systemd-run --user`), a cgroup apart from the spec's, which a workspace
  * cannot start.
@@ -26,7 +26,7 @@
  */
 import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
-import { machineGauge } from "../../../packages/core/src/machine-room";
+import { machineGauge } from "../../../packages/agent/src/machine-room";
 import type { Kit, Spec } from "../kit";
 import { machineQuiet, quietLeg } from "../quiet";
 
