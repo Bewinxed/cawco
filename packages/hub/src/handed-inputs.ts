@@ -26,7 +26,7 @@ import {
   type Artifacts,
   type HandedReceiver,
 } from "./artifacts/service";
-import type { WorkItemRow } from "./db";
+import type { WorkItemRow } from "./db/project-work";
 import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
