@@ -9,7 +9,7 @@
  * launch (agent fleet-harness-set.ts), never through a file written into a
  * checkout, and none of the person's own `claude`, `opencode` or `pi`.
  */
-import { type FleetPlacement, placementProblem } from "./fleet";
+import { type FleetPlacement, placementProblem } from "./fleet-placement";
 import { unhandled } from "./unhandled";
 
 /** The three kinds, by the name the machine's report and the hub's rows use. */

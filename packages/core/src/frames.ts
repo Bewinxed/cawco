@@ -1,5 +1,6 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
 
+import type { AskAnswer } from "./asks";
 import type { BrowserKey, ListedBrowser } from "./browser";
 import type {
   FleetMcpServer,
@@ -10,6 +11,7 @@ import type {
   MarketplaceRead,
 } from "./fleet";
 import type {
+  CutCommand,
   ModeAsk,
   NeutralMessage,
   PermissionUpdate,
@@ -564,9 +566,6 @@ export interface InstancesDeltaFrame {
   upserts: InstanceRow[];
 }
 
-/** The tool a browser ask parks under (hub browser-tools.ts). */
-export const BROWSER_ASK_TOOL = "mcp__cawco__browser_ask";
-
 /**
  * A browser ask (Projects spec §5.11): a session asks the person to take
  * over its project's browser, with one sentence of reason and the page's
@@ -588,9 +587,6 @@ export interface BrowserAskFrame {
   /** One sentence: what the person is needed for. */
   reason: string;
 }
-
-/** The tool a connect ask parks under (hub connect-asks.ts). */
-export const CONNECT_ASK_TOOL = "mcp__cawco__connect_ask";
 
 /**
  * The access a sign-in may ask of its provider: what its scopes let an agent
@@ -690,31 +686,6 @@ export type DaemonPermissionRequestFrame = Omit<
   "presentation" | "raisedAt"
 >;
 
-/**
- * An answered ask's answer as the hub took it, and where it came from, so a
- * screen that held the ask and did not answer it says what won and where
- * (JOURNEY.md Flow 2: "the answer row resolves to the answer that won,
- * naming where it came from").
- */
-export interface AskAnswer {
-  /** Approve or deny; absent when the harness settled the ask itself and did not say. */
-  behavior?: "allow" | "deny";
-  /**
-   * The paired device that answered (a page or the app), or the session that
-   * did (a delegate's parent, its project's conversation), by name; absent when the
-   * hub knows no name (a page or app it trusts by its network).
-   */
-  name?: string;
-  /**
-   * Where it was answered: a dashboard page; the app (a client that is no
-   * page: the iOS and Mac app); another session; the harness itself, in
-   * its own interface; or Full Send, the mode the person put its session
-   * in, which approves an approval the session had open as it entered it
-   * (hub asks.ts `fullSendFiled`).
-   */
-  via: "page" | "app" | "session" | "harness" | "fullSend";
-}
-
 export interface PermissionSettledFrame {
   /** What won, and where, when the ask was answered (`outcome: answered`) and the hub knows. */
   answer?: AskAnswer;
@@ -774,24 +745,6 @@ export interface AsleepFrame {
   instanceId: string;
   /** The daemon stopped an at-rest session's processes, or one ended of its own accord; its next message wakes it. */
   kind: "asleep";
-}
-
-/**
- * A shell command a session's process was running when it died: the command
- * as the model asked it, and the end of what it had printed by then, when
- * its harness kept any (Claude Code spools a running command's output:
- * agent claude.ts `cutCommands`; pi and OpenCode keep none, and their
- * commands are read off the session's own tool calls: agent session.ts
- * `#shells`). The hub says each one interrupted, with that output or that
- * none was kept, in the turn it hands back and in the item's report when
- * the death fails it.
- */
-export interface CutCommand {
-  command: string;
-  /** What it printed: empty when it printed nothing, or when none was kept ({@link unkept}). */
-  output: string;
-  /** Its harness keeps no output of a running command (pi, OpenCode). */
-  unkept?: true;
 }
 
 export interface RecoveryUnavailableFrame {
@@ -930,7 +883,7 @@ export interface ProjectOfferFrame {
 
 export interface ProjectCapFrame {
   /** Its project's cap as it stands now; null once it has none. */
-  cap: import("./project-conversation").ProjectCap | null;
+  cap: import("./areas").ProjectCap | null;
   instanceId?: undefined;
   /** Hub-originated: a project's spend against its cap moved, or the cap did. */
   kind: "project.cap";
@@ -1083,3 +1036,83 @@ export interface DelegateEventFrame {
   /** Hub-originated: delegate traffic; `instanceId` is the delegate's. */
   kind: "delegate_event";
 }
+
+/**
+ * `frames`: everything a session produces, flowing agent→hub→dashboard. The
+ * `frame` kind is a neutral message; `raw` on it carries the harness's own
+ * event verbatim.
+ */
+export type FramePayload =
+  | FleetMcpFrame
+  | FleetReportFrame
+  | import("./fleet").FleetConvergeFrame
+  | PreviewFrame
+  | MessageFrame
+  | SendFrame
+  | RejectedFrame
+  | HeldSendFrame
+  | TakenSendFrame
+  | InstancesFrame
+  | InstancesDeltaFrame
+  | PermissionRequestFrame
+  | PermissionSettledFrame
+  | UsageFrame
+  | StoppedFrame
+  | AsleepFrame
+  | RecoveryUnavailableFrame
+  | ControlResultFrame
+  | ErrorFrame
+  | SessionAddressFrame
+  | ScratchWorktreeFrame
+  | PulseFrame
+  | WorkItemFrame
+  | ProjectOfferFrame
+  | TasksChangedFrame
+  | QuestionsMovedFrame
+  | DecisionsChangedFrame
+  | BlocksChangedFrame
+  | import("./starters").StartersChangedFrame
+  | ProjectsChangedFrame
+  /** Hub-originated: the hub restarts for an update now, and is back within a deadline. */
+  | HubRestartFrame
+  | TailnetHttpsFrame
+  | FleetFetchFrame
+  | ProjectCapFrame
+  | import("./actions").ActionsFrame
+  | import("./hub-auth").HubAuthFrame
+  /** Hub-originated: every install and the draft, whole, on each change. */
+  | import("./install").InstallsFrame
+  | ProjectStopFrame
+  | DelegateEventFrame
+  /** Hub-originated: every open fleet-watch notice, whole, on each change. */
+  | import("./fleet-watch").FleetWatchNoticesFrame
+  /** Hub-originated: every artifact waiting on the person, and their notices, whole, on each change. */
+  | import("./artifact-needs").ArtifactNeedsFrame
+  /** Hub-originated: every law the hub caught broken, whole, on each break. */
+  | import("./invariant").LawsBrokenFrame
+  /** Hub-originated: the person's presence and the machines that count toward it. */
+  | import("./notifications").PersonFrame
+  /** Hub-originated: something that needs the person, shown on the desk tab they use. */
+  | import("./notifications").DeskAlertFrame
+  /** Hub-originated: every project move, whole, on each change. */
+  | import("./move").MovesFrame
+  /** Daemon-originated: how far a move's clone or large files are. */
+  | import("./move").MoveProgressFrame
+  /** Daemon-originated: a running command's wait for a shared machine slot. */
+  | import("./harness").CommandQueueFrame
+  /** Daemon-originated: a workspace's stage changed (live components). */
+  | import("./stage").StageFrame
+  /** Daemon-originated: a place's stage clone is cut and in step (live components). */
+  | import("./stage").StageCloneFrame
+  /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
+  | import("./accounts").AccountBorrowFrame
+  /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
+  | import("./browser").BrowserFrame
+  /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
+  | import("./browser").BrowserHandedBackFrame
+  /** Hub-originated: every browser of the fleet, whole, on each change. */
+  | import("./browser").BrowserListFrame
+  /** Daemon-originated: the stream relay on the machine, whole, on each change. */
+  | import("./stream-relay").RelayFrame
+  /** Hub-originated: the stream relay's journey, whole, on each change. */
+  | import("./stream-relay").RelayJourneyFrame;
