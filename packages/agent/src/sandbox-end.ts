@@ -4,8 +4,8 @@
  * (boundary-host.ts: a guard's restart, its own close) and the agent
  * (boundary.ts `stopBoundary`) end one this way, so this file imports
  * nothing of cawco but the signal wall's sending half
- * (`@cawco/core/signal-wall`, which imports nothing): the host loads none of
- * core's index.
+ * (`@cawco/core/signal-wall`, which imports nothing): the host loads
+ * nothing else of core.
  *
  * The init's death is the namespace's: "If the "init" process of a PID
  * namespace terminates, the kernel terminates all of the processes in the

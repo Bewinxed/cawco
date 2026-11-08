@@ -20,27 +20,30 @@
  * (`plan.resync`), then deltas.
  */
 
+import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
+import type { FramePayload } from "@cawco/core/frames";
 import {
-  alreadyDelivered,
-  alreadyIngested,
   CONTROL_INTERRUPT,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
+} from "@cawco/core/harness";
+import type { PlanDelta, PlanSnapshot } from "@cawco/core/plan";
+import type {
+  ControlPayload,
+  DeliveryMark,
+  Envelope,
+  IngestMark,
+  SendPayload,
+} from "@cawco/core/protocol";
+import { SessionRing } from "@cawco/core/ring";
+import {
+  alreadyDelivered,
+  alreadyIngested,
   type CommandAck,
   type CommandEnvelope,
   type CommandKind,
-  type ControlPayload,
-  type DeliveryMark,
-  type Envelope,
-  type FramePayload,
   type FrameProvenance,
-  type IngestMark,
-  type PlanDelta,
-  type PlanSnapshot,
-  RESOLVE_PERMISSION,
-  type SendPayload,
-  SessionRing,
   type SessionStreamEvent,
   type SessionStreamFrame,
   type StreamBacklog,
@@ -48,7 +51,7 @@ import {
   type StreamHeartbeat,
   type StreamReset,
   type StreamSubscribe,
-} from "@cawco/core";
+} from "@cawco/core/stream";
 import type { HubLifetimeShape } from "./lifetime";
 import { refusalFrame } from "./registry";
 import { type HubSocket, sendFrame } from "./wire-socket";

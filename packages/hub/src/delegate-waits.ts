@@ -51,14 +51,11 @@
  * could answer, not routed to it while it could not) is handed or told
  * then, and the marks keep what was told from going twice.
  */
-import {
-  type AskAnswer,
-  delegateWaitWords,
-  type Envelope,
-  type InstanceRow,
-  type PermissionRequestFrame,
-} from "@cawco/core";
-import type { AskRecord } from "@cawco/core/asks";
+
+import type { AskAnswer, AskRecord } from "@cawco/core/asks";
+import type { PermissionRequestFrame } from "@cawco/core/frames";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import { delegateWaitWords } from "@cawco/core/words/delegates";
 
 /** The payload fields of the asks the hub raises and settles itself: only the person answers them. */
 const PERSON_ONLY = [

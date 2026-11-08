@@ -17,11 +17,12 @@
  * restarting it. A machine's connection ending says nothing either way,
  * since the update restarts its agent too.
  */
-import type { HubRestartFrame } from "@cawco/core";
+
 import {
   type BinaryUpdateState,
   UPDATE_TRIAL_MS,
 } from "@cawco/core/binary-updates";
+import type { HubRestartFrame } from "@cawco/core/frames";
 
 export interface HubRestarts {
   /** What a dashboard connecting now is owed: the announcement while one stands, else null. */

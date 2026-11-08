@@ -19,8 +19,8 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ControlResultFrame as ControlResult } from "@cawco/core";
 import { AGENT_RESTARTED_MID_REQUEST } from "@cawco/core/binary-updates";
+import type { ControlResultFrame as ControlResult } from "@cawco/core/frames";
 import { jsonSizeEstimate } from "@cawco/core/json-stream";
 import { cawcoDataDir } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";

@@ -10,11 +10,11 @@ import {
   attachedFileLine,
   attachedFileName,
   type FileAttachment,
-  type SendPayload,
-  type SentMessage,
   type TextAttachment,
-} from "@cawco/core";
+} from "@cawco/core/attachments";
 import { readWithin } from "@cawco/core/bounded";
+import type { SentMessage } from "@cawco/core/harness";
+import type { SendPayload } from "@cawco/core/protocol";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { delegationHubUrl } from "./delegation";

@@ -6,7 +6,7 @@
  * Before the machine holds a key there is no proof, and a hub that trusts
  * its network takes the request without one.
  */
-import { MACHINE_PROOF_HEADER } from "@cawco/core";
+import { MACHINE_PROOF_HEADER } from "@cawco/core/hub-auth";
 import { machineId } from "@cawco/core/machine-id";
 import { machineProofHeaders } from "@cawco/core/machine-key";
 import { readConfig, writeConfig } from "./config";
