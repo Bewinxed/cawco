@@ -156,7 +156,7 @@ export interface SpawnPayload {
    * nobody chose, leaves the level to the harness, which is not the same as
    * asking for its default: only the model knows which stops it has.
    */
-  effort?: import("./harness").EffortLevel;
+  effort?: import("./harness/kinds").EffortLevel;
   /**
    * This spawn is a project's memory curator or a fleet-watch triage run (a
    * `curator` or `overseer` row): the machine gives it CawCo's MCP server
@@ -171,7 +171,7 @@ export interface SpawnPayload {
    * 20261017 and 20261018 are expired (the app they hold declares it
    * optional); then it is required here.
    */
-  harness?: import("./harness").HarnessKind;
+  harness?: import("./harness/kinds").HarnessKind;
   /**
    * The machine's own Claude Code login is moving into this account
    * (`POST /api/accounts/move-login`) and has not moved yet, so this Claude
@@ -235,7 +235,7 @@ export interface SpawnPayload {
    * it is the one option the user keeps choosing — and the only one they can
    * still change afterwards, with a `setPermissionMode` {@link ControlPayload}.
    */
-  permissionMode?: import("./harness").PermissionMode;
+  permissionMode?: import("./harness/kinds").PermissionMode;
   /** `false` asks the harness never to store this session's transcript. */
   persistSession?: boolean;
   /** Hub-owned launch identity, retained when reattaching a surviving process. */
@@ -584,12 +584,12 @@ export interface SessionLimits {
 
 /** A start that names its harness: what the hub builds and sends a machine. */
 export type NamedSpawn = SpawnPayload & {
-  harness: import("./harness").HarnessKind;
+  harness: import("./harness/kinds").HarnessKind;
 };
 
 /** A stop that names its row's harness: what the hub sends a machine. */
 export type NamedStop = StopPayload & {
-  harness: import("./harness").HarnessKind;
+  harness: import("./harness/kinds").HarnessKind;
 };
 
 /**
@@ -624,7 +624,7 @@ export interface StopPayload {
    * 20261015.3, 20261017 and 20261018 are expired (the app they hold sends
    * this type); then it is required here.
    */
-  harness?: import("./harness").HarnessKind;
+  harness?: import("./harness/kinds").HarnessKind;
   instanceId: string;
   /** The row's launch identity, including a held process not yet attached. */
   processGeneration?: string;
@@ -652,7 +652,7 @@ export interface ControlPayload {
   /** The instance a fleet-originated control claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
   /** The harness the machine-scoped call is addressed at; session calls route by instance. */
-  harness?: import("./harness").HarnessKind;
+  harness?: import("./harness/kinds").HarnessKind;
   instanceId?: string;
   method: string;
   requestId: string;
@@ -718,7 +718,10 @@ export interface AgentRow {
    * New session form opens on there. Absent for a harness never started.
    */
   chosenModes?: Partial<
-    Record<import("./harness").HarnessKind, import("./harness").PermissionMode>
+    Record<
+      import("./harness/kinds").HarnessKind,
+      import("./harness/kinds").PermissionMode
+    >
   >;
   /** Last register's sessiond read, distinct from an available empty list. */
   custody?: SessionCustody;
@@ -1078,7 +1081,7 @@ export interface InstanceRow {
    * it, whatever brings it back; a reading never moves it. Null: nobody
    * chose, and the harness runs its model's default.
    */
-  chosenEffort?: import("./harness").EffortLevel | null;
+  chosenEffort?: import("./harness/kinds").EffortLevel | null;
   /**
    * Started clean ({@link SpawnPayload.clean}): written by its first spawn
    * and kept, so every launch of it is clean and a comparison can tell it
@@ -1117,9 +1120,9 @@ export interface InstanceRow {
    * it sends no effort, null until the first reading lands. What its chip
    * shows; never what a launch of it asks for ({@link chosenEffort}).
    */
-  effort?: import("./harness").SessionEffort | null;
+  effort?: import("./harness/kinds").SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
-  harness: import("./harness").HarnessKind;
+  harness: import("./harness/kinds").HarnessKind;
   /** First-hand custody on the current agent connection, never stored liveness. */
   held?: { since: number; reason: string };
   id: string;
@@ -1698,7 +1701,7 @@ export interface SessionAttachment {
 /** A session's attachments as Files reads them: the list, and the harness that speaks as the agent. */
 export interface SessionAttachments {
   attachments: SessionAttachment[];
-  harness: import("./harness").HarnessKind;
+  harness: import("./harness/kinds").HarnessKind;
 }
 
 /** An artifact's promote: the project folder's commit that holds it, and when. */
