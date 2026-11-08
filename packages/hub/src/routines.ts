@@ -102,7 +102,7 @@ import { type Caw, isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
-import type { WorkBudget } from "./db/schema";
+import type { WorkBudget } from "./db/stored-types";
 import { byHandle } from "./handles";
 import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";

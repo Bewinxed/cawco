@@ -172,16 +172,14 @@ import type {
   WorkspaceRow,
 } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
+import type { LandingPhase, Origin, WorkOrigin } from "./db/schema";
 import type {
   GatePass,
   ItemBlock,
-  LandingPhase,
-  Origin,
   WorkBudget,
   WorkItemSubmission,
   WorkLanding,
-  WorkOrigin,
-} from "./db/schema";
+} from "./db/stored-types";
 import {
   capableMachines,
   capableOnline,
