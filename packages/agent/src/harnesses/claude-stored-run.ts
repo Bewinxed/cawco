@@ -36,7 +36,7 @@ import {
   accountClaudeJson,
   claudeHomeJson,
   projectClaudeDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/claude";
 import { ReverseReader, typeFilter } from "@cawco/jsonl-parser";
 
 /** How far back from a transcript's end its mode and model are looked for. Ours: the CLI appends the mode after each turn, and a turn's assistant record is within one tool result of it. */
