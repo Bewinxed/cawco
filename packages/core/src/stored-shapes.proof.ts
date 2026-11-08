@@ -5,7 +5,6 @@
  * package's tsconfig `include`.
  */
 import type {
-  AccountHue as AccountHueType,
   AccountIdentity as AccountIdentityType,
   AccountKind as AccountKindType,
   AccountMove as AccountMoveType,
@@ -14,7 +13,6 @@ import type {
   AccountReport as AccountReportType,
   AtLimit as AtLimitType,
   Compaction as CompactionType,
-  CompactMethod as CompactMethodType,
   CompactStage as CompactStageType,
   ContinueStep as ContinueStepType,
   EndedBy as EndedByType,
@@ -24,6 +22,10 @@ import type {
   NamedAccount as NamedAccountType,
   WaitReason as WaitReasonType,
 } from "./accounts";
+import type {
+  AccountHue as AccountHueType,
+  CompactMethod as CompactMethodType,
+} from "./accounts/kinds";
 import type {
   FileAttachment as FileAttachmentType,
   SendAttachment as SendAttachmentType,
@@ -207,6 +209,7 @@ import type {
   DelegateEventPayload as DelegateEventPayloadType,
   DelegateEvent as DelegateEventType,
   Envelope as EnvelopeType,
+  IngestMark as IngestMarkType,
   RunKind as RunKindType,
   ScratchWorktree as ScratchWorktreeType,
   SendPayload as SendPayloadType,
@@ -441,10 +444,7 @@ import type {
   WorkspaceRefOutput,
   WorkspaceToolOutput,
 } from "./stored-shapes";
-import type {
-  CommandAckStage as CommandAckStageType,
-  IngestMark as IngestMarkType,
-} from "./stream";
+import type { CommandAckStage as CommandAckStageType } from "./stream";
 import type {
   RelayPortHealth as RelayPortHealthType,
   RelayPortName as RelayPortNameType,

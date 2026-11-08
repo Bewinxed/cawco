@@ -7,10 +7,12 @@
 import type {
   AtLimit as AtLimitType,
   Compaction as CompactionType,
-  CompactMethod as CompactMethodType,
-  PlacementStrategy as PlacementStrategyType,
   StrategyChoice as StrategyChoiceType,
 } from "@cawco/core/accounts";
+import type {
+  CompactMethod as CompactMethodType,
+  PlacementStrategy as PlacementStrategyType,
+} from "@cawco/core/accounts/kinds";
 import type { ArtifactKind as ArtifactKindType } from "@cawco/core/artifact-kinds";
 import type {
   FileAttachment as FileAttachmentType,
