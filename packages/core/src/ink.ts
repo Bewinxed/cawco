@@ -22,8 +22,8 @@
  * Every entry is a plain JSON value in its map.
  */
 
-import type { Anchor, PageAnchor } from "./comments";
-import { chainWords, wholePage } from "./comments";
+import type { Anchor, PageAnchor } from "./comments/anchor";
+import { chainWords, wholePage } from "./comments/anchor";
 
 export const INK_LIMITS = {
   /** Elements one group names it marks. Our call. */
