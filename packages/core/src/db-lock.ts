@@ -2,7 +2,7 @@
  * One hub to a database. Two hubs on one sqlite file both migrate it, both
  * run the board's change log and the dispatcher, and each answers sessions
  * the other started: since the database's default became the platform data
- * dir for every hub (core paths.ts `hubDbPath`), a dev hub started without
+ * dir for every hub (core paths/hub.ts `hubDbPath`), a dev hub started without
  * `CAWCO_DB_PATH` would open the live fleet's.
  *
  * The hub takes `<db>.lock` before it opens the database: a file naming its
