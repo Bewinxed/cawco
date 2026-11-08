@@ -4,7 +4,7 @@ import {
   type StarterOutcome,
   type StarterPlace,
   type StarterSource,
-} from "@cawco/core";
+} from "@cawco/core/starters";
 import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
