@@ -114,27 +114,28 @@
  * changing, a machine with a checkout coming online. A slow timer looks
  * again as a safety net and starts nothing when nothing is ready.
  */
+import { ANY_TYPE } from "@cawco/core/delegate-types";
 import {
-  ANY_TYPE,
   artifactName,
   deliverableKind,
-  type InstanceRow,
-  type LandsMode,
-  markdownLink,
   POST_OUTPUT_RULE,
-  type StageKind,
+} from "@cawco/core/deliverables";
+import { detach } from "@cawco/core/detach";
+import type { LandsMode } from "@cawco/core/injected";
+import type { InstanceRow } from "@cawco/core/protocol";
+import {
+  markdownLink,
   sessionLink,
-  type TaskMover,
   taskLink,
   todoLink,
-} from "@cawco/core";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/references";
 import type {
   AttemptStart,
   Stage,
   TaskSummary,
   WaitWitness,
 } from "@cawco/core/task-views";
+import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow, WorkItemRow } from "./db";

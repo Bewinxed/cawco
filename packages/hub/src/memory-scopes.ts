@@ -11,11 +11,11 @@
  */
 import type {
   DocumentFacts,
-  InstanceRow,
   MemoryScope,
   SessionInstruction,
-} from "@cawco/core";
-import { sessionTakes } from "@cawco/core";
+} from "@cawco/core/fleet";
+import { sessionTakes } from "@cawco/core/fleet";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { PlacementPlace } from "./project-placements";
 import { memoryRoleOf } from "./roles";
 

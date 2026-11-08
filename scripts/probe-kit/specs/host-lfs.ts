@@ -558,7 +558,8 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
     const { hubId } = await import("../../../packages/hub/src/hub-id");
     const { httpProof } =
       await import("../../../packages/core/src/machine-key");
-    const { MACHINE_PROOF_HEADER } = await import("../../../packages/core/src");
+    const { MACHINE_PROOF_HEADER } =
+      await import("../../../packages/core/src/hub-auth");
     const proven = (
       machineId: string,
       key: string,

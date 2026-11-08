@@ -18,7 +18,7 @@
  * A file under no target's folder and in no `wholeApp` (README, scripts,
  * StoreKit) builds nothing.
  */
-import type { DeclaredStep } from "@cawco/core";
+import type { DeclaredStep } from "@cawco/core/project-gate";
 import { covers, TARGETS_PLACE } from "./gate-file";
 import type { GateStep } from "./landing";
 
