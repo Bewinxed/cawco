@@ -22,8 +22,9 @@
  */
 
 import { field, KIND_WORDS, matchOf, parse } from "@cawco/core/find-match";
-import { machineCalled, machineFaultWords } from "@cawco/core/machine-names";
+import { machineCalled } from "@cawco/core/machine-names";
 import type { ArtifactSummary, SessionAttachment } from "@cawco/core/protocol";
+import { machineFaultWords } from "@cawco/core/words/machine-names";
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
 import { listAttachments, listFiles } from "../artifact-api";
