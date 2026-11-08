@@ -7,5 +7,15 @@
     "outDir": "../../../../.tsbuild/packages/agent/src/canvas-host"
   },
   "include": ["."],
-  "references": [{ "path": "../../../core" }, { "path": "../preview-overlay" }]
+  "references": [
+    {
+      "path": "../../../core"
+    },
+    {
+      "path": "../preview-overlay"
+    },
+    {
+      "path": "../../../design-tokens"
+    }
+  ]
 }

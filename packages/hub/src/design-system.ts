@@ -64,11 +64,14 @@ import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { askWords } from "@cawco/core/words/asks";
+import {
+  type BuiltTokens,
+  buildTokens,
+} from "@cawco/design-tokens/design-tokens";
+import { tokensIn } from "@cawco/design-tokens/dtcg-resolver";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { DesignProposalFile } from "./db/stored-types";
-import { type BuiltTokens, buildTokens } from "./design-tokens";
-import { tokensIn } from "./dtcg-resolver";
 import { boardTitle } from "./labels";
 import {
   FOLDER_FILE_LIMIT,
