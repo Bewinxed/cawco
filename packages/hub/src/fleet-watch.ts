@@ -51,12 +51,10 @@
 
 import { Gone, readWithin } from "@cawco/core/bounded";
 import {
-  decisionWords,
   FLEET_WATCH_LIMITS,
   FLEET_WATCH_WAITS,
   type FleetWatchNotice,
   type FleetWatchSignal,
-  signalLine,
   TRIAGE_DECISIONS,
   type TriageDecision,
 } from "@cawco/core/fleet-watch";
@@ -74,6 +72,7 @@ import { sessionLink } from "@cawco/core/references";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { unhandled } from "@cawco/core/unhandled";
+import { decisionWords, signalLine } from "@cawco/core/words/fleet-watch";
 import { z } from "zod";
 import { isProjectConversation, type ProjectEvent } from "./caw";
 import type { DbShape } from "./db";
