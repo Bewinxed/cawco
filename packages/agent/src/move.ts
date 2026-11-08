@@ -49,7 +49,6 @@ import {
   type MoveSnapshotResult,
 } from "@cawco/core/move";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
-import { remoteWithoutCredential } from "@cawco/core/remote-credential";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -61,6 +60,7 @@ import {
   useHubCredentialHelper,
 } from "./git-credential";
 import { notAProject, placeSettled, placeTurn } from "./place-repo";
+import { remoteWithoutCredential } from "./remote-credential";
 import { hubRepoOf } from "./workspace";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
