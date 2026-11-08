@@ -77,6 +77,7 @@ import {
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { versionSaid } from "@cawco/core/version-said";
 import { z } from "zod";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { claudeExecutable } from "./auth";
@@ -569,9 +570,6 @@ const CLAUDE_ELSEWHERE = [
  */
 const VERSION_TIMEOUT_MS = 5000;
 
-/** The first `x.y.z` a version command prints, the same rule tools.ts uses. */
-const VERSION_PATTERN = /\d+\.\d+\.\d+/u;
-
 /** An install's version, or undefined when it is not known (it printed none, could not run, or did not answer in time, which is logged). */
 const askVersion = async (path: string): Promise<string | undefined> => {
   let read: Bounded<string | undefined>;
@@ -588,7 +586,7 @@ const askVersion = async (path: string): Promise<string | undefined> => {
         new Response(child.stderr).text(),
       ]);
       await child.exited;
-      return `${out}${err}`.match(VERSION_PATTERN)?.[0];
+      return versionSaid(`${out}${err}`);
     });
   } catch {
     return undefined;
