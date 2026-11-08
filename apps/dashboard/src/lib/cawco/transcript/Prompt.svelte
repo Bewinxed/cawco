@@ -34,7 +34,6 @@
 </script>
 
 <script lang="ts">
-  import { askerLine } from "@cawco/core/permission-presentation";
   import { questionsOf } from "@cawco/core/question";
   import type {
     PermissionResult,
@@ -42,6 +41,7 @@
     UserQuestion,
   } from "@cawco/core/session-messages";
   import { askWords } from "@cawco/core/words/asks";
+  import { askerLine } from "@cawco/core/words/permission-lines";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
