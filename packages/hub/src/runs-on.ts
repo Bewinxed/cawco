@@ -11,7 +11,8 @@
  * checkout of the project; with none, the start is refused with a sentence
  * saying what it needs, and nothing is placed elsewhere.
  */
-import { machinesCalled, type RunsOnCapability } from "@cawco/core";
+import { machinesCalled } from "@cawco/core/machine-names";
+import type { RunsOnCapability } from "@cawco/core/project-gate";
 
 /** Each capability (core `RunsOnCapability`), and the OS prefix (`os`'s part before `-`) whose machines have it. */
 const CAPABILITY_OS: Record<RunsOnCapability, string> = {
