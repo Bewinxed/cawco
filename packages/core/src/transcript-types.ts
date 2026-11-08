@@ -12,10 +12,8 @@
  * flight — is {@link TranscriptTail}, and is all that moves between frames.
  */
 import type {
-  HarnessKind,
   ModeAsk,
   NeutralStatus,
-  PermissionMode,
   SendRecord,
   SendRefusal,
   SendState,
@@ -23,6 +21,7 @@ import type {
   SlashCommand,
   UserQuestionResult,
 } from "./harness";
+import type { HarnessKind, PermissionMode } from "./harness/kinds";
 import type { ToolStatus } from "./tool-presentation";
 
 /** What a block is: the row kind a renderer draws it as. */
@@ -92,7 +91,7 @@ export interface BlockMetadata {
   compactResult?: "success" | "failed";
   /**
    * A send that is the message a session went on from in a fresh
-   * conversation (origin {@link import("./harness").CONTINUATION_ORIGIN}):
+   * conversation (origin {@link import("./harness/kinds").CONTINUATION_ORIGIN}):
    * drawn folded under the `continued` line before it, never as a turn.
    */
   continuation?: true;

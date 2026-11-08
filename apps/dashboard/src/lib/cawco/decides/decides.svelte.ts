@@ -13,7 +13,7 @@ import type {
   Member,
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
-import type { HarnessKind } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { unhandled } from "@cawco/core/unhandled";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { decidesWords } from "@cawco/core/words/decides";

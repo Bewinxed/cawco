@@ -10,12 +10,12 @@ import type {
 } from "./fleet";
 import type { FleetMcpServerView } from "./fleet-secrets";
 import type {
-  HarnessKind,
   ModeAsk,
   NeutralMessage,
   PermissionUpdate,
   SendRecord,
 } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import type {
   AgentRow,
   ArtifactKind,
