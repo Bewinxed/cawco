@@ -83,10 +83,8 @@ import type {
   FilingStage,
   FilingWrote,
 } from "../../../packages/core/src/context-filing";
-import {
-  COMPACTION_ORIGIN,
-  CONTEXT_LINE,
-} from "../../../packages/core/src/harness";
+import { CONTEXT_LINE } from "../../../packages/core/src/harness";
+import { COMPACTION_ORIGIN } from "../../../packages/core/src/harness/kinds";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { contextWords } from "../../../packages/core/src/words/context";
