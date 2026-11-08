@@ -36,7 +36,7 @@ import { realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import type { HarnessKind } from "../../../packages/core/src/harness";
+import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { presenceLine } from "../../../packages/core/src/injected";
 import { REFERENCE_GUIDANCE } from "../../../packages/core/src/references";

@@ -14,13 +14,13 @@
   } from "@cawco/core/continuation";
   import { detach } from "@cawco/core/detach";
   import type { AvailableCommand } from "@cawco/core/fleet";
+  import { cleanStartRefusal } from "@cawco/core/harness";
   import {
-    cleanStartRefusal,
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
     type PermissionMode,
-  } from "@cawco/core/harness";
+  } from "@cawco/core/harness/kinds";
   import { hubRequest } from "@cawco/core/hub-request";
   import { modelRun } from "@cawco/core/model-names";
   import { type MoveEstimate, moveSize as sizeWords } from "@cawco/core/move";

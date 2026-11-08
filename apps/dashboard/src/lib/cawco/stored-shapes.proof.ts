@@ -34,13 +34,10 @@ import type {
   PreviewFrame as PreviewFrameType,
 } from "@cawco/core/frames";
 import type {
-  EffortLevel as EffortLevelType,
-  HarnessKind as HarnessKindType,
   HarnessNote as HarnessNoteType,
   NeutralContentBlock as NeutralContentBlockType,
   NeutralOrigin as NeutralOriginType,
   NeutralUserMessage as NeutralUserMessageType,
-  PermissionMode as PermissionModeType,
   SentMessage as SentMessageType,
   UserAnswers as UserAnswersType,
   UserQuestionAnswered as UserQuestionAnsweredType,
@@ -48,6 +45,11 @@ import type {
   UserQuestionResult as UserQuestionResultType,
   UserQuestion as UserQuestionType,
 } from "@cawco/core/harness";
+import type {
+  EffortLevel as EffortLevelType,
+  HarnessKind as HarnessKindType,
+  PermissionMode as PermissionModeType,
+} from "@cawco/core/harness/kinds";
 import type { PlaceProject as PlaceProjectType } from "@cawco/core/place-nesting";
 import type {
   OrphanedComments as OrphanedCommentsType,

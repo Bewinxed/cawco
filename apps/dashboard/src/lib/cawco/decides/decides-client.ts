@@ -14,7 +14,7 @@ import type {
   Member,
 } from "@cawco/core/decides";
 import type { DelegateType } from "@cawco/core/delegate-types";
-import type { EffortLevel, HarnessKind } from "@cawco/core/harness";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import { hubRequest } from "@cawco/core/hub-request";
 import { send } from "#lib/cawco/project-tasks.js";
 

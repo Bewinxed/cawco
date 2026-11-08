@@ -109,23 +109,19 @@ import type {
   CarryRestored as CarryRestoredType,
   ChildLimit as ChildLimitType,
   ClaudeModelUsage as ClaudeModelUsageType,
-  EffortLevel as EffortLevelType,
   EndedTask as EndedTaskType,
   HarnessCapabilities as HarnessCapabilitiesType,
-  HarnessKind as HarnessKindType,
   HarnessNote as HarnessNoteType,
   HarnessReport as HarnessReportType,
   McpHttpServerConfig as McpHttpServerConfigType,
   McpSSEServerConfig as McpSSEServerConfigType,
   McpStdioServerConfig as McpStdioServerConfigType,
   ModeAsk as ModeAskType,
-  ModelInfo as ModelInfoType,
   MoveEnded as MoveEndedType,
   NeutralContentBlock as NeutralContentBlockType,
   NeutralOrigin as NeutralOriginType,
   NeutralSessionInfo as NeutralSessionInfoType,
   NeutralUserMessage as NeutralUserMessageType,
-  PermissionMode as PermissionModeType,
   PlaceLfsRow as PlaceLfsRowType,
   SendRefusal as SendRefusalType,
   SentMessage as SentMessageType,
@@ -141,6 +137,12 @@ import type {
   WorkspaceKind as WorkspaceKindType,
   WorkspaceRef as WorkspaceRefType,
 } from "./harness";
+import type {
+  EffortLevel as EffortLevelType,
+  HarnessKind as HarnessKindType,
+  ModelInfo as ModelInfoType,
+  PermissionMode as PermissionModeType,
+} from "./harness/kinds";
 import type { HarnessConfigKind as HarnessConfigKindType } from "./harness-config";
 import type {
   HookAgentHandler as HookAgentHandlerType,

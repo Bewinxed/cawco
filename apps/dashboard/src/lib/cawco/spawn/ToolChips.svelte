@@ -3,7 +3,7 @@
     EffortLevel,
     HarnessKind,
     PermissionMode,
-  } from "@cawco/core/harness";
+  } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { spawnWords } from "@cawco/core/words/spawn";
 

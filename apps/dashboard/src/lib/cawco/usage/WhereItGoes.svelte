@@ -21,7 +21,7 @@
    * machine ran sessions of both. Each group's height is driven
    * (motion/relay-boxes) so an old row never overflows into the group below.
    */
-  import type { HarnessKind } from "@cawco/core/harness";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
   import type {
     UsageGroupBy,
     UsageSummary,

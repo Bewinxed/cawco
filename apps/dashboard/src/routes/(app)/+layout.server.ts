@@ -1,4 +1,4 @@
-import { harnessNamed } from "@cawco/core/harness";
+import { harnessNamed } from "@cawco/core/harness/kinds";
 import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";

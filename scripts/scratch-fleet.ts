@@ -44,7 +44,10 @@ import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { withFetchCap } from "../packages/core/src/fetch-cap";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
-import { HARNESSES, type HarnessKind } from "../packages/core/src/harness";
+import {
+  HARNESSES,
+  type HarnessKind,
+} from "../packages/core/src/harness/kinds";
 import {
   fetchHub,
   type HubRequest,
