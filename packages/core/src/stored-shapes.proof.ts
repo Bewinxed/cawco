@@ -108,37 +108,10 @@ import type {
 } from "./fleet";
 import type { ConnectAccess as ConnectAccessType } from "./frames";
 import type {
-  AuthState as AuthStateType,
-  CarryRestored as CarryRestoredType,
   ChildLimit as ChildLimitType,
-  ClaudeModelUsage as ClaudeModelUsageType,
-  EndedTask as EndedTaskType,
   HarnessCapabilities as HarnessCapabilitiesType,
-  HarnessNote as HarnessNoteType,
   HarnessReport as HarnessReportType,
-  McpHttpServerConfig as McpHttpServerConfigType,
-  McpSSEServerConfig as McpSSEServerConfigType,
-  McpStdioServerConfig as McpStdioServerConfigType,
-  ModeAsk as ModeAskType,
-  MoveEnded as MoveEndedType,
-  NeutralContentBlock as NeutralContentBlockType,
-  NeutralOrigin as NeutralOriginType,
-  NeutralSessionInfo as NeutralSessionInfoType,
-  NeutralUserMessage as NeutralUserMessageType,
-  PlaceLfsRow as PlaceLfsRowType,
-  SendRefusal as SendRefusalType,
-  SentMessage as SentMessageType,
   SignInFault as SignInFaultType,
-  UserAnswers as UserAnswersType,
-  UserQuestionAnswered as UserQuestionAnsweredType,
-  UserQuestionDismissed as UserQuestionDismissedType,
-  UserQuestionResult as UserQuestionResultType,
-  UserQuestion as UserQuestionType,
-  WorkspaceArchived as WorkspaceArchivedType,
-  WorkspaceCut as WorkspaceCutType,
-  WorkspaceHolding as WorkspaceHoldingType,
-  WorkspaceKind as WorkspaceKindType,
-  WorkspaceRef as WorkspaceRefType,
 } from "./harness";
 import type {
   EffortLevel as EffortLevelType,
@@ -228,6 +201,30 @@ import type {
 } from "./relays";
 import type { ReleaseManifest as ReleaseManifestType } from "./release-manifest";
 import type { DownloadProgress as DownloadProgressType } from "./resumable-download";
+import type {
+  EndedTask as EndedTaskType,
+  MoveEnded as MoveEndedType,
+} from "./session/controls";
+import type {
+  AuthState as AuthStateType,
+  ClaudeModelUsage as ClaudeModelUsageType,
+  HarnessNote as HarnessNoteType,
+  McpHttpServerConfig as McpHttpServerConfigType,
+  McpSSEServerConfig as McpSSEServerConfigType,
+  McpStdioServerConfig as McpStdioServerConfigType,
+  ModeAsk as ModeAskType,
+  NeutralContentBlock as NeutralContentBlockType,
+  NeutralOrigin as NeutralOriginType,
+  NeutralSessionInfo as NeutralSessionInfoType,
+  NeutralUserMessage as NeutralUserMessageType,
+  SendRefusal as SendRefusalType,
+  SentMessage as SentMessageType,
+  UserAnswers as UserAnswersType,
+  UserQuestionAnswered as UserQuestionAnsweredType,
+  UserQuestionDismissed as UserQuestionDismissedType,
+  UserQuestionResult as UserQuestionResultType,
+  UserQuestion as UserQuestionType,
+} from "./session-messages";
 import type {
   SessiondAck as SessiondAckType,
   SessiondLimit as SessiondLimitType,
@@ -471,6 +468,15 @@ import type {
   ItemEnd as ItemEndType,
   WorkItemState as WorkItemStateType,
 } from "./work-items";
+import type {
+  CarryRestored as CarryRestoredType,
+  PlaceLfsRow as PlaceLfsRowType,
+  WorkspaceArchived as WorkspaceArchivedType,
+  WorkspaceCut as WorkspaceCutType,
+  WorkspaceHolding as WorkspaceHoldingType,
+  WorkspaceKind as WorkspaceKindType,
+  WorkspaceRef as WorkspaceRefType,
+} from "./workspace/controls";
 import type { Policy as PolicyType } from "./workspace-judge";
 
 /**

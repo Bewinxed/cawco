@@ -29,7 +29,7 @@
  * transcript's `entrypoint`): a person, or a program for what CawCo and
  * `claude -p` ran.
  */
-import type { NeutralSessionInfo } from "@cawco/core/harness";
+import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import {
   DAY_MS as DAY,
   HOUR_MS as HOUR,
