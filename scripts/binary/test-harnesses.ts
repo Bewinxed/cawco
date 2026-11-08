@@ -40,10 +40,12 @@ import {
   fleetStatus,
   syncFleetConfig,
 } from "../../packages/agent/src/fleet";
-import type { Harness } from "../../packages/agent/src/harness";
+import type {
+  Harness,
+  SessiondAdoption,
+} from "../../packages/agent/src/harness";
 import { KeeperPool } from "../../packages/agent/src/keepers";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
-import type { SessiondAdoption } from "../../packages/agent/src/session";
 import {
   endProc,
   type SessiondClient,
