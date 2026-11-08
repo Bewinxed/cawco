@@ -7,7 +7,7 @@
  * frame is the pane's well at a desk's size with the pill where the page
  * drew it.
  */
-import type { Pin } from "@cawco/core/comments";
+import type { Pin } from "@cawco/core/comments/model";
 import PinPeekFrame from "./PinPeekFrame.svelte";
 
 /** Pin 1 on the design graph spec, as the hub keeps it: seven entries. */

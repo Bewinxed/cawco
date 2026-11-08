@@ -24,12 +24,8 @@
  * Every entry is a plain JSON value in its map.
  */
 
-import {
-  type Anchor,
-  FILE_SPOT_PROBLEM,
-  fileSpotProblem,
-  type PageAnchor,
-} from "./comments";
+import type { Anchor, PageAnchor } from "./comments/anchor";
+import { FILE_SPOT_PROBLEM, fileSpotProblem } from "./comments/validate";
 
 export const INK_LIMITS = {
   /** Elements one group names it marks. Our call. */
