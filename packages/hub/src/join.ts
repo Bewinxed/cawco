@@ -52,6 +52,7 @@ import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { connectWords } from "@cawco/core/words/connect";
@@ -206,7 +207,7 @@ export const installScript = (
  */
 const refusalScript = (said: string): string => {
   const line = `cawco: ${said} Nothing on this machine was changed.`;
-  return `#!${systemProgram("sh")}\nprintf '%s\\n' '${line.replaceAll("'", "'\\''")}' >&2\nexit 1\n`;
+  return `#!${systemProgram("sh")}\nprintf '%s\\n' ${shellQuote(line)} >&2\nexit 1\n`;
 };
 
 /**

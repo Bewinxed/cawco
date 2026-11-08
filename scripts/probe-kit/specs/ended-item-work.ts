@@ -49,9 +49,11 @@
  *
  *   bun scripts/probe-kit/run.ts ended-item-work
  */
+
 import { readWithin } from "../../../packages/core/src/bounded";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { commandLines } from "../../../packages/core/src/process-identity";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import {
   isAlive,
   listedPid,
@@ -100,17 +102,14 @@ const ITEM_MS = 300_000;
 /** A workspace's settle once its session can sleep: the sleep, then its machine's archive. */
 const SETTLE_MS = 180_000;
 
-/** `word` as one single-quoted shell word. */
-const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
-
 /** A's server: the port and the socket, growing 8 MiB a second to 1.5 GiB. */
-const SERVE_A = `cd "$TMPDIR" && bun -e ${quoted(
+const SERVE_A = `cd "$TMPDIR" && bun -e ${shellQuote(
   `globalThis.${MARK_A}=1;const k=[];setInterval(()=>{if(k.length<192)k.push(Buffer.alloc(8388608,1))},1000);const fetch=()=>new Response(${JSON.stringify(PAGE_A)});Bun.serve({hostname:"127.0.0.1",port:${PORT_A},fetch});Bun.serve({unix:${JSON.stringify(SOCKET_A)},fetch});`
 )}`;
 /** A command that waits for A's server to answer, then says so, spelled apart. */
-const UP_A = `for i in $(seq 100); do bun -e ${quoted(`const r = await fetch("http://127.0.0.1:${PORT_A}/"); if (!r.ok) process.exit(1);`)} 2>/dev/null && echo "UP-""A:" && break; sleep 0.1; done`;
+const UP_A = `for i in $(seq 100); do bun -e ${shellQuote(`const r = await fetch("http://127.0.0.1:${PORT_A}/"); if (!r.ok) process.exit(1);`)} 2>/dev/null && echo "UP-""A:" && break; sleep 0.1; done`;
 /** What serves B's preview: a page on the `PORT` the stage gives it. */
-const SERVED_B = `cd "$TMPDIR" && bun -e ${quoted(
+const SERVED_B = `cd "$TMPDIR" && bun -e ${shellQuote(
   `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${TITLE_B}</title></head><body>${TITLE_B}</body></html>`)};const fetch=()=>new Response(page,{headers:{"content-type":"text/html"}});Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch});Bun.serve({unix:${JSON.stringify(SOCKET_B)},fetch});`
 )}`;
 
