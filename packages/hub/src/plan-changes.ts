@@ -39,7 +39,8 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
-import type { DbShape, PlanChangeRow } from "./db";
+import type { DbShape } from "./db";
+import type { PlanChangeRow } from "./db/session-plans";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   changeLine,
