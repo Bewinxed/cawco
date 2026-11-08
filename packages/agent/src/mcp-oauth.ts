@@ -1,4 +1,3 @@
-import { mcpGatewayPort } from "@cawco/core";
 import {
   AGENT_RESTARTING,
   RESUMABLE_CAWCO_TOOLS,
@@ -6,6 +5,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/hop-headers";
 import { portHolder } from "@cawco/core/live-processes";
+import { mcpGatewayPort } from "@cawco/core/protocol";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import { GATE_PATH } from "./mcp-gate";

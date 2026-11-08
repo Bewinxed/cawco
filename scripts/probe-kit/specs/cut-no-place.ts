@@ -36,7 +36,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import { workWords } from "../../../packages/core/src/index";
+import { workWords } from "../../../packages/core/src/words/work";
 import {
   ACCOUNT,
   MACHINE,

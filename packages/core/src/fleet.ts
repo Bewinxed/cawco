@@ -138,6 +138,7 @@ export const CAWCO_OAUTH_URL = "https://cawco.dev/oauth";
  * person reaches their hub by. cawco.dev/oauth/callback sends the browser
  * there, so site/src/oauth/handoff.ts names the same path; the site's build
  * stops if the two differ.
+ * @public Read by site/vite.config.ts from this source's text.
  */
 export const MCP_OAUTH_RETURN_PATH = "/oauth/mcp";
 
@@ -405,7 +406,7 @@ export interface AgentFrontMatter {
  * What a subagent may be called. Claude Code's own rule: the name is the token
  * a delegation asks for, and a `:` in it collides with the plugin namespace.
  */
-export const AGENT_NAME = /^[a-z][a-z0-9-]*$/u;
+const AGENT_NAME = /^[a-z][a-z0-9-]*$/u;
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\n]*(?:\n|$)/u;
 const QUOTED_SCALAR = /^(["'])([\s\S]*)\1$/u;
@@ -752,7 +753,7 @@ export interface DocumentFacts {
  * it sits in now; true when the scope names neither. A scope's areas expand
  * to their projects here, as it is read, never as it is stored.
  */
-export const inScopedProjects = (
+const inScopedProjects = (
   scope: Pick<MemoryScope, "areaIds" | "projectIds"> | undefined,
   projectId: string | null | undefined,
   areaId: string | null | undefined
@@ -1075,9 +1076,7 @@ const uriDecoded = (encoded: string): string | undefined => {
  * none for a key that names no place (a fleet row's). The place is after
  * the last `@`, so a row key holding one (an npm scope) stays whole.
  */
-export const placeOfKey = (
-  key: string
-): { key: string; path: string } | undefined => {
+const placeOfKey = (key: string): { key: string; path: string } | undefined => {
   const at = key.lastIndexOf("@");
   if (at <= 0) {
     return;
