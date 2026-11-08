@@ -12,7 +12,7 @@
  * (page.ts {@link faultsGoTo}); a page with none (a preview no artifact
  * holds) sends nothing.
  */
-import { PREVIEW_ERRORS_PATH } from "@cawco/core/frames";
+
 import { hubRequest } from "@cawco/core/hub-request";
 import {
   PAGE_FAULT_EVENT,
@@ -21,6 +21,7 @@ import {
   type PageFault,
   sameFault,
 } from "@cawco/core/page-faults";
+import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
 
 /** The first frame of a stack that names its place: V8's `at … (url:line:col)` or `at url:line:col`, WebKit's and Gecko's `…@url:line:col`. */
 const FRAME_PLACE = /(?:\(|@|at )((?:https?|blob):[^\s()]+):(\d+):(\d+)\)?/u;
