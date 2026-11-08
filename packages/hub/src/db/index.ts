@@ -128,12 +128,10 @@ import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { type DelegateTypesShape, makeDelegateTypes } from "../delegate-types";
-import type { SendHold } from "../delegation-actions";
 import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import { hubId } from "../hub-id";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
-import type { MoveState } from "../moves";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import { type AreaRow, type AreasDb, areasDb } from "./areas";
@@ -287,6 +285,7 @@ import { sealAtRest } from "./seal-at-rest";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
+import type { MoveState, SendHold } from "./stored-types";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import {
   summaryOf as linkSummaryOf,
