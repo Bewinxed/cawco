@@ -9,7 +9,7 @@ import type {
   FleetReportSection,
   FleetSyncReport,
   PlacedSection,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
 import type { FleetPart } from "./fleet-parts";
 
 /** What each part reports into: the fleet's own rows' sections, its placed copies', and the memory's state. */

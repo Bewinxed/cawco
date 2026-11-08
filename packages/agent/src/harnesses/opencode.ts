@@ -33,47 +33,45 @@ import {
 } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { providersOpenedBy } from "@cawco/core/accounts";
+import type { RestartHold } from "@cawco/core/binary-updates";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { canonicalJson } from "@cawco/core/canonical-json";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { HARNESS_TOOLS } from "@cawco/core/delegate-types";
+import { detach } from "@cawco/core/detach";
 import type {
   FleetItemState,
   FleetMcpConfig,
   FleetMcpServer,
   FleetSyncReport,
+  PlacedFleetConfig,
+} from "@cawco/core/fleet";
+import { mcpFleetState } from "@cawco/core/fleet";
+import type {
   HarnessCapabilities,
   HarnessReport,
-  ModelInfo,
   NeutralMessage,
   NeutralSessionInfo,
-  PlacedFleetConfig,
   SessionMessage,
   SignInFault,
   SlashCommand,
-  SpawnPayload,
   StoredRun,
-  TranscriptWindow,
-  WindowAsk,
   WorkspaceRef,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
-  CAWCO_ENV,
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
   cleanStartRefusal,
-  contactWords,
-  HARNESS_TOOLS,
-  machineLabel,
-  mcpFleetState,
   offeredMode,
   opencodeSignInFaultWords,
-  providersOpenedBy,
-} from "@cawco/core";
-import type { RestartHold } from "@cawco/core/binary-updates";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { canonicalJson } from "@cawco/core/canonical-json";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/harness";
+import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import { syncSection } from "@cawco/core/loop-watch";
+import { machineLabel } from "@cawco/core/machine-names";
 import {
   credentialAccountIds,
   opencodeAccountHome,
@@ -84,6 +82,7 @@ import {
   workspaceSpillDir,
   xdgDataHome,
 } from "@cawco/core/paths";
+import type { SpawnPayload } from "@cawco/core/protocol";
 import { runCaptured } from "@cawco/core/run-captured";
 import { serverEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
@@ -91,7 +90,9 @@ import { isAlive, listedPid } from "@cawco/core/signal";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { ModelInfoSchema, SignInFaultSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
+import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
+import { contactWords } from "@cawco/core/words/contact";
 import type {
   CredentialCreateInput,
   SessionInfo,
@@ -1857,7 +1858,7 @@ class OpencodeHarness implements Harness {
   /** Its catalog is its servers' databases, read on the stores thread ({@link listSessions}). */
   readonly catalogFromServer = true as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
-  auth: import("@cawco/core").AuthState = "authenticated";
+  auth: import("@cawco/core/harness").AuthState = "authenticated";
 
   /** The machine's keepers as OpenCode's servers reach them. */
   readonly #keepers = new KeeperPool();
@@ -2078,7 +2079,7 @@ class OpencodeHarness implements Harness {
   readonly #sessionOwners = new Map<string, ServerIdentity>();
   readonly #pendingSessionAddresses = new Map<
     string,
-    import("@cawco/core").SessionAddress
+    import("@cawco/core/protocol").SessionAddress
   >();
   readonly #migrations = new Map<string, Promise<void>>();
   readonly #pendingRecoveries = new Map<
@@ -5193,7 +5194,7 @@ class OpencodeHarness implements Harness {
       .map(([instanceId]) => instanceId);
   }
 
-  sessionAddresses(): import("@cawco/core").SessionAddress[] {
+  sessionAddresses(): import("@cawco/core/protocol").SessionAddress[] {
     const addresses = new Map(this.#pendingSessionAddresses);
     for (const [instanceId, session] of this.#sessions) {
       if (session.sessionId) {

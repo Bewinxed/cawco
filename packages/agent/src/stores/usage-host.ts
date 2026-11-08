@@ -4,7 +4,7 @@
  * transcript and of OpenCode's databases, and its folding, never on the
  * agent's loop, which asks for each scan's buckets (stores/client.ts).
  */
-import type { UsageBucket } from "@cawco/core";
+import type { UsageBucket } from "@cawco/core/usage/types";
 import { UsageScanner } from "../usage/scanner";
 
 let scanner: UsageScanner | undefined;

@@ -82,12 +82,9 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  CAWCO_ENV,
-  CODE_MODE_TOOL,
-  HOOK_EVENTS_ON,
-  HOOK_TOOL_NAMES,
-} from "@cawco/core";
+import { CODE_MODE_TOOL } from "@cawco/core/ask-tools";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { HOOK_EVENTS_ON, HOOK_TOOL_NAMES } from "@cawco/core/hooks";
 import {
   fleetHarnessSetFile,
   fleetMcpSetFile,

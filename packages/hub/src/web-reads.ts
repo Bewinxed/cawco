@@ -22,7 +22,11 @@
  *   tools' names and URL arguments, as above.
  */
 
-import { SHELL_TOOLS, WEB_FETCH_TOOLS, WEB_SEARCH_TOOLS } from "@cawco/core";
+import {
+  SHELL_TOOLS,
+  WEB_FETCH_TOOLS,
+  WEB_SEARCH_TOOLS,
+} from "@cawco/core/delegate-types";
 
 /** An MCP tool, by its server or its name, that reaches pages. */
 const WEB_NAME =
