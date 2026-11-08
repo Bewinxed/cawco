@@ -21,7 +21,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
-import { cssOfNode } from "../../../packages/hub/src/design-tokens";
+import { cssOfNode } from "../../../packages/design-tokens/src/design-tokens";
 import { NEEDS_YOU, type Shot, SLEEPING } from "./tab-icon-shots";
 import { type openTile, TAB_ICON } from "./tab-icon-tile";
 
