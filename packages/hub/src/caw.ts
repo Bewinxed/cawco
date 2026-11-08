@@ -49,7 +49,6 @@ import {
   BOARD_ONLY_DENIED_TOOLS,
   CURATOR_DENIED_TOOLS,
 } from "@cawco/core/delegate-types";
-import type { NeutralOrigin, WorkspaceRef } from "@cawco/core/harness";
 import {
   ACT_ORIGIN,
   type ARTIFACT_ORIGIN,
@@ -76,12 +75,14 @@ import type {
 } from "@cawco/core/protocol";
 import { projectLink, taskLink } from "@cawco/core/references";
 import type { RelayProvider } from "@cawco/core/relays";
+import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { VIEW_TOOLS } from "@cawco/core/views";
 import { areaWords } from "@cawco/core/words/areas";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
 import { conversationWords } from "@cawco/core/words/project-conversation";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
