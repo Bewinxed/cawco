@@ -62,20 +62,22 @@ import {
 import {
   type AnchorFound,
   changedAnchor,
-  newId,
   type PageAnchor,
-  type Pin,
   type PinnedElement,
+  wholePage,
+  wordsFollow,
+} from "@cawco/core/comments/anchor";
+import {
+  newId,
+  type Pin,
   type PinState,
   pinUnsent,
   placeOf,
   placePin,
   readPins,
   goneOf as tombstonesOf,
-  wholePage,
-  wordsFollow,
   writePin,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import {
