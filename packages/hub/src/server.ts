@@ -805,13 +805,11 @@ import type {
   DbShape,
   InstanceKind,
   MachineLineKind,
-  PlaceRow,
-  ProjectRow,
   PublicInstanceRow,
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
-import { checkoutOf, listedAt } from "./db";
+import { listedAt } from "./db";
 import type { AccountLeave, LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
@@ -820,6 +818,8 @@ import type { SourceNote } from "./db/fleet-catalog";
 import { hashHookMaterial, MEMORY_ID } from "./db/fleet-catalog";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
+import type { PlaceRow, ProjectRow } from "./db/projects";
+import { checkoutOf } from "./db/projects";
 import type { PriorConversation, TrashKind } from "./db/schema";
 import type { SentMessageRow } from "./db/sends";
 import { TURN_UNRECORDED } from "./db/sends";
