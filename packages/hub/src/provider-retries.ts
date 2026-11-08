@@ -19,7 +19,8 @@
  * controller's, whose harness ends the turn on it (server.ts).
  */
 import { workWords } from "@cawco/core/words/work";
-import type { DbShape, WorkItemRow } from "./db";
+import type { DbShape } from "./db";
+import type { WorkItemRow } from "./db/project-work";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { isLive } from "./work-items";
 
