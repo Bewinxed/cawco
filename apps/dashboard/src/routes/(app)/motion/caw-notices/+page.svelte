@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Account, AccountHue } from "@cawco/core/accounts";
+  import type { Account } from "@cawco/core/accounts";
+  import type { AccountHue } from "@cawco/core/accounts/kinds";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
   import { machineLabel } from "@cawco/core/machine-names";
   import {
