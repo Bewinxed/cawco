@@ -19,8 +19,9 @@
  * closing answer and a session that ended with its ask unanswered are
  * notices, never needs: a notice never outranks an ask.
  */
+
+import type { ArtifactKind } from "./artifact-kinds";
 import type { HarnessKind } from "./harness/kinds";
-import type { ArtifactKind } from "./index";
 import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
 import { artifactWords } from "./words/artifacts";
@@ -37,13 +38,6 @@ export type ArtifactReason =
    * number. It stands an artifact's row by itself.
    */
   | { count: number; kind: "answer"; pin: number };
-
-/** The reasons' order, strongest first: what the row line leads with. */
-export const ARTIFACT_REASONS = [
-  "unopened",
-  "answers",
-  "answer",
-] as const satisfies readonly ArtifactReason["kind"][];
 
 /** Where the panel opens an artifact: its first pending stop. */
 export type ArtifactStop = { card: string } | { pin: number } | { top: true };
@@ -230,7 +224,7 @@ export const artifactStopOf = (value: string | null): ArtifactPlace => {
 };
 
 /** One reason in the row's words; `alone`, the only one, an answer says on which pin. */
-export const reasonWords = (reason: ArtifactReason, alone = false): string => {
+const reasonWords = (reason: ArtifactReason, alone = false): string => {
   switch (reason.kind) {
     case "unopened":
       return artifactWords.notOpened;

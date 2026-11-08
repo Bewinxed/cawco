@@ -14,9 +14,13 @@
  *   piped, from the owner's terminal to the hub; refused inside a session,
  *   whose transcript a secret must never reach. Nothing prints it back.
  */
-import { CAWCO_ENV, type RelayView, readEnv } from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import { RELAY_PROVIDERS, type RelayProvider } from "@cawco/core/relays";
+import {
+  RELAY_PROVIDERS,
+  type RelayProvider,
+  type RelayView,
+} from "@cawco/core/relays";
 import { RelayViewSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";

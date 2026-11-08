@@ -7,8 +7,9 @@
  * again on each `artifact.needs` frame, which the hub sends whenever an
  * answer, a take or a new ask changes what needs him.
  */
+
+import type { ArtifactKind } from "./artifact-kinds";
 import type { ArtifactStop } from "./artifact-needs";
-import type { ArtifactKind } from "./index";
 
 /** What a question is: a decision card, a canvas or preview to judge, a pin the agent's reply asked on. */
 export type SessionQuestionKind = "card" | "judge" | "pin";

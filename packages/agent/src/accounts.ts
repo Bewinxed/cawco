@@ -18,13 +18,11 @@ import {
   type AccountKind,
   type AccountProbe,
   type AccountReport,
-  type AuthState,
-  configurePage,
   identityOf,
-  type MachineHarnessReport,
-  type ModelInfo,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import type { AuthState, MachineHarnessReport } from "@cawco/core/harness";
+import type { ModelInfo } from "@cawco/core/harness/kinds";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -39,6 +37,7 @@ import {
 } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
+import { configurePage } from "@cawco/core/words/configure";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";

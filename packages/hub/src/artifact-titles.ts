@@ -7,7 +7,7 @@
  * spelled as words. It runs once, as the hub starts (`data_migrations`):
  * no surface ever reads an empty title, and nothing falls back at runtime.
  */
-import { ARTIFACT_TITLE_LIMIT } from "@cawco/core";
+import { ARTIFACT_TITLE_LIMIT } from "@cawco/core/protocol";
 import type { ArtifactRow } from "./db/artifacts";
 import { readKept } from "./decision-program";
 

@@ -92,7 +92,7 @@ import {
   wroteLine,
 } from "../../../packages/core/src/comments";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
+import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/relaunch";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
