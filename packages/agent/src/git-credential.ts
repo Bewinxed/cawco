@@ -27,12 +27,9 @@ import { dirname, join } from "node:path";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { cawcoDataDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { writeStateFile } from "@cawco/core/state-file";
 import { cawcoCommand } from "./cawco-command";
-
-/** One argument as sh reads it back unchanged. */
-const shellWord = (word: string): string =>
-  `'${word.replaceAll("'", "'\\''")}'`;
 
 /** The hub's HTTP origin, from the socket address this agent is connected on. */
 const hubOrigin = (): string | undefined => {
@@ -149,7 +146,7 @@ export const useHubCredentialHelper = (repo: string): void => {
     return;
   }
   const remote = `${origin}/git/`;
-  const helper = `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`;
+  const helper = `!${cawcoCommand("git-credential").map(shellQuote).join(" ")}`;
   const key = `credential.${origin}.helper`;
   const said = (...args: string[]) => {
     const read = config(...args);
@@ -198,7 +195,7 @@ export const sessionGitEnv = (
       [`credential.${origin}.helper`, ""],
       [
         `credential.${origin}.helper`,
-        `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`,
+        `!${cawcoCommand("git-credential").map(shellQuote).join(" ")}`,
       ],
       [`lfs.${origin}/git/.locksverify`, "false"],
     ]
