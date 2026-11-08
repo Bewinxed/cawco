@@ -74,10 +74,13 @@ import {
 } from "@cawco/core/asks";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
-import type { PermissionResult, UserAnswers } from "@cawco/core/harness";
 import { ASK_ORIGIN, type PermissionMode } from "@cawco/core/harness/kinds";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { settledQuestionResult } from "@cawco/core/question";
+import type {
+  PermissionResult,
+  UserAnswers,
+} from "@cawco/core/session-messages";
 import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
 import type { DbShape } from "./db";
