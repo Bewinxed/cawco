@@ -1,7 +1,7 @@
 /**
  * The machine's own bun: the one its person's shell runs. Every Bun CawCo
  * runs against a person's project or workspace is this one, never the
- * runtime a binary install embeds (boundary.ts `bunScriptRuntime`, which only
+ * runtime a binary install embeds (bun-runtime.ts `bunScriptRuntime`, which only
  * CawCo's own scripts run on).
  *
  * It is the first `bun` on the agent's `PATH`. That PATH is the installing
