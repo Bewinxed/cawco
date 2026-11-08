@@ -39,6 +39,7 @@ import {
   type ToolSpec,
   type ToolStatus,
 } from "@cawco/core/tools";
+import { versionSaid } from "@cawco/core/version-said";
 import type { HubLifetimeShape } from "./lifetime";
 
 /**
@@ -51,14 +52,11 @@ const RELEASE_READ_MS = 30 * MINUTE_MS;
 /** How long one read of a release URL may take before it is let go. */
 const RELEASE_WAIT_MS = 20_000;
 
-/** The first `x.y.z` of a release URL's body is the release (core `ToolSpec.release`). */
-const VERSION = /\d+\.\d+\.\d+/u;
-
 /** What a release URL said when last read: the newest release, or why it said none. */
 export type ReleaseRead =
   { at: number; version: string } | { at: number; failed: string };
 
-/** Reads one release URL ({@link VERSION}), within {@link RELEASE_WAIT_MS}. */
+/** Reads one release URL, within {@link RELEASE_WAIT_MS}. */
 export const readRelease = async (
   url: string,
   options: { fetcher?: typeof fetch; signal?: AbortSignal } = {}
@@ -87,7 +85,7 @@ export const readRelease = async (
     };
   }
   const { status, body } = read.value;
-  const version = status === 200 ? VERSION.exec(body)?.[0] : undefined;
+  const version = status === 200 ? versionSaid(body) : undefined;
   if (!version) {
     return {
       at: Date.now(),
