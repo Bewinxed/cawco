@@ -31,7 +31,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Gone } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./boundary";
+import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./bun-runtime";
 
 /** This machine's login keychain, under HOME: the one `unlockKeychain` unlocks. */
 export const loginKeychainPath = (): string =>

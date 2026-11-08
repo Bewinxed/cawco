@@ -106,6 +106,7 @@ import {
   readPlaceSet,
 } from "./fleet-place-set";
 import { expandHome } from "./fs";
+import { readJson, writeJson } from "./json-file";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
 import { markdownUnder } from "./placed-memory";
 import { noRepositoryAt } from "./stand-ins";
@@ -327,35 +328,6 @@ const scriptPathOf = (record: ManagedHook): string | undefined =>
   record.command.startsWith(USER_LAYER_HOOKS_DIR)
     ? record.command
     : undefined);
-
-export const readJson = async <T>(path: string): Promise<T | undefined> => {
-  const file = Bun.file(path);
-  if (!(await file.exists())) {
-    return undefined;
-  }
-  try {
-    return (await file.json()) as T;
-  } catch {
-    return undefined;
-  }
-};
-
-/**
- * Written whole and moved into place, whatever the content is
- * ({@link writeStateFile}): never a half-written `path` that something else
- * reads mid-write. A hook's script is spawned with its execute bit, so a
- * half-written one is worse than a half-written JSON blob: it is a shell
- * prefix somebody's session is about to run.
- */
-export const writeAtomic = (
-  path: string,
-  content: string | Buffer
-): Promise<void> => writeStateFile(path, content);
-
-/** `~/.claude.json` is read by every Claude Code on this machine, and a
- * half-written one is a machine with no MCP servers and no history. */
-const writeJson = (path: string, value: unknown): Promise<void> =>
-  writeAtomic(path, JSON.stringify(value, null, 2));
 
 /**
  * What cawco put here last time; unreadable is the same as never written,
@@ -2385,7 +2357,7 @@ export const syncMemory = async (
   }
 
   try {
-    await writeAtomic(path, desired.content);
+    await writeStateFile(path, desired.content);
     report.memory = { state: "applied" };
     return desired.hash;
   } catch (error) {
@@ -2545,7 +2517,7 @@ const syncMemoryDocs = async (
     }
 
     try {
-      await writeAtomic(join(MEMORIES_DIR, path), doc.content);
+      await writeStateFile(join(MEMORIES_DIR, path), doc.content);
       written[path] = doc.hash;
       report[path] = { state: "applied" };
     } catch (error) {
@@ -2635,7 +2607,7 @@ const placeMemoryDoc = async (
     return recorded;
   }
   try {
-    await writeAtomic(file, doc.content);
+    await writeStateFile(file, doc.content);
     await excludeFromCheckout(placedMemoryDir(cwd));
     report[key] = { state: "applied" };
     return doc.hash;
@@ -2943,7 +2915,7 @@ const settleHooks = async (
   // The guard every fleet hook Claude Code runs goes through
   // (fleet-hook-guard.ts), written before anything names it.
   if ((await fileHashAt(hookGuardFile())) !== hashText(HOOK_GUARD_SOURCE)) {
-    await writeAtomic(hookGuardFile(), HOOK_GUARD_SOURCE);
+    await writeStateFile(hookGuardFile(), HOOK_GUARD_SOURCE);
   }
   const kept: Record<string, ManagedHook> = {};
   const keep = (id: string): void => {
@@ -3037,7 +3009,7 @@ const settleHooks = async (
     hashes.set(hook.id, scriptHash);
     if (plan === "write") {
       try {
-        await writeAtomic(path, hook.script);
+        await writeStateFile(path, hook.script);
         // Claude Code spawns it directly, so it has to carry its own execute bit.
         await chmod(path, 0o755);
       } catch (error) {
