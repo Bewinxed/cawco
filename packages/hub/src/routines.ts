@@ -67,33 +67,31 @@
  *   each checked as a new routine's is. A delete takes the event routes
  *   that fed it with it (`event_routes` cascades), and names each.
  */
+import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
+import { ANY_TYPE } from "@cawco/core/delegate-types";
+import type { NeutralMessage, NeutralOrigin } from "@cawco/core/harness";
+import {
+  type OfferedMode,
+  SESSION_CHOSEN_MODES,
+} from "@cawco/core/harness/kinds";
+import type { LandsMode } from "@cawco/core/injected";
+import { LANDS_MODES } from "@cawco/core/injected";
 import type {
-  DelegateType,
-  InstanceRow,
-  LandsMode,
-  NeutralMessage,
-  NeutralOrigin,
   ProjectNoteEvent,
   RoutineMadeEvent,
   RoutineSchedule,
-  SessionRole,
-} from "@cawco/core";
-
+} from "@cawco/core/project-conversation";
+import type { InstanceRow } from "@cawco/core/protocol";
+import { routineLink, sessionLink } from "@cawco/core/references";
 import {
-  ANY_TYPE,
-  LANDS_MODES,
   MADE_ROUTINE_TARGETS,
-  type OfferedMode,
   type RoutineOutcome,
   type RoutineRunView,
   type RoutineTarget,
-  routineLink,
-  routineToolWords,
-  SESSION_CHOSEN_MODES,
-  sessionLink,
-} from "@cawco/core";
+} from "@cawco/core/routine-kinds";
 import { standalone } from "@cawco/core/runtime";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
 import { Elysia, t } from "elysia";

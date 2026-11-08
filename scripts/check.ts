@@ -263,6 +263,37 @@ const subpathImport = (file: string, specifier: string): string | undefined => {
   }
 };
 
+/** The entry `exports` answers `sub` with, by its exact key or its longest-prefixed `*` pattern, as a resolver reads it. */
+const exportedAt = (
+  exports: Manifest["exports"],
+  sub: string
+): Entry | undefined => {
+  if (!exports) {
+    return;
+  }
+  const exact = exports[sub];
+  if (exact !== undefined) {
+    return exact;
+  }
+  const [pattern] = Object.keys(exports)
+    .filter((key) => {
+      const star = key.indexOf("*");
+      return (
+        star >= 0 &&
+        sub.startsWith(key.slice(0, star)) &&
+        sub.endsWith(key.slice(star + 1))
+      );
+    })
+    .sort((a, b) => b.indexOf("*") - a.indexOf("*"));
+  if (pattern === undefined) {
+    return;
+  }
+  const star = pattern.indexOf("*");
+  const matched = sub.slice(star, sub.length - (pattern.length - star - 1));
+  const entry = exports[pattern] as string;
+  return entry.replace("*", matched);
+};
+
 /** The repository path `specifier` in `file` names, when TypeScript reads it. */
 const targetOf = (file: string, specifier: string): string | undefined => {
   if (specifier.startsWith("#")) {
@@ -279,7 +310,7 @@ const targetOf = (file: string, specifier: string): string | undefined => {
     return;
   }
   const sub = named[2] ? `./${named[2]}` : ".";
-  const entry = pkg.exports?.[sub];
+  const entry = exportedAt(pkg.exports, sub);
   const path =
     typeof entry === "string"
       ? entry
@@ -568,6 +599,10 @@ const gated: Gated[] = [
     key: () => keyOf(["scripts/case-clash-check.ts"], files.join("\n")),
   },
   bun("scripts/css-scope-check.ts", DASH),
+  bun("scripts/browser-core-check.ts", [
+    "apps/dashboard/src/",
+    "packages/core/src/",
+  ]),
   bun("scripts/runtime-bundles-check.ts", [
     ...DASH,
     "packages/agent/src/",

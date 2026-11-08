@@ -88,7 +88,7 @@ import {
   PREVIEW_PASS_COOKIE,
   PREVIEW_PORT_PASS_COOKIE,
   type PreviewTicket,
-} from "@cawco/core";
+} from "@cawco/core/frames";
 import { DAY_MS } from "@cawco/core/time";
 import { z } from "zod";
 import type { PreviewPassesDb, PreviewPassRow } from "./db/preview-passes";

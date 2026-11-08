@@ -7,16 +7,14 @@
  * this very code.
  */
 import { hostname } from "node:os";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import {
-  type AgentRow,
   INSTALL_CODE_ENV,
   INSTALL_CODE_HEADER,
   INSTALL_LIST_LIMIT_MS,
-  INSTALL_STEP_PREFIX,
-  JOIN_WAIT_STEP,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { hubAt, hubRequest } from "@cawco/core/hub-request";
+} from "@cawco/core/install";
+import { INSTALL_STEP_PREFIX, JOIN_WAIT_STEP } from "@cawco/core/join";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineFetch,
@@ -24,6 +22,7 @@ import {
   readMachineKey,
   refusalSince,
 } from "@cawco/core/machine-key";
+import type { AgentRow } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 
 const JOIN_TIMEOUT_MS = INSTALL_LIST_LIMIT_MS;
