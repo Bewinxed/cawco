@@ -21,7 +21,8 @@ import type { CapPeriod, OnCap, ProjectCap } from "@cawco/core/areas";
 import type { ProjectCapFrame } from "@cawco/core/frames";
 import { capHolds } from "@cawco/core/project-conversation";
 import { Elysia, status, t } from "elysia";
-import type { DbShape, ProjectRow } from "./db";
+import type { DbShape } from "./db";
+import type { ProjectRow } from "./db/projects";
 
 /** The period `at` falls in, in the hub's zone: when it began and when the next one begins. */
 const periodOf = (
