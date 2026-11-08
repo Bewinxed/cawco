@@ -166,6 +166,7 @@ import {
 } from "./merge-project-pages";
 import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
+import { PRESENCE_ID, type PresenceDb, presenceDb } from "./presence";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type ProjectWorkDb, projectWorkDb } from "./project-work";
@@ -224,17 +225,12 @@ import {
   mcpToolListings,
   memoryBriefings,
   moves,
-  notificationCleared,
-  notificationSent,
   type OpenSubagent,
   openrouterConnection,
   type PriorConversation,
   parkedAsks,
   planChanges,
   plugins,
-  presenceClients,
-  presenceDevices,
-  presenceSettings,
   projectAccounts,
   projectLinks,
   projectNotes,
@@ -246,7 +242,6 @@ import {
   projectTaskFields,
   projectTaskLabels,
   projectTasks,
-  pushDevices,
   queuedTaskStarts,
   queuedWorkItemGlobs,
   queuedWorkItems,
@@ -432,14 +427,6 @@ export type BoardInstanceRow = PublicInstanceRow & {
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
 type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
-/** One device's last word on the person, as notifications.ts keeps it. */
-export type PresenceClientRow = typeof presenceClients.$inferSelect;
-/** The person's last away stretch: since when, when it ended (null while away), and who was given its recap. */
-export interface AwayStretch {
-  readonly awaySince: Date | null;
-  readonly backAt: Date | null;
-  readonly recapped: readonly string[];
-}
 /**
  * A project as every client reads it: its row, whose `machineId` and `cwd`
  * are its primary place, and every place it has, the primary first.
@@ -475,12 +462,6 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect & {
    */
   links: TaskLinkSummary[];
 };
-/** A device the iOS app registered for pushes, by its Cawrier pairing. */
-/** A device the hub can push to: its sealed pairing secret and key opened. */
-export type PushDeviceRow = Omit<
-  typeof pushDevices.$inferSelect,
-  "secret" | "key"
-> & { key: string; secret: string };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 type SessionPlanRow = typeof sessionPlans.$inferSelect;
 export type PlanChangeRow = typeof planChanges.$inferSelect;
@@ -1548,25 +1529,6 @@ interface HubStore {
   readonly noteTurnEnded: (id: string, at: Date, silent: boolean) => void;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
-  /** What a device was shown and what has been cleared, by collapse id (notifications.ts). */
-  readonly notifications: {
-    /** Shown under this collapse id: outstanding again, and no longer cleared. */
-    readonly sent: (collapseId: string, at: Date) => void;
-    /** When each of these ids was last sent, for those still outstanding. */
-    readonly sentAt: (collapseIds: string[]) => Map<string, Date>;
-    /**
-     * Clears the ids that were sent and are still outstanding; `any` clears
-     * an id however it was shown (a device's own dismiss). Answers the ids
-     * this newly cleared, in the order given.
-     */
-    readonly clear: (collapseIds: string[], at: Date, any: boolean) => string[];
-    /** Every id cleared at or after `since`, newest first. */
-    readonly clearedSince: (
-      since: Date
-    ) => { collapseId: string; clearedAt: Date }[];
-    /** Forgets sends and clears older than `before`. */
-    readonly prune: (before: Date) => void;
-  };
   /** Files an offer; false when the session was already offered one. */
   readonly offerProject: (offer: {
     instanceId: string;
@@ -1750,25 +1712,6 @@ interface HubStore {
    * those that may hold news for the person on their return.
    */
   readonly plansWithAwayNotes: () => string[];
-  /** The person's Appear away, the machines that count toward their presence, each device's last word and the last away stretch (notifications.ts). */
-  readonly presence: {
-    /** Appear away: on since when, or null while off. */
-    readonly appearAway: () => Date | null;
-    readonly setAppearAway: (on: boolean, at: Date) => void;
-    /** The machines the person opted in. */
-    readonly counted: () => Set<string>;
-    readonly setCounts: (machineId: string, counts: boolean) => void;
-    /** Every device's last word, as the hub's restart reads it back. */
-    readonly clients: () => PresenceClientRow[];
-    readonly keepClient: (row: PresenceClientRow) => void;
-    readonly dropClient: (clientId: string) => void;
-    /** The person's away clock, ms; null while they keep the default. */
-    readonly awayAfter: () => number | null;
-    readonly setAwayAfter: (ms: number) => void;
-    /** The person's last away stretch. */
-    readonly stretch: () => AwayStretch;
-    readonly setStretch: (stretch: AwayStretch) => void;
-  };
   /** Host mode's preview passes, one per browser (preview-access.ts). */
   readonly previewPasses: PreviewPassesDb;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
@@ -1869,24 +1812,6 @@ interface HubStore {
   readonly projectWorkItems: (projectId: string) => WorkItemRow[];
   /** Drops the fleet MCP relay sessions unused since `before`; answers how many. */
   readonly pruneMcpSessions: (before: Date) => number;
-  /** The iOS app's pushes (push.ts): the devices that registered, by their Cawrier pairing. */
-  readonly push: {
-    readonly devices: () => PushDeviceRow[];
-    /** Registers or refreshes a device; a refresh keeps its quiet setting unless one is given. */
-    readonly putDevice: (
-      device: Pick<
-        PushDeviceRow,
-        "key" | "name" | "pairingId" | "platform" | "secret"
-      > & {
-        quiet?: boolean;
-      }
-    ) => PushDeviceRow;
-    /** False when no device has that pairing. */
-    readonly dropDevice: (pairingId: string) => boolean;
-    readonly setQuiet: (pairingId: string, quiet: boolean) => boolean;
-    /** What Cawrier said to the last push for a device: taken (no error) or refused with a reason. */
-    readonly noteResult: (pairingId: string, error: string | null) => void;
-  };
   /** The person saw the session's away notes as `notes` read (`session_plans.away_seen`). A session with no plan row has none to see. */
   readonly putAwaySeen: (instanceId: string, notes: string) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
@@ -2746,7 +2671,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = SessionIdentityDb &
+export type DbShape = PresenceDb &
+  SessionIdentityDb &
   Pick<Revocations, "revokedAmong" | "onCredentialsRevoked"> &
   ArtifactListenersDb &
   HubStore;
@@ -3150,8 +3076,6 @@ const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
 /** The one row of {@link imageSettings}. */
 const IMAGE_SETTINGS_ID = "images";
-/** The one {@link presenceSettings} row's key, and the one {@link findSettings} row's. */
-const PRESENCE_ID = "person";
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -4780,6 +4704,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...presenceDb(core),
     ...sessionIdentityDb(core),
     ...core.artifactListeners,
     revokedAmong: core.revokedAmong,
@@ -10557,225 +10482,6 @@ const make = async (path: string): Promise<DbShape> => {
       db.delete(openrouterConnection)
         .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
         .run();
-    },
-    push: {
-      // A device whose pairing secret or key does not open is none until the
-      // app registers again, which it does on every launch.
-      devices: () =>
-        db
-          .select()
-          .from(pushDevices)
-          .orderBy(pushDevices.createdAt)
-          .all()
-          .flatMap(({ secret, key, ...device }) =>
-            secret && key ? [{ ...device, secret, key }] : []
-          ),
-      putDevice: ({ quiet, ...device }) => {
-        const now = new Date();
-        const row = db
-          .insert(pushDevices)
-          .values({
-            ...device,
-            quiet: quiet ?? false,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            target: pushDevices.pairingId,
-            set: {
-              ...device,
-              ...(quiet === undefined ? {} : { quiet }),
-              updatedAt: now,
-            },
-          })
-          .returning()
-          .get();
-        // The secret and key just written, as given: what the row seals.
-        return { ...row, secret: device.secret, key: device.key };
-      },
-      dropDevice: (pairingId) =>
-        db
-          .delete(pushDevices)
-          .where(eq(pushDevices.pairingId, pairingId))
-          .returning({ pairingId: pushDevices.pairingId })
-          .all().length > 0,
-      setQuiet: (pairingId, quiet) =>
-        db
-          .update(pushDevices)
-          .set({ quiet, updatedAt: new Date() })
-          .where(eq(pushDevices.pairingId, pairingId))
-          .returning({ pairingId: pushDevices.pairingId })
-          .all().length > 0,
-      noteResult: (pairingId, error) => {
-        db.update(pushDevices)
-          .set(
-            error === null
-              ? { lastSentAt: new Date(), lastError: null }
-              : { lastError: error }
-          )
-          .where(eq(pushDevices.pairingId, pairingId))
-          .run();
-      },
-    },
-    presence: {
-      appearAway: () => {
-        const row = db
-          .select()
-          .from(presenceSettings)
-          .where(eq(presenceSettings.id, PRESENCE_ID))
-          .get();
-        return row?.appearAway ? (row.appearAwayAt ?? new Date(0)) : null;
-      },
-      setAppearAway: (on, at) => {
-        const set = { appearAway: on, appearAwayAt: on ? at : null };
-        db.insert(presenceSettings)
-          .values({ id: PRESENCE_ID, ...set })
-          .onConflictDoUpdate({ target: presenceSettings.id, set })
-          .run();
-      },
-      counted: () =>
-        new Set(
-          db
-            .select({ machineId: presenceDevices.machineId })
-            .from(presenceDevices)
-            .where(eq(presenceDevices.counts, true))
-            .all()
-            .map((row) => row.machineId)
-        ),
-      setCounts: (machineId, counts) => {
-        db.insert(presenceDevices)
-          .values({ machineId, counts })
-          .onConflictDoUpdate({
-            target: presenceDevices.machineId,
-            set: { counts },
-          })
-          .run();
-      },
-      clients: () => db.select().from(presenceClients).all(),
-      keepClient: (row) => {
-        const { clientId, ...set } = row;
-        db.insert(presenceClients)
-          .values(row)
-          .onConflictDoUpdate({ target: presenceClients.clientId, set })
-          .run();
-      },
-      dropClient: (clientId) => {
-        db.delete(presenceClients)
-          .where(eq(presenceClients.clientId, clientId))
-          .run();
-      },
-      awayAfter: () =>
-        db
-          .select({ ms: presenceSettings.awayAfterMs })
-          .from(presenceSettings)
-          .where(eq(presenceSettings.id, PRESENCE_ID))
-          .get()?.ms ?? null,
-      setAwayAfter: (ms) => {
-        db.insert(presenceSettings)
-          .values({ id: PRESENCE_ID, appearAway: false, awayAfterMs: ms })
-          .onConflictDoUpdate({
-            target: presenceSettings.id,
-            set: { awayAfterMs: ms },
-          })
-          .run();
-      },
-      stretch: () => {
-        const row = db
-          .select()
-          .from(presenceSettings)
-          .where(eq(presenceSettings.id, PRESENCE_ID))
-          .get();
-        return {
-          awaySince: row?.awaySince ?? null,
-          backAt: row?.backAt ?? null,
-          recapped: row?.recapped ?? [],
-        };
-      },
-      setStretch: ({ awaySince, backAt, recapped }) => {
-        const set = { awaySince, backAt, recapped: [...recapped] };
-        db.insert(presenceSettings)
-          .values({ id: PRESENCE_ID, appearAway: false, ...set })
-          .onConflictDoUpdate({ target: presenceSettings.id, set })
-          .run();
-      },
-    },
-    notifications: {
-      sent: (collapseId, at) => {
-        db.transaction((tx) => {
-          tx.delete(notificationCleared)
-            .where(eq(notificationCleared.collapseId, collapseId))
-            .run();
-          tx.insert(notificationSent)
-            .values({ collapseId, sentAt: at })
-            .onConflictDoUpdate({
-              target: notificationSent.collapseId,
-              set: { sentAt: at },
-            })
-            .run();
-        });
-      },
-      sentAt: (collapseIds) =>
-        new Map(
-          collapseIds.length === 0
-            ? []
-            : db
-                .select()
-                .from(notificationSent)
-                .where(inArray(notificationSent.collapseId, collapseIds))
-                .all()
-                .map((row) => [row.collapseId, row.sentAt])
-        ),
-      clear: (collapseIds, at, any) =>
-        db.transaction((tx) => {
-          const ids = [...new Set(collapseIds)];
-          if (ids.length === 0) {
-            return [];
-          }
-          const outstanding = new Set(
-            tx
-              .delete(notificationSent)
-              .where(inArray(notificationSent.collapseId, ids))
-              .returning({ collapseId: notificationSent.collapseId })
-              .all()
-              .map((row) => row.collapseId)
-          );
-          const already = new Set(
-            tx
-              .select({ collapseId: notificationCleared.collapseId })
-              .from(notificationCleared)
-              .where(inArray(notificationCleared.collapseId, ids))
-              .all()
-              .map((row) => row.collapseId)
-          );
-          const newly = ids.filter(
-            (id) => outstanding.has(id) || (any && !already.has(id))
-          );
-          for (const collapseId of newly) {
-            tx.insert(notificationCleared)
-              .values({ collapseId, clearedAt: at })
-              .onConflictDoUpdate({
-                target: notificationCleared.collapseId,
-                set: { clearedAt: at },
-              })
-              .run();
-          }
-          return newly;
-        }),
-      clearedSince: (since) =>
-        db
-          .select()
-          .from(notificationCleared)
-          .where(gte(notificationCleared.clearedAt, since))
-          .orderBy(desc(notificationCleared.clearedAt))
-          .all(),
-      prune: (before) => {
-        db.delete(notificationSent)
-          .where(lt(notificationSent.sentAt, before))
-          .run();
-        db.delete(notificationCleared)
-          .where(lt(notificationCleared.clearedAt, before))
-          .run();
-      },
     },
     listRules: () =>
       db.select().from(rules).orderBy(desc(rules.createdAt)).all().map(ruleOf),
