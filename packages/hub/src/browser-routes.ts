@@ -45,7 +45,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   RELAY_HEADER,
-} from "@cawco/core/preview-proxy";
+} from "@cawco/core/preview/proxy";
 import { stunServer } from "@cawco/core/stream-relay";
 import { HOUR_MS } from "@cawco/core/time";
 import type { ServerWebSocket } from "bun";

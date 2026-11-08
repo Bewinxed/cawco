@@ -32,14 +32,14 @@ import {
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
 import { readFileSpot } from "@cawco/core/file-spot";
+import type { InkGroup } from "@cawco/core/ink";
+import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
+import type { PreviewElement } from "@cawco/core/preview/protocol";
 import {
   PAGE_TOUCHED_MESSAGE,
   PERSONS_INPUT,
   personsInput,
-} from "@cawco/core/frames";
-import type { InkGroup } from "@cawco/core/ink";
-import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
-import type { PreviewElement } from "@cawco/core/protocol";
+} from "@cawco/core/preview/routes";
 import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { interactionOf } from "@cawco/core/stage";
 import {

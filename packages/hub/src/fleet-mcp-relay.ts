@@ -1,9 +1,9 @@
 import { readWithin } from "@cawco/core/bounded";
-import { HOP_BY_HOP_HEADERS } from "@cawco/core/hop-headers";
 import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
+import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";

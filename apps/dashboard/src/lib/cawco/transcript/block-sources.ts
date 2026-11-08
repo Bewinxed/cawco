@@ -13,9 +13,9 @@
  *   still the thumbnail a pane last took of it.
  */
 
-import { projectPagePlace } from "@cawco/core/frames";
 import { hubRequest } from "@cawco/core/hub-request";
 import { blockFile } from "@cawco/core/inline-blocks";
+import { projectPagePlace } from "@cawco/core/preview/routes";
 import { theme } from "#lib/theme.svelte.js";
 import { thumbnailUrl } from "../artifact-api";
 import { artifactsOf, readArtifacts } from "../files/files.svelte";
