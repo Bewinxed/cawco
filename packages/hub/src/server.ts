@@ -147,7 +147,7 @@ import {
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
 import type { ChoiceEntry } from "@cawco/core/choices";
-import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { COMMENT_LIMITS } from "@cawco/core/comments/model";
 import { compressAnswer } from "@cawco/core/compress-answer";
 import {
   CONTROL_GH_ACCOUNTS,

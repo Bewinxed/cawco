@@ -53,14 +53,12 @@
  */
 import {
   type AnchorFound,
-  buryPin,
   changedAnchor,
-  newId,
   type PageAnchor,
   type PinnedElement,
-  readPins,
   wordsFollow,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/anchor";
+import { buryPin, newId, readPins } from "@cawco/core/comments/model";
 import type { DocMap } from "@cawco/core/doc-maps";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { boxOf } from "@cawco/core/shapes";
