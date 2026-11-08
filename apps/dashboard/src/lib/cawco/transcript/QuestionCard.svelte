@@ -1,11 +1,11 @@
 <script lang="ts">
   import { QUESTION_UNSHOWN } from "@cawco/core/ask-tools";
+  import { questionsOf } from "@cawco/core/question";
   import type {
     UserAnswers,
     UserQuestion,
     UserQuestionResult,
-  } from "@cawco/core/harness";
-  import { questionsOf } from "@cawco/core/question";
+  } from "@cawco/core/session-messages";
   import { untrack } from "svelte";
   import {
     CURVE,
