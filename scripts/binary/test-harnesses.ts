@@ -48,12 +48,11 @@ import {
   endProc,
   type SessiondClient,
 } from "../../packages/agent/src/sessiond-client";
-import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
+import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts/controls";
 import { CAWCO_ENV } from "../../packages/core/src/cawco-env";
 import {
   CAPABILITIES_NONE,
   type MachineHarnessReport,
-  MESSAGES_READ,
 } from "../../packages/core/src/harness";
 import {
   HARNESSES,
@@ -61,6 +60,7 @@ import {
 } from "../../packages/core/src/harness/kinds";
 import { claudeHome } from "../../packages/core/src/paths/claude";
 import { sessionEnvironment } from "../../packages/core/src/session-env";
+import { MESSAGES_READ } from "../../packages/core/src/session-messages";
 
 /** What a session is handed by the supervisor, and what the harness hands back for it. */
 type Context = Parameters<Harness["spawn"]>[1];
