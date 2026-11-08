@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./socket-root": "./src/socket-root.ts",
     "./harness/kinds": "./src/harness/kinds.ts",
     "./loop-watch": "./src/loop-watch.ts",
     "./loop-watch-shared": "./src/loop-watch-shared.ts",
