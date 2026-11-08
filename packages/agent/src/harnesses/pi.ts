@@ -15,10 +15,13 @@ import { withAccountReads } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
 import { toolGate } from "../tools";
 import { keeperCustody } from "./keeper-custody";
+import { neutralSubagentChange } from "./neutral-subagents";
 import { PI_SPEC, PiProfile } from "./pi-services";
 import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
 
 class PiHarness extends PiProfile implements Harness<"pi"> {
+  readonly subagentChange = neutralSubagentChange;
+
   /**
    * pi's bash saves the whole output of a command it cuts to its host's
    * `TMPDIR` ("Full output: <tmpdir>/pi-bash-<id>.log", output-accumulator.js
