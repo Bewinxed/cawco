@@ -36,16 +36,18 @@ import {
 } from "@cawco/core/choices";
 import {
   COMMENT_LIMITS,
-  goneProblem,
-  heldNoteProblem,
   isSendControl,
   type MarkPictures,
-  pinsProblem,
   SEND_CONTROLS,
   SEND_WRITES_MAX,
   type SendBody,
+} from "@cawco/core/comments/model";
+import {
+  goneProblem,
+  heldNoteProblem,
+  pinsProblem,
   seenProblem,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/validate";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
 import { inkProblem } from "@cawco/core/ink";
