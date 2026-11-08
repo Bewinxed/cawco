@@ -82,7 +82,7 @@ import { detach } from "@cawco/core/detach";
 import type { Stage, TaskSummary } from "@cawco/core/task-views";
 import { Elysia, status, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
-import type { TrackerCursor, TrackerSynced } from "./db/schema";
+import type { TrackerCursor, TrackerSynced } from "./db/stored-types";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type {
   TrackerAgreementRow,

@@ -24,9 +24,9 @@ import {
   ruleState,
   rules,
   skills,
-  type TrashedRows,
   type TrashKind,
 } from "./schema";
+import type { TrashedRows } from "./stored-types";
 
 /**
  * How long a deleted config item can be brought back whole: past the life
