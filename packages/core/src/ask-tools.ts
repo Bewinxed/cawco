@@ -17,10 +17,6 @@ export const WITHDRAW_PERMISSION = "withdrawPermission";
 /** How a withdrawn question's message begins; the card that drew it reads "withdrawn" from it. */
 export const QUESTION_UNSHOWN = "This question couldn't be shown";
 
-/** What an ask the hub could not show says to the session that asked it, with why. */
-export const unshownAskMessage = (question: boolean, why: string): string =>
-  `${question ? QUESTION_UNSHOWN : "This permission request couldn't be shown"} (${why}).`;
-
 /**
  * The tool that asks the reader rather than the machine. Its permission request
  * is the question, so it settles through {@link RESOLVE_PERMISSION} like any

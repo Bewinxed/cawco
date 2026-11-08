@@ -58,19 +58,20 @@
    * with its dot, and comes back when it is raised again.
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-  import { needLinkOf, reasonLine } from "@cawco/core/artifact-needs";
+  import { needLinkOf } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
-  import { causeLine } from "@cawco/core/install";
   import { questionsOf } from "@cawco/core/question";
   import type {
     TailnetHttps,
     TailnetHttpsTodo,
   } from "@cawco/core/tailnet-https";
+  import { reasonLine } from "@cawco/core/words/artifact-needs";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { askWords } from "@cawco/core/words/asks";
   import { configurePage } from "@cawco/core/words/configure";
   import { connectWords } from "@cawco/core/words/connect";
   import { contactWords } from "@cawco/core/words/contact";
+  import { causeLine } from "@cawco/core/words/install";
   import { mcpWords } from "@cawco/core/words/mcp";
   import { pairingWords } from "@cawco/core/words/pairing";
   import { presenceWords } from "@cawco/core/words/presence";
