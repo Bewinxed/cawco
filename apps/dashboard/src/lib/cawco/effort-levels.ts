@@ -11,7 +11,7 @@
  * advice. Effort is not only thinking depth — a lower level also buys fewer and
  * more consolidated tool calls, less preamble and terser confirmations.
  */
-import { EFFORT_LEVELS, type EffortLevel } from "@cawco/core/harness";
+import { EFFORT_LEVELS, type EffortLevel } from "@cawco/core/harness/kinds";
 
 export interface EffortLevelOption {
   /** `high` is what the API answers on when nothing asks for a level. */

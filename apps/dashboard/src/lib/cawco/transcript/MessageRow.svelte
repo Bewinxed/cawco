@@ -10,7 +10,7 @@
 
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
+  import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { tick, untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";

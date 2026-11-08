@@ -1,4 +1,4 @@
-import type { HarnessKind, ModelInfo } from "@cawco/core/harness";
+import type { HarnessKind, ModelInfo } from "@cawco/core/harness/kinds";
 import { type ModelListing, modelAdmitted } from "@cawco/core/model-names";
 
 /** One model a harness offers, on the machine whose report listed it. */

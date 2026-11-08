@@ -12,10 +12,8 @@
  * flight — is {@link TranscriptTail}, and is all that moves between frames.
  */
 import type {
-  HarnessKind,
   ModeAsk,
   NeutralStatus,
-  PermissionMode,
   SendRecord,
   SendRefusal,
   SendState,
@@ -23,6 +21,7 @@ import type {
   SlashCommand,
   UserQuestionResult,
 } from "./harness";
+import type { HarnessKind, PermissionMode } from "./harness/kinds";
 import type { ToolStatus } from "./tool-presentation";
 
 /** What a block is: the row kind a renderer draws it as. */
