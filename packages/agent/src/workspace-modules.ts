@@ -43,7 +43,7 @@
 import { lstat, mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core/harness";
-import { workspaceCacheDir } from "@cawco/core/paths";
+import { workspaceCacheDir } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { isPlace } from "@cawco/core/workspace-policy";
