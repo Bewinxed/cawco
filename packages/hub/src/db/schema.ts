@@ -17,15 +17,7 @@ import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
 import type { MemoryRole } from "@cawco/core/fleet";
 import type { FleetScope } from "@cawco/core/fleet-placement";
 import type { ConnectAccess } from "@cawco/core/frames";
-import type {
-  AuthState,
-  HarnessReport,
-  SendMode,
-  SendState,
-  WorkspaceCut,
-  WorkspaceHolding,
-  WorkspaceKind,
-} from "@cawco/core/harness";
+import type { HarnessReport } from "@cawco/core/harness";
 import type {
   EffortLevel,
   HarnessKind,
@@ -58,6 +50,11 @@ import type {
   RuleTiming,
   RuleWatch,
 } from "@cawco/core/rules";
+import type {
+  AuthState,
+  SendMode,
+  SendState,
+} from "@cawco/core/session-messages";
 import type {
   StarterGlyph,
   StarterOutcome,
@@ -119,6 +116,11 @@ import { HOUR_MS } from "@cawco/core/time";
 import type { ToolStatus } from "@cawco/core/tools";
 import type { LimitWindow, UsageHarness } from "@cawco/core/usage/types";
 import type { StagesTemplate } from "@cawco/core/views";
+import type {
+  WorkspaceCut,
+  WorkspaceHolding,
+  WorkspaceKind,
+} from "@cawco/core/workspace/controls";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
