@@ -9,6 +9,7 @@
 
 import type { HarnessKind, ModelInfo } from "@cawco/core/harness/kinds";
 import { isEffortLevel } from "@cawco/core/harness/kinds";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
@@ -127,7 +128,7 @@ function accountRows(): HarnessModel[] {
 const catalogRows = $derived.by(() =>
   reported().map((row) => {
     const window =
-      row.harness === "claude"
+      traitsOf(row.harness).contextWindow === "hub"
         ? store.claudeWindows[row.resolvedModel ?? row.value]
         : undefined;
     return window ? { ...row, contextWindow: window } : row;
@@ -153,7 +154,7 @@ function unread(harness: string, machineIds?: string[]): string | null {
     (machine) => !machineIds?.length || machineIds.includes(machine.machineId)
   );
   const said =
-    harness === "claude"
+    traitsOf(harness).modelCatalog === "account"
       ? claudeUnread(machines.map((machine) => machine.machineId))
       : machines.flatMap((machine) => {
           const why = machine.harnesses?.find(
@@ -169,7 +170,7 @@ function unread(harness: string, machineIds?: string[]): string | null {
   }
   // Only Claude's catalogs are read by the hub; another harness that says
   // nothing has said nothing yet.
-  return harness === "claude"
+  return traitsOf(harness).modelCatalog === "account"
     ? "The hub hasn't read the models of the Claude accounts signed in here yet. It tries again until it can."
     : null;
 }
