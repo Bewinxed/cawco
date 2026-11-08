@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { NeutralSessionInfo } from "@cawco/core/harness";
+  import type { NeutralSessionInfo } from "@cawco/core/session-messages";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * Right-click on a stored session, wherever one is listed. The row itself stays
