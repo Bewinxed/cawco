@@ -23,15 +23,16 @@
  * - `settled(machineId, path)` resolves once that place's step in flight,
  *   if any, has finished, whichever way: a move's plan inspects after it.
  */
-import {
-  CONTROL_PLACE_REPO,
-  type PlaceLeftOut,
-  type PlaceRepo,
-} from "@cawco/core/harness";
+
 import { machineCalled } from "@cawco/core/machine-names";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import { PlaceLfsRowSchema } from "@cawco/core/stored-shapes";
+import {
+  CONTROL_PLACE_REPO,
+  type PlaceLeftOut,
+  type PlaceRepo,
+} from "@cawco/core/workspace/controls";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { received } from "./stored-json";
