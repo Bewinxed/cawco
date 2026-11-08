@@ -1,4 +1,4 @@
-import type { Envelope, InstanceRow } from "@cawco/core";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 
 /**
  * `actor`'s call to `toolName` as an ask parked for the person: its

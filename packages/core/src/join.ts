@@ -49,25 +49,6 @@ export interface JoinInfo {
   sshPublicKey: string | null;
 }
 
-/** `POST /api/machines/ssh`. */
-export interface SshJoinRequest {
-  /**
-   * Unread: a machine added over SSH reaches the hub through the hub's own
-   * connection to it. Apps built before still send the address they picked.
-   */
-  hubUrl?: string;
-  /**
-   * The target's password, for a machine that does not trust the hub's key
-   * yet: this one connection signs in with it and adds the key to the
-   * machine's `~/.ssh/authorized_keys`, so every later one uses the key. The
-   * hub holds it only while it hands it to `ssh`, and never stores it.
-   */
-  password?: string;
-  port?: number;
-  /** `user@host`, or a `Host` from the hub user's `~/.ssh/config`. */
-  target: string;
-}
-
 /**
  * Why an SSH add failed. The wording is the dashboard's; the hub only says
  * which case it is, decided by what it measured (a TCP connect's errno, the
