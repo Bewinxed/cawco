@@ -5,18 +5,18 @@
  * bounded, answers that say only what the hub stored. Their handlers call
  * the artifact routes (delegation-actions.ts).
  */
-import { MADE_ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
-import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
-import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
-import { CHOICE_LIMITS } from "@cawco/core/choices";
-import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
   ARTIFACT_TITLE_LIMIT,
   ASK_LIMIT,
-} from "@cawco/core/protocol";
+  MADE_ARTIFACT_KINDS,
+} from "@cawco/core/artifact-kinds";
+import { PICTURE_LIMITS } from "@cawco/core/artifact-picture";
+import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
+import { CHOICE_LIMITS } from "@cawco/core/choices";
+import { COMMENT_LIMITS } from "@cawco/core/comments";
+import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
