@@ -1,9 +1,9 @@
 /** What the hub tells a session about the marks a person left on its artifact. */
 
 import { humanSize } from "../attachments";
-import { chainWords, type PinnedElement, wholePage } from "./anchor";
+import { chainWords, wroteLine } from "../words/comment-lines";
+import { type PinnedElement, wholePage } from "./anchor";
 import {
-  type ChangedItem,
   type CommentAttachment,
   type Pin,
   pinHeld,
@@ -43,10 +43,6 @@ export const pinsToTell = (pins: Iterable<Pin>): Pin[] =>
       (pin) =>
         pin.kind === "annotation" || pin.thread.length > 0 || pinKnown(pin)
     );
-
-/** A delivery's line for the person's note with the comments they held and sent together. */
-export const notedLine = (text: string): string =>
-  `- My note with these comments: ${JSON.stringify(text)}`;
 
 /** A section's head and what its pin stands on: the element by selector, source, page and text, or a canvas's element. */
 /**
@@ -146,14 +142,6 @@ const attachedLine = (
   }
   return `- I attached: ${attachment.name} (${size}, ${attachment.mediaType}), its "Attached file" line below`;
 };
-
-/** A delivery's line for what an update changed under a comment the agent didn't answer: its element, before and after. */
-export const askedAgainLine = (item: ChangedItem): string =>
-  `- Your update changed ${item.element ?? "it"}${item.before === undefined ? "" : ` from ${JSON.stringify(item.before)}`} to ${JSON.stringify(item.after ?? item.label)}${item.moved ? ", and moved it" : ""}.`;
-
-/** A delivery's line for the person's words in a pin's thread: what a probe reads them by. */
-export const wroteLine = (text: string): string =>
-  `- I wrote: ${JSON.stringify(text)}`;
 
 /** One pin's section: what it stands on, where, and what the session has not heard of its thread. */
 export function pinSection(

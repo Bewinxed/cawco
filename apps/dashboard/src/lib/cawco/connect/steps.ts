@@ -5,7 +5,6 @@
  * under (core install.ts `checkStep`). Read from the hub's install alone.
  */
 import {
-  CHECK_WORDS,
   checkStep,
   INSTALL_CHECKS,
   type Install,
@@ -13,8 +12,8 @@ import {
   type InstallStep,
   stepLimit,
   stepsOf,
-  stepWords,
 } from "@cawco/core/install";
+import { CHECK_WORDS, stepWords } from "@cawco/core/words/install";
 
 /** Where a step stands: its status glyph (DESIGN.md, Status displays). */
 export type MarkState = "done" | "current" | "failed" | "stopped" | "future";
