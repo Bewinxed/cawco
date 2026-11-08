@@ -41,7 +41,7 @@ import {
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths";
+import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";

@@ -97,7 +97,7 @@ state=$HOME/.cawco/workspaces/$id
 echo "workspace $id: $clone (rig pid $rig)"
 r() { (cd "$clone" && "$state/exec" "$@"); }
 connect() { r "/usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$1' 2>/dev/null"; }
-# The workspace's doors (paths.ts `workspaceDoorDir`), each connected to from inside.
+# The workspace's doors (paths/workspace.ts `workspaceDoorDir`), each connected to from inside.
 door_dir=/private/tmp/cawco-$(id -u)/$id
 doors_served() {
   local door rig_state=gone
