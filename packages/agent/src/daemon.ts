@@ -182,7 +182,6 @@ import {
   type RelayStartArgs,
 } from "@cawco/core/stream-relay";
 import { unhandled } from "@cawco/core/unhandled";
-import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { hostJavaHome, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { setSectionMarker } from "@cawco/jsonl-parser";
@@ -346,6 +345,7 @@ import { setStageCloneSink } from "./stage-clone";
 import type { RenderAsk } from "./stage-render";
 import { endToolSignins } from "./tool-signin";
 import { onNeedsAnswered, onToolsMoved, probeTools } from "./tools";
+import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
 import { UsageScans } from "./usage/scans";
 import {
   archiveWorkspace,
