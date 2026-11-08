@@ -12,7 +12,7 @@ import {
   type QueueSlot,
   queueWords,
   type WorkspaceRef,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   BACKGROUND_SHELL,
   HEAVY_SLOT_ENV,

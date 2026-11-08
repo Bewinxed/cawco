@@ -19,7 +19,7 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { CommandResult } from "@cawco/core";
+import type { CommandResult } from "@cawco/core/harness";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { DbShape } from "./db";
 import { projectRoot } from "./project-folder";

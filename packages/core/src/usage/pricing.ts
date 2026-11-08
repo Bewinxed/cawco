@@ -222,7 +222,7 @@ loadFromSnapshot(snapshot as PricingSnapshot);
  * Model ids a pricing lookup could not resolve. A miss prices at 0 and records
  * the id here; the API surfaces it. Never invent a fallback rate.
  */
-export const missingPricing = new Set<string>();
+const missingPricing = new Set<string>();
 
 /** A model id's provider and model: `provider/model`, or a bare Claude id. */
 const split = (id: string): { model: string; provider: string } => {
@@ -253,7 +253,7 @@ const inPeak = (at: number): boolean => {
  * What the provider's clock multiplies the model's listed rates by at `at`:
  * {@link PEAK}'s factor for a DeepSeek model in its peak hours, else 1.
  */
-export function clockFactor(id: string, at: number): number {
+function clockFactor(id: string, at: number): number {
   const { provider, model } = split(id);
   const peak =
     PEAK.providers.has(provider) &&

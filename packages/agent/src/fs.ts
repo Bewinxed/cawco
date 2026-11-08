@@ -7,9 +7,9 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import type { FsEntry, FsMedia, FsPayload } from "@cawco/core";
-import { MEDIA_LIMIT_BYTES } from "@cawco/core";
 import { claudeHome } from "@cawco/core/paths";
+import type { FsEntry, FsMedia, FsPayload } from "@cawco/core/protocol";
+import { MEDIA_LIMIT_BYTES } from "@cawco/core/protocol";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /**

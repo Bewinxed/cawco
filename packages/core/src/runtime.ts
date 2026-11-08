@@ -1,4 +1,4 @@
-/** Server-only runtime layout. Never import through the browser-facing core barrel. */
+/** Server-only runtime layout: only a server imports it. */
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
