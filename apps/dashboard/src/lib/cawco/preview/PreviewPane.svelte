@@ -7,7 +7,6 @@
     type Pin,
     type PreviewMode,
     pinHeld,
-    pinProblem,
     pinUnsent,
     previewMode,
     type RefusedReplies,
@@ -15,7 +14,8 @@
     type ThreadEntry,
     withKeptReplies,
     writeAgain,
-  } from "@cawco/core/comments";
+  } from "@cawco/core/comments/model";
+  import { pinProblem } from "@cawco/core/comments/validate";
   import { detach } from "@cawco/core/detach";
   import { hubRequest } from "@cawco/core/hub-request";
   import { machineLabel } from "@cawco/core/machine-names";
