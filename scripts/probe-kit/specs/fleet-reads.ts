@@ -58,7 +58,7 @@ import {
   projectClaudeRelative,
   TREE_STORE_DIR,
 } from "../../../packages/core/src/claude-dirs";
-import type { HarnessKind } from "../../../packages/core/src/harness";
+import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import {
