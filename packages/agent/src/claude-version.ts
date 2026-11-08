@@ -3,7 +3,7 @@ import { writeJsonAtomic } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type { FleetItemState } from "@cawco/core/fleet";
-import { claudeVersionPath } from "@cawco/core/paths";
+import { claudeVersionPath } from "@cawco/core/paths/cawco";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";

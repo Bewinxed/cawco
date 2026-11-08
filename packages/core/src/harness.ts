@@ -2781,7 +2781,7 @@ export const CONTROL_INPUTS_COPY = "inputsCopy";
  * Where a session's inputs land on its machine: a work item's workspace,
  * in its scratch dir (`$TMPDIR/inputs/`, a host-scope one's too); or a
  * session with no work item, by its id and the folder it works in, in its
- * own inputs folder (core paths.ts `sessionScratchDir`), or, working in a
+ * own inputs folder (core paths/workspace.ts `sessionScratchDir`), or, working in a
  * workspace's clone, which bounds it, that workspace's (agent inputs.ts
  * `inputsHome`).
  */
