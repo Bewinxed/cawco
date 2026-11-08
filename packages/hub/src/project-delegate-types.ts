@@ -40,20 +40,18 @@
  */
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { SettingSource } from "@cawco/core";
+import type { SettingSource } from "@cawco/core/areas";
 import {
   DELEGATE_TYPE_NAME,
   type DelegateType,
   delegateTypeProblem,
-  type FrontMatterLine,
-  frontMatterBlock,
-  LANDS_MODES,
-  type LandsMode,
   mayStartProblem,
   SESSION_ROLES,
   type SessionRole,
   type StartingSet,
-} from "@cawco/core";
+} from "@cawco/core/delegate-types";
+import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
+import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia } from "elysia";
 import type { DelegateTypesShape } from "./delegate-types";

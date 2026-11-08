@@ -15,7 +15,7 @@ import type { SessionStreamEvent } from "./stream";
  * spare, and the honest refusal ({@link StreamReset}) covers everything longer.
  * Bounded per session on purpose: the hub holds the fleet, not a transcript.
  */
-export const RING_SIZE = 512;
+const RING_SIZE = 512;
 
 /** One sequenced event in a ring: what was recorded, under its seq. */
 export interface RingEvent<F> {

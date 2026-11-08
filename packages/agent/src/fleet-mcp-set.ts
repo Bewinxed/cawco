@@ -15,7 +15,7 @@ import {
   type FleetItemState,
   type FleetMcpConfig,
   MCP_NEEDS_SIGN_IN,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
 import { fleetMcpSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { placeSetAt } from "./fleet-place-set";

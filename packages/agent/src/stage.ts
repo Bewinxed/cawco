@@ -55,15 +55,11 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import {
-  mcpGatewayPort,
-  type PreviewSource,
-  sheetWords,
-  type WorkspaceRef,
-} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
+import type { WorkspaceRef } from "@cawco/core/harness";
 import { stagesCarriedPath } from "@cawco/core/paths";
+import { mcpGatewayPort, type PreviewSource } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
@@ -103,6 +99,7 @@ import {
 import { readRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { StageErrorSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
+import { sheetWords } from "@cawco/core/words/sheet";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import {

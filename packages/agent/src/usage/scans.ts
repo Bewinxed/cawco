@@ -3,7 +3,7 @@
  * thread (stores/usage-host.ts, usage/scanner.ts): each scan asked there,
  * and what its store holds said in the memory line.
  */
-import type { UsageBucket } from "@cawco/core";
+import type { UsageBucket } from "@cawco/core/usage/types";
 import { gauge } from "../memory";
 import { storeWork } from "../stores/client";
 import type { UsageGauges } from "../stores/usage-host";

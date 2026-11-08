@@ -1,4 +1,5 @@
-import type { HarnessKind, SessionCommands, SessionOrigin } from "@cawco/core";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { SessionCommands, SessionOrigin } from "@cawco/core/protocol";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { and, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";

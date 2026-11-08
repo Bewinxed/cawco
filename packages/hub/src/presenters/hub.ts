@@ -3,7 +3,7 @@
  * build check found and each machine's install, what a design write did,
  * what a verdict recorded.
  */
-import type { UpdateReport } from "@cawco/core";
+import type { UpdateReport } from "@cawco/core/protocol";
 import type { CapabilityCallsReport } from "../capability-calls";
 import type { DesignWritten } from "../design-system";
 import { ago, count, lines, listed } from "./words";

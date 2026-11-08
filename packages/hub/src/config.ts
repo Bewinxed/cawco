@@ -1,13 +1,11 @@
 import { dirname, resolve } from "node:path";
+import { CAWCO_ENV, type CawcoEnvVar, readEnv } from "@cawco/core/cawco-env";
+import { hubDbPath } from "@cawco/core/paths";
 import {
-  CAWCO_ENV,
   CAWCO_HUB_PORT,
-  type CawcoEnvVar,
   localDashboardPort,
   mcpGatewayPort,
-  readEnv,
-} from "@cawco/core";
-import { hubDbPath } from "@cawco/core/paths";
+} from "@cawco/core/protocol";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 
 /** Reported by `GET /health`; keep in sync with package.json. */
