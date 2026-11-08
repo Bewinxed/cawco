@@ -46,7 +46,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
-} from "@cawco/core/preview-proxy";
+} from "@cawco/core/preview/proxy";
 import type {
   TailnetHttps,
   TailnetHttpsTodo,
