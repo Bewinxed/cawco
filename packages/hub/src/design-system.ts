@@ -62,6 +62,7 @@ import { machineCalled } from "@cawco/core/machine-names";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { askWords } from "@cawco/core/words/asks";
 import type { DbShape, WorkItemRow } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
@@ -69,7 +70,6 @@ import type { DesignProposalFile } from "./db/stored-types";
 import { type BuiltTokens, buildTokens } from "./design-tokens";
 import { tokensIn } from "./dtcg-resolver";
 import { boardTitle } from "./labels";
-import { quote } from "./landing";
 import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
@@ -743,9 +743,9 @@ const writeTemporary = async (
   for (let part = 0; part < count; part += 1) {
     const chunk = text.slice(part * CHUNK, (part + 1) * CHUNK);
     const head =
-      part === 0 ? `mkdir -p ${quote(posix.dirname(target))} && ` : "";
+      part === 0 ? `mkdir -p ${shellQuote(posix.dirname(target))} && ` : "";
     const result = await sh(
-      `${head}printf %s '${chunk}' | base64 -d ${part === 0 ? ">" : ">>"} ${quote(`${target}.cawco-${index}`)}`
+      `${head}printf %s '${chunk}' | base64 -d ${part === 0 ? ">" : ">>"} ${shellQuote(`${target}.cawco-${index}`)}`
     );
     if (result.exitCode !== 0) {
       throw failed(`${target} could not be written`, result);
@@ -796,7 +796,7 @@ const ownTest = (own: OwnLanding[]): string =>
     : own
         .map(
           ({ onto, sha }) =>
-            `{ git cat-file -e ${quote(`${sha}^{commit}`)} 2>/dev/null && git merge-base --is-ancestor "$add" ${quote(sha)} && ! git merge-base --is-ancestor "$add" ${quote(onto)}; }`
+            `{ git cat-file -e ${shellQuote(`${sha}^{commit}`)} 2>/dev/null && git merge-base --is-ancestor "$add" ${shellQuote(sha)} && ! git merge-base --is-ancestor "$add" ${shellQuote(onto)}; }`
         )
         .join(" || ");
 
@@ -819,7 +819,7 @@ const repositoryStore = (
     theirs: async () => {
       const manifest = `${DESIGN_DIR}/${MANIFEST}`;
       const result = await sh(
-        `${SAFE_GIT_SHELL}git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${manifest}`)} 2>/dev/null; then add=$(git log -1 --diff-filter=A --format=%H ${quote(base)} -- ${quote(manifest)}); if [ -n "$add" ] && { ${ownTest(own)}; }; then echo own; else echo yes; fi; else echo no; fi`
+        `${SAFE_GIT_SHELL}git rev-parse --verify -q ${shellQuote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${shellQuote(`${base}:${manifest}`)} 2>/dev/null; then add=$(git log -1 --diff-filter=A --format=%H ${shellQuote(base)} -- ${shellQuote(manifest)}); if [ -n "$add" ] && { ${ownTest(own)}; }; then echo own; else echo yes; fi; else echo no; fi`
       );
       if (result.exitCode !== 0) {
         throw failed("design/'s history could not be read", result);
@@ -828,7 +828,7 @@ const repositoryStore = (
     },
     commit: async (message) => {
       const result = await sh(
-        `${SAFE_GIT_SHELL}git add -A -- ${DESIGN_DIR} && { git diff --cached --quiet -- ${DESIGN_DIR} || git commit -q -m ${quote(message)} -- ${DESIGN_DIR}; } && git rev-parse HEAD`
+        `${SAFE_GIT_SHELL}git add -A -- ${DESIGN_DIR} && { git diff --cached --quiet -- ${DESIGN_DIR} || git commit -q -m ${shellQuote(message)} -- ${DESIGN_DIR}; } && git rev-parse HEAD`
       );
       if (result.exitCode !== 0) {
         throw failed("design/ could not be committed", result);
@@ -841,7 +841,7 @@ const repositoryStore = (
       const found = new Map<string, Uint8Array | null>();
       for (const path of paths) {
         const result = await sh(
-          `p=${quote(`${DESIGN_DIR}/${path}`)}; if [ -f "$p" ]; then echo F; base64 < "$p" | tr -d '\\n'; fi`
+          `p=${shellQuote(`${DESIGN_DIR}/${path}`)}; if [ -f "$p" ]; then echo F; base64 < "$p" | tr -d '\\n'; fi`
         );
         if (result.exitCode !== 0) {
           throw failed("design/ could not be read", result);
@@ -864,7 +864,7 @@ const repositoryStore = (
         );
       }
       const result = await sh(
-        `f=${quote(path)}; [ -f "$f" ] || { echo "from $f: there is no such file in ${at.root}" >&2; exit 2; }; n=$(wc -c < "$f"); [ "$n" -le ${FOLDER_FILE_LIMIT} ] || { echo "from $f: it is $n bytes, past the ${FOLDER_FILE_LIMIT} one design file may weigh" >&2; exit 2; }; base64 < "$f" | tr -d '\\n'`
+        `f=${shellQuote(path)}; [ -f "$f" ] || { echo "from $f: there is no such file in ${at.root}" >&2; exit 2; }; n=$(wc -c < "$f"); [ "$n" -le ${FOLDER_FILE_LIMIT} ] || { echo "from $f: it is $n bytes, past the ${FOLDER_FILE_LIMIT} one design file may weigh" >&2; exit 2; }; base64 < "$f" | tr -d '\\n'`
       );
       if (result.exitCode !== 0) {
         throw failed("it could not be read", result);
@@ -880,7 +880,7 @@ const repositoryStore = (
         files
           .map(
             (file, index) =>
-              `mv -f ${quote(`${DESIGN_DIR}/${file.path}.cawco-${index}`)} ${quote(`${DESIGN_DIR}/${file.path}`)}`
+              `mv -f ${shellQuote(`${DESIGN_DIR}/${file.path}.cawco-${index}`)} ${shellQuote(`${DESIGN_DIR}/${file.path}`)}`
           )
           .join(" && ")
       );
