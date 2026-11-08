@@ -1247,7 +1247,7 @@ export type ConnectionViewOutput = z.output<typeof ConnectionViewShape>;
 const PairingOffAnswerShape = declared(
   z.union([z.object({ ok: z.literal(true) }), z.object({ error: z.string() })]),
   "PairingOffAnswer",
-  "packages/core/src/paths.ts"
+  "packages/core/src/paths/hub.ts"
 );
 export const PairingOffAnswerSchema = PairingOffAnswerShape;
 export type PairingOffAnswerOutput = z.output<typeof PairingOffAnswerShape>;

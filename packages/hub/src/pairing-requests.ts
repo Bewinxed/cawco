@@ -1,6 +1,6 @@
 /**
  * `cawco pairing off` while the hub runs (cli pairing.ts): the command leaves
- * a request beside the hub's database (core paths.ts `pairingOffRequestPath`,
+ * a request beside the hub's database (core paths/hub.ts `pairingOffRequestPath`,
  * the user's own 0600 file, the same reach as the database itself), and the
  * hub turns paired devices off on its own connection and answers. While the
  * hub runs, only it writes its database (db/wal.ts); a stopped hub's
@@ -18,7 +18,7 @@ import {
   PAIRING_OFF_REQUEST,
   type PairingOffAnswer,
   pairingOffAnswerPath,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/hub";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import type { HubLifetimeShape } from "./lifetime";
 
