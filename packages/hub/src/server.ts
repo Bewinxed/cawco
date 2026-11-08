@@ -824,18 +824,11 @@ import type {
   PlaceRow,
   ProjectRow,
   PublicInstanceRow,
-  SentMessageRow,
   SourceNote,
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
-import {
-  checkoutOf,
-  hashHookMaterial,
-  listedAt,
-  MEMORY_ID,
-  TURN_UNRECORDED,
-} from "./db";
+import { checkoutOf, hashHookMaterial, listedAt, MEMORY_ID } from "./db";
 import type { AccountLeave, LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
@@ -843,6 +836,8 @@ import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { PriorConversation, TrashKind } from "./db/schema";
+import type { SentMessageRow } from "./db/sends";
+import { TURN_UNRECORDED } from "./db/sends";
 import type { MachineLine } from "./db/session-lines";
 import type {
   ContinuationAsker,
