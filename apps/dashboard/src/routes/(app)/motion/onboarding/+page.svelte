@@ -6,14 +6,14 @@
   } from "@cawco/core/asks";
   import { detach } from "@cawco/core/detach";
   import type { PulseFrame } from "@cawco/core/frames";
-  import {
-    CAWCO_NOTICE,
-    type PermissionResult,
-    type UserAnswers,
-    type UserQuestion,
-  } from "@cawco/core/harness";
+  import { CAWCO_NOTICE } from "@cawco/core/harness";
   import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
   import type { InstanceRow } from "@cawco/core/protocol";
+  import type {
+    PermissionResult,
+    UserAnswers,
+    UserQuestion,
+  } from "@cawco/core/session-messages";
   import type { Stage as BoardStage } from "@cawco/core/task-views";
   import { askAnsweredTitle } from "@cawco/core/transcript-rules";
   import { projectWords } from "@cawco/core/words/project";
