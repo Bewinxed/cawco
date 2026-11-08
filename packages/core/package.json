@@ -11,8 +11,6 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "faces": "bun scripts/house-faces.ts",
-    "faces:check": "bun scripts/house-faces.ts --check",
     "fmt": "bun ../../scripts/fmt.ts .",
     "openui": "OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun scripts/openui-views.ts",
     "openui:check": "OPENUI_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun scripts/openui-views.ts --check",
@@ -43,9 +41,6 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@capsizecss/core": "4.1.3",
-    "@capsizecss/metrics": "4.4.0",
-    "@capsizecss/unpack": "4.0.1",
     "@types/bun": "^1.4.3",
     "@types/fontkit": "2.0.9",
     "@types/subset-font": "2.3.0"
