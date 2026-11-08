@@ -23,7 +23,7 @@
  */
 import type { InstanceRow } from "@cawco/core";
 import { z } from "zod";
-import type { DesignFinding, DesignPick } from "./db/schema";
+import type { DesignFinding, DesignPick } from "./db/stored-types";
 import {
   DESIGN_WRITE_FILES,
   type DesignFileIn,
