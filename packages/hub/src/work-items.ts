@@ -105,6 +105,7 @@ import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
 import { workWords } from "@cawco/core/words/work";
+import { holdingWords, sizeWords } from "@cawco/core/words/workspace-holding";
 import { isWorkspaceNeedsRefusal } from "@cawco/core/words/workspace-needs";
 import type {
   ChangedPath,
@@ -148,11 +149,9 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
-  holdingWords,
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
   OUTPUTS_DIR,
-  sizeWords,
 } from "@cawco/core/workspace/controls";
 import {
   excludedPaths,
