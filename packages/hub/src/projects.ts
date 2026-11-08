@@ -5,7 +5,7 @@
  * for one repository compare equal.
  */
 
-import type { CommandResult } from "@cawco/core/harness";
+import type { CommandResult } from "@cawco/core/commands/controls";
 import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 

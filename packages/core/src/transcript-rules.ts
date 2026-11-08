@@ -13,36 +13,20 @@ import { accountMoveWords } from "./accounts";
 import { answersOf, dismissedOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
-import type {
-  CompactionFailure,
-  HarnessNote,
-  NeutralAssistantMessage,
-  NeutralMessage,
-  NeutralOrigin,
-  NeutralStatus,
-  SendRecord,
-  SessionMessage,
-  SlashCommand,
-  UserQuestionResult,
-} from "./harness";
 import {
   ACCOUNT_MOVE,
   ARTIFACT_RESPONSES,
   CAWCO_NOTICE,
   CLI_OUTDATED,
   CONTEXT_LINE,
-  CONVERSATION_RESET,
   CUSTODY_HELD,
   FLEET_WATCH,
   FRESH_START,
   FRESH_START_LINE,
   firstSentence,
   LIMIT_REACHED,
-  MCP_NOT_CONNECTED,
   MOVED_HERE,
   PROJECT_NOTE,
-  REPEATED_FAILURE,
-  REPEATED_FAILURE_LIMIT,
   ROOM_HELD,
   SESSION_STOPPED,
 } from "./harness";
@@ -65,6 +49,24 @@ import { invariant } from "./invariant";
 import { CAW_EVENT_NOTE, type ProjectNote } from "./project-conversation";
 import { parseReference } from "./references";
 import { parseRuleMarker } from "./rules";
+import type {
+  CompactionFailure,
+  HarnessNote,
+  NeutralAssistantMessage,
+  NeutralMessage,
+  NeutralOrigin,
+  NeutralStatus,
+  SendRecord,
+  SessionMessage,
+  SlashCommand,
+  UserQuestionResult,
+} from "./session-messages";
+import {
+  CONVERSATION_RESET,
+  MCP_NOT_CONNECTED,
+  REPEATED_FAILURE,
+  REPEATED_FAILURE_LIMIT,
+} from "./session-messages";
 import { ContextLineSchema, ProjectNoteSchema } from "./stored-shapes";
 import type {
   BlockMetadata,

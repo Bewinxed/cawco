@@ -15,10 +15,10 @@
  * together, so there is no older dialect to negotiate.
  */
 
-import type { CarrySessionRequest } from "./harness";
 import type { PlanDelta, PlanFollow, PlanResync, PlanSnapshot } from "./plan";
 import type { HubPreviewOrigins } from "./preview/hub-previews";
 import type { DeliveryMark, IngestMark } from "./protocol";
+import type { CarrySessionRequest } from "./session/controls";
 import type { TailnetServing } from "./tailnet-https";
 
 /**
