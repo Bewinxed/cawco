@@ -40,10 +40,10 @@ import {
   type ExternalComment,
   type ExternalKind,
   type ExternalState,
-  externalItemWords,
   refOfUrl,
-  type WaitTarget,
-} from "@cawco/core";
+} from "@cawco/core/external-items";
+import type { WaitTarget } from "@cawco/core/wait-targets";
+import { externalItemWords } from "@cawco/core/words/external-items";
 import type { Octokit } from "@octokit/rest";
 import type { TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type { TrackersDb } from "./db/trackers";
