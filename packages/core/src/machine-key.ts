@@ -14,7 +14,7 @@ import { z } from "zod";
 import { MACHINE_PROOF_HEADER } from "./hub-auth";
 import { hubRequest } from "./hub-request";
 import { machineId as hostMachineId } from "./machine-id";
-import { cawcoConfigDir } from "./paths";
+import { cawcoConfigDir } from "./paths/cawco";
 import {
   readTextRecordSync,
   writeStateFile,
