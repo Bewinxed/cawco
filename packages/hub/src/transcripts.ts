@@ -22,14 +22,14 @@
  * and has exactly what the hub has.
  */
 import type { FramePayload } from "@cawco/core/frames";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { SessionCommands, SessionTooling } from "@cawco/core/protocol";
 import {
   type NeutralMessage,
   type SendRecord,
   type SessionMessage,
   STREAM_SO_FAR,
-} from "@cawco/core/harness";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { SessionCommands, SessionTooling } from "@cawco/core/protocol";
+} from "@cawco/core/session-messages";
 import type { SessionStreamFrame } from "@cawco/core/stream";
 import type {
   TranscriptEvent,

@@ -78,7 +78,6 @@ import { SHELL_TOOLS } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { PermissionRequestFrame } from "@cawco/core/frames";
-import type { TurnWakes } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { PairingRequest } from "@cawco/core/hub-auth";
 import { causeLine, type Install, installName } from "@cawco/core/install";
@@ -92,6 +91,7 @@ import {
 } from "@cawco/core/permission-presentation";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
+import type { TurnWakes } from "@cawco/core/session-messages";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";

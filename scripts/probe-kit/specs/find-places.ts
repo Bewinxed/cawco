@@ -36,10 +36,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CONTROL_TRANSCRIPT_PLACES,
-  type NeutralMessage,
-  type SessionMessage,
   unknownControlWords,
-} from "../../../packages/core/src/harness";
+} from "../../../packages/core/src/session/controls";
+import type {
+  NeutralMessage,
+  SessionMessage,
+} from "../../../packages/core/src/session-messages";
 import type { TranscriptBlock } from "../../../packages/core/src/transcript-types";
 import { placesHeard } from "../../../packages/hub/src/find-places";
 import { TranscriptBuilder } from "../../../packages/hub/src/transcript";

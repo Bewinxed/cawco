@@ -19,8 +19,8 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
-import { INPUTS_LIMIT_BYTES } from "@cawco/core/harness";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
+import { INPUTS_LIMIT_BYTES } from "@cawco/core/workspace/controls";
 import {
   ArtifactRefusal,
   type Artifacts,
