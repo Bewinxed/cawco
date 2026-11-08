@@ -14,7 +14,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { hubDbPath } from "@cawco/core/paths";
-import { quote } from "./landing";
+import { shellQuote } from "@cawco/core/shell-quote";
 
 /** Past this the ship command is stopped: it starts a release, it does not run one. */
 const SHIP_TIMEOUT_MS = 120_000;
@@ -32,8 +32,8 @@ export const shipLanded = async (options: {
   await writeFile(notes, options.notes, { mode: 0o600 });
   try {
     const command = options.command
-      .replaceAll("{commit}", quote(options.commit))
-      .replaceAll("{notes}", quote(notes));
+      .replaceAll("{commit}", shellQuote(options.commit))
+      .replaceAll("{notes}", shellQuote(notes));
     const ran = await readWithin(SHIP_TIMEOUT_MS, async (signal) => {
       const child = Bun.spawn(["sh", "-c", command], {
         env: process.env,
