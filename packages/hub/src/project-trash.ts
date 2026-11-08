@@ -40,6 +40,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { ARTIFACT_NAME } from "@cawco/core/artifact-kinds";
 import type { BrowserKey } from "@cawco/core/browser";
 import type {
   ForgottenBrings,
@@ -50,7 +51,6 @@ import type {
 } from "@cawco/core/forgotten-project";
 import { machineCalled } from "@cawco/core/machine-names";
 import { type PlaceNesting, placeNesting } from "@cawco/core/place-nesting";
-import { ARTIFACT_NAME } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
   readRecord,
