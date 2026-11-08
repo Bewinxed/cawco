@@ -13,8 +13,8 @@ import {
   type TextAttachment,
 } from "@cawco/core/attachments";
 import { readWithin } from "@cawco/core/bounded";
-import type { SentMessage } from "@cawco/core/harness";
 import type { SendPayload } from "@cawco/core/protocol";
+import type { SentMessage } from "@cawco/core/session-messages";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { delegationHubUrl } from "./delegation";

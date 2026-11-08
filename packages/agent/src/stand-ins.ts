@@ -47,10 +47,10 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
-import type { WorkspaceRef } from "@cawco/core/harness";
 import { projectClaudeDir } from "@cawco/core/paths/claude";
 import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
