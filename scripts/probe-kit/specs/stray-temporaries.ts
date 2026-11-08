@@ -40,10 +40,8 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sweepRecords } from "../../../packages/agent/src/damaged-records";
-import {
-  sessionWakeupsDir,
-  workspacesDir,
-} from "../../../packages/core/src/paths";
+import { sessionWakeupsDir } from "../../../packages/core/src/paths/cawco";
+import { workspacesDir } from "../../../packages/core/src/paths/workspace";
 import type { Kit, Spec } from "../kit";
 
 /** A process's entry in `/proc`. */

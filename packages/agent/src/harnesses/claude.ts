@@ -135,7 +135,7 @@ import {
   claudeHome,
   projectSlug,
   sessionConfigDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/claude";
 import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
 import { mcpGatewayPort } from "@cawco/core/protocol";
 import { conversationGone } from "@cawco/core/relaunch";
