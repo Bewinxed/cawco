@@ -15,15 +15,7 @@ import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
-
-/** One file a proposal changes: as it stood when proposed, and as proposed. */
-export interface ProposedFile {
-  /** The file as it stood then: the base its change merges from; "" for a file it makes. */
-  before: string;
-  /** The file's whole proposed text. */
-  content: string;
-  path: string;
-}
+import type { ProposedFile } from "./db/stored-types";
 
 /** What the proposal writes now, or the first file it no longer applies to. */
 export type Applies =
