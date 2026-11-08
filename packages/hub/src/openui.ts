@@ -21,8 +21,9 @@
  *   of the wrong type, too many arguments, no root) is refused with its own
  *   sentence, so Caw fixes it rather than the view losing a part silently.
  */
-import { VIEW_TOOLS, type ViewToolName } from "@cawco/core";
+
 import { unhandled } from "@cawco/core/unhandled";
+import { VIEW_TOOLS, type ViewToolName } from "@cawco/core/views";
 import { viewToolArgsFaults } from "@cawco/core/views-library";
 import spec from "@cawco/core/views-spec";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
