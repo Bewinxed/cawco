@@ -164,7 +164,7 @@ const NeutralSessionInfoShape = declared(
     wroteAt: z.number().optional(),
   }),
   "NeutralSessionInfo",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export const NeutralSessionInfoSchema = NeutralSessionInfoShape;
 export type NeutralSessionInfoOutput = z.output<typeof NeutralSessionInfoShape>;
@@ -425,7 +425,7 @@ const McpStdioServerConfigShape = declared(
     type: z.literal("stdio").optional(),
   }),
   "McpStdioServerConfig",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type McpStdioServerConfigOutput = z.output<
   typeof McpStdioServerConfigShape
@@ -440,7 +440,7 @@ const McpSSEServerConfigShape = declared(
     url: z.string(),
   }),
   "McpSSEServerConfig",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type McpSSEServerConfigOutput = z.output<typeof McpSSEServerConfigShape>;
 
@@ -453,7 +453,7 @@ const McpHttpServerConfigShape = declared(
     url: z.string(),
   }),
   "McpHttpServerConfig",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type McpHttpServerConfigOutput = z.output<
   typeof McpHttpServerConfigShape
@@ -515,7 +515,7 @@ const WorkspaceCutShape = declared(
     commit: z.string(),
   }),
   "WorkspaceCut",
-  "packages/core/src/harness.ts"
+  "packages/core/src/workspace/controls.ts"
 );
 export const WorkspaceCutSchema = WorkspaceCutShape;
 export type WorkspaceCutOutput = z.output<typeof WorkspaceCutShape>;
@@ -523,7 +523,7 @@ export type WorkspaceCutOutput = z.output<typeof WorkspaceCutShape>;
 const WorkspaceKindShape = declared(
   z.enum(["repo", "folder"]),
   "WorkspaceKind",
-  "packages/core/src/harness.ts"
+  "packages/core/src/workspace/controls.ts"
 );
 export const WorkspaceKindSchema = WorkspaceKindShape;
 export type WorkspaceKindOutput = z.output<typeof WorkspaceKindShape>;
@@ -755,7 +755,7 @@ export type StageErrorOutput = z.output<typeof StageErrorShape>;
 const AuthStateShape = declared(
   z.enum(["authenticated", "unauthenticated", "unreadable-credentials"]),
   "AuthState",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type AuthStateOutput = z.output<typeof AuthStateShape>;
 
@@ -1857,7 +1857,7 @@ const CarryRestoredShape = declared(
     z.object({ applied: z.string() }),
   ]),
   "CarryRestored",
-  "packages/core/src/harness.ts"
+  "packages/core/src/workspace/controls.ts"
 );
 export type CarryRestoredOutput = z.output<typeof CarryRestoredShape>;
 
@@ -1892,7 +1892,7 @@ const ClaudeModelUsageShape = declared(
     outputTokens: z.number(),
   }),
   "ClaudeModelUsage",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export const ClaudeModelUsageSchema = ClaudeModelUsageShape;
 export type ClaudeModelUsageOutput = z.output<typeof ClaudeModelUsageShape>;
@@ -2099,14 +2099,14 @@ const EndedTaskShape = declared(
     type: z.string(),
   }),
   "EndedTask",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session/controls.ts"
 );
 export type EndedTaskOutput = z.output<typeof EndedTaskShape>;
 
 const MoveEndedShape = declared(
   z.object({ tasks: z.array(EndedTaskShape), wakeups: z.number() }),
   "MoveEnded",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session/controls.ts"
 );
 export const MoveEndedSchema = MoveEndedShape;
 export type MoveEndedOutput = z.output<typeof MoveEndedShape>;
@@ -2176,7 +2176,7 @@ export type NamedMoveRequestOutput = z.output<typeof NamedMoveRequestShape>;
 const UserAnswersShape = declared(
   z.record(z.string(), z.union([z.string(), z.array(z.string())])),
   "UserAnswers",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type UserAnswersOutput = z.output<typeof UserAnswersShape>;
 
@@ -2188,7 +2188,7 @@ const UserQuestionShape = declared(
     question: z.string(),
   }),
   "UserQuestion",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type UserQuestionOutput = z.output<typeof UserQuestionShape>;
 
@@ -2209,7 +2209,7 @@ const UserQuestionAnsweredShape = declared(
     response: z.string().optional(),
   }),
   "UserQuestionAnswered",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type UserQuestionAnsweredOutput = z.output<
   typeof UserQuestionAnsweredShape
@@ -2221,7 +2221,7 @@ const UserQuestionDismissedShape = declared(
     questions: z.array(UserQuestionShape),
   }),
   "UserQuestionDismissed",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type UserQuestionDismissedOutput = z.output<
   typeof UserQuestionDismissedShape
@@ -2230,7 +2230,7 @@ export type UserQuestionDismissedOutput = z.output<
 const UserQuestionResultShape = declared(
   z.union([UserQuestionAnsweredShape, UserQuestionDismissedShape]),
   "UserQuestionResult",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type UserQuestionResultOutput = z.output<typeof UserQuestionResultShape>;
 
@@ -2274,7 +2274,7 @@ const NeutralContentBlockShape = declared(
     }),
   ]),
   "NeutralContentBlock",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type NeutralContentBlockOutput = z.output<
   typeof NeutralContentBlockShape
@@ -2289,7 +2289,7 @@ const HarnessNoteShape = declared(
     toolUseId: z.string().optional(),
   }),
   "HarnessNote",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type HarnessNoteOutput = z.output<typeof HarnessNoteShape>;
 
@@ -2311,7 +2311,7 @@ const NeutralOriginShape = declared(
     }),
   ]),
   "NeutralOrigin",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type NeutralOriginOutput = z.output<typeof NeutralOriginShape>;
 
@@ -2336,7 +2336,7 @@ const NeutralUserMessageShape = declared(
     uuid: z.string().optional(),
   }),
   "NeutralUserMessage",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export const NeutralUserMessageSchema = NeutralUserMessageShape;
 export type NeutralUserMessageOutput = z.output<typeof NeutralUserMessageShape>;
@@ -2402,7 +2402,7 @@ const PlaceLfsRowShape = declared(
     pattern: z.string(),
   }),
   "PlaceLfsRow",
-  "packages/core/src/harness.ts"
+  "packages/core/src/workspace/controls.ts"
 );
 export const PlaceLfsRowSchema = PlaceLfsRowShape;
 export type PlaceLfsRowOutput = z.output<typeof PlaceLfsRowShape>;
@@ -2486,7 +2486,7 @@ const SentMessageShape = declared(
     uuid: z.string(),
   }),
   "SentMessage",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type SentMessageOutput = z.output<typeof SentMessageShape>;
 
@@ -2581,7 +2581,7 @@ export type StartingSetOutput = z.output<typeof StartingSetShape>;
 const WorkspaceRefShape = declared(
   z.object({ id: z.string(), path: z.string() }),
   "WorkspaceRef",
-  "packages/core/src/harness.ts"
+  "packages/core/src/workspace/controls.ts"
 );
 export type WorkspaceRefOutput = z.output<typeof WorkspaceRefShape>;
 
@@ -2682,7 +2682,7 @@ const WorkspaceHoldingShape = declared(
     strays: z.number().optional(),
   }),
   "WorkspaceHolding",
-  "packages/core/src/harness.ts"
+  "packages/core/src/workspace/controls.ts"
 );
 export const WorkspaceHoldingSchema = WorkspaceHoldingShape;
 export type WorkspaceHoldingOutput = z.output<typeof WorkspaceHoldingShape>;
@@ -2864,7 +2864,7 @@ export const SendRefusalShape = declared(
     }),
   ]),
   "SendRefusal",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type SendRefusalOutput = z.output<typeof SendRefusalShape>;
 
@@ -2875,7 +2875,7 @@ export const ModeAskShape = declared(
     refused: PermissionModeShape.optional(),
   }),
   "ModeAsk",
-  "packages/core/src/harness.ts"
+  "packages/core/src/session-messages.ts"
 );
 export type ModeAskOutput = z.output<typeof ModeAskShape>;
 
@@ -3053,7 +3053,7 @@ const WorkspaceArchivedShape = declared(
     held: WorkspaceHoldingShape.optional(),
   }),
   "WorkspaceArchived",
-  "packages/core/src/harness.ts"
+  "packages/core/src/workspace/controls.ts"
 );
 export const WorkspaceArchivedSchema = WorkspaceArchivedShape;
 export type WorkspaceArchivedOutput = z.output<typeof WorkspaceArchivedShape>;

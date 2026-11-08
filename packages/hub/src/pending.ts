@@ -1,7 +1,7 @@
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { AskAnswer, AskRecord } from "@cawco/core/asks";
-import type { PermissionResult } from "@cawco/core/harness";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import type { PermissionResult } from "@cawco/core/session-messages";
 import { EnvelopeShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";

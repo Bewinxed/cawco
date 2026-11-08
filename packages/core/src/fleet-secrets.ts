@@ -38,12 +38,12 @@ import type {
   FleetMcpConfig,
   FleetMcpServer,
 } from "./fleet";
+import { looksSecret, SECRET_KEY } from "./secret-shapes";
 import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
-} from "./harness";
-import { looksSecret, SECRET_KEY } from "./secret-shapes";
+} from "./session-messages";
 
 /** A secret as a read says it: set. Never a string, so it is never a value that could be saved back as one. */
 interface SecretSet {
