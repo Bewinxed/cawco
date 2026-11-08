@@ -35,7 +35,8 @@ import {
 } from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
 import type { Connections } from "./connections";
-import type { DbShape, PlaceRow, ProjectRow } from "./db";
+import type { DbShape } from "./db";
+import type { PlaceRow, ProjectRow } from "./db/projects";
 import type { PlaceRepos } from "./place-repo";
 
 /** GitHub's rule for a repository's name. */
