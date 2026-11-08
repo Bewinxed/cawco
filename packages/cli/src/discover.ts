@@ -9,7 +9,8 @@ import {
   toWsUrl,
 } from "@cawco/agent/discovery";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { CAWCO_HUB_PORT, CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
+import { CAWCO_HUB_PORT } from "@cawco/core/ports";
+import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 
 /** Which rung of the ladder answered. */
