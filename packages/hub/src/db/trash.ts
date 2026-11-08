@@ -27,6 +27,7 @@ import {
   type TrashKind,
 } from "./schema";
 import type { TrashedRows } from "./stored-types";
+import type { Tx } from "./tx";
 
 /**
  * How long a deleted config item can be brought back whole: past the life
@@ -116,8 +117,6 @@ const part = (table: string, where: SQL, kept = true): Part => ({
   table,
   where,
 });
-
-type Tx = Parameters<Parameters<BunSQLiteDatabase["transaction"]>[0]>[0];
 
 /** Each kind's parts, by its key: its own table first. */
 const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
