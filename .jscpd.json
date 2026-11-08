@@ -11,7 +11,11 @@
     "packages/core/src/hub-routes.gen.ts",
     "packages/hub/src/db/stored-shapes.ts",
     "packages/agent/src/stored-shapes.ts",
-    "apps/dashboard/src/lib/cawco/stored-shapes.ts"
+    "apps/dashboard/src/lib/cawco/stored-shapes.ts",
+    "packages/core/src/stored-shapes.proof.ts",
+    "packages/hub/src/db/stored-shapes.proof.ts",
+    "packages/agent/src/stored-shapes.proof.ts",
+    "apps/dashboard/src/lib/cawco/stored-shapes.proof.ts"
   ],
   "minTokens": 50,
   "threshold": 0,
