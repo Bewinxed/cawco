@@ -146,10 +146,6 @@ export const AWAY_AFTER_CHOICES_MS = [
   HOUR_MS,
 ] as const;
 
-/** `POST /api/person/away-clock`: the person's away clock, ms. */
-export interface AwayClockSet {
-  readonly awayAfterMs: number;
-}
 /**
  * How long the tab a desk alert went to has to answer it: a tab that says
  * nothing in this time is gone (closed without its last beacon, its
@@ -256,27 +252,6 @@ export interface DeskAlertFrame {
 
 /** How a device let go of a notification. */
 export type DismissVia = "open" | "action" | "dismiss";
-
-/** `POST /api/notifications/dismiss`: a device acted on, opened or individually dismissed these. */
-export interface NotificationsDismiss {
-  readonly collapseIds: readonly string[];
-  /**
-   * When this device delivered each id, epoch ms on its own clock. The hub
-   * keeps an id it has sent again since (more than 120 s after, for clock
-   * drift): that newer notification is not the one dismissed. Ids without
-   * one (a live open, action or swipe of an unrecorded id) clear as given.
-   */
-  readonly deliveredAt?: Readonly<Record<string, number>>;
-  readonly via: DismissVia;
-}
-
-/** `GET /api/notifications/cleared?since=<ms>`: everything cleared since then, newest first. */
-export interface NotificationsClearedRead {
-  readonly cleared: readonly {
-    readonly at: number;
-    readonly collapseId: string;
-  }[];
-}
 
 /** The socket frame every connected client gets as soon as ids clear. */
 export interface NotificationsClearedFrame {
