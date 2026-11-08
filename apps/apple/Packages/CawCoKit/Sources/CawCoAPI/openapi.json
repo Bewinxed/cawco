@@ -54805,7 +54805,7 @@
             "description": "A compaction boundary read back from a harness that stores how it ended\n(opencode): `failed` with the harness's words in `compactError`."
           },
           "continuation": {
-            "description": "A send that is the message a session went on from in a fresh\nconversation (origin {@link import (\"./harness\").CONTINUATION_ORIGIN}):\ndrawn folded under the `continued` line before it, never as a turn.",
+            "description": "A send that is the message a session went on from in a fresh\nconversation (origin {@link import (\"./harness/kinds\").CONTINUATION_ORIGIN}):\ndrawn folded under the `continued` line before it, never as a turn.",
             "const": true,
             "type": "boolean"
           },

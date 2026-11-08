@@ -16,7 +16,7 @@
 
 import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
 import { type FleetPlacement, placementProblem } from "./fleet";
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import { accountsWords } from "./words/accounts";
 
 /** Every lifecycle point a hook can attach to. */

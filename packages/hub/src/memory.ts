@@ -105,7 +105,7 @@ import {
   type PermissionResult,
   type ProjectNote,
 } from "@cawco/core";
-import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
