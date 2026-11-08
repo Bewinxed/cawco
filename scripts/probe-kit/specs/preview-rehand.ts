@@ -46,10 +46,12 @@
  *
  *   bun scripts/probe-kit/run.ts preview-rehand
  */
+
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { downOf } from "../../../packages/core/src/preview-proxy";
 import { artifactLink } from "../../../packages/core/src/references";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { workWords } from "../../../packages/core/src/words/work";
 import { handle } from "../../../packages/hub/src/presenters/words";
 import { toolWords } from "../../lib/tool-call";
@@ -90,12 +92,9 @@ type Tag = "A" | "B" | "C";
 /** The tool a discard asked of the person names on its card. */
 const DISCARD_TOOL = "mcp__cawco__discard_workspace";
 
-/** `word` as one single-quoted shell word. */
-const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
-
 /** What serves a delegate's preview: a page saying `word` on the `PORT` the stage gives it. */
 const served = (word: string): string =>
-  `bun -e ${quoted(
+  `bun -e ${shellQuote(
     `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${word}</title></head><body><h1 id="word">${word}</h1></body></html>`)};Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch:()=>new Response(page,{headers:{"content-type":"text/html"}})});`
   )}`;
 

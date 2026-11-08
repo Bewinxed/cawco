@@ -174,6 +174,7 @@ import {
 } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { listedPid, type Pid, signal as signalPid } from "@cawco/core/signal";
 import {
   DamagedRecord,
@@ -463,9 +464,6 @@ export const sandboxOf = async (
   }
   return await readPlace(workspace, held.gen);
 };
-
-export const shellQuote = (value: string): string =>
-  `'${value.replaceAll("'", "'\\''")}'`;
 
 /** A session's `command`, as it runs inside the boundary (pi's bash tool): `--session`, so it shows the workspace's notice first. */
 export const boundaryCommand = (boundary: Boundary, command: string): string =>
