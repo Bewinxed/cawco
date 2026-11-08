@@ -36,18 +36,6 @@ import type {
   PreviewFrame as PreviewFrameType,
 } from "@cawco/core/frames";
 import type {
-  HarnessNote as HarnessNoteType,
-  NeutralContentBlock as NeutralContentBlockType,
-  NeutralOrigin as NeutralOriginType,
-  NeutralUserMessage as NeutralUserMessageType,
-  SentMessage as SentMessageType,
-  UserAnswers as UserAnswersType,
-  UserQuestionAnswered as UserQuestionAnsweredType,
-  UserQuestionDismissed as UserQuestionDismissedType,
-  UserQuestionResult as UserQuestionResultType,
-  UserQuestion as UserQuestionType,
-} from "@cawco/core/harness";
-import type {
   EffortLevel as EffortLevelType,
   HarnessKind as HarnessKindType,
   PermissionMode as PermissionModeType,
@@ -68,6 +56,18 @@ import type {
 } from "@cawco/core/plan";
 import type { PreviewSource as PreviewSourceType } from "@cawco/core/preview/protocol";
 import type { SendPayload as SendPayloadType } from "@cawco/core/protocol";
+import type {
+  HarnessNote as HarnessNoteType,
+  NeutralContentBlock as NeutralContentBlockType,
+  NeutralOrigin as NeutralOriginType,
+  NeutralUserMessage as NeutralUserMessageType,
+  SentMessage as SentMessageType,
+  UserAnswers as UserAnswersType,
+  UserQuestionAnswered as UserQuestionAnsweredType,
+  UserQuestionDismissed as UserQuestionDismissedType,
+  UserQuestionResult as UserQuestionResultType,
+  UserQuestion as UserQuestionType,
+} from "@cawco/core/session-messages";
 import type {
   CanvasShapes as CanvasShapesType,
   DecisionMedia as DecisionMediaType,

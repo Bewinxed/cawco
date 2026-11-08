@@ -45,7 +45,6 @@ import {
   removeFolder,
 } from "../../../packages/agent/src/remove-folder";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
-import type { RemoveFolder } from "../../../packages/core/src/harness";
 import {
   fetchHub,
   type HubRequest,
@@ -57,6 +56,7 @@ import {
   machinePath,
 } from "../../../packages/core/src/machine-path";
 import { projectTrashWords } from "../../../packages/core/src/words/project-trash";
+import type { RemoveFolder } from "../../../packages/core/src/workspace/controls";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { Kit, Spec } from "../kit";
 
