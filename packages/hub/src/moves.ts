@@ -61,8 +61,9 @@ import {
 import { DAY_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
-import { checkoutOf, type DbShape, type PlaceRow, type ProjectRow } from "./db";
+import type { DbShape } from "./db";
 import type { MoveRow } from "./db/moves";
+import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
 import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
