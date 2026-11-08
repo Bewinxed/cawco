@@ -7,7 +7,7 @@
    * for, and the artifacts and pins the panes would hold.
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-  import type { Pin } from "@cawco/core/comments";
+  import type { Pin } from "@cawco/core/comments/model";
   import { holdArtifact, noteArtifact } from "./artifact-names.svelte";
   import MessageBody from "./MessageBody.svelte";
   import { provideMarkdownFleet } from "./markdown-fleet";
