@@ -12,7 +12,7 @@ import { toHttpBase } from "@cawco/agent/discovery";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
-import { hubCredentialSocket } from "@cawco/core/paths";
+import { hubCredentialSocket } from "@cawco/core/paths/hub";
 import type { AgentRow } from "@cawco/core/protocol";
 import { CAWCO_HUB_PORT, CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
