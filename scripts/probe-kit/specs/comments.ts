@@ -285,10 +285,10 @@ import { applyUpdate, Doc } from "yjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import {
   type PageAnchor,
-  PIN_MAPS,
   type Pin,
   readPins,
 } from "../../../packages/core/src/comments";
+import { PIN_MAPS } from "../../../packages/core/src/doc-maps";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
