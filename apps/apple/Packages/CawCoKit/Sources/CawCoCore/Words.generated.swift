@@ -3934,7 +3934,7 @@ public enum Words {
 
         public static let problemTrimmerRole = "role trimmer is the unused skills and servers routine's: the hub starts that run itself, and it denies shell, edit and web tools"
 
-        // packages/core/src/harness.ts `EFFORT_LEVELS`
+        // packages/core/src/harness/kinds.ts `EFFORT_LEVELS`
         /// Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read.
         public static let effortLevels: [String] = ["low", "medium", "high", "xhigh", "max"]
     }
