@@ -85,7 +85,7 @@ import {
   waitTarget,
 } from "@cawco/core";
 import { TASK_EDGES } from "@cawco/core/task-edges";
-import type { WorkBudget } from "./db/schema";
+import type { WorkBudget } from "./db/stored-types";
 
 /** The front matter fields a task file knows, in the order a new file writes them. */
 export const TASK_FIELDS = [
