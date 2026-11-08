@@ -139,7 +139,7 @@ const INLINE_STYLES = {
     "pointer-events",
     "width",
   ],
-  "src/lib/cawco/spawn/LifetimeChip.svelte": ["color"],
+  "src/lib/cawco/spawn/ChoiceChip.svelte": ["color"],
   "src/lib/cawco/spawn/LocationSection.svelte": [
     "color",
     "opacity",

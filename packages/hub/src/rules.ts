@@ -97,8 +97,11 @@ interface Buffer {
   turn: string[];
 }
 
-/** The instance facts a scope is tested against, cached off the hot path. */
-type Facts = RuleFacts;
+/**
+ * The instance facts a scope is tested against, cached off the hot path, and
+ * whether it started clean: a clean one hears no rule (core `SpawnPayload.clean`).
+ */
+type Facts = RuleFacts & { clean: boolean };
 
 /**
  * Where a streaming buffer's thinking begins. NUL-fenced so no model text can
@@ -471,6 +474,7 @@ export class RuleEngine {
       model: row.model ?? null,
       role: memoryRoleOf(row as InstanceRow),
       delegateType: row.delegateType ?? null,
+      clean: row.clean === true,
     };
     this.#facts.set(instanceId, facts);
     return facts;
@@ -489,7 +493,8 @@ export class RuleEngine {
   /** Sends a matched rule's reply, unless its scope, shots or ceiling hold it; true when sent. */
   #fire(rule: Rule, instanceId: string): boolean {
     const facts = this.#factsFor(instanceId);
-    if (!(facts && ruleInScope(rule.scope, facts))) {
+    // A clean session hears no standing instruction.
+    if (!(facts && !facts.clean && ruleInScope(rule.scope, facts))) {
       return false;
     }
 

@@ -16,6 +16,16 @@ export const harnessWords = {
   /** One that ended on its own with `code`, in the last of what it said on stderr. */
   claudeExited: (code: number, said: string) =>
     `Claude Code stopped on its own (exit ${code}) and said “${said}”. A message to it starts it again.`,
+  /**
+   * A clean start asked of OpenCode (core `cleanStartRefusal`): its server,
+   * which every session of an account shares, reads the global and the
+   * project's `AGENTS.md` for each of them, and no session can opt out.
+   */
+  openCodeNotClean:
+    "OpenCode can't start a session clean: the server every session of an account shares reads its global and project AGENTS.md into each of them. Start it on Claude Code or pi, or without clean. Nothing was started.",
+  /** A clean start asked together with what would bring context back into it. */
+  cleanWith: (what: string) =>
+    `A clean start takes no ${what}: drop ${what}, or start without clean. Nothing was started.`,
 };
 
 /**

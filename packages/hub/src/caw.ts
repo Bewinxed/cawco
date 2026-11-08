@@ -218,6 +218,18 @@ export const fencedSpawn = (
 };
 
 /**
+ * A clean session's spawn (core `SpawnPayload.clean`), on every launch of
+ * its row: said clean, so its machine starts its harness without the
+ * instruction context; fenced, so it takes CawCo's MCP server and no other
+ * (no fleet server, no placed hook, no fleet settings, no MCP config of the
+ * person's); and with no skills, its delegate type's among them.
+ */
+export const cleanSpawn = ({
+  skills: _skills,
+  ...payload
+}: SpawnPayload): SpawnPayload => ({ ...payload, clean: true, fence: true });
+
+/**
  * The place a sheet's stage is named by for a session with no workspace of
  * its own (live components): a place over the folder it works in, on its
  * machine. The machine runs the stage in that place's stage clone (agent stage-clone.ts):

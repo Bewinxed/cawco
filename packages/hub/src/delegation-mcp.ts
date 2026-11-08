@@ -1270,7 +1270,12 @@ export function createDelegationMcp(options: {
       { name: "cawco", version: "1.0.0" },
       {
         capabilities: { tools: { listChanged: true } },
-        instructions: initialize ? instructionsFor(bound, binding) : undefined,
+        // A clean session's server says no instructions: its tools alone
+        // (core `SpawnPayload.clean`).
+        instructions:
+          initialize && !bound?.clean
+            ? instructionsFor(bound, binding)
+            : undefined,
       }
     );
     const transport = new WebStandardStreamableHTTPServerTransport({

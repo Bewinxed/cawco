@@ -45,6 +45,8 @@ export interface SessionDraft {
   /** Continue from the messages the session was asked alone (the person's; a delegate's brief and its parent's hand-offs): nothing is summarised. */
   asks: boolean;
   baseCwd: string;
+  /** Start it clean: no instruction context (core `SpawnPayload.clean`); absent: with its context. */
+  clean?: true;
   cwd: string;
   effort: EffortLevel | null;
   /** What rode the prompt: its images and attachments, as a send carries them. */

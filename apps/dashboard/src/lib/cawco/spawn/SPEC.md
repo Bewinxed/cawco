@@ -18,6 +18,7 @@ At 640px and below the modal is the kit Drawer: a bottom sheet with rounded top 
   - **Project**: pick, clear or create.
   - **Location**: Existing files, or Clone a repository by its git URL on any host, with a directory browser over the machine's filesystem.
   - **Lifetime**: keep the session, or let it end with its task.
+  - **Context**: its instruction files, memory, skills and hooks, or Clean: none of them (core `SpawnPayload.clean`). Off by default; not offered on a fork or a continuation, and Start is held, saying why, for a harness that can't start clean (OpenCode).
 - On a coarse pointer the chip rows open to 14px apart so each touch area reaches 44px.
 - Several machines make Start read "Start N sessions" and start one session on each.
 

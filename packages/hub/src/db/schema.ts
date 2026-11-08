@@ -1202,6 +1202,11 @@ export const instances = sqliteTable("instances", {
   /** The project whose catalog `delegateType` came from; null: the fleet's. */
   delegateTypeProject: text("delegate_type_project"),
   /**
+   * Started clean (core `SpawnPayload.clean`): written by its first spawn and
+   * never after, and every spawn of the row goes clean (server.ts `bounded`).
+   */
+  clean: integer("clean", { mode: "boolean" }).notNull().default(false),
+  /**
    * What was last *written down* about the session — history, not liveness.
    *
    * Read this column raw and you are reading a fact that was true at the moment

@@ -3017,6 +3017,7 @@ export interface components {
           turns?: number;
           usd?: number;
         };
+        clean?: boolean;
         cwd?: string;
         fork?: boolean;
         from?: string;
@@ -4497,6 +4498,8 @@ export interface components {
         turns?: number;
         usd?: number;
       };
+      /** @description Start without instruction files, memory, skills or hooks; not on OpenCode. */
+      clean?: boolean;
       /** @description The repository a new workspace is cut from, an absolute path on `machine`. Default: this session's. With host: the folder it runs in; default the agent user's home. */
       cwd?: string;
       /** @description Start as a copy of this conversation, on this session's harness and model. */

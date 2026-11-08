@@ -15,6 +15,7 @@
   import { detach } from "@cawco/core/detach";
   import type { AvailableCommand } from "@cawco/core/fleet";
   import {
+    cleanStartRefusal,
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
@@ -138,6 +139,7 @@
   import { startForecast, usage } from "../usage/forecast.svelte";
   import { fmt, type Part } from "../usage/rings";
   import type { AccountTool } from "./AccountChip.svelte";
+  import ContextChip from "./ContextChip.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
   import LocationChip from "./LocationChip.svelte";
   import MachinesChip from "./MachinesChip.svelte";
@@ -337,6 +339,8 @@
   let projectId = $state<string>();
   let editing = $state(false);
   let spinOff = $state(false);
+  /** Start it clean: no instruction context (core `SpawnPayload.clean`). Off by default. */
+  let clean = $state(false);
   /** Why Start held back before anything was sent (a file uploading, a form that doesn't hold); "" otherwise. */
   let error = $state("");
   let unreadable = $state(false);
@@ -355,9 +359,9 @@
    * lands (or the press is answered with its refusal), never a press lost.
    */
   let pressedFor = $state<string | null>(null);
-  let popover = $state<"machines" | "project" | "location" | "lifetime" | null>(
-    null
-  );
+  let popover = $state<
+    "machines" | "project" | "location" | "lifetime" | "context" | null
+  >(null);
   /**
    * The `/` menu: what a session of the picked harness opens with in the
    * picked folder on the first machine, asked of that machine
@@ -1115,8 +1119,15 @@
   const startFailed = $derived(failure !== "");
   /** The line under the chips says why Start can't go: it stays on step 2 too. */
   const readingSaysWhy = $derived(cawco.hub !== "connected" || failure !== "");
+  /** A clean start its harness can't make (core `cleanStartRefusal`); null when it can, or none is asked. */
+  const cleanRefused = $derived(
+    clean && !(forking || continueFrom)
+      ? (cleanStartRefusal(harness) ?? null)
+      : null
+  );
   const cantStart = $derived(
     firstMessage.uploading ||
+      cleanRefused !== null ||
       continueBlocked ||
       placementRefusal !== null ||
       modeRefused !== null ||
@@ -1146,6 +1157,8 @@
       held = spawnWords.held.repo;
     } else if (firstMessage.uploading) {
       held = spawnWords.held.uploading;
+    } else if (cleanRefused) {
+      held = cleanRefused;
     }
     return held === failure ? "" : held;
   });
@@ -1268,6 +1281,7 @@
     model = kept.usedModel;
     account = kept.account ?? null;
     spinOff = kept.scratch !== undefined;
+    clean = kept.clean === true;
     editing = kept.baseCwd !== openedIn || kept.machineIds[0] !== openedOn;
     lastMachine = kept.machineIds[0] ?? "";
   }
@@ -1304,6 +1318,7 @@
       repo = undefined;
       editing = false;
       spinOff = Boolean(prefill?.spinOff);
+      clean = false;
       error = "";
       popover = null;
       verifiedLocation = "";
@@ -1863,6 +1878,7 @@
       harness: draft.harness,
       ...runPicks(draft),
       scratch: draft.scratch,
+      ...(draft.clean ? { clean: true } : {}),
       bootstrap:
         draft.repo === undefined
           ? undefined
@@ -1943,6 +1959,8 @@
       model,
       effort,
       scratch: spinOff ? { worktree: false, baseCwd: workdir } : undefined,
+      // A fork or a continuation carries a conversation: never clean.
+      ...(clean && !(forking || continueFrom) ? { clean: true } : {}),
       repo: repo?.trim(),
       projectId,
       summarizer: {
@@ -2450,6 +2468,20 @@
             }}
             open={popover === "lifetime"}
           />
+          <!-- A fork or a continuation carries its conversation: it starts
+               with that context whatever this says, so it is not offered. -->
+          {#if !(forking || continueFrom)}
+            <ContextChip
+              {clean}
+              onchange={(value) => {
+                popover = value ? "context" : null;
+              }}
+              onclean={(value) => {
+                clean = value;
+              }}
+              open={popover === "context"}
+            />
+          {/if}
           <!-- Attach acts on the prompt, not on where it runs: it stands
                apart from the setting chips, at the row's end. -->
           <span class="ms-auto inline-flex">

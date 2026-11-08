@@ -690,6 +690,12 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "Start as a copy of this conversation, on this session's harness and model."
           ),
+        clean: z
+          .boolean()
+          .optional()
+          .describe(
+            "Start without instruction files, memory, skills or hooks; not on OpenCode."
+          ),
         may_start: z
           .array(z.string())
           .optional()
@@ -739,6 +745,7 @@ export function handoffTools(deps: HandoffDeps) {
         workspace,
         from,
         fork,
+        clean,
         may_start,
         inputs,
         machine,
@@ -760,6 +767,7 @@ export function handoffTools(deps: HandoffDeps) {
           workspace,
           from,
           fork,
+          clean,
           type,
           mayStart: may_start,
           inputs,

@@ -788,6 +788,7 @@ const SessionDraftShape = z.object({
   account: z.string().optional(),
   asks: z.boolean(),
   baseCwd: z.string(),
+  clean: z.literal(true).optional(),
   cwd: z.string(),
   effort: EffortLevelShape.nullable(),
   extras: SendExtrasShape,

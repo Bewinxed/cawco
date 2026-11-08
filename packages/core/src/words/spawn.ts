@@ -226,6 +226,19 @@ export const spawnWords = {
     ephemeralDesc: "A spin-off: ends and clears itself when the task is done.",
   },
 
+  /** The context chip: start with the instruction context, or clean (core `SpawnPayload.clean`). */
+  context: {
+    chip: (name: string) => `Context: ${name}`,
+    full: "Full context",
+    fullDesc:
+      "Its instruction files, memory, skills and hooks, as every session.",
+    clean: "Clean",
+    cleanDesc:
+      "Starts without instructions, memory or skills: its prompt and CawCo's tools alone.",
+    /** The session's own mark, where its other start facts show. */
+    mark: "Clean start",
+  },
+
   /** The machines chip and its rows. */
   machines: {
     chip: (machines: string) => `Machines: ${machines}`,

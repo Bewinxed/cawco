@@ -1648,6 +1648,8 @@ export interface DbShape {
     role?: InstanceRole;
     /** The delegate type it was started as, and where it came from; set at its first spawn. */
     delegateType?: { name: string; projectId?: string };
+    /** Started clean (core `SpawnPayload.clean`); set at its first spawn, never after. */
+    clean?: boolean;
     /** The account placement chose; a row that has one keeps it. */
     accountId?: string;
     /** The account its start named, as placed; a row that has one keeps it. */
@@ -5769,6 +5771,7 @@ const make = async (path: string): Promise<DbShape> => {
       workItemId,
       role,
       delegateType,
+      clean = false,
       accountId,
       namedAccount,
       forkedFrom,
@@ -5844,6 +5847,7 @@ const make = async (path: string): Promise<DbShape> => {
           role,
           delegateType: delegateType?.name,
           delegateTypeProject: delegateType?.projectId,
+          clean,
           accountId,
           namedAccount,
           forkedFrom,

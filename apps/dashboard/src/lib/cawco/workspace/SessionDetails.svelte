@@ -12,6 +12,7 @@
   import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { commonWords } from "@cawco/core/words/common";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -765,6 +766,12 @@
           >
             <MorphText text={shortPath(cwd)} />
           </button>
+        {/if}
+        <!-- Started clean, so a comparison tells it from one started with its
+             context (core `SpawnPayload.clean`). -->
+        {#if row?.clean}
+          <span aria-hidden="true">·</span>
+          <span data-slot="clean">{spawnWords.context.mark}</span>
         {/if}
       </p>
       <!-- A copy pressed in the head that the browser refused, under it. -->

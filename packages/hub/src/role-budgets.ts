@@ -96,9 +96,13 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * words cut from generate_image, artifact_read, todo_write, delegate and
  * artifact_create's `to`, so the room comes from words, not the budgets
  * (worker 29,820, delegate 11,142 measured).
+ * 2026-11-08: delegate takes `clean`, which the owner asked for to compare
+ * a delegate started without the instruction context against one started
+ * with it, described in one line (worker 29,932, delegate 11,164 measured:
+ * a leaf is listed no delegate).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 29_900,
+  worker: 29_950,
   delegate: 11_200,
   overseer: 770,
   "web-facing": 3400,

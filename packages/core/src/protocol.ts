@@ -123,6 +123,18 @@ export interface SpawnPayload {
    * git into a subdirectory of `baseDir` and runs the session in the clone.
    */
   bootstrap?: { repo: string; baseDir: string };
+  /**
+   * Start the session clean: its model sees the harness's own base prompt,
+   * the tools it needs to work in CawCo and its first message, and none of
+   * the instruction context (the fleet's and the repository's instruction
+   * files, CawCo's memory documents and server instructions, skills,
+   * plugins, hooks and the harness's own memory). A starter asks for it (the
+   * New session form, `delegate`); the hub keeps it on the session's row
+   * ({@link InstanceRow.clean}) and puts it, with {@link fence}, on every
+   * spawn of that row, whatever the caller sent. A harness that cannot start
+   * clean is refused (core `cleanStartRefusal`).
+   */
+  clean?: true;
   cwd: string;
   /**
    * The delegate type it was started as: its name, and the project whose
@@ -1067,6 +1079,12 @@ export interface InstanceRow {
    * chose, and the harness runs its model's default.
    */
   chosenEffort?: import("./harness").EffortLevel | null;
+  /**
+   * Started clean ({@link SpawnPayload.clean}): written by its first spawn
+   * and kept, so every launch of it is clean and a comparison can tell it
+   * from a session started with its context.
+   */
+  clean?: boolean;
   /**
    * The session a continuation moved this one's work item to: this one never
    * runs again ({@link relaunchOf} refuses it), and what is sent to it goes

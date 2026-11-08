@@ -159,6 +159,7 @@ import { WorkspaceArchivedSchema } from "@cawco/core/stored-shapes";
 import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { harnessWords } from "@cawco/core/words/harness";
 import {
   excludedPaths,
   IGNORED_STATUS,
@@ -778,6 +779,25 @@ const inputsRefused = (words: string, options?: ErrorOptions) =>
 /** What the hub writes is its reader's to read and write. */
 const HELD_MODE = 0o600;
 
+/**
+ * Why a clean `delegate` can't go as asked: what it names would bring
+ * context back into its session (skills it loads, a conversation it copies,
+ * a session that started with its own). Undefined when it can.
+ */
+const cleanProblem = (request: WorkItemRequest): string | undefined => {
+  if (!request.clean) {
+    return;
+  }
+  const named = [
+    ...(request.skills?.length ? ["skills"] : []),
+    ...(request.fork ? ["fork"] : []),
+    ...(request.workspace ? ["workspace"] : []),
+  ];
+  return named.length > 0
+    ? harnessWords.cleanWith(named.join(", "))
+    : undefined;
+};
+
 /** What `delegate` asks for. */
 /** An item's clone as a brief reads it: its workspace, on its machine (commands in it run inside its boundary). */
 export interface CloneRef {
@@ -805,6 +825,12 @@ export interface WorkItemRequest {
    * dispatcher for an attempt he started from the dashboard.
    */
   byPerson?: boolean;
+  /**
+   * Its session starts clean (core `SpawnPayload.clean`): no instruction
+   * context, and none of its type's skills. Not with skills, fork or
+   * workspace, which would bring context back ({@link cleanProblem}).
+   */
+  clean?: boolean;
   /** The repository a new workspace is cut from; the parent's directory by default. */
   cwd?: string;
   /**
@@ -1377,6 +1403,8 @@ const SETTLE_FAILS_LASTING = 3;
  */
 interface Settings {
   account?: string;
+  /** Its session starts clean ({@link WorkItemRequest.clean}). */
+  clean?: boolean;
   forkOf?: string;
   harness: HarnessKind;
   /** The delegate types it may start: its request's or its type's, within its parent's. */
@@ -1469,11 +1497,22 @@ const sessionOf = (
   instanceId: string,
   title: string,
   parent: Parent,
-  { account, forkOf, harness, mayStart, model, role, skills, type }: Settings
+  {
+    account,
+    clean,
+    forkOf,
+    harness,
+    mayStart,
+    model,
+    role,
+    skills,
+    type,
+  }: Settings
 ): Omit<NamedSpawn, "cwd"> => ({
   instanceId,
   harness,
   ...(account ? { account } : {}),
+  ...(clean ? { clean: true as const } : {}),
   ...(parent.projectId ? { projectId: parent.projectId } : {}),
   ...(forkOf ? { resume: { sessionKey: forkOf, fork: true } } : {}),
   ...(model ? { model } : {}),
@@ -5933,11 +5972,14 @@ export const createWorkItems = ({
       types(parent.projectId),
       request
     );
+    const skills = request.skills?.length ? request.skills : type?.skills;
     const settings: Settings = {
       type,
       harness,
       model,
-      skills: request.skills?.length ? request.skills : type?.skills,
+      // A clean session loads no skill, its type's included.
+      skills: request.clean ? undefined : skills,
+      ...(request.clean ? { clean: true } : {}),
       mayStart: narrowMayStart(
         request.mayStart ?? type?.mayStart ?? [],
         sessionMayStart(parent)
@@ -9709,6 +9751,10 @@ export const createWorkItems = ({
       const guide = briefingOf(asked);
       if (guide) {
         throw new WorkItemRefusal(409, guide);
+      }
+      const unclean = cleanProblem(asked);
+      if (unclean) {
+        throw new WorkItemRefusal(400, unclean);
       }
       try {
         return await start(asked);

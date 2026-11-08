@@ -263,6 +263,7 @@ import {
   type ContinuationRead,
   type ContinuationReadOptions,
   CUSTODY_HELD,
+  cleanStartRefusal,
   clockWords,
   configurePage,
   connectWords,
@@ -583,6 +584,7 @@ import { containerWords } from "@cawco/core/words/containers";
 import { contextWords } from "@cawco/core/words/context";
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { handlerWords } from "@cawco/core/words/handlers";
+import { harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
@@ -695,6 +697,7 @@ import { createCallKeys } from "./call-keys";
 import {
   type Caw,
   cawRoutes,
+  cleanSpawn,
   createCaw,
   eventContext,
   fencedSpawn,
@@ -8262,16 +8265,20 @@ export const createServer = (
     // and project, as the fleet says them now (memory-scopes.ts). Its
     // project's for its folder are placed there already: in a checkout as
     // its rows reached the machine, in a clone as the clone was cut.
+    // A clean session loads none of them (core `SpawnPayload.clean`).
     const projects = db.listProjects();
-    const instructions = sessionInstructions(
-      db.listFleetMemoryDocs(),
-      documentFacts(
-        stored,
-        projects.flatMap((project) => project.places),
-        (projectId) =>
-          projects.find((project) => project.id === projectId)?.areaId ?? null
-      )
-    );
+    const instructions = stored.clean
+      ? []
+      : sessionInstructions(
+          db.listFleetMemoryDocs(),
+          documentFacts(
+            stored,
+            projects.flatMap((project) => project.places),
+            (projectId) =>
+              projects.find((project) => project.id === projectId)?.areaId ??
+              null
+          )
+        );
     return {
       sessionCredential: identities.mint(read.id),
       ...account,
@@ -8477,6 +8484,7 @@ export const createServer = (
       accountDir: _callerDir,
       homeLoginMove: _callerMove,
       schedulesToParent: _callerSchedules,
+      clean: _callerClean,
       ...asked
     } = payload;
     const owned = db.ownedInstance(payload.instanceId);
@@ -8509,7 +8517,11 @@ export const createServer = (
     return {
       // A fenced run (triage, a memory curator) is fenced on every spawn of
       // its row: the first, and each revive, restore and relaunch.
-      ...fencedSpawn(asked, row, harness),
+      // A clean session is clean on every spawn of its row: no skills, and
+      // CawCo's MCP server alone (`cleanSpawn`).
+      ...(row.clean
+        ? cleanSpawn(fencedSpawn(asked, row, harness))
+        : fencedSpawn(asked, row, harness)),
       // A session refused routine_create is refused its harness's durable
       // schedule too, on every spawn of its row (`makesRoutines`).
       ...(makesRoutines(row) ? {} : { schedulesToParent: true as const }),
@@ -8596,6 +8608,12 @@ export const createServer = (
     | { payload: SettledSpawn; permissionMode: string | null }
     | { refusal: string; ask?: ModeAsk } => {
     const { harness } = payload;
+    // A clean start on a harness that can't start one is refused, never
+    // started half clean (core `cleanStartRefusal`).
+    const unclean = payload.clean ? cleanStartRefusal(harness) : undefined;
+    if (unclean) {
+      return { refusal: unclean };
+    }
     const unlisted = peekResume(payload)
       ? undefined
       : modelRefusal(machineId, harness, payload.model);
@@ -10250,6 +10268,14 @@ export const createServer = (
         }),
   });
 
+  /**
+   * Whether a send to `row` says where the person is: a session that talks
+   * with them (roles.ts `talksWithPerson`), and not a clean one, whose
+   * context has none of CawCo's words (core `SpawnPayload.clean`).
+   */
+  const toldOfPerson = (row: InstanceRow): boolean =>
+    talksWithPerson(row) && !row.clean;
+
   /** A send's content with `lines` in one reminder block after its last text (core `withReminder`). */
   const remindedContent = (
     content: SentMessage["message"]["content"],
@@ -10286,9 +10312,7 @@ export const createServer = (
     }
     const [row] = db.getInstancesByIds([instanceId]);
     const said =
-      row && !talksWithPerson(row)
-        ? undefined
-        : personSaid(instanceId, message);
+      row && !toldOfPerson(row) ? undefined : personSaid(instanceId, message);
     const { reminder, ...sent } = message;
     const lines = [
       ...(reminder ? [reminder] : []),
@@ -17147,6 +17171,7 @@ export const createServer = (
       ...(workItemId ? { workItemId } : {}),
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
+      clean: payload.clean === true,
       ...openedAccount(payload, placed),
       // The account its start named, as placement honoured it.
       ...(payload.account && placed.accountId
@@ -27783,6 +27808,7 @@ export const createServer = (
    */
   const delegatedAttempt = async ({
     task,
+    clean,
     parentInstanceId,
     cwd,
     machineId,
@@ -27792,8 +27818,12 @@ export const createServer = (
   }: AttemptAsk &
     Pick<
       WorkItemRequest,
-      "cwd" | "host" | "machineId" | "parentInstanceId" | "workspace"
+      "clean" | "cwd" | "host" | "machineId" | "parentInstanceId" | "workspace"
     > & { task: string }): Promise<DelegateResult> => {
+    // An attempt runs on its task's own word, never clean.
+    if (clean) {
+      throw new WorkItemRefusal(400, harnessWords.cleanWith("task"));
+    }
     const placed = [
       ...(workspace ? ["workspace"] : []),
       ...(host ? ["host"] : []),
@@ -32400,6 +32430,9 @@ export const createServer = (
       // the spawning tools from it, and the hub reads its row for every
       // other answer about it (what it may start, its memory role, a restore).
       mayStart: payload.mayStart,
+      // Started clean; a row started again keeps its own word (written at
+      // its first spawn alone, `db.openInstance`).
+      clean: payload.clean === true,
       ...parent,
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
@@ -36978,6 +37011,8 @@ export const createServer = (
             account: t.Optional(t.String()),
             skills: t.Optional(t.Array(t.String())),
             mayStart: t.Optional(t.Array(t.String())),
+            // Its session starts clean (core `SpawnPayload.clean`).
+            clean: t.Optional(t.Boolean()),
             cwd: t.Optional(t.String()),
             machineId: t.Optional(t.String()),
             workspace: t.Optional(t.String()),

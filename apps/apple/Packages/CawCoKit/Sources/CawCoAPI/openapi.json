@@ -33202,6 +33202,9 @@
               "chosenEffort": {
                 "$ref": "#/components/schemas/EffortLevel"
               },
+              "clean": {
+                "type": "boolean"
+              },
               "continuedInto": {
                 "type": [
                   "null",
@@ -33364,6 +33367,7 @@
             },
             "required": [
               "accountId",
+              "clean",
               "continuedInto",
               "createdAt",
               "cwd",
@@ -33442,6 +33446,9 @@
             },
             "chosenEffort": {
               "$ref": "#/components/schemas/EffortLevel"
+            },
+            "clean": {
+              "type": "boolean"
             },
             "continuedInto": {
               "type": [
@@ -33639,6 +33646,7 @@
           },
           "required": [
             "accountId",
+            "clean",
             "continuedInto",
             "createdAt",
             "cwd",
@@ -37850,6 +37858,11 @@
               "baseDir",
               "repo"
             ]
+          },
+          "clean": {
+            "description": "Start the session clean: its model sees the harness's own base prompt,\nthe tools it needs to work in CawCo and its first message, and none of\nthe instruction context (the fleet's and the repository's instruction\nfiles, CawCo's memory documents and server instructions, skills,\nplugins, hooks and the harness's own memory). A starter asks for it (the\nNew session form, `delegate`); the hub keeps it on the session's row\n({@link InstanceRow.clean}) and puts it, with {@link fence}, on every\nspawn of that row, whatever the caller sent. A harness that cannot start\nclean is refused (core `cleanStartRefusal`).",
+            "const": true,
+            "type": "boolean"
           },
           "cwd": {
             "type": "string"
@@ -64738,6 +64751,10 @@
           "chosenEffort": {
             "$ref": "#/components/schemas/EffortLevel",
             "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
+          },
+          "clean": {
+            "description": "Started clean ({@link SpawnPayload.clean}): written by its first spawn\nand kept, so every launch of it is clean and a comparison can tell it\nfrom a session started with its context.",
+            "type": "boolean"
           },
           "continuedInto": {
             "description": "The session a continuation moved this one's work item to: this one never\nruns again ({@link relaunchOf} refuses it), and what is sent to it goes\nthere. Null on every other session.",

@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `clean` integer DEFAULT false NOT NULL;

@@ -57,6 +57,7 @@ import {
   CONTROL_MODEL_CATALOG,
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
+  cleanStartRefusal,
   contactWords,
   HARNESS_TOOLS,
   machineLabel,
@@ -5527,6 +5528,12 @@ export class OpencodeHarness implements Harness {
   }
 
   spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
+    // A clean start is refused, never started half clean: the hub refuses
+    // it first (`settleMode`), and a spawn from anywhere else is too.
+    const unclean = spec.clean ? cleanStartRefusal("opencode") : undefined;
+    if (unclean) {
+      return Promise.reject(new Error(unclean));
+    }
     // Config convergence gate: a spawn during a reload is delivered when it lifts.
     if (this.#applyGate) {
       return new Promise<HarnessSession>((resolve, reject) => {

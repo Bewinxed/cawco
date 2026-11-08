@@ -1,20 +1,12 @@
 <script lang="ts">
   import { spawnWords } from "@cawco/core/words/spawn";
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
    * Session lifetime as a composer chip. Choosing between keeping a session
    * and letting it end with its task is a decision worth a look at both
    * options, so the chip opens them rather than flipping on a click.
    */
-  import {
-    IconSuccess as Check,
-    IconDatabase as Database,
-    IconChevronDown as Down,
-    IconFire as Fire,
-  } from "#lib/icons.js";
-  import NsPopover from "./NsPopover.svelte";
+  import { IconDatabase as Database, IconFire as Fire } from "#lib/icons.js";
+  import ChoiceChip, { type ChoiceOption } from "./ChoiceChip.svelte";
 
   let {
     ephemeral,
@@ -27,76 +19,30 @@
     open: boolean;
     onchange: (open: boolean) => void;
   } = $props();
-  const OPTIONS = [
+  const OPTIONS: ChoiceOption<boolean>[] = [
     {
-      ephemeral: false,
+      value: false,
       name: spawnWords.lifetime.persistent,
       desc: spawnWords.lifetime.persistentDesc,
       icon: Database,
       hue: "var(--hue-blue-500)",
     },
     {
-      ephemeral: true,
+      value: true,
       name: spawnWords.lifetime.ephemeral,
       desc: spawnWords.lifetime.ephemeralDesc,
       icon: Fire,
       hue: "var(--hue-orange-500)",
     },
   ];
-  const current = $derived(
-    OPTIONS.find((option) => option.ephemeral === ephemeral) ?? OPTIONS[0]
-  );
 </script>
 
-<NsPopover
-  gap={2}
+<ChoiceChip
   id="session-lifetime"
-  label={spawnWords.lifetime.chip(current.name)}
+  label={spawnWords.lifetime.chip}
   {onchange}
+  onpick={onlifetime}
   {open}
-  rows="[data-fh]"
-  triggerClass={chipVariants({ variant: "setting" })}
-  width={300}
->
-  {#snippet trigger()}
-    {@const Icon = current.icon}
-    {#key current.name}
-      <span data-slot="swap" class="ns-in inline-flex items-center gap-space-2">
-        <Icon class="size-icon-md flex-none" style={`color:${current.hue}`} />
-        <span data-slot="chip-label">{current.name}</span>
-      </span>
-    {/key}
-    <Down data-slot="chevron" />
-  {/snippet}
-  {#each OPTIONS as option, index (option.name)}
-    {@const Icon = option.icon}
-    {@const on = option.ephemeral === ephemeral}
-    <button
-      data-slot="row"
-      aria-pressed={on}
-      class="select-none ns-in press-tint transition-control relative flex min-h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
-      data-fh="1"
-      onclick={() => {
-        onlifetime(option.ephemeral);
-        onchange(false);
-      }}
-      style:--delay={staggered(index)}
-      type="button"
-    >
-      <span data-slot="tile" class={iconTileVariants()} style:color={option.hue}
-        ><Icon class="size-icon-md" /></span
-      >
-      <span data-slot="text" class="min-w-0 flex-1">
-        <span data-slot="name" class="type-label block">{option.name}</span>
-        <span
-          data-slot="meta"
-          class="type-meta block text-pretty text-ink-subtle in-aria-pressed:text-selected-ink"
-          >{option.desc}</span
-        >
-      </span>
-      {#if on}
-        <Check class="ns-check size-icon-md flex-none text-selected-icon" />
-      {/if}
-    </button>
-  {/each}
-</NsPopover>
+  options={OPTIONS}
+  value={ephemeral}
+/>

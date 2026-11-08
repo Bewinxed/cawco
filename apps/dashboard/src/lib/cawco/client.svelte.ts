@@ -6275,6 +6275,7 @@ export async function spawnSession({
   model,
   effort,
   scratch,
+  clean,
   bootstrap,
   projectId,
   account,
@@ -6297,6 +6298,8 @@ export async function spawnSession({
   model?: string;
   effort?: EffortLevel;
   scratch?: SpawnPayload["scratch"];
+  /** Start it clean, with no instruction context (core `SpawnPayload.clean`). */
+  clean?: true;
   bootstrap?: SpawnPayload["bootstrap"];
   projectId?: string;
   /** The account picked for this session; absent: the hub places it. */
@@ -6313,6 +6316,7 @@ export async function spawnSession({
     model,
     effort,
     scratch,
+    ...(clean ? { clean } : {}),
     bootstrap,
     projectId,
     ...(account ? { account } : {}),

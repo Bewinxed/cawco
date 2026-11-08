@@ -97,6 +97,18 @@ export interface SessionCredentialInstall {
 }
 
 /** The harness a value off the wire, a URL or storage names, when it names one CawCo runs. */
+/**
+ * Why `harness` can't start a session clean (core `SpawnPayload.clean`), or
+ * undefined when it can. Claude Code and pi start each session with what its
+ * launch says (setting sources and memory off; pi's resource loader without
+ * context files, skills or extensions); OpenCode's server is an account's,
+ * shared by its sessions, and reads the global and project `AGENTS.md` into
+ * every one of them. A harness that can't is refused, never started half
+ * clean.
+ */
+export const cleanStartRefusal = (harness: HarnessKind): string | undefined =>
+  harness === "opencode" ? harnessWords.openCodeNotClean : undefined;
+
 export const harnessNamed = (value: unknown): HarnessKind | undefined =>
   HARNESSES.find((harness) => harness === value);
 

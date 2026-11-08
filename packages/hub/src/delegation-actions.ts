@@ -980,6 +980,8 @@ export interface HandoffActions {
       from?: string;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
+      /** Its session starts clean, with no instruction context (core `SpawnPayload.clean`). */
+      clean?: boolean;
       /** What it is handed (core handed-input.ts), written into its `$TMPDIR/inputs/` before its brief. */
       inputs?: unknown[];
       /** Where its commits go once it passes the landing gate; `main` by default. */

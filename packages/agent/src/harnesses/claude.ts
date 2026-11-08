@@ -1598,6 +1598,70 @@ const SESSION_DEFAULTS = { autoCompactWindow: 1_000_000 } as const;
  */
 const FENCE_SETTINGS = { disableClaudeAiConnectors: true } as const;
 
+/**
+ * What a clean session's CLI starts with besides its fence ({@link
+ * SpawnPayload.clean}): no settings file read, and so no CLAUDE.md, rules,
+ * skills, agents, output styles, hooks or plugins of the account's or the
+ * folder's. "Pass `[]` to disable filesystem settings (SDK isolation mode).
+ * Must include `'project'` to load CLAUDE.md files" (`settingSources`,
+ * sdk.d.ts 0.3.318); managed settings and the `--settings` CawCo hands it
+ * (its boundary's hook) still apply ("managed settings and --settings still
+ * apply", `claude --help`, 2.1.319). Its sign-in stays: `--bare`, which
+ * would drop the same and more, reads no OAuth ("OAuth and keychain are
+ * never read", same help).
+ */
+const CLEAN_OPTIONS: Pick<SdkOptions, "settingSources"> = {
+  settingSources: [],
+};
+
+/**
+ * What a fenced or clean session's `query()` options carry over the
+ * caller's. A fenced session's servers are these and no others: the CLI's
+ * `--strict-mcp-config`. It keeps the servers of `agents` passed in ("and
+ * servers declared by explicitly-passed agent definitions in `agents`",
+ * sdk.d.ts 0.3.296), so it takes no caller's agents. A clean one reads no
+ * settings file ({@link CLEAN_OPTIONS}).
+ */
+const isolation = (fence: boolean, clean: boolean) => ({
+  ...(fence ? { strictMcpConfig: true, agents: undefined } : {}),
+  ...(clean ? CLEAN_OPTIONS : {}),
+});
+
+/**
+ * The SDK hooks a session's compaction runs: its open items, word for word,
+ * after each compaction whoever asked for it (hub open-items.ts),
+ * "SessionStart hooks that match the `compact` source: Claude Code runs
+ * them and adds their output to the compacted context"
+ * (code.claude.com/docs/en/context-window). A clean session is given none
+ * of CawCo's words.
+ */
+const compactionHooks = (
+  clean: boolean,
+  openItems: () => Promise<SyncHookJSONOutput>
+) =>
+  clean
+    ? {}
+    : {
+        SessionStart: [
+          {
+            matcher: "compact",
+            timeout: OPEN_ITEMS_HOOK_TIMEOUT_S,
+            hooks: [openItems],
+          },
+        ],
+      };
+
+/**
+ * A clean session's environment: no auto memory, which `settingSources: []`
+ * keeps (its `MEMORY.md` still reached a request with no setting source,
+ * 2.1.319), and no CLAUDE.md from anywhere, an added directory's included
+ * (`fI(){return Boolean(i.CLAUDE_CODE_DISABLE_CLAUDE_MDS||…)}`, 2.1.319).
+ */
+const CLEAN_ENV = {
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+  CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
+} as const;
+
 /** The `hooks` of flag settings, by event. */
 type FlagHooks = NonNullable<Settings["hooks"]>;
 /** One matcher's entry of a `hooks` event, as flag settings hold it. */
@@ -1933,6 +1997,8 @@ interface CallerOptions {
  * the session hold across a restart.
  */
 interface SessionSpec {
+  /** Started clean, with no instruction context ({@link SpawnPayload.clean}). */
+  clean: boolean;
   denyTools: string[] | undefined;
   effort: EffortLevel | undefined;
   /** CawCo's MCP server alone, from no source but the launch ({@link SpawnPayload.fence}). */
@@ -1955,7 +2021,9 @@ const sessionSpecOf = (
   account: string | undefined
 ): SessionSpec => {
   const options = spec.options as CallerOptions | undefined;
+  const clean = spec.clean === true;
   return {
+    clean,
     denyTools: spec.denyTools,
     effort: spec.effort,
     fence: spec.fence === true,
@@ -1971,6 +2039,7 @@ const sessionSpecOf = (
               CLAUDE_CONFIG_DIR: undefined,
               CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
             }),
+        ...(clean ? CLEAN_ENV : {}),
       },
     },
     permissionMode: offeredMode(spec.permissionMode),
@@ -2398,6 +2467,7 @@ class ClaudeSession implements HarnessSession {
       skills,
       denyTools,
       fence,
+      clean,
       instructions,
       schedulesToParent,
     } = session;
@@ -2446,12 +2516,8 @@ class ClaudeSession implements HarnessSession {
         pathToClaudeCodeExecutable: sessiond.executable,
         extraArgs,
         mcpServers,
-        // A fenced session's servers are these and no others: the CLI's
-        // `--strict-mcp-config`, set after the caller's options so none of
-        // them turns it off. It keeps the servers of `agents` passed in
-        // ("and servers declared by explicitly-passed agent definitions in
-        // `agents`", sdk.d.ts 0.3.296), so it takes no caller's agents.
-        ...(fence ? { strictMcpConfig: true, agents: undefined } : {}),
+        // Set after the caller's options so none of them undoes it.
+        ...isolation(fence, clean),
         // What the CLI holds for later, said at each turn's end: the SDK's
         // `Stop` hook input lists the wake-ups the session has scheduled
         // ("Lets hooks distinguish 'session is done' from 'session is paused
@@ -2472,17 +2538,10 @@ class ClaudeSession implements HarnessSession {
               ],
             },
           ],
-          // Its open items, word for word, after each compaction whoever
-          // asked for it (hub open-items.ts): "SessionStart hooks that match
-          // the `compact` source: Claude Code runs them and adds their output
-          // to the compacted context" (code.claude.com/docs/en/context-window).
-          SessionStart: [
-            {
-              matcher: "compact",
-              timeout: OPEN_ITEMS_HOOK_TIMEOUT_S,
-              hooks: [async () => await this.#openItemsAfterCompaction()],
-            },
-          ],
+          ...compactionHooks(
+            clean,
+            async () => await this.#openItemsAfterCompaction()
+          ),
           ...scheduleHooks(schedulesToParent),
         },
         // Fleet baseline (from supervisor_config.denied_tools, cached in the

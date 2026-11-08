@@ -2660,6 +2660,7 @@ const SpawnPayloadShape = declared(
     account: z.string().optional(),
     accountDir: z.object({ accountId: z.string() }).optional(),
     bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
+    clean: z.literal(true).optional(),
     cwd: z.string(),
     delegateType: z
       .object({ name: z.string(), projectId: z.string().optional() })

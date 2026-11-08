@@ -780,6 +780,77 @@ const cawcosExtensionsAlone = (
 });
 
 /**
+ * A clean session's resources (`SpawnPayload.clean`), beside its fence's
+ * extensions ({@link cawcosExtensionsAlone}): no context file (`AGENTS.md`,
+ * `CLAUDE.md`, from its folder up and pi's own), no skill and no prompt
+ * template of the person's or a package's, and pi's own system prompt, not
+ * a `SYSTEM.md` or `APPEND_SYSTEM.md` in its folder or agent dir (pi 1.4.0
+ * resource-loader.js `discoverSystemPromptFile`). `noSkills` keeps the
+ * loader's added skill paths (`mergePaths(cliEnabledSkills,
+ * this.additionalSkillPaths)`), so the session adds none.
+ */
+const CLEAN_LOADER = {
+  noContextFiles: true,
+  noSkills: true,
+  noPromptTemplates: true,
+  systemPromptOverride: () => undefined,
+  appendSystemPromptOverride: () => [],
+} satisfies Partial<ConstructorParameters<typeof DefaultResourceLoader>[0]>;
+
+/**
+ * What a session's resource loader reads beside pi's own discovery, and the
+ * context files CawCo adds to pi's. pi reads `AGENTS.md` and `CLAUDE.md` up
+ * from its folder itself (resource-loader.js `loadContextFileFromDir`,
+ * 1.0.1); the project's memory documents CawCo placed in its folder (fleet.ts
+ * `placedMemoryIn`) and its role's, which it launches with, join them as
+ * context files. The project's skills placed at its folder: pi reads no
+ * `.claude/skills` (its place's file, fleet-place-set.ts), and "if a
+ * directory contains SKILL.md, treat it as a skill root" (pi 1.3.0
+ * skills.js). The fleet's pi extensions and its folder's project's, as the
+ * fleet sync made them ready (fleet-harness-config.ts): a module's file, or
+ * an installed package's dir, which pi loads as a pi package. A clean
+ * session reads none of them, nor pi's own ({@link CLEAN_LOADER}).
+ */
+const loaderSources = async (
+  spec: SpawnPayload,
+  cwd: string
+): Promise<{
+  loader: Partial<ConstructorParameters<typeof DefaultResourceLoader>[0]>;
+  memory: { content: string; path: string }[];
+}> => {
+  if (spec.clean === true) {
+    return {
+      memory: [],
+      loader: {
+        ...CLEAN_LOADER,
+        additionalSkillPaths: [],
+        additionalExtensionPaths: [],
+      },
+    };
+  }
+  const set = await readFleetHarnessSet();
+  const placed = await placeSetAt(cwd);
+  return {
+    memory: [
+      ...(await placedMemoryIn(cwd)).map(({ file, content }) => ({
+        path: file,
+        content,
+      })),
+      ...(spec.instructions ?? []).map(({ path, content }) => ({
+        path: `cawco memory: ${path}`,
+        content,
+      })),
+    ],
+    loader: {
+      additionalSkillPaths: Object.values(placed?.skills ?? {}),
+      additionalExtensionPaths: configAt(set, placed, "piExtensions").flatMap(
+        (extension) => (extension.entry ? [extension.entry] : [])
+      ),
+    },
+  };
+};
+
+/**
  * The HTTP status of the provider's last answer to a session, read off the
  * response itself: {@link fetch} is the fetch every request the session's
  * agent streams is made with (pi-ai `StreamOptions.fetch`, "Defaults to
@@ -1573,20 +1644,7 @@ export async function startPiHost(
   const shells = new PiShells();
   const agentDir = getAgentDir();
   const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
-  // pi reads `AGENTS.md` and `CLAUDE.md` up from its folder itself
-  // (resource-loader.js `loadContextFileFromDir`, 1.0.1); the project's
-  // memory documents CawCo placed in its folder (fleet.ts `placedMemoryIn`)
-  // and its role's, which it launches with, join them as context files.
-  const memory = [
-    ...(await placedMemoryIn(ctx.cwd)).map(({ file, content }) => ({
-      path: file,
-      content,
-    })),
-    ...(spec.instructions ?? []).map(({ path, content }) => ({
-      path: `cawco memory: ${path}`,
-      content,
-    })),
-  ];
+  const { memory, loader } = await loaderSources(spec, ctx.cwd);
   // The fleet's MCP servers, registered for this session alone (`FleetMcp`),
   // and pi's own MCP and tool-search extensions, which the SDK does not load
   // ("SDK sessions do not; add `createCodemodeExtension()`,
@@ -1614,28 +1672,17 @@ export async function startPiHost(
         cwd: ctx.cwd,
         ...(ctx.boundary ? { boundary: ctx.boundary } : {}),
       });
-  const set = await readFleetHarnessSet();
-  const placed = await placeSetAt(ctx.cwd);
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
     agentDir,
     settingsManager,
-    // The project's skills placed at its folder: pi reads no `.claude/skills`
-    // (its place's file, fleet-place-set.ts), and "if a directory contains
-    // SKILL.md, treat it as a skill root" (pi 1.3.0 skills.js).
-    additionalSkillPaths: Object.values(placed?.skills ?? {}),
-    // The fleet's pi extensions and its folder's project's, as the fleet
-    // sync made them ready (fleet-harness-config.ts): a module's file, or an
-    // installed package's dir, which pi loads as a pi package. A fenced
-    // session keeps CawCo's inline extensions alone (`cawcosExtensionsAlone`).
-    additionalExtensionPaths: configAt(set, placed, "piExtensions").flatMap(
-      (extension) => (extension.entry ? [extension.entry] : [])
-    ),
+    ...loader,
     extensionFactories: [
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
       ...mcp,
       ...(hooks ? [hooks.extension()] : []),
     ],
+    // A fenced session keeps CawCo's inline extensions alone.
     ...(fenced ? { extensionsOverride: cawcosExtensionsAlone } : {}),
     agentsFilesOverride: (base) => ({
       agentsFiles: [...base.agentsFiles, ...memory],
