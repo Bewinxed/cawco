@@ -19,12 +19,6 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import type {
-  JevChoiceAnswer,
-  JevQuestion,
-  JevResult,
-  JevText,
-} from "@cawco/core/jev";
 import {
   type ProjectStarter,
   STARTER_PLACES,
@@ -32,6 +26,12 @@ import {
 } from "@cawco/core/starters";
 import { unhandled } from "@cawco/core/unhandled";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
+import type {
+  JevChoiceAnswer,
+  JevQuestion,
+  JevResult,
+  JevText,
+} from "./jev-types";
 import {
   PLACE_QUESTION,
   reasonRefusal,
