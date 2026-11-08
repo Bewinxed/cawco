@@ -6,7 +6,7 @@ import {
   type CommentAttachment,
   eachFileOnce,
   type Pin,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import { field, type MatchEntry, matchOf, parse } from "@cawco/core/find-match";
 import { pinName } from "@cawco/core/pin-name";
 import type { PendingFile } from "../transcript/composer-draft.svelte";
