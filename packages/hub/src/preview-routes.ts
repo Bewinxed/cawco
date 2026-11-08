@@ -9,7 +9,7 @@
  */
 
 import type { PreviewNames } from "@cawco/core/browser";
-import { SEND_CONTROLS } from "@cawco/core/comments";
+import { SEND_CONTROLS } from "@cawco/core/comments/model";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
