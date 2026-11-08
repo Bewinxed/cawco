@@ -14,7 +14,7 @@
  * same order to what they read.
  */
 import type { ProjectAtLimit } from "./accounts";
-import type { OfferedMode } from "./harness";
+import type { OfferedMode } from "./harness/kinds";
 import type { CapPeriod, OnCap } from "./project-conversation";
 
 /** Where a setting in effect came from: the project's own, its area's, or the fleet's. */
