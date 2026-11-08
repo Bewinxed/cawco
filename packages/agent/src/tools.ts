@@ -10,6 +10,10 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { type Ran, runCaptured } from "@cawco/core/run-captured";
+import { hostEnvironment } from "@cawco/core/session-env";
+import { spawnRead, spawnTethered, untether } from "@cawco/core/tether";
 import type {
   ToolFootprint,
   ToolInstallMethod,
@@ -18,7 +22,7 @@ import type {
   ToolSpec,
   ToolStatus,
   ToolUpdateSwitches,
-} from "@cawco/core";
+} from "@cawco/core/tools";
 import {
   needProbe,
   olderThan,
@@ -26,11 +30,7 @@ import {
   TOOL_CATALOG,
   toolRuns,
   toolSpec,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { type Ran, runCaptured } from "@cawco/core/run-captured";
-import { hostEnvironment } from "@cawco/core/session-env";
-import { spawnRead, spawnTethered, untether } from "@cawco/core/tether";
+} from "@cawco/core/tools";
 import { toolWords } from "@cawco/core/words/tools";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";

@@ -24,12 +24,12 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { CommandResult } from "@cawco/core/harness";
 import type {
-  CommandResult,
   DesignOfferState,
   ProjectNote,
-  StagesTemplate,
-} from "@cawco/core";
+} from "@cawco/core/project-conversation";
+import type { StagesTemplate } from "@cawco/core/views";
 import { Elysia } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";

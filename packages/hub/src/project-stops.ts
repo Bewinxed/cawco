@@ -29,8 +29,10 @@
  *   an `endIntent` and no `endConfirmedAt`). Once that stop is recorded the
  *   session no longer blocks the delete: it stops when its machine is back.
  */
-import type { ProjectStopFrame, SessionPulse } from "@cawco/core";
+
 import { readWithin } from "@cawco/core/bounded";
+import type { ProjectStopFrame } from "@cawco/core/frames";
+import type { SessionPulse } from "@cawco/core/protocol";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { DbShape } from "./db";
