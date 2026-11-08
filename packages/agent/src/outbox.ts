@@ -45,13 +45,14 @@
  *    before it slept is kept until acknowledged, as for a dropped link, and
  *    the dead socket is noticed by the heartbeat's deadline (daemon.ts).
  */
+
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { DeliveryMark } from "@cawco/core/protocol";
 import {
   FRAMES_LOST,
   type NeutralMessage,
   type NeutralSystemMessage,
-} from "@cawco/core/harness";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { DeliveryMark } from "@cawco/core/protocol";
+} from "@cawco/core/session-messages";
 
 /** How much the outbox keeps, across every session on the machine. */
 const OUTBOX_BYTES = 32 * 1024 * 1024;

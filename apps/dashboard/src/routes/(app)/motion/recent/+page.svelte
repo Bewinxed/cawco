@@ -1,12 +1,7 @@
 <script lang="ts">
   import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import type { PermissionRequestFrame, PulseFrame } from "@cawco/core/frames";
-  import {
-    CAPABILITIES_NONE,
-    CONTROL_STORED_RUN,
-    type NeutralSessionInfo,
-    type StoredRun,
-  } from "@cawco/core/harness";
+  import { CAPABILITIES_NONE } from "@cawco/core/harness";
   import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import {
     type MemberProject,
@@ -19,6 +14,11 @@
     StoredRecent,
     TabNamed,
   } from "@cawco/core/protocol";
+  import { CONTROL_STORED_RUN } from "@cawco/core/session/controls";
+  import type {
+    NeutralSessionInfo,
+    StoredRun,
+  } from "@cawco/core/session-messages";
   import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
   import type {
     TranscriptBlock,
