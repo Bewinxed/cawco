@@ -1,7 +1,7 @@
 /**
  * `bun scripts/stored-json-check.ts <hub.db> [--key <secrets.key>]`: every
  * row of every stored JSON column in a hub database, checked against its
- * column's schema as the hub would read it (core stored-json.ts). It prints
+ * column's schema as the hub would read it (hub stored-json.ts). It prints
  * each failing table and column with how many rows fail, the first one's
  * primary key, and what zod says is wrong. It exits 1 when any row fails:
  * each failure is a migration this commit is missing.

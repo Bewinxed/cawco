@@ -64,7 +64,6 @@ import type {
   StarterPlace,
   StarterSourceKind,
 } from "@cawco/core/starters";
-import { storedJson } from "@cawco/core/stored-json";
 import {
   AccountMoveSchema,
   AccountOverageSchema,
@@ -137,6 +136,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 import { hubSecrets, openOrNull } from "../secret-box";
+import { storedJson } from "../stored-json";
 import {
   AuthorizationServerMetadataSchema,
   ConnectionSecretSchema,
@@ -211,7 +211,7 @@ const sealedText = customType<{ data: string | null; driverData: string }>({
 
 /**
  * A secret JSON column: the value's JSON, sealed as {@link sealedText} is,
- * and checked against its schema once it is opened (core stored-json.ts).
+ * and checked against its schema once it is opened (hub stored-json.ts).
  */
 const sealedJson = <S extends z.ZodType>(schema: S) =>
   storedJson(schema, {
