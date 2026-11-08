@@ -58,7 +58,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import type { WorkspaceRef } from "@cawco/core/harness";
-import { stagesCarriedPath } from "@cawco/core/paths";
+import { stagesCarriedPath } from "@cawco/core/paths/cawco";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { mcpGatewayPort } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
