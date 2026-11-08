@@ -1160,11 +1160,11 @@ export interface WorkItemDeps {
     headline?: string,
     outputs?: string[]
   ) => void;
-  /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts); throws a refusal in its words. */
+  /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; throws a refusal in its words. */
   readonly resolveHanded: (
     caller: InstanceRow,
     input: HeldInput
-  ) => Promise<HandedFile[]> | HandedFile[];
+  ) => AsyncGenerator<HandedFile> | Promise<HandedFile[]> | HandedFile[];
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -6409,35 +6409,33 @@ export const createWorkItems = ({
   /**
    * What `held` names, resolved now and read for `reader` (handed-inputs.ts):
    * refused in words naming it when it names nothing `reader` may read, or
-   * when together it is more than {@link INPUTS_LIMIT_BYTES}.
+   * as soon as what has been read passes {@link INPUTS_LIMIT_BYTES}.
    */
   const resolveHeld = async (
     held: HeldInput[],
     reader: InstanceRow
   ): Promise<HandedFile[]> => {
-    const each: HandedFile[][] = [];
+    const resolved: HandedFile[] = [];
+    let bytes = 0;
     for (const input of held) {
       try {
-        each.push(await resolveHanded(reader, input));
+        for await (const file of await resolveHanded(reader, input)) {
+          // What is made for its reader as it is written (a preview's pass)
+          // is a few hundred bytes: what is in hand now is what counts.
+          bytes += typeof file.bytes === "function" ? 0 : file.bytes.length;
+          if (bytes > INPUTS_LIMIT_BYTES) {
+            throw new WorkItemRefusal(
+              400,
+              workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
+            );
+          }
+          resolved.push(file);
+        }
       } catch (error) {
         throw error instanceof HandedInputRefusal
           ? inputsRefused(error.message, { cause: error })
           : error;
       }
-    }
-    const resolved = each.flat();
-    // What is made for its reader as it is written (a preview's pass) is a
-    // few hundred bytes: what is in hand now is the whole of it that counts.
-    const bytes = resolved.reduce(
-      (sum, file) =>
-        sum + (typeof file.bytes === "function" ? 0 : file.bytes.length),
-      0
-    );
-    if (bytes > INPUTS_LIMIT_BYTES) {
-      throw new WorkItemRefusal(
-        400,
-        workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
-      );
     }
     return resolved;
   };

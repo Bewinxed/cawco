@@ -442,10 +442,11 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     ];
   };
 
-  const assets = async (
+  /** An item's assets, each read only when its reader asks for the next: a reader past its budget reads no more. */
+  async function* assets(
     caller: InstanceRow,
     id: string
-  ): Promise<HandedFile[]> => {
+  ): AsyncGenerator<HandedFile> {
     const item = itemOf(caller, id, "assets");
     const folder = deps.outputsFolder(item);
     if (!item.projectId) {
@@ -474,21 +475,18 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       );
     }
     // Each lands at its path in the project's folder, its folders kept:
-    // `inputs/assets/<item>/design-briefs/brief.md`. Read one at a time: an
-    // item's outputs can be thousands of files.
-    const files: HandedFile[] = [];
+    // `inputs/assets/<item>/design-briefs/brief.md`.
     for (const path of paths) {
       const { bytes } = await folderRead(() =>
         readFolderBytes(projectId, path, ASSET_LIMIT)
       );
-      files.push({
+      yield {
         name: path,
         bytes: Buffer.from(bytes),
         from: `${path} in the project's folder`,
-      });
+      };
     }
-    return files;
-  };
+  }
 
   /**
    * `input` as the files it lands as, read for `caller`; a {@link
@@ -498,7 +496,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
   const resolve = (
     caller: InstanceRow,
     input: HeldInput
-  ): Promise<HandedFile[]> | HandedFile[] => {
+  ): AsyncGenerator<HandedFile> | Promise<HandedFile[]> | HandedFile[] => {
     if ("report" in input) {
       return report(caller, input.report);
     }
