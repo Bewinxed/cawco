@@ -9,21 +9,17 @@ import { unhandled } from "@cawco/core/unhandled";
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
-import type { AgentRow } from "@cawco/core";
-import {
-  CAWCO_ENV,
-  CAWCO_HUB_PORT,
-  CAWCO_MDNS_TYPE,
-  configurePage,
-  pinnedTools,
-  readEnv,
-} from "@cawco/core";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { hubCredentialSocket } from "@cawco/core/paths";
+import type { AgentRow } from "@cawco/core/protocol";
+import { CAWCO_HUB_PORT, CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { AgentRowSchema } from "@cawco/core/stored-shapes";
 import { secondsOf } from "@cawco/core/time";
+import { pinnedTools } from "@cawco/core/tools";
+import { configurePage } from "@cawco/core/words/configure";
 import { z } from "zod";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { OwnerApprovalError, ownerFetch } from "./owner";

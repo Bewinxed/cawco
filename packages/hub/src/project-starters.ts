@@ -47,17 +47,16 @@
  * (`starters.changed`).
  */
 import { createHash } from "node:crypto";
+import type { CommandResult } from "@cawco/core/harness";
 import {
-  CLOSED_STAGE_KINDS,
-  type CommandResult,
   type ProjectStarter,
   STARTER_PLACES,
-  type StageKind,
   type StarterPlace,
   type StartersChangedFrame,
-} from "@cawco/core";
+} from "@cawco/core/starters";
 import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
+import { CLOSED_STAGE_KINDS, type StageKind } from "@cawco/core/views";
 import { Elysia, t } from "elysia";
 import type { DbShape, WorkItemRow } from "./db";
 import { designShaped } from "./design-offers";

@@ -60,11 +60,11 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { HopByHopHeader } from "../../../packages/core/src/hop-headers";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { PREVIEW_WHY_META } from "../../../packages/core/src/index";
 import {
   processArgs,
   processLineage,
 } from "../../../packages/core/src/process-identity";
+import { PREVIEW_WHY_META } from "../../../packages/core/src/protocol";
 import type { RenderReport } from "../../../packages/core/src/stage";
 import {
   leasePortRange,

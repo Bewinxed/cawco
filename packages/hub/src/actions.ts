@@ -34,13 +34,10 @@
  * only if it reads that key; the hub's own at-most-once does not depend on it.
  */
 import { createHash } from "node:crypto";
-import {
-  ACTION_STATES,
-  type ApprovedActionView,
-  type InstanceRow,
-  type SessionRole,
-} from "@cawco/core";
+import { ACTION_STATES, type ApprovedActionView } from "@cawco/core/actions";
+import type { SessionRole } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";

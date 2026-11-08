@@ -15,7 +15,7 @@
  * the MCP server's own `Authorization: Bearer` header is: the hub takes no
  * call on a session's name alone.
  */
-import { CAWCO_ENV } from "@cawco/core";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { type HubRequest, hubAt, hubRequest } from "@cawco/core/hub-request";
 import {
   envelopeText,

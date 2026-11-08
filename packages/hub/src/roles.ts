@@ -50,14 +50,14 @@
  * you), and only the curator sorts the inbox.
  */
 import {
-  type InstanceRow,
-  type MemoryRole,
-  NO_REPLY_TOOL,
   type SessionRole,
   SPAWNING_TOOLS,
   sessionMayStart,
   startsAny,
-} from "@cawco/core";
+} from "@cawco/core/delegate-types";
+import type { MemoryRole } from "@cawco/core/fleet";
+import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
 import type { TaskTool } from "./task-tools";
 

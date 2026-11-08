@@ -58,18 +58,17 @@
  *   `prWait`), kept by the events and reads above. A project with no GitHub
  *   poller is refused either wait where it is written.
  */
-import {
-  configurePage,
-  githubTarget,
-  type InstanceRow,
-  type OfferedMode,
-  readsGitHubApi,
-  SESSION_CHOSEN_MODES,
-  taskLinkWords,
-  type WaitTarget,
-} from "@cawco/core";
+import { readsGitHubApi } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
+import {
+  type OfferedMode,
+  SESSION_CHOSEN_MODES,
+} from "@cawco/core/harness/kinds";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
+import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";
+import { configurePage } from "@cawco/core/words/configure";
+import { taskLinkWords } from "@cawco/core/words/task-links";
 import { Elysia, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";

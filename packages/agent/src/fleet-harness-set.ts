@@ -16,17 +16,17 @@
  * from the user settings the sync registers them in, where the person's own
  * `claude` runs them too.
  */
+import type { FleetItemState } from "@cawco/core/fleet";
+import type { HarnessConfigKind } from "@cawco/core/harness-config";
 import {
   type FleetHook,
-  type FleetItemState,
-  type HarnessConfigKind,
   type HookEvent,
   type HookHandler,
   type HookHarness,
   type HookMatchTest,
   hookUnsupported,
   hookWorkspaceNote,
-} from "@cawco/core";
+} from "@cawco/core/hooks";
 import { fleetHarnessSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { FleetPlaceSet } from "./fleet-place-set";

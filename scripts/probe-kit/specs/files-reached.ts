@@ -36,7 +36,6 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ArtifactSummary } from "../../../packages/core/src";
 import {
   type HubSent,
   hubRequest,
@@ -44,6 +43,7 @@ import {
   type ToolArgs,
   type ToolName,
 } from "../../../packages/core/src/hub-request";
+import type { ArtifactSummary } from "../../../packages/core/src/protocol";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
