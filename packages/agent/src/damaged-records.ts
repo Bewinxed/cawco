@@ -23,13 +23,13 @@
  */
 import { readdir, rm, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import type { DamagedRecordReport } from "@cawco/core";
 import {
   accountsRoot,
   sessionTakenDir,
   sessionWakeupsDir,
   workspacesDir,
 } from "@cawco/core/paths";
+import type { DamagedRecordReport } from "@cawco/core/protocol";
 import {
   type DamagedRecord,
   isDamagedRecord,

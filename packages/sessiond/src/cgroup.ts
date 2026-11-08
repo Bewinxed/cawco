@@ -97,7 +97,8 @@ import {
 } from "node:fs/promises";
 import { availableParallelism, totalmem } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
-import type { ChildLimit, SessionLimits } from "@cawco/core";
+import type { ChildLimit } from "@cawco/core/harness";
+import type { SessionLimits } from "@cawco/core/protocol";
 import { TASK_RESERVE } from "./tasks";
 
 /** Where the keeper runs inside its delegated cgroup: the unit's `DelegateSubgroup=`. */

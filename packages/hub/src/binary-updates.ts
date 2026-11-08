@@ -17,7 +17,6 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type DamagedHubRecord, damagedHubRecordWords } from "@cawco/core";
 import {
   ARCHIVE_ASK_AGAIN_S,
   type ArchiveFetching,
@@ -41,6 +40,10 @@ import type {
   ChannelRelease,
 } from "@cawco/core/binary-updates";
 import { hubUpdatePolicyPath } from "@cawco/core/paths";
+import {
+  type DamagedHubRecord,
+  damagedHubRecordWords,
+} from "@cawco/core/protocol";
 import {
   isDamagedRecord,
   parseRecord,

@@ -16,13 +16,13 @@ import {
   type HostOutputListed,
   OUTPUTS_DIR,
   type WorkspaceOutputs,
-  workWords,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   forgetWorkspaceTmp,
   linkWorkspaceTmp,
   workspaceScratchDir,
 } from "@cawco/core/paths";
+import { workWords } from "@cawco/core/words/work";
 import { removeTree } from "./remove-tree";
 
 /** A workspace id as the hub makes one (`crypto.randomUUID()`): nothing else names a folder under the scratch root. */
