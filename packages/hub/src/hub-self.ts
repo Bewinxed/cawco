@@ -11,7 +11,7 @@
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { CAWCO_HUB_PORT } from "@cawco/core/protocol";
+import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 
 const WS_SCHEME = /^ws/u;
 const WS_PATH_SUFFIX = /\/ws$/u;
