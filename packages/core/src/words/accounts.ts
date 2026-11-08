@@ -11,7 +11,11 @@
  * shows each; a word marked "the app's alone" is one only the app says,
  * where the HIG asks for something the web does another way.
  */
-import type { AccountHue, CompactMethod, PlacementStrategy } from "../accounts";
+import type {
+  AccountHue,
+  CompactMethod,
+  PlacementStrategy,
+} from "../accounts/kinds";
 import type { HarnessKind } from "../harness/kinds";
 import { commonWords } from "./common";
 import { andList, pad2 } from "./helpers";

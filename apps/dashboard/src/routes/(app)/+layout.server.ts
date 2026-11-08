@@ -1,11 +1,11 @@
 import type { ArtifactNeedsRead } from "@cawco/core/artifact-needs";
+import type { FramePayload } from "@cawco/core/frames";
 import { harnessNamed } from "@cawco/core/harness/kinds";
 import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { MoveJob } from "@cawco/core/move";
 import type {
   Envelope,
-  FramePayload,
   InstanceRow,
   SessionPulse,
   StoredRecent,
