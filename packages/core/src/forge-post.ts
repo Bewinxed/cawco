@@ -16,10 +16,6 @@ export const FORGE_NAMES: Readonly<Record<Forge, string>> = {
   gitea: "Gitea",
 };
 
-/** What a pull request is called on each forge: GitLab's is a merge request. */
-export const changeRequestWords = (forge: Forge): string =>
-  forge === "gitlab" ? "merge request" : "pull request";
-
 /**
  * One write to a repository on a forge: an issue, a pull or merge request
  * from `head` into `base`, or a comment on an issue's or a pull request's
