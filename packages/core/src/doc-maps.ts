@@ -7,8 +7,6 @@
  * (agent preview-overlay mirror.ts), which loads no Yjs into the page.
  */
 
-import { PIN_MAPS } from "./comments";
-
 /** What a map's watcher hears of one transaction: the keys it changed, and whether this view made it. */
 export interface MapChange {
   keysChanged: Set<string>;
@@ -38,9 +36,24 @@ export interface MapDoc {
 }
 
 /**
+ * The maps a pin is written across ({@link Pin}'s parts): `pins` its head,
+ * `places` where it stands, `resolves` its resolve, `looks` the person's
+ * last look (`seenAt`), `deliveries` the hub's stamps, `entries` its
+ * thread, one key per entry (`<pin>:<entry>`).
+ */
+export const PIN_MAPS = [
+  "pins",
+  "places",
+  "resolves",
+  "looks",
+  "deliveries",
+  "entries",
+] as const;
+
+/**
  * The maps a page's overlay reads and writes, kept on the page by its
  * mirror: the decision state and the doc's meta, the ink, its moved groups,
- * the pins in their parts (comments.ts `PIN_MAPS`), their tombstones, and
+ * the pins in their parts (`PIN_MAPS`), their tombstones, and
  * the person's looks at what changed.
  */
 export const MIRRORED_MAPS = [
