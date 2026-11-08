@@ -32,7 +32,7 @@ import {
   idSpans,
   type LineIndex,
   LineIndexes,
-  unlessGone,
+  readUnlessGone,
   windowCuts,
   windowRange,
 } from "./transcript-index.ts";
@@ -1388,7 +1388,7 @@ async function messagesAt(
 //
 // A transcript deleted while it is read (its session deleted, its workspace
 // retired) reads as one never found, as the harness reads a session with no
-// transcript: no messages ({@link unlessGone}).
+// transcript: no messages ({@link readUnlessGone}).
 // ---------------------------------------------------------------------------
 
 /**
@@ -1397,7 +1397,7 @@ async function messagesAt(
  * answer, a continuation).
  */
 export function readSessionChain(path: string): Promise<SDKSessionMessage[]> {
-  return unlessGone(async () => {
+  return readUnlessGone(async () => {
     const index = await indexes.get(path);
     const nodes = await memo(index, "chain", async () =>
       (await walkChainYielding([...index.nodes], false)).filter(
@@ -1417,7 +1417,7 @@ export function readSessionChain(path: string): Promise<SDKSessionMessage[]> {
  * branch is there too. For readers that index what a session ever did.
  */
 export function readSessionWhole(path: string): Promise<SDKSessionMessage[]> {
-  return unlessGone(async () => {
+  return readUnlessGone(async () => {
     const index = await indexes.get(path);
     const shown = index.nodes.filter((node) => node.shows !== undefined);
     const records = (await readSpans(path, shown)) as (RawRecord | undefined)[];
@@ -1452,7 +1452,7 @@ export function readSaidWindow(
   path: string,
   ask: WindowAsk
 ): Promise<SaidWindow> {
-  return unlessGone(
+  return readUnlessGone(
     async () => {
       if ("end" in ask) {
         const fast = await newestWindow(path, ask.limit);
@@ -1602,7 +1602,7 @@ export function readSessionEnd(
   path: string,
   count = 200
 ): Promise<{ complete: boolean; messages: SDKSessionMessage[] }> {
-  return unlessGone(() => sessionEnd(path, count), {
+  return readUnlessGone(() => sessionEnd(path, count), {
     complete: true,
     messages: [],
   });
