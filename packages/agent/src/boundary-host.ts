@@ -84,22 +84,22 @@ import {
   CloneDenySchema,
   cloneDenies,
 } from "@cawco/core/clone-denies";
-import { isGitDirSync } from "@cawco/core/git-dir";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
-import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
-import { srtRefusedLine } from "@cawco/core/srt-refusal";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { z } from "zod";
+import { isGitDirSync } from "./git-dir";
+import { mountedAnywhere, mountPointsOf } from "./mount-table";
 import {
   RELAY_SOCKET_ENV,
   RELAY_SOCKET_NAME,
   startProxyRelay,
 } from "./proxy-relay";
 import { endSandbox, parentOf } from "./sandbox-end";
+import { srtRefusedLine } from "./srt-refusal";
 
 /**
  * Address space no command dials by an address literal. srt judges only the

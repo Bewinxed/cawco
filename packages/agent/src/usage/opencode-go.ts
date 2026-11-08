@@ -1,7 +1,7 @@
-import { readWithin } from "../bounded";
-import { secondsOf } from "../time";
-import { unhandled } from "../unhandled";
-import type { LimitWindow, OpenCodeGoLimits } from "./types";
+import { readWithin } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
+import type { LimitWindow, OpenCodeGoLimits } from "@cawco/core/usage/types";
 
 /**
  * The OpenCode Go plan's live windows. OpenCode Go meters every key by dollar
