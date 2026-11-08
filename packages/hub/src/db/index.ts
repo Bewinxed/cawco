@@ -9,7 +9,6 @@ import type {
   FleetConfig,
   FleetItemStatus,
   FleetMarketplace,
-  FleetMcpConfig,
   FleetMcpServer,
   FleetPlugin,
   FleetRefresh,
@@ -17,7 +16,6 @@ import type {
   FleetSyncOutcome,
   FleetSyncReport,
   FleetVersioned,
-  McpPlatform,
   MemoryScope,
   MemoryVersion,
   SkillFile,
@@ -71,7 +69,7 @@ import {
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { DAY_MS } from "@cawco/core/time";
-import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
+import type { ToolStatus } from "@cawco/core/tools";
 import type { StagesTemplate } from "@cawco/core/views";
 import { stoppedWords } from "@cawco/core/words/machine-pause";
 import { RESTART_LOST } from "@cawco/core/words/session-ends";
@@ -87,7 +85,6 @@ import {
   inArray,
   isNotNull,
   isNull,
-  lt,
   ne,
   notInArray,
   or,
@@ -142,6 +139,7 @@ import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type HubSettingsDb, hubSettingsDb } from "./hub-settings";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type LfsOffersDb, lfsOffersDb } from "./lfs-offers";
+import { type McpServersDb, mcpServersDb } from "./mcp-servers";
 import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
 import {
   mergeProjectPages,
@@ -177,7 +175,6 @@ import {
   fleetHookHistory,
   fleetHooks,
   fleetMcpOauth,
-  fleetMcpSessions,
   fleetMemory,
   fleetMemoryDocAreas,
   fleetMemoryDocProjects,
@@ -197,7 +194,6 @@ import {
   lineAnchors,
   marketplaces,
   mcpServers,
-  mcpToolListings,
   memoryBriefings,
   moves,
   type OpenSubagent,
@@ -224,7 +220,6 @@ import {
   skills,
   spendSettings,
   taskCommentIds,
-  tools,
   usageBuckets,
   usageLimits,
   workItemGlobs,
@@ -772,9 +767,6 @@ interface HubStore {
   readonly deleteMachine: (machineId: string) => {
     instanceIds: string[];
   };
-  readonly deleteMcpOauth: (name: string) => void;
-  /** A fleet MCP relay session closed: its `initialize` params go. */
-  readonly deleteMcpSession: (id: string) => void;
   /** Design checks and design proposals (design-verify.ts, design-system.ts). */
   readonly designChecks: DesignChecksDb;
   /** Caw's one design-system offer per project (design-offers.ts). */
@@ -880,19 +872,6 @@ interface HubStore {
    * from a derived one.
    */
   readonly getInstancesByIds: (ids: string[]) => PublicInstanceRow[];
-  readonly getMcpOauth: (
-    name: string
-  ) => typeof fleetMcpOauth.$inferSelect | undefined;
-  readonly getMcpServer: (name: string) =>
-    | (Omit<typeof mcpServers.$inferSelect, "config"> & {
-        config: FleetMcpConfig;
-      })
-    | undefined;
-  /** The `initialize` params a fleet MCP relay session of `server` opened with, if it is kept. */
-  readonly getMcpSession: (
-    id: string,
-    server: string
-  ) => Record<string, unknown> | undefined;
   /** A parent's items in one group that no combined report has carried yet, oldest first. */
   readonly groupWorkItems: (
     parentInstanceId: string,
@@ -1047,8 +1026,6 @@ interface HubStore {
   readonly listProjects: () => ProjectRow[];
   /** Every skill row without its files — a catalog read should not weigh megabytes. */
   readonly listSkills: () => FleetSkillMeta[];
-  /** The fleet's tool policy (NEW.md §10) — only the tools somebody has ruled on. */
-  readonly listToolPolicies: () => ToolPolicy[];
   /** The listed sessions running or starting on one machine. */
   readonly liveInstancesOn: (machineId: string) => PublicInstanceRow[];
   /** Where each live top-level mainline session works, and no more of it. */
@@ -1436,8 +1413,6 @@ interface HubStore {
   readonly projectWork: ProjectWorkDb;
   /** Every work item of the project, newest first (handed-inputs.ts names one by its handle). */
   readonly projectWorkItems: (projectId: string) => WorkItemRow[];
-  /** Drops the fleet MCP relay sessions unused since `before`; answers how many. */
-  readonly pruneMcpSessions: (before: Date) => number;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
     name: string;
@@ -1462,30 +1437,6 @@ interface HubStore {
   /** A row stored whole, as `harnessConfigProblem` passed it; answers it as stored. */
   readonly putHarnessConfig: (row: FleetHarnessConfig) => FleetHarnessConfig;
   readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
-  readonly putMcpOauth: (row: typeof fleetMcpOauth.$inferInsert) => void;
-  /**
-   * Upsert. `projectId` binds it to one project (placed at each of its
-   * checkouts and workspaces), null makes it every machine's, and left out
-   * keeps what it was. `platforms` the same way: the platforms it runs on,
-   * null every platform, left out as it was. `shared`, one instance per
-   * machine started at its first call, left out as it was.
-   */
-  readonly putMcpServer: (server: {
-    name: string;
-    config: FleetMcpServer["config"];
-    enabled?: boolean;
-    projectId?: string | null;
-    /** As `projectId`, bound to every project in that area instead. */
-    areaId?: string | null;
-    platforms?: McpPlatform[] | null;
-    shared?: boolean;
-  }) => FleetMcpServer;
-  /** A fleet MCP relay session opened: its `initialize` params, kept across hub restarts. */
-  readonly putMcpSession: (row: {
-    id: string;
-    server: string;
-    init: Record<string, unknown>;
-  }) => void;
   readonly putPlugin: (plugin: {
     id: string;
     enabled?: boolean;
@@ -1523,12 +1474,6 @@ interface HubStore {
     error?: string;
     files?: SkillFile[];
   }) => FleetSkillMeta;
-  readonly putToolListing: (listing: string, toolsHash: string) => void;
-  /** Upsert; a patch names only what it changes and the rest stays as it was. */
-  readonly putToolPolicy: (
-    id: string,
-    patch: { required?: boolean; pinnedVersion?: string | null }
-  ) => ToolPolicy;
   /** Every hook start waiting for a slot in the project, oldest first (dispatch.ts). */
   readonly queuedTaskStarts: (projectId: string) => QueuedTaskStartRow[];
   /** `delegate` calls waiting for files a live item owns, oldest first. */
@@ -1715,11 +1660,6 @@ interface HubStore {
     until: Date | null,
     stopped: StoppedCommands | null
   ) => boolean;
-  readonly setMcpAuth: (
-    name: string,
-    mode: "direct" | "oauth",
-    error?: string
-  ) => void;
   /** A move's "Don't move", remembered on its project; null forgets it. */
   /** Records the root commit checkout place `id` was read at. */
   readonly setPlaceRoot: (id: string, commit: string) => void;
@@ -1878,9 +1818,6 @@ interface HubStore {
    * connection's change log), and the log emptied: what the board reads again.
    */
   readonly takeChangedInstances: () => string[];
-  readonly takeMcpAuthorization: (
-    state: string
-  ) => typeof fleetMcpOauth.$inferSelect | undefined;
   /** Takes one owed start off the books; true for exactly one caller. */
   readonly takeOwedSpawn: (id: string) => boolean;
   /** The task a comment written under the id its device chose went on (`task_comment_ids`). */
@@ -1891,8 +1828,6 @@ interface HubStore {
   readonly taskLinks: TaskLinksDb;
   /** Each relayed tool call taken under an idempotency key, and its answer (tool-call-keys.ts). */
   readonly toolCallKeys: ToolCallKeysDb;
-  /** The hash of the tools a cawco MCP listing last answered, if it has. */
-  readonly toolListing: (listing: string) => string | undefined;
   readonly touchAgent: (machineId: string) => void;
   /**
    * The session moved. This is the only write anywhere that means it: every
@@ -1903,8 +1838,6 @@ interface HubStore {
    * Called off the daemon's pulse and throttled by the caller.
    */
   readonly touchInstanceActivity: (id: string) => void;
-  /** A fleet MCP relay session was used now. */
-  readonly touchMcpSession: (id: string) => void;
   /** Trackers: a project's binding to GitHub Issues or Linear, and what its tasks and their issues agreed on (tracker.ts). */
   readonly trackers: TrackersDb;
   /** Deleted config items, kept whole for their Undo (trash.ts). */
@@ -2073,7 +2006,8 @@ interface HubStore {
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
-export type DbShape = SendsDb &
+export type DbShape = McpServersDb &
+  SendsDb &
   SessionLinesDb &
   UsageDb &
   DelegateEventsDb &
@@ -2255,9 +2189,6 @@ const harnessConfigOf = (
 
 /** A hub place's machine: the hub itself, which is no machine of the fleet. */
 const HUB_PLACE_MACHINE = "hub";
-
-/** A fleet MCP server's detail between saving a new config and the server's first answer. */
-const MCP_NOT_YET_REACHED = "The hub has not reached this server yet.";
 
 /** Where a place stands in its project's list: the primary checkout, other checkouts, the hub's folder, workspaces. */
 const placeRank = (place: PlaceRow): number => {
@@ -3796,6 +3727,7 @@ const make = async (path: string): Promise<DbShape> => {
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
+    ...mcpServersDb(core),
     ...sendsDb(core),
     ...sessionLinesDb(core),
     ...usageDb(core),
@@ -4210,94 +4142,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(listedInstances())
         .all()
         .map(asListed),
-    toolListing: (listing) =>
-      db
-        .select({ toolsHash: mcpToolListings.toolsHash })
-        .from(mcpToolListings)
-        .where(eq(mcpToolListings.listing, listing))
-        .get()?.toolsHash,
-    putToolListing: (listing, toolsHash) => {
-      const row = { listing, toolsHash, listedAt: new Date() };
-      db.insert(mcpToolListings)
-        .values(row)
-        .onConflictDoUpdate({ target: mcpToolListings.listing, set: row })
-        .run();
-    },
-    getMcpServer: (name) => {
-      const row = db
-        .select()
-        .from(mcpServers)
-        .where(eq(mcpServers.name, name))
-        .get();
-      // A config the hub's key does not open is no server until it is saved again.
-      return row?.config ? { ...row, config: row.config } : undefined;
-    },
-    getMcpOauth: (name) =>
-      db.select().from(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).get(),
-    putMcpOauth: (row) => {
-      db.insert(fleetMcpOauth)
-        .values(row)
-        .onConflictDoUpdate({ target: fleetMcpOauth.name, set: row })
-        .run();
-    },
-    deleteMcpOauth: (name) => {
-      db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
-    },
-    getMcpSession: (id, server) =>
-      db
-        .select({ init: fleetMcpSessions.init })
-        .from(fleetMcpSessions)
-        .where(
-          and(eq(fleetMcpSessions.id, id), eq(fleetMcpSessions.server, server))
-        )
-        .get()?.init,
-    putMcpSession: ({ id, server, init }) => {
-      const row = { id, server, init, usedAt: new Date() };
-      db.insert(fleetMcpSessions)
-        .values(row)
-        .onConflictDoUpdate({ target: fleetMcpSessions.id, set: row })
-        .run();
-    },
-    touchMcpSession: (id) => {
-      db.update(fleetMcpSessions)
-        .set({ usedAt: new Date() })
-        .where(eq(fleetMcpSessions.id, id))
-        .run();
-    },
-    deleteMcpSession: (id) => {
-      db.delete(fleetMcpSessions).where(eq(fleetMcpSessions.id, id)).run();
-    },
-    pruneMcpSessions: (before) =>
-      db
-        .delete(fleetMcpSessions)
-        .where(lt(fleetMcpSessions.usedAt, before))
-        .returning({ id: fleetMcpSessions.id })
-        .all().length,
-    setMcpAuth: (name, mode, error) => {
-      db.update(mcpServers)
-        .set({ authMode: mode, authError: error ?? null })
-        .where(eq(mcpServers.name, name))
-        .run();
-    },
-    takeMcpAuthorization: (state) =>
-      db.transaction((tx) => {
-        // A sign-in under way is sealed, so its state is found by opening
-        // each one: a fleet holds a handful.
-        const row = tx
-          .select()
-          .from(fleetMcpOauth)
-          .where(isNotNull(fleetMcpOauth.pending))
-          .all()
-          .find((one) => one.pending?.state === state);
-        if (!row?.pending || row.pending.expiresAt <= Date.now()) {
-          return;
-        }
-        tx.update(fleetMcpOauth)
-          .set({ pending: null })
-          .where(eq(fleetMcpOauth.name, row.name))
-          .run();
-        return row;
-      }),
     upsertAgent: ({
       machineId,
       hostname,
@@ -5454,38 +5298,6 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .returning({ id: instances.id })
         .all().length,
-    listToolPolicies: () =>
-      db
-        .select()
-        .from(tools)
-        .all()
-        .map(({ id, required, pinnedVersion }) => ({
-          id,
-          required,
-          pinnedVersion,
-        })),
-    putToolPolicy: (id, { required, pinnedVersion }) => {
-      const stored = db.select().from(tools).where(eq(tools.id, id)).get();
-      const policy: ToolPolicy = {
-        id,
-        required: required ?? stored?.required ?? false,
-        pinnedVersion:
-          pinnedVersion === undefined
-            ? (stored?.pinnedVersion ?? null)
-            : pinnedVersion,
-      };
-      db.insert(tools)
-        .values(policy)
-        .onConflictDoUpdate({
-          target: tools.id,
-          set: {
-            required: policy.required,
-            pinnedVersion: policy.pinnedVersion,
-          },
-        })
-        .run();
-      return policy;
-    },
     agentTools: toolsOf,
     // The cells reported replace their own; a tool the report did not name
     // keeps what it had.
@@ -5774,67 +5586,6 @@ const make = async (path: string): Promise<DbShape> => {
         harnessConfig: listHarnessConfig().filter((row) => row.enabled),
         // Always sent: a machine spawns nothing until it has heard it.
         deniedTools: deniedToolNames(),
-      };
-    },
-    putMcpServer: ({
-      name,
-      config,
-      enabled,
-      projectId,
-      areaId,
-      platforms,
-      shared,
-    }) => {
-      const previous = db
-        .select()
-        .from(mcpServers)
-        .where(eq(mcpServers.name, name))
-        .get();
-      const changed =
-        !previous || JSON.stringify(previous.config) !== JSON.stringify(config);
-      if (changed) {
-        db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
-      }
-      const placement = placementOf({ projectId, areaId }, previous, "local");
-      const asked = platforms?.length ? platforms : null;
-      const runsOn =
-        platforms === undefined ? (previous?.platforms ?? null) : asked;
-      const one = shared ?? previous?.shared ?? false;
-      // A new or changed config is unsettled — failed, so never synced — until
-      // the hub hears from the server (fleet-mcp.ts `#probe`).
-      const unsettled = {
-        authMode: "direct" as const,
-        authError: MCP_NOT_YET_REACHED,
-      };
-      db.insert(mcpServers)
-        .values({
-          name,
-          config,
-          enabled: enabled ?? true,
-          platforms: runsOn,
-          shared: one,
-          ...placement,
-          ...unsettled,
-        })
-        .onConflictDoUpdate({
-          target: mcpServers.name,
-          set: {
-            config,
-            enabled: enabled ?? true,
-            platforms: runsOn,
-            shared: one,
-            ...placement,
-            ...(changed ? unsettled : {}),
-          },
-        })
-        .run();
-      return {
-        name,
-        config,
-        enabled: enabled ?? true,
-        ...bindingOf(placement, "local"),
-        ...(runsOn ? { platforms: runsOn } : {}),
-        ...(one ? { shared: one } : {}),
       };
     },
     putMarketplace: ({ name, source }) => {
