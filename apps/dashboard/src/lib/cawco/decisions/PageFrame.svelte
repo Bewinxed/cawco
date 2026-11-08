@@ -2,7 +2,7 @@
   import {
     PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
-  } from "@cawco/core/frames";
+  } from "@cawco/core/preview/routes";
   /**
    * A decision page in the Decisions tab's pane, live: the project's page, on
    * the project's own preview origin at `/__cawco/page/<id>/`, whichever

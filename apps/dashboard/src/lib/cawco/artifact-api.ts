@@ -8,12 +8,12 @@
 import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hubRequest } from "@cawco/core/hub-request";
+import type { ShownFailure } from "@cawco/core/preview/protocol";
 import type {
   ArtifactHit,
   ArtifactSummary,
   ArtifactThumbnail,
   SessionAttachments,
-  ShownFailure,
 } from "@cawco/core/protocol";
 import { type PageLinks, pageLinksOf } from "@cawco/core/reference-faces";
 import type { SheetRead, StoryOp } from "@cawco/core/stage";
