@@ -10,6 +10,7 @@
  * (real money) stay in their own columns, never one.
  */
 
+import { traitsOf } from "@cawco/core/harness/traits";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unhandled } from "@cawco/core/unhandled";
 import type { UsageSummaryRow } from "@cawco/core/usage/types";
@@ -77,8 +78,8 @@ function spendCells(
   const { harness, row } = spend;
   const cost = row.costUsd.toFixed(2);
   return [
-    harness === "claude" ? cost : "",
-    harness === "claude" ? "" : cost,
+    traitsOf(harness).costMeaning === "estimated" ? cost : "",
+    traitsOf(harness).costMeaning === "estimated" ? "" : cost,
     String(row.input),
     String(row.output),
     String(row.cacheCreation),
