@@ -8,7 +8,7 @@
  * page's does); the worker runs Yjs, y-websocket's protocol over that
  * socket, and the copy kept on the device (y-indexeddb).
  */
-import type { RefusedWrites } from "@cawco/core/comments";
+import type { RefusedWrites } from "@cawco/core/comments/model";
 
 /** One write to a mirrored map: a key set to a plain value, or deleted. */
 export type WriteOp =

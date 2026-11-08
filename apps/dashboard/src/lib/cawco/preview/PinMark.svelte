@@ -1,6 +1,6 @@
 <script lang="ts" module>
-  import type { Pin, PinState } from "@cawco/core/comments";
-  import { pinUnsent } from "@cawco/core/comments";
+  import type { Pin, PinState } from "@cawco/core/comments/model";
+  import { pinUnsent } from "@cawco/core/comments/model";
 
   /** Where pin `pin` stands: hollow while the session hasn't heard it, filled once sent, recessed once resolved. */
   export const markState = (pin: Pin): PinState => {
