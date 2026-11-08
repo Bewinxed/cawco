@@ -117,7 +117,6 @@ import {
 } from "@cawco/core/handover";
 import type { WorkspaceRef } from "@cawco/core/harness";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core/harness";
-import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import {
   currentEndpoint,
   currentKeeper,
@@ -154,6 +153,7 @@ import {
   workspaceXdgDirs,
   workspaceXdgEnv,
 } from "@cawco/core/paths";
+import { HUB_PREVIEWS_ENV } from "@cawco/core/preview/hub-previews";
 import {
   commandLine as commandLineOf,
   commandLines,

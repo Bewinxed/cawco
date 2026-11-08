@@ -18,12 +18,13 @@
  * pass (its load, or its page's word that it was let in) stands for that
  * frame too.
  */
+
+import { hubRequest } from "@cawco/core/hub-request";
 import {
   hostModeDomain,
   type PreviewTicket,
   previewEnterUrl,
-} from "@cawco/core/frames";
-import { hubRequest } from "@cawco/core/hub-request";
+} from "@cawco/core/preview/routes";
 import { previewWords } from "@cawco/core/words/preview";
 import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 
