@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { FleetMcpConfig } from "@cawco/core";
+import type { FleetMcpConfig } from "@cawco/core/fleet";
 import { installed, launchArgs, readNpx } from "./mcp-install";
 import { bunOnlyNpm, resolveBin, toolPath } from "./tools";
 

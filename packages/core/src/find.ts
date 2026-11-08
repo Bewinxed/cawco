@@ -410,7 +410,7 @@ export interface FindMachine extends FindBase {
 
 export interface FindArtifact extends FindBase {
   /** Which kind of artifact: a preview, an HTML page, a canvas, a sheet. */
-  artifactKind: import("./index").ArtifactKind;
+  artifactKind: import("./artifact-kinds").ArtifactKind;
   /** The session that made it. */
   conversation: { id: string; title: string };
   kind: "artifact" | "decision";
@@ -502,7 +502,7 @@ export type WaitingKind = "artifact" | "decision" | "report" | "task";
 
 export interface WaitingItem {
   /** For an artifact or decision: which kind of artifact. */
-  artifactKind?: import("./index").ArtifactKind;
+  artifactKind?: import("./artifact-kinds").ArtifactKind;
   /** The conversation it came from, when one made it. */
   conversation: { id: string; title: string } | null;
   /** The object's id: an artifact's, a work item's, `project:tsk-142`. */

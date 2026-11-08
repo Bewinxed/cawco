@@ -6,12 +6,13 @@
  * repository, the project's own when the session names none, and answers
  * what came of it.
  */
-import type { InstanceRow } from "@cawco/core";
+
 import type {
   ForgeAsk,
   ForgeVerdict,
   ForgeWrite,
 } from "@cawco/core/forge-post";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 
 /** What a machine's forge call came to: its verdict, or why there is none. */

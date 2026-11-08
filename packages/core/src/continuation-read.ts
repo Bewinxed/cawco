@@ -217,9 +217,7 @@ const changedPaths = (call: ToolUse): string[] => {
 };
 
 /** The newest assistant turn's model, for a session whose row never recorded one. */
-export const transcriptModel = (
-  entries: SessionMessage[]
-): string | undefined => {
+const transcriptModel = (entries: SessionMessage[]): string | undefined => {
   const last = entries.findLast(
     (entry) => entry.type === "assistant" && messageOf(entry).model
   );
@@ -407,7 +405,7 @@ function renderTurn(
  * and tool output. Images are left out — their base64 is not what a model is
  * billed for, and counting it would size a screenshot as a novel.
  */
-export const scopeChars = (entries: SessionMessage[]): number =>
+const scopeChars = (entries: SessionMessage[]): number =>
   entries.flatMap(blocksOf).reduce((sum, block) => {
     switch (block.type) {
       case "text":
@@ -436,7 +434,7 @@ const ownMessages = (entries: SessionMessage[]): SessionMessage[] =>
  * the compaction happened and names where that tail begins
  * (`SessionMessage.keptFrom`): the summary, then the tail, then what followed.
  */
-export function liveScope(entries: SessionMessage[]): SessionMessage[] {
+function liveScope(entries: SessionMessage[]): SessionMessage[] {
   const own = ownMessages(entries);
   const last = own.findLastIndex((entry) => entry.compactSummary);
   if (last < 0) {
@@ -453,7 +451,7 @@ export function liveScope(entries: SessionMessage[]): SessionMessage[] {
  * The three parts: middle and tail from the live scope, the artifact index
  * from the whole transcript (both oldest first, as a machine answers them).
  */
-export function extractTranscript(
+function extractTranscript(
   scope: SessionMessage[],
   whole: SessionMessage[],
   askers: readonly string[]

@@ -9,7 +9,7 @@
  */
 
 /** How long a title derived from a first message runs before it is cut. */
-export const TITLE_LIMIT = 80;
+const TITLE_LIMIT = 80;
 
 const COMMAND_OPEN = /<command-(?:message|name)>/u;
 const COMMAND_CLOSE = /<\/command-(?:message|name)>/gu;
