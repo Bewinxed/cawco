@@ -53,3 +53,5 @@ reply-composer-no-fleet/cawco/transcript/planted.ts:5:1 reply-composer-no-fleet
 reply-composer-no-fleet/cawco/transcript/planted.ts:7:1 reply-composer-no-fleet
 no-whole-seconds/planted.ts:5:27 no-whole-seconds
 no-whole-seconds/planted.ts:6:27 no-whole-seconds
+no-hand-shell-quote/planted.ts:4:28 no-hand-shell-quote
+no-hand-shell-quote/planted.ts:5:31 no-hand-shell-quote

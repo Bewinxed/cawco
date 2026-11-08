@@ -66,6 +66,7 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
@@ -992,7 +993,7 @@ const hostGitEnv = async (): Promise<Record<string, string>> => {
       ...(gh
         ? ([
             [key, ""],
-            [key, `!${shellWord(gh)} auth git-credential`],
+            [key, `!${shellQuote(gh)} auth git-credential`],
             ["lfs.https://github.com/.access", "basic"],
           ] as [string, string][])
         : []),
@@ -1716,9 +1717,6 @@ export const closeGitDoor = async (id: string): Promise<void> => {
   await rm(gitDoorOf(id), { force: true });
 };
 
-const shellWord = (word: string): string =>
-  `'${word.replaceAll("'", "'\\''")}'`;
-
 /**
  * `pairs` as the words git reads from `GIT_CONFIG_PARAMETERS`, each
  * `'<key>'='<value>'` with one space between (git-config(1) "ENVIRONMENT";
@@ -1729,7 +1727,7 @@ const shellWord = (word: string): string =>
  */
 const configWords = (pairs: readonly (readonly [string, string])[]): string =>
   pairs
-    .map(([key, value]) => `${shellWord(key)}=${shellWord(value)}`)
+    .map(([key, value]) => `${shellQuote(key)}=${shellQuote(value)}`)
     .join(" ");
 
 /** Workspace `id`'s copy's `origin` URL as its own config names it (its copy at `clone`); empty when it names none. */
