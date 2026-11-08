@@ -181,8 +181,7 @@ export const decidesWords = {
   /** The kinds line appended to every session's instructions. */
   kindsLine: (kinds: string) => `Kinds: ${kinds}.`,
   /** A decision card for Caw: the event's trigger. */
-  decisionTrigger: (page: string) =>
-    `A decision card on ${page} is Caw's to settle.`,
+  decisionTrigger: (page: string) => `a decision card on ${page} is yours`,
 
   // ── The page's words: the roster, its tiles and the hand-over ───────────
   /** A member's card with no kind. */

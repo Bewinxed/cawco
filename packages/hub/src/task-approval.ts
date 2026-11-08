@@ -16,27 +16,25 @@
  *   (task-history.ts `createdBy`). It is sent your approval as your words
  *   are (the composer's send path, as jev-tasks.ts sends your comments): a
  *   stopped or sleeping session starts again.
- * - **A handler** of the task (handlers.ts) hears it when its filer takes no
- *   input now (gone, its conversation gone, its finished work's workspace
- *   archived or taken over): only while Caw is on for the project. Off,
- *   nobody is woken, and the task waits in the stage you moved it to, where
- *   the board shows it. The project's conversation files as any session
- *   does, and hears it as its filer while it takes input.
+ * - **Caw** hears it when its filer takes no input now (gone, its
+ *   conversation gone, its finished work's workspace archived or taken
+ *   over), as an event: only while he is on for the project. Off, nobody is
+ *   woken, and the task waits in the stage you moved it to, where the board
+ *   shows it. The project's conversation files as any session does, and
+ *   hears it as its filer.
  * - A task you filed, or the hub, a routine or a hand edit did, has no
  *   agent to hear it: you decide what comes next yourself.
  */
 import { type InstanceRow, taskLink } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { noticeWords } from "@cawco/core/words/notices";
-import type { PersonsSend } from "./caw";
+import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
-import type { Handled, Trigger } from "./handlers";
 import type { TaskEvent, Tasks } from "./tasks";
 
 export interface TaskApprovalDeps {
+  readonly caw: Pick<Caw, "tell">;
   readonly db: Pick<DbShape, "getInstancesByIds" | "project">;
-  /** A trigger on the task, to its handler (handlers.ts `trigger`). */
-  readonly handle: (projectId: string, trigger: Trigger) => Promise<Handled>;
   /** Why a session takes none of your words now (server.ts `inputRefusal`), or nothing. */
   readonly refused: (row: InstanceRow) => string | undefined;
   /** Your act to a session, CawCo's notice of it (server.ts `sendYours`). */
@@ -64,13 +62,13 @@ const approvalText = (
 };
 
 export const createTaskApproval = ({
+  caw,
   db,
-  handle,
   refused,
   sendYours,
   tasks,
 }: TaskApprovalDeps) => {
-  /** An approval, to its filer; to the task's handler, while Caw is on, when its filer takes no input now. */
+  /** An approval, to its filer; to Caw, while he is on, when he filed it or its filer takes no input now. */
   const approved = async (approval: Approval): Promise<void> => {
     const { projectId, id } = approval;
     const task = await tasks.get(projectId, id);
@@ -99,16 +97,14 @@ export const createTaskApproval = ({
       return;
     }
     const filer = `which ${by.name} filed and which comes to you because that session takes no input now (${silent})`;
-    const woke = await handle(projectId, {
+    const woke = await caw.tell(projectId, {
+      by: "event",
       kind: "task-move",
-      thing: { kind: "task", id },
-      name: `${id} ${task.title}`,
-      context: `The person approved ${taskLink(projectId, id, task.title)}, moving it from ${approval.from} to ${approval.to}.`,
-      delta: approvalText(approval, task.title, filer),
-      who: "you",
+      trigger: `the owner approved ${taskLink(projectId, id, task.title)}, moving it from ${approval.from} to ${approval.to}`,
+      text: approvalText(approval, task.title, filer),
     });
     console.log(
-      `[tasks] ${id} in ${projectId}: approved; ${why}: ${woke.woke ? `its handler ${woke.instanceId.slice(0, 8)} hears it` : `no handler hears it: ${woke.why}`}`
+      `[tasks] ${id} in ${projectId}: approved; ${why}: Caw ${woke.woke ? "hears it" : `was not woken: ${woke.why}`}`
     );
   };
 

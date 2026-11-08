@@ -133,12 +133,6 @@ export const CAWCO_ENV = {
   cloudflareIps: "CAWCO_CLOUDFLARE_IPS",
   relayDns: "CAWCO_RELAY_DNS",
   stunServer: "CAWCO_STUN_SERVER",
-  /**
-   * How long a handler may sit idle with nothing open before the hub ends
-   * it, in ms (core `HANDLER_IDLE_MS` when unset); unset on every installed
-   * machine, a scratch fleet's probe names a short one.
-   */
-  handlerIdleMs: "CAWCO_HANDLER_IDLE_MS",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

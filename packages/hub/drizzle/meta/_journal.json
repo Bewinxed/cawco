@@ -2640,6 +2640,13 @@
       "when": 1794121525609,
       "tag": "0384_instances_clean",
       "breakpoints": true
+    },
+    {
+      "idx": 385,
+      "version": "6",
+      "when": 1794124619522,
+      "tag": "0385_drop_handlers",
+      "breakpoints": true
     }
   ]
 }

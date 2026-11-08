@@ -680,6 +680,7 @@ const run = async ({ check }: Kit) => {
       writer,
       { projectId },
       {
+        caw: "project-caw",
         instance: (id) => (id === WRITER ? parentRow : undefined),
         refusal: (id) =>
           refusing.includes(id)
@@ -692,26 +693,28 @@ const run = async ({ check }: Kit) => {
   const toCaw = takerWith([DELEGATE, WRITER], "project-1");
   const toNone = takerWith([DELEGATE, WRITER], null);
   // Stopped, with no refusal: ended all the same (core ENDED_STATUSES), so
-  // setup-send leg 5's stopped writer's Set up goes to the page's handler.
+  // setup-send leg 5's stopped writer's Set up goes to the project's Caw.
   const stoppedWriter = artifactTaker(
     { ...writer, status: "stopped" } as InstanceRow,
     { projectId: "project-1" },
     {
+      caw: "project-caw",
       instance: () => undefined,
       refusal: () => undefined,
     }
   );
   check(
-    "i: an answered page goes to whoever holds it, the one rule his marks go by: its writer while it takes input; ended, the session that delegated it (its open_items list holds it); that one ended too, the page's handler, never the project's conversation; no project, no one; a stopped writer has ended though nothing refuses it",
+    "i: an answered page goes to whoever holds it, the one rule his marks go by: its writer while it takes input; ended, the session that delegated it (its open_items list holds it); that one ended too, the project's Caw; neither, no one; a stopped writer has ended though nothing refuses it",
     standing.to === "writer" &&
       standing.session.id === DELEGATE &&
       toParent.to === "parent" &&
       toParent.session.id === WRITER &&
       toParent.why === "Its work's workspace was archived" &&
-      toCaw.to === "handler" &&
+      toCaw.to === "caw" &&
+      toCaw.caw === "project-caw" &&
       toCaw.projectId === "project-1" &&
       toNone.to === "none" &&
-      stoppedWriter.to === "handler" &&
+      stoppedWriter.to === "caw" &&
       stoppedWriter.why === noticeWords.sessionEnded,
     JSON.stringify({ standing, toParent, toCaw, toNone, stoppedWriter })
   );
@@ -745,6 +748,7 @@ const run = async ({ check }: Kit) => {
     instance: (id) => fleetRows.get(id),
     taker: (artifact) =>
       artifactTaker(fleetRows.get(artifact.instanceId ?? ""), artifact, {
+        caw: "project-caw",
         instance: (id) => fleetRows.get(id),
         refusal: (id) =>
           id === DELEGATE ? "Its work's workspace was archived." : undefined,

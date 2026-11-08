@@ -45,7 +45,6 @@
     {
       archivedAt: null,
       attempts: [],
-      handlers: [],
       builtOn: [],
       closeReason: null,
       completedAt: null,

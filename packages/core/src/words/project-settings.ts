@@ -60,7 +60,7 @@ export interface SettingsRead {
   events: boolean;
   /** The tasks dispatch would start next, in order. */
   frontier: string[];
-  /** A handler reads what the person writes on a task with no running attempt (task-input.ts). */
+  /** The conversation reads what the person writes on tasks. */
   hearsTasks: boolean;
   lands: string;
   /** Its links, one per repository, like github.com/owner/name. */
@@ -86,9 +86,9 @@ export const projectSettingsWords = {
   read: (now: SettingsRead): string =>
     [
       `${now.name}'s settings, each with the change that sets it:`,
-      `- Caw is on: routines, events and changes start handlers: ${onOff(now.events)} (set_events)`,
-      `- A handler reads what the person writes on a task with no running attempt: ${onOff(now.hearsTasks)} (set_hears_tasks)`,
-      `- The person's comment on a task reaches its running attempt: ${onOff(now.attemptsHearComments)} (set_attempts_hear_comments)`,
+      `- Events reach the project's conversation: ${onOff(now.events)} (set_events)`,
+      `- The conversation reads what the person writes on tasks: ${onOff(now.hearsTasks)} (set_hears_tasks)`,
+      `- The person's comment on a task reaches its attempt: ${onOff(now.attemptsHearComments)} (set_attempts_hear_comments)`,
       `- Start attempts at ready tasks on their own: ${onOff(now.dispatch)} (set_dispatch)`,
       `- Attempts at once: at most ${now.maxAttempts} (set_max_attempts)`,
       `- Dispatch pauses at ${now.reviewLimit} tasks waiting for review (set_review_limit)`,
@@ -131,16 +131,16 @@ export const projectSettingsWords = {
       : `Let each attempt spend at most ${budgetText(budget)}`,
   eventsOn: (on: boolean): string =>
     on
-      ? "Turn Caw on: routines, events and changes on the project's things start handlers"
-      : "Turn Caw off: no handler starts, what Caw started finishes, and only the person's words reach the conversation",
+      ? "Turn events on: routines and events reach the project's conversation"
+      : "Turn events off: what the conversation started finishes, and only the person's words reach it",
   hearsTasks: (on: boolean): string =>
     on
-      ? "Have a handler read your comments, to-dos and new tasks, and fold them into the task"
-      : "Stop handlers reading your comments, to-dos and new tasks",
+      ? "Have the project's conversation read your comments, to-dos and new tasks, and fold them into the task"
+      : "Stop the project's conversation reading your comments, to-dos and new tasks",
   attemptsHearComments: (on: boolean): string =>
     on
-      ? "Send your comment on a task to its running attempt"
-      : "Keep your comments on a task from its running attempt",
+      ? "Send your comment on a task to its attempt"
+      : "Keep your comments on a task from its attempt",
 
   /** Refusals, each naming the field and how to fix it. */
   already: {
@@ -154,7 +154,7 @@ export const projectSettingsWords = {
     events: (on: boolean) =>
       `Events are ${onOff(on)} for this project already.`,
     hearsTasks: (on: boolean) =>
-      `Handlers reading what you write on tasks is ${onOff(on)} for this project already.`,
+      `The conversation reading what you write on tasks is ${onOff(on)} for this project already.`,
     attemptsHearComments: (on: boolean) =>
       `Comments reaching their task's attempt is ${onOff(on)} for this project already.`,
     runsOn: (to: string | null) =>

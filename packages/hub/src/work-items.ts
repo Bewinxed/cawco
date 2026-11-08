@@ -103,14 +103,11 @@ import {
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   type DashboardReach,
-  type HandledThing,
-  handlerParentId,
   handoffMarker,
   holdingWords,
   INPUTS_COUNT_LIMIT,
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
-  isHandlerParent,
   isWorkspaceNeedsRefusal,
   knowsNotControl,
   type MayStart,
@@ -321,33 +318,7 @@ const VERIFIER_PARENT = "verifier:";
  * it ended.
  */
 export const isHubParent = (id: string | null | undefined): boolean =>
-  isRoutineParent(id) || isVerifierParent(id) || isHandlerParent(id);
-
-/**
- * A handler's parent (core `handlerParentId`): its project, the machine and
- * checkout it runs in (host scope, nothing cut), under the title it
- * handles its thing by.
- */
-export const handlerParent = (handler: {
-  cwd: string;
-  machineId: string;
-  projectId: string;
-  thing: HandledThing;
-  title: string;
-}): Parent => ({
-  id: handlerParentId(handler.projectId, handler.thing),
-  projectId: handler.projectId,
-  machineId: handler.machineId,
-  cwd: handler.cwd,
-  title: handler.title,
-  launchDir: "unknown",
-  harness: null,
-  model: null,
-  sessionId: null,
-  delegateType: null,
-  // The hub starts it: it may start any delegate its work needs.
-  mayStart: [ANY_TYPE],
-});
+  isRoutineParent(id) || isVerifierParent(id);
 
 /** Whether a parent id is a design check's: its session is that check's verifier. */
 export const isVerifierParent = (id: string | null | undefined): boolean =>
@@ -853,12 +824,6 @@ export interface WorkItemRequest {
   from?: string;
   /** Its group under its parent: one combined report once every item of it has ended. */
   group?: string;
-  /**
-   * The thing of its project the item is the handler of (core
-   * `HandledThing`, hub handlers.ts). Set by the hub alone, never by a
-   * tool call.
-   */
-  handles?: HandledThing;
   harness?: HarnessKind;
   /**
    * Host scope: its session runs on the machine itself (`machineId`, the
@@ -884,11 +849,6 @@ export interface WorkItemRequest {
    * absent. Never past what its parent may start itself ({@link Settings}).
    */
   mayStart?: MayStart;
-  /**
-   * The permission mode its session starts in, over the one its parent's
-   * would give it: a handler's, its project's mode. Set by the hub alone.
-   */
-  mode?: PermissionMode;
   model?: string;
   /**
    * Whose work it is (work_items.origin). Left out, its parent's: Caw's, the
@@ -3091,7 +3051,7 @@ export const createWorkItems = ({
    * delegated work's do (a work item). A session another session started with `start_session`
    * nests under it and reports to no one, its asks the person's. A
    * routine's run has no parent row: routines.ts reads how it ended and
-   * sends its report to the routine's handler itself (`surfaceRun`),
+   * sends its report to the project's conversation itself (`surfaceRun`),
    * so a run that answers NO_REPLY wakes no model, the conversation's
    * included.
    */
@@ -6996,12 +6956,6 @@ export const createWorkItems = ({
       owns: request.owns?.length ? request.owns : null,
       waitedOn: request.waitedOn?.length ? request.waitedOn : null,
       budget: budgetFrom(request.budget, project?.budget),
-      ...(request.handles
-        ? {
-            handlesKind: request.handles.kind,
-            handlesId: request.handles.id,
-          }
-        : {}),
     };
   };
 
@@ -7042,20 +6996,6 @@ export const createWorkItems = ({
    * account, placed before a new workspace was cut ({@link ItemPlacement});
    * absent, it is placed as it spawns.
    */
-  /**
-   * The mode an item's session falls back on. Autonomous by definition: it
-   * must never sit waiting on a tool permission prompt nobody is watching
-   * for; questions still ask. Its parent caused it: Full Send only when the
-   * parent is in it now, read off its row as it stands after the workspace
-   * was cut. A handler runs in its project's mode, which the hub names.
-   */
-  const fallbackModeOf = (
-    request: WorkItemRequest,
-    parent: Parent
-  ): PermissionMode =>
-    request.mode ??
-    unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode);
-
   const spawnIn = (
     workspace: WorkspaceRow,
     settings: Settings,
@@ -7099,7 +7039,11 @@ export const createWorkItems = ({
         workspace.machineId,
         spawnOf(instanceId, item.title, parent, workspace, settings),
         item.id,
-        fallbackModeOf(request, parent),
+        // Autonomous by definition: it must never sit waiting on a tool
+        // permission prompt nobody is watching for. Questions still ask.
+        // Its parent caused it: Full Send only when the parent is in it now,
+        // read off its row as it stands after the workspace was cut.
+        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
         ahead && { accountId: ahead.placement.accountId }
       );
     } catch (error) {
@@ -9691,32 +9635,6 @@ export const createWorkItems = ({
       landingWait(itemId, words),
 
     /**
-     * A handler the hub ends (handlers.ts): idle with nothing open. Done,
-     * its headline its own `finish_item`'s when it wrote one, else its last
-     * turn's first line, else `idle`'s; its session ends (`idle.why` in the
-     * log). It reports to no session.
-     */
-    endHandler(itemId: string, idle: { headline: string; why: string }): void {
-      const item = db.workItem(itemId);
-      if (!(item?.handlesKind && LIVE.has(item.state))) {
-        return;
-      }
-      quiet.delete(item.id);
-      const said = item.result?.split("\n").find((line) => line.trim());
-      finish(item, {
-        state: "done",
-        headline: item.headline ?? said?.trim() ?? idle.headline,
-        landingSince: null,
-        submission: null,
-      });
-      end(item.instanceId).catch((error: unknown) =>
-        console.warn(
-          `[work-items] ${item.id}, a handler, was ended (${idle.why}), and its session did not end: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
-    },
-
-    /**
      * The hub's own item stopped by the hub, `why` kept as who stopped it: a
      * design check's verifier whose builder ended (design-verify.ts). Its
      * session ends; it reports to no session.
@@ -10388,17 +10306,6 @@ export const createWorkItems = ({
       // A finished item has reported; one whose landing is running reports
       // when it settles (its session's own call may have died with the hub).
       if (!LIVE.has(item.state) || item.landingSince) {
-        return undefined;
-      }
-      // A handler's turn ends at rest: what it said is its result so far,
-      // and the hub ends it once it has been idle with nothing open
-      // (handlers.ts), never for a quiet turn.
-      if (item.handlesKind) {
-        quiet.delete(item.id);
-        const said = turn.text.trim();
-        if (said) {
-          update(item.id, { result: said });
-        }
         return undefined;
       }
       return openItemTurnEnded(row, item, turn, endedAt, worked);

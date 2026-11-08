@@ -42,7 +42,7 @@
  *   `unlocks`. An `after` naming no decision of the project's links
  *   nothing; its writer is told so on create and revision (`linksOf`).
  */
-import { artifactLink, type ChoiceEntry, type InstanceRow } from "@cawco/core";
+import type { ChoiceEntry, InstanceRow } from "@cawco/core";
 import { SEND_WRITES_MAX } from "@cawco/core/comments";
 import {
   type AfterLinks,
@@ -388,16 +388,16 @@ export interface DecisionsDeps {
   /**
    * Who hears the person on `artifact`: the one his marks and the hub's own
    * send of his answers go to (artifacts/taker.ts), its writer while it
-   * takes input, else the session that delegated it, else its handler.
+   * takes input, else the session that delegated it, else Caw.
    */
-  taker: (artifact: ArtifactRow) => ArtifactTaker;
+  taker: (artifact: ArtifactRow) => ArtifactTaker<unknown>;
   /** A Send's carried writes (core `SendBody.writes`) applied to the artifact's doc (artifacts/sync.ts `takeSentWrites`): why not, or null. */
   takeWrites: (artifactId: string, writes: string) => string | null;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
   tasks: (projectId: string) => Promise<DecidedTask[]>;
   /** The person's words or act to a session ({@link PersonsSend}), through the one send path, as the send `uuid`. */
   tell: (instance: InstanceRow, said: PersonsSend, uuid: string) => void;
-  /** The person's words or act to the project's newest conversation (caw.ts `say`): its session, and the send's uuid. */
+  /** The person's words or act to the project's conversation (caw.ts `tellYours`): its session, and the send's uuid. */
   tellConversation: (
     projectId: string,
     said: PersonsSend
@@ -1131,17 +1131,18 @@ export const createDecisions = (deps: DecisionsDeps) => {
         return { to: "caw", instanceId };
       }
       // His Send, one path whoever hears it: its session while it stands,
-      // else the page's handler, told the page is its now.
+      // else Caw, told the page is his now.
       const heard = await deps.send(
         read.artifactId,
         `POST /api/projects/${projectId}/decisions/${name}/send`,
         "instance" in to
           ? { session: to.instance }
           : {
-              handler: {
+              caw: {
                 projectId,
-                trigger: `The person is done picking on the decision page ${artifactLink(read.artifactId, read.title)} (decisions/${name}/).`,
-                text: handedToCaw(read),
+                line: noticeWords.donePicking(read.title),
+                trigger: "the person sent a decision page",
+                text: `The person is done picking on the decision page “${read.title}” (decisions/${name}/). ${handedToCaw(read)}`,
               },
             }
       );

@@ -260,7 +260,6 @@ const routineTasks = async (db: Db) => {
     starters: () => [],
     setTemplate: (id, template) => db.setProjectTemplate(id, template),
     attempts: db.projectAttempts,
-    handlers: () => [],
     commentSaid: db.taskCommentSaid,
     noteComment: db.noteTaskComment,
     saveResult: () => undefined,

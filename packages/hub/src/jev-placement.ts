@@ -194,6 +194,22 @@ export async function jevAttach(
   return { attach: noul >= ATTACH_THRESHOLD, noul };
 }
 
+/**
+ * Attach or fresh with no caller and Jev off: a session idle and on the
+ * same task (the rule's stand-in for "its history matters") takes the
+ * message when warm, and goes on compressed when cold; any other, fresh.
+ */
+export const attachByRule = (facts: {
+  idle: boolean;
+  sameTask: boolean;
+  warm: boolean;
+}): "attach" | "continue" | "fresh" => {
+  if (!(facts.idle && facts.sameTask)) {
+    return "fresh";
+  }
+  return facts.warm ? "attach" : "continue";
+};
+
 // --- Ready to dispatch (score) and Dispatch order (score ×3) --------------------
 
 /** A frontier task as the dispatcher's two rows read it. */

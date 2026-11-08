@@ -9,27 +9,38 @@
  *   checks makes it a duplicate.
  * - **Triage** (choice), as a task is filed while Jev is on: its `triage`
  *   field. Off: a session triages when asked (the triage skill).
+ * - **Attach or fresh** (yes/no), as you comment on a task whose newest
+ *   attempt has ended (§5.3, Attach or spawn), one of three: its session
+ *   takes your words (attach, its cache warm); its history is compressed
+ *   and continued in a new session in the attempt's own workspace, which
+ *   opens on your words (continue, its cache cold: waking it would re-read
+ *   its whole transcript at full price); or a fresh attempt starts, briefed
+ *   with the task, the last failure and the comments since (dispatch.ts).
+ *   Jev on: Jev says whether that session's history matters, and its cache
+ *   decides attach or continue. Off, with no caller: idle and on the same
+ *   task stands in for "its history matters", so attach when warm, continue
+ *   when cold, else fresh. A live attempt simply reads your comment. The
+ *   project's `attemptsHearComments` switch off, your comment reaches no
+ *   attempt.
  * - **Phone requests** (choice + fill): a sentence from the phone about the
  *   project. Jev on: Jev picks the action and fills it (the task, the
- *   stage). Off: the project's newest conversation reads the sentence, as
- *   the person's words (caw.ts `say`). The push's own buttons are not this
- *   and always work.
- *
- * Your comment on a task goes to its running attempt or its handler
- * (task-input.ts, the owner's card "What a trigger wakes"): an attempt that
- * has ended is never woken, continued or compressed for it.
+ *   stage). Off: the project's conversation reads the sentence. The push's own buttons are
+ *   not this and always work.
  */
 import { taskLink } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
-import type { Caw } from "./caw";
+import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
 import { type JevAccess, jevAccess } from "./jev";
 import {
+  attachByRule,
   DUPLICATE_CANDIDATES_MAX,
   type DuplicateBrief,
   head,
+  JevFailed,
+  jevAttach,
   jevDuplicate,
   jevPhone,
   jevTriage,
@@ -47,9 +58,28 @@ import {
   YOU_ACTOR,
   YOU_WRITING,
 } from "./tasks";
+import { isLive } from "./work-items";
+
+/** A session as the hub's database reads it. */
+type SessionRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 export interface JevTasksDeps {
-  readonly caw: Pick<Caw, "say">;
+  readonly caw: Pick<Caw, "tell">;
+  /**
+   * An ended attempt's cold session compressed and continued in a new
+   * session in its workspace, which takes on the attempt and opens on
+   * `comment` (server.ts `continueAttempt`): the new session's id, and how
+   * the job ends (nothing once it started, else why not). Throws why it
+   * could not begin.
+   */
+  readonly continueAttempt: (
+    row: SessionRow,
+    taskId: string,
+    comment: string
+  ) => Promise<{
+    ended: Promise<string | undefined>;
+    targetInstanceId: string;
+  }>;
   readonly db: Pick<
     DbShape,
     | "getInstancesByIds"
@@ -59,7 +89,16 @@ export interface JevTasksDeps {
     | "projectAttempts"
   >;
   readonly dispatcher: Pick<Dispatcher, "retryFor" | "startFor">;
+  /**
+   * Why your words may not reach the session's finished work item, or
+   * nothing (work-items `refusal`: an archived workspace, a newer item there).
+   */
+  readonly refused: (row: SessionRow) => string | undefined;
+  /** Your words to a session, theirs alone with CawCo's note beside them (server.ts `sendYours`). */
+  readonly sendYours: (row: SessionRow, said: PersonsSend) => void;
   readonly tasks: Tasks;
+  /** A session's prompt cache is warm now (the cold check's test), and it is not in a turn. */
+  readonly warmth: (row: SessionRow) => { idle: boolean; warm: boolean };
 }
 
 /** What Duplicates did with a task filed. */
@@ -75,6 +114,13 @@ export type DuplicateOutcome =
 
 const words = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/** What the Jev-off rule's log line says each answer does. */
+const OFF_PLACED = {
+  attach: "its session continues",
+  continue: "it continues compressed",
+  fresh: "a fresh attempt starts",
+} as const;
 
 /** A task as Duplicates compares it. */
 const briefOf = (task: TaskView): DuplicateBrief => ({
@@ -96,9 +142,13 @@ export interface PhoneDone {
 
 export const createJevTasks = ({
   caw,
+  continueAttempt,
   db,
   dispatcher,
+  refused,
+  sendYours,
   tasks,
+  warmth,
 }: JevTasksDeps) => {
   const key = () => jevAccess(db);
 
@@ -275,8 +325,211 @@ export const createJevTasks = ({
   };
 
   /**
+   * Attach or fresh with Jev on: Jev says whether the session's history
+   * matters; when it does, a warm session takes your words as it is and a
+   * cold one is compressed and continued, never woken whole.
+   */
+  const placedByJev = async (
+    jev: JevAccess,
+    projectId: string,
+    task: TaskView,
+    newest: ReturnType<DbShape["projectAttempts"]>[number],
+    row: SessionRow,
+    text: string
+  ): Promise<"attach" | "continue" | "fresh"> => {
+    const { warm } = warmth(row);
+    const cache = warm ? "warm" : "cold";
+    const judged = await jevAttach(jev, projectId, {
+      cache,
+      lastWork: newest.digest ?? newest.result ?? newest.error ?? "",
+      message: text,
+      session: row.title ?? row.derivedTitle ?? newest.title,
+      task: `${task.id} ${task.title}`,
+    });
+    let placed: "attach" | "continue" | "fresh" = "fresh";
+    if (judged.attach) {
+      placed = warm ? "attach" : "continue";
+    }
+    console.log(
+      `[tasks] ${task.id} in ${projectId}: Jev says ${judged.attach ? "attach" : "fresh"} (${judged.noul.toFixed(2)}, cache ${cache})${placed === "continue" ? ": it continues compressed" : ""}`
+    );
+    return placed;
+  };
+
+  /**
+   * What your comment on a task's ended attempt does: its session takes it
+   * (`attach`, warm), its history goes on compressed in a new session in
+   * the attempt's workspace (`continue`, cold), or a fresh attempt starts;
+   * `failed` when Jev did not answer, which the task's comments then say,
+   * and nothing starts.
+   */
+  const attachOrFresh = async (
+    projectId: string,
+    task: TaskView,
+    newest: ReturnType<DbShape["projectAttempts"]>[number],
+    row: SessionRow,
+    text: string
+  ): Promise<"attach" | "continue" | "fresh" | "failed"> => {
+    const { warm, idle } = warmth(row);
+    const cache = warm ? "warm" : "cold";
+    const jev = key();
+    if (!jev) {
+      // The newest attempt at the task is this task's: the same task.
+      const placed = attachByRule({ warm, idle, sameTask: true });
+      offLine(
+        "attach",
+        projectId,
+        `${task.id}'s last attempt ${newest.id.slice(0, 8)} is ${cache} and ${idle ? "idle" : "busy"}: ${OFF_PLACED[placed]}`
+      );
+      return placed;
+    }
+    try {
+      return await placedByJev(jev, projectId, task, newest, row, text);
+    } catch (error) {
+      if (!(error instanceof JevFailed)) {
+        throw error;
+      }
+      await tasks.comment(
+        projectId,
+        task.id,
+        `${error.message} Nothing was started for your comment: continue its last attempt's session or start a new attempt yourself.`,
+        hubActor("Attach or fresh")
+      );
+      return "failed";
+    }
+  };
+
+  /**
+   * An ended attempt's cold session compressed and continued for your
+   * comment ({@link JevTasksDeps.continueAttempt}). What stops it, before it
+   * begins or after, is said in the task's comments, and nothing else
+   * starts for your comment.
+   */
+  const continueCompressed = async (
+    projectId: string,
+    task: TaskView,
+    newest: ReturnType<DbShape["projectAttempts"]>[number],
+    row: SessionRow,
+    yours: string
+  ): Promise<void> => {
+    const notStarted = async (why: string): Promise<void> => {
+      console.warn(
+        `[tasks] ${task.id} in ${projectId}: its last attempt ${newest.id.slice(0, 8)} did not continue compressed: ${why}`
+      );
+      await tasks.comment(
+        projectId,
+        task.id,
+        `Its last attempt's session could not go on compressed: ${why} Nothing was started for your comment: continue its last attempt's session or start a new attempt yourself.`,
+        hubActor("Attach or fresh")
+      );
+    };
+    let started: Awaited<ReturnType<typeof continueAttempt>>;
+    try {
+      started = await continueAttempt(row, task.id, yours);
+    } catch (error) {
+      await notStarted(words(error));
+      return;
+    }
+    console.log(
+      `[tasks] ${task.id} in ${projectId}: it continues compressed: ${row.id.slice(0, 8)}'s history goes on in new session ${started.targetInstanceId.slice(0, 8)} in its workspace, opening on your comment`
+    );
+    const stopped = await started.ended;
+    if (stopped) {
+      await notStarted(stopped);
+    }
+  };
+
+  /**
+   * Attach or fresh (§5.3) for your comment on a task: a live attempt reads
+   * it; an ended one's session takes it, goes on compressed with it, or a
+   * fresh attempt starts. A task never attempted, or closed, starts
+   * nothing: the comment waits in its file for the next brief.
+   */
+  const commented = async (
+    projectId: string,
+    id: string,
+    text: string
+  ): Promise<void> => {
+    const [newest] = db
+      .projectAttempts(projectId)
+      .filter((item) => item.taskId === id);
+    if (!newest) {
+      return;
+    }
+    const [row] = db.getInstancesByIds([newest.instanceId]);
+    const yours = `A comment on ${id}, your task:\n\n${text}`;
+    const comment: PersonsSend = {
+      by: "you",
+      words: text,
+      note: `It is a comment on ${id}, your task.`,
+    };
+    if (isLive(newest.state)) {
+      if (row) {
+        sendYours(row, comment);
+      }
+      return;
+    }
+    const task = await tasks.get(projectId, id);
+    if (task.kind === "done" || task.kind === "dropped") {
+      return;
+    }
+    const placed = await continuing(projectId, task, newest, row, text);
+    if (placed === "failed") {
+      return;
+    }
+    if (placed?.to === "attach") {
+      sendYours(placed.row, comment);
+      return;
+    }
+    if (placed?.to === "continue") {
+      await continueCompressed(projectId, task, newest, placed.row, yours);
+      return;
+    }
+    const started =
+      task.lastAttemptFailed || task.lastAttemptStopped
+        ? await dispatcher.retryFor(projectId, id, undefined)
+        : await dispatcher.startFor(projectId, id, undefined);
+    console.log(
+      `[tasks] ${id} in ${projectId}: a fresh attempt for your comment: ${started.text.split("\n")[0]}`
+    );
+  };
+
+  /**
+   * The ended attempt's session your comment goes to as it is (`attach`) or
+   * compressed (`continue`), or undefined for a fresh attempt: one that
+   * cannot take your words (gone, archived, a newer item in its workspace)
+   * starts fresh by code; else Attach or fresh decides. `failed` when Jev
+   * did not answer.
+   */
+  const continuing = async (
+    projectId: string,
+    task: TaskView,
+    newest: ReturnType<DbShape["projectAttempts"]>[number],
+    row: SessionRow | undefined,
+    text: string
+  ): Promise<
+    { to: "attach" | "continue"; row: SessionRow } | undefined | "failed"
+  > => {
+    const blocked = row ? refused(row) : "its session is gone";
+    if (blocked || !row) {
+      offLine(
+        "attach",
+        projectId,
+        `${task.id}'s last attempt ${newest.id.slice(0, 8)} cannot continue (${blocked}): a fresh attempt starts`
+      );
+      return;
+    }
+    const placed = await attachOrFresh(projectId, task, newest, row, text);
+    if (placed === "failed") {
+      return "failed";
+    }
+    return placed === "fresh" ? undefined : { to: placed, row };
+  };
+
+  /**
    * What runs after a change to a project's tasks: Duplicates and Triage on
-   * filing.
+   * filing, Attach or fresh on your comment while the project's
+   * `attemptsHearComments` switch is on.
    */
   const taskChanged = (event: TaskEvent): void => {
     if (event.kind === "created") {
@@ -300,6 +553,24 @@ export const createJevTasks = ({
         ),
         "task filed"
       );
+      return;
+    }
+    if (
+      event.kind === "changed" &&
+      event.id &&
+      event.comment?.actor.mover === "you" &&
+      db.project(event.projectId)?.attemptsHearComments
+    ) {
+      const { id, projectId } = event;
+      const { text } = event.comment;
+      detach(
+        commented(projectId, id, text).catch((error: unknown) =>
+          console.warn(
+            `[tasks] your comment on ${id} in ${projectId} did not reach an attempt: ${words(error)}`
+          )
+        ),
+        "task comment"
+      );
     }
   };
 
@@ -314,19 +585,22 @@ export const createJevTasks = ({
     return picked;
   };
 
-  /** Your sentence from the phone, to the project's newest conversation as your words. */
+  /** Your sentence from the phone, to the project's conversation as your words. */
   const toLead = async (
     projectId: string,
     sentence: string,
     about: string | undefined
   ): Promise<void> => {
     const task = about ? await tasks.get(projectId, about) : undefined;
-    await caw.say(projectId, {
+    const woke = await caw.tell(projectId, {
       by: "you",
       kind: "person-request",
       trigger: `the person wrote from their phone${task ? `, about ${taskLink(projectId, task.id, task.title)}` : ""}`,
       words: sentence,
     });
+    if (!woke.woke && woke.thrown !== undefined) {
+      throw woke.thrown;
+    }
   };
 
   /** Jev's reading of a phone sentence, over the project's stages and open tasks. */

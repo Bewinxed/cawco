@@ -33,11 +33,11 @@
  *   stored and unrouted, and says so in the log. Jev off: the oldest
  *   matching route takes it. The routine runs with the event as the run's
  *   input (routines.ts `runForEvent`; behind a run still going it queues,
- *   and is handled when it starts). An event no route took goes to its
- *   handler (handlers.ts: a fresh session for it, the owner's card "What a
- *   trigger wakes") while Caw is on; while it is off, or no handler can
- *   start, it waits in the inbox, and the inbox goes to one handler as one
- *   send when Caw is next turned on ({@link Ingress.drain}).
+ *   and is handled when it starts). An event no route took is one send to
+ *   the project's conversation (caw.ts `tell`) while its switch is on; while
+ *   it is off, or no conversation can start, it waits in the inbox, and the
+ *   inbox goes to the conversation as one send when it next starts
+ *   ({@link Ingress.drain}).
  * - **Data, never instructions.** An event reaches a model only inside a
  *   delimited block ({@link eventData}, {@link inboxText}) whose JSON cannot
  *   close it, after a sentence that says it is untrusted content.
@@ -73,6 +73,7 @@ import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { Elysia, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
+import type { ProjectEvent } from "./caw";
 import { readsOnly } from "./connection-writes";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -87,7 +88,6 @@ import type { InboundVia } from "./db/schema";
 import type { Dispatcher } from "./dispatch";
 import type { ExternalItems } from "./external-items";
 import { githubReposOf, pollRepo, readRunWait } from "./github";
-import type { Handled, Trigger } from "./handlers";
 import { byHandle } from "./handles";
 import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_CONVERSATION } from "./jev-placement";
@@ -483,13 +483,19 @@ export interface IngressDeps {
   readonly eventLanded: (projectId: string) => void;
   /** Applies a stored event to the task links it names, and reads links not read yet (external-items.ts). */
   readonly externalItems: Pick<ExternalItems, "applyEvent" | "readLinks">;
-  /** A trigger on an event, to its handler (handlers.ts `trigger`): whether one took it. */
-  readonly handle: (projectId: string, trigger: Trigger) => Promise<Handled>;
   /** Jev's route while Jev is on (jev.ts `jevAccess`). */
   readonly jevAccess: () => JevAccess | undefined;
   readonly lifetime: HubLifetimeShape;
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
+  /**
+   * One send to a project's conversation (caw.ts `tell`): whether it took
+   * it. Read late: the conversation is made after ingress.
+   */
+  readonly tell: (
+    projectId: string,
+    event: ProjectEvent
+  ) => Promise<{ woke: boolean }>;
   /** A run a project waits on changed state: its tasks look again (tasks.ts `waitsMoved`). */
   readonly waitsMoved?: (projectId: string) => void;
 }
@@ -568,7 +574,7 @@ export const createIngress = ({
   jevAccess,
   lifetime,
   routines,
-  handle,
+  tell,
   waitsMoved,
 }: IngressDeps) => {
   const store = db.ingress;
@@ -705,8 +711,8 @@ export const createIngress = ({
   };
 
   /**
-   * An event no route took, to its handler (handlers.ts) while Caw is on;
-   * handled once one took it, else it waits in the inbox.
+   * An event no route took, one send to the project's conversation while
+   * its switch is on; handled once it went, else it waits in the inbox.
    */
   const toConversation = async (
     row: InboundEventRow,
@@ -715,14 +721,11 @@ export const createIngress = ({
     if (!db.project(row.projectId)?.eventsOn) {
       return;
     }
-    const told = await handle(row.projectId, {
+    const told = await tell(row.projectId, {
+      by: "event",
       kind: kindOf(row),
-      thing: { kind: "event", id: row.id },
-      name: `${row.source}'s ${row.kind} ${row.deliveryKey}`,
-      context: `${row.source} sent ${row.kind}${url ? ` (${url})` : ""}, delivery ${row.deliveryKey}, received ${row.receivedAt.toISOString()} via ${row.via}, and no route took it.`,
-      delta: eventData(row),
-      who: row.source,
-      at: row.receivedAt,
+      trigger: `${row.source} sent ${row.kind}${url ? ` (${url})` : ""}, and no route took it`,
+      text: eventData(row),
     });
     if (told.woke) {
       store.setEvent(row.id, { handledAt: new Date() });
@@ -730,24 +733,22 @@ export const createIngress = ({
   };
 
   /**
-   * Caw turned on for the project: the inbound events that waited (it was
-   * off, or no handler could start) go to one handler of the project's
-   * inbox as one send. Taken first; given back when the send does not go.
+   * The project's conversation started while its switch is on: the inbound
+   * events that waited for it (its switch was off, or none could start) go
+   * to it as one send. Taken first; given back when the send does not go.
    */
   const drain = async (projectId: string): Promise<void> => {
     const inbox = store.claimInbox(projectId, new Date());
     if (inbox.length === 0) {
       return;
     }
-    const told = await handle(projectId, {
+    const told = await tell(projectId, {
+      by: "event",
       kind: inbox.every((row) => kindOf(row) === "github-event")
         ? "github-event"
         : "inbound-event",
-      thing: { kind: "inbox", id: projectId },
-      name: "the project's inbox",
-      context: `${inbox.length} inbound event${inbox.length === 1 ? "" : "s"} no route took waited while Caw was off.`,
-      delta: inboxText(inbox),
-      who: "the hub",
+      trigger: `${inbox.length} inbound event${inbox.length === 1 ? "" : "s"} no route took waited for the conversation to start`,
+      text: inboxText(inbox),
     }).catch(() => ({ woke: false }));
     if (!told.woke) {
       store.releaseInbox(inbox.map((each) => each.id));

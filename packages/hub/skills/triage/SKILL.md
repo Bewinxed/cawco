@@ -1,6 +1,6 @@
 ---
 name: triage
-description: Triage a project's tasks into needs-info, ready-for-agent, ready-for-human or won't do, one batch per wake. Use when tasks arrive without acceptance criteria, when the person asks what is ready, what needs them or to triage, or when a session of the project finds untriaged tasks.
+description: Triage a project's tasks into needs-info, ready-for-agent, ready-for-human or won't do, one batch per wake. Use when tasks arrive without acceptance criteria, when the person asks what is ready, what needs them or to triage, or when the project's conversation wakes with untriaged tasks.
 ---
 
 # Triage
@@ -16,7 +16,7 @@ Every task gets one of four **states**. A state is a label on the task plus the 
 
 Read the project's stage names and kinds with `task_read` (no `id`): each stage is listed as `name (kind, …)`.
 
-## One batch per run
+## One batch per wake
 
 1. **Gather the batch**: every task in a `todo` or `you` stage with no state label, plus every `needs-info` task with a comment newer than its triage notes. Read each with `task_read({ id })`. Done when the batch is listed; an empty batch ends the run with nothing written.
 2. **Decide each task's state.** Search the code and the board for the behaviour it asks for, by concept and not only by its words, so an already-built or duplicate task is caught. For a bug, confirm the claim from the code path or a reproduction before calling it ready. A task that needs a real interview gets needs-info, with the questions `grill` would ask first. Done when each task has a state and the reason for it.

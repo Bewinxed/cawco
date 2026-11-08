@@ -1,30 +1,27 @@
 /**
- * The person's writing on a task (PRD §5.3, tsk-141; the owner's card "What
- * a trigger wakes", 2026-11-07): a comment, a to-do or a task they add at
- * the board or the phone is input, no @ needed. Each task's pieces are
- * gathered until {@link QUIET_MS} passes with nothing new, then go as one
- * send to the one session on the task:
+ * The person's writing on a task, to the project's conversation (PRD §5.3,
+ * tsk-141): a comment, a to-do or a task they add at the board or the phone
+ * is input, no @ needed. Each task's pieces are gathered until
+ * {@link QUIET_MS} passes with nothing new, then told to the conversation as
+ * one send (caw.ts `tell`), which folds them into the task and answers under
+ * it (the project-task-input skill).
  *
- * - **Its running attempt**, while the project's `attemptsHearComments` is
- *   on: their comments, as their words, the task named in the note, into
- *   the live attempt's session, which takes them at its next step.
- * - **Else the task's handler** (handlers.ts), while the project's
- *   `hearsTasks` is on and Caw is: the one that lives, or a fresh one,
- *   briefed with their comments verbatim and what they added, which folds
- *   them into the task and answers under it (the project-task-input skill).
- *   Never the project's conversation, and never an attempt that has ended:
- *   nothing is woken because it once worked on the task.
+ * - Their comments are their words (`by: "you"`, the task named in the
+ *   note); a task or to-dos they add, with no comment, are their act
+ *   (`by: "act"`). Either reaches the conversation whether its events are
+ *   on or off, starting it when it has none.
  * - Only a change whose actor carries `words` (tasks.ts `YOU_WRITING`, set by
  *   the person's routes alone) is gathered: what an agent, Caw or the hub
- *   writes wakes nothing, so a handler's own edits and answer never loop.
+ *   writes wakes nothing, so Caw's own edits and answer never loop.
+ * - The project's `hearsTasks` switch, read as the send goes, holds it all
+ *   back. A live attempt hears a comment at once on its own path
+ *   (jev-tasks.ts), under its own switch.
  */
-import type { InstanceRow } from "@cawco/core";
-import { taskLink } from "@cawco/core";
-import type { PersonsSend } from "./caw";
+import { ACT_ORIGIN, taskLink } from "@cawco/core";
+import { noticeWords } from "@cawco/core/words/notices";
+import type { Caw, YourAct, YourWords } from "./caw";
 import type { DbShape } from "./db";
-import type { Handled, Trigger } from "./handlers";
 import type { TaskEvent, Tasks } from "./tasks";
-import { isLive } from "./work-items";
 
 /** How long a task's pieces wait for the next before they go together, ms. */
 const QUIET_MS = 10_000;
@@ -59,12 +56,12 @@ const writtenOf = (
   return written.length > 0 ? { taskId: event.id, written } : undefined;
 };
 
-/** One task's gathered pieces, as the task's handler reads them: their comments verbatim, then what they added. */
-const inputTrigger = (
+/** One task's gathered pieces as one send: their comments as their words, else their act. */
+const inputEvent = (
   projectId: string,
-  task: { id: string; stage: string; title: string },
+  task: { id: string; title: string },
   written: readonly Written[]
-): Trigger => {
+): YourWords | YourAct => {
   const link = taskLink(projectId, task.id, task.title);
   const comments = written.flatMap((one) =>
     one.kind === "comment" ? [one.text] : []
@@ -81,46 +78,48 @@ const inputTrigger = (
         ]
       : []),
   ];
-  let context: string;
   if (comments.length > 0) {
-    context = `The person commented on ${link} in ${task.stage}${comments.length > 1 ? ` (${comments.length} comments, in order)` : ""}.`;
-  } else if (added) {
-    context = `The person added ${link} in ${task.stage}.`;
-  } else {
-    context = `The person added to-dos to ${link} in ${task.stage}.`;
+    return {
+      by: "you",
+      kind: "task-input",
+      trigger: `the person commented on ${link}`,
+      words: comments.join("\n\n"),
+      note: [
+        comments.length === 1
+          ? `It is their comment on ${task.id}.`
+          : `They are their ${comments.length} comments on ${task.id}, in order.`,
+        ...acts,
+      ].join("\n"),
+    };
   }
   return {
+    by: "act",
     kind: "task-input",
-    thing: { kind: "task", id: task.id },
-    name: `${task.id} ${task.title}`,
-    context,
-    delta: [...comments, ...acts].join("\n\n"),
-    who: "you",
+    trigger: added
+      ? `the person added ${link}`
+      : `the person added to-dos to ${link}`,
+    origin: {
+      name: ACT_ORIGIN,
+      line: added
+        ? noticeWords.taskAdded(task.id)
+        : noticeWords.todosAdded(task.id),
+    },
+    text: acts.join("\n"),
   };
 };
 
 export interface TaskInputDeps {
-  readonly db: Pick<
-    DbShape,
-    "getInstancesByIds" | "project" | "projectAttempts"
-  >;
-  /** A trigger on the task, to its handler (handlers.ts `trigger`). */
-  readonly handle: (projectId: string, trigger: Trigger) => Promise<Handled>;
+  readonly caw: Pick<Caw, "tell">;
+  readonly db: Pick<DbShape, "project">;
   /** The quiet spell; {@link QUIET_MS} unless a test shortens it. */
   readonly quietMs?: number;
-  /** Why a session takes none of the person's words now (work-items `refusal`), or nothing. */
-  readonly refused: (row: InstanceRow) => string | undefined;
-  /** The person's words to a session, as their composer sends them (server.ts `sendYours`). */
-  readonly sendYours: (row: InstanceRow, said: PersonsSend) => void;
   readonly tasks: Pick<Tasks, "get">;
 }
 
 export const createTaskInput = ({
+  caw,
   db,
-  handle,
   quietMs = QUIET_MS,
-  refused,
-  sendYours,
   tasks,
 }: TaskInputDeps) => {
   /** Each task's pieces waiting for quiet, by project and task, with the timer that sends them. */
@@ -129,66 +128,23 @@ export const createTaskInput = ({
     { timer: ReturnType<typeof setTimeout>; written: Written[] }
   >();
 
-  /** The task's running attempt that takes the person's words now, its session; undefined when none does. */
-  const runningAttempt = (
-    projectId: string,
-    taskId: string
-  ): InstanceRow | undefined => {
-    const [newest] = db
-      .projectAttempts(projectId)
-      .filter((item) => item.taskId === taskId);
-    if (!(newest && isLive(newest.state))) {
-      return;
-    }
-    const [session] = db.getInstancesByIds([newest.instanceId]);
-    return session && !refused(session as InstanceRow)
-      ? (session as InstanceRow)
-      : undefined;
-  };
-
-  /**
-   * One task's pieces, to the one session on the task: its running attempt
-   * (their comments), else its handler; what did not go is logged, and the
-   * writing waits in the task's file.
-   */
+  /** Tells the conversation one task's pieces, unless the project's switch is off; what did not go is logged. */
   const send = async (
     projectId: string,
     taskId: string,
     written: Written[]
   ): Promise<void> => {
-    const project = db.project(projectId);
-    if (!project) {
-      return;
-    }
-    const comments = written.flatMap((one) =>
-      one.kind === "comment" ? [one.text] : []
-    );
-    const attempt =
-      project.attemptsHearComments && comments.length > 0
-        ? runningAttempt(projectId, taskId)
-        : undefined;
-    if (attempt) {
-      sendYours(attempt, {
-        by: "you",
-        words: comments.join("\n\n"),
-        note:
-          comments.length === 1
-            ? `It is a comment on ${taskId}, your task.`
-            : `They are ${comments.length} comments on ${taskId}, your task, in order.`,
-      });
-      return;
-    }
-    if (!project.hearsTasks) {
+    if (!db.project(projectId)?.hearsTasks) {
       return;
     }
     const task = await tasks.get(projectId, taskId);
-    const told = await handle(
+    const told = await caw.tell(
       projectId,
-      inputTrigger(projectId, task, written)
+      inputEvent(projectId, task, written)
     );
     if (!told.woke) {
       console.warn(
-        `[tasks] what you wrote on ${taskId} in ${projectId} reached no handler: ${told.why}`
+        `[tasks] what you wrote on ${taskId} in ${projectId} did not reach its conversation: ${told.why}`
       );
     }
   };
@@ -209,7 +165,7 @@ export const createTaskInput = ({
       gathering.delete(key);
       send(event.projectId, found.taskId, written).catch((error: unknown) =>
         console.warn(
-          `[tasks] what you wrote on ${found.taskId} in ${event.projectId} reached no session: ${error instanceof Error ? error.message : String(error)}`
+          `[tasks] what you wrote on ${found.taskId} in ${event.projectId} did not reach its conversation: ${error instanceof Error ? error.message : String(error)}`
         )
       );
     }, quietMs);

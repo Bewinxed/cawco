@@ -468,7 +468,6 @@ const legs = async (rig: Rig): Promise<void> => {
     starters: () => [],
     setTemplate: (id, template) => rig.db.setProjectTemplate(id, template),
     attempts: rig.db.projectAttempts,
-    handlers: () => [],
     commentSaid: rig.db.taskCommentSaid,
     noteComment: rig.db.noteTaskComment,
     saveResult: () => undefined,

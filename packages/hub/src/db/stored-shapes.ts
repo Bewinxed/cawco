@@ -180,7 +180,6 @@ const ContinuationAskerShape = declared(
     z.object({ kind: z.literal("person") }),
     z.object({ kind: z.literal("session"), id: z.string() }),
     z.object({ kind: z.literal("task"), id: z.string() }),
-    z.object({ kind: z.literal("cold"), why: z.string() }),
     z.object({
       kind: z.literal("move"),
       line: z.string(),

@@ -1836,17 +1836,17 @@ export type PageFrom =
 
 /**
  * Who hears a page's Send: the session that holds it, or, once that one has
- * ended, the page's handler (hub handlers.ts), told the person's act in its
- * words (decisions.ts `send`): the one that lives, or a fresh one.
+ * ended, the project's Caw, told the person's act in its words (decisions.ts
+ * `send`), whose conversation a message starts again.
  */
 export type PageHearer =
   | { session: InstanceRow }
   | {
-      handler: {
+      caw: {
+        line: string;
         projectId: string;
-        /** The person's act, verbatim: what the handler reads. */
         text: string;
-        /** What happened, one line with the page's link. */
+        /** Why Caw is woken, in its wake's words. */
         trigger: string;
       };
     };
@@ -2009,11 +2009,10 @@ export interface ArtifactServiceDeps {
     png: string
   ) => Promise<string>;
   /**
-   * The projects session `instance` is Caw's in: their conversation, or a
-   * live handler of a thing of theirs (hub handlers.ts). An ended writer's
-   * marks go to a handler, which answers them in their pins' threads; both
-   * read every page of the project, so a page whose session ended or is
-   * gone is theirs to act on (Projects spec §5.8, decisions.ts).
+   * The projects session `instance` is the conversation of (their Caw): an ended writer's
+   * marks are routed to him, and he answers them in their pins' threads.
+   * He also reads every page of his project, so a page whose session ended
+   * or is gone is his to act on (Projects spec §5.8, decisions.ts).
    */
   ledProjects: (instance: InstanceRow) => string[];
   /** The hub's lifetime: the marks' delivery and the shown acks' keep run on it. */
@@ -3267,9 +3266,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * The artifacts whose pins a session answers: its own, and, for a
-   * project's conversation or handler (Caw's), those of every session of
-   * its project, whose ended writer's marks come to a handler. No other
-   * session's.
+   * project's conversation (Caw), those of every session of its project,
+   * whose ended writer's marks come to him. No other session's.
    */
   const answerable = (
     instance: InstanceRow,
@@ -3352,7 +3350,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     return "session" in to
       ? to.session.id === instance.id
-      : deps.ledProjects(instance).includes(to.handler.projectId);
+      : deps.ledProjects(instance).includes(to.caw.projectId);
   };
 
   /**

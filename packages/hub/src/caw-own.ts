@@ -1,13 +1,8 @@
-import { HANDLER_PARENT } from "@cawco/core";
 import type { DbShape } from "./db";
 import { isHubParent } from "./work-items";
 
 type ProjectRow = NonNullable<ReturnType<DbShape["project"]>>;
 type Row = ReturnType<DbShape["getInstancesByIds"]>[number];
-
-/** Whether a parent id is a handler's of `project` (core `handlerParentId`). */
-const handlerOf = (id: string, project: ProjectRow): boolean =>
-  id.startsWith(`${HANDLER_PARENT}${project.id}:`);
 
 /** Whether `root`, the top of a delegation chain, is `project`'s conversation. */
 const isLead = (root: Row, project: ProjectRow): boolean =>
@@ -17,18 +12,14 @@ const isLead = (root: Row, project: ProjectRow): boolean =>
  * Whether the delegation chain above a session whose parent is
  * `parentInstanceId` tops at `project`'s Caw: each session's
  * `parentInstanceId` walked up (a follow-up item rewrites it to its own
- * parent) to a session with none, the project's conversation, or a handler
- * (its parent the project's handler's, core `handlerParentId`: Caw's too). A routine's
- * run (`routine:<id>`) tops at no session.
+ * parent) to a session with none. A routine's run (`routine:<id>`) tops at
+ * no session.
  */
 export const topsAtCaw = (
   db: Pick<DbShape, "getInstancesByIds">,
   parentInstanceId: string,
   project: ProjectRow
 ): boolean => {
-  if (handlerOf(parentInstanceId, project)) {
-    return true;
-  }
   if (isHubParent(parentInstanceId)) {
     return false;
   }
@@ -36,9 +27,6 @@ export const topsAtCaw = (
   let [root] = db.getInstancesByIds([parentInstanceId]);
   while (root?.parentInstanceId && !seen.has(root.id)) {
     seen.add(root.id);
-    if (handlerOf(root.parentInstanceId, project)) {
-      return true;
-    }
     if (isHubParent(root.parentInstanceId)) {
       return false;
     }

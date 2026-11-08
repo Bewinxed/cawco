@@ -960,7 +960,6 @@
       archivedAt: task.archivedAt,
       closeReason: task.closeReason,
       attempts: task.attempts,
-      handlers: task.handlers,
       waits: task.waits,
       unblocks: task.unblocks,
       parts: task.parts,

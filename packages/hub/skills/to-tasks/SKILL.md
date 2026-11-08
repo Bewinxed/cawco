@@ -1,6 +1,6 @@
 ---
 name: to-tasks
-description: Turn a spec, a decision page's picks or a session's talk into CawCo tasks, each a vertical slice with blocking edges, acceptance criteria and checks. Use when a spec is agreed, when the person asks for tasks, or when work must outlive this session.
+description: Turn a spec, a decision page's picks or the conversation into CawCo tasks, each a vertical slice with blocking edges, acceptance criteria and checks. Use when a spec is agreed, when the person asks for tasks, or when work must outlive this conversation.
 ---
 
 # To tasks
@@ -9,7 +9,7 @@ A **task** here is a vertical slice: one narrow path through every layer it touc
 
 ## Steps
 
-1. **Read the source whole**: the spec file, the decision page (`artifact_read` with its `id`), or what was said in this session. Read the project's stages and delegate types with `task_read` (no `id`) and `list_delegate_types`. Done when you can name every part of the spec and where each lives in the code or the project's files.
+1. **Read the source whole**: the spec file, the decision page (`artifact_read` with its `id`), or the conversation. Read the project's stages and delegate types with `task_read` (no `id`) and `list_delegate_types`. Done when you can name every part of the spec and where each lives in the code or the project's files.
 2. **Cut slices.** Prefactoring that makes the change easy comes first, as its own slice. A wide mechanical change (a rename across hundreds of files) is the one exception to vertical slicing: expand (add the new form beside the old), migrate in batches, contract (delete the old), each step a task that `waits_on` the one before. Done when every part of the spec is in exactly one slice.
 3. **Give each slice its fields:**
    - `title`: one line, verb first, in the project's words.

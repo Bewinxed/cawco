@@ -43,10 +43,10 @@
  * - `set_events`: whether the project's events reach its conversation,
  *   through the switch the person flips (caw.ts `configure`,
  *   `PATCH /api/projects/:id/caw`). Off lets what it started finish.
- * - `set_hears_tasks`, `set_attempts_hear_comments`: whether a handler
- *   reads what the person writes on a task with no running attempt, and
- *   whether their comment reaches the task's running attempt (both
- *   task-input.ts), through the same `configure`.
+ * - `set_hears_tasks`, `set_attempts_hear_comments`: whether the
+ *   conversation reads what the person writes on tasks (task-input.ts), and
+ *   whether their comment reaches the task's attempt (jev-tasks.ts), through
+ *   the same `configure`.
  * - `set_account`: the account the project's sessions start on when a start
  *   names none (an account's id, nickname or email; null for the fleet's
  *   routing), checked and written as the person's own edit is

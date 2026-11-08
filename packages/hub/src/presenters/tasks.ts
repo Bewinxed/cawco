@@ -260,13 +260,6 @@ const attemptLine = (
 ): string =>
   `- ${sessionLink(attempt.instanceId, cut(title, 120))} · ${attempt.state} · started ${ago(attempt.startedAt, now)}${attempt.endedAt ? ` · ended ${ago(attempt.endedAt, now)}` : ""}${attempt.endedHow ? ` · ${attempt.endedHow}` : ""}${attempt.headline ? `: ${quote(attempt.headline, 240)}` : ""}`;
 
-/** A handler of a task, a line: its session by its link, how it stands and what it did (handlers.ts). */
-const handlerLine = (
-  handler: TaskView["handlers"][number],
-  now: number
-): string =>
-  `- ${sessionLink(handler.instanceId, "handler")} · ${handler.state} · started ${ago(handler.startedAt, now)}${handler.endedAt ? ` · ended ${ago(handler.endedAt, now)}` : ""}${handler.headline ? `: ${quote(handler.headline, 240)}` : ""}`;
-
 const artifactWords = (artifact: ResultArtifact): string => {
   const shown = artifact.name ? `${artifact.name}: ` : "";
   switch (artifact.kind) {
@@ -374,11 +367,6 @@ const workLines = (task: TaskAnswer, now: number): string[] =>
       : "No attempts yet.",
     task.startProblem && `It won't start: ${task.startProblem}`,
     taskResultLine(task, now),
-    task.handlers.length > 0 &&
-      lines(
-        "## Handled by, newest first",
-        task.handlers.map((handler) => handlerLine(handler, now))
-      ),
     task.comments.length > 0 &&
       lines(
         "## Comments",

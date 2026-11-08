@@ -287,7 +287,7 @@
   /** A model was picked in the card: its pending and refusal are the card's model line. */
   let choosing = $state(false);
   /**
-   * On the conversation the person's words reach, its harness and model
+   * On the conversation the project's events reach, its harness and model
    * are the project's settings (the project's row): a model picked on
    * another harness's rail moves it to the two together. Any other
    * conversation's card is its own session's.
