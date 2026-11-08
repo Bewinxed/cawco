@@ -50,7 +50,7 @@ const write = async (path: string, text: string): Promise<void> => {
   await Bun.write(path, text);
 };
 
-/** A key's shape the credential scan reads (core secret-text.ts): not a real one. */
+/** A key's shape the credential scan reads (agent secret-text.ts): not a real one. */
 const FAKE_KEY = "sk-proj-abcdefghijklmnopqrstuvwxyz012345";
 
 const placeLeg = async (kit: Kit, root: string): Promise<void> => {
