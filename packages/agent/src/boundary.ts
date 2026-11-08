@@ -245,7 +245,7 @@ import {
   isJudgeOf,
   JUDGE_FORM_LENGTH,
   judgeProcId,
-  parseProcId,
+  sessionOfProc,
 } from "./proc-id";
 import { RELAY_STEP } from "./proxy-relay";
 import { removeTree } from "./remove-tree";
@@ -6537,8 +6537,7 @@ const attachedProcs = (
 ): HeldProc[] => {
   const hook = `'${join(stateDir(id), "hook")}'`;
   return procs.filter((proc) => {
-    const { kind } = parseProcId(proc.procId);
-    if (!(proc.alive && (kind === "claude" || kind === "pi"))) {
+    if (!(proc.alive && sessionOfProc(proc.procId))) {
       return false;
     }
     if (isPlace(id)) {
