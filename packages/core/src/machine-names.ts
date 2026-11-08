@@ -4,8 +4,7 @@ import { secondsOf } from "./time";
  * How the fleet names its machines in words: a hostname as the dashboard
  * shows it, a machine among others in a sentence, why a machine could not
  * take a request, and whether an error says a machine fell silent. A module
- * of its own, imported by no barrel, so a reader of these words loads them
- * alone; core's index re-exports it.
+ * of its own, so a reader of these words loads them alone.
  */
 
 /** mDNS and router suffixes: they say "same network", which the fleet already implies. */

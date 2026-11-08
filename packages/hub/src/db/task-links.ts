@@ -19,11 +19,11 @@ import {
   type ExternalRef,
   type ExternalSource,
   type LinkMode,
-  type PlanStep,
   refOfUrl,
   type TaskLinkSummary,
-  waitTarget,
-} from "@cawco/core";
+} from "@cawco/core/external-items";
+import type { PlanStep } from "@cawco/core/plan";
+import { waitTarget } from "@cawco/core/wait-targets";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { externalComments, projectTasks, taskLinks } from "./schema";
