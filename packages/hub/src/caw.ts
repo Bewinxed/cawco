@@ -36,43 +36,48 @@
  */
 
 import { createHash } from "node:crypto";
+import { accountNameAmong, CLAUDE_PROVIDER } from "@cawco/core/accounts";
 import {
-  ACT_ORIGIN,
-  type ARTIFACT_ORIGIN,
-  accountNameAmong,
   BLOCK_PAGE_TITLES,
   BLOCK_PAGES,
   type BlockPage,
+  viewTitle,
+} from "@cawco/core/blocks";
+import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+import type { ConnectionView } from "@cawco/core/connections";
+import {
   BOARD_ONLY_DENIED_TOOLS,
+  CURATOR_DENIED_TOOLS,
+} from "@cawco/core/delegate-types";
+import type { NeutralOrigin, WorkspaceRef } from "@cawco/core/harness";
+import {
+  ACT_ORIGIN,
+  type ARTIFACT_ORIGIN,
+  HARNESSES,
+  type HarnessKind,
+  harnessNamed,
+  type OfferedMode,
+  type PLAN_ORIGIN,
+} from "@cawco/core/harness/kinds";
+import {
   CAW_NO_MACHINE,
   type CawInitiated,
   type CawRunning,
   type CawStart,
-  CLAUDE_PROVIDER,
-  type ConnectionView,
-  CURATOR_DENIED_TOOLS,
-  type Envelope,
-  HARNESSES,
-  type HarnessKind,
-  harnessNamed,
-  type InstanceRow,
-  type NeutralOrigin,
-  type OfferedMode,
-  type PLAN_ORIGIN,
   type ProjectConversationView,
   type ProjectNote,
   type ProjectSpend,
-  projectLink,
-  type RelayProvider,
-  type SendPayload,
-  type SpawnPayload,
-  taskLink,
-  VIEW_TOOLS,
-  viewTitle,
-  type WorkspaceRef,
-} from "@cawco/core";
-import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+} from "@cawco/core/project-conversation";
+import type {
+  Envelope,
+  InstanceRow,
+  SendPayload,
+  SpawnPayload,
+} from "@cawco/core/protocol";
+import { projectLink, taskLink } from "@cawco/core/references";
+import type { RelayProvider } from "@cawco/core/relays";
 import { unhandled } from "@cawco/core/unhandled";
+import { VIEW_TOOLS } from "@cawco/core/views";
 import { areaWords } from "@cawco/core/words/areas";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
