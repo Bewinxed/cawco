@@ -214,7 +214,7 @@ const ENUMS: { members: Member[]; swift: string }[] = [
         as: "",
       },
       {
-        file: "harness.ts",
+        file: "harness/kinds.ts",
         export: "EFFORT_LEVELS",
         as: "effortLevels",
         rules: true,
