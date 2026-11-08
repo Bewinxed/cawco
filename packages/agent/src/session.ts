@@ -227,7 +227,7 @@ import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
 import { forgetFirstSession } from "./first-session";
-import { hashText, placeFolder, probeToolchain, readJson } from "./fleet";
+import { hashText, placeFolder, probeToolchain } from "./fleet";
 import { basisMoved, type ConvergeBasis } from "./fleet-converged";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
 import { within, writeFleetMcpSet } from "./fleet-mcp-set";
@@ -255,16 +255,15 @@ import type {
 import {
   HarnessRecoveryRefused,
   HeldProcessRefused,
-  type KeeperRefused,
   ReattachFailed,
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
-import { writeJson } from "./harnesses/fleet-common";
 import { fetchDefaultBranch, hostGit } from "./host-git";
 import { hostScratchReady } from "./host-scratch";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
+import { readJson, writeJson } from "./json-file";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
 import { createLeftRunning } from "./left-running";
@@ -297,7 +296,12 @@ import {
   openContainerDoors,
   sessionsOwedEnding,
 } from "./session-containers";
-import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
+import {
+  endProc,
+  type KeeperRefused,
+  keeperLimits,
+  procEpoch,
+} from "./sessiond-client";
 import { carryStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
