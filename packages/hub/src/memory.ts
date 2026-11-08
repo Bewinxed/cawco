@@ -100,7 +100,6 @@ import type {
   NeutralOrigin,
   PermissionResult,
 } from "@cawco/core/harness";
-import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import {
   DELEGATE_TYPE_PROPOSAL_TOOL,
   MEMORY_PROPOSAL_TOOL,
@@ -118,6 +117,7 @@ import { ProposalSchema } from "./db/stored-shapes";
 import type { Proposal, ProposalFile } from "./db/stored-types";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine, type PlacementRow } from "./jev-placement";
+import type { JevChoiceAnswer, JevQuestion } from "./jev-types";
 import { boardTitle } from "./labels";
 import { tool } from "./mcp-tool";
 import {

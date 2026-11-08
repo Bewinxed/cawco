@@ -1,10 +1,10 @@
-import type { JevResult } from "@cawco/core/jev";
 import type { SuggestCandidate } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
+import type { JevResult } from "./jev-types";
 import { usageScores } from "./usage-count";
 
 /** Suggestions answer while the reader types, so they are asked briefly. */
