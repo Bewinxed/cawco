@@ -23,8 +23,7 @@
  * commit whose change landed altered (a conflict resolved on the way):
  * those are the parent's to decide.
  */
-
-const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+import { shellQuote } from "./shell-quote";
 
 /** A full commit id: what `landed` holds, never an option. */
 const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
@@ -45,7 +44,7 @@ export const ownCommitsShell = (
   if (bad !== undefined) {
     throw new Error(`"${bad}" is not a commit id`);
   }
-  const upstream = base ? quote(`refs/remotes/origin/${base}`) : "";
+  const upstream = base ? shellQuote(`refs/remotes/origin/${base}`) : "";
   const matched = upstream
     ? `if [ "$n" -gt 0 ] && git rev-parse -q --verify ${upstream} > /dev/null; then
   mine=$(printf '%s\\n' "$own" | git diff-tree --stdin --root -r -p --no-color | git patch-id --stable) || exit 1
