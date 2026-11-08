@@ -30,13 +30,13 @@ import {
   parseAgentFrontMatter,
 } from "@cawco/core/fleet";
 import type { ConnectAccess, FleetFetchFrame } from "@cawco/core/frames";
-import type {
-  McpHttpServerConfig,
-  McpSSEServerConfig,
-} from "@cawco/core/harness";
 import type { FleetHook } from "@cawco/core/hooks";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { FsEntry } from "@cawco/core/protocol";
+import type {
+  McpHttpServerConfig,
+  McpSSEServerConfig,
+} from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
