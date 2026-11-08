@@ -6,9 +6,12 @@
  * sees every attempt in its project beside its own delegates, as co-parent
  * (§5.3 conversation authority).
  */
-import type { InstanceRow, TranscriptPage, WorkItemState } from "@cawco/core";
+
 import type { FilingStage } from "@cawco/core/context-filing";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS } from "@cawco/core/time";
+import type { TranscriptPage } from "@cawco/core/transcript-types";
+import type { WorkItemState } from "@cawco/core/work-items";
 import type { DbShape, WorkItemRow } from "./db";
 import { byHandle } from "./handles";
 import type { KeepAliveRow } from "./keep-alive";

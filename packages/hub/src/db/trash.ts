@@ -1,4 +1,4 @@
-import type { Deleted } from "@cawco/core";
+import type { Deleted } from "@cawco/core/fleet";
 import { and, eq, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {

@@ -268,7 +268,7 @@ export const byPerson = (origin: NeutralOrigin): boolean =>
 
 /**
  * The hub's line in a session's transcript where it started again fresh
- * under its id ({@link import("./index").relaunchOf}): its first start never
+ * under its id ({@link import("./relaunch").relaunchOf}): its first start never
  * began, so it had no conversation to resume. Drawn as a note titled
  * {@link FRESH_START_LINE}.
  */
@@ -1936,10 +1936,6 @@ export const CONTROL_STORED_RUN = "storedRun";
  */
 export const CONTROL_READ_TRANSCRIPT_WINDOW = "readTranscriptWindow";
 export const CONTROL_READ_SESSION_CONTEXT = "readSessionContext";
-export const CONTROL_RENAME_SESSION = "renameSession";
-export const CONTROL_TAG_SESSION = "tagSession";
-export const CONTROL_DELETE_SESSION = "deleteSession";
-
 /**
  * What a spin-off's worktree would take with it if it were discarded, read
  * on its machine now: the commits on its HEAD that no branch or remote of

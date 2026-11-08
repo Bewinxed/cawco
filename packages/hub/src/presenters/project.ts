@@ -4,14 +4,11 @@
  * and relays. Each by its name and the handle its tools take back
  * (handles.ts), each time as how long ago or how far ahead.
  */
-import {
-  type ApprovedActionView,
-  type RelayView,
-  type RoutineRunView,
-  routineLink,
-  routineToolWords,
-  taskLink,
-} from "@cawco/core";
+import type { ApprovedActionView } from "@cawco/core/actions";
+import { routineLink, taskLink } from "@cawco/core/references";
+import type { RelayView } from "@cawco/core/relays";
+import type { RoutineRunView } from "@cawco/core/routine-kinds";
+import { routineToolWords } from "@cawco/core/words/routines";
 import type {
   ConnectorPollView,
   EventRouteView,

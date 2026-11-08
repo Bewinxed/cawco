@@ -37,7 +37,7 @@ export type BrowserHostKind = "container" | "local";
 export const BROWSER_PORTS = { first: 14_070, last: 14_131 } as const;
 
 /** The machine's DevTools gate: every session's browser tool, every browser, by the path's gate id. */
-export const BROWSER_GATE_PORT = BROWSER_PORTS.first;
+const BROWSER_GATE_PORT = BROWSER_PORTS.first;
 
 /** The local host's forward proxy (agent `browser/hub-proxy.ts`): the last port of the range, on 127.0.0.1 alone. */
 export const BROWSER_PROXY_PORT = BROWSER_PORTS.last;
@@ -69,7 +69,7 @@ export const browserGatePort = (): number => {
 export const BROWSER_SCREEN = { width: 1280, height: 800 } as const;
 
 /** How many ports one browser takes from {@link BROWSER_PORTS}. */
-export const BROWSER_PORTS_EACH = 3;
+const BROWSER_PORTS_EACH = 3;
 
 /** One browser's ports; `http` and `media` are the container host's alone. */
 export interface BrowserPorts {

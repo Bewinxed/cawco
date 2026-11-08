@@ -1,7 +1,8 @@
 import { Database } from "bun:sqlite";
 import { basename } from "node:path";
-import type { UsageTokens } from "@cawco/core";
-import { costForUsage, totalTokens } from "@cawco/core";
+import { costForUsage } from "@cawco/core/usage/pricing";
+import { totalTokens } from "@cawco/core/usage/tokens";
+import type { UsageTokens } from "@cawco/core/usage/types";
 import { scanRanges } from "@cawco/jsonl-parser/opencode";
 import { z } from "zod";
 import type { ScannedRecord } from "./types";
