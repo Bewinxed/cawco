@@ -97,10 +97,13 @@
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
 
   let {
+    height = 900,
     path = canvasPath(["src/lib/cawco/transcript/Prompt.stories.ts"], {}),
     artifactName = "Ask in the composer",
     ask = "Judge the ask in each state: pin anything that reads wrong",
   }: {
+    /** The frame's height: a story's, never the window's, which the stage grows to fit the frame. */
+    height?: number;
     /** Where the panel's frame opens, on this page's own origin. */
     path?: string;
     artifactName?: string;
@@ -266,20 +269,16 @@
     active: ID,
   });
 
-  let frameH = $state(innerHeight);
-
   const lent = $derived(composerBindings.get(ID));
 </script>
-
-<svelte:window bind:innerHeight={frameH} />
 
 <TooltipProvider>
   <div
     class="@container/shell contain-layout relative flex h-(--frame-h) flex-col bg-surface-shelf text-ink-strong"
     data-hang-layer={layer.id}
     data-working-area
-    style:--frame-h={`${frameH}px`}
-    style:--shell-h={`${frameH}px`}
+    style:--frame-h={`${height}px`}
+    style:--shell-h={`${height}px`}
     {@attach relayInFrames}
   >
     <div
