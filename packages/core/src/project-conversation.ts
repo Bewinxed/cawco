@@ -5,7 +5,7 @@
  * person in its transcript, and what the project spends.
  */
 
-import type { SettingSource } from "./areas";
+import type { OnCap, ProjectCap } from "./areas";
 import type { PlaceLfsRow } from "./harness";
 import type { HarnessKind, OfferedMode, PermissionMode } from "./harness/kinds";
 import type { ItemEnd } from "./work-items";
@@ -320,46 +320,6 @@ export interface ProjectNote {
   body?: string;
   event: ProjectNoteEvent;
   title: string;
-}
-
-/**
- * What reaching a project's spend cap does (Projects spec §5.3): `pause`
- * starts no new attempts at its tasks, `quiet` books what would wake its Caw
- * without a turn, `both` does both. The fleet has a default (Configure,
- * Spend); a project may set its own.
- */
-export type OnCap = "pause" | "quiet" | "both";
-
-/** The span a project's cap counts over, in the hub's own zone. */
-export type CapPeriod = "day" | "month";
-
-/**
- * A project's spend cap as it stands now: what the period has spent
- * against it, and what reaching it does. Spend is every session of the
- * project's (its Caw and its attempts) since the period began.
- */
-export interface ProjectCap {
-  /** Where its amount and period came from: the project's own or its area's (core areas.ts). */
-  from: Exclude<SettingSource, "fleet">;
-  /**
-   * `onCap` is not the project's own (`onCapFrom` is its area or the fleet).
-   * Read by the shipped apps and dashboard tabs on an older wire; `onCapFrom`
-   * says where it came from.
-   */
-  inherited: boolean;
-  /** What reaching it does: the project's own, else its area's, else the fleet's. */
-  onCap: OnCap;
-  /** Where `onCap` came from. */
-  onCapFrom: SettingSource;
-  period: CapPeriod;
-  /** Spent at or past the cap. Read with `resetsAt`: past it, the cap is not reached. */
-  reached: boolean;
-  /** When the next period begins, ms epoch; the cap counts from zero then. */
-  resetsAt: number;
-  spentUsd: number;
-  /** When this period began, ms epoch. */
-  startsAt: number;
-  usd: number;
 }
 
 /** The cap holds back what it says now: reached, and its period still running. */

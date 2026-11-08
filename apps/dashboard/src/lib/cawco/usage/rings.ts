@@ -12,11 +12,9 @@
  * (emphasis, an account's dot) and nothing is a " · " chain.
  */
 import {
-  ACCOUNT_HUES,
   type Account,
   type AccountBench,
   type AccountForecast,
-  type AccountHue,
   accountNames,
   type CarrySpan,
   CLAUDE_PROVIDER,
@@ -25,6 +23,7 @@ import {
   type ProviderRouting,
   type WindowForecast,
 } from "@cawco/core/accounts";
+import { ACCOUNT_HUES, type AccountHue } from "@cawco/core/accounts/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
