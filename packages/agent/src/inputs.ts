@@ -43,8 +43,7 @@ import {
   type InputsRead,
   type WorkspaceRef,
   type WorkspaceSaved,
-  workWords,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   sessionScratchDir,
   workspaceClaudeTmpDir,
@@ -52,6 +51,7 @@ import {
   workspaceTmpDir,
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
+import { workWords } from "@cawco/core/words/work";
 import {
   inputDenial,
   projectFolderOf,

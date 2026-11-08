@@ -11,14 +11,12 @@
  * A read that fails keeps the last good windows, with their time, and says
  * why ({@link ProviderAccountReading.error}); the hub keeps that reading.
  */
-import type {
-  LimitWindow,
-  ProviderAccountReading,
-  SpawnPayload,
-} from "@cawco/core";
+import type { ProviderAccountReading } from "@cawco/core/accounts";
 import { credentialAccountIds } from "@cawco/core/paths";
+import type { SpawnPayload } from "@cawco/core/protocol";
 import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
+import type { LimitWindow } from "@cawco/core/usage/types";
 import type { HarnessContext } from "./harness";
 import { freshen, readHeld } from "./provider-accounts";
 

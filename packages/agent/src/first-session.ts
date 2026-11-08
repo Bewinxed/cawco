@@ -17,7 +17,8 @@
  */
 import { readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { HarnessKind, WorkspaceFirstSession } from "@cawco/core";
+import type { WorkspaceFirstSession } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   projectSlug,
   sessionConfigDir,

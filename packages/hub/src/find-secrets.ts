@@ -29,7 +29,7 @@ import type {
   FindResult,
   FindSecrets,
   SecretSpan,
-} from "@cawco/core";
+} from "@cawco/core/find";
 import { unmarked } from "@cawco/core/find-match";
 import type { HeldMoment } from "./find";
 import { secretRangesOf } from "./secret-filter";

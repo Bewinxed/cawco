@@ -28,6 +28,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
+import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import type {
   CarryRestored,
   CommandResult,
@@ -43,14 +45,12 @@ import type {
   WorkspaceOutputs,
   WorkspaceRef,
   WorkspaceUnlanded,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   holdingWords,
   holdsNothing,
   WORKSPACE_GIT_TIMEOUT_MS,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
-import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
+} from "@cawco/core/harness";
 import type { HubRepoKey } from "@cawco/core/hub-repo";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";

@@ -292,12 +292,3 @@ export interface ViewEventsOutput {
   /** Newest first. */
   rows: ViewEvent[];
 }
-
-/** Each view tool's input and output, by name. */
-export interface ViewToolIO {
-  events: { input: ViewEventsInput; output: ViewEventsOutput };
-  routines: { input: ViewRoutinesInput; output: ViewRoutinesOutput };
-  spend: { input: ViewSpendInput; output: ViewSpendOutput };
-  stages: { input: Record<string, never>; output: ViewStagesOutput };
-  tasks: { input: ViewTasksInput; output: ViewTasksOutput };
-}
