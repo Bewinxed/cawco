@@ -19,7 +19,6 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
-import { type HeldInput, inputFileName } from "@cawco/core/handed-input";
 import { INPUTS_LIMIT_BYTES } from "@cawco/core/harness";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import {
@@ -28,6 +27,7 @@ import {
   type HandedReceiver,
 } from "./artifacts/service";
 import type { WorkItemRow } from "./db";
+import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
 import { FolderRefusal, readFolderBytes } from "./project-folder";
