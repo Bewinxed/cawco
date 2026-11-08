@@ -18,12 +18,12 @@
    * the row grows out of that machine's own (MachinesList).
    */
   import {
-    causeLine,
     type Install,
     type InstallStep,
     installName,
   } from "@cawco/core/install";
   import { unhandled } from "@cawco/core/unhandled";
+  import { causeLine } from "@cawco/core/words/install";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import {
     machineHue,

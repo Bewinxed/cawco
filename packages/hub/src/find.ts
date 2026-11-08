@@ -23,8 +23,6 @@
 import {
   type ArtifactNeedNoticePart,
   type ArtifactNeedsRead,
-  noticePartWords,
-  reasonLine,
   unparked,
 } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
@@ -60,6 +58,7 @@ import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { StageKind } from "@cawco/core/views";
+import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { status, t } from "elysia";
 import type { DbShape } from "./db";

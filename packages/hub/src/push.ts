@@ -80,7 +80,7 @@ import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { PermissionRequestFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { PairingRequest } from "@cawco/core/hub-auth";
-import { causeLine, type Install, installName } from "@cawco/core/install";
+import { type Install, installName } from "@cawco/core/install";
 import { machineLabel } from "@cawco/core/machine-names";
 import { DESK_ACK_MS, type DeskAlertFrame } from "@cawco/core/notifications";
 import {
@@ -100,6 +100,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { contactWords } from "@cawco/core/words/contact";
 import { decidesWords } from "@cawco/core/words/decides";
 import { needs as needCount } from "@cawco/core/words/helpers";
+import { causeLine } from "@cawco/core/words/install";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { pairingWords } from "@cawco/core/words/pairing";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
