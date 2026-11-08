@@ -34,7 +34,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
-} from "@cawco/core/preview-proxy";
+} from "@cawco/core/preview/proxy";
 import type { Server } from "bun";
 import { HUB_PORT } from "./config";
 import { processSecret } from "./hub-self";

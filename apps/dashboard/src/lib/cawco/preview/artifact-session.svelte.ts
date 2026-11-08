@@ -12,13 +12,13 @@
  * artifact is gone) is opened no more, and the tab says the hub's reason.
  */
 
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { ListedBrowser } from "@cawco/core/browser";
 import {
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
-  type ArtifactSessionFrame,
-} from "@cawco/core/frames";
+} from "@cawco/core/artifact-session";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { ListedBrowser } from "@cawco/core/browser";
+import type { ArtifactSessionFrame } from "@cawco/core/frames";
 import type { FsEntry, FsPayload } from "@cawco/core/protocol";
 import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
