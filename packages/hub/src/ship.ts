@@ -13,7 +13,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import { hubDbPath } from "@cawco/core/paths";
+import { hubDbPath } from "@cawco/core/paths/hub";
 import { shellQuote } from "@cawco/core/shell-quote";
 
 /** Past this the ship command is stopped: it starts a release, it does not run one. */

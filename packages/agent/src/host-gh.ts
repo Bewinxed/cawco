@@ -14,7 +14,7 @@ import {
   workspaceCacheDir,
   workspaceScratchRoot,
   workspacesDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { z } from "zod";
 
