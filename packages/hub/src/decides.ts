@@ -10,8 +10,7 @@
  * same name: its Runs on and Knows are the type's, its standing
  * instructions the type's description. Both are written together.
  */
-import type { DelegateType, EffortLevel, HarnessKind } from "@cawco/core";
-import { ANY_TYPE, EFFORT_LEVELS, HARNESSES } from "@cawco/core";
+
 import {
   BUILT_IN_MEMBERS,
   CAW_POSE_IDS,
@@ -29,6 +28,10 @@ import {
   readDecides,
   slugOf,
 } from "@cawco/core/decides";
+import type { DelegateType } from "@cawco/core/delegate-types";
+import { ANY_TYPE } from "@cawco/core/delegate-types";
+import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
+import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { decidesWords } from "@cawco/core/words/decides";
 import { Elysia, status, t } from "elysia";
 import type { DecidesDb } from "./db/decides";

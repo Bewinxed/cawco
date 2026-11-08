@@ -54,7 +54,8 @@
  *   judges it; its verdict goes to the session that asked, as one message,
  *   and nothing is held or finished.
  */
-import type { InstanceRow, ResultArtifact } from "@cawco/core";
+import type { ResultArtifact } from "@cawco/core/deliverables";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import type { DbShape, WorkItemRow } from "./db";

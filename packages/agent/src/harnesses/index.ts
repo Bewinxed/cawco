@@ -3,7 +3,7 @@
  * adapter implements {@link Harness}; a machine can run several at once, and a
  * spawn names which one it wants (`SpawnPayload.harness`, default `claude`).
  */
-import type { HarnessKind } from "@cawco/core";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { Harness } from "../harness";
 import { claudeHarness } from "./claude";
 import { opencodeHarness } from "./opencode";

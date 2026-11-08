@@ -63,12 +63,12 @@
  * A gate.md that does not read is never taken for none: the item does not
  * land, and finish_item names every problem.
  */
-import {
-  type DeclaredStep,
-  machineCalled,
-  type ProjectGate,
-  type RunsOnCapability,
-} from "@cawco/core";
+import { machineCalled } from "@cawco/core/machine-names";
+import type {
+  DeclaredStep,
+  ProjectGate,
+  RunsOnCapability,
+} from "@cawco/core/project-gate";
 import { Elysia } from "elysia";
 import { FolderRefusal, readFolderFile, refused } from "./project-folder";
 import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
