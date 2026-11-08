@@ -336,8 +336,10 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
   const { call, db } = rig;
   const { place, projectAccountOf, runningAccounts } =
     await import("../../../packages/hub/src/placement");
-  const { defaultRouting, ruleInScope, sessionTakes } =
-    await import("../../../packages/core/src/index");
+  const { defaultRouting } =
+    await import("../../../packages/core/src/accounts");
+  const { ruleInScope } = await import("../../../packages/core/src/rules");
+  const { sessionTakes } = await import("../../../packages/core/src/fleet");
   const listed = (
     (await call(hubRequest("GET /api/projects"))).json as {
       id: string;
