@@ -1,5 +1,6 @@
 // Accounts: several sign-ins per provider, and which one a session runs on.
 export * from "./accounts";
+export * from "./accounts/kinds";
 // Connections: outside services the hub signs in to and calls for sessions.
 export * from "./actions";
 // "Continue in new session": the size rules the hub and the dashboard share.
@@ -11,6 +12,7 @@ export * from "./artifact-kinds";
 // What waits on the person among the artifacts: Needs you's artifact items.
 export * from "./artifact-needs";
 export * from "./ask-tools";
+export type { AskAnswer, SourceFacts } from "./asks";
 // Files and texts a turn carries, and the line naming each attached file.
 export * from "./attachments";
 // Pages are blocks: a project page's arrangement, kept by the hub.
@@ -42,6 +44,7 @@ export * from "./external-items";
 export * from "./find";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
 export * from "./fleet";
+export * from "./fleet-placement";
 // Fleet watch: its signals, limits, words and frames (Projects spec §5.3).
 export * from "./fleet-watch";
 export * from "./frames";
