@@ -1244,24 +1244,38 @@ const opencodeEntry = async (
   };
 };
 
-/** One entry of pi's or OpenCode's own store, read now. */
-const readStoreEntry = (
-  store: HomeCredential["store"],
+const readPiEntry = async (
   storeProvider: string
-): Promise<StoreEntry | undefined> => STORE_ENTRY[store](storeProvider);
-const STORE_ENTRY: Record<
+): Promise<StoreEntry | undefined> => {
+  const path = piStorePath();
+  const entry = (await readJson(path))[storeProvider];
+  const credential = entry ? piCredentialOf(entry) : undefined;
+  return credential
+    ? { credential, drop: () => dropPiEntry(path, storeProvider, credential) }
+    : undefined;
+};
+
+const READ_STORE: Record<
   HomeCredential["store"],
   (storeProvider: string) => Promise<StoreEntry | undefined>
 > = {
-  opencode: (storeProvider) => opencodeEntry(storeProvider),
-  pi: async (storeProvider) => {
-    const path = piStorePath();
-    const entry = (await readJson(path))[storeProvider];
-    const credential = entry ? piCredentialOf(entry) : undefined;
-    return credential
-      ? { credential, drop: () => dropPiEntry(path, storeProvider, credential) }
-      : undefined;
-  },
+  opencode: opencodeEntry,
+  pi: readPiEntry,
+};
+
+/** One entry of pi's or OpenCode's own store, read now. */
+const readStoreEntry = async (
+  store: HomeCredential["store"],
+  storeProvider: string
+): Promise<StoreEntry | undefined> => await READ_STORE[store](storeProvider);
+
+/** The account provider an OAuth entry in a store is for, where the store's own id for it differs. */
+const STORE_OAUTH_PROVIDER: Record<
+  HomeCredential["store"],
+  Partial<Record<string, string>>
+> = {
+  opencode: { openai: "openai-codex" },
+  pi: {},
 };
 
 /** The account provider an entry in a store is for. */
@@ -1270,10 +1284,8 @@ const providerOfEntry = (
   storeProvider: string,
   credential: Credential
 ): string =>
-  store === "opencode" &&
-  storeProvider === "openai" &&
   credential.type === "oauth"
-    ? "openai-codex"
+    ? (STORE_OAUTH_PROVIDER[store][storeProvider] ?? storeProvider)
     : storeProvider;
 
 /**
