@@ -32,8 +32,8 @@
  *   bun scripts/probe-kit/run.ts preview-dashboard
  */
 import type { FrameLocator, Page } from "playwright-core";
-import { OVERLAY_PATH } from "../../../packages/core/src/frames";
 import { hubRequest } from "../../../packages/core/src/hub-request";
+import { OVERLAY_PATH } from "../../../packages/core/src/preview/routes";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, type View } from "../kit";
 

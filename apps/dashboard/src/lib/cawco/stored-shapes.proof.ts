@@ -66,10 +66,8 @@ import type {
   SessionPlan as SessionPlanType,
   TaskTodo as TaskTodoType,
 } from "@cawco/core/plan";
-import type {
-  PreviewSource as PreviewSourceType,
-  SendPayload as SendPayloadType,
-} from "@cawco/core/protocol";
+import type { PreviewSource as PreviewSourceType } from "@cawco/core/preview/protocol";
+import type { SendPayload as SendPayloadType } from "@cawco/core/protocol";
 import type {
   CanvasShapes as CanvasShapesType,
   DecisionMedia as DecisionMediaType,
