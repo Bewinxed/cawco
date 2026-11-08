@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { HarnessKind } from "@cawco/core/harness";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { LogoAntigravity, LogoClaude } from "@cawco/icons/marks";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
   import PiLogo from "./PiLogo.svelte";

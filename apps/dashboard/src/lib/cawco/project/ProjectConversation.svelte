@@ -33,7 +33,7 @@
    *   transcript's end (`setup`, SetupWell), and the questions the board
    *   draws are not lent to the composer (`asksElsewhere`).
    */
-  import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+  import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
   import { commonWords } from "@cawco/core/words/common";
   import { cawPanelWords } from "@cawco/core/words/onboarding";

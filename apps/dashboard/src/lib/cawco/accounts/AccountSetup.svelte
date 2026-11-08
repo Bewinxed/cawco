@@ -39,7 +39,7 @@
     type StrategyChoice,
   } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
-  import type { HarnessKind } from "@cawco/core/harness";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { configureWords } from "@cawco/core/words/configure";
   import { untrack } from "svelte";

@@ -10,7 +10,7 @@ import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
-import { HARNESSES } from "@cawco/core/harness";
+import { HARNESSES } from "@cawco/core/harness/kinds";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { spawnRead, untether } from "@cawco/core/tether";
