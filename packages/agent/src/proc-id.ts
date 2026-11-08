@@ -66,3 +66,12 @@ export function parseProcId(procId: string): ProcId {
   }
   return { kind: "claude", instanceId: procId };
 }
+
+/** A keeper child that is a session's, with whose: every other child (a boundary, a judge, a server) is the machine's. */
+export type SessionProc = Extract<ProcId, { instanceId: string }>;
+
+/** `procId` as a session's child, when it is one. */
+export function sessionOfProc(procId: string): SessionProc | undefined {
+  const proc = parseProcId(procId);
+  return "instanceId" in proc ? proc : undefined;
+}
