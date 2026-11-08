@@ -740,7 +740,7 @@ const gated: Gated[] = [
     "bun.lock",
   ]),
   run("packages/hub", "stored-writes:check", [
-    "packages/core/src/stored-json.ts",
+    "packages/hub/src/stored-json.ts",
     "packages/core/src/stored-types.ts",
     "packages/core/src/stored-shapes.ts",
     "packages/hub/scripts/stored-writes-check.ts",
