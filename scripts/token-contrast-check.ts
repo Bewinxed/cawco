@@ -9,7 +9,7 @@
  *
  * The values are the declarations of the dashboard's theme.css (its
  * `@theme static` block, and the dark scheme's block where a value differs),
- * read by the evaluator (packages/hub/src/design-css.ts, on colorjs.io), which resolves
+ * read by the evaluator (packages/design-tokens/src/design-css.ts, on colorjs.io), which resolves
  * `light-dark()`, `color-mix()` and relative `oklch(from …)` as the cascade
  * does. Over that this check only paints: a colour with alpha (a wash, a
  * glyph at its breath floor) is laid over what stands under it, source-over
@@ -30,7 +30,10 @@ import Color from "colorjs.io";
 import postcss from "postcss";
 import { ACCOUNT_HUES } from "../packages/core/src/accounts/kinds";
 import { STATUS_PAIRS } from "../packages/core/src/views";
-import { CssEvaluator, type CssToken } from "../packages/hub/src/design-css";
+import {
+  CssEvaluator,
+  type CssToken,
+} from "../packages/design-tokens/src/design-css";
 
 const THEME = join(
   import.meta.dir,
