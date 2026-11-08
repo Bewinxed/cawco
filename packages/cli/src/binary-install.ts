@@ -9,12 +9,6 @@ import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
 import {
-  CAWCO_ENV,
-  HARNESSES,
-  INSTALL_JOINED,
-  INSTALL_STEP_PREFIX,
-} from "@cawco/core";
-import {
   type BinaryInstallation,
   binaryRoot,
   currentDirectory,
@@ -33,7 +27,10 @@ import type {
   BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { writeWrapper } from "@cawco/core/binary-wrapper";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { HARNESSES } from "@cawco/core/harness/kinds";
 import { fetchHub, hubRequest } from "@cawco/core/hub-request";
+import { INSTALL_JOINED, INSTALL_STEP_PREFIX } from "@cawco/core/join";
 import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";

@@ -13,7 +13,7 @@ import {
   PREVIEW_DOWNS,
   PREVIEW_WHY_META,
   type PreviewDown,
-} from "./index";
+} from "./protocol";
 import { embeddedFile, standalone } from "./runtime";
 import { previewWords } from "./words/preview";
 
