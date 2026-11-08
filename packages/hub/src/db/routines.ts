@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { type RoutineRunState, routineRuns, routines } from "./schema";
+import type { Tx } from "./tx";
 
 export type RoutineRow = typeof routines.$inferSelect;
 export type RoutineRunRow = typeof routineRuns.$inferSelect;
@@ -88,8 +89,6 @@ export interface RoutinesDb {
 }
 
 export const routinesDb = (db: BunSQLiteDatabase): RoutinesDb => {
-  type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
   const get = (id: string, q: Tx | BunSQLiteDatabase = db) =>
     q.select().from(routines).where(eq(routines.id, id)).get();
 
