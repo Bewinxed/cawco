@@ -10,7 +10,7 @@
 
 import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROLS } from "@cawco/core/comments";
-import type { PreviewAddress } from "@cawco/core/frames";
+import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";
