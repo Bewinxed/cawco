@@ -40,10 +40,7 @@ import type {
   ChannelRelease,
 } from "@cawco/core/binary-updates";
 import { hubUpdatePolicyPath } from "@cawco/core/paths/hub";
-import {
-  type DamagedHubRecord,
-  damagedHubRecordWords,
-} from "@cawco/core/protocol";
+import type { DamagedHubRecord } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
   parseRecord,
@@ -52,6 +49,7 @@ import {
 } from "@cawco/core/state-file";
 import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
+import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { hidden } from "./hidden";
