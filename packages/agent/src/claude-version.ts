@@ -8,6 +8,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
 import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core/tools";
+import { versionSaid } from "@cawco/core/version-said";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";
@@ -47,9 +48,6 @@ export const INITIALIZE_SAYS_VERSION_FROM = "2.1.299";
  * and the next caller finds its answer.
  */
 const VERSION_WAIT_MS = 5000;
-
-/** The first `x.y.z` that `claude --version` prints. */
-const SAID = /\d+\.\d+\.\d+/u;
 
 /**
  * The version read of one binary: the file it is (`<real path>:<mtime>:<size>`),
@@ -130,7 +128,7 @@ const readVersion = (path: string, binary: string): VersionRead => {
     });
     child = spawned;
     version = Promise.all([new Response(spawned.stdout).text(), spawned.exited])
-      .then(([said, code]) => (code === 0 ? SAID.exec(said)?.[0] : undefined))
+      .then(([said, code]) => (code === 0 ? versionSaid(said) : undefined))
       .catch(() => undefined)
       .finally(() => untether(spawned.stdin));
   } catch {
