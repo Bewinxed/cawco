@@ -1,4 +1,4 @@
-import type { UsageHarness, UsageTokens } from "@cawco/core";
+import type { UsageHarness, UsageTokens } from "@cawco/core/usage/types";
 
 /**
  * One normalized usage record, harness-agnostic. The scanners reduce their

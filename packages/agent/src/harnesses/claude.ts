@@ -45,12 +45,43 @@ import {
   type SyncHookJSONOutput,
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { AccountIdentity, AccountKind } from "@cawco/core/accounts";
+import {
+  CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_CHECK_ACCOUNT,
+  CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_FORGET_ACCOUNT,
+  CONTROL_JOIN_ACCOUNT_LOGIN,
+  CONTROL_MOVE_HOME_LOGIN,
+  CONTROL_PROBE_ACCOUNT,
+  CONTROL_READ_HOME_LOGIN,
+  identityOf,
+} from "@cawco/core/accounts";
+import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import { FULL_SEND_ANSWER } from "@cawco/core/asks";
+import type { RestartHold } from "@cawco/core/binary-updates";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import type { StartingSet } from "@cawco/core/delegate-types";
+import {
+  HARNESS_TOOLS,
+  inStartingSet,
+  PERSON_AND_READ_TOOLS,
+} from "@cawco/core/delegate-types";
+import { detach } from "@cawco/core/detach";
+import type { FleetMcpConfig, SessionInstruction } from "@cawco/core/fleet";
+import {
+  INSPECT_CONFIG,
+  READ_HOOK_SCRIPT,
+  READ_MEMORY_FILE,
+  READ_SKILL_FILES,
+  READ_SKILL_FOLDER,
+} from "@cawco/core/fleet";
+import { maskMcpConfig } from "@cawco/core/fleet-secrets";
 import type {
-  AccountIdentity,
-  AccountKind,
   AuthState,
   CutCommand,
-  EffortLevel,
   EndedTask,
   FleetMcpChange,
   FleetMcpTakeAnswer,
@@ -59,82 +90,48 @@ import type {
   MoveEnded,
   NeutralMessage,
   NeutralSessionInfo,
-  SendPayload,
   SentMessage,
-  SessionInstruction,
   SessionMessage,
-  SpawnPayload,
-  StartingSet,
   StoredRun,
-  TranscriptWindow,
   UserAnswers,
   UserQuestion,
   UserQuestionAnswered,
   UserQuestionResult,
-  WindowAsk,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
-  ASK_USER_QUESTION,
   BOUNDARY_RELAUNCH,
   byPerson,
-  CAWCO_ENV,
-  CLAUDE_SETTINGS_REFUSED,
-  CONTROL_BEGIN_ACCOUNT_LOGIN,
-  CONTROL_CHECK_ACCOUNT,
-  CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FLEET_SETTINGS,
   CONTROL_FOLDER_COMMANDS,
-  CONTROL_FORGET_ACCOUNT,
   CONTROL_INTERRUPT,
-  CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
   CONTROL_MCP_STATUS,
-  CONTROL_MOVE_HOME_LOGIN,
-  CONTROL_PROBE_ACCOUNT,
-  CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_WITHDRAW_SEND,
   CONVERSATION_RESET,
-  configurePage,
-  conversationGone,
   EFFORT_READ,
   GATEWAY_RELAUNCH,
-  HARNESS_TOOLS,
-  harnessWords,
-  INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
-  identityOf,
-  inStartingSet,
   MESSAGES_HELD,
   MESSAGES_READ,
-  mcpGatewayPort,
-  type OfferedMode,
   offeredMode,
-  PERSON_AND_READ_TOOLS,
-  type PermissionMode,
   RATE_LIMIT_READ,
-  READ_HOOK_SCRIPT,
-  READ_MEMORY_FILE,
-  READ_SKILL_FILES,
-  READ_SKILL_FOLDER,
-  resumeCursor,
   SESSION_DIR_READ,
   SESSION_STOPPED,
   VERIFY_SESSION_CREDENTIAL,
-} from "@cawco/core";
-import { FULL_SEND_ANSWER } from "@cawco/core/asks";
-import type { RestartHold } from "@cawco/core/binary-updates";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { projectClaudeRelative } from "@cawco/core/claude-dirs";
-import { detach } from "@cawco/core/detach";
-import type { FleetMcpConfig } from "@cawco/core/fleet";
-import { maskMcpConfig } from "@cawco/core/fleet-secrets";
+} from "@cawco/core/harness";
+import type {
+  EffortLevel,
+  OfferedMode,
+  PermissionMode,
+} from "@cawco/core/harness/kinds";
+import { CLAUDE_SETTINGS_REFUSED } from "@cawco/core/harness-config";
 import {
   accountConfigDir,
   accountIds,
@@ -143,10 +140,17 @@ import {
   projectSlug,
   sessionConfigDir,
 } from "@cawco/core/paths";
+import type { SendPayload, SpawnPayload } from "@cawco/core/protocol";
+import { mcpGatewayPort } from "@cawco/core/protocol";
+import { conversationGone } from "@cawco/core/relaunch";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { isDamagedRecord } from "@cawco/core/state-file";
+import { resumeCursor } from "@cawco/core/stream";
 import { HOUR_MS } from "@cawco/core/time";
+import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
+import { configurePage } from "@cawco/core/words/configure";
+import { harnessWords } from "@cawco/core/words/harness";
 import {
   completeLines,
   lineRecords,
@@ -1482,7 +1486,7 @@ const sdkMode = (
 
 /** A permission answer in the SDK's words: any `setMode` it carries names the CLI's mode. */
 const sdkPermissionResult = (
-  result: import("@cawco/core").PermissionResult
+  result: import("@cawco/core/harness").PermissionResult
 ): PermissionResult =>
   (result.behavior === "allow" && result.updatedPermissions
     ? {
@@ -1510,7 +1514,9 @@ class SessionMode {
   #cli: import("@anthropic-ai/claude-agent-sdk").PermissionMode | undefined;
   #fullSend: boolean;
 
-  constructor(mode: import("@cawco/core").PermissionMode | undefined) {
+  constructor(
+    mode: import("@cawco/core/harness/kinds").PermissionMode | undefined
+  ) {
     this.#fullSend = mode === "fullSend";
     this.#cli = mode && sdkMode(mode);
   }
@@ -1522,7 +1528,7 @@ class SessionMode {
   }
 
   /** CawCo sets the mode: a mode control's, or an answer's `setMode`. */
-  choose(mode: import("@cawco/core").PermissionMode): void {
+  choose(mode: import("@cawco/core/harness/kinds").PermissionMode): void {
     this.#fullSend = mode === "fullSend";
     this.#cli = sdkMode(mode);
   }
@@ -4592,7 +4598,7 @@ class ClaudeSession implements HarnessSession {
 
   resolvePermission(
     requestId: string,
-    result: import("@cawco/core").PermissionResult
+    result: import("@cawco/core/harness").PermissionResult
   ): void {
     const held = this.#permissions.get(requestId);
     if (!held) {
@@ -5609,7 +5615,7 @@ class ClaudeHarness implements Harness {
   }
 
   syncFleet(
-    config: import("@cawco/core").PlacedFleetConfig,
+    config: import("@cawco/core/fleet").PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>
   ) {
     return syncFleetConfig(config, parts);
