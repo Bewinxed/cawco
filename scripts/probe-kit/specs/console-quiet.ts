@@ -57,12 +57,10 @@ import type { Page, Response, WebSocketRoute } from "playwright-core";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { RECONNECTING_MS } from "../../../packages/core/src/handover";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import {
-  machineCalled,
-  machineFaultWords,
-} from "../../../packages/core/src/machine-names";
+import { machineCalled } from "../../../packages/core/src/machine-names";
 import type { AgentRow } from "../../../packages/core/src/protocol";
 import { filesWords } from "../../../packages/core/src/words/files";
+import { machineFaultWords } from "../../../packages/core/src/words/machine-names";
 import { MACHINE, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import { scan } from "../journeys/scan";

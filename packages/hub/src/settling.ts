@@ -40,7 +40,6 @@ import {
   type Member,
   memberOf,
   type RouteState,
-  routeLine,
 } from "@cawco/core/decides";
 import { type DecisionCard, pickMade } from "@cawco/core/decisions";
 import type { DelegateType } from "@cawco/core/delegate-types";
@@ -48,6 +47,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { decisionLink, sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
+import { routeLine } from "@cawco/core/words/decides-lines";
 import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable, SettleRefusal } from "./decides-file";
