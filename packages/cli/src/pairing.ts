@@ -31,7 +31,7 @@ import {
   hubDbPath,
   pairingOffAnswerPath,
   pairingOffRequestPath,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/hub";
 import { PairingOffAnswerSchema } from "@cawco/core/stored-shapes";
 import { configurePage } from "@cawco/core/words/configure";
 

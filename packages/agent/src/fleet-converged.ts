@@ -1,6 +1,6 @@
 /**
  * What this machine's harnesses last converged of the fleet, kept on disk
- * (core paths.ts `fleetConvergedFile`): each item's hash as a converge
+ * (core paths/fleet.ts `fleetConvergedFile`): each item's hash as a converge
  * wrote it, and the report that converge came to. It is the converge's
  * basis: an item a delta carries whose hash this already holds is not
  * written again (fleet-desired.ts `apply`), so an agent that starts again
@@ -13,7 +13,7 @@
  */
 import type { FleetSyncReport } from "@cawco/core/fleet";
 import { itemKind } from "@cawco/core/fleet-items";
-import { fleetConvergedFile } from "@cawco/core/paths";
+import { fleetConvergedFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { FleetSyncReportSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
