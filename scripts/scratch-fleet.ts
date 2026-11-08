@@ -146,7 +146,7 @@ const SEEN_CHARS = 100_000_000;
 
 /**
  * What the mock answers a provider's usage read with, by path: OpenCode Go's
- * three windows (`GET /zen/go/v1/usage`, core usage/opencode-go.ts) and
+ * three windows (`GET /zen/go/v1/usage`, agent usage/opencode-go.ts) and
  * ChatGPT's two (`GET /backend-api/wham/usage`, usage/chatgpt.ts), each some
  * way into its window.
  */
@@ -2206,7 +2206,7 @@ async function standUp(
     DISABLE_AUTOUPDATER: "1",
     OPENCODE_DISABLE_MODELS_FETCH: "1",
     // The hosts CawCo's own code reads besides a model provider, each its
-    // stand-in on the mock: OpenCode Go's usage (core usage/opencode-go.ts),
+    // stand-in on the mock: OpenCode Go's usage (agent usage/opencode-go.ts),
     // ChatGPT's (usage/chatgpt.ts) and models.dev's rates (usage/pricing.ts).
     CAWCO_OPENCODE_BASE_URL: mockBase,
     CAWCO_CHATGPT_BASE_URL: `${mockBase}/backend-api`,
