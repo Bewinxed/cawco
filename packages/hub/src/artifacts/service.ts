@@ -51,15 +51,23 @@ import {
   unsentChoices,
 } from "@cawco/core/choices";
 import {
+  askedAgainLine,
+  type Carried,
+  notedLine,
+  pinDelivery,
+  pinStandsOn,
+  pinsToTell,
+  withoutHeld,
+  wroteLine,
+} from "@cawco/core/comments/deliver";
+import {
   ACTIVITY_LIMIT,
   type ArtifactChanges,
   activityLines,
   activityOf,
   answerChanges,
   answeredLines,
-  askedAgainLine,
   bindChanges,
-  type Carried,
   CHANGES_LIMIT,
   type ChangedItem,
   COMMENT_LIMITS,
@@ -68,13 +76,9 @@ import {
   heldNoteOf,
   type MarkPictures,
   newAnswer,
-  notedLine,
   type Pin,
-  pinDelivery,
   pinReady,
   pinSaid,
-  pinStandsOn,
-  pinsToTell,
   pinUnsent,
   readPin,
   readPins,
@@ -86,12 +90,10 @@ import {
   stampHeard,
   type ThreadEntry,
   unheardEntries,
-  withoutHeld,
   writeDelivery,
   writeEntry,
   writeResolve,
-  wroteLine,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import type { Member } from "@cawco/core/decides";
 import {
   type AfterLinks,
