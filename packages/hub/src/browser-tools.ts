@@ -21,9 +21,12 @@
  * the person took it is withdrawn, and the call refused. A waiting call ends
  * with the hub that held it, so the ask is not kept across a restart.
  */
-import type { Envelope, InstanceRow, PermissionResult } from "@cawco/core";
-import { BROWSER_ASK_TOOL, type BrowserAskFrame } from "@cawco/core";
+
+import { BROWSER_ASK_TOOL } from "@cawco/core/ask-tools";
 import type { BrowserKey } from "@cawco/core/browser";
+import type { BrowserAskFrame } from "@cawco/core/frames";
+import type { PermissionResult } from "@cawco/core/harness";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { browserAskWords } from "@cawco/core/words/browser";
 import { z } from "zod";
 import { tool } from "./mcp-tool";

@@ -21,12 +21,9 @@
  * the tool always let it: it is how a session finds the one that owns the
  * work. Never itself, never a continuation's summariser.
  */
-import {
-  accountNameAmong,
-  type InstanceRow,
-  type NeutralOrigin,
-  type NeutralUserMessage,
-} from "@cawco/core";
+import { accountNameAmong } from "@cawco/core/accounts";
+import type { NeutralOrigin, NeutralUserMessage } from "@cawco/core/harness";
+import type { InstanceRow } from "@cawco/core/protocol";
 import { refusedUntil } from "./at-limit";
 import type { DbShape, SentMessageRow } from "./db";
 import { redactSecrets } from "./secret-filter";

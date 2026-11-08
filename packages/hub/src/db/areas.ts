@@ -1,4 +1,4 @@
-import type { Area, OwnSettings } from "@cawco/core";
+import type { Area, OwnSettings } from "@cawco/core/areas";
 import { asc, count, eq, max } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {

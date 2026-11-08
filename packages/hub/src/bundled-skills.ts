@@ -21,9 +21,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FleetSkillPayload, SkillFile, StagesTemplate } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
+import type { FleetSkillPayload, SkillFile } from "@cawco/core/fleet";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
+import type { StagesTemplate } from "@cawco/core/views";
 
 export const BUNDLED_SKILLS = [
   "show",

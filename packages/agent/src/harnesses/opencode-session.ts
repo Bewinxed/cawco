@@ -25,29 +25,32 @@
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import type { ProviderRefusal } from "@cawco/core/accounts";
+import { atProviderLimit } from "@cawco/core/accounts";
+import { ASK_USER_QUESTION, CODE_MODE_TOOL } from "@cawco/core/ask-tools";
+import { type AskAnswer, FULL_SEND_ANSWER } from "@cawco/core/asks";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { MayStart } from "@cawco/core/delegate-types";
+import {
+  SPAWNING_TOOLS,
+  sessionMayStart,
+  spawningToolAllowed,
+} from "@cawco/core/delegate-types";
+import { detach } from "@cawco/core/detach";
+import type { SessionInstruction } from "@cawco/core/fleet";
 import type {
-  AskAnswer,
-  EffortLevel,
   FleetMcpChange,
   FleetMcpTakeAnswer,
-  MayStart,
   McpServerStatus,
-  ModelInfo,
   ModelTurnUsage,
   NeutralContentBlock,
-  PermissionMode,
   PermissionResult,
-  ProviderRefusal,
   SentMessage,
-  SessionInstruction,
   UserAnswers,
   UserQuestion,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
-  ASK_USER_QUESTION,
-  atProviderLimit,
   byPerson,
-  CODE_MODE_TOOL,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
@@ -61,8 +64,6 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
-  configurePage,
-  EFFORT_LEVELS,
   EFFORT_READ,
   INSTALL_SESSION_CREDENTIAL,
   MCP_NOT_CONNECTED,
@@ -71,23 +72,24 @@ import {
   mcpNotConnectedLine,
   offeredMode,
   PROVIDER_RETRY,
-  pricedRequest,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
-  SERVER_STOPPED_MID_TURN,
-  SPAWNING_TOOLS,
-  sessionMayStart,
-  spawningToolAllowed,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
-} from "@cawco/core";
-import { FULL_SEND_ANSWER } from "@cawco/core/asks";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/harness";
+import type {
+  EffortLevel,
+  ModelInfo,
+  PermissionMode,
+} from "@cawco/core/harness/kinds";
+import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unlistedModelRefusal } from "@cawco/core/model-names";
+import { SERVER_STOPPED_MID_TURN } from "@cawco/core/protocol";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { pricedRequest } from "@cawco/core/usage/pricing";
+import { configurePage } from "@cawco/core/words/configure";
 import type {
   FormInfo,
   ModelInfo as OpencodeModel,
