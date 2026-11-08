@@ -1,66 +1,69 @@
 import type {
-  AccountHue,
   AccountKind,
   AccountProvider,
   AccountSetupStep,
   AtPlanLimit,
+  HomeStore,
+  ProjectAtLimit,
+  RefusalReach,
+  SigninState,
+  StrategyChoice,
+} from "@cawco/core/accounts";
+import type { AccountHue } from "@cawco/core/accounts/kinds";
+import type { CapPeriod, OnCap } from "@cawco/core/areas";
+import { ASK_STORED, type AskState } from "@cawco/core/asks";
+import type { BlockPage, BlockWidth } from "@cawco/core/blocks";
+import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
+import type { MemoryRole } from "@cawco/core/fleet";
+import type { FleetScope } from "@cawco/core/fleet-placement";
+import type { ConnectAccess } from "@cawco/core/frames";
+import type {
   AuthState,
-  BlockPage,
-  BlockWidth,
-  CapPeriod,
-  CheckoutMove,
-  ConnectAccess,
+  HarnessReport,
+  SendMode,
+  SendState,
+  WorkspaceCut,
+  WorkspaceHolding,
+  WorkspaceKind,
+} from "@cawco/core/harness";
+import type {
+  EffortLevel,
+  HarnessKind,
+  OfferedMode,
+  PermissionMode,
+  SessionEffort,
+} from "@cawco/core/harness/kinds";
+import type { HarnessConfigKind } from "@cawco/core/harness-config";
+import type { HookEvent } from "@cawco/core/hooks";
+import type { DeviceKind } from "@cawco/core/hub-auth";
+import type { ImageProviderId } from "@cawco/core/image-generation";
+import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
+import type { MachinePath } from "@cawco/core/machine-path";
+import type { MoveStage } from "@cawco/core/move";
+import type { MachineState, PresenceClient } from "@cawco/core/notifications";
+import type { RoutineMadeEvent } from "@cawco/core/project-conversation";
+import type {
   ContinuationJob,
   DelegateAskStatus,
   DelegateEventKind,
-  DeviceKind,
-  EffortLevel,
   Envelope,
-  FleetScope,
-  HarnessConfigKind,
-  HarnessKind,
-  HarnessReport,
-  HomeStore,
-  HookEvent,
-  ImageProviderId,
   InstanceStatus,
-  LandsMode,
-  LimitWindow,
-  MachineState,
-  MemoryRole,
-  MoveStage,
-  OfferedMode,
-  OnCap,
-  PermissionMode,
-  PresenceClient,
-  ProjectAtLimit,
-  RefusalReach,
-  RoutineMadeEvent,
+  SendPayload,
+  SessionEndIntent,
+  SpawnPayload,
+} from "@cawco/core/protocol";
+import type {
   RuleMatchKind,
   RuleScope,
   RuleTiming,
   RuleWatch,
-  SendMode,
-  SendPayload,
-  SendState,
-  SessionEffort,
-  SessionEndIntent,
-  SigninState,
-  SpawnPayload,
-  StagesTemplate,
+} from "@cawco/core/rules";
+import type {
   StarterGlyph,
   StarterOutcome,
   StarterPlace,
   StarterSourceKind,
-  StrategyChoice,
-  ToolStatus,
-  WorkspaceCut,
-  WorkspaceHolding,
-  WorkspaceKind,
-} from "@cawco/core";
-import { ASK_STORED, type AskState } from "@cawco/core/asks";
-import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
-import type { MachinePath } from "@cawco/core/machine-path";
+} from "@cawco/core/starters";
 import { storedJson } from "@cawco/core/stored-json";
 import {
   AccountMoveSchema,
@@ -114,6 +117,9 @@ import {
 import type { StreamRelayState } from "@cawco/core/stream-relay";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { HOUR_MS } from "@cawco/core/time";
+import type { ToolStatus } from "@cawco/core/tools";
+import type { LimitWindow } from "@cawco/core/usage/types";
+import type { StagesTemplate } from "@cawco/core/views";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -644,7 +650,7 @@ export const projects = sqliteTable("projects", {
 });
 
 /** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
-export type Tracker = import("@cawco/core").Tracker;
+export type Tracker = import("@cawco/core/trackers").Tracker;
 
 /**
  * Attempts a stage's `runs:` hook asked for while the project already ran
@@ -1056,7 +1062,7 @@ export const instances = sqliteTable("instances", {
    * whose work item has ended is listed a day, asleep or not.
    */
   origin: text("origin")
-    .$type<import("@cawco/core").SessionOrigin>()
+    .$type<import("@cawco/core/protocol").SessionOrigin>()
     .notNull()
     .default("person"),
   /** The delegating tool call, so the parent transcript can render the round trip. */
@@ -1180,7 +1186,7 @@ export const instances = sqliteTable("instances", {
    * a delegate type's `role` for its work item's session. Null: derived
    * from how it started (roles.ts `roleOf`).
    */
-  role: text("role").$type<import("@cawco/core").SessionRole>(),
+  role: text("role").$type<import("@cawco/core/delegate-types").SessionRole>(),
   /**
    * The delegate type its spawn named (a fleet type, or its project's), so
    * what the type says (its denied tools) reads the same for every session
@@ -1207,7 +1213,7 @@ export const instances = sqliteTable("instances", {
    * last happened, and the last thing that happened does not stop having
    * happened because the machine went quiet.
    *
-   * The union is core's {@link import('@cawco/core').InstanceStatus} (see its
+   * The union is core's {@link import('@cawco/core/protocol').InstanceStatus} (see its
    * doc comment for what each value means). Plain text, no SQL migration:
    * `sleeping` arrived by a one-time boot sweep over rows the old taxonomy had
    * to file under `error`.
@@ -1217,7 +1223,9 @@ export const instances = sqliteTable("instances", {
   lastError: text("last_error"),
   /** What `lastError` was, typed where it was found (core `LastErrorKind`); null when nothing typed it. */
   lastErrorKind:
-    text("last_error_kind").$type<import("@cawco/core").LastErrorKind>(),
+    text("last_error_kind").$type<
+      import("@cawco/core/relaunch").LastErrorKind
+    >(),
   createdAt: stampedNow("created_at"),
   updatedAt: stampedNow("updated_at"),
   /**
@@ -1430,7 +1438,7 @@ export type Origin = "you" | "event";
 export type WorkOrigin = Origin | "kept";
 
 /** A work item's life. Only `starting` and `running` take messages. */
-export type WorkItemState = import("@cawco/core").WorkItemState;
+export type WorkItemState = import("@cawco/core/work-items").WorkItemState;
 
 /**
  * Where a work item's landing stands ({@link workItems} `landingPhase`), kept
@@ -4018,7 +4026,7 @@ export const projectOffers = sqliteTable("project_offers", {
   instanceId: text("instance_id").primaryKey(),
   /** Which signal made it: `delegates`, `days`, `plan` or `repo`; `caw` when Caw asked in conversation. */
   reason: text("reason")
-    .$type<import("@cawco/core").ProjectOfferReason>()
+    .$type<import("@cawco/core/frames").ProjectOfferReason>()
     .notNull(),
   /** The sentence the offer says, naming why. */
   line: text("line").notNull(),
@@ -4293,7 +4301,9 @@ export const planChanges = sqliteTable(
     instanceId: text("instance_id").notNull(),
     /** Who hears it: `session:<instance id>` or `caw:<project id>`. */
     receiver: text("receiver").notNull(),
-    kind: text("kind").$type<import("@cawco/core").PlanEditKind>().notNull(),
+    kind: text("kind")
+      .$type<import("@cawco/core/plan").PlanEditKind>()
+      .notNull(),
     step: text("step").notNull(),
     was: text("was").notNull(),
     words: text("words").notNull(),
@@ -4379,11 +4389,13 @@ export const artifacts = sqliteTable(
     projectId: text("project_id").references(() => projects.id, {
       onDelete: "set null",
     }),
-    kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
+    kind: text("kind")
+      .$type<import("@cawco/core/artifact-kinds").ArtifactKind>()
+      .notNull(),
     name: text("name").notNull(),
     /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */
     does: text("does")
-      .$type<import("@cawco/core").ArtifactDoes>()
+      .$type<import("@cawco/core/protocol").ArtifactDoes>()
       .notNull()
       .default("judge"),
     /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
@@ -4851,7 +4863,7 @@ export const projectNotes = sqliteTable(
  * a message to the project's Caw, or the project's memory curator
  * (memory.ts), a delegate in the `curator` role that only the hub makes.
  */
-export type RoutineTarget = import("@cawco/core").RoutineTarget;
+export type RoutineTarget = import("@cawco/core/routine-kinds").RoutineTarget;
 
 /**
  * A routine (Projects spec §5.5, routines.ts): a prompt the hub runs on a
@@ -4930,7 +4942,8 @@ export const routines = sqliteTable(
  * starts when the runs before it end), being started, running, ended, or
  * skipped (nothing started).
  */
-export type RoutineRunState = import("@cawco/core").RoutineRunState;
+export type RoutineRunState =
+  import("@cawco/core/routine-kinds").RoutineRunState;
 
 /**
  * How a run ended, by its delegate's `finish_item` summary or Caw's
@@ -4938,7 +4951,7 @@ export type RoutineRunState = import("@cawco/core").RoutineRunState;
  * notice), `failed` (`AUTOMATION_FAILED`, an item that failed, or Caw's turn
  * ending without a result), `cancelled` (someone stopped it).
  */
-export type RoutineOutcome = import("@cawco/core").RoutineOutcome;
+export type RoutineOutcome = import("@cawco/core/routine-kinds").RoutineOutcome;
 
 /**
  * One run of a routine at one slot: a scheduled slot's time (ISO), `test:<created
@@ -4998,15 +5011,19 @@ export const connections = sqliteTable("connections", {
   /** Which account of the service, in the owner's words. */
   account: text("account").notNull(),
   transport: text("transport")
-    .$type<import("@cawco/core").ConnectionTransport>()
+    .$type<import("@cawco/core/connections").ConnectionTransport>()
     .notNull(),
   url: text("url"),
   command: text("command"),
   args: storedJson(z.array(z.string()))("args"),
-  auth: text("auth").$type<import("@cawco/core").ConnectionAuth>().notNull(),
+  auth: text("auth")
+    .$type<import("@cawco/core/connections").ConnectionAuth>()
+    .notNull(),
   /** For `header` auth: the header (stdio: the environment variable) the key goes in. */
   header: text("header"),
-  state: text("state").$type<import("@cawco/core").ConnectionState>().notNull(),
+  state: text("state")
+    .$type<import("@cawco/core/connections").ConnectionState>()
+    .notNull(),
   reason: text("reason"),
   /** Its key, or its OAuth tokens, client and a sign-in's verifier: sealed. */
   secret: sealedJson(ConnectionSecretSchema)("sealed"),
@@ -5255,7 +5272,7 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
   provider: text("provider")
-    .$type<import("@cawco/core").IssueTracker>()
+    .$type<import("@cawco/core/trackers").IssueTracker>()
     .notNull(),
   /** The connection's name (connections.ts). */
   connection: text("connection").notNull(),
@@ -5267,7 +5284,7 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   boundAt: timestamp("bound_at").notNull(),
   cursor: storedJson(TrackerCursorSchema)("cursor").notNull(),
   state: text("state")
-    .$type<import("@cawco/core").TrackerSyncState>()
+    .$type<import("@cawco/core/trackers").TrackerSyncState>()
     .notNull(),
   /** Why it is refused, or why its last poll stopped short; null when all went through. */
   reason: text("reason"),
@@ -5324,9 +5341,11 @@ export const taskLinks = sqliteTable(
     /** As the task file or plan step writes it. */
     url: text("url").notNull(),
     source: text("source")
-      .$type<import("@cawco/core").ExternalSource>()
+      .$type<import("@cawco/core/external-items").ExternalSource>()
       .notNull(),
-    kind: text("kind").$type<import("@cawco/core").ExternalKind>().notNull(),
+    kind: text("kind")
+      .$type<import("@cawco/core/external-items").ExternalKind>()
+      .notNull(),
     /** GitHub's node id, Linear's uuid; empty until the item was read. */
     externalId: text("external_id").notNull().default(""),
     /** GitHub's #12; null on Linear. */
@@ -5335,11 +5354,14 @@ export const taskLinks = sqliteTable(
     ref: text("ref").notNull(),
     title: text("title").notNull().default(""),
     /** Null until the item was read. */
-    state: text("state").$type<import("@cawco/core").ExternalState>(),
+    state:
+      text("state").$type<import("@cawco/core/external-items").ExternalState>(),
     stateName: text("state_name").notNull().default(""),
     author: storedJson(ExternalActorSchema)("author"),
     labels: storedJson(z.array(z.string()))("labels").notNull().default([]),
-    mode: text("mode").$type<import("@cawco/core").LinkMode>().notNull(),
+    mode: text("mode")
+      .$type<import("@cawco/core/external-items").LinkMode>()
+      .notNull(),
     /** When the source last changed it, ms; null before it was read. */
     remoteUpdatedAt: integer("remote_updated_at"),
     /** When the hub last read it; null before it first did. */
@@ -5381,7 +5403,7 @@ export const externalComments = sqliteTable(
   {
     projectId: projectKey(),
     source: text("source")
-      .$type<import("@cawco/core").ExternalSource>()
+      .$type<import("@cawco/core/external-items").ExternalSource>()
       .notNull(),
     /** GitHub's comment number, Linear's uuid. */
     externalId: text("external_id").notNull(),
@@ -5411,7 +5433,7 @@ export const externalComments = sqliteTable(
  * answer came back, or the hub stopped mid-call: it may or may not have
  * happened), or cancelled before it ran.
  */
-export type ActionState = import("@cawco/core").ActionState;
+export type ActionState = import("@cawco/core/actions").ActionState;
 
 /**
  * An approved action (Projects spec §5.5, actions.ts): one exact tool call on
@@ -5478,9 +5500,9 @@ export const actions = sqliteTable(
 );
 
 /** Who signs a relay's deliveries (relay.ts). */
-export type RelayProvider = import("@cawco/core").RelayProvider;
+export type RelayProvider = import("@cawco/core/relays").RelayProvider;
 /** Where a relay is (relay.ts): asked for, live, waiting on one step of yours, or turned off. */
-export type RelayState = import("@cawco/core").RelayState;
+export type RelayState = import("@cawco/core/relays").RelayState;
 
 /**
  * A relay (Projects spec §5.5 Relay, relay.ts): one public path,

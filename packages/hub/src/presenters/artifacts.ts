@@ -8,14 +8,16 @@
  * hash and time, a decision page's program) is the detailed form.
  */
 
-import { artifactLink, artifactToolWords, decidedByLine } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
+import { decidedByLine } from "@cawco/core/decides";
+import { artifactLink } from "@cawco/core/references";
 import {
   type CanvasSpec,
   type DesignMap,
   type PageError,
   STAGE_RENDER_MS,
 } from "@cawco/core/stage";
+import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import type { movesSaid, renderSaid } from "../artifacts/component";
 import type {
