@@ -53,7 +53,6 @@ import {
   linkedFolder as linkedFolderFrom,
   linkedRebundle,
 } from "@cawco/core/linked-rebundle";
-import { PACKAGE_TREES } from "@cawco/core/package-trees";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
@@ -114,6 +113,7 @@ import {
   TraceMap,
 } from "@jridgewell/trace-mapping";
 import { parse as lex, init as lexerReady } from "es-module-lexer";
+import { PACKAGE_TREES } from "../package-trees";
 import { propsOf } from "./docgen";
 import {
   codeWordOf,

@@ -32,7 +32,6 @@ import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
-import { received } from "@cawco/core/stored-json";
 import { RelayPortsSchema, RelayReachSchema } from "@cawco/core/stored-shapes";
 import {
   RELAY_CERTIFY,
@@ -60,6 +59,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
+import { received } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
 const STUN_MS = 3000;
