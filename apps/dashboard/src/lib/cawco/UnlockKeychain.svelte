@@ -1,6 +1,6 @@
 <script lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
-  import type { AuthState } from "@cawco/core/harness";
+  import type { AuthState } from "@cawco/core/session-messages";
   import { unhandled } from "@cawco/core/unhandled";
   import { configurePage } from "@cawco/core/words/configure";
   import { machineWords } from "@cawco/core/words/machine";

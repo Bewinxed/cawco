@@ -115,8 +115,6 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
-import type { WorkspaceRef } from "@cawco/core/harness";
-import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core/harness";
 import {
   currentEndpoint,
   currentKeeper,
@@ -177,6 +175,8 @@ import {
 import { PolicySchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Policy } from "@cawco/core/workspace-judge";
 import {
   systemProgram,
