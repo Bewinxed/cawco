@@ -31,7 +31,7 @@ import {
   placesWithBuiltIns,
   viewBlock,
   viewOfBlock,
-} from "@cawco/core";
+} from "@cawco/core/blocks";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
 import { FolderRefusal, refused } from "./project-folder";

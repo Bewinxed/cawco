@@ -9,12 +9,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readWithin } from "@cawco/core/bounded";
 import {
   type FleetItemState,
   type FleetMcpConfig,
   MCP_NEEDS_SIGN_IN,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/fleet";
 import { standalone } from "@cawco/core/runtime";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";

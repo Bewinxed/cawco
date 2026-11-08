@@ -13,7 +13,7 @@ import {
   type FleetRefresh,
   frontMatterBlock,
   type SkillFile,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
 
 const QUOTED = /^(["'])(.*)\1$/u;
 

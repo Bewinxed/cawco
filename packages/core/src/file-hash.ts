@@ -1,4 +1,4 @@
-import type { SkillFile } from "./index";
+import type { SkillFile } from "./fleet";
 
 /**
  * Sorted `path\0mode\0content` triples, so the same skill or plugin hashes the

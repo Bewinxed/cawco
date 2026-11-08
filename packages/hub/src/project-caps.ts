@@ -17,13 +17,9 @@
  * Every dashboard hears a project's cap move (`project.cap`) as its spend is
  * reported and as the cap or the defaults change.
  */
-import {
-  type CapPeriod,
-  capHolds,
-  type OnCap,
-  type ProjectCap,
-  type ProjectCapFrame,
-} from "@cawco/core";
+import type { CapPeriod, OnCap, ProjectCap } from "@cawco/core/areas";
+import type { ProjectCapFrame } from "@cawco/core/frames";
+import { capHolds } from "@cawco/core/project-conversation";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow } from "./db";
 
