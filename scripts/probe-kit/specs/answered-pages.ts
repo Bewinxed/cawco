@@ -89,7 +89,7 @@
 
 import type { CanvasAuthor } from "../../../packages/core/src/canvas";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
-import type { Pin } from "../../../packages/core/src/comments";
+import type { Pin } from "../../../packages/core/src/comments/model";
 import type { DecisionCard } from "../../../packages/core/src/decisions";
 import { artifactResponsesNotice } from "../../../packages/core/src/injected";
 import type { InstanceRow } from "../../../packages/core/src/protocol";
