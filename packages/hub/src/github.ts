@@ -49,9 +49,10 @@
  *   origin only: a next page anywhere else is not asked for, and a redirect
  *   is refused.
  */
-import type { WaitTarget } from "@cawco/core";
+
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { unhandled } from "@cawco/core/unhandled";
+import type { WaitTarget } from "@cawco/core/wait-targets";
 import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import type { GitHubCursor, GitHubResource } from "./db/schema";

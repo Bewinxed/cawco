@@ -12,12 +12,11 @@
  * is recorded, and the files stay out. Nothing is tracked before the person
  * says so, and each offer is answered once.
  */
-import {
-  CONTROL_PLACE_LFS,
-  type LfsOfferState,
-  type PlaceLfsMade,
-  type ProjectNote,
-} from "@cawco/core";
+import { CONTROL_PLACE_LFS, type PlaceLfsMade } from "@cawco/core/harness";
+import type {
+  LfsOfferState,
+  ProjectNote,
+} from "@cawco/core/project-conversation";
 import { Elysia } from "elysia";
 import type { DbShape } from "./db";
 import type { LfsOfferRow } from "./db/lfs-offers";

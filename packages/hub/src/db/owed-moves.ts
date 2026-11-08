@@ -1,4 +1,4 @@
-import type { AccountMove } from "@cawco/core";
+import type { AccountMove } from "@cawco/core/accounts";
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { owedMoves } from "./schema";
