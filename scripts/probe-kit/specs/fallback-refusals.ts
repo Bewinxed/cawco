@@ -37,11 +37,11 @@ import {
   machineSync,
   syncNotice,
 } from "../../../apps/dashboard/src/lib/cawco/convergence";
-import { clockWords } from "../../../packages/core/src/accounts";
 import { OWN_LIST_DENIED } from "../../../packages/core/src/delegate-types";
 import type { FleetSyncOutcome } from "../../../packages/core/src/fleet";
 import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import { HOUR_MS } from "../../../packages/core/src/time";
+import { clockWords } from "../../../packages/core/src/words/account-lines";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { FleetSync } from "../../../packages/hub/src/fleet-sync";
 import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
