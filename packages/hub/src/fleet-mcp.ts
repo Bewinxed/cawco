@@ -1,14 +1,13 @@
+import { readWithin } from "@cawco/core/bounded";
 import {
   CAWCO_OAUTH_URL,
-  type ConnectAccess,
-  type ConnectAccessSet,
-  configurePage,
   type FleetMcpServer,
   type MachineFleetConfig,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/fleet";
+import type { ConnectAccess, ConnectAccessSet } from "@cawco/core/frames";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { configurePage } from "@cawco/core/words/configure";
 import { mcpWords } from "@cawco/core/words/mcp";
 import {
   discoverAuthorizationServerMetadata,

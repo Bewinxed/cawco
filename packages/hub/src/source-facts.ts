@@ -7,9 +7,10 @@
  * proposed (asks.ts), and kept on the ask, so the card reads the same
  * after a restart.
  */
-import type { FleetMarketplace, SourceFacts } from "@cawco/core";
+import type { SourceFacts } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
+import type { FleetMarketplace } from "@cawco/core/fleet";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Octokit } from "@octokit/rest";
