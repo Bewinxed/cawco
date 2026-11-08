@@ -19,7 +19,7 @@ import type { ControlResultFrame } from "@cawco/core/frames";
 import {
   CONTROL_TRANSCRIPT_PLACES,
   unknownControlWords,
-} from "@cawco/core/harness";
+} from "@cawco/core/session/controls";
 import { secretRangesOf } from "./secret-filter";
 
 /** The most places one find in a conversation answers with (agent search/index.ts `MAX_PLACES` holds it too). */
