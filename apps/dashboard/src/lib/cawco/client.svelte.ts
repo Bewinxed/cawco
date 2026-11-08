@@ -9,7 +9,6 @@ import type {
   AccountBench,
   AccountCatalog,
   AccountCatalogFault,
-  AccountHue,
   AccountKind,
   AccountProvider,
   AccountReading,
@@ -26,12 +25,14 @@ import type {
   RebalanceNotice,
   RefusalVerdict,
 } from "@cawco/core/accounts";
+import type { AccountHue } from "@cawco/core/accounts/kinds";
 import type { ApprovedActionView } from "@cawco/core/actions";
 import {
   type Activity,
   sessionChain,
   waitingOnYou,
 } from "@cawco/core/activity";
+import type { OnCap, ProjectCap } from "@cawco/core/areas";
 import type {
   ArtifactNeed,
   ArtifactNeedNotice,
@@ -57,6 +58,7 @@ import type {
   BrowserAskFrame,
   ConnectAskFrame,
   FleetFetchFrame,
+  FramePayload,
   HarnessFailed,
   HarnessUnanswered,
   PreviewSettings,
@@ -103,8 +105,6 @@ import type {
   CawStart,
   DesignOfferState,
   LfsOfferState,
-  OnCap,
-  ProjectCap,
   ProjectConversationView,
   ProjectSpend,
 } from "@cawco/core/project-conversation";
@@ -117,7 +117,6 @@ import type {
   DelegateEvent,
   DelegateSummary,
   Envelope,
-  FramePayload,
   FsPayload,
   InstanceRow,
   NamedSpawn,
