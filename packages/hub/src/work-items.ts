@@ -162,12 +162,12 @@ import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
 import { briefingFor } from "./briefings";
 import type {
   DbShape,
-  ProjectRow,
   QueuedWorkItemRow,
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
+import type { ProjectRow } from "./db/projects";
 import type { LandingPhase, Origin, WorkOrigin } from "./db/schema";
 import type {
   GatePass,
