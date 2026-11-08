@@ -3,7 +3,7 @@
  * tabs, the transcript, the preview panel beside it and what the panel shows,
  * real components on placeholder data.
  */
-import WorkingAreaFrame from "./WorkingAreaFrame.svelte";
+import WorkingAreaFrame from "./fixtures/WorkingAreaFrame.svelte";
 
 export default {
   title: "Workspace/Working area",

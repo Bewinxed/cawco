@@ -1,8 +1,5 @@
 <script lang="ts" module>
-  import {
-    PREVIEW_ENTER_PATH,
-    PREVIEW_PING_PATH,
-  } from "@cawco/core/frames";
+  import { PREVIEW_ENTER_PATH, PREVIEW_PING_PATH } from "@cawco/core/frames";
 
   /**
    * No hub stands behind a states file, and the panel's frame is this page's
@@ -100,10 +97,7 @@
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
 
   let {
-    path = canvasPath(
-      ["src/lib/cawco/transcript/Prompt.stories.ts"],
-      {}
-    ),
+    path = canvasPath(["src/lib/cawco/transcript/Prompt.stories.ts"], {}),
     artifactName = "Ask in the composer",
     ask = "Judge the ask in each state: pin anything that reads wrong",
   }: {
@@ -272,14 +266,19 @@
     active: ID,
   });
 
+  let frameH = $state(innerHeight);
+
   const lent = $derived(composerBindings.get(ID));
 </script>
 
+<svelte:window bind:innerHeight={frameH} />
+
 <TooltipProvider>
   <div
-    class="@container/shell contain-layout relative flex h-dvh flex-col bg-surface-shelf text-ink-strong [--shell-h:100dvh]"
+    class="@container/shell contain-layout relative flex h-(--frame-h) flex-col bg-surface-shelf text-ink-strong [--shell-h:var(--frame-h)]"
     data-hang-layer={layer.id}
     data-working-area
+    style:--frame-h={`${frameH}px`}
     {@attach relayInFrames}
   >
     <div
