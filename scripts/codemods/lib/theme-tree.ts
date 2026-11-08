@@ -24,7 +24,7 @@ const SCAN = [
 const SKIP = (path: string) =>
   path === THEME ||
   path.startsWith("scripts/codemods/") ||
-  path === "packages/hub/src/design-tokens.ts" ||
+  path === "packages/design-tokens/src/design-tokens.ts" ||
   /(^|\/)dtcg-[^/]*$/u.test(path) ||
   /(^|\/)node_modules\//u.test(path);
 
