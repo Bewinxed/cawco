@@ -112,7 +112,7 @@ import { Octokit } from "@octokit/rest";
 import { Elysia, status, t } from "elysia";
 import { readsOnly } from "./connection-writes";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
-import type { ConnectionAppSecret, ConnectionSecret } from "./db/schema";
+import type { ConnectionAppSecret, ConnectionSecret } from "./db/stored-types";
 import { undoable } from "./db/trash";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
