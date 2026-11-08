@@ -44,8 +44,6 @@ import {
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
-import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import type {
   AuthOperationOptions,
   Credential,
@@ -56,6 +54,8 @@ import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 import { removeAccountDir } from "./accounts";
 import { storeRead } from "./stores/client";
+import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
+import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
 
 // ── The store ────────────────────────────────────────────────────────────
 
