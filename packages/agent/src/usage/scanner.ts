@@ -552,13 +552,23 @@ export class UsageScanner {
 
   /** Folds `rec` in if it survives dedup (USAGE-SPEC.md §5.2). */
   #ingest(rec: ScannedRecord): void {
-    if (rec.harness === "opencode") {
+    this.#ingestBy[rec.harness](rec);
+  }
+
+  /** Each usage source's own dedup (USAGE-SPEC.md §5.2). */
+  readonly #ingestBy: Record<
+    ScannedRecord["harness"],
+    (rec: ScannedRecord) => void
+  > = {
+    claude: (rec) => this.#ingestClaude(rec),
+    opencode: (rec) => {
       if (this.#seeOpencode.get(rec.messageId)) {
         this.#foldIn(rec);
       }
-      return;
-    }
+    },
+  };
 
+  #ingestClaude(rec: ScannedRecord): void {
     const mainKey = `${rec.messageId}\u0000${rec.requestId}`;
     const main = this.#findClaude(mainKey);
     if (main && !prefers(rec, main)) {
