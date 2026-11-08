@@ -136,6 +136,7 @@ import {
 } from "@cawco/core/move";
 import type { MachineActivity } from "@cawco/core/notifications";
 import { userLayerPath } from "@cawco/core/paths/claude";
+import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import type {
   AdmissionPayload,
   BuildInfo,
@@ -150,7 +151,6 @@ import type {
 } from "@cawco/core/protocol";
 import {
   CANCEL_BINARY_UPDATE,
-  CAWCO_HUB_PORT,
   CONFIGURE_BINARY_UPDATES,
   UPDATE_CAWCO,
 } from "@cawco/core/protocol";

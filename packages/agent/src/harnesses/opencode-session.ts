@@ -85,11 +85,11 @@ import type {
 import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { unlistedModelRefusal } from "@cawco/core/model-names";
-import { SERVER_STOPPED_MID_TURN } from "@cawco/core/protocol";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { configurePage } from "@cawco/core/words/configure";
+import { SERVER_STOPPED_MID_TURN } from "@cawco/core/words/session-ends";
 import type {
   FormInfo,
   ModelInfo as OpencodeModel,

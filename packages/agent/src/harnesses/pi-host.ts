@@ -1,7 +1,7 @@
 /** NDJSON host, spawned exclusively by sessiond. Agent disconnects do not end it. */
 import { createInterface } from "node:readline";
 import { INSTALL_SESSION_CREDENTIAL, MESSAGES_READ } from "@cawco/core/harness";
-import { mcpGatewayPort } from "@cawco/core/protocol";
+import { mcpGatewayPort } from "@cawco/core/ports";
 import type { BrowserDoor } from "../browser/door";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { startPiHost } from "./pi-runtime";
