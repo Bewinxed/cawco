@@ -13,9 +13,11 @@
  * `FormAlreadySettledError`, …), and a request that never reached the server
  * as a `ClientError` with reason `Transport`.
  */
-import { type SlashCommand, type ToolSpec, toolSpec } from "@cawco/core";
+
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { SlashCommand } from "@cawco/core/harness";
 import { secondsOf } from "@cawco/core/time";
+import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { toolBinary } from "../tools";

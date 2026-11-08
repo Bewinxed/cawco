@@ -8,7 +8,7 @@
  * last four characters as the hub shows them, and the route Jev takes now;
  * never the key.
  */
-import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";

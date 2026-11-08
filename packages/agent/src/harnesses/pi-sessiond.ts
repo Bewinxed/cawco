@@ -1,26 +1,25 @@
 /** Agent-side pi transport. Only the sessiond-owned host runs the SDK. */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import type {
   FleetMcpChange,
   FleetMcpTakeAnswer,
   NeutralMessage,
   SentMessage,
-  SpawnPayload,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   BOUNDARY_RELAUNCH,
-  CAWCO_ENV,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_FLEET_HEAL,
   GATEWAY_RELAUNCH,
   MESSAGES_HELD,
   MESSAGES_READ,
-  mcpGatewayPort,
-  readEnv,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import { workspaceSpillDir } from "@cawco/core/paths";
+import type { SpawnPayload } from "@cawco/core/protocol";
+import { mcpGatewayPort } from "@cawco/core/protocol";
 import { standalone } from "@cawco/core/runtime";
 import { z } from "zod";
 import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
