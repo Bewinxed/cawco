@@ -107,7 +107,6 @@ import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { GUARDED_CONFIG, protectedFindTests } from "@cawco/core/clone-denies";
-import { isGitDir, isGitDirSync } from "@cawco/core/git-dir";
 import {
   type HandoverCommand,
   type HandoverEvent,
@@ -215,6 +214,7 @@ import { BUN_SCRIPT_ENV, bunScriptRuntime } from "./bun-runtime";
 import { browserExecutable } from "./capabilities";
 import { reportDamaged } from "./damaged-records";
 import { syncedHeld } from "./fleet-converged";
+import { isGitDir, isGitDirSync } from "./git-dir";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import {
   closeGitDoor,
