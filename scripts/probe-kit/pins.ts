@@ -9,7 +9,11 @@
  */
 import type { Frame } from "playwright-core";
 import { Doc } from "yjs";
-import { type Pin, readPins, writePin } from "../../packages/core/src/comments";
+import {
+  type Pin,
+  readPins,
+  writePin,
+} from "../../packages/core/src/comments/model";
 import { PIN_MAPS } from "../../packages/core/src/doc-maps";
 
 /** A doc's pin maps as plain data: each map's values by key. */
