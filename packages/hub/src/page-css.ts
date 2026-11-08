@@ -16,7 +16,7 @@
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { CSS_BROWSERS } from "./css-target";
+import { CSS_BROWSERS } from "@cawco/core/css-target";
 
 /**
  * One sheet of a page: a file by its absolute path, or text a compiler hands
@@ -209,7 +209,7 @@ export function pageFiles(
     const name = output.path.replace(DOT_SLASH, "");
     if (name.endsWith(".css")) {
       throw new Error(
-        `${page}: Bun's CSS bundler emitted ${name}; a stylesheet imported from the page's code goes in its sheet list (Lightning CSS, core page-css.ts) instead`
+        `${page}: Bun's CSS bundler emitted ${name}; a stylesheet imported from the page's code goes in its sheet list (Lightning CSS, hub page-css.ts) instead`
       );
     }
     files.set(name, output);
