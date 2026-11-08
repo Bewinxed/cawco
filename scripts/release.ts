@@ -58,7 +58,7 @@ import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
 import { hubInit, hubRequest } from "../packages/core/src/hub-request";
 import { machineFetch } from "../packages/core/src/machine-key";
-import { hubDbPath } from "../packages/core/src/paths";
+import { hubDbPath } from "../packages/core/src/paths/hub";
 import {
   type ReleaseManifest,
   signManifest,
