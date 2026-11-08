@@ -54,9 +54,10 @@
    * card holding the roving 0 to the region's "N more").
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-  import { reasonLine, reasonShort } from "@cawco/core/artifact-needs";
+  import { reasonShort } from "@cawco/core/artifact-needs";
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import type { ArtifactSummary } from "@cawco/core/protocol";
+  import { reasonLine } from "@cawco/core/words/artifact-needs";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { type Component, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
