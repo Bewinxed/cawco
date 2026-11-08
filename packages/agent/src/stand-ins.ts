@@ -33,6 +33,7 @@
  * workspace's archive takes it away whole; anything else in such a folder
  * is saved to a carry first, or keeps it ({@link straysIn}).
  */
+
 import { type Stats, watch } from "node:fs";
 import {
   chmod,
@@ -46,6 +47,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import { isGitDir } from "@cawco/core/git-dir";
 import type { WorkspaceRef } from "@cawco/core/harness";
@@ -181,7 +183,9 @@ const listedFileOf = (id: string): string =>
 
 /** What {@link listedFileOf} holds: none listed when there is no record. */
 const listedOf = async (id: string): Promise<string[]> => {
-  const text = await readFile(listedFileOf(id), "utf8").catch(() => undefined);
+  const text = await readFile(listedFileOf(id), "utf8").catch(
+    unlessGone(undefined)
+  );
   return text === undefined
     ? []
     : parseRecord(listedFileOf(id), text, z.array(z.string()));

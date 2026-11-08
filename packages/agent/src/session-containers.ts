@@ -86,6 +86,7 @@
  * unlabelled; the agent's log says so, and so is the session, once, as it
  * starts (core `CONTAINERS_UNTRACKED`).
  */
+
 import {
   mkdir,
   readdir,
@@ -97,6 +98,7 @@ import {
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
 import { cawcoDataDir } from "@cawco/core/paths";
@@ -1210,7 +1212,9 @@ export const finishEnding = async (
 export const sessionsOwedEnding = async (
   instances: readonly string[]
 ): Promise<{ gone: string[]; unfinished: string[] }> => {
-  const unfinished = await readdir(ENDING_DIR()).catch(() => [] as string[]);
+  const unfinished = await readdir(ENDING_DIR()).catch(
+    unlessGone([] as string[])
+  );
   const labels = ownFilter(await owner());
   const had = new Set(instances);
   const gone = new Set<string>();

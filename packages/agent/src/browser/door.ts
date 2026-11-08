@@ -22,8 +22,10 @@
  * wakes the browser as a tool first connects, which chrome-devtools-mcp does
  * at its first tool call, not as it starts.
  */
+
 import { readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { browserGatePort } from "@cawco/core/browser";
 import { machineId } from "@cawco/core/machine-id";
 import {
@@ -80,7 +82,7 @@ export const browserDoor = async (
     wsEndpoint: `ws://127.0.0.1:${browserGatePort()}/${id}`,
     wsHeaders: JSON.stringify({ Authorization: `Bearer ${token}` }),
   })}\n`;
-  if ((await readFile(config, "utf8").catch(() => "")) !== body) {
+  if ((await readFile(config, "utf8").catch(unlessGone(""))) !== body) {
     await writeStateFile(config, body, { mode: 0o600 });
   }
   console.info(

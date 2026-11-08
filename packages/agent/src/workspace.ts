@@ -12,6 +12,7 @@
  * it is held ({@link accessOf}): never the person's folder beneath a Linux
  * view.
  */
+
 import { constants } from "node:fs";
 import {
   chmod,
@@ -28,6 +29,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import type {
@@ -689,7 +691,7 @@ export const clearUnfinished = (): Promise<void> => {
 
 /** {@link clearUnfinished}'s pass; never throws. */
 const sweepUnfinished = async (): Promise<void> => {
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(unlessGone([] as string[]));
   for (const id of ids) {
     try {
       const layer = await readLayer(id).catch(() => undefined);
@@ -777,7 +779,9 @@ export const clearUnmarkedHusks = (liveWorkspaces: unknown): void => {
 const sweepUnmarked = async (): Promise<void> => {
   try {
     await unfinishedCleared;
-    const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+    const ids = await readdir(workspacesDir()).catch(
+      unlessGone([] as string[])
+    );
     for (const id of ids) {
       await clearUnmarked(id);
     }
@@ -1281,7 +1285,7 @@ const carryOf = async (id: string, folder: string): Promise<Carried> => {
   const bundle = join(named, "commits.bundle");
   const patch = join(named, "uncommitted.patch");
   const head = (
-    await readFile(join(named, "head"), "utf8").catch(() => "")
+    await readFile(join(named, "head"), "utf8").catch(unlessGone(""))
   ).trim();
   return {
     ...(COMMIT.test(head) && (await isFile(bundle))

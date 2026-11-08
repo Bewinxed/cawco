@@ -15,8 +15,10 @@
  * ({@link placeSetAt}), found by the folder's own ancestors, as Claude Code
  * reads a folder's own map over its user scope.
  */
+
 import { readdir, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { type FleetMcpConfig, placeKeyOf } from "@cawco/core/fleet";
 import { fleetPlacesDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -94,7 +96,9 @@ export const dropPlaceSet = (cwd: string): Promise<void> => {
 
 /** Every place's file on this machine. */
 export const placeSets = async (): Promise<FleetPlaceSet[]> => {
-  const names = await readdir(fleetPlacesDir()).catch(() => [] as string[]);
+  const names = await readdir(fleetPlacesDir()).catch(
+    unlessGone([] as string[])
+  );
   const sets = await Promise.all(
     names
       .filter((name) => name.endsWith(EXT))

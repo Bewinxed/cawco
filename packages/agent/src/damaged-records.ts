@@ -21,8 +21,10 @@
  * damage a crash left shows at once, not at the next spawn; it also removes
  * the temporary files a write the crash cut short left beside them.
  */
+
 import { readdir, rm, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import {
   accountsRoot,
   sessionTakenDir,
@@ -71,7 +73,7 @@ const ownerOf = (
 };
 
 const writtenAt = async (file: string): Promise<number | undefined> =>
-  (await stat(file).catch(() => undefined))?.mtimeMs;
+  (await stat(file).catch(unlessGone(undefined)))?.mtimeMs;
 
 /**
  * Records `damage`, and says it in the log the first time it is found:
@@ -156,7 +158,7 @@ const check = async (
 };
 
 const namesIn = (dir: string): Promise<string[]> =>
-  readdir(dir).catch(() => [] as string[]);
+  readdir(dir).catch(unlessGone([] as string[]));
 
 /**
  * Removes what a write cut short left in `dir`, and answers the names of

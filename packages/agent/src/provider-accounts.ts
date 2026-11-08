@@ -15,10 +15,12 @@
  * out, and OpenCode's copy carries a marker where a rotating refresh token
  * would be.
  */
+
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import {
   type AccountBorrowFrame,
   type AccountIdentity,
@@ -1776,7 +1778,9 @@ export const opencodeAccountEnv = (
  * (`opencode-accounts-<hub>.json` beside the session credentials) goes too.
  */
 export const dropOpencodeMarkers = async (): Promise<void> => {
-  const stale = (await readdir(sessionIdentityDir()).catch(() => [])).filter(
+  const stale = (
+    await readdir(sessionIdentityDir()).catch(unlessGone([]))
+  ).filter(
     (file) => file.startsWith("opencode-accounts-") && file.endsWith(".json")
   );
   await Promise.all(

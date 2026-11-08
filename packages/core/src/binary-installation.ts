@@ -1,9 +1,11 @@
 /** Server-only install identity and durable update state of a binary install. */
+
 import type { Dirent } from "node:fs";
 import { mkdir, readdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { unlessGone } from "./absent";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
 import { versionsInUse } from "./live-processes";
@@ -285,7 +287,7 @@ async function removeFoldersBut(
   keep: ReadonlySet<string>
 ): Promise<void> {
   const present = await readdir(dir, { withFileTypes: true }).catch(
-    () => [] as Dirent[]
+    unlessGone([] as Dirent[])
   );
   await Promise.all(
     present

@@ -4,9 +4,11 @@
  * before the clone is cut, the running boundary's `boundary.json`, and a
  * place's `place.json`, written once a stage runs there ({@link keepPlace}).
  */
+
 import { mkdir, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import type { WorkspaceRef } from "@cawco/core/harness";
 import { workspacesDir } from "@cawco/core/paths";
 import {
@@ -82,7 +84,7 @@ export const workspacePath = async (
 };
 
 const scan = async (): Promise<Scan> => {
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(unlessGone([] as string[]));
   const found = await Promise.all(
     ids.map(async (id) => ({ id, path: await pathOf(id) }))
   );

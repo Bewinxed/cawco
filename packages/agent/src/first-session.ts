@@ -15,8 +15,10 @@
  * - pi and OpenCode: CawCo's own folder for the session's instance id
  *   (core `workspaceSpillDir`).
  */
+
 import { readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import type { WorkspaceFirstSession } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -131,7 +133,9 @@ export const takeFirstSession = async (
   id: string,
   instanceId: string
 ): Promise<string | undefined> => {
-  const text = await readFile(recordOf(id), "utf8").catch(() => undefined);
+  const text = await readFile(recordOf(id), "utf8").catch(
+    unlessGone(undefined)
+  );
   if (text === undefined) {
     return;
   }

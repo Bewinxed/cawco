@@ -51,9 +51,11 @@
  * whose preview-name rules the hub's names no longer want (browsers.ts
  * `RulesAt`); while another does, that waits for the last release.
  */
+
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import {
   type BrowserKey,
@@ -267,7 +269,7 @@ export const gateTokenFile = (id: string): string =>
  */
 export const ensureGateToken = async (id: string): Promise<string> => {
   const file = gateTokenFile(id);
-  const kept = (await readFile(file, "utf8").catch(() => "")).trim();
+  const kept = (await readFile(file, "utf8").catch(unlessGone(""))).trim();
   if (kept) {
     return kept;
   }
@@ -280,7 +282,7 @@ export const ensureGateToken = async (id: string): Promise<string> => {
 /** Whether `given` is workspace `id`'s token. */
 const tokenOf = async (id: string, given: string): Promise<boolean> => {
   const kept = Buffer.from(
-    (await readFile(gateTokenFile(id), "utf8").catch(() => "")).trim()
+    (await readFile(gateTokenFile(id), "utf8").catch(unlessGone(""))).trim()
   );
   const offered = Buffer.from(given);
   return (

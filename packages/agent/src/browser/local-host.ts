@@ -8,6 +8,7 @@
  * saves or fills passwords, addresses or cards here: the profile's
  * preferences say so before it first starts.
  */
+
 import { spawn } from "node:child_process";
 import {
   accessSync,
@@ -18,6 +19,7 @@ import {
 } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import {
   BROWSER_SCREEN,
   type BrowserRelay,
@@ -172,7 +174,7 @@ const KEPT_IN_RECORDS = [PROFILE_NAME, LOG_NAME];
 
 /** The first line of its output that says what went wrong, else its last. */
 const lastWords = async (record: BrowserRecord): Promise<string> => {
-  const lines = (await readFile(logFile(record), "utf8").catch(() => ""))
+  const lines = (await readFile(logFile(record), "utf8").catch(unlessGone("")))
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
@@ -348,7 +350,9 @@ export class LocalHost implements BrowserHost {
    * profile there. Its next start runs from the moved one.
    */
   async moveKeptFiles(): Promise<void> {
-    const names = await readdir(browsersDir()).catch(() => [] as string[]);
+    const names = await readdir(browsersDir()).catch(
+      unlessGone([] as string[])
+    );
     for (const name of names) {
       const key = name.replace("-", ":");
       if (!isBrowserKey(key)) {

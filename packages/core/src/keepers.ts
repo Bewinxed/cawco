@@ -27,6 +27,7 @@
  * machine's endpoint when it starts. A handover publishes the endpoint, then
  * moves the link.
  */
+
 import {
   lstat,
   readdir,
@@ -37,6 +38,7 @@ import {
 } from "node:fs/promises";
 import { Socket } from "node:net";
 import { basename, dirname, join } from "node:path";
+import { unlessGone } from "./absent";
 import { readKeeperVersion } from "./binary-installation";
 import { type Bounded, readWithin } from "./bounded";
 import { sessiondEndpoint } from "./sessiond";
@@ -164,7 +166,7 @@ export async function currentKeeper(
       ? { endpoint: join(dirname(machine), basename(target)), keeper }
       : undefined;
   }
-  const found = await lstat(machine).catch(() => undefined);
+  const found = await lstat(machine).catch(unlessGone(undefined));
   if (!found?.isSocket()) {
     return undefined;
   }
@@ -196,7 +198,7 @@ export async function keeperEndpoints(
 ): Promise<FoundKeeper[]> {
   const current = await currentKeeper(machine);
   const dir = dirname(machine);
-  const names = await readdir(dir).catch(() => [] as string[]);
+  const names = await readdir(dir).catch(unlessGone([] as string[]));
   const found: FoundKeeper[] = names.flatMap((name) => {
     const keeper = keeperOf(name);
     const endpoint = join(dir, name);
@@ -229,7 +231,7 @@ export async function publishKeeper(
   if ((await readlink(machine).catch(() => undefined)) === target) {
     return;
   }
-  const there = await lstat(machine).catch(() => undefined);
+  const there = await lstat(machine).catch(unlessGone(undefined));
   let checkout: string | undefined;
   if (there?.isSocket()) {
     const live = await answers(machine);

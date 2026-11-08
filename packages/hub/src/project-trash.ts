@@ -37,9 +37,11 @@
  * Nothing in the trash is erased: a restore moves its folder back and drops
  * its record, whose rows are live again.
  */
+
 import { mkdirSync, rmSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import type { BrowserKey } from "@cawco/core/browser";
 import type {
   ForgottenBrings,
@@ -196,7 +198,7 @@ const recordOf = async (entry: Entry) =>
 
 /** How many task files the folder at `root` holds. */
 const taskFiles = async (root: string): Promise<number> =>
-  (await readdir(join(root, "tasks")).catch(() => [])).filter(
+  (await readdir(join(root, "tasks")).catch(unlessGone([]))).filter(
     (file) => fileTaskNumber(file) !== undefined
   ).length;
 
@@ -207,13 +209,13 @@ const trashedTasks = async (
   const root = join(PROJECT_TRASH_DIR, entry);
   const tasks: { number: number; title: string }[] = [];
   for (const dir of ["tasks", ARCHIVE_DIR]) {
-    for (const file of await readdir(join(root, dir)).catch(() => [])) {
+    for (const file of await readdir(join(root, dir)).catch(unlessGone([]))) {
       const number = fileTaskNumber(file);
       if (number === undefined) {
         continue;
       }
       const content = await readFile(join(root, dir, file), "utf8").catch(
-        () => undefined
+        unlessGone(undefined)
       );
       if (content !== undefined) {
         tasks.push({
@@ -233,7 +235,9 @@ const HEADING = /^#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
 
 /** The first heading of the folder's AGENTS.md but the stub's; null for none. */
 const headingIn = async (root: string): Promise<string | null> => {
-  const text = await readFile(join(root, "AGENTS.md"), "utf8").catch(() => "");
+  const text = await readFile(join(root, "AGENTS.md"), "utf8").catch(
+    unlessGone("")
+  );
   for (const line of text.split("\n")) {
     const heading = HEADING.exec(line.trim())?.[1]?.trim();
     if (heading && heading !== STUB_HEADING) {
@@ -246,7 +250,7 @@ const headingIn = async (root: string): Promise<string | null> => {
 /** The stage names the folder's stages.md reads to; none when it has none or it does not read. */
 const stagesIn = async (root: string): Promise<string[]> => {
   const text = await readFile(join(root, "stages.md"), "utf8").catch(
-    () => undefined
+    unlessGone(undefined)
   );
   const reading = text === undefined ? undefined : readStages(text);
   return reading?.ok ? reading.stages.stages.map((stage) => stage.name) : [];
@@ -256,7 +260,7 @@ const stagesIn = async (root: string): Promise<string[]> => {
 const pagesIn = async (root: string): Promise<string[]> =>
   (
     await readdir(join(root, "decisions"), { withFileTypes: true }).catch(
-      () => []
+      unlessGone([])
     )
   )
     .filter((one) => one.isDirectory() && ARTIFACT_NAME.test(one.name))

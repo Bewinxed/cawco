@@ -16,11 +16,13 @@
  * of a dir is an FSEvents stream over everything beneath it, so each of
  * those writes would be queued by fseventsd for the daemon and handed to it.
  */
+
 import { randomBytes } from "node:crypto";
 import { createSocket } from "node:dgram";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_SLOTS,
@@ -186,8 +188,9 @@ export const browserOwner = async (): Promise<string> => {
 export const keptBrowserOwner = async (
   dir: string
 ): Promise<string | undefined> =>
-  (await readFile(join(dir, OWNER_FILE), "utf8").catch(() => "")).trim() ||
-  undefined;
+  (
+    await readFile(join(dir, OWNER_FILE), "utf8").catch(unlessGone(""))
+  ).trim() || undefined;
 
 /** One browser's dir. */
 export const browserDir = (key: BrowserKey): string =>
@@ -236,7 +239,7 @@ export const forgetBrowser = async (key: BrowserKey): Promise<void> => {
 
 /** Every browser this machine keeps a record of. */
 export const allBrowsers = async (): Promise<BrowserRecord[]> => {
-  const names = await readdir(browsersDir()).catch(() => [] as string[]);
+  const names = await readdir(browsersDir()).catch(unlessGone([] as string[]));
   const keys = names
     .map((name) => name.replace("-", ":"))
     .filter((key): key is BrowserKey => isBrowserKey(key));

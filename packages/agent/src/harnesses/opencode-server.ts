@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   commandLines,
@@ -364,7 +365,7 @@ const writeRecord = async (path: string, record: unknown): Promise<void> => {
  */
 const recordedServers = async (): Promise<Set<string>> => {
   const dir = join(homedir(), ".cawco");
-  const files = (await readdir(dir).catch(() => [] as string[])).filter(
+  const files = (await readdir(dir).catch(unlessGone([] as string[]))).filter(
     (file) => ANY_RECORD.test(file)
   );
   const named = new Set<string>();
@@ -447,7 +448,7 @@ const strayServer = async (
 const recordsLike = async (pattern: RegExp): Promise<RegExpMatchArray[]> => {
   const stem = recordStem();
   const files = await readdir(join(homedir(), ".cawco")).catch(
-    () => [] as string[]
+    unlessGone([] as string[])
   );
   return files.flatMap((file) => {
     const match = file.match(pattern);

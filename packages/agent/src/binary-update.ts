@@ -17,8 +17,10 @@
  * stands, and goes ahead by itself once the hub runs a build that does,
  * whichever of the hub's machine and this one took the release first.
  */
+
 import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import {
   archiveAnswered,
   type SignedRelease,
@@ -2104,7 +2106,7 @@ async function ownWrapper(): Promise<void> {
     return;
   }
   const path = join(binaryRoot(), "run");
-  if ((await readFile(path, "utf8").catch(() => "")) !== BINARY_WRAPPER) {
+  if ((await readFile(path, "utf8").catch(unlessGone(""))) !== BINARY_WRAPPER) {
     await writeWrapper(binaryRoot());
     console.info(`[update] ${path} is ${runtimeVersion}'s wrapper now`);
   }

@@ -71,6 +71,7 @@
  * another machine only through CawCo: the landing gate's iOS build runs in a
  * gate workspace on a Mac (the hub's `runGate`).
  */
+
 import { createHash, randomBytes } from "node:crypto";
 import {
   accessSync,
@@ -101,6 +102,7 @@ import {
 import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { atMost } from "@cawco/core/at-most";
 import { readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
@@ -418,7 +420,7 @@ const readPlace = async (
   id: string,
   gen: string
 ): Promise<Place | undefined> => {
-  const text = await readFile(placeOf(id, gen), "utf8").catch(() => "");
+  const text = await readFile(placeOf(id, gen), "utf8").catch(unlessGone(""));
   const [outer, inner, ...idle] = text
     .trim()
     .split(WHITESPACE)
@@ -1213,7 +1215,7 @@ const recordHostRestarts = async (
   const text = await readFile(
     join(generationDir(id, held.gen), HOST_RESTARTS_FILE),
     "utf8"
-  ).catch(() => "[]");
+  ).catch(unlessGone("[]"));
   let restarts: unknown;
   try {
     restarts = JSON.parse(text);
@@ -1323,7 +1325,7 @@ export const heldBy = async (
 export const settleGonePlaces = async (): Promise<void> => {
   try {
     const ids = (
-      await readdir(workspacesDir()).catch(() => [] as string[])
+      await readdir(workspacesDir()).catch(unlessGone([] as string[]))
     ).filter(isPlace);
     for (const id of ids) {
       const held = await readHeld(id).catch(() => undefined);
@@ -3031,7 +3033,7 @@ const recordDecision = (id: string, entry: Deciding): Promise<void> => {
 /** Workspace `id`'s decisions as recorded ({@link DECISIONS_FILE}), oldest first; none when there are none or they do not parse. */
 const readDecisions = async (id: string): Promise<BoundaryDecision[]> => {
   const text = await readFile(join(stateDir(id), DECISIONS_FILE), "utf8").catch(
-    () => "[]"
+    unlessGone("[]")
   );
   try {
     const read: unknown = JSON.parse(text);
@@ -4284,7 +4286,9 @@ const preTag = (pid: number, cache: string, home: string): boolean =>
  * still here; undefined when the records did not read whole.
  */
 const endPreTagLeftovers = async (): Promise<number | undefined> => {
-  const cache = await realpath(workspaceCacheDir()).catch(() => undefined);
+  const cache = await realpath(workspaceCacheDir()).catch(
+    unlessGone(undefined)
+  );
   if (!cache) {
     // No boundary of this install has started on this machine.
     return 0;
@@ -4473,7 +4477,7 @@ const commandsIn = async (
   gen: string
 ): Promise<number[]> => {
   const dir = commandsOf(id, gen);
-  const names = await readdir(dir).catch(() => [] as string[]);
+  const names = await readdir(dir).catch(unlessGone([] as string[]));
   const live = new Set(executors(seen, id));
   const marked: number[] = [];
   await Promise.all(
@@ -4497,7 +4501,7 @@ const commandsIn = async (
  * counts these (awake.ts).
  */
 export const workspacesWithCommands = async (): Promise<string[]> => {
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(unlessGone([] as string[]));
   const found = await Promise.all(
     ids.map(async (id) => {
       const generations = [
@@ -4506,7 +4510,7 @@ export const workspacesWithCommands = async (): Promise<string[]> => {
       ].flatMap((held) => (held ? [held.gen] : []));
       for (const gen of generations) {
         const marks = await readdir(commandsOf(id, gen)).catch(
-          () => [] as string[]
+          unlessGone([] as string[])
         );
         const seen = await Promise.all(
           marks.map(async (name) => ({
@@ -4927,7 +4931,7 @@ const workers = async (
   work: Map<number, Worker>;
 }> => {
   const ids = (
-    only ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
+    only ?? (await readdir(workspacesDir()).catch(unlessGone([] as string[])))
   ).filter((id) => !isPlace(id));
   const [lineage, lines] = await Promise.all([
     processLineage(),
@@ -5631,7 +5635,7 @@ const recheckNow = async (
 ): Promise<void> => {
   const procs = (await keepers.held()).filter((proc) => proc.alive);
   const runningIds = (
-    ids ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
+    ids ?? (await readdir(workspacesDir()).catch(unlessGone([] as string[])))
   ).filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)));
   for (const id of runningIds) {
     if (starting.has(id) || closing.has(id)) {
@@ -5679,7 +5683,7 @@ const recheckNow = async (
  */
 const inUseNow = async (): Promise<string[]> => {
   const procs = (await keepers.held()).filter((proc) => proc.alive);
-  const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
+  const ids = (await readdir(workspacesDir()).catch(unlessGone([] as string[])))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
     .filter((id) => !(starting.has(id) || closing.has(id)));
   const facts = await liveFacts(procs);
@@ -5800,7 +5804,7 @@ const RETIRING_FILE = /^retiring-[^/]+\.json$/u;
 
 /** Every older boundary of workspace `id` recorded as still running beside the current one. */
 const readRetiring = async (id: string): Promise<Retiring[]> => {
-  const names = await readdir(stateDir(id)).catch(() => [] as string[]);
+  const names = await readdir(stateDir(id)).catch(unlessGone([] as string[]));
   const records = await Promise.all(
     names
       .filter((name) => RETIRING_FILE.test(name))
@@ -6337,7 +6341,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
   if (!facts) {
     return;
   }
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(unlessGone([] as string[]));
   for (const id of ids) {
     if (starting.has(id) || closing.has(id)) {
       continue;
@@ -6696,7 +6700,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
  */
 const sweepQuiet = async (): Promise<void> => {
   const procs = (await keepers.held()).filter((proc) => proc.alive);
-  const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
+  const ids = (await readdir(workspacesDir()).catch(unlessGone([] as string[])))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
     .filter((id) => !closing.has(id));
   if (ids.length === 0) {
@@ -6825,7 +6829,7 @@ const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
     return;
   }
   await Promise.all(rearming.values());
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(unlessGone([] as string[]));
   if (ids.length === 0) {
     return;
   }
@@ -6872,7 +6876,7 @@ interface JudgeAnswer {
 /** Asks the judge workspace `id`'s hook names which build it runs ({@link JUDGE_BUILD_QUESTION}). */
 const judgeAnswer = async (id: string, build: string): Promise<JudgeAnswer> => {
   const hook = await readFile(join(stateDir(id), "hook"), "utf8").catch(
-    () => ""
+    unlessGone("")
   );
   const socket = HOOK_JUDGE.exec(hook)?.[1];
   if (!socket) {

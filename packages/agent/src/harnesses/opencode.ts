@@ -33,6 +33,7 @@ import {
 } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { providersOpenedBy } from "@cawco/core/accounts";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -985,7 +986,7 @@ const placeOpencodeMcp = async (
   const now = serversByPlace(desired);
   if (placedRevisionMoved(was, now, live)) {
     const revision = await readFile(OPENCODE_PLACED_REVISION, "utf8").catch(
-      () => ""
+      unlessGone("")
     );
     await writeStateFile(
       OPENCODE_PLACED_REVISION,
@@ -2236,7 +2237,7 @@ export class OpencodeHarness implements Harness {
     // boots, so only a place it had that changed moves it
     // (placedRevisionMoved), never a place added or gone.
     const placed = (
-      await readFile(OPENCODE_PLACED_REVISION, "utf8").catch(() => "")
+      await readFile(OPENCODE_PLACED_REVISION, "utf8").catch(unlessGone(""))
     ).trim();
     // The fleet's servers too: a server takes them in its launch config.
     const fleet = await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP);

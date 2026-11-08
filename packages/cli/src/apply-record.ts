@@ -17,8 +17,10 @@
  * - `swap`: the current build moved from `from` to `version` and the units
  *   restart onto it (`restarting`), or the swap failed (`error`).
  */
+
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { binaryRoot } from "@cawco/core/binary-installation";
 import { writeStateFile } from "@cawco/core/state-file";
 
@@ -60,7 +62,7 @@ export type ApplyEvent =
 export const recordApply = async (event: ApplyEvent): Promise<void> => {
   const path = join(binaryRoot(), APPLY_RECORD_FILE);
   try {
-    const text = await readFile(path, "utf8").catch(() => "[]");
+    const text = await readFile(path, "utf8").catch(unlessGone("[]"));
     let before: unknown;
     try {
       before = JSON.parse(text);

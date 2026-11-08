@@ -20,6 +20,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import type {
@@ -1251,7 +1252,7 @@ const writeVendoredMarketplace = async (
   // What the fleet no longer carries goes, whether or not its bytes arrived.
   const wanted = new Set(plugins.map(({ name }) => name));
   const present = await readdir(join(into, "plugins")).catch(
-    () => [] as string[]
+    unlessGone([] as string[])
   );
   // Each removal is its own folder: all at once.
   await Promise.all(
@@ -1328,7 +1329,7 @@ const writeVendoredMarketplaces = async (
     await writeVendoredMarketplace(marketplace, group);
   }
   // Each removal is its own folder: all at once.
-  const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
+  const present = await readdir(VENDOR_ROOT).catch(unlessGone([] as string[]));
   await Promise.all(
     present
       .filter((name) => !groups.has(name))
@@ -1484,10 +1485,10 @@ export const skillDrift = (
 const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   const held: Record<string, string> = {};
   for (const marketplace of await readdir(VENDOR_ROOT).catch(
-    () => [] as string[]
+    unlessGone([] as string[])
   )) {
     const root = join(vendorDir(marketplace), "plugins");
-    for (const name of await readdir(root).catch(() => [] as string[])) {
+    for (const name of await readdir(root).catch(unlessGone([] as string[]))) {
       const hash = await heldHash(join(root, name));
       if (hash) {
         held[`${name}@${marketplace}`] = hash;
@@ -1732,7 +1733,7 @@ const syncVendoredPlugins = async (
   const written: Record<string, string> = {};
   const byId = new Map(payloads.map((plugin) => [payloadId(plugin), plugin]));
   const groups = byMarketplace(payloads);
-  const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
+  const present = await readdir(VENDOR_ROOT).catch(unlessGone([] as string[]));
 
   // Every payload the agent holds carries its bytes (fleet-desired.ts); only
   // a plugin this disk does not hold at that hash is written, so a converge
