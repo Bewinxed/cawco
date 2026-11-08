@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type Pin, pinHeld } from "@cawco/core/comments";
+  import { type Pin, pinHeld } from "@cawco/core/comments/model";
   import { parse } from "@cawco/core/find-match";
   import { pinName } from "@cawco/core/pin-name";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
