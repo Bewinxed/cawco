@@ -130,6 +130,13 @@
   let railWidth = $state<number | null>(
     untrack(() => (initialRailWidth === null ? null : clamp(initialRailWidth)))
   );
+  /**
+   * The width the first paint draws, the server's: the rail's
+   * `--sidebar-width` falls back to it under the stored `--rail-w`. Never
+   * written again: a width after it is the rail's own (`showRail`), and
+   * rewritten here it would rewrite the rail's style attribute over it.
+   */
+  const firstWidth = untrack(() => railWidth);
   /** The width the rail is drawn at, as a number. */
   const drawnWidth = () => railWidth ?? tokenWidth();
   let railOpen = $state(false);
@@ -172,16 +179,24 @@
     setRail(own);
   });
 
+  /** The rail: its own width and flex-basis are what a width changes. */
+  let railBox = $state<HTMLElement | null>(null);
+
   /**
-   * Show a width. Called on every frame of a drag, so it does no more than that.
-   *
-   * `--sidebar-width` resolves through `--rail-w` (see the shell's inline
-   * style), so the value the inline script established is replaced rather than
-   * fought with.
+   * Show a width: written on the rail itself, as its own width and
+   * flex-basis, which nothing inherits. `--rail-w` on the root is the first
+   * paint's alone (app.html sets it before the body parses, and the rail's
+   * `--sidebar-width` resolves through it until this writes over it): a
+   * custom property on the root is inherited by the whole document, so
+   * writing it again restyled every element on the page (a rail drag's
+   * release on conversation-frames: 1,794 elements, 105ms at 4x).
    */
   function showRail(px: number) {
     railWidth = clamp(px);
-    document.documentElement.style.setProperty("--rail-w", `${railWidth}px`);
+    if (railBox) {
+      railBox.style.width = `${railWidth}px`;
+      railBox.style.flexBasis = `${railWidth}px`;
+    }
   }
 
   /**
@@ -225,15 +240,12 @@
    *
    * against 17 ms for a frame that forces layout and changes nothing. The
    * rail's width and flex-basis are the two things that actually have to
-   * change, so during a drag they are set directly and the cascade is left
-   * out of it. On release the settled width goes back through `--rail-w` and
-   * the inline overrides are dropped in the same task — one style flush, so
-   * the stylesheet takes the rail back without a frame of the old width.
+   * change, so they are set directly and the cascade is left out of it, on
+   * every frame of the drag and on release (`showRail`).
    *
-   * `railWidth` is deliberately NOT written while dragging: it is read by the
-   * shell's inline `style`, so assigning it would put `--sidebar-width` back
-   * on the shell every frame and buy back the cost this avoids. It catches up
-   * on release, which is also when `aria-valuenow` settles.
+   * `railWidth` is NOT written while dragging: it is what `aria-valuenow`
+   * says, and a state write a frame would render the slider for nothing. It
+   * catches up on release.
    */
   function startDrag(event: PointerEvent) {
     const handle = event.currentTarget as HTMLElement;
@@ -259,8 +271,6 @@
         cancelAnimationFrame(frame);
       }
       setRail(latest);
-      rail.style.width = "";
-      rail.style.flexBasis = "";
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", stop);
       handle.removeEventListener("pointercancel", stop);
@@ -1186,9 +1196,6 @@
     data-first-paint={firstRender.held || undefined}
     data-first-render={!firstRender.held || undefined}
     class="@container/shell flex h-dvh w-full bg-surface-recess overflow-hidden"
-    style="--sidebar-width: var(--rail-w, {railWidth === null
-      ? 'var(--c-sidebar-w)'
-      : `${railWidth}px`})"
     style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
   >
     <!-- The rail holds the screen's leading edge, so it keeps a landscape
@@ -1198,7 +1205,11 @@
       data-slot="rail"
       data-full={full || undefined}
       class="hidden desk:flex data-full:hidden relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
+      style="--sidebar-width: var(--rail-w, {firstWidth === null
+        ? 'var(--c-sidebar-w)'
+        : `${firstWidth}px`})"
       style:--rail-inset="env(safe-area-inset-left, 0px)"
+      bind:this={railBox}
     >
       {#if railed}
         <RegionBoundary face="line" part="sidebar">

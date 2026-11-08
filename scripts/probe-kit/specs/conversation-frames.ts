@@ -10,27 +10,33 @@
  * On a scratch fleet, one Claude Code session of `TURNS` calls, each with a
  * reply of product-shaped prose (three of a paragraph, a list and a code
  * block), opened alone in one pane at the desk's 1440x900 and read back
- * to its first turn. Three legs, each traced (DevTools, the timeline's own
- * category with its stacks, the CPU throttled `SLOWER` times):
+ * to its first turn. Four legs, each traced (DevTools, the timeline's own
+ * category with its stacks, the CPU throttled `SLOWER` times but the one
+ * marked 1x):
  *
  * - wheel: the pointer over the transcript, wheeled up a notch of 120px every
  *   50ms for `WHEELS` notches, moving a little between notches;
+ * - wheel1x: the same wheel on this machine's own CPU;
  * - pointer: the pointer swept across the rows for `SWEEPS` moves, nothing
  *   scrolled;
  * - rail: the rail's grip dragged out `RAIL_TRAVEL`px and back, a step a
- *   frame.
+ *   frame, and let go.
  *
  * Read off each trace, on the page's main thread: frame callbacks a second
  * (`FireAnimationFrame`), the longest task by its own CPU (`tdur`, less the
- * garbage collections in it), and the
- * style recalculations and layouts, all of them and those a script forced
- * (one with a stack). Asserted: while the pointer moves and while the rail
- * is dragged, frame callbacks a second under `RAF_PER_S` (every observer's
- * answer in one callback, no loop where nothing moves), and no style or
- * layout forced by a script in the drag. Each leg's tasks over `FRAME_MS`
- * of CPU are noted. `PROBE_FRAMES_DIAGNOSE=1` and `PROBE_FRAMES_SELECTORS=1`
- * add invalidations, script samples and selector costs to the traces. Each
- * leg's numbers and its raw trace go to the spec's out folder.
+ * garbage collections in it), and the style recalculations and layouts, all
+ * of them and those a script forced (one with a stack), and the most
+ * elements one style pass restyled. Asserted: while the pointer moves and
+ * while the rail is dragged, frame callbacks a second under `RAF_PER_S`
+ * (every observer's answer in one callback, no loop where nothing moves);
+ * no style or layout forced by a script in the drag; no style pass of the
+ * rail leg past `RAIL_RESTYLED` elements (letting go restyles the rail, not
+ * the page); no task of the 1x wheel over `FRAME_MS` of CPU; and find's
+ * highlight styled only while the root holds marks. Each leg's tasks over
+ * `FRAME_MS` are noted. `PROBE_FRAMES_DIAGNOSE=1`, `PROBE_FRAMES_PROFILE=1`
+ * and `PROBE_FRAMES_SELECTORS=1` add invalidations and script samples,
+ * script samples alone, and selector costs to the traces. Each leg's numbers
+ * and its raw trace go to the spec's out folder.
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -55,6 +61,8 @@ const SLOWER = 4;
 const DIAGNOSE = process.env.PROBE_FRAMES_DIAGNOSE === "1";
 /** `PROBE_FRAMES_SELECTORS=1`: each trace also records each style pass's selector costs (Blink's `SelectorStats`). */
 const SELECTORS = process.env.PROBE_FRAMES_SELECTORS === "1";
+/** `PROBE_FRAMES_PROFILE=1`: each trace also samples script, without the invalidation tracking that weighs on every DOM write. */
+const PROFILE = process.env.PROBE_FRAMES_PROFILE === "1";
 /** A frame's budget at 60 Hz, the page's own work. */
 const FRAME_MS = 16;
 /**
@@ -64,6 +72,12 @@ const FRAME_MS = 16;
  * 285.
  */
 const RAF_PER_S = 70;
+/**
+ * The most elements one style pass of the rail leg may restyle: the rail and
+ * what it holds. Through the root's `--rail-w`, the release restyled the
+ * page (1,794). Our own call.
+ */
+const RAIL_RESTYLED = 600;
 
 const PROSE = [
   "The hub's merge checks passed on the rebased branch; the dashboard build is green and the probe kit's web specs ran clean on chromium and webkit.",
@@ -128,6 +142,8 @@ interface LegNumbers {
   layouts: number;
   longestTaskCpuMs: number;
   longestTaskWallMs: number;
+  /** The most elements one style pass restyled. */
+  mostRestyled: number;
   rafPerS: number;
   seconds: number;
   styleMs: number;
@@ -142,7 +158,8 @@ async function traced(
   kit: Kit,
   page: Page,
   name: string,
-  act: () => Promise<void>
+  act: () => Promise<void>,
+  rate = SLOWER
 ): Promise<LegNumbers> {
   const cdp = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -161,6 +178,9 @@ async function traced(
         "disabled-by-default-devtools.timeline.stack",
         "blink.user_timing",
         ...(SELECTORS ? ["disabled-by-default-blink.debug"] : []),
+        ...(PROFILE && !DIAGNOSE
+          ? ["disabled-by-default-v8.cpu_profiler"]
+          : []),
         ...(DIAGNOSE
           ? [
               "disabled-by-default-devtools.timeline.invalidationTracking",
@@ -170,7 +190,7 @@ async function traced(
       ],
     },
   });
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: SLOWER });
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate });
   await page.evaluate((n) => performance.mark(`frames:${n}:start`), name);
   await act();
   await page.evaluate((n) => performance.mark(`frames:${n}:end`), name);
@@ -229,6 +249,7 @@ async function traced(
     longestTaskWallMs: round(
       Math.max(0, ...tasks.map((t) => t.dur ?? 0)) / 1000
     ),
+    mostRestyled: Math.max(0, ...styles.map((e) => e.args?.elementCount ?? 0)),
     tasksOverFrame: tasks.filter((t) => (t.tdur ?? 0) > FRAME_MS * 1000).length,
     styles: styles.length,
     styleMs: ms(styles),
@@ -311,14 +332,19 @@ const spec: Spec = {
     await page.waitForTimeout(1000);
 
     const numbers: Record<string, LegNumbers> = {};
-    numbers.wheel = await traced(kit, page, "wheel", async () => {
+    const wheel = async () => {
       for (let i = 0; i < WHEELS; i += 1) {
         await page.mouse.move(cx + (i % 7) * 9, cy + (i % 5) * 11);
         await page.mouse.wheel(0, -120);
         await page.waitForTimeout(50);
       }
       await page.waitForTimeout(500);
-    });
+    };
+    numbers.wheel = await traced(kit, page, "wheel", wheel);
+    await page.waitForTimeout(1500);
+    // The same wheel on this machine's own CPU: the budget as the frame
+    // holds it, the page's own work in 16ms.
+    numbers.wheel1x = await traced(kit, page, "wheel1x", wheel, 1);
     await page.waitForTimeout(1500);
     numbers.pointer = await traced(kit, page, "pointer", async () => {
       for (let i = 0; i < SWEEPS; i += 1) {
@@ -386,14 +412,51 @@ const spec: Spec = {
         said(numbers.rail)
       );
     }
-    // The frame budget itself is noted, not asserted: a wheel's frame on
-    // this fixture at 4x is the browser's style and layout of the rows it
-    // mounts, and its scroll's own reads (virtua).
-    for (const [leg, n] of Object.entries(numbers)) {
-      kit.note(
-        `${leg}: ${n.tasksOverFrame} task(s) over ${FRAME_MS}ms of the page's own CPU at ${SLOWER}x, the longest ${n.longestTaskCpuMs}ms`
+    // The rail's width is the rail's own: letting go restyles the rail,
+    // not the page (through the root's --rail-w it was every element).
+    if (numbers.rail) {
+      kit.check(
+        `rail: no style pass restyles more than ${RAIL_RESTYLED} elements`,
+        numbers.rail.mostRestyled <= RAIL_RESTYLED,
+        `the most in one pass: ${numbers.rail.mostRestyled}`
       );
     }
+    // The wheel holds the frame on this machine's own CPU. At 4x it is
+    // noted, not asserted: what a frame holds there is the rows virtua
+    // mounts (their components, their markdown, their style and layout)
+    // and its own scroll read.
+    const wheel1x = numbers.wheel1x as LegNumbers;
+    kit.check(
+      `wheel at 1x: no task over ${FRAME_MS}ms of the page's own CPU`,
+      wheel1x.tasksOverFrame === 0,
+      said(wheel1x)
+    );
+    for (const [leg, n] of Object.entries(numbers)) {
+      kit.note(
+        `${leg}: ${n.tasksOverFrame} task(s) over ${FRAME_MS}ms of the page's own CPU at ${leg === "wheel1x" ? 1 : SLOWER}x, the longest ${n.longestTaskCpuMs}ms`
+      );
+    }
+    // Find's marks are styled only while find holds some: a ::highlight()
+    // rule over every element costs Chromium every element's highlight
+    // style in every style pass (design.css).
+    const washes = await page.evaluate((sel) => {
+      const row = document.querySelector(`${sel} [data-row] p`);
+      if (!row) {
+        return null;
+      }
+      const wash = () =>
+        getComputedStyle(row, "::highlight(find-place)").backgroundColor;
+      const without = wash();
+      document.documentElement.setAttribute("data-find-marks", "");
+      const marked = wash();
+      document.documentElement.removeAttribute("data-find-marks");
+      return { without, marked };
+    }, SCROLLER);
+    kit.check(
+      "find's highlight is styled only while the root holds marks",
+      washes !== null && washes.without !== washes.marked,
+      JSON.stringify(washes)
+    );
   },
 };
 export default spec;

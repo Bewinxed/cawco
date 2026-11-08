@@ -243,11 +243,26 @@
 
   * {
     @apply border-border;
-    /* The ring's colour at rest, so focus only switches the outline on: a
-       control with transition-colors would otherwise fade its ring in from
-       its text colour. */
-    outline-color: var(--focus-ring);
     scrollbar-width: thin;
+  }
+
+  /* The ring's colour at rest, so focus only switches the outline on: a
+     control with transition-colors would otherwise fade its ring in from
+     its text colour. On what takes focus only: on every element, it was a
+     tenth of a restyle of the page (conversation-frames, 790 elements:
+     16.9ms against 15.4ms without it). */
+  :where(
+    a[href],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    iframe,
+    [tabindex],
+    [contenteditable]:not([contenteditable="false"])
+  ) {
+    outline-color: var(--focus-ring);
   }
 
   /* An enabled button takes the pointer hand; a disabled or pending one
@@ -2315,12 +2330,19 @@
 /* Find in a conversation's marks (find/find-marks.ts): every place the
    words are in washed, the one stepped to on the coral where you act, its
    words in the ink that stands on it (DESIGN.md, The White On Coral Rule).
-   Drawn by the CSS Custom Highlight API, so no row's text is wrapped. */
+   Drawn by the CSS Custom Highlight API, so no row's text is wrapped.
+   Matched only while find holds marks (`data-find-marks` on the root): a
+   ::highlight() rule that matches every element has Chromium resolve each
+   element's highlight style in every style pass (highlight inheritance),
+   a fifth of a restyle of the page (conversation-frames, 790 elements:
+   16.9ms against 13.5ms without them). WebKit as shipped resolves a
+   highlight against its own element, so the rule still matches every
+   element under the root, rather than the root alone. */
 @layer base {
-  ::highlight(find-place) {
+  [data-find-marks] ::highlight(find-place) {
     background-color: var(--brand-wash);
   }
-  ::highlight(find-current) {
+  [data-find-marks] ::highlight(find-current) {
     background-color: var(--action-solid);
     color: var(--on-action);
   }

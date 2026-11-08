@@ -7,7 +7,8 @@
  * frame while find stands (Transcript), and hands its ranges here; the
  * page's two highlights are every transcript's ranges together.
  *
- * Styled in app.css: `::highlight(find-place)` and `::highlight(find-current)`.
+ * Styled in design.css: `::highlight(find-place)` and `::highlight(find-current)`,
+ * matched only while the root carries `data-find-marks`.
  */
 
 const PLACE = "find-place";
@@ -33,6 +34,12 @@ function draw(): void {
   }
   CSS.highlights.set(PLACE, new Highlight(...places));
   CSS.highlights.set(CURRENT, new Highlight(...current));
+  // The marks' styles match only while there are marks (design.css): a
+  // ::highlight() rule standing over every element costs every style pass.
+  document.documentElement.toggleAttribute(
+    "data-find-marks",
+    places.length > 0 || current.length > 0
+  );
 }
 
 /** Transcript `viewId`'s marks now: its places washed, `current` solid. */
