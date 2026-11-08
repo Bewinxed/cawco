@@ -455,7 +455,6 @@ import {
 } from "@cawco/core/injected";
 import { blockFile } from "@cawco/core/inline-blocks";
 import { invariant } from "@cawco/core/invariant";
-import { localNameOf } from "@cawco/core/local-name";
 import { doing } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
@@ -574,7 +573,6 @@ import {
   type StageStatus,
   storiesKey,
 } from "@cawco/core/stage";
-import { received } from "@cawco/core/stored-json";
 import {
   BuildInfoSchema,
   ContextLineSchema,
@@ -610,7 +608,6 @@ import {
   TOOL_CATALOG,
   toolSpec,
 } from "@cawco/core/tools";
-import type { HubLine } from "@cawco/core/transcript";
 import { transcriptUserText } from "@cawco/core/transcript-rules";
 import type {
   TranscriptPage,
@@ -928,6 +925,7 @@ import { boardTitle, type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLaws } from "./laws";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
+import { localNameOf } from "./local-name";
 import { createMachineContact } from "./machine-contact";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import {
@@ -1126,6 +1124,7 @@ import {
 import { createSshTunnels } from "./ssh-tunnels";
 import { templateOf } from "./stages";
 import { sessionStartingSet } from "./starting-set";
+import { received } from "./stored-json";
 import { createStoredRecent } from "./stored-recent";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
@@ -1156,6 +1155,7 @@ import {
 } from "./tool-call-keys";
 import { releaseTarget, ToolReleases, updatesOwed } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
+import type { HubLine } from "./transcript";
 import {
   createTranscripts,
   type HistoryCursor,
@@ -2497,7 +2497,7 @@ const resolveDelegatePermissionMode = (
   return undefined;
 };
 
-/** A skill's files as a machine read them, taken into CawCo's type as they are kept (core stored-json.ts `received`). */
+/** A skill's files as a machine read them, taken into CawCo's type as they are kept (hub stored-json.ts `received`). */
 const machineSkillFiles = (result: unknown): SkillFile[] =>
   received(z.array(SkillFileSchema), result, "a machine's skill files");
 
@@ -37553,7 +37553,7 @@ export const createServer = (
             workspace: t.Optional(t.String()),
             from: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
-            // Each a path or a held kind (core handed-input.ts), checked in words by work-items.
+            // Each a path or a held kind (hub handed-input.ts), checked in words by work-items.
             inputs: t.Optional(t.Array(t.Unknown())),
             lands: t.Optional(LANDS),
             host: t.Optional(t.Boolean()),

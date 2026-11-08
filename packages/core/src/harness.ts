@@ -349,7 +349,7 @@ export const CONTAINERS_UNTRACKED = "containers_untracked";
 
 /**
  * A session's start waits for its machine's memory: the machine's room on
- * memory (core machine-room.ts `measureMemoryRoom`: Linux's memory available
+ * memory (agent machine-room.ts `measureMemoryRoom`: Linux's memory available
  * and the room under its keeper's cgroup limit; the Mac's pressure level)
  * fails, so its process is not started yet. The
  * agent's frame to the hub (`content`, {@link roomHeldSentence}), and the
@@ -2310,7 +2310,7 @@ export const CONTROL_PLACE_PUSH = "placePush";
 /**
  * What {@link CONTROL_PLACE_PUSH} read, or pushed. Refused, naming them,
  * when any commit the branch reaches holds text that reads as a credential
- * (core secret-text.ts).
+ * (agent secret-text.ts).
  */
 export interface PlacePush {
   branch: string;

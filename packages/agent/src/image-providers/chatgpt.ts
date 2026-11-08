@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { arch, platform, release } from "node:os";
 import { credentialAccountIds } from "@cawco/core/paths";
-import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
 import {
   type BlockedLogin,
   imageGenerationWords,
 } from "@cawco/core/words/image-generation";
 import { z } from "zod";
 import { chatgptStanding, freshen, readHeld } from "../provider-accounts";
+import { chatgptBaseUrl, chatgptClaims } from "../usage/chatgpt";
 import type { ImageJob, ImageProvider, MadeImage } from "./provider";
 
 /** Native Codex's edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */

@@ -250,12 +250,12 @@ export default {
         "src/**/*.stories.{ts,js,tsx,jsx}",
         // The states files' preview file, read by the stage host by its name: packages/agent/src/stage-host/host.ts `previewFile`.
         ".storybook/preview.ts",
-        // The decision host page's Bun.build entrypoints, the host and an HTML page's dials: packages/core/src/decision-host.ts:281.
+        // The decision host page's Bun.build entrypoints, the host and an HTML page's dials: packages/hub/src/decision-host.ts:281.
         "src/lib/cawco/decisions/host/host.ts",
         "src/lib/cawco/decisions/host/dials.ts",
-        // The decision host's sheet, compiled by Tailwind from its path: packages/core/src/decision-host.ts:44.
+        // The decision host's sheet, compiled by Tailwind from its path: packages/hub/src/decision-host.ts:44.
         "src/lib/cawco/decisions/host/host.css",
-        // `$app/env` in the decision host's build, a Bun plugin's resolve Knip does not follow: packages/core/src/decision-host.ts `appEnv`.
+        // `$app/env` in the decision host's build, a Bun plugin's resolve Knip does not follow: packages/hub/src/decision-host.ts `appEnv`.
         "src/lib/cawco/decisions/host/app-env.ts",
         // `$app/env` in the address preview build, an alias Knip does not follow: scripts/address-preview.vite.ts:42-43.
         "src/lib/cawco/address/flow/kit-env.ts",
@@ -309,7 +309,7 @@ export default {
         "src/stores/worker.ts",
         // Resolved for `cawco:pi-runtime` by the binary build: scripts/build-binary.ts:490.
         "src/standalone-setup.ts",
-        // The canvas host page's Bun.build entrypoint: packages/core/src/canvas-host.ts:91.
+        // The canvas host page's Bun.build entrypoint: packages/hub/src/canvas-host.ts:91.
         "src/canvas-host/host.tsx",
         // The file viewer's Bun.build entrypoint: packages/core/src/file-viewer.ts `buildViewerScript`.
         "src/file-viewer/viewer.ts",
