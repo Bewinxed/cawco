@@ -16,7 +16,7 @@
  * A reload at any moment is safe, since everything a person has in progress
  * comes back after it, save words no draft keeps ({@link unsavedWords}).
  */
-import { PERSONS_INPUT, personsInput } from "@cawco/core/frames";
+import { PERSONS_INPUT, personsInput } from "@cawco/core/preview/routes";
 import { version } from "$app/env";
 import { leaveThePage } from "./leaving";
 import { store, stored } from "./storage";
