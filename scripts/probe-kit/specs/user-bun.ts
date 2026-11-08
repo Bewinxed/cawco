@@ -65,6 +65,7 @@ import {
 import { delimiter, dirname, join } from "node:path";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
 import { hubRequest } from "../../../packages/core/src/hub-request";
+import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { workWords } from "../../../packages/core/src/words/work";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
@@ -282,14 +283,13 @@ const run = async (kit: Kit) => {
   await mkdir(standInDir, { recursive: true });
   await mkdir(dirname(log), { recursive: true });
   const real = await realpath(process.execPath);
-  const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
   await writeFile(
     standIn,
     [
       `#!${systemProgram("sh")}`,
-      `printf '%s\\t%s\\n' "$PWD" "$*" >> ${quote(log)}`,
-      `[ "$1" = --revision ] && { echo ${quote(STAND_IN_REVISION)}; exit 0; }`,
-      `exec ${quote(real)} "$@"`,
+      `printf '%s\\t%s\\n' "$PWD" "$*" >> ${shellQuote(log)}`,
+      `[ "$1" = --revision ] && { echo ${shellQuote(STAND_IN_REVISION)}; exit 0; }`,
+      `exec ${shellQuote(real)} "$@"`,
       "",
     ].join("\n")
   );
