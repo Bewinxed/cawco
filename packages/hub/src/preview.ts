@@ -6,18 +6,9 @@ import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
 import { FILE_VIEWER_ASSETS, fileViewerFile } from "@cawco/core/file-viewer";
-import {
-  DASHBOARD_COOKIE,
-  OVERLAY_PATH,
-  PREVIEW_ENTER_PATH,
-  PREVIEW_ERRORS_PATH,
-  PREVIEW_PING_PATH,
-  type PreviewAddress,
-  type PreviewFrame,
-  type PreviewSettings,
-  previewEnterUrl,
-} from "@cawco/core/frames";
+import type { PreviewFrame } from "@cawco/core/frames";
 import type { PageFaultReport } from "@cawco/core/page-faults";
+import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
 import {
   asksUpgrade,
   cachePreview,
@@ -45,16 +36,25 @@ import {
   upgradePreview,
   versionAssets,
   versionedFile,
-} from "@cawco/core/preview-proxy";
+} from "@cawco/core/preview/proxy";
 import {
   type HubReach,
   PREVIEW_HELD_HEADER,
   PREVIEW_PING_HEADER,
   PREVIEW_REACH_PATH,
   type PreviewPingDown,
-} from "@cawco/core/preview-reach";
-import type { MachineSource, Upstream } from "@cawco/core/preview-upstream";
-import type { PreviewDown, PreviewSource } from "@cawco/core/protocol";
+} from "@cawco/core/preview/reach";
+import {
+  DASHBOARD_COOKIE,
+  OVERLAY_PATH,
+  PREVIEW_ENTER_PATH,
+  PREVIEW_ERRORS_PATH,
+  PREVIEW_PING_PATH,
+  type PreviewAddress,
+  type PreviewSettings,
+  previewEnterUrl,
+} from "@cawco/core/preview/routes";
+import type { MachineSource, Upstream } from "@cawco/core/preview/upstream";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
