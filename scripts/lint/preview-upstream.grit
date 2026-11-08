@@ -1,7 +1,7 @@
 language js
 
 // A preview origin's upstream ({ for, address, port, token }: core
-// preview-upstream.ts `Upstream`) is made in one place, the hub's
+// preview/upstream.ts `Upstream`) is made in one place, the hub's
 // preview-service.ts, which starts a machine's listener for what the
 // origin's artifact row names and relays through it only while the row
 // still names that (its `for`). An upstream made anywhere else is a second
