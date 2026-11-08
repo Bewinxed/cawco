@@ -13,12 +13,11 @@
    * past its reset a stopped session is still carried on by itself (core
    * `AtLimit.staleAfterHours`).
    */
+  import type { Account, AtLimit } from "@cawco/core/accounts";
   import {
-    type Account,
-    type AtLimit,
     COMPACT_METHODS,
     type CompactMethod,
-  } from "@cawco/core/accounts";
+  } from "@cawco/core/accounts/kinds";
   import { HARNESSES } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { cawco } from "#lib/cawco/client.svelte.js";
