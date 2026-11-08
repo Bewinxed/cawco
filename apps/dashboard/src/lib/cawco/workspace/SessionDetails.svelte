@@ -8,8 +8,8 @@
     EffortLevel,
     HarnessKind,
     PermissionMode,
-  } from "@cawco/core/harness";
-  import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness";
+  } from "@cawco/core/harness/kinds";
+  import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { commonWords } from "@cawco/core/words/common";
   import { spawnWords } from "@cawco/core/words/spawn";
