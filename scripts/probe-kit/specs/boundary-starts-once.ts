@@ -33,7 +33,7 @@ import { basename, dirname, join } from "node:path";
 import {
   HARNESSES,
   type HarnessKind,
-} from "../../../packages/core/src/harness";
+} from "../../../packages/core/src/harness/kinds";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   MACHINE,

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { HarnessKind } from "@cawco/core/harness";
-  import { HARNESSES } from "@cawco/core/harness";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
+  import { HARNESSES } from "@cawco/core/harness/kinds";
   import { hubRequest } from "@cawco/core/hub-request";
   import type {
     RuleDraft,

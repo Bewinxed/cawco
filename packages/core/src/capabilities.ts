@@ -1,4 +1,4 @@
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 
 /** Optional machine tools. Reporting never installs or impersonates a tool. */
 export interface MachineCapability {
