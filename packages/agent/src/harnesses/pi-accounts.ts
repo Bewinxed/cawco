@@ -18,7 +18,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { providersOpenedBy } from "@cawco/core/accounts";
 import { readWithin } from "@cawco/core/bounded";
-import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
+import {
+  accountCredentialPath,
+  credentialAccountIds,
+} from "@cawco/core/paths/claude";
 import { mcpGatewayPort } from "@cawco/core/protocol";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";

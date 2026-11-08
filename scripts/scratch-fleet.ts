@@ -53,11 +53,11 @@ import {
   type HubRequest,
   hubRequest,
 } from "../packages/core/src/hub-request";
+import { darwinUserDirs } from "../packages/core/src/paths/host-policy";
 import {
-  darwinUserDirs,
   socketPathProblem,
   workspaceCacheDir,
-} from "../packages/core/src/paths";
+} from "../packages/core/src/paths/workspace";
 import {
   commandLines,
   processArgs,
@@ -1840,7 +1840,7 @@ async function standUp(
   // The services' HOME and the agent's XDG_RUNTIME_DIR, apart from the
   // sandbox, two hex under their roots (`fleetRoots`): the runtime dir under
   // the shortest. Mode 700, as a runtime dir is. The agent keeps a
-  // workspace's sockets out of its HOME (paths.ts `workspaceDoorDir`) and
+  // workspace's sockets out of its HOME (paths/workspace.ts `workspaceDoorDir`) and
   // refuses one under it that does not fit (`scratchSocketProblem`); the
   // longest under the runtime dir is a preview's bridge (preview-bridge.ts
   // `bridgeDir`), `/cawco/previews/<instance id>.sock`, checked here.

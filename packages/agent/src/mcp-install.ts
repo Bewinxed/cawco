@@ -13,7 +13,7 @@
  * case (i.e. it would typically only happen if another process was SIGKILLed
  * while holding the same lock)"), and npm 12.2.0's with-lock.js keeps it. A
  * boundary ends its sandbox with SIGKILL, and every workspace shares one npm
- * cache (core paths.ts `workspaceCacheEnv`), so one killed session held
+ * cache (agent boundary-env.ts `workspaceCacheEnv`), so one killed session held
  * every other session's browser tool for a minute.
  *
  * So the fleet sync installs each such package once, at its exact version,
@@ -28,7 +28,7 @@
 import { mkdir, readdir, readlink, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import { fleetMcpInstallsDir } from "@cawco/core/paths";
+import { fleetMcpInstallsDir } from "@cawco/core/paths/fleet";
 import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";

@@ -45,7 +45,7 @@ import {
 import { dirname, join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
 import { holdingWords } from "@cawco/core/harness";
-import { workspaceCarriesDir } from "@cawco/core/paths";
+import { workspaceCarriesDir } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";

@@ -48,7 +48,8 @@ import {
   type MoveSnapshotRequest,
   type MoveSnapshotResult,
 } from "@cawco/core/move";
-import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
+import { cawcoDataDir } from "@cawco/core/paths/cawco";
+import { isSecretFileName } from "@cawco/core/paths/host-policy";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
