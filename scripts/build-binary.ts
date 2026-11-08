@@ -35,11 +35,11 @@ import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
 import { bundled } from "../packages/core/src/bundled";
-import { canvasHostAssets } from "../packages/core/src/canvas-host";
-import { decisionHostAssets } from "../packages/core/src/decision-host";
 import { fileViewerAssets } from "../packages/core/src/file-viewer";
 import { bundleOverlay } from "../packages/core/src/preview-proxy";
 import { publishedFile } from "../packages/core/src/runtime";
+import { canvasHostAssets } from "../packages/hub/src/canvas-host";
+import { decisionHostAssets } from "../packages/hub/src/decision-host";
 import { dashboardBuild } from "./dashboard-build-cache";
 
 export const PINNED_BUN = "1.4.4";
@@ -249,9 +249,9 @@ export async function prepareAssets(options: {
     ["workspace-judge.ts", "packages/core/src/workspace-judge.ts"],
   ];
   const [canvas, decision, fileViewer] = await Promise.all([
-    // A canvas's host page, its bundle and Excalidraw's fonts (core canvas-host.ts).
+    // A canvas's host page, its bundle and Excalidraw's fonts (hub canvas-host.ts).
     canvasHostAssets(join(WORK, "canvas"), filesUnder),
-    // A decision page's host bundle, its HTML pages' dials entry with it (core decision-host.ts).
+    // A decision page's host bundle, its HTML pages' dials entry with it (hub decision-host.ts).
     decisionHostAssets(join(WORK, "decision"), filesUnder),
     // The file viewer's script and sheet, and PDF.js as published (core file-viewer.ts).
     fileViewerAssets(join(WORK, "file"), filesUnder),
@@ -439,10 +439,10 @@ export async function compileBinary(options: {
       // docker-modem loads it), built by no install here; ssh2 requires it
       // inside a try and goes on without it, and the browser runtime speaks to
       // unix sockets alone, never SSH. lightningcss and browserslist: the
-      // runtime pages' CSS compiler (core page-css.ts), which loads them on a
+      // runtime pages' CSS compiler (hub page-css.ts), which loads them on a
       // compile only; the binary carries every page prebuilt and compiles none.
       // postcss, @tailwindcss/postcss and unplugin-icons: the decision host's
-      // Tailwind compile and its icons (core decision-host.ts), loaded the same
+      // Tailwind compile and its icons (hub decision-host.ts), loaded the same
       // way; the binary carries the host prebuilt and never builds it.
       // fontkit, subset-font and woff2-encoder: what cuts the house faces into
       // their woff2 pieces (core house-faces.ts), loaded the same way; the
