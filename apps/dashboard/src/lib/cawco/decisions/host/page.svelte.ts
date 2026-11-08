@@ -7,7 +7,7 @@
  */
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { PICTURES_TAG, type PictureSize } from "@cawco/core/decisions-library";
-import { OVERLAY_PATH } from "@cawco/core/frames";
+import { OVERLAY_PATH } from "@cawco/core/preview/routes";
 import type { DecisionMedia } from "@cawco/core/stage";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { getContext } from "svelte";
