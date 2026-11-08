@@ -8,6 +8,7 @@ import type {
   BlockPage,
   BlockWidth,
   CapPeriod,
+  CheckoutMove,
   ConnectAccess,
   ContinuationJob,
   DelegateAskStatus,
@@ -53,6 +54,8 @@ import type {
   StarterSourceKind,
   StrategyChoice,
   ToolStatus,
+  WorkspaceCut,
+  WorkspaceHolding,
   WorkspaceKind,
 } from "@cawco/core";
 import { ASK_STORED, type AskState } from "@cawco/core/asks";
@@ -1370,7 +1373,9 @@ export const workspaces = sqliteTable("workspaces", {
    * its machine read it once its boundary was closed; null in any other
    * state.
    */
-  holding: storedJson(WorkspaceHoldingSchema)("holding"),
+  holding: storedJson(WorkspaceHoldingSchema)(
+    "holding"
+  ).$type<WorkspaceHolding>(),
   /** When {@link workspaces.holding} was read. */
   heldAt: timestamp("held_at"),
   /**
@@ -1383,7 +1388,7 @@ export const workspaces = sqliteTable("workspaces", {
    * HEAD built on the branch (agent workspace.ts `carriedFrom`). Null until
    * it retires.
    */
-  head: storedJson(WorkspaceCutSchema)("head"),
+  head: storedJson(WorkspaceCutSchema)("head").$type<WorkspaceCut>(),
   /**
    * How CawCo moved its checkout (core injected.ts `CheckoutMove`: cut again,
    * work-items.ts `recut`; rebased as it landed, `landOnBase`) while no
@@ -1392,7 +1397,8 @@ export const workspaces = sqliteTable("workspaces", {
    * injected.ts `withMovedLine`), and clears it. Null otherwise. Kept on the
    * row, so a hub restart between the move and that message still says it.
    */
-  movedUntold: storedJson(CheckoutMoveSchema)("moved_untold"),
+  movedUntold:
+    storedJson(CheckoutMoveSchema)("moved_untold").$type<CheckoutMove>(),
   /**
    * The carry its machine wrote as it went: a discard's, its parent or the
    * person letting its unlanded work go, which is never cut again; or its
