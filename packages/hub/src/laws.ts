@@ -17,7 +17,7 @@ import {
   LAWS,
   type Law,
   type LawBroken,
-} from "@cawco/core";
+} from "@cawco/core/invariant";
 
 export function createLaws(options: {
   /** Sends every law caught broken so far to every dashboard. */

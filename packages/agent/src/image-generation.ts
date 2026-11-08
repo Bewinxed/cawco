@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
 import {
   type GeneratedImage,
   IMAGE_EXTENSIONS,
@@ -11,8 +12,7 @@ import {
   type ImageFormat,
   MAX_REFERENCE_IMAGES,
   offersModelChoice,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/image-generation";
 import { unhandled } from "@cawco/core/unhandled";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { imageSize } from "image-size";

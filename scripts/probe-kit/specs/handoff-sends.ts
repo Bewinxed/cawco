@@ -27,7 +27,7 @@ import {
   type Sending,
   type ToolArgs,
 } from "../../../packages/core/src/hub-request";
-import { workWords } from "../../../packages/core/src/index";
+import { workWords } from "../../../packages/core/src/words/work";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
   type ToolSession,

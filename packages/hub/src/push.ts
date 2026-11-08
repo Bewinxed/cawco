@@ -70,43 +70,39 @@
  *
  * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run.
  */
+import type { ActionState } from "@cawco/core/actions";
+import type { ArtifactNeed } from "@cawco/core/artifact-needs";
+import { BROWSER_ASK_TOOL } from "@cawco/core/ask-tools";
+import { readWithin } from "@cawco/core/bounded";
+import { SHELL_TOOLS } from "@cawco/core/delegate-types";
+import { detach } from "@cawco/core/detach";
+import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
+import type { PermissionRequestFrame } from "@cawco/core/frames";
+import type { TurnWakes } from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { PairingRequest } from "@cawco/core/hub-auth";
+import { causeLine, type Install, installName } from "@cawco/core/install";
+import { machineLabel } from "@cawco/core/machine-names";
+import { DESK_ACK_MS, type DeskAlertFrame } from "@cawco/core/notifications";
 import {
-  type ActionState,
-  type ArtifactNeed,
-  artifactWords,
-  BROWSER_ASK_TOOL,
-  causeLine,
-  configurePage,
-  contactWords,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
-  DESK_ACK_MS,
-  type DeskAlertFrame,
-  type Envelope,
-  type FleetWatchNotice,
-  type HarnessKind,
-  type Install,
-  type InstanceRow,
-  installName,
   MEMORY_PROPOSAL_TOOL,
-  machineLabel,
-  mcpWords,
-  type PairingRequest,
-  type PermissionRequestFrame,
   PROJECT_SETTINGS_TOOL,
-  pairingWords,
-  presenceLogWords,
-  questionsOf,
-  SHELL_TOOLS,
-  type TurnWakes,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/permission-presentation";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
+import { questionsOf } from "@cawco/core/question";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
+import { artifactWords } from "@cawco/core/words/artifacts";
+import { configurePage } from "@cawco/core/words/configure";
+import { contactWords } from "@cawco/core/words/contact";
 import { decidesWords } from "@cawco/core/words/decides";
 import { needs as needCount } from "@cawco/core/words/helpers";
+import { mcpWords } from "@cawco/core/words/mcp";
+import { pairingWords } from "@cawco/core/words/pairing";
+import { presenceLogWords } from "@cawco/core/words/presence-log";
 import { Elysia, t } from "elysia";
 import { isProjectConversation } from "./caw";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";

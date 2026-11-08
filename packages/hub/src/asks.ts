@@ -51,14 +51,7 @@
  * fullSendFiled}), so nothing of a session in Full Send waits on the
  * person, however recently the mode was set.
  */
-import type {
-  Envelope,
-  InstanceRow,
-  PermissionMode,
-  PermissionResult,
-  SourceFacts,
-  UserAnswers,
-} from "@cawco/core";
+
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import {
   type AskedPermit,
@@ -75,12 +68,15 @@ import {
   HUB_RESTARTED,
   isAdminWrite,
   newAskId,
+  type SourceFacts,
   sameCall,
   UserQuestionShape,
 } from "@cawco/core/asks";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
-import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
+import type { PermissionResult, UserAnswers } from "@cawco/core/harness";
+import { ASK_ORIGIN, type PermissionMode } from "@cawco/core/harness/kinds";
+import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { settledQuestionResult } from "@cawco/core/question";
 import { noticeWords } from "@cawco/core/words/notices";
 import { z } from "zod";
