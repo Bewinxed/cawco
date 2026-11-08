@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { damagedHubRecordWords } from "@cawco/core/protocol";
   /**
    * What Caw's popover holds (NeedsCaw): one list in two sections. Needs you
    * first, longest wait first (home `needs`), each a NeedsCard row; then
@@ -24,6 +23,7 @@
    * the dev bench's fixture (/motion/caw-notices).
    */
   import { commonWords } from "@cawco/core/words/common";
+  import { damagedHubRecordWords } from "@cawco/core/words/damaged";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconNotices } from "#lib/icons.js";

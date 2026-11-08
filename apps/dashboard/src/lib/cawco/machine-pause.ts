@@ -2,8 +2,9 @@
  * A machine's pause as the dashboard offers and says it (hub
  * machine-pause.ts): the menu's few ends, and the row's "paused until 00:57".
  */
-import { type AgentRow, pauseClock } from "@cawco/core/protocol";
+import type { AgentRow } from "@cawco/core/protocol";
 import { HOUR_MS } from "@cawco/core/time";
+import { pauseClock } from "@cawco/core/words/machine-pause";
 
 /** The hour a morning pause ends at, on this browser's clock. */
 const MORNING_HOUR = 8;
