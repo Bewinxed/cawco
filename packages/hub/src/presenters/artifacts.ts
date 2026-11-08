@@ -8,7 +8,8 @@
  * hash and time, a decision page's program) is the detailed form.
  */
 
-import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
+import { pinStandsOn } from "@cawco/core/comments/deliver";
+import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
 import { decidedByLine } from "@cawco/core/decides";
 import { artifactLink } from "@cawco/core/references";
 import {

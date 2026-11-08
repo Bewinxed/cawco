@@ -9,7 +9,7 @@
  * the title the hub gave it (a decision page's own program title).
  */
 
-import type { Pin, ThreadEntry } from "@cawco/core/comments";
+import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
 import type { ArtifactSummary } from "@cawco/core/protocol";
 
 const said = (
