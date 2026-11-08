@@ -27,21 +27,16 @@
  *   no turn on its `session.compaction.ended` (CawCo's plugin,
  *   opencode-plugin.ts). A person's Continue opens the new session on it.
  */
-import {
-  type InstanceRow,
-  type PlanStep,
-  type SessionPlan,
-  stepLink,
-  type TaskTodo,
-  taskLink,
-  todoLink,
-} from "@cawco/core";
+
 import { askLink } from "@cawco/core/asks";
 import type {
   ContextFill,
   FiledRecords,
   FilingWrote,
 } from "@cawco/core/context-filing";
+import type { PlanStep, SessionPlan, TaskTodo } from "@cawco/core/plan";
+import type { InstanceRow } from "@cawco/core/protocol";
+import { stepLink, taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
 import type { QuestionAnswer } from "./artifacts/questions";
 import type { AskedOf } from "./artifacts/service";

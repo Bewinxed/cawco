@@ -21,10 +21,14 @@
  * ended), then parentage (your own sessions, today's delegates of them).
  */
 import {
-  type AgentRow,
   type ArtifactNeedNoticePart,
   type ArtifactNeedsRead,
-  artifactWords,
+  noticePartWords,
+  reasonLine,
+  unparked,
+} from "@cawco/core/artifact-needs";
+import { detach } from "@cawco/core/detach";
+import {
   FIND_KINDS,
   type FindAnswer,
   type FindBy,
@@ -35,22 +39,13 @@ import {
   type FindMachineCoverage,
   type FindMoment,
   type FindResult,
-  type HarnessFailed,
-  type HarnessUnanswered,
   type MomentAuthor,
-  machineLabel,
-  type NeutralSessionInfo,
-  noticePartWords,
-  reasonLine,
-  type StageKind,
   TRANSCRIPT_ANSWER_MS,
   type TranscriptAnswer,
   type TranscriptQuery,
-  unparked,
   type WaitingAnswer,
   type WaitingItem,
-} from "@cawco/core";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/find";
 import {
   marksOf,
   matchOf,
@@ -58,8 +53,14 @@ import {
   parse,
   type Query,
 } from "@cawco/core/find-match";
+import type { HarnessFailed, HarnessUnanswered } from "@cawco/core/frames";
+import type { NeutralSessionInfo } from "@cawco/core/harness";
+import { machineLabel } from "@cawco/core/machine-names";
+import type { AgentRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import type { StageKind } from "@cawco/core/views";
+import { artifactWords } from "@cawco/core/words/artifacts";
 import { status, t } from "elysia";
 import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
