@@ -9,7 +9,6 @@
  * (`transcript.ts`) applies it.
  */
 
-import { accountMoveWords } from "./accounts";
 import { answersOf, dismissedOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
@@ -22,7 +21,6 @@ import {
   CUSTODY_HELD,
   FLEET_WATCH,
   FRESH_START,
-  FRESH_START_LINE,
   firstSentence,
   LIMIT_REACHED,
   MOVED_HERE,
@@ -75,8 +73,10 @@ import type {
   TranscriptBlock,
   TranscriptBranch,
 } from "./transcript-types";
+import { accountMoveWords } from "./words/account-lines";
 import { contextWords } from "./words/context";
 import { delegateWaitWords } from "./words/delegates";
+import { FRESH_START_LINE } from "./words/harness-lines";
 import { noticeLine, noticeWords } from "./words/notices";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
