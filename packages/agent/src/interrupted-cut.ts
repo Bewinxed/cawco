@@ -24,7 +24,6 @@
 import type { Stats } from "node:fs";
 import { lstat, readdir, readFile, readlink, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { isGitDir } from "@cawco/core/git-dir";
 import type { WorkspaceCut } from "@cawco/core/harness";
 import { isSecretFileName, workspacesDir } from "@cawco/core/paths";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
@@ -32,6 +31,7 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { WorkspaceCutSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import { placedAsMade } from "./fleet";
+import { isGitDir } from "./git-dir";
 import { hostGit } from "./host-git";
 import { straysAmong } from "./stand-ins";
 
