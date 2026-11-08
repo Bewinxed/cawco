@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { type Pin, writePin } from "@cawco/core/comments";
+  import { type Pin, writePin } from "@cawco/core/comments/model";
   import {
     PREVIEW_ENTER_PATH,
     PREVIEW_PING_PATH,
@@ -262,7 +262,7 @@
    * Only the client's state is seeded, as the /motion benches seed it (dev's
    * `__cawcoDebug`); the app never mounts this.
    */
-  import type { PreviewMode } from "@cawco/core/comments";
+  import type { PreviewMode } from "@cawco/core/comments/model";
   import type { PulseFrame } from "@cawco/core/frames";
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { canvasPath } from "@cawco/core/stage";
