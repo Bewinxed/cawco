@@ -49,7 +49,7 @@
     IconSearch,
     IconSort,
   } from "../../../apps/dashboard/src/lib/icons.js";
-  import { newAnswer } from "../../../packages/core/src/comments.ts";
+  import { newAnswer } from "../../../packages/core/src/comments/model.ts";
   import { pinName } from "../../../packages/core/src/pin-name.ts";
   import { commentWords as said } from "../../../packages/core/src/words/comments.ts";
   import EXPORT from "../pins.json";
