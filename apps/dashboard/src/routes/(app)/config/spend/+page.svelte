@@ -4,7 +4,7 @@
    * nothing of its own (project-caps.ts in the hub). A project sets its
    * budget, and may set its own answer to this, on its Usage tile.
    */
-  import type { OnCap } from "@cawco/core/project-conversation";
+  import type { OnCap } from "@cawco/core/areas";
   import { SPEND_ON_CAP, spendWords } from "@cawco/core/words/spend";
   import { onMount } from "svelte";
   import { setSpendSettings, spendSettings } from "#lib/cawco/client.svelte.js";

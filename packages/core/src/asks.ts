@@ -19,10 +19,8 @@
 import { z } from "zod";
 import { clockWords, dayWords } from "./accounts";
 import { canonicalJson } from "./canonical-json";
-import type { AskAnswer } from "./frames";
 import type { UserAnswers, UserQuestion } from "./harness";
 import { markerTag, readMarkerTag } from "./injected";
-import type { SourceFacts } from "./permission-presentation";
 import { sessionLink } from "./references";
 
 export type AskState = "open" | "answered" | "withdrawn";
@@ -472,3 +470,57 @@ export const askClosedWords = (ask: AskRecord): string => {
   }
   return `That ask was withdrawn: ${ask.withdrawn?.why ?? "its session ended"}.`;
 };
+
+/**
+ * An answered ask's answer as the hub took it, and where it came from, so a
+ * screen that held the ask and did not answer it says what won and where
+ * (JOURNEY.md Flow 2: "the answer row resolves to the answer that won,
+ * naming where it came from").
+ */
+export interface AskAnswer {
+  /** Approve or deny; absent when the harness settled the ask itself and did not say. */
+  behavior?: "allow" | "deny";
+  /**
+   * The paired device that answered (a page or the app), or the session that
+   * did (a delegate's parent, its project's conversation), by name; absent when the
+   * hub knows no name (a page or app it trusts by its network).
+   */
+  name?: string;
+  /**
+   * Where it was answered: a dashboard page; the app (a client that is no
+   * page: the iOS and Mac app); another session; the harness itself, in
+   * its own interface; or Full Send, the mode the person put its session
+   * in, which approves an approval the session had open as it entered it
+   * (hub asks.ts `fullSendFiled`).
+   */
+  via: "page" | "app" | "session" | "harness" | "fullSend";
+}
+
+/**
+ * Where an install fetches from, as the hub read it when the call was
+ * proposed (hub source-facts.ts): a skill's source, a marketplace's.
+ */
+export interface SourceFacts {
+  /** The source as read: `github.com/owner/repo`, `npm package`, `/path on machine`. */
+  at: string;
+  /** When it first came out: the repository's creation, the package's first publish (ISO). */
+  since?: string;
+  /**
+   * A skill read from a folder on a machine before the person is asked: what
+   * its SKILL.md declares and every file the install carries, by path.
+   */
+  skill?: {
+    description: string;
+    /** Every file, by path, with the hash of its content. */
+    files: { hash: string; path: string }[];
+    /** The hash of every file together: what the approval pins. */
+    hash: string;
+    name: string;
+  };
+  /** The repository's GitHub stars. */
+  stars?: number;
+  /** Why there are no facts: a source that carries none, or the registry's answer. */
+  unknown?: string;
+  /** The package's npm downloads in the last week. */
+  weeklyDownloads?: number;
+}
