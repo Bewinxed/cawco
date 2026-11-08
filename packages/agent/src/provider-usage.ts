@@ -1,8 +1,8 @@
 /**
  * Each provider account's windows on this machine, read wherever the
  * provider exposes them, with the account's one credential: ChatGPT's
- * `wham/usage` (core usage/chatgpt.ts), OpenCode Go's `zen/go/v1/usage`
- * (core usage/opencode-go.ts). Every 5 minutes while the account is signed in
+ * `wham/usage` (agent usage/chatgpt.ts), OpenCode Go's `zen/go/v1/usage`
+ * (agent usage/opencode-go.ts). Every 5 minutes while the account is signed in
  * here, and shortly after each turn a session runs on it. Every other
  * provider exposes none: no windows, and so no dials and no at-limit moves,
  * though placement still works. A credential is read at call time for one
@@ -14,11 +14,11 @@
 import type { ProviderAccountReading } from "@cawco/core/accounts";
 import { credentialAccountIds } from "@cawco/core/paths";
 import type { SpawnPayload } from "@cawco/core/protocol";
-import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
-import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import type { HarnessContext } from "./harness";
 import { freshen, readHeld } from "./provider-accounts";
+import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
+import { fetchOpenCodeGoLimits } from "./usage/opencode-go";
 
 /** How often a signed-in account's windows are read with nothing running on it. */
 const PROVIDER_READ_INTERVAL_MS = 5 * 60_000;
