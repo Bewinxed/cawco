@@ -42,7 +42,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { toolWords } from "../../lib/tool-call";
 import {

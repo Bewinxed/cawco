@@ -1,0 +1,326 @@
+import { type Dirent, existsSync, readdirSync } from "node:fs";
+import { readdir, rm } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
+import {
+  CLAUDE_DIR_NAME,
+  CLAUDE_JSON_NAME,
+  PLACED_MEMORY,
+  PROJECT_SKILLS,
+  TREE_STORE_DIR,
+} from "../claude-dirs";
+import { piAgentDir } from "./harnesses";
+
+/**
+ * Node-only paths shared across packages. Kept out of the main entry, which
+ * the dashboard bundles for the browser.
+ *
+ * This file owns every Claude Code dir on a machine; nothing else builds a
+ * path into one (`bun run claude-paths:check`). A Claude session runs in one
+ * config dir, `CLAUDE_CONFIG_DIR`: its account's ({@link accountConfigDir}),
+ * or {@link claudeHome} for a session on no account. What a config dir holds
+ * is in one of three classes, each read from Claude Code's own docs
+ * (https://code.claude.com/docs/en/claude-directory) and from real listings
+ * of `~/.claude` and account dirs:
+ * - the user layer ({@link USER_LAYER_DIRS}, {@link USER_LAYER_FILES},
+ *   {@link projectMemoryDir}): one copy
+ *   in {@link claudeHome}, linked into every account dir;
+ * - per session ({@link SESSION_ENTRIES}): in the session's own dir,
+ *   {@link sessionConfigDir}, carried whole when its account changes;
+ * - per account: everything else (the credential, `.claude.json`, caches,
+ *   telemetry, prompt history, process files), never linked or carried.
+ */
+
+/** Where every account's stores live on a machine, one dir per account. */
+export const accountsRoot = (): string => join(homedir(), ".cawco", "accounts");
+
+/**
+ * Claude Code's own config dir on this machine, `~/.claude`: where it runs
+ * with no `CLAUDE_CONFIG_DIR`. The user layer's one copy (fleet sync writes
+ * there; every account dir links to it), and the dir of a session on no
+ * account.
+ */
+export const claudeHome = (): string => join(homedir(), CLAUDE_DIR_NAME);
+
+/** A path under the user layer on this machine. */
+export const userLayerPath = (...parts: string[]): string =>
+  join(claudeHome(), ...parts);
+
+/**
+ * The `.claude.json` of {@link claudeHome}: beside it, `~/.claude.json`, as
+ * Claude Code keeps it for the default dir (every Claude Code on the machine
+ * reads it too).
+ */
+export const claudeHomeJson = (): string => join(homedir(), CLAUDE_JSON_NAME);
+
+/**
+ * One account's Claude Code config dir on this machine: its own credential,
+ * transcripts and `.claude.json`, and the fleet's user layer linked in.
+ */
+export const accountConfigDir = (accountId: string): string =>
+  join(accountsRoot(), accountId, "claude");
+
+/** The `.claude.json` inside an account's dir, where its MCP servers and login identity live. */
+export const accountClaudeJson = (accountId: string): string =>
+  join(accountConfigDir(accountId), CLAUDE_JSON_NAME);
+
+/**
+ * The one dir a Claude session's own data is in: its account's dir, or
+ * {@link claudeHome} for a session on no account. Every change of a row's
+ * account carries the session's data here before the row says so, so a
+ * reader with the row reads this dir and no other.
+ */
+export const sessionConfigDir = ({
+  accountId,
+}: {
+  accountId?: string | null;
+}): string => (accountId ? accountConfigDir(accountId) : claudeHome());
+
+/** A project's own Claude Code dir: `<cwd>/.claude`, read whatever config dir a session runs in. */
+export const projectClaudeDir = (cwd: string, ...parts: string[]): string =>
+  join(cwd, CLAUDE_DIR_NAME, ...parts);
+
+/**
+ * Where a project's memory documents are placed in a folder (agent
+ * placed-memory.ts): its `.claude/rules/cawco/`. Claude Code loads every
+ * rule file under `.claude/rules/` at a session's launch ("All `.md` files
+ * are discovered recursively", code.claude.com/docs/en/memory).
+ */
+export const placedMemoryDir = (cwd: string): string =>
+  join(cwd, PLACED_MEMORY);
+
+/** The store of the trees the entries of `dir` link to (claude-dirs.ts {@link TREE_STORE_DIR}). */
+export const treeStoreOf = (dir: string): string =>
+  join(dirname(dir), TREE_STORE_DIR, basename(dir));
+
+/**
+ * The dirs of a config dir that are the user's, not an account's: one copy
+ * in {@link claudeHome}, each linked into every account dir. Each is a
+ * global-scope entry of https://code.claude.com/docs/en/claude-directory
+ * ("files in `~/.claude` are personal configuration that applies across all
+ * your projects"), or CawCo's own (`memories`, the documents CLAUDE.md
+ * links). `plans` too: plan mode writes there by default, by a random name a
+ * transcript then names by its full path, so one copy keeps that path good
+ * on every account. And {@link TREE_STORE_DIR}, where each fleet skill in
+ * `skills` links to by a relative link (`../.cawco-trees/skills/<tree>`):
+ * a workspace's boundary on Linux binds `skills` at the account dir's own
+ * name, so the link resolves beside that name, and an account dir without
+ * the store there read every fleet skill as missing (`ls
+ * $CLAUDE_CONFIG_DIR/skills/interface-craft/`: "No such file or directory",
+ * 2026-10-16).
+ */
+export const USER_LAYER_DIRS = [
+  "memories",
+  "rules",
+  "skills",
+  TREE_STORE_DIR,
+  "commands",
+  "agents",
+  "output-styles",
+  "workflows",
+  "agent-memory",
+  "plugins",
+  "themes",
+  "plans",
+] as const;
+
+/**
+ * The dir in {@link claudeHome} CawCo writes the fleet's marketplaces into,
+ * one per fleet marketplace, each registered with Claude Code as a
+ * `directory` marketplace (agent fleet.ts `VENDOR_ROOT`). Claude Code runs a
+ * directory marketplace's plugins from there: their hooks' `${CLAUDE_PLUGIN_ROOT}`
+ * is a path inside it, so a session that may not read it runs none of them.
+ * Each marketplace keeps its plugins' tree store inside it
+ * (`<marketplace>/.cawco-trees/plugins`).
+ */
+export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
+
+/** The fleet's skills for Claude Code, which OpenCode reads too (agent session.ts `fleetHoldings`). */
+export const claudeSkillsDir = (): string => userLayerPath("skills");
+
+/** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
+export const placedSkillsDir = (cwd: string): string =>
+  join(cwd, PROJECT_SKILLS);
+
+/** The user layer's files ({@link USER_LAYER_DIRS} has why each is the user's). */
+export const USER_LAYER_FILES = [
+  "CLAUDE.md",
+  "settings.json",
+  "keybindings.json",
+] as const;
+
+/**
+ * A project's auto memory, `projects/<slug>/memory` ("Global only… Claude's
+ * notes to itself across sessions", claude-directory docs): the user's, one
+ * copy in {@link claudeHome}, linked into each account dir per project.
+ */
+export const projectMemoryDir = (configDir: string, slug: string): string =>
+  join(configDir, "projects", slug, "memory");
+
+/** The longest slug Claude Code keeps whole (the SDK's `lo`, 0.3.289). */
+const SLUG_MAX = 200;
+
+/**
+ * The folder Claude Code files a project under in `projects/`: the path with
+ * every byte other than a letter or digit as `-`, cut at 200 with a hash of
+ * the whole path after it. The SDK's own `Tc` and `iS` (sdk.mjs 0.3.289).
+ */
+export const projectSlug = (path: string): string => {
+  const slug = path.replace(/[^a-zA-Z0-9]/gu, "-");
+  if (slug.length <= SLUG_MAX) {
+    return slug;
+  }
+  let hash = 0;
+  // By UTF-16 unit, as the SDK's `charCodeAt` loop counts.
+  for (let index = 0; index < path.length; index += 1) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: the SDK's own 32-bit string hash, kept exact
+    hash = ((hash << 5) - hash + path.charCodeAt(index)) | 0;
+  }
+  return `${slug.slice(0, SLUG_MAX)}-${Math.abs(hash).toString(36)}`;
+};
+
+/**
+ * How one per-session entry sits in a config dir, for session `id`:
+ * - `dir`: `<root>/<id>` (a folder of the session's own);
+ * - `file`: `<root>/<id><suffix>`;
+ * - `prefix`: every name under `<root>` starting `<id><suffix>`;
+ * - `project`: under each `projects/<slug>/`, the transcript `<id>.jsonl`,
+ *   the folder `<id>/` (subagent transcripts, tool output), and the copies
+ *   Claude Code sets aside (`<id>.jsonl.superseded-*`, `.orphaned-<id>-*`).
+ */
+export type SessionEntry =
+  | { kind: "dir"; root: string }
+  | { kind: "file"; root: string; suffix: string }
+  | { kind: "prefix"; root: string; suffix: string }
+  | { kind: "project" };
+
+/**
+ * Every entry of a config dir that belongs to one session, from the
+ * claude-directory docs' "Application data" table: the transcript and its
+ * folder, `tasks/<id>` (the task tools' list, named by the session id),
+ * `file-history/<id>` (checkpoints), `session-env/<id>`, `debug/<id>.txt`,
+ * `uploads/<id>`, `dev-mods/<id>`, and the legacy `todos/<id>-*` and
+ * `image-cache/<id>`. Not here, each per account: `sessions/` and
+ * `shell-snapshots/` (one per process, gone at exit), `paste-cache/` and
+ * `history.jsonl` (the dir's prompt history).
+ */
+export const SESSION_ENTRIES: readonly SessionEntry[] = [
+  { kind: "project" },
+  { kind: "dir", root: "tasks" },
+  { kind: "dir", root: "file-history" },
+  { kind: "dir", root: "session-env" },
+  { kind: "dir", root: "uploads" },
+  { kind: "dir", root: "dev-mods" },
+  { kind: "dir", root: "image-cache" },
+  { kind: "file", root: "debug", suffix: ".txt" },
+  { kind: "prefix", root: "todos", suffix: "-" },
+];
+
+/**
+ * The one store of an account of any provider other than Claude's on this
+ * machine: its credential in pi-ai's credential format, keyed by the
+ * provider's id (`{ "<provider>": { "type": "oauth" | "api_key", … } }`),
+ * owner-only, written and refreshed by the agent alone.
+ */
+export const accountCredentialPath = (accountId: string): string =>
+  join(accountsRoot(), accountId, "credential.json");
+
+const accountsHaving = (entry: string): string[] => {
+  try {
+    return readdirSync(accountsRoot(), { withFileTypes: true })
+      .filter(
+        (dir) =>
+          dir.isDirectory() && existsSync(join(accountsRoot(), dir.name, entry))
+      )
+      .map((dir) => dir.name);
+  } catch {
+    return [];
+  }
+};
+
+/** The ids of the Claude accounts that have a config dir on this machine. */
+export const accountIds = (): string[] => accountsHaving("claude");
+
+/** The ids of the provider accounts that have a credential store on this machine. */
+export const credentialAccountIds = (): string[] =>
+  accountsHaving("credential.json");
+
+/** The account's dir on this machine, gone with everything in it. */
+export const removeAccountRoot = (accountId: string): Promise<void> =>
+  rm(join(accountsRoot(), accountId), { recursive: true, force: true });
+
+/**
+ * Every Claude Code config dir on this machine, for a lookup by session id
+ * alone (no row to say which dir): {@link claudeHome}, each account's own
+ * dir, and any the process was pointed at (`$CLAUDE_CONFIG_DIR`,
+ * comma-separated, or `$XDG_CONFIG_HOME/claude`), each once.
+ */
+const pointedConfigDirs = (): string[] => {
+  const env = process.env.CLAUDE_CONFIG_DIR;
+  if (env) {
+    return env
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  const xdg = process.env.XDG_CONFIG_HOME;
+  return xdg ? [join(xdg, "claude")] : [];
+};
+
+export const claudeConfigDirs = (): string[] => {
+  const pointed = pointedConfigDirs();
+  return [
+    ...new Set([
+      claudeHome(),
+      ...accountIds().map(accountConfigDir),
+      ...pointed,
+    ]),
+  ];
+};
+
+export interface ClaudeFile {
+  path: string;
+  /** The path component immediately after `projects/`. */
+  project: string;
+}
+
+async function walk(
+  root: string,
+  project: string | null,
+  out: ClaudeFile[]
+): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return; // a projects dir that vanished mid-walk is not an error
+  }
+  for (const entry of entries) {
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) {
+      await walk(full, project ?? entry.name, out);
+    } else if (entry.name.endsWith(".jsonl")) {
+      out.push({ path: full, project: project ?? "unknown" });
+    }
+  }
+}
+
+/** Every `*.jsonl` under each Claude config dir's `projects/`, with its project name. */
+export const listClaudeFiles = async (): Promise<ClaudeFile[]> => {
+  const files: ClaudeFile[] = [];
+  for (const dir of claudeConfigDirs()) {
+    await walk(join(dir, "projects"), null, files);
+  }
+  return files;
+};
+
+/**
+ * Every pi session file on the machine: pi keeps one dir of sessions, whichever
+ * account a session ran on (agent pi-accounts.ts `accountRuntime`), a folder per
+ * cwd under its agent dir's `sessions/` (agent pi-services.ts `piSessionPath`).
+ */
+export const listPiFiles = async (): Promise<string[]> => {
+  const files: ClaudeFile[] = [];
+  await walk(join(piAgentDir(), "sessions"), null, files);
+  return files.map((file) => file.path);
+};
