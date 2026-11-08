@@ -80,7 +80,8 @@ import type {
   WorkspaceConflict,
   WorkspaceKind,
 } from "@cawco/core/harness";
-import { claudeHome, workspacesDir } from "@cawco/core/paths";
+import { claudeHome } from "@cawco/core/paths/claude";
+import { workspacesDir } from "@cawco/core/paths/workspace";
 import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
