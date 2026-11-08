@@ -548,6 +548,7 @@ import {
 import type { Rule, RuleDraft } from "@cawco/core/rules";
 import { RULE_TEMPLATES, ruleProblem } from "@cawco/core/rules";
 import { protocolRange } from "@cawco/core/runtime";
+import { shellQuote } from "@cawco/core/shell-quote";
 import {
   type DecisionMedia,
   type DesignMap,
@@ -924,7 +925,6 @@ import {
   pageSourcePaths,
 } from "./kept-blocks";
 import { boardTitle, type LabelledRow, leafOf, sessionLabel } from "./labels";
-import { quote } from "./landing";
 import { createLaws } from "./laws";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
@@ -29029,7 +29029,7 @@ export const createServer = (
       const read = await runOnMachine(
         workspace.machineId,
         workspace.path,
-        `cat -- ${quote(path)}`,
+        `cat -- ${shellQuote(path)}`,
         WORKSPACE_READ_MS,
         workItems.workspaceRef(workspace.id)
       );

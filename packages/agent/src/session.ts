@@ -178,6 +178,7 @@ import {
   SESSIOND_PROCESS_LIMIT,
   type SessiondLimit,
 } from "@cawco/core/sessiond";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import type { FrameProvenance } from "@cawco/core/stream";
 import {
@@ -208,7 +209,6 @@ import {
   rearmMoved,
   recheckNarrowed,
   sandboxOf,
-  shellQuote,
 } from "./boundary";
 import {
   type BrowserDoor,
