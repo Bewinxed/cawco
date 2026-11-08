@@ -21,14 +21,14 @@
  * the project's details (server.ts `addProjectPlace`).
  */
 
+import { SETUP_PAGE } from "@cawco/core/artifact-needs";
+import type { ChoiceEntry } from "@cawco/core/choices";
+import type { SetupDrawn } from "@cawco/core/decisions";
 import {
-  type ChoiceEntry,
   OFFERED_TEMPLATES,
   type OfferedTemplate,
   type StagesTemplate,
-} from "@cawco/core";
-import { SETUP_PAGE } from "@cawco/core/artifact-needs";
-import type { SetupDrawn } from "@cawco/core/decisions";
+} from "@cawco/core/views";
 import type { setupWords } from "@cawco/core/words/onboarding";
 import { templateStages } from "./stages";
 import { templateTypes } from "./template-types";
