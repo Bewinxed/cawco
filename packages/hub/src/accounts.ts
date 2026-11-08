@@ -361,7 +361,7 @@ export const reconcileAccounts = async (
   const store = db.accounts;
   const ofScope = (account: Account | undefined): account is Account =>
     account !== undefined &&
-    (account.provider === CLAUDE_PROVIDER) === (scope === "claude");
+    (account.provider === CLAUDE_PROVIDER) === (scope !== "providers");
   const mine = store
     .signins()
     .filter(
@@ -398,7 +398,7 @@ export const reconcileAccounts = async (
       changed =
         store.putSignin({ accountId: account.id, machineId, state }) || changed;
     }
-    if (state === "signed-in" && scope === "claude") {
+    if (state === "signed-in" && scope !== "providers") {
       const read = await refreshCatalog(
         db,
         machineId,
