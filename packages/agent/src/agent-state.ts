@@ -8,7 +8,7 @@
  * write.
  */
 import { join } from "node:path";
-import { cawcoDataDir } from "@cawco/core/paths";
+import { cawcoDataDir } from "@cawco/core/paths/cawco";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** The file in CawCo's data dir that holds {@link AgentState}. */
