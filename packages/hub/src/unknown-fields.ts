@@ -9,8 +9,8 @@
  * declares it, so the 422 names exactly what the caller sent wrong.
  */
 
-import { unrecognizedKeys } from "@cawco/core/unrecognized-keys";
 import { ValidationError } from "elysia";
+import { unrecognizedKeys } from "./unrecognized-keys";
 
 /** A JSON Schema node as TypeBox builds one, read loosely. */
 type Node = Record<string, unknown>;
