@@ -30,7 +30,7 @@ import {
   linkUserLayer,
   removeAccountDir,
 } from "./accounts";
-import { inFleetQueue, writeAtomic } from "./fleet";
+import { inFleetQueue } from "./fleet";
 import { forgetAccount } from "./login";
 
 /**
@@ -291,7 +291,7 @@ const putOauthAccount = async (
   oauthAccount: unknown
 ): Promise<void> => {
   const { oauthAccount: _was, ...rest } = (await readJson(path)) ?? {};
-  await writeAtomic(
+  await writeStateFile(
     path,
     JSON.stringify(
       oauthAccount === undefined ? rest : { ...rest, oauthAccount },
@@ -453,7 +453,7 @@ const moveOnce = (
     const undo = async (why: string): Promise<never> => {
       await store.remove(account);
       if (prior) {
-        await writeAtomic(accountJson, prior);
+        await writeStateFile(accountJson, prior);
       } else {
         await rm(accountJson, { force: true });
       }
@@ -559,7 +559,7 @@ const moveAccountLogin = async (
   const undo = async (why: string): Promise<never> => {
     await store.remove(into);
     if (prior) {
-      await writeAtomic(intoJson, prior);
+      await writeStateFile(intoJson, prior);
     } else {
       await rm(intoJson, { force: true });
     }
