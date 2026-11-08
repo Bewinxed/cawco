@@ -84,7 +84,7 @@ import {
   CloneDenySchema,
   cloneDenies,
 } from "@cawco/core/clone-denies";
-import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
+import { HUB_PREVIEWS_ENV } from "@cawco/core/preview/hub-previews";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { writeStateFileSync } from "@cawco/core/state-file";
