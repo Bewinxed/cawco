@@ -9,8 +9,9 @@
     RuleTiming,
     RuleWatch,
   } from "@cawco/core/rules";
-  import { ruleProblem, ruleSentence } from "@cawco/core/rules";
+  import { ruleProblem } from "@cawco/core/rules";
   import { commonWords } from "@cawco/core/words/common";
+  import { ruleSentence } from "@cawco/core/words/rule-lines";
   import { rulesWords } from "@cawco/core/words/rules";
   import { onMount, untrack } from "svelte";
   import { hubFetch } from "#lib/cawco/hub-read.js";
