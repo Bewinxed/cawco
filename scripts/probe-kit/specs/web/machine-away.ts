@@ -242,7 +242,7 @@ async function fixtures(fleet: KitFleet) {
     })
   );
   // A hook's script lands in the machine's fleet hooks dir, outside the
-  // user layer (core paths.ts `fleetHooksDir`: `$XDG_DATA_HOME/cawco/
+  // user layer (core paths/fleet.ts `fleetHooksDir`: `$XDG_DATA_HOME/cawco/
   // fleet-hooks`; agent fleet.ts `hookScriptPath`), and the scratch fleet's
   // XDG_DATA_HOME is its HOME's `.local/share` (scratch-fleet.ts).
   const script = await machineFile(
