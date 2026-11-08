@@ -1,6 +1,7 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import type { HarnessKind, PermissionResult } from "@cawco/core/harness";
+  import type { PermissionResult } from "@cawco/core/harness";
+  import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { questionsOf } from "@cawco/core/question";
   import { CONTINUED_IN } from "@cawco/core/relaunch";
   import { askWords } from "@cawco/core/words/asks";

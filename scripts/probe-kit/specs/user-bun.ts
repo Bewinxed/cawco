@@ -63,7 +63,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
-import type { HarnessKind } from "../../../packages/core/src/harness";
+import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { workWords } from "../../../packages/core/src/words/work";
