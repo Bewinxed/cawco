@@ -43,7 +43,7 @@
    * actions, no status lines, no change lines and no reply, since a press
    * anywhere on it opens the whole thread (PinFloat `onpress`).
    */
-  import type { CommentAttachment, Pin } from "@cawco/core/comments";
+  import type { CommentAttachment, Pin } from "@cawco/core/comments/model";
   import { referenceHref } from "@cawco/core/references";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
