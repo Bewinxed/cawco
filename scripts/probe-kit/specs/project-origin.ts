@@ -53,8 +53,8 @@
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the legs are read in order, one after another.
 import type { Frame, Page } from "playwright-core";
-import { PREVIEW_PASS_COOKIE } from "../../../packages/core/src/frames";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { PREVIEW_PASS_COOKIE } from "../../../packages/core/src/preview/routes";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
 import {

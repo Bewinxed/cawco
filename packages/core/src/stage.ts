@@ -13,7 +13,7 @@
  * supervision, and its preview's doc keeps its state the same way.
  */
 
-import type { PreviewDown } from "./protocol";
+import type { PreviewDown } from "./preview/protocol";
 
 /**
  * The frameworks a stage mounts a component with: what the daemon hands its
