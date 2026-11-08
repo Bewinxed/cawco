@@ -22,6 +22,7 @@ import type { LimitWindow } from "@cawco/core/usage/types";
 import { windowKey as windowSetKey } from "@cawco/core/usage/windows";
 import { and, asc, eq, gt, gte, inArray, lte, max, ne, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { DbCore } from "./core";
 import {
   accountBench,
   accountCatalogs,
@@ -1011,6 +1012,35 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           set: { until: values.until },
         })
         .run();
+    },
+  };
+};
+
+export interface ProjectAccountsDb {
+  /** The accounts the project's sessions may run on; null: every account. */
+  readonly setProjectAccounts: (id: string, accounts: string[] | null) => void;
+}
+
+export const projectAccountsDb = (core: DbCore): ProjectAccountsDb => {
+  const { db } = core;
+
+  return {
+    setProjectAccounts: (id, list) => {
+      db.transaction((tx) => {
+        tx.update(projects)
+          .set({ accountsLimited: list !== null })
+          .where(eq(projects.id, id))
+          .run();
+        tx.delete(projectAccounts)
+          .where(eq(projectAccounts.projectId, id))
+          .run();
+        const distinct = [...new Set(list ?? [])];
+        if (distinct.length > 0) {
+          tx.insert(projectAccounts)
+            .values(distinct.map((accountId) => ({ projectId: id, accountId })))
+            .run();
+        }
+      });
     },
   };
 };
