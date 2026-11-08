@@ -1,4 +1,4 @@
-import { DECIDES_RULE, type Kind, kindsLine } from "@cawco/core/decides";
+import { DECIDES_RULE, type Kind } from "@cawco/core/decides";
 import {
   sessionMayStart,
   spawningToolAllowed,
@@ -22,6 +22,7 @@ import { LANDS_MODES } from "@cawco/core/injected";
 import { NO_REPLY_OWED, NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { REFERENCE_GUIDANCE } from "@cawco/core/references";
 import type { DesignMap } from "@cawco/core/stage";
+import { kindsLine } from "@cawco/core/words/decides-lines";
 import { z } from "zod";
 import type {
   ArtifactList,

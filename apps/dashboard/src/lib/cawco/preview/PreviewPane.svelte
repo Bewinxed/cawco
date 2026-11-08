@@ -28,8 +28,6 @@
   import {
     askHubReach,
     PAGE_SILENT_MS,
-    previewsNeedWords,
-    previewUnreachedWords,
     probePreview,
     unreachedOf,
   } from "@cawco/core/preview/reach";
@@ -67,6 +65,10 @@
   import { commentWords } from "@cawco/core/words/comments";
   import { commonWords } from "@cawco/core/words/common";
   import { previewWords } from "@cawco/core/words/preview";
+  import {
+    previewsNeedWords,
+    previewUnreachedWords,
+  } from "@cawco/core/words/preview-reach";
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
   import { type Snippet, untrack } from "svelte";
