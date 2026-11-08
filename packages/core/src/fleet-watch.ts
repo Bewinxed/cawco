@@ -62,13 +62,6 @@ export const TRIAGE_DECISIONS = [
 ] as const;
 export type TriageDecision = (typeof TRIAGE_DECISIONS)[number];
 
-/** One open signal, as the hub words it: the line a transcript and a notice read. */
-export interface FleetWatchSignalOpen {
-  kind: FleetWatchSignal;
-  /** Sentence case, no full stop: "Same Bash call 3 times in a row". */
-  line: string;
-}
-
 /** The words for an open signal; `detail` is the tool's name (repeat) or the error's first words (error). */
 export const signalLine = (kind: FleetWatchSignal, detail?: string): string => {
   switch (kind) {

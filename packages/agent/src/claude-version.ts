@@ -1,16 +1,13 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import {
-  CLAUDE_VERSION_FLOOR,
-  type FleetItemState,
-  olderThan,
-} from "@cawco/core";
 import { writeJsonAtomic } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import type { FleetItemState } from "@cawco/core/fleet";
 import { claudeVersionPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
+import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core/tools";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";

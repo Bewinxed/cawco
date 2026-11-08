@@ -65,8 +65,10 @@
  * harness alike and for commits no hook sees (`--no-verify`, a cherry-pick,
  * a rebase the session ran, a repository whose `core.hooksPath` is its own).
  */
-import type { CommandResult, RunsOnCapability } from "@cawco/core";
+
 import { detach } from "@cawco/core/detach";
+import type { CommandResult } from "@cawco/core/harness";
+import type { RunsOnCapability } from "@cawco/core/project-gate";
 import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**

@@ -1,8 +1,8 @@
 /**
  * CawCo's environment variables, by name ({@link CAWCO_ENV}): a file of its
- * own that imports nothing, so a process that must not load core's index
+ * own that imports nothing, so a process that must load nothing else of core
  * (the srt host a workspace's boundary runs, agent boundary-host.ts, through
- * session-env.ts) reads the same registry. Core's index re-exports it.
+ * session-env.ts) reads the same registry.
  */
 
 /**

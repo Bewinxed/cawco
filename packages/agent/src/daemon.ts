@@ -4,90 +4,22 @@ import { arch, homedir, hostname, networkInterfaces, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
   AccountIdentity,
-  AdmissionPayload,
-  AuthState,
-  BuildInfo,
-  Envelope,
-  FleetHeld,
-  HeartbeatAckPayload,
-  HeartbeatPayload,
   HomeCredential,
-  LaunchAsk,
-  LaunchGrant,
   LentAccess,
-  MachineActivity,
-  MachineHarnessReport,
   MachineProviderLists,
-  NamedSpawn,
-  RegisterAckPayload,
-  SessionCustody,
-  SpawnPayload,
-  WorkspaceWorkEnd,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
 import {
-  CANCEL_BINARY_UPDATE,
-  CAWCO_ENV,
-  CAWCO_HUB_PORT,
-  CONFIGURE_BINARY_UPDATES,
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_BORROW_ACCOUNT,
-  CONTROL_CANCEL_COMMAND,
-  CONTROL_CLONE_HOLDING,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
-  CONTROL_GH_ACCOUNTS,
-  CONTROL_GH_TOKEN,
-  CONTROL_HOST_OUTPUTS,
-  CONTROL_HOST_SCRATCH_REMOVE,
-  CONTROL_INPUTS_ADMIT,
-  CONTROL_INPUTS_COPY,
-  CONTROL_INPUTS_READ,
-  CONTROL_INPUTS_WRITE,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_LEND_ACCOUNT,
-  CONTROL_MOVE_CANCEL,
-  CONTROL_MOVE_CLONE,
   CONTROL_MOVE_HOME_CREDENTIAL,
-  CONTROL_MOVE_INSPECT,
-  CONTROL_MOVE_LFS,
-  CONTROL_MOVE_PREPARE,
-  CONTROL_MOVE_REMOTE_CREDENTIAL,
-  CONTROL_MOVE_SNAPSHOT,
-  CONTROL_PLACE_LFS,
-  CONTROL_PLACE_PUSH,
-  CONTROL_PLACE_REPO,
   CONTROL_READ_HOME_CREDENTIALS,
-  CONTROL_REMOVE_FOLDER,
-  CONTROL_REPO_ROOT,
-  CONTROL_RUN_COMMAND,
-  CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PROVIDER_KEY,
-  CONTROL_TRANSCRIPT_PLACES,
-  CONTROL_TRANSCRIPT_TURNS,
-  CONTROL_WORKSPACE_APPLY,
-  CONTROL_WORKSPACE_ARCHIVE,
-  CONTROL_WORKSPACE_AT,
-  CONTROL_WORKSPACE_BOUNDARY,
-  CONTROL_WORKSPACE_BUNDLE,
-  CONTROL_WORKSPACE_CHANGES,
-  CONTROL_WORKSPACE_CLONES,
-  CONTROL_WORKSPACE_CREATE,
-  CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_OUTPUTS,
-  CONTROL_WORKSPACE_SAVE,
-  CONTROL_WORKSPACE_WORK_END,
-  type HarnessKind,
-  invariant,
-  lawPolicy,
-  MACHINE_PART_MS,
-  type RemoveFolder,
-  type TranscriptPlacesQuery,
-  type TranscriptQuery,
-  type TranscriptTurnsQuery,
-  UPDATE_CAWCO,
-  type WorkspaceRef,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
 import { readInstallation } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
@@ -112,9 +44,17 @@ import {
   type BrowserViewersArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
+import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { timerMs } from "@cawco/core/clock";
+import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
+import type {
+  TranscriptPlacesQuery,
+  TranscriptQuery,
+  TranscriptTurnsQuery,
+} from "@cawco/core/find";
+import type { FleetHeld } from "@cawco/core/fleet";
 import { CONTROL_FORGE_POST, readForgeAsk } from "@cawco/core/forge-post";
 import {
   CUSTODY_BOUND_MS,
@@ -126,6 +66,47 @@ import {
   type KeeperWord,
   REGISTER_ACK_MS,
 } from "@cawco/core/handover";
+import type {
+  AuthState,
+  MachineHarnessReport,
+  WorkspaceWorkEnd,
+} from "@cawco/core/harness";
+import {
+  CONTROL_CANCEL_COMMAND,
+  CONTROL_CLONE_HOLDING,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
+  CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_WRITE,
+  CONTROL_PLACE_LFS,
+  CONTROL_PLACE_PUSH,
+  CONTROL_PLACE_REPO,
+  CONTROL_REMOVE_FOLDER,
+  CONTROL_REPO_ROOT,
+  CONTROL_RUN_COMMAND,
+  CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_TRANSCRIPT_PLACES,
+  CONTROL_TRANSCRIPT_TURNS,
+  CONTROL_WORKSPACE_APPLY,
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
+  CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
+  CONTROL_WORKSPACE_CLONES,
+  CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
+  CONTROL_WORKSPACE_SAVE,
+  CONTROL_WORKSPACE_WORK_END,
+  MACHINE_PART_MS,
+  type RemoveFolder,
+  type WorkspaceRef,
+} from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { invariant, lawPolicy } from "@cawco/core/invariant";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
 import { endProcess } from "@cawco/core/listeners";
@@ -144,7 +125,35 @@ import {
   writeMachineKeySync,
   writeMachineRefusal,
 } from "@cawco/core/machine-key";
+import {
+  CONTROL_MOVE_CANCEL,
+  CONTROL_MOVE_CLONE,
+  CONTROL_MOVE_INSPECT,
+  CONTROL_MOVE_LFS,
+  CONTROL_MOVE_PREPARE,
+  CONTROL_MOVE_REMOTE_CREDENTIAL,
+  CONTROL_MOVE_SNAPSHOT,
+} from "@cawco/core/move";
+import type { MachineActivity } from "@cawco/core/notifications";
 import { userLayerPath } from "@cawco/core/paths";
+import type {
+  AdmissionPayload,
+  BuildInfo,
+  Envelope,
+  HeartbeatAckPayload,
+  HeartbeatPayload,
+  LaunchAsk,
+  LaunchGrant,
+  NamedSpawn,
+  SessionCustody,
+  SpawnPayload,
+} from "@cawco/core/protocol";
+import {
+  CANCEL_BINARY_UPDATE,
+  CAWCO_HUB_PORT,
+  CONFIGURE_BINARY_UPDATES,
+  UPDATE_CAWCO,
+} from "@cawco/core/protocol";
 import { sweepDeadShortLinks } from "@cawco/core/sessiond";
 import type { DesignQuery } from "@cawco/core/stage";
 import {
@@ -160,6 +169,7 @@ import {
   type StageWarm,
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
+import type { RegisterAckPayload } from "@cawco/core/stream";
 import {
   RELAY_CERTIFY,
   RELAY_PROVE,
@@ -402,7 +412,7 @@ const browserKeyOf = (args: unknown): BrowserKey => {
 
 /** The hub's session limits, said to every keeper, which starts each child under them from here; said in the log once each time they change. */
 const takeSessionLimits = (
-  limits: import("@cawco/core").SessionLimits | undefined
+  limits: import("@cawco/core/protocol").SessionLimits | undefined
 ): void => {
   if (!setSessionLimits(limits)) {
     return;
@@ -1023,7 +1033,7 @@ interface RegisterPayload extends MachineIdentity {
    * when this register ran. Absent alongside `resumable`.
    */
   resumableAt?: Record<string, number>;
-  sessionAddresses: import("@cawco/core").SessionAddress[];
+  sessionAddresses: import("@cawco/core/protocol").SessionAddress[];
 }
 
 class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
@@ -2796,7 +2806,8 @@ const attach = (
       if (envelope.verb !== "stop") {
         return;
       }
-      const stop = envelope.payload as import("@cawco/core").StopPayload;
+      const stop =
+        envelope.payload as import("@cawco/core/protocol").StopPayload;
       Effect.runFork(
         Effect.logInfo(
           `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${identity.machineId} outcome=received elapsedMs=0`
@@ -3038,8 +3049,8 @@ const attach = (
       receiveStop(envelope);
       if (
         envelope.verb === "control" &&
-        (envelope.payload as import("@cawco/core").ControlPayload).method ===
-          "acknowledgeSessionAddress"
+        (envelope.payload as import("@cawco/core/protocol").ControlPayload)
+          .method === "acknowledgeSessionAddress"
       ) {
         supervisor.dispatch(envelope);
         return;
