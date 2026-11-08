@@ -73,8 +73,6 @@
     PREVIEW_REACH_PATH,
     type PreviewWays,
     previewHeld,
-    previewsNeedWords,
-    previewUnreachedWords,
     probePreview,
     unreachedOf,
   } from "@cawco/core/preview/reach";
@@ -96,6 +94,10 @@
   } from "@cawco/core/stage";
   import { commonWords } from "@cawco/core/words/common";
   import { decisionsWords } from "@cawco/core/words/decisions";
+  import {
+    previewsNeedWords,
+    previewUnreachedWords,
+  } from "@cawco/core/words/preview-reach";
   import {
     type FrameObserver,
     frameObserver,

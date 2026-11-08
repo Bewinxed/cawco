@@ -3,10 +3,7 @@
   import type { AccountHue } from "@cawco/core/accounts/kinds";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
   import { machineLabel } from "@cawco/core/machine-names";
-  import {
-    type RelayJourneyView,
-    STREAM_RELAY_WORDS,
-  } from "@cawco/core/stream-relay";
+  import type { RelayJourneyView } from "@cawco/core/stream-relay";
   /**
    * CAW'S NOTICES BENCH (dev only) — the real CawPanel in the real popover
    * shell (a HangCard on the top bar's own glass, as NeedsCaw hangs it),
@@ -27,6 +24,7 @@
    * the switches.
    */
   import { cawHeadWords } from "@cawco/core/words/caw-head";
+  import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
   import { MediaQuery } from "svelte/reactivity";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
   import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
