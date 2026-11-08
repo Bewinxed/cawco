@@ -19,13 +19,12 @@
  */
 import { createHash } from "node:crypto";
 import type { CanvasElement, CanvasEntry } from "@cawco/core/canvas";
+import { ANCHOR_IDENTITIES, generatedId } from "@cawco/core/comments/anchor";
 import {
-  ANCHOR_IDENTITIES,
   CHANGE_WORDS_MOST,
   CHANGES_LIMIT,
   type ChangedItem,
-  generatedId,
-} from "@cawco/core/comments";
+} from "@cawco/core/comments/model";
 import type { DecisionCard } from "@cawco/core/decisions";
 import { elementName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 
