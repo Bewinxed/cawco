@@ -48,7 +48,8 @@ import {
 import { basename, dirname, join, relative } from "node:path";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import type { WorkspaceRef } from "@cawco/core/harness";
-import { projectClaudeDir, workspaceStateDir } from "@cawco/core/paths";
+import { projectClaudeDir } from "@cawco/core/paths/claude";
+import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
