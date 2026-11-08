@@ -1,6 +1,6 @@
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { sessionWakeupsDir } from "@cawco/core/paths";
+import { sessionWakeupsDir } from "@cawco/core/paths/cawco";
 import {
   DamagedRecord,
   readRecord,

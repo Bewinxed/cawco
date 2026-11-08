@@ -302,7 +302,7 @@ const keychainUserOf = (user: string | undefined): string =>
  * The Keychain service Claude Code keeps an account dir's login under:
  * `Claude Code-credentials-` and the first 8 hex of the SHA-256 of the dir
  * exactly as the agent sets `CLAUDE_CONFIG_DIR` (agent/src/accounts.ts
- * `keychainService`, core/src/paths.ts `accountConfigDir`):
+ * `keychainService`, core/src/paths/claude.ts `accountConfigDir`):
  * `<HOME>/.cawco/accounts/<id>/claude`, HOME as given.
  */
 const keychainServiceOf = (configDir: string): string =>
