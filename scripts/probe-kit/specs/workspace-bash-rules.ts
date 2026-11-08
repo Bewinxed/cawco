@@ -50,7 +50,7 @@ import type { Boundary } from "../../../packages/agent/src/boundary";
 import { BROWSER_GATE_PORT } from "../../../packages/core/src/browser";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import {
   MACHINE,
   MODEL,

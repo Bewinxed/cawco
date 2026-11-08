@@ -30,7 +30,10 @@
 import { Database } from "bun:sqlite";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { opencodeDatabases, opencodeDataDir } from "@cawco/core/paths";
+import {
+  opencodeDatabases,
+  opencodeDataDir,
+} from "@cawco/core/paths/harnesses";
 import { z } from "zod";
 
 /** How long a read waits out another process's lock on this thread before it answers absent. Our call: a commit's moment, well inside the loop's deadline for the read. */
