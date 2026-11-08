@@ -18,8 +18,8 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { CONTROL_SLEEP } from "../../../packages/core/src/harness";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { CONTROL_SLEEP } from "../../../packages/core/src/session/controls";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
