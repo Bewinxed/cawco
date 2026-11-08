@@ -18,6 +18,7 @@ import type { TextAttachment } from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
+import type { FramePayload } from "@cawco/core/frames";
 import type {
   HarnessCapabilities,
   HarnessReport,
@@ -361,18 +362,6 @@ export interface ServerCustody {
   abortSession: (sessionKey: string, dir: string) => Promise<boolean>;
   /** Authoritative server activity, when the runtime owns turns outside this daemon. */
   busyInstances: () => Promise<string[]>;
-  /**
-   * Confirm a server session's turn and resources ended without adopting it.
-   * `forget`: nothing will reattach it (a stop's `forget`), so
-   * what the harness kept to reattach it goes too.
-   */
-  endSession: (
-    sessionKey: string,
-    dir: string,
-    instanceId?: string,
-    claimed?: readonly string[],
-    forget?: boolean
-  ) => Promise<void>;
   readonly kind: "server";
   /**
    * Whether a server this adapter's sessions run in still runs, held by a
@@ -394,11 +383,53 @@ export interface ServerCustody {
   sessionsOn: (procId: string) => string[];
   /** Lifecycle guards read the supervisor's one machine recovery barrier. */
   readonly setCustodyReadiness: (read: () => boolean) => void;
+  /**
+   * The server's part in a stop: confirm the conversation's turn and
+   * resources ended without adopting it (`key`; shared with another row, its
+   * routing alone goes), or, for a row that named none, that no unclaimed
+   * runner in `directory` remains. Throws when the row names no directory.
+   * `waiting` hands the supervisor what it tells the hub: the end waits on
+   * runners it could not claim.
+   */
+  stop: (request: ServerStopRequest) => Promise<ServerStop>;
   /** Complete post-stop reading; unknown server runners must remain untouched. */
   unclaimedRunners: (
     directory: string,
     claimed: readonly string[]
   ) => Promise<{ count: number; readStartedAt: number }>;
+}
+
+/** What a server-held stop needs of the supervisor. */
+export interface ServerStopRequest {
+  /** What the hub said other rows hold, the shared check's start. */
+  claimed: readonly string[];
+  directory: string | undefined;
+  /** Nothing will reattach it (a stop's `forget`): what was kept to reattach it goes too. */
+  forget: boolean;
+  instanceId: string;
+  /** The conversation it holds, when it named one. */
+  key: string | null | undefined;
+  /** Whether another of the supervisor's own rows holds conversation `key`. */
+  sharedElsewhere: (key: string) => boolean;
+}
+
+/** How a server-held stop ended: confirmed, or waiting on runners nobody claimed. */
+export type ServerStop =
+  | {
+      ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
+      sharedConversation: boolean;
+      waiting?: undefined;
+    }
+  | {
+      ended?: undefined;
+      sharedConversation?: undefined;
+      waiting: { endReason: string; message: string };
+    };
+
+/** A subagent's start or end, as one neutral frame says it. */
+export interface SubagentChange {
+  kind: "started" | "ended";
+  taskId: string;
 }
 
 /** The facet a harness of kind `K` carries, per the traits table: a type error when the two disagree. */
@@ -464,6 +495,8 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
     tail?: number,
     span?: TranscriptSpan
   ) => Promise<SessionMessage[]>;
+  /** A heal of a live session's fleet MCP servers reaches it ({@link CONTROL_MCP_FLEET_HEAL}). */
+  readonly healsFleetMcp?: true;
   /**
    * The hub restarted since this harness's live sessions connected to it:
    * whatever connection to the hub they hold that does not come back by
@@ -501,6 +534,8 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
     spec: SpawnPayload,
     ctx: HarnessContext
   ) => Promise<HarnessSession | undefined>;
+  /** A manual `/compact` replaces its process at rest ({@link COMPACT_RELAUNCH}). */
+  readonly relaunchesOnManualCompact?: true;
   renameSession: (
     sessionKey: string,
     title: string,
@@ -528,6 +563,8 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
     cwd: string,
     workspace: string
   ) => Promise<{ dir: string; spec: SpawnPayload }>;
+  /** The subagent this frame starts or ends, for the pulse's count of a session's running subagents; which frames say so is the harness's. */
+  subagentChange: (message: NeutralMessage) => SubagentChange | undefined;
   /**
    * Applies the parts `parts` of the hub's fleet config (fleet-parts.ts) to
    * this harness's own files, every other part left as its last converge
