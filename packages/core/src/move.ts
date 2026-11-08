@@ -14,7 +14,7 @@
  * install as it needs them, as in any checkout.
  */
 
-import type { EffortLevel, HarnessKind, PermissionMode } from "./harness";
+import type { EffortLevel, HarnessKind, PermissionMode } from "./harness/kinds";
 import type { HubRepoKey } from "./hub-repo";
 
 /** Every {@link MoveStep}, in the order a job does them. */
