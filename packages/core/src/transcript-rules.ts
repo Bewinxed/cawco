@@ -10,7 +10,7 @@
  */
 
 import { accountMoveWords } from "./accounts";
-import { ASK_ORIGIN, answersOf, dismissedOf, parseAskAnswered } from "./asks";
+import { answersOf, dismissedOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
 import type {
@@ -27,12 +27,10 @@ import type {
 } from "./harness";
 import {
   ACCOUNT_MOVE,
-  ARTIFACT_ORIGIN,
   ARTIFACT_RESPONSES,
   CAWCO_NOTICE,
   CLI_OUTDATED,
   CONTEXT_LINE,
-  CONTINUATION_ORIGIN,
   CONVERSATION_RESET,
   CUSTODY_HELD,
   FLEET_WATCH,
@@ -48,6 +46,11 @@ import {
   ROOM_HELD,
   SESSION_STOPPED,
 } from "./harness";
+import {
+  ARTIFACT_ORIGIN,
+  ASK_ORIGIN,
+  CONTINUATION_ORIGIN,
+} from "./harness/kinds";
 import {
   parseArtifactNotice,
   parseDelegateAsk,
