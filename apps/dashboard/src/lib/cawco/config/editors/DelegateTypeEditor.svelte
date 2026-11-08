@@ -5,7 +5,7 @@
     type StartingSet,
     startingSetProblem,
   } from "@cawco/core/delegate-types";
-  import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness";
+  import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
   import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
   import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";

@@ -20,7 +20,7 @@
 
 import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
-import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { hubRequest } from "@cawco/core/hub-request";
 import { TAB_NAMES_PER_ASK, type TabNamed } from "@cawco/core/protocol";
 import { untrack } from "svelte";
