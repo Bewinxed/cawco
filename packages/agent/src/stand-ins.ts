@@ -46,9 +46,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
-import type { WorkspaceRef } from "@cawco/core";
 import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import { isGitDir } from "@cawco/core/git-dir";
+import type { WorkspaceRef } from "@cawco/core/harness";
 import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir, workspaceStateDir } from "@cawco/core/paths";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";

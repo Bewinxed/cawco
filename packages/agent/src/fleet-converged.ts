@@ -11,7 +11,7 @@
  * A Linux workspace boundary's form names what the fleet sync wrote that it
  * binds by these hashes ({@link syncedHeld}), never by a stat of the disk.
  */
-import type { FleetSyncReport } from "@cawco/core";
+import type { FleetSyncReport } from "@cawco/core/fleet";
 import { itemKind } from "@cawco/core/fleet-items";
 import { fleetConvergedFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";

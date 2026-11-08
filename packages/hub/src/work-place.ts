@@ -19,8 +19,8 @@
  *   decisions) is not, so a start there would work on the wrong tree. The
  *   start is refused or skipped in words naming what is missing.
  */
-import type { AccountSignin } from "@cawco/core";
-import { machinesCalled } from "@cawco/core";
+import type { AccountSignin } from "@cawco/core/accounts";
+import { machinesCalled } from "@cawco/core/machine-names";
 import type { ProjectRow } from "./db";
 import { onAccountMachines } from "./placement";
 import { fits, type MachineFacts, runsOnWords } from "./runs-on";

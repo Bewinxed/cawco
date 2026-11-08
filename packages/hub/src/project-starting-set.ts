@@ -22,11 +22,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  type FrontMatterLine,
-  frontMatterBlock,
   type StartingSet,
   startingSetProblem,
-} from "@cawco/core";
+} from "@cawco/core/delegate-types";
+import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import {
   deleteFolderFile,
   projectRoot,

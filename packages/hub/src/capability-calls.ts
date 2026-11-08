@@ -17,7 +17,8 @@
  * listed on. pi lists neither, so its machines' installs are read from
  * their Claude Code and OpenCode sessions.
  */
-import { type HarnessKind, machineLabel } from "@cawco/core";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { machineLabel } from "@cawco/core/machine-names";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";

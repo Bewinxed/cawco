@@ -25,22 +25,24 @@
 import {
   BLOCK_PAGE_TITLES,
   type BlockPage,
+  type ViewRemoval,
+  type ViewRemoved,
+  viewTitle,
+} from "@cawco/core/blocks";
+import type { TaskSummary } from "@cawco/core/task-views";
+import { DAY_MS } from "@cawco/core/time";
+import { unrecognizedKeys } from "@cawco/core/unrecognized-keys";
+import {
   type ProjectView,
   STAGE_KINDS,
   type StageKind,
   VIEW_TOOLS,
   type ViewEventsOutput,
-  type ViewRemoval,
-  type ViewRemoved,
   type ViewRoutinesOutput,
   type ViewSpendOutput,
   type ViewStagesOutput,
   type ViewToolName,
-  viewTitle,
-} from "@cawco/core";
-import type { TaskSummary } from "@cawco/core/task-views";
-import { DAY_MS } from "@cawco/core/time";
-import { unrecognizedKeys } from "@cawco/core/unrecognized-keys";
+} from "@cawco/core/views";
 import { viewToolInput } from "@cawco/core/views-library";
 import { askWords } from "@cawco/core/words/asks";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
