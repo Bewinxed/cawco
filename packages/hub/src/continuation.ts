@@ -6,7 +6,8 @@
  */
 import { SUMMARY_CAP_TOKENS } from "@cawco/core/continuation";
 import { blocksOf, type Extracted } from "@cawco/core/continuation-read";
-import type { GitChanges, SessionMessage } from "@cawco/core/harness";
+import type { GitChanges } from "@cawco/core/session/controls";
+import type { SessionMessage } from "@cawco/core/session-messages";
 import type { ContinuationSource } from "./db/stored-types";
 
 /** Lines of git output the artifact index carries before it says how many it cut. */

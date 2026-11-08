@@ -56,7 +56,6 @@ import {
   PROTECTED_PARENTS,
   protectedFindTests,
 } from "./clone-denies";
-import type { WorkspaceRef } from "./harness";
 import { xdgDataHome } from "./paths/cawco";
 import {
   accountConfigDir,
@@ -89,6 +88,7 @@ import {
 import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { hostEnvironment } from "./session-env";
 import { readRecord } from "./state-file";
+import type { WorkspaceRef } from "./workspace/controls";
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 import { findProgram, hostJavaHome, startedPath } from "./workspace-needs";
 
