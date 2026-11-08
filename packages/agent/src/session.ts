@@ -257,8 +257,9 @@ import { laidOver } from "./fleet-report";
 import { expandHome, runFs } from "./fs";
 import type {
   Harness,
-  HarnessContext,
   HarnessSession,
+  SessiondAdoption,
+  SessiondAwareContext,
   TranscriptSpan,
 } from "./harness";
 import {
@@ -319,55 +320,6 @@ import { beginToolSignin, completeToolSignin } from "./tool-signin";
 import { installTool, probeTools } from "./tools";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
 
-/**
- * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
- * structurally rather than imported as a class: the supervisor stays
- * harness-agnostic, and an adapter that cannot keep processes simply does not
- * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
- */
-export interface SessiondAdoption {
-  /**
-   * Takes back the child `spec`'s session runs in. `spec` is the spawn the
-   * hub sent for it, read by the same rules as a launch's, so the session
-   * runs under every option it launched with (its mode, a fence, its
-   * denials, its account).
-   */
-  adopt: (
-    spec: SpawnPayload,
-    ctx: HarnessContext,
-    options: {
-      /** The hub's mark as a seq in this child's ring; absent follows from `head`. */
-      afterSeq?: number;
-      /** The ring's last seq off the same welcome. */
-      head: number;
-      /** {@link turnRunning}'s answer for this child. */
-      turnRunning: boolean;
-    }
-  ) => Promise<HarnessSession>;
-  custodyCandidates: () => Promise<{
-    /**
-     * What every keeper holds, the current keeper's first. `cwd` is what lets
-     * a survivor the hub never named be adopted at all; `epoch` is its
-     * keeper's per-boot epoch, and with its pid the space its seqs count in
-     * (design §7).
-     */
-    procs: {
-      procId: string;
-      alive: boolean;
-      cwd?: string;
-      epoch: string;
-      head: number;
-      pid: number;
-    }[];
-  }>;
-  /** The keepers there for custody to read, the current one first. */
-  custodyKeepers: () => Promise<string[]>;
-  /** One keeper's word on this harness's children ({@link KeeperPool.read}): its listing of them, its end, or why it could not be read. */
-  custodyReading: (keeper: string) => Promise<KeeperReading>;
-  /** Whether the child is mid-turn as its ring stands up to `head`. */
-  turnRunning: (instanceId: string, head: number) => Promise<boolean>;
-}
-
 /** The controls that change a session's setting: each names it as its one argument. */
 const SETTING_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_SET_MODEL,
@@ -414,24 +366,6 @@ interface Claimed {
   /** Lets go of the claim, for a reattach waiting on this row. */
   settle: () => void;
   spec: SpawnPayload;
-}
-
-/**
- * The context the supervisor hands an adapter, plus the one thing only an
- * adapter reading a sessiond ring can supply: which line the frame it is about
- * to emit came from (design §7).
- *
- * Declared here rather than on {@link HarnessContext} because it is not part of
- * the harness contract — a ring-reading adapter reaches it as
- * `(ctx as Partial<SessiondAwareContext>).line?.(epoch, seq)`, and every other
- * adapter neither knows nor needs it.
- *
- * The one producer is claude's `adopt`: its `stamp` runs one statement before
- * `custody.ingest`, and `ingest` emits its frame synchronously, so the stamp
- * lands on that frame and no other.
- */
-export interface SessiondAwareContext extends HarnessContext {
-  line: (srcEpoch: string, srcSeq: number) => void;
 }
 
 /**
