@@ -2,20 +2,15 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, rmSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { UsageBucket, UsageTokens } from "@cawco/core";
-import {
-  BUCKET_MS,
-  bucketStart,
-  ratesFingerprint,
-  refreshPricing,
-  totalTokens,
-} from "@cawco/core";
 import {
   cawcoDataDir,
   listClaudeFiles,
   opencodeDatabases,
 } from "@cawco/core/paths";
 import { DAY_MS } from "@cawco/core/time";
+import { ratesFingerprint, refreshPricing } from "@cawco/core/usage/pricing";
+import { BUCKET_MS, bucketStart, totalTokens } from "@cawco/core/usage/tokens";
+import type { UsageBucket, UsageTokens } from "@cawco/core/usage/types";
 import { parseClaudeLine } from "./scan-claude";
 import { scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";

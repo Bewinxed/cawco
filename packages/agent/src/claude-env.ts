@@ -1,4 +1,4 @@
-import { NO_REPLY_TOOL } from "@cawco/core";
+import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { MCP_SERVER_NAME } from "./delegation";
 
 /**
