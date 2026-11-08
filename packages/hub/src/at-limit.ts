@@ -6,14 +6,11 @@ import {
   type AccountReading,
   type AtLimit,
   accountNameAmong,
-  clockWords,
-  dayWords,
   type HeldReason,
   keepsGoingOnExtraUsage,
   modelScope,
   namedAccount,
   type RebalanceNotice,
-  tokenWords,
   type WaitReason,
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
@@ -36,6 +33,11 @@ import {
   windowUsed,
   windowWords,
 } from "@cawco/core/usage/windows";
+import {
+  clockWords,
+  dayWords,
+  tokenWords,
+} from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
 import {
