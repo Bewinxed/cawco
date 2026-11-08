@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./accounts/kinds": "./src/accounts/kinds.ts",
+    "./fleet-placement": "./src/fleet-placement.ts",
     "./socket-root": "./src/socket-root.ts",
     "./harness/kinds": "./src/harness/kinds.ts",
     "./loop-watch": "./src/loop-watch.ts",

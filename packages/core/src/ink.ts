@@ -23,6 +23,7 @@
  *
  * Every entry is a plain JSON value in its map.
  */
+
 import {
   type Anchor,
   FILE_SPOT_PROBLEM,
