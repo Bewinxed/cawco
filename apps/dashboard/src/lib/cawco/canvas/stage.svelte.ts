@@ -18,7 +18,7 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
-import { previewRoute } from "@cawco/core/frames";
+import { previewRoute } from "@cawco/core/preview/routes";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
