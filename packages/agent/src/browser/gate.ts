@@ -55,12 +55,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import {
-  type BrowserKey,
-  browserGatePort,
-  SHIELD_CLOSE_WORDS,
-  SHIELD_WORDS,
-} from "@cawco/core/browser";
+import { type BrowserKey, browserGatePort } from "@cawco/core/browser";
 import { gatedPageScript } from "@cawco/core/browser-gate";
 import { machineId } from "@cawco/core/machine-id";
 import {
@@ -68,6 +63,7 @@ import {
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { SHIELD_CLOSE_WORDS, SHIELD_WORDS } from "@cawco/core/words/browser";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
 import { CdpCalls } from "./cdp-calls";
