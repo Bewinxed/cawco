@@ -17,7 +17,7 @@
  *   bun scripts/probe-kit/run.ts rail-resolve
  */
 import type { Frame, Page } from "playwright-core";
-import type { Pin } from "../../../packages/core/src/comments";
+import type { Pin } from "../../../packages/core/src/comments/model";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
