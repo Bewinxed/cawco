@@ -21,7 +21,8 @@
  */
 import { join } from "node:path";
 import type { Connections } from "./connections";
-import type { DbShape, ProjectRow } from "./db";
+import type { DbShape } from "./db";
+import type { ProjectRow } from "./db/projects";
 import {
   hasProjectFolder,
   listFolder,
