@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { PermissionResult } from "@cawco/core/harness";
+  import type { PermissionResult } from "@cawco/core/session-messages";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import type { PendingPermission } from "../client.svelte";
 

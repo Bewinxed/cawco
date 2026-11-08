@@ -12,6 +12,7 @@ import type {
   BrowserListFrame,
   ListedBrowser,
 } from "./browser";
+import type { CommandQueueFrame, CutCommand } from "./commands/controls";
 import type {
   FleetConvergeFrame,
   FleetMcpServer,
@@ -22,14 +23,6 @@ import type {
   MarketplaceRead,
 } from "./fleet";
 import type { FleetWatchNoticesFrame } from "./fleet-watch";
-import type {
-  CommandQueueFrame,
-  CutCommand,
-  ModeAsk,
-  NeutralMessage,
-  PermissionUpdate,
-  SendRecord,
-} from "./harness";
 import type { HarnessKind } from "./harness/kinds";
 import type { HubAuthFrame } from "./hub-auth";
 import type { InstallsFrame } from "./install";
@@ -50,6 +43,12 @@ import type {
   WorkItemSummary,
 } from "./protocol";
 import type { LastErrorKind } from "./relaunch";
+import type {
+  ModeAsk,
+  NeutralMessage,
+  PermissionUpdate,
+  SendRecord,
+} from "./session-messages";
 import type { StageCloneFrame, StageFrame, StageState } from "./stage";
 import type { StartersChangedFrame } from "./starters";
 import type { RelayFrame, RelayJourneyFrame } from "./stream-relay";

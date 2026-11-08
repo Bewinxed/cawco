@@ -41,7 +41,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
-import { CONTROL_HOST_OUTPUTS } from "../../../packages/core/src/harness";
 import {
   fetchHub,
   type HubRequest,
@@ -50,6 +49,7 @@ import {
 } from "../../../packages/core/src/hub-request";
 import { machinePath } from "../../../packages/core/src/machine-path";
 import { judgedWords } from "../../../packages/core/src/words/judged";
+import { CONTROL_HOST_OUTPUTS } from "../../../packages/core/src/workspace/controls";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { DispatchView } from "../../../packages/hub/src/dispatch";
 import type { TaskView } from "../../../packages/hub/src/tasks";

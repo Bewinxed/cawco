@@ -52,7 +52,6 @@ import { realpathSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
-import type { WorkspaceRef } from "@cawco/core/harness";
 import { listenOrEnd } from "@cawco/core/listeners";
 import { hubCredentialSocket } from "@cawco/core/paths/hub";
 import {
@@ -71,6 +70,7 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { gitDoorWords } from "@cawco/core/words/git-door";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { hubOrigins } from "./git-credential";
 import { hostGh } from "./host-gh";

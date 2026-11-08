@@ -15,7 +15,7 @@
  */
 
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { SlashCommand } from "@cawco/core/harness";
+import type { SlashCommand } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import { unhandled } from "@cawco/core/unhandled";

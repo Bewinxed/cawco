@@ -22,6 +22,8 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
+import type { CutCommand } from "@cawco/core/commands/controls";
+import { CONTROL_RUN_COMMAND } from "@cawco/core/commands/controls";
 import {
   CONTROL_READ_CONTINUATION,
   type ContinuationReadOptions,
@@ -58,20 +60,7 @@ import type {
   HarnessFailed,
   HarnessUnanswered,
 } from "@cawco/core/frames";
-import type {
-  AgentBusyReport,
-  CarrySessionOutcome,
-  CarrySessionRequest,
-  CutCommand,
-  GitChanges,
-  MoveEnded,
-  NeutralMessage,
-  NeutralResultMessage,
-  NeutralSessionInfo,
-  PermissionResult,
-  SpinOffHeld,
-  WorkInFlight,
-} from "@cawco/core/harness";
+import type { AgentBusyReport } from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
   BOUNDARY_RELAUNCH,
@@ -79,36 +68,7 @@ import {
   COMPACT_RELAUNCH,
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
-  CONTROL_ABANDON,
-  CONTROL_CARRY_SESSIONS,
-  CONTROL_FLEET_SETTINGS,
   CONTROL_FORGET_CREDENTIALS,
-  CONTROL_GIT_CHANGES,
-  CONTROL_HOST_OUTPUTS,
-  CONTROL_HOST_SCRATCH_REMOVE,
-  CONTROL_INTERRUPT,
-  CONTROL_LIST_SESSIONS,
-  CONTROL_MCP_FLEET_HEAL,
-  CONTROL_QUERIES,
-  CONTROL_READ_SESSION_CONTEXT,
-  CONTROL_READ_TRANSCRIPT_WINDOW,
-  CONTROL_RESTLESS,
-  CONTROL_RUN_COMMAND,
-  CONTROL_SET_EFFORT,
-  CONTROL_SET_MODEL,
-  CONTROL_SET_PERMISSION_MODE,
-  CONTROL_SLEEP,
-  CONTROL_SPIN_OFF_HELD,
-  CONTROL_WORK_IN_FLIGHT,
-  CONTROL_WORKSPACE_ARCHIVE,
-  CONTROL_WORKSPACE_AT,
-  CONTROL_WORKSPACE_BUNDLE,
-  CONTROL_WORKSPACE_CREATE,
-  CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_OUTPUTS,
-  CONTROL_WORKSPACE_WORK_END,
-  cacheHit,
-  holdingWords,
   INSTALL_SESSION_CREDENTIAL,
   LEAK_ENDED,
   LEAK_FOUND,
@@ -116,19 +76,11 @@ import {
   LIMIT_REACHED,
   type LimitHolder,
   limitSentence,
-  MESSAGES_HELD,
-  MESSAGES_READ,
-  MESSAGES_STORED,
-  promptCacheUsage,
   RATE_LIMIT_READ,
-  REPEATED_FAILURE,
-  REPEATED_FAILURE_LIMIT,
   ROOM_HELD,
   roomHeldSentence,
   SESSION_DIR_READ,
-  unknownControlWords,
   VERIFY_SESSION_CREDENTIAL,
-  type WorkspaceRef,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { GENERATE_IMAGE } from "@cawco/core/image-generation";
@@ -164,7 +116,50 @@ import {
 import { lastErrorKindOf } from "@cawco/core/relaunch";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
+import type {
+  CarrySessionOutcome,
+  CarrySessionRequest,
+  GitChanges,
+  MoveEnded,
+  SpinOffHeld,
+  WorkInFlight,
+} from "@cawco/core/session/controls";
+import {
+  CONTROL_ABANDON,
+  CONTROL_CARRY_SESSIONS,
+  CONTROL_FLEET_SETTINGS,
+  CONTROL_GIT_CHANGES,
+  CONTROL_INTERRUPT,
+  CONTROL_LIST_SESSIONS,
+  CONTROL_MCP_FLEET_HEAL,
+  CONTROL_QUERIES,
+  CONTROL_READ_SESSION_CONTEXT,
+  CONTROL_READ_TRANSCRIPT_WINDOW,
+  CONTROL_RESTLESS,
+  CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
+  CONTROL_SET_PERMISSION_MODE,
+  CONTROL_SLEEP,
+  CONTROL_SPIN_OFF_HELD,
+  CONTROL_WORK_IN_FLIGHT,
+  unknownControlWords,
+} from "@cawco/core/session/controls";
 import { hostEnvironment } from "@cawco/core/session-env";
+import type {
+  NeutralMessage,
+  NeutralResultMessage,
+  NeutralSessionInfo,
+  PermissionResult,
+} from "@cawco/core/session-messages";
+import {
+  cacheHit,
+  MESSAGES_HELD,
+  MESSAGES_READ,
+  MESSAGES_STORED,
+  promptCacheUsage,
+  REPEATED_FAILURE,
+  REPEATED_FAILURE_LIMIT,
+} from "@cawco/core/session-messages";
 import {
   processLimitSentence,
   SESSIOND_PROCESS_LIMIT,
@@ -189,6 +184,19 @@ import type { WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
+import {
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
+  CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
+  CONTROL_WORKSPACE_WORK_END,
+  holdingWords,
+  type WorkspaceRef,
+} from "@cawco/core/workspace/controls";
 import { Effect } from "effect";
 import { recordAgentState } from "./agent-state";
 import { drawArtifact } from "./artifact-picture";

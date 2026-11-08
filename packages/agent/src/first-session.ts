@@ -17,7 +17,6 @@
  */
 import { readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { WorkspaceFirstSession } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { projectSlug, sessionConfigDir } from "@cawco/core/paths/claude";
 import {
@@ -25,6 +24,7 @@ import {
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
 import { writeStateFile } from "@cawco/core/state-file";
+import type { WorkspaceFirstSession } from "@cawco/core/workspace/controls";
 import { z } from "zod";
 
 /** Where Claude Code session `sessionId`, on `account` (none: the machine's own login) in `cwd`, saves its tool results. */

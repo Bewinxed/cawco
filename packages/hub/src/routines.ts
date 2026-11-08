@@ -69,7 +69,6 @@
  */
 import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
 import { ANY_TYPE } from "@cawco/core/delegate-types";
-import type { NeutralMessage, NeutralOrigin } from "@cawco/core/harness";
 import {
   type OfferedMode,
   SESSION_CHOSEN_MODES,
@@ -90,6 +89,10 @@ import {
   type RoutineTarget,
 } from "@cawco/core/routine-kinds";
 import { standalone } from "@cawco/core/runtime";
+import type {
+  NeutralMessage,
+  NeutralOrigin,
+} from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";

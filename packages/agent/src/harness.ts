@@ -16,24 +16,26 @@
 import type { AskAnswer } from "@cawco/core/asks";
 import type { TextAttachment } from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
+import type { CutCommand } from "@cawco/core/commands/controls";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
 import type {
-  AuthState,
-  CutCommand,
   HarnessCapabilities,
   HarnessReport,
   MachineHarnessReport,
-  MoveEnded,
+  SignInFault,
+} from "@cawco/core/harness";
+import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
+import type { MoveEnded } from "@cawco/core/session/controls";
+import type {
+  AuthState,
   NeutralMessage,
   NeutralSessionInfo,
   PermissionResult,
   PermissionUpdate,
   SentMessage,
   SessionMessage,
-  SignInFault,
-} from "@cawco/core/harness";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
+} from "@cawco/core/session-messages";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import type { FleetPart } from "./fleet-parts";
 import type { KeeperRefused } from "./sessiond-client";

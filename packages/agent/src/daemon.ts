@@ -19,7 +19,7 @@ import {
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_SET_PROVIDER_KEY,
-} from "@cawco/core/accounts";
+} from "@cawco/core/accounts/controls";
 import { readInstallation } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
@@ -46,6 +46,10 @@ import {
 } from "@cawco/core/browser";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { timerMs } from "@cawco/core/clock";
+import {
+  CONTROL_CANCEL_COMMAND,
+  CONTROL_RUN_COMMAND,
+} from "@cawco/core/commands/controls";
 import { CONTROL_GH_ACCOUNTS, CONTROL_GH_TOKEN } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
@@ -66,45 +70,8 @@ import {
   type KeeperWord,
   REGISTER_ACK_MS,
 } from "@cawco/core/handover";
-import type {
-  AuthState,
-  MachineHarnessReport,
-  WorkspaceWorkEnd,
-} from "@cawco/core/harness";
-import {
-  CONTROL_CANCEL_COMMAND,
-  CONTROL_CLONE_HOLDING,
-  CONTROL_HOST_OUTPUTS,
-  CONTROL_HOST_SCRATCH_REMOVE,
-  CONTROL_INPUTS_ADMIT,
-  CONTROL_INPUTS_COPY,
-  CONTROL_INPUTS_READ,
-  CONTROL_INPUTS_WRITE,
-  CONTROL_PLACE_LFS,
-  CONTROL_PLACE_PUSH,
-  CONTROL_PLACE_REPO,
-  CONTROL_REMOVE_FOLDER,
-  CONTROL_REPO_ROOT,
-  CONTROL_RUN_COMMAND,
-  CONTROL_SEARCH_TRANSCRIPTS,
-  CONTROL_TRANSCRIPT_PLACES,
-  CONTROL_TRANSCRIPT_TURNS,
-  CONTROL_WORKSPACE_APPLY,
-  CONTROL_WORKSPACE_ARCHIVE,
-  CONTROL_WORKSPACE_AT,
-  CONTROL_WORKSPACE_BOUNDARY,
-  CONTROL_WORKSPACE_BUNDLE,
-  CONTROL_WORKSPACE_CHANGES,
-  CONTROL_WORKSPACE_CLONES,
-  CONTROL_WORKSPACE_CREATE,
-  CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_OUTPUTS,
-  CONTROL_WORKSPACE_SAVE,
-  CONTROL_WORKSPACE_WORK_END,
-  MACHINE_PART_MS,
-  type RemoveFolder,
-  type WorkspaceRef,
-} from "@cawco/core/harness";
+import type { MachineHarnessReport } from "@cawco/core/harness";
+import { MACHINE_PART_MS } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { invariant, lawPolicy } from "@cawco/core/invariant";
 import { machineEndpoint } from "@cawco/core/keepers";
@@ -154,6 +121,12 @@ import {
   CONFIGURE_BINARY_UPDATES,
   UPDATE_CAWCO,
 } from "@cawco/core/protocol";
+import {
+  CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_TRANSCRIPT_PLACES,
+  CONTROL_TRANSCRIPT_TURNS,
+} from "@cawco/core/session/controls";
+import type { AuthState } from "@cawco/core/session-messages";
 import { sweepDeadShortLinks } from "@cawco/core/sessiond";
 import type { DesignQuery } from "@cawco/core/stage";
 import {
@@ -183,6 +156,35 @@ import {
 } from "@cawco/core/stream-relay";
 import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
+import type { WorkspaceWorkEnd } from "@cawco/core/workspace/controls";
+import {
+  CONTROL_CLONE_HOLDING,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
+  CONTROL_INPUTS_READ,
+  CONTROL_INPUTS_WRITE,
+  CONTROL_PLACE_LFS,
+  CONTROL_PLACE_PUSH,
+  CONTROL_PLACE_REPO,
+  CONTROL_REMOVE_FOLDER,
+  CONTROL_REPO_ROOT,
+  CONTROL_WORKSPACE_APPLY,
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
+  CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CHANGES,
+  CONTROL_WORKSPACE_CLONES,
+  CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
+  CONTROL_WORKSPACE_SAVE,
+  CONTROL_WORKSPACE_WORK_END,
+  type RemoveFolder,
+  type WorkspaceRef,
+} from "@cawco/core/workspace/controls";
 import { hostJavaHome, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { setSectionMarker } from "@cawco/jsonl-parser";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
