@@ -804,7 +804,6 @@ import type {
   BoardInstanceRow,
   DbShape,
   InstanceKind,
-  MachineLine,
   MachineLineKind,
   PlaceRow,
   ProjectRow,
@@ -828,6 +827,7 @@ import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { PriorConversation, TrashKind } from "./db/schema";
+import type { MachineLine } from "./db/session-lines";
 import type {
   ContinuationAsker,
   ContinuationSource,
