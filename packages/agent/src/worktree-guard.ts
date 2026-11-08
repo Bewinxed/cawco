@@ -19,6 +19,7 @@ import { relative } from "node:path";
 import { HARNESS_CONFIG } from "@cawco/core/clone-denies";
 import type { WorkspaceRef } from "@cawco/core/harness";
 import { GIT_VALUED_OPTIONS } from "@cawco/core/safe-git";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { workspaceDenies } from "@cawco/core/workspace-policy";
 
@@ -76,9 +77,6 @@ export const denyPathspecs = async (
       ]
     : literal;
 };
-
-/** `text` as one shell word. */
-const word = (text: string): string => `'${text.replaceAll("'", "'\\''")}'`;
 
 /**
  * The git subcommands that move the worktree: those whose target commit the
@@ -258,7 +256,7 @@ export const gitShim = (
   git: `#!${systemProgram("sh")}
 # CawCo workspace ${id}: git, its moves of the worktree judged on the paths the boundary keeps (${GIT_MOVE}).
 set -f
-self=${word(bin)}
+self=${shellQuote(bin)}
 real=
 first=
 seen=
@@ -285,7 +283,7 @@ for arg in "$@"; do
     ${GIT_VALUED_OPTIONS.join(" | ")}) skip=1 ;;
     -*) ;;
     ${STILL.join(" | ")}) exec "$real" "$@" ;;
-    *) exec ${word(systemProgram("bash"))} "$self/${GIT_MOVE}" "$real" "$@" ;;
+    *) exec ${shellQuote(systemProgram("bash"))} "$self/${GIT_MOVE}" "$real" "$@" ;;
   esac
 done
 exec "$real" "$@"
@@ -305,11 +303,11 @@ while [ $# -gt 0 ]; do
 done
 g() { "$real" "\${globals[@]}" "$@"; }
 run() { exec "$real" "\${globals[@]}" "$sub" "$@"; }
-before=(${paths.before.map(word).join(" ")})
-after=(${paths.after.map(word).join(" ")})
+before=(${paths.before.map(shellQuote).join(" ")})
+after=(${paths.after.map(shellQuote).join(" ")})
 [ \${#before[@]} -gt 0 ] || run "$@"
 top=$(g rev-parse --show-toplevel 2>/dev/null)
-[ "$top" = ${word(clone)} ] || run "$@"
+[ "$top" = ${shellQuote(clone)} ] || run "$@"
 named=$sub
 case " ${MOVES.join(" ")} " in
   *" $sub "*) ;;
