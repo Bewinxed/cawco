@@ -816,7 +816,6 @@ import {
   secureDashboardUrl,
 } from "./dashboard-url";
 import type {
-  AgentAuth,
   BoardInstanceRow,
   DbShape,
   InstanceKind,
@@ -830,6 +829,7 @@ import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { SourceNote } from "./db/fleet-catalog";
 import { hashHookMaterial, MEMORY_ID } from "./db/fleet-catalog";
+import type { AgentAuth } from "./db/machines";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
