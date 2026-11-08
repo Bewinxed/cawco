@@ -4,16 +4,21 @@ import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { resumeCursor } from "@cawco/core/stream";
 import { sessionFleetDenials } from "../denied-tools";
-import type { Harness, HarnessContext, HarnessSession } from "../harness";
-import type { KeeperReading } from "../keepers";
-import { parseProcId, procIdFor } from "../proc-id";
+import type {
+  Harness,
+  HarnessContext,
+  HarnessSession,
+  KeeperCustody,
+} from "../harness";
+import { procIdFor } from "../proc-id";
 import { withAccountReads } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
 import { toolGate } from "../tools";
+import { keeperCustody } from "./keeper-custody";
 import { PI_SPEC, PiProfile } from "./pi-services";
 import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
 
-class PiHarness extends PiProfile implements Harness {
+class PiHarness extends PiProfile implements Harness<"pi"> {
   /**
    * pi's bash saves the whole output of a command it cuts to its host's
    * `TMPDIR` ("Full output: <tmpdir>/pi-bash-<id>.log", output-accumulator.js
@@ -63,34 +68,13 @@ class PiHarness extends PiProfile implements Harness {
     );
   }
 
-  /** The keepers there for custody to read, the current one first. */
-  async custodyKeepers(): Promise<string[]> {
-    await piKeepers.current();
-    return await piKeepers.endpoints();
-  }
-
-  /** One keeper's word on pi's children: its listing of them, its end, or why it could not be read. */
-  async custodyReading(keeper: string): Promise<KeeperReading> {
-    const reading = await piKeepers.read(keeper);
-    return reading.kind === "listed"
-      ? {
-          kind: "listed",
-          procs: reading.procs.filter(
-            (proc) => parseProcId(proc.procId).kind === "pi"
-          ),
-        }
-      : reading;
-  }
-
-  /** What every keeper holds of pi's, the current keeper's first, each with its keeper's epoch. */
-  async custodyCandidates() {
-    await piKeepers.current();
-    return {
-      procs: (await piKeepers.held()).filter(
-        (proc) => parseProcId(proc.procId).kind === "pi"
-      ),
-    };
-  }
+  /** The children every keeper holds of pi's; {@link adopt} takes one back. */
+  readonly custody: KeeperCustody = {
+    kind: "keeper",
+    ...keeperCustody("pi", piKeepers),
+    adopt: (spec, ctx, options) => this.adopt(spec, ctx, options),
+    turnRunning: (instanceId, head) => this.turnRunning(instanceId, head),
+  };
 
   async turnRunning(instanceId: string, _head: number): Promise<boolean> {
     return (await piSnapshot(instanceId)).busy;
@@ -114,7 +98,7 @@ class PiHarness extends PiProfile implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    const { procs } = await this.custodyCandidates();
+    const { procs } = await this.custody.candidates();
     const proc = procs.find(
       (one) => one.alive && one.procId === procIdFor("pi", spec.instanceId)
     );
@@ -127,4 +111,4 @@ class PiHarness extends PiProfile implements Harness {
   }
 }
 
-export const piHarness: Harness = new PiHarness();
+export const piHarness: Harness<"pi"> = new PiHarness();
