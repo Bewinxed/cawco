@@ -61,3 +61,5 @@ no-whole-seconds/planted.ts:5:27 no-whole-seconds
 no-whole-seconds/planted.ts:6:27 no-whole-seconds
 no-hand-shell-quote/planted.ts:4:28 no-hand-shell-quote
 no-hand-shell-quote/planted.ts:5:31 no-hand-shell-quote
+frames-types-only/packages/core/src/frames.ts:5:1 frames-types-only
+frames-types-only/packages/core/src/frames.ts:6:1 frames-types-only
