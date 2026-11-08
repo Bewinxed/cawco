@@ -37,7 +37,7 @@ import {
 import { tmpdir, userInfo } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { RELEASE_REPOSITORY } from "../packages/core/src/binary-distribution";
-import { releaseEnvPath } from "../packages/core/src/paths";
+import { releaseEnvPath } from "../packages/core/src/paths/cawco";
 import { APPLE_TEAM_ID } from "./binary/sign-agent-bundle";
 import { SECRET_VARIABLES } from "./release-signing";
 import {

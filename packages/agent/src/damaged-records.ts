@@ -23,12 +23,9 @@
  */
 import { readdir, rm, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import {
-  accountsRoot,
-  sessionTakenDir,
-  sessionWakeupsDir,
-  workspacesDir,
-} from "@cawco/core/paths";
+import { sessionTakenDir, sessionWakeupsDir } from "@cawco/core/paths/cawco";
+import { accountsRoot } from "@cawco/core/paths/claude";
+import { workspacesDir } from "@cawco/core/paths/workspace";
 import type { DamagedRecordReport } from "@cawco/core/protocol";
 import {
   type DamagedRecord,

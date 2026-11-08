@@ -1,7 +1,7 @@
 /**
  * A host-scope delegate's scratch dir (core protocol.ts
  * `SpawnPayload.hostScratch`): its host workspace's, at the same path a
- * bounded workspace's is (core paths.ts `workspaceScratchDir`), made on each
+ * bounded workspace's is (core paths/workspace.ts `workspaceScratchDir`), made on each
  * spawn of its session with `outputs/` in it, and given its commands as
  * `TMPDIR` though they run on the host. What it leaves in `outputs/` is the
  * one way a file of this machine reaches its parent on another: the hub
@@ -21,7 +21,7 @@ import {
   forgetWorkspaceTmp,
   linkWorkspaceTmp,
   workspaceScratchDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/workspace";
 import { workWords } from "@cawco/core/words/work";
 import { removeTree } from "./remove-tree";
 
@@ -44,7 +44,7 @@ const hostId = (asked: unknown): string => {
 /**
  * The scratch dir of host workspace `id` made, `outputs/` in it, owner-only,
  * as its session is spawned: the `TMPDIR` its commands get (on macOS its
- * short name, core paths.ts `workspaceTmpDir`). Made again for a session
+ * short name, core paths/workspace.ts `workspaceTmpDir`). Made again for a session
  * spawned after its removal.
  */
 export const hostScratchReady = async (asked: unknown): Promise<string> => {

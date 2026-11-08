@@ -19,7 +19,7 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { sessionIdentityDir } from "@cawco/core/paths";
+import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   stateTemporaryTarget,
   writeStateFileSync,

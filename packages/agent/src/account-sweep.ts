@@ -14,7 +14,7 @@ import {
   accountConfigDir,
   accountCredentialPath,
   accountsRoot,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/claude";
 import { changingSignins, removeAccountDir } from "./accounts";
 import { forgetAccount } from "./login";
 import { forgetProviderAccount } from "./provider-accounts";
