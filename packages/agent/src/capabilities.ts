@@ -10,6 +10,7 @@ import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
+import { HARNESS_TOOL } from "@cawco/core/harness";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -195,7 +196,7 @@ async function readVersion(item: MachineCapability): Promise<void> {
   }
   // Claude Code's version is the version gate's own read (claude-version.ts), so the two never disagree.
   const read =
-    item.id === "claude"
+    item.id === HARNESS_TOOL.claude
       ? await claudeHostVersion()
       : await toolVersion(item.path);
   switch (read.kind) {
