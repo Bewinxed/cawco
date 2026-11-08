@@ -34,13 +34,15 @@ import {
   sameIdentity,
 } from "@cawco/core/accounts";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
   accountCredentialPath,
   credentialAccountIds,
+} from "@cawco/core/paths/claude";
+import {
   opencodeAccountHome,
   opencodeDataDir,
-  sessionIdentityDir,
-} from "@cawco/core/paths";
+} from "@cawco/core/paths/harnesses";
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";

@@ -13,7 +13,7 @@
  * leak-watch.ts tells a session what its runs leak).
  */
 import { join } from "node:path";
-import { workspaceCacheDir } from "../../packages/core/src/paths";
+import { workspaceCacheDir } from "../../packages/core/src/paths/workspace";
 
 const DISK_ROOM = join(import.meta.dir, "disk-room.sh");
 

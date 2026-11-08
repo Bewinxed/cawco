@@ -1,6 +1,6 @@
 /** Pi's agent adapter owns only custody and transport, never a running SDK turn. */
 
-import { workspaceSpillDir } from "@cawco/core/paths";
+import { workspaceSpillDir } from "@cawco/core/paths/workspace";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import { resumeCursor } from "@cawco/core/stream";
 import { sessionFleetDenials } from "../denied-tools";

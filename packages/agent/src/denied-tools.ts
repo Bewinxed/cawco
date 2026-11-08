@@ -40,7 +40,7 @@ import {
   QUESTION_TOOL_DENIED,
   SUBAGENTS_DENIED,
 } from "@cawco/core/delegate-types";
-import { userLayerPath } from "@cawco/core/paths";
+import { userLayerPath } from "@cawco/core/paths/claude";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 
