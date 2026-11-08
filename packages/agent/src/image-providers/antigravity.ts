@@ -8,8 +8,8 @@ import {
 } from "node:fs/promises";
 import { homedir, hostname, platform, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import { toolSpec } from "@cawco/core";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { toolSpec } from "@cawco/core/tools";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { z } from "zod";

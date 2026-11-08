@@ -29,7 +29,10 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FleetPluginPayload, MarketplacePluginInfo } from "@cawco/core";
+import type {
+  FleetPluginPayload,
+  MarketplacePluginInfo,
+} from "@cawco/core/fleet";
 import { pluginVersion } from "./fleet-versions";
 import { downloadRepo, get, readTree, unpack } from "./skills";
 

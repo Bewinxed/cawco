@@ -43,13 +43,13 @@ import {
   type SaidWindow,
   type SDKSessionMessage,
 } from "../../../packages/agent/src/harnesses/claude-transcript";
+import type { SessionMessage } from "../../../packages/core/src/harness";
+import { TranscriptBuilder } from "../../../packages/core/src/transcript";
 import type {
-  SessionMessage,
   TranscriptBlock,
   TranscriptEvent,
   WindowAsk,
-} from "../../../packages/core/src";
-import { TranscriptBuilder } from "../../../packages/core/src/transcript";
+} from "../../../packages/core/src/transcript-types";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import type { Kit, Spec } from "../kit";
 

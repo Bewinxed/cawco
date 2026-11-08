@@ -27,14 +27,14 @@
  * before starting (never a password) is kept beside them.
  */
 import { dirname, join as joinPath } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import {
   checkStep,
   currentStep,
   type DraftStamp,
   INSTALL_CHECKS,
   INSTALL_GRACE_MS,
-  INSTALL_JOINED,
-  INSTALL_STEP_PREFIX,
   INSTALL_SYNC_LIMIT_MS,
   type Install,
   type InstallCheck,
@@ -48,13 +48,15 @@ import {
   type InstallStep,
   type InstallsFrame,
   type InstallsRead,
+  targetHost,
+} from "@cawco/core/install";
+import {
+  INSTALL_JOINED,
+  INSTALL_STEP_PREFIX,
   JOIN_WAIT_STEP,
   type SshJoinJob,
   type SshJoinProblem,
-  targetHost,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
+} from "@cawco/core/join";
 import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";

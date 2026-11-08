@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import type { NeutralMessage } from "@cawco/core";
+import type { NeutralMessage } from "@cawco/core/harness";
 import { listClaudeFiles } from "@cawco/core/paths";
 import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";

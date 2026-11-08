@@ -81,9 +81,9 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { FleetMcpConfig } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
+import type { FleetMcpConfig } from "@cawco/core/fleet";
 import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,

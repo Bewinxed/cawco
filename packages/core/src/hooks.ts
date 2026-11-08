@@ -541,7 +541,7 @@ export const hookToolInputBack = (
  * "inside the `decision` object" for PermissionRequest
  * (code.claude.com/docs/en/hooks).
  */
-export const HOOK_INPUT_EVENTS: readonly HookEvent[] = [
+const HOOK_INPUT_EVENTS: readonly HookEvent[] = [
   "PreToolUse",
   "PermissionRequest",
 ];
@@ -557,7 +557,7 @@ export const HOOK_INPUT_EVENTS: readonly HookEvent[] = [
  * alike, its rewrite kept: Claude Code reads its reply itself, and the owner
  * picked "Allow them" for these ("user choice in the end", 2026-10-23).
  */
-export const hookWorkspaceWords = {
+const hookWorkspaceWords = {
   dropped:
     "In a workspace session its input rewrite (updatedInput) is dropped: the boundary judged the call as asked. Its deny, ask and context still count.",
   mcpToolKept:
@@ -693,10 +693,6 @@ const jsonBlock = (
     return saidText(parsed.stopReason) ?? "A fleet hook stopped it.";
   }
 };
-
-/** The five things a hook can actually run. */
-export type HookHandlerType =
-  "command" | "http" | "mcp_tool" | "prompt" | "agent";
 
 /** Fields every handler shares, whatever it runs. */
 interface HookHandlerBase {

@@ -29,15 +29,16 @@
  * a newer release, a Retry, or the machine connecting again (a new agent
  * process, whose own memory of the failure went with the old one).
  */
+
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
+import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import {
   olderThan,
   type ToolPolicy,
   type ToolSpec,
   type ToolStatus,
-} from "@cawco/core";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { detach } from "@cawco/core/detach";
-import { MINUTE_MS, secondsOf } from "@cawco/core/time";
+} from "@cawco/core/tools";
 import type { HubLifetimeShape } from "./lifetime";
 
 /**

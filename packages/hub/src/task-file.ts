@@ -73,18 +73,15 @@ import {
   actorNamed,
   commentIdOfUrl,
   type ExternalComment,
-  type FrontMatterLine,
-  frontMatterBlock,
   isExternalSource,
-  LANDS_MODES,
-  type LandsMode,
   refOfUrl,
-  TASK_MOVERS,
-  type TaskTodo,
-  waitHandle,
-  waitTarget,
-} from "@cawco/core";
+} from "@cawco/core/external-items";
+import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
+import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+import type { TaskTodo } from "@cawco/core/plan";
 import { TASK_EDGES } from "@cawco/core/task-edges";
+import { TASK_MOVERS } from "@cawco/core/views";
+import { waitHandle, waitTarget } from "@cawco/core/wait-targets";
 import type { WorkBudget } from "./db/stored-types";
 
 /** The front matter fields a task file knows, in the order a new file writes them. */

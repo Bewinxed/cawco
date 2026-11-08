@@ -17,6 +17,7 @@
 
 import type { CarrySessionRequest } from "./harness";
 import type { HubPreviewOrigins } from "./hub-previews";
+import type { PlanDelta, PlanFollow, PlanResync, PlanSnapshot } from "./plan";
 import type { DeliveryMark, IngestMark } from "./protocol";
 import type { TailnetServing } from "./tailnet-https";
 
@@ -286,11 +287,11 @@ export const WIRE_PROTOCOL = 56;
  * state. Raw frames never reach a dashboard; the hub folds them.
  */
 export type SessionStreamFrame =
-  | (Extract<import("./index").FramePayload, { kind: "frame" | "send" }> & {
+  | (Extract<import("./frames").FramePayload, { kind: "frame" | "send" }> & {
       keepAlive: true;
     })
   | import("./transcript-types").TranscriptStreamFrame
-  | Extract<import("./index").FramePayload, { kind: "preview" }>;
+  | Extract<import("./frames").FramePayload, { kind: "preview" }>;
 
 /**
  * One event on a session's canonical stream. `seq` is hub-assigned, monotonic
@@ -435,22 +436,25 @@ export const HEARTBEAT_DEADLINE_MS = 10_000;
  */
 export const HUB_TAKE_MEASURE = "cawco hub messages";
 
-/** Everything the stream protocol can put on the dashboard socket. */
+/**
+ * Everything the stream protocol can put on the dashboard socket.
+ * @public Read by name by packages/hub/scripts/wire-compat.ts.
+ */
 export type StreamServerMessage =
   | StreamBacklog
   | StreamReset
   | StreamDelta
   | CommandAck
   | StreamHeartbeat
-  | import("./plan").PlanSnapshot
-  | import("./plan").PlanDelta;
+  | PlanSnapshot
+  | PlanDelta;
 export type StreamClientMessage =
   | StreamSubscribe
   | StreamUnsubscribe
   | StreamHeartbeat
   | CommandEnvelope
-  | import("./plan").PlanFollow
-  | import("./plan").PlanResync;
+  | PlanFollow
+  | PlanResync;
 
 // ---------------------------------------------------------------------------
 // The ingest ledger (sessiond design §7): joining sessiond's per-child line
@@ -549,11 +553,11 @@ export interface RegisterAckPayload {
    */
   revokedCredentials?: string[];
   /**
-   * The fleet's session limits ({@link import("./index").SessionLimits}), so
+   * The fleet's session limits ({@link import("./protocol").SessionLimits}), so
    * the first process the machine starts after it connects runs under them.
    * Every heartbeat's ack carries them again.
    */
-  sessionLimits?: import("./index").SessionLimits;
+  sessionLimits?: import("./protocol").SessionLimits;
   /**
    * Every Claude session this hub has a row for on the machine, each with
    * the account its row runs on (null for none). The machine carries each

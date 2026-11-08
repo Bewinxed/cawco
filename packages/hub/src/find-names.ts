@@ -3,22 +3,22 @@
  * is recognised by, how a query's words match those recognisers, and how a
  * match ranks. Pure: the engine reads the rows and hands them here.
  */
-import {
-  type AgentRow,
-  CAWCO_SCRATCH_TAG,
-  deriveTitleFromFirstMessage,
-  type FindChange,
-  type FindConversation,
-  type FindKind,
-  type FindLiveState,
-  type FindResult,
-  type MomentAuthor,
-  machineLabel,
-  type NeutralSessionInfo,
-  type StageKind,
-} from "@cawco/core";
+import type {
+  FindChange,
+  FindConversation,
+  FindKind,
+  FindLiveState,
+  FindResult,
+  MomentAuthor,
+} from "@cawco/core/find";
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
+import type { NeutralSessionInfo } from "@cawco/core/harness";
+import { machineLabel } from "@cawco/core/machine-names";
+import type { AgentRow } from "@cawco/core/protocol";
+import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { deriveTitleFromFirstMessage } from "@cawco/core/title";
+import type { StageKind } from "@cawco/core/views";
 import type { ProjectRow } from "./db";
 import type {
   FindArtifactRow,

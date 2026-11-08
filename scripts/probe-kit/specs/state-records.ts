@@ -45,7 +45,7 @@ import {
 import type {
   DamagedHubRecord,
   DamagedRow,
-} from "../../../packages/core/src/index";
+} from "../../../packages/core/src/protocol";
 import { clientLine } from "../../../packages/core/src/wire";
 import { MACHINE, MODEL, type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";

@@ -3540,7 +3540,7 @@ function handleFrame(frame: FramePayload): void {
     // carrying it left, so whichever pulse actually happened later, by its
     // own `at`, is the one kept.
     if (frame.kind === "instances") {
-      for (const [id, pulse] of Object.entries(frame.pulses ?? {})) {
+      for (const [id, pulse] of Object.entries(frame.pulses)) {
         const held = pulses.get(id);
         if (!held || pulse.at >= held.at) {
           takePulse(id, pulse);

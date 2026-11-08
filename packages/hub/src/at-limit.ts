@@ -6,36 +6,37 @@ import {
   type AccountReading,
   type AtLimit,
   accountNameAmong,
-  accountsWords,
-  aheadOfWeek,
-  bearing,
   clockWords,
-  configurePage,
   dayWords,
-  earliestReset,
   type HeldReason,
   keepsGoingOnExtraUsage,
-  type LimitWindow,
-  type MoveEnded,
   modelScope,
-  type NeutralOrigin,
   namedAccount,
-  OVER_STATUSES,
-  type PlacementStrategy,
   type RebalanceNotice,
-  spentWindow,
   tokenWords,
   type WaitReason,
-  windowResetAt,
-  windowUsed,
-  windowWords,
-} from "@cawco/core";
+} from "@cawco/core/accounts";
+import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import {
   RESTART_WAIT_CAP_MS,
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
+import type { MoveEnded, NeutralOrigin } from "@cawco/core/harness";
+import { OVER_STATUSES } from "@cawco/core/protocol";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import type { LimitWindow } from "@cawco/core/usage/types";
+import {
+  aheadOfWeek,
+  bearing,
+  earliestReset,
+  spentWindow,
+  windowResetAt,
+  windowUsed,
+  windowWords,
+} from "@cawco/core/usage/windows";
+import { accountsWords } from "@cawco/core/words/accounts";
+import { configurePage } from "@cawco/core/words/configure";
 import {
   type Admission,
   type Figure,

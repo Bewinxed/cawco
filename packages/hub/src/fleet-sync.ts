@@ -33,7 +33,6 @@
  * has written it, whatever delta comes meanwhile.
  */
 import {
-  type ControlResultFrame,
   FLEET_ACK_MS,
   type FleetAck,
   type FleetDelta,
@@ -41,8 +40,9 @@ import {
   type FleetHeld,
   type FleetItemStatus,
   type FleetSyncOutcome,
-} from "@cawco/core";
+} from "@cawco/core/fleet";
 import { type FleetItems, itemHash } from "@cawco/core/fleet-items";
+import type { ControlResultFrame } from "@cawco/core/frames";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 /** How long fleet changes gather before each machine's delta is built. */

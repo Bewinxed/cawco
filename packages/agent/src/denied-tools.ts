@@ -33,13 +33,13 @@
  * Both read {@link resolvedFleetDenials} — the single source — so they cannot
  * drift from each other.
  */
+import { clockWords } from "@cawco/core/accounts";
 import {
-  clockWords,
   OWN_LIST_DENIED,
   opencodeToolsFor,
   QUESTION_TOOL_DENIED,
   SUBAGENTS_DENIED,
-} from "@cawco/core";
+} from "@cawco/core/delegate-types";
 import { userLayerPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
