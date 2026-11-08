@@ -35,7 +35,7 @@
  * working directory.
  *
  * A plain Bun script, never a module of cawco, importing nothing of it but
- * these, which reach no other file of the repository and never core's index
+ * these, which reach no other file of the repository
  * (the probe kit's sandbox-end e6 holds them to this list): core's dir names
  * (`claude-dirs.ts`), the one list of what a clone protects
  * (`clone-denies.ts`), mount table (`mount-table.ts`), nested-boundary words

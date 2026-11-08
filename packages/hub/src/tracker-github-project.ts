@@ -30,13 +30,14 @@
  *   with GitHub's own words; tracker.ts then leaves Status alone and issues
  *   sync as before (CawCo's no-fallback rule: the piece does not start).
  */
+
+import { readWithin } from "@cawco/core/bounded";
 import type {
   GithubProject,
   GithubProjectChoice,
   GithubProjectsView,
   StatusOption,
-} from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+} from "@cawco/core/trackers";
 import type { Octokit } from "@octokit/rest";
 import { TrackerRefusal } from "./tracker-adapter";
 import { githubRefusal } from "./tracker-github";

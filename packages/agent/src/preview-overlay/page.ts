@@ -2,7 +2,7 @@
  * The overlay where it runs: the outermost previewed document (overlay.ts
  * decides; a same-origin frame inside stands down and is reached from here).
  */
-import type { PreviewElement } from "@cawco/core";
+
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
   ANCHOR_IDENTITIES,
@@ -39,6 +39,7 @@ import {
 } from "@cawco/core/frames";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
+import type { PreviewElement } from "@cawco/core/protocol";
 import {
   isReferenceHref,
   OPEN_REFERENCE_ASK,
