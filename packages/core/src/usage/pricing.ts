@@ -1,4 +1,4 @@
-import type { ModelTurnUsage } from "../harness";
+import type { ModelTurnUsage } from "../session-messages";
 import { DAY_MS, HOUR_MS } from "../time";
 import snapshot from "./pricing-snapshot.json";
 import type { UsageTokens } from "./types";

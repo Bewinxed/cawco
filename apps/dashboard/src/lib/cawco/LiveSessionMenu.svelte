@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@cawco/core/machine-names";
   /**
    * Right-click (long-press on touch, the menu key on a focused row) on a
    * session, wherever one is listed: the rail, a project's page, the Fleet
@@ -18,12 +19,11 @@
    */
   import {
     CONTROL_SPIN_OFF_HELD,
-    holdsNothing,
     type SpinOffHeld,
-  } from "@cawco/core/harness";
-  import { machineLabel } from "@cawco/core/machine-names";
+  } from "@cawco/core/session/controls";
   import { unhandled } from "@cawco/core/unhandled";
   import { sidebarWords } from "@cawco/core/words/sidebar";
+  import { holdsNothing } from "@cawco/core/workspace/controls";
   import type { Snippet } from "svelte";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
