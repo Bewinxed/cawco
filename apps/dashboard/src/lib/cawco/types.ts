@@ -4,8 +4,8 @@
  * hub has them, and its own failure lines.
  */
 
-import type { SendState } from "@cawco/core/harness";
 import type { DelegateEvent } from "@cawco/core/protocol";
+import type { SendState } from "@cawco/core/session-messages";
 import type {
   BlockMetadata,
   TranscriptBlock,
