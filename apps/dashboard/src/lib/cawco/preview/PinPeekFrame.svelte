@@ -6,7 +6,7 @@
    * his words and the latest reply) or whole, as the pane draws them. The
    * pins are the design graph spec's, as the hub keeps them.
    */
-  import type { Pin } from "@cawco/core/comments";
+  import type { Pin } from "@cawco/core/comments/model";
   import { pinName } from "@cawco/core/pin-name";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
   import PinCard from "./PinCard.svelte";
