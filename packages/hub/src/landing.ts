@@ -69,6 +69,7 @@
 import { detach } from "@cawco/core/detach";
 import type { CommandResult } from "@cawco/core/harness";
 import type { RunsOnCapability } from "@cawco/core/project-gate";
+import { shellQuote } from "@cawco/core/shell-quote";
 import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**
@@ -398,7 +399,7 @@ const fetchBase = (
 ): Promise<CommandResult> =>
   triedOnFault(
     `the fetch of ${base}`,
-    () => run(`git fetch origin ${quote(base)}`, NETWORK_MS),
+    () => run(`git fetch origin ${shellQuote(base)}`, NETWORK_MS),
     async (fetched) => fetched.exitCode === 0,
     stopped
   );
@@ -409,10 +410,6 @@ const refusal = (step: Refusal["step"], result: CommandResult): Refusal => ({
   step,
   detail: detailOf(result),
 });
-
-/** One shell word, whatever the branch is called. */
-export const quote = (word: string): string =>
-  `'${word.replaceAll("'", `'\\''`)}'`;
 
 /** The end of a failed command, as one paragraph a person can read. */
 const detailOf = (result: CommandResult): string =>
@@ -428,7 +425,7 @@ const detailOf = (result: CommandResult): string =>
 export const statusCommand = (skip: string[] = []): string =>
   skip.length === 0
     ? "git status --porcelain"
-    : `git status --porcelain -- . ${skip.map((path) => quote(`:(exclude,literal)${path}`)).join(" ")}`;
+    : `git status --porcelain -- . ${skip.map((path) => shellQuote(`:(exclude,literal)${path}`)).join(" ")}`;
 
 /** The trailer that links a landed commit to the session that made it. */
 export const LOGS_TRAILER = "Agent-Logs-Url";
@@ -450,7 +447,7 @@ export const LOGS_TRAILER = "Agent-Logs-Url";
  * alone: author, tree and parents kept.
  */
 const stampCommand = (url: string): string =>
-  `m=$(git log -1 --format=%B) && t=$(git log -1 --format=%aI | sed 's/+/%2B/') && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${quote(`${LOGS_TRAILER}: ${url}?at=`)}"$t") && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
+  `m=$(git log -1 --format=%B) && t=$(git log -1 --format=%aI | sed 's/+/%2B/') && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${shellQuote(`${LOGS_TRAILER}: ${url}?at=`)}"$t") && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
 
 /**
  * What a landing's report names as its commits (work-items.ts
@@ -479,14 +476,14 @@ export const reportedRange = (
 
 /** The commits of {@link reportedRange}'s `range`, one `git log --oneline` line each, newest first. */
 export const reportedCommits = (range: { from: string; to: string }): string =>
-  `git log --oneline ${quote(`${range.from}..${range.to}`)}`;
+  `git log --oneline ${shellQuote(`${range.from}..${range.to}`)}`;
 
 /** The diffstat of {@link reportedRange}'s `range`, from where `to` left `from` (`...`), its last `lines` lines. */
 export const reportedDiffstat = (
   range: { from: string; to: string },
   lines: number
 ): string =>
-  `git diff --stat ${quote(`${range.from}...${range.to}`)} | tail -n ${lines}`;
+  `git diff --stat ${shellQuote(`${range.from}...${range.to}`)} | tail -n ${lines}`;
 
 /** The line before the rebased commit in {@link stampedRebase}'s output. */
 const HEAD_MARK = "cawco-head";
@@ -552,7 +549,7 @@ const stampedRebase = (
     `w=$(mktemp -d "\${TMPDIR:-/tmp}/cawco-rebase.XXXXXX") || exit 1`,
     `trap 'git worktree remove --force "$w" >/dev/null 2>&1 || { rm -rf "$w"; git worktree prune; }' EXIT`,
     `git worktree add --quiet --no-checkout --detach "$w" HEAD || exit 1`,
-    `( cd "$w" && export GIT_LFS_SKIP_SMUDGE=1 && s=$(git rev-parse --path-format=absolute --git-path info/sparse-checkout) && mkdir -p "\${s%/*}" && printf '${ROOT_FILES_ONLY}' > "$s" && git ${SPARSE} read-tree -mu HEAD && { git ${SPARSE} rebase${keepBase ? " --keep-base --rebase-merges" : ""} --exec ${quote(stampCommand(url))} ${quote(upstream)} || { files=$(git diff --name-only --diff-filter=U); git rebase --abort; if [ -n "$files" ]; then printf '${CONFLICT_MARK}\\n%s\\n' "$files"; fi; exit 1; }; } && printf '${HEAD_MARK}\\n%s\\n' "$(git rev-parse HEAD)" )`,
+    `( cd "$w" && export GIT_LFS_SKIP_SMUDGE=1 && s=$(git rev-parse --path-format=absolute --git-path info/sparse-checkout) && mkdir -p "\${s%/*}" && printf '${ROOT_FILES_ONLY}' > "$s" && git ${SPARSE} read-tree -mu HEAD && { git ${SPARSE} rebase${keepBase ? " --keep-base --rebase-merges" : ""} --exec ${shellQuote(stampCommand(url))} ${shellQuote(upstream)} || { files=$(git diff --name-only --diff-filter=U); git rebase --abort; if [ -n "$files" ]; then printf '${CONFLICT_MARK}\\n%s\\n' "$files"; fi; exit 1; }; } && printf '${HEAD_MARK}\\n%s\\n' "$(git rev-parse HEAD)" )`,
   ].join("\n");
 
 /** The commit {@link stampedRebase}'s output names, after its {@link HEAD_MARK}; undefined when it names none. */
@@ -617,7 +614,7 @@ export async function landedRebase(
     };
   }
   const moved = await run(
-    `git reset --quiet --keep ${quote(head)}`,
+    `git reset --quiet --keep ${shellQuote(head)}`,
     LOCAL_MS,
     noWait,
     false,
@@ -752,7 +749,7 @@ async function onBase<F>(
 > {
   const run = (cmd: string, timeoutMs: number) =>
     deps.run(cmd, timeoutMs, inTurn);
-  const target = quote(`origin/${base}`);
+  const target = shellQuote(`origin/${base}`);
   const fetched = await fetchBase(run, base, deps.stopped);
   if (fetched.exitCode !== 0) {
     return refusal("fetch", fetched);
@@ -833,7 +830,7 @@ async function pushCheck(
     `the push check of ${ref}`,
     () =>
       run(
-        `git push --dry-run${onto === undefined ? " --force" : ""} origin ${quote(`HEAD:${ref}`)}`,
+        `git push --dry-run${onto === undefined ? " --force" : ""} origin ${shellQuote(`HEAD:${ref}`)}`,
         NETWORK_MS
       ),
     async (checked) => checked.exitCode === 0
@@ -851,7 +848,10 @@ async function pushCheck(
   if (onto === undefined) {
     return refused;
   }
-  const there = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
+  const there = await run(
+    `git ls-remote origin ${shellQuote(ref)}`,
+    NETWORK_MS
+  );
   const held = there.stdout.trim().split(SPACE)[0] ?? "";
   return there.exitCode === 0 && held !== "" && held !== onto
     ? { kind: "moved", refusal: refused }
@@ -872,7 +872,7 @@ async function holds(
   noWait: boolean
 ): Promise<boolean> {
   const there = await run(
-    `git ls-remote origin ${quote(ref)}`,
+    `git ls-remote origin ${shellQuote(ref)}`,
     NETWORK_MS,
     noWait,
     true
@@ -895,7 +895,10 @@ async function movedOn(
   if (fetched.exitCode !== 0) {
     return false;
   }
-  const now = await run(`git rev-parse ${quote(`origin/${base}`)}`, LOCAL_MS);
+  const now = await run(
+    `git rev-parse ${shellQuote(`origin/${base}`)}`,
+    LOCAL_MS
+  );
   return now.exitCode === 0 && now.stdout.trim() !== onto;
 }
 
@@ -939,7 +942,7 @@ async function attempt<F>(
     `${deps.turn?.who ?? "a landing"}'s push to ${base}`,
     () =>
       deps.run(
-        `git push origin ${quote(`HEAD:refs/heads/${base}`)}`,
+        `git push origin ${shellQuote(`HEAD:refs/heads/${base}`)}`,
         NETWORK_MS,
         true,
         true
@@ -1007,7 +1010,10 @@ async function tipOf(
   run: LandingDeps<unknown>["run"],
   ref: string
 ): Promise<string | Refusal> {
-  const there = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
+  const there = await run(
+    `git ls-remote origin ${shellQuote(ref)}`,
+    NETWORK_MS
+  );
   return there.exitCode === 0
     ? (there.stdout.trim().split(SPACE)[0] ?? "")
     : refusal("fetch", there);
@@ -1122,7 +1128,7 @@ async function pushOwnBranch(
       return refusal("fetch", fetched);
     }
     const ahead = await run(
-      `git rev-list --count ${quote(`origin/${base}`)}..HEAD`,
+      `git rev-list --count ${shellQuote(`origin/${base}`)}..HEAD`,
       LOCAL_MS
     );
     if (ahead.exitCode !== 0) {
@@ -1193,7 +1199,7 @@ async function leasedPush(
     `the push to ${branch}`,
     () =>
       run(
-        `git push --force-with-lease=${quote(`${ref}:${held}`)} origin ${quote(`HEAD:${ref}`)}`,
+        `git push --force-with-lease=${shellQuote(`${ref}:${held}`)} origin ${shellQuote(`HEAD:${ref}`)}`,
         NETWORK_MS,
         false,
         true
