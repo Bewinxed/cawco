@@ -1,12 +1,12 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { NeutralMessage } from "@cawco/core/harness";
-import type { JevResult } from "@cawco/core/jev";
 import type { Rule, RuleFacts } from "@cawco/core/rules";
 import { ruleInScope } from "@cawco/core/rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, jevAccess } from "./jev";
+import type { JevResult } from "./jev-types";
 
 /** A meaning rule answers inside the turn it judges, so it is asked briefly. */
 const MEANING_TIMEOUT_MS = 10_000;
