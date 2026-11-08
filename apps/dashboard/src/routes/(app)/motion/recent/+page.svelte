@@ -5,9 +5,9 @@
     CAPABILITIES_NONE,
     CONTROL_STORED_RUN,
     type NeutralSessionInfo,
-    PERMISSION_MODES,
     type StoredRun,
   } from "@cawco/core/harness";
+  import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import {
     type MemberProject,
     projectAt,

@@ -20,7 +20,7 @@ import {
   PROJECT_SKILLS,
   TREE_STORE_DIR,
 } from "./claude-dirs";
-import type { HarnessKind } from "./harness";
+import type { HarnessKind } from "./harness/kinds";
 import { hostEnvironment } from "./session-env";
 import { sessiondEndpoint } from "./sessiond";
 import { hostJavaHome, systemProgram } from "./workspace-needs";

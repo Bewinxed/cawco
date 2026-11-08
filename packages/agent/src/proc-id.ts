@@ -1,4 +1,4 @@
-import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 
 /** The process keeper's namespace. Infrastructure procs are never sessions. */
 export const OPENCODE_SERVER_PROC_ID = "opencode-server";
