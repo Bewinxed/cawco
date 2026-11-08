@@ -22,12 +22,14 @@
  * - Two rows still alike (OpenCode and pi list one model from several
  *   providers) are told apart by provider, else by id.
  */
+
 import type { HarnessReport } from "./harness";
 import {
   type HarnessKind,
   harnessNamed,
   type ModelInfo,
 } from "./harness/kinds";
+import { traitsOf } from "./harness/traits";
 import { unhandled } from "./unhandled";
 import { accountsWords } from "./words/accounts";
 import { decidesWords } from "./words/decides";
@@ -224,6 +226,20 @@ const CLAUDE_ALIASES = new Set([
  */
 const CLAUDE_MODEL_ID = /^claude-[a-z0-9-]+$/u;
 
+/** What each harness takes that no row lists; see {@link modelListed}. */
+const UNLISTED_TAKEN: Record<
+  HarnessKind,
+  (id: string, rows: readonly ModelInfo[]) => boolean
+> = {
+  claude: (id) =>
+    CLAUDE_ALIASES.has(id) ||
+    CLAUDE_MODEL_ID.test(id.replace(LONG_CONTEXT, "")),
+  opencode: () => false,
+  pi: (id, rows) =>
+    providerOf(id) === undefined &&
+    rows.filter((row) => row.value.endsWith(`/${id}`)).length === 1,
+};
+
 /**
  * Whether a `harness` session may start on `id`, by what the harness takes:
  * the harness's default; a row listed under it or one that runs it
@@ -243,22 +259,8 @@ const modelListed = (
   if (id === "default" || modelNameIn(rows, id) !== null) {
     return true;
   }
-  switch (harness) {
-    case "claude":
-      return (
-        CLAUDE_ALIASES.has(id) ||
-        CLAUDE_MODEL_ID.test(id.replace(LONG_CONTEXT, ""))
-      );
-    case "pi":
-      return (
-        providerOf(id) === undefined &&
-        rows.filter((row) => row.value.endsWith(`/${id}`)).length === 1
-      );
-    case "opencode":
-      return false;
-    default:
-      return unhandled("harness", harness);
-  }
+  const takes = UNLISTED_TAKEN[harness];
+  return takes ? takes(id, rows) : unhandled("harness", harness as never);
 };
 
 /** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
@@ -296,7 +298,7 @@ export const modelListingOn = (
     readonly faults?: readonly string[];
   }
 ): ModelListing => {
-  if (harness === "claude") {
+  if (traitsOf(harness).modelCatalog === "account") {
     const read = there.catalogs ?? [];
     if (read.length > 0) {
       return { read: true, rows: read.flat() };

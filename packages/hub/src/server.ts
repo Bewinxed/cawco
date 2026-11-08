@@ -320,6 +320,7 @@ import {
   WIRE_PERMISSION_MODES,
   WORK_ITEM_ORIGIN,
 } from "@cawco/core/harness/kinds";
+import { HARNESS_TRAITS, traitsOf } from "@cawco/core/harness/traits";
 import {
   type FleetHarnessConfig,
   type HarnessConfigKind,
@@ -4555,7 +4556,7 @@ export const createServer = (
       row &&
       (!claim.processGeneration ||
         claim.processGeneration === processGeneration(row)) &&
-      row.harness === "opencode" &&
+      traitsOf(row.harness).custody === "server" &&
       !row.endConfirmedAt &&
       !(row.endIntent && !row.sessionId);
     if (acknowledged) {
@@ -5235,10 +5236,14 @@ export const createServer = (
     harness: string,
     model: string | null | undefined
   ): string | null | undefined => {
-    if (harness !== "pi" || !model || model.includes("/")) {
+    const bare = harnessNamed(harness);
+    if (
+      !(bare && HARNESS_TRAITS[bare].bareModelIds && model) ||
+      model.includes("/")
+    ) {
       return model;
     }
-    return harnessReportOf(machineId, "pi")?.modelNames?.[model] ?? model;
+    return harnessReportOf(machineId, bare)?.modelNames?.[model] ?? model;
   };
   /**
    * A new pi session that names no model (or `default`) starts on the model
@@ -5341,7 +5346,7 @@ export const createServer = (
       : undefined;
   /** A new pi session that names no model, so pi's pick in its directory is asked first. */
   const asksPiDefault = (payload: SpawnPayload): boolean =>
-    payload.harness === "pi" &&
+    traitsOf(payload.harness).defaultModelFromDirectory &&
     (!payload.model || payload.model === "default") &&
     !payload.resume &&
     Boolean(payload.cwd);
@@ -5354,7 +5359,7 @@ export const createServer = (
       harness,
       resolvedModel(machineId, harness, model)
     );
-    if (harness === "claude") {
+    if (traitsOf(harness).accountModel === "dir") {
       return candidates[0];
     }
     const signedIn = new Set(
@@ -5423,7 +5428,7 @@ export const createServer = (
     why: string
   ): void => {
     const [row] = db.getInstancesByIds([rowId]);
-    if (row && row.harness === "claude" && row.sessionId) {
+    if (row && traitsOf(row.harness).accountModel === "dir" && row.sessionId) {
       launchClaims.set(rowId, { accountId, at: Date.now() });
       console.log(spawnWords.launchesOnLine(rowId, accountId, why));
       return;
@@ -5456,7 +5461,7 @@ export const createServer = (
       return { accountId: held };
     }
     const moved =
-      row.harness === "claude" && movedFrom().has(row.id)
+      traitsOf(row.harness).accountModel === "dir" && movedFrom().has(row.id)
         ? homeMovedAccountOn(machineId)
         : undefined;
     if (moved) {
@@ -5591,7 +5596,7 @@ export const createServer = (
     }
     const { accountId } = claimed;
     if (!accountId) {
-      return harness === "claude"
+      return traitsOf(harness).accountModel === "dir"
         ? {
             refusal: noAccountRefusal(machine),
             cause: { kind: "no-account", machineId },
@@ -5682,10 +5687,10 @@ export const createServer = (
     machineId: string,
     row: { accountId?: string | null; harness?: string | null }
   ) =>
-    row.harness === "claude"
+    traitsOf(row.harness).accountModel === "dir"
       ? movingLogins().find(
           (move) =>
-            move.store === "claude" &&
+            traitsOf(move.store).accountModel === "dir" &&
             move.machineId === machineId &&
             (!row.accountId ||
               row.accountId === move.accountId ||
@@ -5717,7 +5722,7 @@ export const createServer = (
     model?: string | null;
   }) => {
     const { harness } = row;
-    if (harness === "claude") {
+    if (traitsOf(harness).accountModel === "dir") {
       return homeLoginMoveOf(row.machineId, row);
     }
     return movingLogins().find(
@@ -6357,7 +6362,7 @@ export const createServer = (
     const accountId = row?.accountId;
     if (
       !(word && row && accountId) ||
-      row.harness !== "claude" ||
+      traitsOf(row.harness).accountModel !== "dir" ||
       generation !== processGeneration(row) ||
       homeLoginMoveOf(machineId, row) ||
       movedFrom().has(row.id)
@@ -6400,7 +6405,7 @@ export const createServer = (
       if (
         row.id !== refused &&
         row.accountId === accountId &&
-        row.harness === "claude" &&
+        traitsOf(row.harness).accountModel === "dir" &&
         machines.includes(row.machineId) &&
         wakesForSend(row) &&
         !owedMoves.has(row.id)
@@ -7601,7 +7606,7 @@ export const createServer = (
    */
   const reclaimUnread = async (instanceId: string): Promise<void> => {
     const [row] = db.getInstancesByIds([instanceId]);
-    if (row?.harness !== "claude") {
+    if (!traitsOf(row?.harness).withdrawSend) {
       return;
     }
     const unread = db.sendsIn(instanceId, ["pending"]).filter((send) => {
@@ -9323,7 +9328,7 @@ export const createServer = (
       store,
       storeProvider: move.storeProvider,
     };
-    const what = `${machine}'s own ${store} ${store === "claude" ? "login" : move.storeProvider}`;
+    const what = `${machine}'s own ${store} ${traitsOf(store).accountModel === "dir" ? "login" : move.storeProvider}`;
     switch (answer.kind) {
       case "unanswered":
         // Not known to have moved or not: the move stays pending and the
@@ -9345,7 +9350,8 @@ export const createServer = (
         throw unreachable(answer);
     }
     const kept = (answer.value.result as HomeLoginMoved).store;
-    const repinned = store === "claude" ? ranOnHomeLogin(move) : [];
+    const repinned =
+      traitsOf(store).accountModel === "dir" ? ranOnHomeLogin(move) : [];
     db.accounts.putSignin({
       accountId: move.accountId,
       machineId,
@@ -9599,7 +9605,7 @@ export const createServer = (
       .filter(
         (row) =>
           row.machineId === move.machineId &&
-          row.harness === "claude" &&
+          traitsOf(row.harness).accountModel === "dir" &&
           row.accountId !== move.accountId &&
           !(row.accountId && placedOn(move.machineId, row.accountId))
       );
@@ -9651,7 +9657,7 @@ export const createServer = (
       .filter(
         (one) =>
           one.machineId === machineId &&
-          one.movedFrom === "claude" &&
+          traitsOf(one.movedFrom).accountModel === "dir" &&
           db.accounts.get(one.accountId)?.provider === CLAUDE_PROVIDER
       )
       .sort((a, b) => (b.movedAt ?? 0) - (a.movedAt ?? 0))[0]?.accountId;
@@ -9670,7 +9676,11 @@ export const createServer = (
   ): Promise<void> => {
     const [row] = db.getInstancesByIds([instanceId]);
     const into = homeMovedAccountOn(machineId);
-    if (!(row && into) || row.harness !== "claude" || row.accountId === into) {
+    if (
+      !(row && into) ||
+      traitsOf(row.harness).accountModel !== "dir" ||
+      row.accountId === into
+    ) {
       db.accounts.removeMovedFrom(instanceId);
       return;
     }
@@ -9794,7 +9804,7 @@ export const createServer = (
       }
     }
     const answer =
-      move.store === "claude"
+      traitsOf(move.store).accountModel === "dir"
         ? await callAgent(
             machineId,
             CONTROL_MOVE_HOME_LOGIN,
@@ -12192,7 +12202,7 @@ export const createServer = (
       stopped !== undefined &&
       (laterSince === undefined || waitedOut(laterSince));
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
-      row.harness === "claude" && row.sessionId
+      traitsOf(row.harness).accountModel === "dir" && row.sessionId
         ? [
             {
               instanceId: row.id,
@@ -12897,7 +12907,7 @@ export const createServer = (
   > => {
     const machine = machineName(machineId);
     const asked =
-      store === "claude"
+      traitsOf(store).accountModel === "dir"
         ? await readAgent(
             machineId,
             CONTROL_READ_HOME_LOGIN,
@@ -12926,7 +12936,7 @@ export const createServer = (
         error: read.error ?? `${machine} could not say what its stores hold.`,
       };
     }
-    if (store === "claude") {
+    if (traitsOf(store).accountModel === "dir") {
       const home = read.result as HomeLogin;
       return home.loggedIn && home.identity
         ? {
@@ -15277,7 +15287,7 @@ export const createServer = (
     harness: HarnessKind,
     machineIds: ReadonlySet<string>
   ): ModelInfo[] => {
-    if (harness !== "claude") {
+    if (traitsOf(harness).modelCatalog !== "account") {
       return db
         .listAgents()
         .filter((machine) => machineIds.has(machine.machineId))
@@ -16964,7 +16974,7 @@ export const createServer = (
     placed: { accountId?: string }
   ): { accountId?: string } => {
     if (
-      payload.harness !== "claude" ||
+      traitsOf(payload.harness).accountModel !== "dir" ||
       !payload.resume ||
       payload.resume.fork ||
       !placed.accountId
@@ -17143,7 +17153,7 @@ export const createServer = (
     task: { projectId: string | null; taskId?: string }
   ): ItemPlacement => {
     const placed = placedOrRefused(machineId, { ...session, cwd: "" }, task);
-    if (session.harness !== "claude") {
+    if (traitsOf(session.harness).accountModel !== "dir") {
       return placed;
     }
     const launchesOn = launchedOn(
@@ -17181,7 +17191,7 @@ export const createServer = (
     instanceId: string
   ): string | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
-    if (row?.harness !== "claude") {
+    if (traitsOf(row?.harness).accountModel !== "dir") {
       return;
     }
     const owed = owedOn(row);
@@ -17946,7 +17956,8 @@ export const createServer = (
       }
       const connection = registry.agent(machineId);
       const rows = owned.filter(
-        (row) => row.machineRemoved && row.harness === "opencode"
+        (row) =>
+          row.machineRemoved && traitsOf(row.harness).custody === "server"
       );
       if (rows.length === 0) {
         return;
@@ -18477,7 +18488,7 @@ export const createServer = (
     harness: HarnessKind,
     model: string | undefined
   ): Promise<number | undefined> => {
-    if (harness === "claude") {
+    if (traitsOf(harness).contextWindow === "hub") {
       // No model named: Claude Code's own default, which the machine's
       // account's catalog resolves to a model id.
       const accountId = machineAccount(db, machineId);
@@ -18536,7 +18547,7 @@ export const createServer = (
         readAt: (row.contextReadAt as Date).getTime(),
       };
     }
-    if (row.harness !== "claude" || !row.sessionId) {
+    if (!(traitsOf(row.harness).readsStoredContext && row.sessionId)) {
       return { reason: "no stored Claude conversation" };
     }
     const answer = await readAgent(
@@ -22168,7 +22179,7 @@ export const createServer = (
       // A build whose catalog lacks it: Claude Code is what every machine
       // runs, so its absence fails the step; the others are not asked.
       return Promise.resolve(
-        harness === "claude"
+        traitsOf(harness).requiredOnEveryMachine
           ? {
               failed: `${machineName(machineId)} runs a CawCo build that doesn't manage Claude Code, so it wasn't checked. Update CawCo there from ${configurePage("updates")}.`,
             }
@@ -22180,7 +22191,7 @@ export const createServer = (
         runs: `${spec.name}${has.version ? ` ${has.version}` : ""}`,
       });
     }
-    if (has.state === "missing" && harness !== "claude") {
+    if (has.state === "missing" && !traitsOf(harness).requiredOnEveryMachine) {
       return Promise.resolve({ skipped: true });
     }
     return bringTool(machineId, spec, has, say);
@@ -22381,7 +22392,7 @@ export const createServer = (
       return;
     }
     for (const row of db.liveInstancesOn(machineId)) {
-      if (row.harness && row.harness !== "claude") {
+      if (row.harness && !traitsOf(row.harness).liveSkillReload) {
         continue;
       }
       for (const method of methods) {
@@ -24936,7 +24947,7 @@ export const createServer = (
     row: InstanceRow | undefined,
     model: string
   ): row is InstanceRow => {
-    if (!row || row.harness === "claude") {
+    if (!row || traitsOf(row.harness).accountModel === "dir") {
       return false;
     }
     const current = row.accountId
@@ -25379,7 +25390,9 @@ export const createServer = (
     entry: SessionMessage,
     at: string | undefined
   ): boolean =>
-    at === undefined || where.harness !== "opencode" || entry.type !== "user";
+    at === undefined ||
+    traitsOf(where.harness).rewindAnchor !== "user-turn" ||
+    entry.type !== "user";
 
   /** A history read that took this long or longer says so in the log, part by part. */
   const SLOW_HISTORY_MS = 1000;
@@ -28048,7 +28061,9 @@ export const createServer = (
     const turns = db.recordedTurns(row.id);
     const activityBound =
       turns.unbounded ||
-      (row.harness === "claude" && !!row.sessionId && !turns.hasTurns);
+      (traitsOf(row.harness).unrecordedTurnsBoundByActivity &&
+        !!row.sessionId &&
+        !turns.hasTurns);
     // Activity writes are throttled; the closing pulse can land within that window.
     const lastTurnAt = activityBound
       ? new Date(
@@ -29669,7 +29684,7 @@ export const createServer = (
     );
     const { accountId } = session;
     if (
-      session.harness === "claude" &&
+      traitsOf(session.harness).accountModel === "dir" &&
       accountId &&
       reached &&
       confirmReading(db, accountId, session.machineId, at) &&
@@ -30339,7 +30354,10 @@ export const createServer = (
     const byMove = plan?.stage === "compacting";
     if (!failed) {
       compactedBy(row, frame, byMove);
-    } else if (!byMove && row.harness === "opencode") {
+    } else if (
+      !byMove &&
+      traitsOf(row.harness).boundaryBeforeCompactionFailure
+    ) {
       compactionFailedAfterBoundary(row);
     }
   };
@@ -31781,7 +31799,7 @@ export const createServer = (
     const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
     if (
       !from ||
-      row.harness !== "claude" ||
+      traitsOf(row.harness).accountModel !== "dir" ||
       !LIMITED_PROVIDERS.includes(from.provider) ||
       row.forkedFrom !== null ||
       owedMoves.has(row.id) ||
@@ -31864,7 +31882,7 @@ export const createServer = (
   const contextWindowNow = (
     row: ReturnType<typeof db.getInstancesByIds>[number]
   ): number | null => {
-    if (row.harness !== "claude") {
+    if (traitsOf(row.harness).contextWindow !== "hub") {
       return null;
     }
     const accountId = row.accountId ?? machineAccount(db, row.machineId);
@@ -32495,7 +32513,7 @@ export const createServer = (
         oweMoveOff(row.id, account.id, why)
       ) {
         moving += 1;
-      } else if (row.harness === "claude") {
+      } else if (traitsOf(row.harness).accountModel === "dir") {
         // Its next send is refused for want of an account (placement's
         // `noAccountRefusal`): its line says it stopped, and why.
         strandedIds.push(row.id);
@@ -34346,7 +34364,7 @@ export const createServer = (
         },
         async ({ params, query, set, status }) => {
           const account =
-            query.harness === "claude"
+            traitsOf(query.harness).accountModel === "dir"
               ? (query.account ?? machineAccount(db, params.machineId))
               : undefined;
           const answer = await readAgent(
@@ -34861,7 +34879,10 @@ export const createServer = (
           if (!current) {
             return status(404, `no session ${params.id}`);
           }
-          if (body.keepAlive !== undefined && current.harness !== "claude") {
+          if (
+            body.keepAlive !== undefined &&
+            !traitsOf(current.harness).keepAlive
+          ) {
             return status(409, "Keep-alive is for Claude sessions");
           }
           if (body.keepAlive !== undefined) {
@@ -39111,7 +39132,7 @@ export const createServer = (
               const outlived = ({ row }: (typeof settled)[number]): boolean =>
                 heldIds.has(row.id) ||
                 (heldOpencode &&
-                  row.harness === "opencode" &&
+                  traitsOf(row.harness).custody === "server" &&
                   row.sessionId !== null);
               const registeredAt = Date.now();
               for (const orphan of settled) {
@@ -39135,7 +39156,7 @@ export const createServer = (
                   inCustody.set(orphan.row.id, {
                     machineId: message.machineId,
                     since: registeredAt,
-                    told: orphan.row.harness === "opencode",
+                    told: traitsOf(orphan.row.harness).custody === "server",
                   });
                   decideCustody(orphan.row.id);
                 }
@@ -39154,7 +39175,10 @@ export const createServer = (
                     ["running", "starting", "unknown"].includes(owner.status)
                   ) &&
                   !heldIds.has(parked.instanceId ?? "") &&
-                  !(heldOpencode && owner?.harness === "opencode") &&
+                  !(
+                    heldOpencode &&
+                    traitsOf(owner?.harness).custody === "server"
+                  ) &&
                   // A prompt is kept while its session may run again.
                   !keepPrompt(parked)
                 ) {
@@ -39291,7 +39315,7 @@ export const createServer = (
                     !restoredIds.has(row.id) &&
                     !returningRemoved.has(row.id) &&
                     row.kind !== "summariser" &&
-                    row.harness === "opencode" &&
+                    traitsOf(row.harness).custody === "server" &&
                     row.sessionId &&
                     (row.status === "sleeping" || row.status === "error")
                   ) {
@@ -39609,7 +39633,7 @@ export const createServer = (
                 db.mergeAgentHarnesses(message.machineId, filed);
                 capabilityReports.delete(message.machineId);
                 const claudeReport = reported.find(
-                  (report) => report.harness === "claude"
+                  (report) => traitsOf(report.harness).accountModel === "dir"
                 );
                 // The machine's word on Claude moves with its Claude report,
                 // not only at its register: a keychain unlocked from the
@@ -41064,7 +41088,7 @@ export const createServer = (
                   }
                 } else if (neutral.type === "result") {
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
-                  if (cacheRow?.harness === "claude") {
+                  if (traitsOf(cacheRow?.harness).keepAlive) {
                     db.updateKeepAlive(
                       cacheRow.id,
                       keepAliveResult(
@@ -41107,7 +41131,10 @@ export const createServer = (
                   // Claude reports each model's window only here; kept so a
                   // picker can say whether a model fits (claude's catalog
                   // carries no window of its own).
-                  if (peek(message.payload, "harness") === "claude") {
+                  if (
+                    traitsOf(peek(message.payload, "harness")).contextWindow ===
+                    "hub"
+                  ) {
                     const { modelUsage } = neutral as {
                       modelUsage?: Record<string, { contextWindow?: number }>;
                     };
