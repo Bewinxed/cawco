@@ -17,7 +17,7 @@
  */
 import { readdir, realpath, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type FleetMcpConfig, placeKeyOf } from "@cawco/core";
+import { type FleetMcpConfig, placeKeyOf } from "@cawco/core/fleet";
 import { fleetPlacesDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { SetHarnessConfig, SetHook } from "./fleet-harness-set";

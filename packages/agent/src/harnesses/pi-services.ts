@@ -2,33 +2,33 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts";
 import type {
-  AuthState,
   FleetHoldings,
   FleetItemState,
   FleetMcpConfig,
   FleetSyncReport,
+  PlacedFleetConfig,
+} from "@cawco/core/fleet";
+import type {
+  AuthState,
   HarnessCapabilities,
   HarnessReport,
-  ModelInfo,
   NeutralAssistantBlock,
   NeutralContentBlock,
   NeutralSessionInfo,
-  PlacedFleetConfig,
   SessionMessage,
-  TranscriptWindow,
-  WindowAsk,
-} from "@cawco/core";
+} from "@cawco/core/harness";
 import {
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
-  CONTROL_PI_DEFAULT_MODEL,
   type SupportedCommands,
-  type ToolSpec,
-  toolSpec,
-} from "@cawco/core";
+} from "@cawco/core/harness";
+import type { ModelInfo } from "@cawco/core/harness/kinds";
 import { piAgentDir, piMemoryFile, piSkillsDir } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { type ToolSpec, toolSpec } from "@cawco/core/tools";
+import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { type LocatedRecord, readSpans } from "@cawco/jsonl-parser";
 import type {
   ImageContent,

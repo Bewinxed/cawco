@@ -65,7 +65,7 @@ export const browserGatePort = (): number => {
 export const BROWSER_SCREEN = { width: 1280, height: 800 } as const;
 
 /** How many ports one browser takes from {@link BROWSER_PORTS}. */
-export const BROWSER_PORTS_EACH = 3;
+const BROWSER_PORTS_EACH = 3;
 
 /** One browser's ports; `http` and `media` are the container host's alone. */
 export interface BrowserPorts {
