@@ -978,6 +978,10 @@ const byLocalName = (a: string, b: string): number => {
 };
 
 /** `out`'s import lines: zod, then each module's types and values. `shapes`: the outputs a proof reads from the generated file itself. */
+/** A specifier as Biome's import order reads it: by path segment, so a subpath sits before a sibling with the same stem and a suffix. */
+const bySegment = (specifier: string): string =>
+  specifier.replaceAll("/", "\u0000");
+
 const importsOf = (
   out: string,
   {
@@ -1011,7 +1015,11 @@ const importsOf = (
     at(out).typed.push(...shapes);
   }
   return [...bySpecifier]
-    .toSorted(([a], [b]) => rank(a) - rank(b) || (a < b ? -1 : Number(a > b)))
+    .toSorted(
+      ([a], [b]) =>
+        rank(a) - rank(b) ||
+        (bySegment(a) < bySegment(b) ? -1 : Number(bySegment(a) > bySegment(b)))
+    )
     .flatMap(([from, { named, typed }]) => [
       // A module only types come from is imported as types alone, so loading
       // a generated file never loads it (schema.ts and moves.ts read these).
