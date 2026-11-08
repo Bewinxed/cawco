@@ -24,8 +24,6 @@
 import {
   type ArtifactNeedNoticePart,
   type ArtifactNeedsRead,
-  noticePartWords,
-  reasonLine,
   unparked,
 } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
@@ -63,6 +61,7 @@ import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { StageKind } from "@cawco/core/views";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { catalogWords } from "@cawco/core/words/catalog";
 import { status, t } from "elysia";

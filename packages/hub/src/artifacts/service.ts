@@ -51,14 +51,11 @@ import {
   unsentChoices,
 } from "@cawco/core/choices";
 import {
-  askedAgainLine,
   type Carried,
-  notedLine,
   pinDelivery,
   pinStandsOn,
   pinsToTell,
   withoutHeld,
-  wroteLine,
 } from "@cawco/core/comments/deliver";
 import {
   ACTIVITY_LIMIT,
@@ -192,6 +189,11 @@ import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
+import {
+  askedAgainLine,
+  notedLine,
+  wroteLine,
+} from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";

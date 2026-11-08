@@ -9,6 +9,7 @@
  * history. The words a person reads; what CawCo decides by is the kind
  * `conversation-gone` ({@link LastErrorKind}).
  */
+import { continuedWords } from "./words/relaunch";
 export const CLAUDE_CONVERSATION_GONE =
   "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working.";
 
@@ -83,22 +84,6 @@ export type Relaunch =
   | { kind: "resume"; sessionKey: string }
   | { kind: "fresh" }
   | { kind: "refused"; reason: string };
-
-/** Why a session whose work a continuation took on never runs again. */
-const continuedWords = (continuedInto: string): string =>
-  `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
-
-/**
- * Where a continued session's work went, as its page says it in its
- * composer's place (the words before the new session's title, a link to
- * it), and as the hub refuses a person's message to it: a moved
- * conversation points onward, it never takes a message on silently.
- */
-export const CONTINUED_IN = "Continued in";
-
-/** {@link CONTINUED_IN} with the new session's title, as one sentence. */
-export const continuedInWords = (title: string): string =>
-  `${CONTINUED_IN} ${title}`;
 
 export const relaunchOf = (row: {
   continuedInto?: string | null;
