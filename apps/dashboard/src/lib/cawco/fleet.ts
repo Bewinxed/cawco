@@ -11,27 +11,18 @@ import type { Bounded } from "@cawco/core/bounded";
 import { PACKAGE_MANAGERS } from "@cawco/core/deps";
 import {
   CAWCO_OAUTH_URL,
-  type ConfigInspection,
   type Deleted,
   type FleetAgent,
-  type FleetConfig,
   type FleetMarketplace,
   type FleetMcpConfig,
   type FleetMcpServer,
   type FleetPlugin,
   type FleetSkillMeta,
-  type MachineHookScript,
-  type MachineMemorySet,
-  type MarketplaceLink,
   type MarketplacePluginInfo,
-  type MarketplaceRead,
   type MemoryScope,
-  type MemoryVersion,
   parseAgentFrontMatter,
 } from "@cawco/core/fleet";
 import type { ConnectAccess, FleetFetchFrame } from "@cawco/core/frames";
-import type { FleetHook } from "@cawco/core/hooks";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { FsEntry } from "@cawco/core/protocol";
 import type {
   McpHttpServerConfig,
@@ -40,63 +31,28 @@ import type {
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
-import {
-  awayOf,
-  couldNot,
-  couldNotOrAway,
-  hubFetch,
-  hubJson,
-} from "#lib/platform/hub-read.js";
-import type { ListedVersion } from "./config/PreviousVersions.svelte";
+import type { Treaty } from "@elysia/eden";
+import { hub } from "#lib/platform/hub.js";
+import { couldNot, couldNotOrAway } from "#lib/platform/hub-read.js";
 import { machineFs, onFleetFetch } from "./stores/machines";
 
+/**
+ * What `GET /api/fleet` answers with (its route's own type). The skills are a
+ * sibling of the config rather than part of it: what the machines get
+ * carries every skill's files, and a catalog read should not weigh
+ * megabytes.
+ */
+export type FleetSnapshot = Treaty.Data<typeof hub.api.fleet.get>;
+
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
-export interface FleetMemoryRow {
-  content: string;
-  hash: string;
-  /** ISO: a `Date` crossing JSON is a string by the time it is read here. */
-  updatedAt: string;
-}
+export type FleetMemoryRow = NonNullable<FleetSnapshot["memory"]>;
 
 /**
  * One document of the fleet's memory, as the hub stores it: its path, its
  * markdown, and the sessions it is loaded into. No scope is a document the
  * main memory links, landing at its path under `~/.claude/memories/`.
  */
-export interface FleetMemoryDocRow extends FleetMemoryRow {
-  path: string;
-  scope?: MemoryScope;
-}
-
-/**
- * What `GET /api/fleet` answers with. The skills are a sibling of the config
- * rather than part of it: what the machines get carries every skill's files,
- * and a catalog read should not weigh megabytes.
- */
-export interface FleetSnapshot {
-  /**
-   * The subagents, file and all: a definition is a page of markdown, so the
-   * editor is seeded from this read rather than fetching each one again.
-   */
-  agents: FleetAgent[];
-  config: FleetConfig;
-  /**
-   * Marketplace links with no row yet: under way, or refused and not let go.
-   * Each stands in the marketplace list until it lands or is let go.
-   */
-  links: MarketplaceLink[];
-  /** Null while the fleet keeps no memory, which is where every fleet starts. */
-  memory: FleetMemoryRow | null;
-  /**
-   * The documents the main memory links, by path. Empty until somebody splits
-   * the memory into a set, and carried with their files for the same reason the
-   * subagents are — each one is a page of markdown.
-   */
-  memoryDocs: FleetMemoryDocRow[];
-  skills: FleetSkillMeta[];
-  /** Machines the hub could not write the subagents to, by machineId → why. */
-  unpushable: Record<string, string>;
-}
+export type FleetMemoryDocRow = FleetSnapshot["memoryDocs"][number];
 
 /** The charset MCP server names are held to, on the hub and here. */
 const NAME_PATTERN = /^[A-Za-z0-9_-]+$/u;
@@ -309,42 +265,32 @@ export function formatBytes(bytes: number): string {
 /** A machine's own words' closing stops, dropped so they sit inside a sentence of ours. */
 const TRAILING_STOPS = /\.+$/u;
 
-const put = <T>(request: HubRequest, attempt: string): Promise<T> =>
-  hubJson<T>(request, { failure: couldNotOrAway(attempt) });
-
-/**
- * A config delete: the hub moves the row into its trash and answers the
- * entry its Undo names (config/undo.ts). `body` is for the one row whose
- * identity will not fit in a path: a linked document is keyed by
- * `models/claude-opus-5.md`, and a slash in a route parameter is a route
- * somewhere else.
- */
-const erase = (request: HubRequest, attempt: string): Promise<Deleted> =>
-  hubJson<Deleted>(request, { failure: couldNotOrAway(attempt) });
-
 /**
  * Saves an MCP server. `projectId` binds it to one project, placed at each of
  * its checkouts and workspaces; null makes it every machine's.
  */
-export const saveMcpServer = (
+export const saveMcpServer = async (
   name: string,
   config: FleetMcpConfig,
   enabled: boolean,
   projectId: string | null
-): Promise<FleetMcpServer> =>
-  put(
-    hubRequest("PUT /api/fleet/mcp/:name", {
-      path: { name },
-      body: { config, enabled, projectId },
-    }),
-    `save ${name}`
-  );
+) => {
+  const answer = await hub.api.fleet
+    .mcp({ name })
+    .put({ config: { ...config }, enabled, projectId });
+  if (answer.error) {
+    throw couldNotOrAway(`save ${name}`)(answer);
+  }
+  return answer.data;
+};
 
-export const removeMcpServer = (name: string): Promise<Deleted> =>
-  erase(
-    hubRequest("DELETE /api/fleet/mcp/:name", { path: { name } }),
-    `remove ${name}`
-  );
+export const removeMcpServer = async (name: string) => {
+  const answer = await hub.api.fleet.mcp({ name }).delete();
+  if (answer.error) {
+    throw couldNotOrAway(`remove ${name}`)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * Signs this browser in to a fleet MCP server, in a tab of its own: the
@@ -374,23 +320,18 @@ export const signInToMcp = async (
     );
   }
   const { origin } = window.location;
-  let authorizationUrl: string;
-  let expiresAt: number;
-  try {
-    ({ authorizationUrl, expiresAt } = await hubJson<{
-      authorizationUrl: string;
-      expiresAt: number;
-    }>(
-      hubRequest("POST /api/fleet/mcp/:name/sign-in", {
-        path: { name },
-        ...(access ? { body: { access } } : {}),
-      }),
-      { failure: couldNotOrAway(`start sign-in to ${name}`) }
-    ));
-  } catch (error) {
+  const answer = await hub.api.fleet
+    .mcp({ name })
+    ["sign-in"].post(access ? { access } : undefined)
+    .catch((error: unknown) => {
+      tab.close();
+      throw error;
+    });
+  if (answer.error) {
     tab.close();
-    throw error;
+    throw couldNotOrAway(`start sign-in to ${name}`)(answer);
   }
+  const { authorizationUrl, expiresAt } = answer.data;
   // The address rides in the fragment, which the browser never sends to a server.
   const hop = btoa(JSON.stringify({ origin, auth: authorizationUrl }))
     .replaceAll("+", "-")
@@ -404,17 +345,21 @@ export const signInToMcp = async (
  * Hands the provider's answer to the hub, which finishes the sign-in by
  * exchanging the code. It answers with the server that is now signed in.
  */
-export const completeMcpSignIn = (
+export const completeMcpSignIn = async (
   code: string,
   state: string,
   iss: string | null
-): Promise<{ name: string }> =>
-  hubJson(
-    hubRequest("POST /api/fleet/mcp/oauth/complete", {
-      body: { code, state, ...(iss ? { iss } : {}) },
-    }),
-    { failure: couldNotOrAway("finish the sign-in") }
-  );
+) => {
+  const answer = await hub.api.fleet.mcp.oauth.complete.post({
+    code,
+    state,
+    ...(iss ? { iss } : {}),
+  });
+  if (answer.error) {
+    throw couldNotOrAway("finish the sign-in")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * What `/mcp auth [server]` means in a composer. Claude Code's own `/mcp` has
@@ -488,11 +433,15 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
     `read ${source}`,
     (frame) =>
       frame.marketplace?.source === source ? frame.marketplace : undefined,
-    () =>
-      hubJson<MarketplaceRead>(
-        hubRequest("GET /api/fleet/marketplace-read", { query: { source } }),
-        { failure: couldNotOrAway(`read ${source}`) }
-      )
+    async () => {
+      const answer = await hub.api.fleet["marketplace-read"].get({
+        query: { source },
+      });
+      if (answer.error) {
+        throw couldNotOrAway(`read ${source}`)(answer);
+      }
+      return answer.data;
+    }
   );
   if (!read.name) {
     throw new Error(
@@ -511,26 +460,33 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
  * way, and a refusal, in the snapshot's `links` until it lands or is let go,
  * and every `fleet.fetch` frame says how it stands.
  */
-export const linkMarketplace = (wanted: string): Promise<MarketplaceLink> => {
+export const linkMarketplace = async (wanted: string) => {
   const source = wanted.trim();
-  return hubJson<MarketplaceLink>(
-    hubRequest("POST /api/fleet/marketplace-links", { body: { source } }),
-    { failure: couldNotOrAway(`link ${source}`) }
-  );
+  const answer = await hub.api.fleet["marketplace-links"].post({ source });
+  if (answer.error) {
+    throw couldNotOrAway(`link ${source}`)(answer);
+  }
+  return answer.data;
 };
 
 /** Lets a refused link go: it leaves the marketplace list. */
-export const dropMarketplaceLink = (source: string): Promise<unknown> =>
-  hubJson(
-    hubRequest("DELETE /api/fleet/marketplace-links", { query: { source } }),
-    { failure: couldNotOrAway(`let go of ${source}`) }
-  );
+export const dropMarketplaceLink = async (source: string) => {
+  const answer = await hub.api.fleet["marketplace-links"].delete(undefined, {
+    query: { source },
+  });
+  if (answer.error) {
+    throw couldNotOrAway(`let go of ${source}`)(answer);
+  }
+  return answer.data;
+};
 
-export const removeMarketplace = (name: string): Promise<Deleted> =>
-  erase(
-    hubRequest("DELETE /api/fleet/marketplaces/:name", { path: { name } }),
-    `unlink ${name}`
-  );
+export const removeMarketplace = async (name: string) => {
+  const answer = await hub.api.fleet.marketplaces({ name }).delete();
+  if (answer.error) {
+    throw couldNotOrAway(`unlink ${name}`)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * A fetch asked of the hub, resolved with the row once it has landed. The
@@ -590,59 +546,49 @@ const untilFetched = <T extends { fetching?: boolean }>(
  * comes back marked `fetching`, and its `fleet.fetch` frame says how that
  * went.
  */
-export const installPlugin = (id: string): Promise<FleetPlugin> =>
-  put(
-    hubRequest("PUT /api/fleet/plugins/:id", {
-      path: { id },
-      body: { enabled: true },
-    }),
-    `install ${id}`
-  );
+export const installPlugin = async (id: string) => {
+  const answer = await hub.api.fleet.plugins({ id }).put({ enabled: true });
+  if (answer.error) {
+    throw couldNotOrAway(`install ${id}`)(answer);
+  }
+  return answer.data;
+};
 
-const switchRow = <T>(request: HubRequest, enabled: boolean, what: string) =>
-  hubJson<T>(request, {
-    failure: couldNotOrAway(`${enabled ? "turn on" : "turn off"} ${what}`),
-  });
+/** A switch's refusal: "Couldn't turn on `what`." and the hub's words. */
+const switchRefusal = (enabled: boolean, what: string) =>
+  couldNotOrAway(`${enabled ? "turn on" : "turn off"} ${what}`);
 
 /**
  * Switches an installed plugin on or off: the stored row's flag, nothing
  * fetched. A disabled plugin is uninstalled from the machines.
  */
-export const switchPlugin = (
-  id: string,
-  enabled: boolean
-): Promise<FleetPlugin> =>
-  switchRow(
-    hubRequest("PATCH /api/fleet/plugins/:id", {
-      path: { id },
-      body: { enabled },
-    }),
-    enabled,
-    id
-  );
+export const switchPlugin = async (id: string, enabled: boolean) => {
+  const answer = await hub.api.fleet.plugins({ id }).patch({ enabled });
+  if (answer.error) {
+    throw switchRefusal(enabled, id)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * Switches a fleet skill on or off: the stored row's flag, its files as
  * they are, nothing fetched.
  */
-export const switchSkill = (
-  name: string,
-  enabled: boolean
-): Promise<FleetSkillMeta> =>
-  switchRow(
-    hubRequest("PATCH /api/fleet/skills/:name", {
-      path: { name },
-      body: { enabled },
-    }),
-    enabled,
-    name
-  );
+export const switchSkill = async (name: string, enabled: boolean) => {
+  const answer = await hub.api.fleet.skills({ name }).patch({ enabled });
+  if (answer.error) {
+    throw switchRefusal(enabled, name)(answer);
+  }
+  return answer.data;
+};
 
-export const removePlugin = (id: string): Promise<Deleted> =>
-  erase(
-    hubRequest("DELETE /api/fleet/plugins/:id", { path: { id } }),
-    `remove ${id}`
-  );
+export const removePlugin = async (id: string) => {
+  const answer = await hub.api.fleet.plugins({ id }).delete();
+  if (answer.error) {
+    throw couldNotOrAway(`remove ${id}`)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * Resolves a plugin's bytes at the hub again — the answer to a plugin the hub
@@ -654,11 +600,13 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
   untilFetched(
     `refresh ${id}`,
     (frame) => (frame.plugin?.id === id ? frame.plugin : undefined),
-    () =>
-      hubJson(
-        hubRequest("POST /api/fleet/plugins/:id/refresh", { path: { id } }),
-        { failure: couldNotOrAway(`refresh ${id}`) }
-      )
+    async () => {
+      const answer = await hub.api.fleet.plugins({ id }).refresh.post();
+      if (answer.error) {
+        throw couldNotOrAway(`refresh ${id}`)(answer);
+      }
+      return answer.data;
+    }
   );
 
 /**
@@ -667,77 +615,83 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
  * the row's, as the `fleet.fetch` frames bring it: its files, the hub's
  * reason it could not resolve, or the `choices` an ambiguous source holds.
  */
-export const saveSkill = (
+export const saveSkill = async (
   name: string,
   body: { source: string; enabled?: boolean; projectId?: string | null }
-): Promise<FleetSkillMeta> =>
-  put(
-    hubRequest("PUT /api/fleet/skills/:name", { path: { name }, body }),
-    `save ${name}`
-  );
+) => {
+  const answer = await hub.api.fleet.skills({ name }).put(body);
+  if (answer.error) {
+    throw couldNotOrAway(`save ${name}`)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * What a machine really has, fleet or not (NEW.md §11), and what a session in
  * `cwd` would see. Asked on demand and never stored: it is the machine's own
  * word at the moment of asking.
  */
-export const inspectMachine = (
-  machineId: string,
-  cwd?: string
-): Promise<ConfigInspection> =>
-  hubJson(
-    hubRequest("POST /api/agents/:machineId/inspect", {
-      path: { machineId },
-      body: cwd ? { cwd } : {},
-    }),
-    { failure: couldNotOrAway("read what this machine has") }
-  );
+export const inspectMachine = async (machineId: string, cwd?: string) => {
+  const answer = await hub.api
+    .agents({ machineId })
+    .inspect.post(cwd ? { cwd } : {});
+  if (answer.error) {
+    throw couldNotOrAway("read what this machine has")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * A skill somebody wrote on one machine, taken into the fleet: the hub reads
  * its files off that machine and stores them like any it fetched itself.
  */
-export const adoptSkill = (
+export const adoptSkill = async (
   name: string,
   machineId: string,
   cwd?: string
-): Promise<FleetSkillMeta> =>
-  put(
-    hubRequest("PUT /api/fleet/skills/:name", {
-      path: { name },
-      body: { fromMachine: machineId, ...(cwd ? { cwd } : {}) },
-    }),
-    `adopt ${name}`
-  );
+) => {
+  const answer = await hub.api.fleet
+    .skills({ name })
+    .put({ fromMachine: machineId, ...(cwd ? { cwd } : {}) });
+  if (answer.error) {
+    throw couldNotOrAway(`adopt ${name}`)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * The fleet's copy of a skill over the one a machine edited. The machine sets
  * its edited copy aside before it writes the fleet's.
  */
-export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
-  hubJson(
-    hubRequest("POST /api/fleet/skills/:name/push", {
-      path: { name },
-      body: { machineId },
-    }),
-    { failure: couldNotOrAway("overwrite this machine") }
-  );
+export const pushSkill = async (name: string, machineId: string) => {
+  const answer = await hub.api.fleet.skills({ name }).push.post({ machineId });
+  if (answer.error) {
+    throw couldNotOrAway("overwrite this machine")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * What a skill used to be, newest first, without its files — the hub keeps a
  * version on every change to the fleet's copy, on a delete, and of a
  * machine's edited copy an overwrite replaced.
  */
-export const skillHistory = (name: string): Promise<ListedVersion[]> =>
-  hubJson(hubRequest("GET /api/fleet/skills/history", { query: { name } }), {
-    failure: couldNotOrAway("load this skill’s history"),
-  });
+export const skillHistory = async (name: string) => {
+  const answer = await hub.api.fleet.skills.history.get({ query: { name } });
+  if (answer.error) {
+    throw couldNotOrAway("load this skill’s history")(answer);
+  }
+  return answer.data;
+};
 
 /** Writes a past version back as the fleet's copy, keeping what it replaces. */
-export const restoreSkillVersion = (id: number): Promise<FleetSkillMeta> =>
-  hubJson(hubRequest("POST /api/fleet/skills/restore", { body: { id } }), {
-    failure: couldNotOrAway("restore that version"),
-  });
+export const restoreSkillVersion = async (id: number) => {
+  const answer = await hub.api.fleet.skills.restore.post({ id });
+  if (answer.error) {
+    throw couldNotOrAway("restore that version")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * Resolves the same source again — for a skill whose repo has moved on. Comes
@@ -748,11 +702,13 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
   untilFetched(
     `refresh ${name}`,
     (frame) => (frame.skill?.name === name ? frame.skill : undefined),
-    () =>
-      hubJson(
-        hubRequest("POST /api/fleet/skills/:name/refresh", { path: { name } }),
-        { failure: couldNotOrAway(`refresh ${name}`) }
-      )
+    async () => {
+      const answer = await hub.api.fleet.skills({ name }).refresh.post();
+      if (answer.error) {
+        throw couldNotOrAway(`refresh ${name}`)(answer);
+      }
+      return answer.data;
+    }
   );
 
 /**
@@ -764,10 +720,13 @@ export const checkForUpdates = (): Promise<{ fetching: boolean }> =>
   untilFetched(
     "check for updates",
     (frame) => frame.check,
-    () =>
-      hubJson(hubRequest("POST /api/fleet/updates/check"), {
-        failure: couldNotOrAway("check for updates"),
-      })
+    async () => {
+      const answer = await hub.api.fleet.updates.check.post();
+      if (answer.error) {
+        throw couldNotOrAway("check for updates")(answer);
+      }
+      return answer.data;
+    }
   );
 
 /**
@@ -792,75 +751,69 @@ export const versionPair = (
     ? [from.version, to.version]
     : [versionLabel(undefined, from.hash), versionLabel(undefined, to.hash)];
 
-export const removeSkill = (name: string): Promise<Deleted> =>
-  erase(
-    hubRequest("DELETE /api/fleet/skills/:name", { path: { name } }),
-    `remove ${name}`
-  );
+export const removeSkill = async (name: string) => {
+  const answer = await hub.api.fleet.skills({ name }).delete();
+  if (answer.error) {
+    throw couldNotOrAway(`remove ${name}`)(answer);
+  }
+  return answer.data;
+};
 
 /** What a subagent write came to: what the hub did, or the file it has instead. */
 export type AgentWrite<T> =
   { ok: true; done: T } | { ok: false; latest: FleetAgent };
 
 /**
- * A subagent write naming `expectedHash`, the hash of the file the writer had
+ * A subagent write names `expectedHash`, the hash of the file the writer had
  * in front of them ("" for a new one): a file somebody else moved comes back
- * with what is really there, unwritten, as a memory save does.
+ * (a 409) with what is really there, unwritten, as a memory save does.
  */
-async function agentWrite<T>(
-  request: HubRequest,
-  attempt: string
-): Promise<AgentWrite<T>> {
-  const response = await hubFetch(request);
-  if (response.status === 409) {
-    return { ok: false, latest: (await response.json()) as FleetAgent };
-  }
-  if (!response.ok) {
-    throw await couldNot(attempt, response);
-  }
-  return { ok: true, done: (await response.json()) as T };
-}
-
-/**
- * Stores a subagent's file and writes it to every machine that is online. The
- * markdown is the whole of it: the hub parses the front matter to refuse a
- * broken one and stores what it was given either way.
- */
-export const saveAgent = (
+export const saveAgent = async (
   name: string,
   content: string,
   expectedHash: string
-): Promise<AgentWrite<FleetAgent>> =>
-  agentWrite(
-    hubRequest("PUT /api/fleet/agents/:name", {
-      path: { name },
-      body: { content, expectedHash },
-    }),
-    `save ${name}`
-  );
+): Promise<AgentWrite<FleetAgent>> => {
+  const answer = await hub.api.fleet
+    .agents({ name })
+    .put({ content, expectedHash });
+  if (answer.error) {
+    if (answer.error.status === 409 && typeof answer.error.value === "object") {
+      return { ok: false, latest: answer.error.value };
+    }
+    throw couldNot(`save ${name}`, answer);
+  }
+  return { ok: true, done: answer.data };
+};
 
 /**
  * Forgets it here, if it is still the file at `expectedHash`. The file stays
  * on the machines — the `fs` verb has no delete — so discovery lists it as
  * unmanaged until the daemon can take it away itself.
  */
-export const removeAgent = (
+export const removeAgent = async (
   name: string,
   expectedHash: string
-): Promise<AgentWrite<Deleted>> =>
-  agentWrite(
-    hubRequest("DELETE /api/fleet/agents/:name", {
-      path: { name },
-      query: { expectedHash },
-    }),
-    `remove ${name}`
-  );
+): Promise<AgentWrite<Deleted>> => {
+  const answer = await hub.api.fleet
+    .agents({ name })
+    .delete(undefined, { query: { expectedHash } });
+  if (answer.error) {
+    if (answer.error.status === 409 && typeof answer.error.value === "object") {
+      return { ok: false, latest: answer.error.value };
+    }
+    throw couldNot(`remove ${name}`, answer);
+  }
+  return { ok: true, done: answer.data };
+};
 
 /** Writes the subagents again, at every machine that is online. */
-export const pushAgents = (): Promise<{ unpushable: Record<string, string> }> =>
-  hubJson(hubRequest("POST /api/fleet/agents/push"), {
-    failure: couldNotOrAway("push the subagents to the machines"),
-  });
+export const pushAgents = async () => {
+  const answer = await hub.api.fleet.agents.push.post();
+  if (answer.error) {
+    throw couldNotOrAway("push the subagents to the machines")(answer);
+  }
+  return answer.data;
+};
 
 /** One subagent found on a machine, whoever wrote it. */
 export interface DiscoveredAgent {
@@ -986,10 +939,10 @@ export async function discoverAgents(
   };
 }
 
-/** One superseded version of the memory as `GET /api/fleet/memory/history` sends it: core's, its `createdAt` the ISO string. */
-export type FleetMemoryVersion = Omit<MemoryVersion, "createdAt"> & {
-  createdAt: string;
-};
+/** One superseded version of the memory, as `GET /api/fleet/memory/history` sends it. */
+export type FleetMemoryVersion = Treaty.Data<
+  typeof hub.api.fleet.memory.history.get
+>[number];
 
 /** What a save came to: the row the hub stored, or the one it has instead. */
 export type MemorySave =
@@ -1004,78 +957,74 @@ export async function saveMemory(
   content: string,
   expectedHash?: string
 ): Promise<MemorySave> {
-  const response = await hubFetch(
-    hubRequest("PUT /api/fleet/memory", { body: { content, expectedHash } })
-  );
-  if (response.status === 409) {
-    return { ok: false, latest: (await response.json()) as FleetMemoryRow };
+  const answer = await hub.api.fleet.memory.put({ content, expectedHash });
+  if (answer.error) {
+    if (answer.error.status === 409) {
+      return { ok: false, latest: answer.error.value };
+    }
+    throw couldNot("save the memory", answer);
   }
-  if (!response.ok) {
-    throw await couldNot("save the memory", response);
-  }
-  return { ok: true, memory: (await response.json()) as FleetMemoryRow };
+  return { ok: true, memory: answer.data };
 }
 
 /** What one machine really has, without adopting it: the read behind Compare. */
-/**
- * A machine with no user CLAUDE.md is answered 204 — a fact, not a failure.
- * `hubJson` would refuse that empty answer as not JSON, and the memory tab
- * would report the fetch's own exception as what the machine said.
- */
-export async function peekMemory(
-  machineId: string
-): Promise<MachineMemorySet | null> {
-  const response = await hubFetch(
-    hubRequest("POST /api/fleet/memory/peek", { body: { machineId } })
-  );
-  if (!response.ok) {
-    throw (
-      (await awayOf(response)) ??
-      (await couldNot("read this machine's memory", response))
-    );
+/** A machine with no user CLAUDE.md is answered 204 — a fact, not a failure. */
+export async function peekMemory(machineId: string) {
+  const answer = await hub.api.fleet.memory.peek.post({ machineId });
+  if (answer.error) {
+    throw couldNotOrAway("read this machine's memory")(answer);
   }
-  if (response.status === 204) {
-    return null;
-  }
-  return (await response.json()) as MachineMemorySet;
+  return answer.data || null;
 }
 
 /**
  * What the memory used to say, newest first and without the content. One
  * document at a time: a `path` for a linked one, the main file without.
  */
-export const memoryHistory = (path?: string): Promise<FleetMemoryVersion[]> =>
-  hubJson(
-    hubRequest("GET /api/fleet/memory/history", {
-      ...(path === undefined ? {} : { query: { path } }),
-    }),
-    { failure: couldNotOrAway("read the memory history") }
-  );
-
-export const memoryVersion = (
-  id: number
-): Promise<FleetMemoryVersion & { content: string }> =>
-  hubJson(hubRequest("GET /api/fleet/memory/history/:id", { path: { id } }), {
-    failure: couldNotOrAway("read that version"),
+export const memoryHistory = async (path?: string) => {
+  const answer = await hub.api.fleet.memory.history.get({
+    query: path === undefined ? {} : { path },
   });
+  if (answer.error) {
+    throw couldNotOrAway("read the memory history")(answer);
+  }
+  return answer.data;
+};
+
+export const memoryVersion = async (id: number) => {
+  const answer = await hub.api.fleet.memory.history({ id }).get();
+  if (answer.error) {
+    throw couldNotOrAway("read that version")(answer);
+  }
+  return answer.data;
+};
 
 /** The memory's documents as they stand now, files and all (`GET /api/fleet`'s `memoryDocs`). */
-export const memoryDocsNow = async (): Promise<FleetMemoryDocRow[]> =>
-  (
-    await hubJson<FleetSnapshot>(hubRequest("GET /api/fleet"), {
-      failure: couldNotOrAway("read the memory documents"),
-    })
-  ).memoryDocs;
+export const memoryDocsNow = async () => {
+  const answer = await hub.api.fleet.get();
+  if (answer.error) {
+    throw couldNotOrAway("read the memory documents")(answer);
+  }
+  return answer.data.memoryDocs;
+};
 
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
-export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
-  hubJson(hubRequest("POST /api/fleet/memory/restore", { body: { id } }), {
-    failure: couldNotOrAway("restore that version"),
-  });
+export const restoreMemory = async (id: number) => {
+  const answer = await hub.api.fleet.memory.restore.post({ id });
+  if (answer.error) {
+    throw couldNotOrAway("restore that version")(answer);
+  }
+  return answer.data;
+};
 
 /** Drops it, and with it the copy on every machine that still has cawco's. */
-export const removeMemory = (): Promise<Deleted> =>
-  erase(hubRequest("DELETE /api/fleet/memory"), "remove the memory");
+export const removeMemory = async () => {
+  const answer = await hub.api.fleet.memory.delete();
+  if (answer.error) {
+    throw couldNotOrAway("remove the memory")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * Stores one document, keyed by its path: a linked one lands on every
@@ -1092,120 +1041,122 @@ export async function saveMemoryDoc(
   | { ok: true; doc: FleetMemoryDocRow }
   | { ok: false; latest: FleetMemoryDocRow }
 > {
-  const response = await hubFetch(
-    hubRequest("PUT /api/fleet/memory/docs", {
-      body: { path, content, expectedHash, scope },
-    })
-  );
-  if (response.status === 409) {
-    return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };
+  const answer = await hub.api.fleet.memory.docs.put({
+    path,
+    content,
+    expectedHash,
+    scope,
+  });
+  if (answer.error) {
+    if (answer.error.status === 409) {
+      return { ok: false, latest: answer.error.value };
+    }
+    throw couldNot(`save ${path}`, answer);
   }
-  if (!response.ok) {
-    throw await couldNot(`save ${path}`, response);
-  }
-  return { ok: true, doc: (await response.json()) as FleetMemoryDocRow };
+  return { ok: true, doc: answer.data };
 }
 
 /** Drops one document, and with it the copy on every machine that has cawco's. */
-export const removeMemoryDoc = (path: string): Promise<Deleted> =>
-  erase(
-    hubRequest("DELETE /api/fleet/memory/docs", { body: { path } }),
-    `remove ${path}`
-  );
+export const removeMemoryDoc = async (path: string) => {
+  const answer = await hub.api.fleet.memory.docs.delete({ path });
+  if (answer.error) {
+    throw couldNotOrAway(`remove ${path}`)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * Takes one machine's whole memory as the fleet's — the main file and every
  * document beside it. Where the first document comes from, and how a machine
  * that drifted has its version win.
  */
-export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
-  hubJson(hubRequest("POST /api/fleet/memory/adopt", { body: { machineId } }), {
-    failure: couldNotOrAway("adopt this machine's memory"),
-  });
+export const adoptMemory = async (machineId: string) => {
+  const answer = await hub.api.fleet.memory.adopt.post({ machineId });
+  if (answer.error) {
+    throw couldNotOrAway("adopt this machine's memory")(answer);
+  }
+  return answer.data;
+};
 
 /** The same for one document of the set, for the drifted row being settled. */
-export const adoptMemoryDoc = (
-  machineId: string,
-  path: string
-): Promise<FleetMemoryDocRow> =>
-  hubJson(
-    hubRequest("POST /api/fleet/memory/adopt", { body: { machineId, path } }),
-    { failure: couldNotOrAway(`adopt this machine's ${path}`) }
-  );
+export const adoptMemoryDoc = async (machineId: string, path: string) => {
+  const answer = await hub.api.fleet.memory.adopt.post({ machineId, path });
+  if (answer.error) {
+    throw couldNotOrAway(`adopt this machine's ${path}`)(answer);
+  }
+  return answer.data;
+};
 
 /**
  * The other direction: the fleet's document over a machine copy that drifted.
  * A `path` forces the one document, so settling a drifted `models/…` does not
  * also overwrite a main file nobody looked at.
  */
-export const pushMemory = (
-  machineId: string,
-  path?: string
-): Promise<unknown> =>
-  hubJson(
-    hubRequest("POST /api/fleet/memory/push", { body: { machineId, path } }),
-    { failure: couldNotOrAway("overwrite this machine") }
-  );
+export const pushMemory = async (machineId: string, path?: string) => {
+  const answer = await hub.api.fleet.memory.push.post({ machineId, path });
+  if (answer.error) {
+    throw couldNotOrAway("overwrite this machine")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * One machine's copy of a hook's script, for the compare beside a drift; 204
  * when the machine has none.
  */
-export async function peekHook(
-  machineId: string,
-  id: string
-): Promise<MachineHookScript | null> {
-  const response = await hubFetch(
-    hubRequest("POST /api/fleet/hooks/peek", { body: { machineId, id } })
-  );
-  if (!response.ok) {
-    throw (
-      (await awayOf(response)) ??
-      (await couldNot("read this machine's script", response))
-    );
+export async function peekHook(machineId: string, id: string) {
+  const answer = await hub.api.fleet.hooks.peek.post({ machineId, id });
+  if (answer.error) {
+    throw couldNotOrAway("read this machine's script")(answer);
   }
-  if (response.status === 204) {
-    return null;
-  }
-  return (await response.json()) as MachineHookScript;
+  return answer.data || null;
 }
 
 /** Takes one machine's edited script for a hook as the fleet's. */
-export const adoptHook = (machineId: string, id: string): Promise<FleetHook> =>
-  hubJson(
-    hubRequest("POST /api/fleet/hooks/adopt", { body: { machineId, id } }),
-    { failure: couldNotOrAway("adopt this machine's script") }
-  );
+export const adoptHook = async (machineId: string, id: string) => {
+  const answer = await hub.api.fleet.hooks.adopt.post({ machineId, id });
+  if (answer.error) {
+    throw couldNotOrAway("adopt this machine's script")(answer);
+  }
+  return answer.data;
+};
 
 /** The other direction: the fleet's script over a machine's edited one. */
-export const pushHook = (machineId: string, id: string): Promise<unknown> =>
-  hubJson(
-    hubRequest("POST /api/fleet/hooks/push", { body: { machineId, id } }),
-    { failure: couldNotOrAway("overwrite this machine") }
-  );
+export const pushHook = async (machineId: string, id: string) => {
+  const answer = await hub.api.fleet.hooks.push.post({ machineId, id });
+  if (answer.error) {
+    throw couldNotOrAway("overwrite this machine")(answer);
+  }
+  return answer.data;
+};
 
 /** The items that did not set up on a machine, converged again: the hub sends them forced in one delta (hub fleet-sync.ts `retry`). */
-export const retryFleetItems = (
+export const retryFleetItems = async (
   machineId: string,
   ids: readonly string[]
-): Promise<unknown> =>
-  hubJson(
-    hubRequest("POST /api/fleet/items/retry", { body: { machineId, ids } }),
-    { failure: couldNotOrAway("set these up again") }
-  );
+) => {
+  const answer = await hub.api.fleet.items.retry.post({
+    machineId,
+    ids: [...ids],
+  });
+  if (answer.error) {
+    throw couldNotOrAway("set these up again")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * Asks the hub to push the desired state again — at one machine, or at every
  * machine that is online. A change already syncs itself; this is for the
  * machine that was asleep when one happened.
  */
-export const syncFleet = (machineId?: string): Promise<unknown> =>
-  hubJson(
-    hubRequest("POST /api/fleet/sync", {
-      body: machineId ? { machineId } : {},
-    }),
-    { failure: couldNotOrAway("sync the fleet") }
-  );
+export const syncFleet = async (machineId?: string) => {
+  const answer = await hub.api.fleet.sync.post(machineId ? { machineId } : {});
+  if (answer.error) {
+    throw couldNotOrAway("sync the fleet")(answer);
+  }
+  return answer.data;
+};
 
 /**
  * What a linked marketplace offers, read by the hub from its source: the
@@ -1220,13 +1171,15 @@ export const marketplaceCatalog = async (
     `read ${row.name}`,
     (frame) =>
       frame.marketplace?.source === row.source ? frame.marketplace : undefined,
-    () =>
-      hubJson<MarketplaceRead>(
-        hubRequest("GET /api/fleet/marketplace-read", {
-          query: { source: row.source },
-        }),
-        { failure: couldNotOrAway(`read ${row.name}`) }
-      )
+    async () => {
+      const answer = await hub.api.fleet["marketplace-read"].get({
+        query: { source: row.source },
+      });
+      if (answer.error) {
+        throw couldNotOrAway(`read ${row.name}`)(answer);
+      }
+      return answer.data;
+    }
   );
   if (read.error) {
     throw new Error(
