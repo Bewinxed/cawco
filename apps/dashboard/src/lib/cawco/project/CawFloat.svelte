@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
+  import { MediaQuery } from "svelte/reactivity";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   /**
    * Caw's panel (ProjectConversation) on the project's page. One panel for the page,
    * opened from whichever seat stands (CawSeat, its `lead.anchor`), the
@@ -30,10 +34,7 @@
    * row more of the height; on a phone the sheet stands at the screen's
    * full height under its top inset, as New session's sheet does. Back on Assistant it narrows again.
    */
-  import { untrack } from "svelte";
-  import type { Attachment } from "svelte/attachments";
-  import { MediaQuery } from "svelte/reactivity";
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { appearOnMount } from "#lib/platform/motion/curves.svelte.js";
   import type { PendingPermission } from "../client.svelte";
   import { stopWork } from "../stop-work.svelte";
@@ -69,7 +70,7 @@
   } = $props();
 
   /** A phone: the page is one scroller with the views bar at its foot (ViewBar's line). */
-  const phone = new MediaQuery("(max-width: 639px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   const open = $derived(front && lead.open && lead.anchor !== null);
   /**
