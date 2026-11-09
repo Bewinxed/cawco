@@ -3,17 +3,21 @@
  * artifact service: its deps, and the service's parts it calls, each read
  * when called. Each kind picks what it reads.
  */
-
 import type { ArtifactDoes } from "@cawco/core/artifact-kinds";
+import type { ArtifactPending } from "@cawco/core/artifact-needs";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { ChangedItem, MetaMap } from "@cawco/core/doc-meta";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { ArtifactRow } from "../../db/artifacts";
+import type { createAccess } from "../access";
 import type { ArtifactServiceDeps } from "../deps";
 import type { createMarks } from "../marks";
 import type { ArtifactInput, ArtifactRead, Opened } from "../shapes";
 import type { createVersions } from "../versions";
 
 export interface KindContext {
+  above: ReturnType<typeof createAccess>["above"];
+  actsNoMore: (instance: InstanceRow) => boolean;
   askedOf: (input: Pick<ArtifactInput, "does" | "ask" | "title">) => {
     ask: string;
     does: ArtifactDoes;
@@ -26,6 +30,7 @@ export interface KindContext {
   handing: ReturnType<typeof createVersions>["handing"];
   handOver: ReturnType<typeof createVersions>["handOver"];
   heldId: ReturnType<typeof createVersions>["heldId"];
+  holder: ReturnType<typeof createAccess>["holder"];
   holdNext: ReturnType<typeof createVersions>["holdNext"];
   inPanel: (row: ArtifactRow) => boolean;
   marked: ReturnType<typeof createMarks>["marked"];
@@ -38,8 +43,13 @@ export interface KindContext {
     items: ChangedItem[],
     revision: (meta: MetaMap) => number
   ) => ChangedItem[];
+  mediaSeen: (page: ArtifactRow, id: string) => ArtifactRow | undefined;
+  ofTree: ReturnType<typeof createAccess>["ofTree"];
   openedOf: (shown: Opened) => Opened;
   openNextFirst: ReturnType<typeof createVersions>["openNextFirst"];
+  ownerFor: (maker: InstanceRow, input: ArtifactInput) => InstanceRow;
+  pagesShowing: () => Map<string, ArtifactRow[]>;
+  pendingFor: (row: ArtifactRow) => ArtifactPending | null;
   personChangedAfter: (
     row: ArtifactRow,
     since: number,
@@ -58,4 +68,5 @@ export interface KindContext {
   ) => number;
   relistOf: (row: ArtifactRow) => void;
   stampMeta: (row: ArtifactRow, given: string | null) => void;
+  waitsOnPerson: (row: ArtifactRow) => boolean;
 }
