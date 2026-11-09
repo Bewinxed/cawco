@@ -59,7 +59,6 @@ import {
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
 import { readWithin } from "@cawco/core/bounded";
 import { timerMs } from "@cawco/core/clock";
-import { fetchHub, type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import {
   answers,
   currentKeeper,
@@ -87,6 +86,13 @@ import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
 import { leaveRetiringKeepers } from "./boundary/control";
+import {
+  type HubAnswer,
+  type HubClient,
+  hubClient,
+  hubPath,
+  reached,
+} from "./hub-client";
 import { provenFetch } from "./hub-proof";
 import {
   type KeeperConnection,
@@ -169,14 +175,14 @@ async function readReadiness(
     "what its restart would cut",
     5000,
     hub,
-    hubRequest("GET /api/binary-updates/hub-readiness"),
-    async (response) => {
-      if (!response.ok) {
+    (client) => client.api["binary-updates"]["hub-readiness"].get(),
+    (answer) => {
+      if (answer.error) {
         throw new Error(
-          `The hub did not say what its restart would cut: ${response.status}`
+          `The hub did not say what its restart would cut: ${answer.status}`
         );
       }
-      return (await response.json()) as RestartReadiness;
+      return answer.data;
     }
   );
   const holds = mergeHolds(local.holds, theirs.holds);
@@ -203,15 +209,12 @@ async function readHubProtocol(hub: string): Promise<{
     "with its wire protocol",
     20_000,
     hub,
-    hubRequest("GET /health"),
-    async (response) => {
-      if (!response.ok) {
-        throw new Error(`its /health answered ${response.status}`);
+    (client) => client.health.get(),
+    (answer) => {
+      if (answer.error) {
+        throw new Error(`its /health answered ${answer.status}`);
       }
-      return (await response.json()) as {
-        build?: { protocol?: { max: number; min: number } };
-        trial?: boolean;
-      };
+      return answer.data;
     }
   ).catch((error: unknown) => {
     if (error instanceof HubUnreachable) {
@@ -230,12 +233,11 @@ async function fenceHub(hub: string, ms: number): Promise<void> {
     "its fence",
     5000,
     hub,
-    hubRequest("POST /api/binary-updates/hub-fence", { body: { ms } }),
-    (response) => {
-      if (!response.ok) {
-        throw new Error(`The hub did not take its fence: ${response.status}`);
+    (client) => client.api["binary-updates"]["hub-fence"].post({ ms }),
+    (answer) => {
+      if (answer.error) {
+        throw new Error(`The hub did not take its fence: ${answer.status}`);
       }
-      return Promise.resolve();
     }
   );
 }
@@ -383,15 +385,21 @@ const HUB_GONE: ReadonlySet<string> = new Set([
  * {@link HubUnreachable} ("the hub did not answer <what> within N s"), never
  * an answer that refused.
  */
-const askHub = async <T>(
+const askHub = async <A extends HubAnswer, T>(
   what: string,
   ms: number,
   hub: string,
-  request: HubRequest,
-  take: (response: Response) => Promise<T>
+  request: (client: HubClient) => Promise<A>,
+  take: (answer: A) => T
 ): Promise<T> => {
   const read = await readWithin(ms, async (signal) =>
-    take(await fetchHub(provenFetch, hub, request, { signal }))
+    take(
+      reached(
+        await request(
+          hubClient(hub, (url, init) => provenFetch(url, { ...init, signal }))
+        )
+      )
+    )
   ).catch((error: unknown) => {
     const code = cutCode(error);
     if (code === undefined) {
@@ -425,11 +433,9 @@ export const readUpdateSettings = (
     "with its update settings",
     10_000,
     hub,
-    hubRequest("GET /api/binary-updates/settings"),
-    async (response) =>
-      response.ok
-        ? { policy: (await response.json()) as BinaryUpdatePolicy }
-        : { status: response.status }
+    (client) => client.api["binary-updates"].settings.get(),
+    (answer) =>
+      answer.error ? { status: answer.status } : { policy: answer.data }
   );
 
 /**
@@ -1311,25 +1317,23 @@ export class BinaryUpdater {
       "with the build it offers",
       20_000,
       hub,
-      hubRequest("GET /api/binary-updates/latest"),
-      async (response) => {
+      (client) => client.api["binary-updates"].latest.get(),
+      (answer) => {
         // A hub that failed to answer its offer (its release host's read
         // failed, it is starting up) is no answer: the command stands and
         // the next tick asks again. A refusal (no build, a damaged policy)
         // is its answer, and settles it.
-        if (response.status >= 500) {
+        if (answer.status >= 500) {
           throw new HubUnreachable(
-            `the hub did not offer a build (latest: ${response.status}); nothing was done on it, and it is asked again on the next tick`
+            `the hub did not offer a build (latest: ${answer.status}); nothing was done on it, and it is asked again on the next tick`
           );
         }
-        if (!response.ok) {
+        if (answer.error) {
           throw new Error(
-            `The hub has no build to offer (latest: ${response.status})`
+            `The hub has no build to offer (latest: ${answer.status})`
           );
         }
-        return (await response.json()) as SignedRelease & {
-          dbSchemaVersion?: number;
-        };
+        return answer.data;
       }
     );
     // The hub carries the manifest as the JSON of its signed text, read here
@@ -1687,11 +1691,7 @@ export class BinaryUpdater {
       download: { received: Bun.file(partial).size, total: artifact.size },
       hubFetch: undefined,
     });
-    const url = `${hub}${
-      hubRequest("GET /api/binary-updates/artifacts/:version/:archive", {
-        path: { version, archive: artifact.archive },
-      }).path
-    }`;
+    const url = `${hub}${hubPath.api["binary-updates"].artifacts({ version })({ archive: artifact.archive })["~path"]}`;
     const what = downloadWords.fromHub(artifact.archive);
     let saidAt = 0;
     const say = (
@@ -1755,17 +1755,16 @@ export class BinaryUpdater {
       "for the update state",
       10_000,
       installation.hubUrl,
-      hubRequest("PUT /api/binary-updates/machines/:machineId/state", {
-        path: { machineId: await machineId() },
-        body: this.#state,
-      }),
-      (response) => {
-        if (!response.ok) {
+      async (client) =>
+        client.api["binary-updates"]
+          .machines({ machineId: await machineId() })
+          .state.put(this.#state),
+      (answer) => {
+        if (answer.error) {
           throw new Error(
-            `The hub did not take the update state: ${response.status}`
+            `The hub did not take the update state: ${answer.status}`
           );
         }
-        return Promise.resolve();
       }
     );
   }
