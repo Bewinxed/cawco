@@ -110,7 +110,7 @@ const ALLOWED: Verdict = { ok: true };
 
 /** Reads the policy the agent wrote; throws when it is not there or not one. */
 export const readPolicy = (file: string): Policy => {
-  // A plain Bun script beside the policy (agent boundary.ts `JUDGE_SCRIPT`):
+  // A plain Bun script beside the policy (agent boundary/hook-judge.ts `JUDGE_SCRIPT`):
   // node's built-ins alone, so the record is narrowed here, not by a schema.
   const policy: unknown = JSON.parse(readFileSync(file, "utf8"));
   if (typeof policy !== "object" || policy === null) {
