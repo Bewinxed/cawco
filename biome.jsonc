@@ -398,6 +398,15 @@
       },
     },
     {
+      // A test holds the type checker to what the code holds it to: Ultracite
+      // turns noExplicitAny off for test files.
+      "includes": [
+        "**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}",
+        "**/__tests__/**/*",
+      ],
+      "linter": { "rules": { "suspicious": { "noExplicitAny": "error" } } },
+    },
+    {
       // The shadcn-svelte kit's component groups are imported as a namespace
       // (`* as DropdownMenu`, read as `DropdownMenu.Root`, `.Item`) through
       // each group's index. A namespace import of anything but a kit group is
