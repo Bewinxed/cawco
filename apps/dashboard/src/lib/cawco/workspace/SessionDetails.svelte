@@ -43,11 +43,6 @@
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
-  import {
-    relaunchSession,
-    settingFault,
-    submitCommand,
-  } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { answeredOr } from "../hub/control";
@@ -65,6 +60,7 @@
   } from "../spawn/ToolChips.svelte";
   import { accountsStore } from "../stores/accounts.svelte";
   import { boardStore, machineConnected } from "../stores/board.svelte";
+  import { settingFault, submitCommand } from "../stores/commands.svelte";
   import { latestCommandFor } from "../stores/ledger.svelte";
   import {
     holdDetails,
@@ -72,6 +68,7 @@
     showContext,
   } from "../stores/session-detail.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
+  import { relaunchSession } from "../stores/turns.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import LimitBar from "../usage/LimitBar.svelte";
