@@ -122,7 +122,7 @@ interface Custody {
 /**
  * A workspace's arming: left until a session there needs it, being armed, or
  * armed. What fails in an arming is said by the arming itself (agent
- * boundary/arming.ts `rearmOne`).
+ * boundary/ensure.ts `rearmOne`).
  */
 type WorkspaceArm = { kind: "later" } | { kind: "arming" } | { kind: "armed" };
 
