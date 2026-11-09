@@ -149,7 +149,7 @@ const HARNESS_CREDENTIALS: Record<HarnessKind, () => string[]> = {
 /**
  * Every place on this machine that holds a credential CawCo, a harness or
  * another tool keeps. Every workspace boundary hides each one from every
- * command it runs (packages/agent/src/boundary.ts): a directory with all that
+ * command it runs (packages/agent/src/boundary/): a directory with all that
  * is in it, a file whole. A new store is hidden by adding it here; a secret
  * file a project keeps is hidden by its name ({@link SECRET_FILE_NAME}).
  */
