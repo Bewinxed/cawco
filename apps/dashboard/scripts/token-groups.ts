@@ -12,8 +12,9 @@
  * (`action-top`) have no Apple colour set or Swift accessor. A token that
  * names none is drawn on every platform.
  */
+
+import { TOKENS_EXTENSION } from "@cawco/design-tokens/dtcg-values";
 import type { TransformedToken } from "style-dictionary/types";
-import { TOKENS_EXTENSION } from "../../../packages/design-tokens/src/dtcg-values";
 
 const SITE_GROUPS = new Set(["marketing"]);
 
