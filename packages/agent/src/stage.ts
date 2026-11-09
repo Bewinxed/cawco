@@ -104,12 +104,9 @@ import { sheetWords } from "@cawco/core/words/sheet";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
-import {
-  agentServerStarted,
-  ensureBoundary,
-  listeners,
-  workspaceNetworks,
-} from "./boundary";
+import { ensureBoundary } from "./boundary/lifecycle";
+import { listeners, workspaceNetworks } from "./boundary/sandboxes";
+import { agentServerStarted } from "./boundary/work";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
 import {
@@ -193,7 +190,7 @@ const SERVE_LET_GO_MS = (SERVE_BEAT_S + 7) * 1000;
 /**
  * How long a sheet's start waits for the host before it to let go of the
  * port: past the runner's KILL of one this daemon ended, 4 s after its TERM
- * (boundary.ts `runnerText` `cancel`), and past the beat (stage-host host.ts
+ * (boundary/runner.ts `runnerText` `cancel`), and past the beat (stage-host host.ts
  * `BEAT_MS`, 15 s) at which one an earlier daemon left finds no one reading
  * it and ends. Ours.
  */
@@ -945,7 +942,7 @@ const accepts = (port: number): Promise<boolean> =>
 
 /**
  * Whether a preview's server is up: a socket listens on its port in its
- * boundary's network (the network's own TCP tables, boundary.ts
+ * boundary's network (the network's own TCP tables, boundary/
  * `listeners`), or, where boundaries share the host's network (macOS), the
  * port accepts a connection. No request reaches the app: asking it for `/`
  * had the dashboard's dev server render its home page at every look, and a
@@ -1250,7 +1247,7 @@ async function start(stage: Stage): Promise<void> {
     await writeHost(stage);
     // The host a failed health look ended (`crashed` → `kill`: its
     // executor's TERM has the boundary's runner TERM the host's group, then
-    // KILL it 4 s on, boundary.ts `runnerText` `cancel`) lets go of the port
+    // KILL it 4 s on, boundary/runner.ts `runnerText` `cancel`) lets go of the port
     // first: one hung there holds it, and a replacement started beside it
     // only says "Port … is already in use" until its restarts are spent.
     if (!(await letGo(stage, HOST_LET_GO_MS))) {
@@ -1277,7 +1274,7 @@ async function start(stage: Stage): Promise<void> {
   stage.child = child;
   // The agent's own, as its landing's commands are: a session's sweep of
   // the workspace (an interrupt, a stop, its items' end) leaves it serving
-  // (boundary.ts `agentServerStarted`). On Linux its environment names no
+  // (boundary/work.ts `agentServerStarted`). On Linux its environment names no
   // session; on the Mac, where the sweep reads the workspace's whole work,
   // only this mark spares it.
   const executor = spawnedPid(child);
