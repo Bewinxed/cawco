@@ -44,9 +44,7 @@
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
   import {
-    cawco,
     holdDetails,
-    latestCommandFor,
     refreshContext,
     relaunchSession,
     settingFault,
@@ -70,6 +68,8 @@
   } from "../spawn/ToolChips.svelte";
   import { accountsStore } from "../stores/accounts.svelte";
   import { boardStore, machineConnected } from "../stores/board.svelte";
+  import { latestCommandFor } from "../stores/ledger.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import LimitBar from "../usage/LimitBar.svelte";
@@ -122,7 +122,7 @@
     };
   }
   const uid = $props.id();
-  const session = $derived(cawco.session(sessionId));
+  const session = $derived(sessionsStore.session(sessionId));
   const row = $derived(boardStore.instanceIndex.byId.get(sessionId));
   const context = $derived(contextOf(sessionId));
   const machineId = $derived(
@@ -139,7 +139,7 @@
     machine?.harnesses?.find((item) => item.harness === harness)
   );
   const cwd = $derived(session?.cwd || row?.cwd || context?.cwd || "");
-  const stats = $derived(cawco.statsOf(sessionId));
+  const stats = $derived(sessionsStore.statsOf(sessionId));
   const model = $derived(kept ? kept.model : (session?.model ?? null));
 
   /**

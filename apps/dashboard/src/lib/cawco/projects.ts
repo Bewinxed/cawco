@@ -1,5 +1,5 @@
 import { primaryPlaceOf } from "@cawco/core/project-membership";
-import type { ProjectPlace, ProjectRow } from "./client.svelte";
+import type { ProjectPlace, ProjectRow } from "./stores/projects.svelte";
 
 /* A session lists in one project, the `projectId` the hub wrote on it
    (core project-membership): the rail and the hub's forget read that one

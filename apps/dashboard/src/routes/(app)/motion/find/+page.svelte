@@ -33,13 +33,13 @@
   } from "@cawco/core/find";
   import type { SessionPulse } from "@cawco/core/protocol";
   import { onMount, untrack } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
   import {
     askPlacesWith,
     findIn,
   } from "#lib/cawco/find/conversation-find.svelte.js";
   import type { Read } from "#lib/cawco/find/find-client.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
