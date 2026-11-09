@@ -129,7 +129,7 @@ export const totalTokensOf = (r: {
  * machine's Go key): the first good one, else one that failed but kept its
  * last good windows (served stale). Null when no machine has a reading with
  * windows. Claude's limits are never picked this way: each is its account's
- * own (`cawco.claudeLimits`, by account id).
+ * own (`usageStore.claudeLimits`, by account id).
  */
 export function speakingReading<
   T extends { error: string | null; stale?: boolean; windows: LimitWindow[] },

@@ -1,6 +1,6 @@
 /**
  * A read, or a press that reads first, asked of one machine and waited out
- * while that machine is away, the way a transcript is (client.svelte.ts
+ * while that machine is away, the way a transcript is (stores/transcript-reads.svelte.ts
  * `readBehind`): the hub's 503 naming the machine (hub-read.ts
  * `MachineAwayError`) is never a refusal. The surface that asked says it in
  * place, a line of its own (MachineAway.svelte), and the same ask runs again
