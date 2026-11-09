@@ -17,7 +17,9 @@
  * proxies the hub's paths rather than asking them.
  *
  * `hubRequestAsGiven` sends a body as given, never held to its route: only
- * the callers {@link AS_GIVEN} lists may, each with why.
+ * the callers {@link AS_GIVEN} lists may, each with why. The dashboard's
+ * `hubPath` (a route's address from Eden's path, for a send Eden's client
+ * cannot make) only in the files {@link HUB_PATH_USERS} lists, each with why.
  *
  * golar.config.ts runs it over the dashboard's source, every script, and
  * the agent's, the CLI's and core's source; scripts/lint/fixtures/
@@ -68,6 +70,35 @@ const OWN: Record<string, string> = {
     "reads the hub paths the shell scripts send, against the route table",
   "scripts/tool-answer-check.ts":
     "names the tool door's path to find the code that calls it",
+};
+
+/**
+ * The dashboard's files that take a route's address from Eden's path
+ * (platform/hub.ts `hubPath`) for what Eden's client cannot send or the
+ * browser reads itself, each with why. Every other request goes through
+ * Eden, read by hub-read's readers (house/eden-answers-read).
+ */
+const HUB_PATH_USERS: Record<string, string> = {
+  "apps/dashboard/src/lib/cawco/presence.ts":
+    "the beat a closing page leaves: only a beacon goes with it",
+  "apps/dashboard/src/lib/cawco/transcript/file-upload.ts":
+    "an upload that says how far it has gone: only an XHR does",
+  "apps/dashboard/src/lib/cawco/views-api.ts":
+    "a view's own Query arguments, which no type holds and Eden types per tool",
+  "apps/dashboard/src/lib/cawco/stores/projects.svelte.ts":
+    "the delete for good, whose `delete` segment Eden's types fold into DELETE /api/projects/:id",
+  "apps/dashboard/src/lib/cawco/links.ts":
+    "the transcript read, its answer and its body each under a limit of their own",
+  "apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte":
+    "the address core's reach probe asks under its own deadline",
+  "apps/dashboard/src/lib/cawco/transcript/ToolGroup.svelte":
+    "a machine's picture or video, an element's src",
+  "apps/dashboard/src/lib/cawco/artifact-api.ts":
+    "an artifact's thumbnail, an element's src",
+  "apps/dashboard/src/lib/cawco/project-tasks.ts":
+    "a folder file's and an output's address, an element's src or a link",
+  "apps/dashboard/src/routes/dev/artifact-panel/+page.svelte":
+    "the stand-in recognises the requests it answers by their path",
 };
 
 /** The files that may send a body as given (`hubRequestAsGiven`), each with why. */
@@ -160,6 +191,17 @@ export const hubPathDoor = defineRule({
         report(
           node.expression,
           "hubRequestAsGiven sends a body its route may not take: only for a body the hub's own check holds, listed in scripts/lint/hub-path-door.ts AS_GIVEN with why. Build the request with hubRequest, which holds it to its route."
+        );
+      }
+      if (
+        isCallExpression(node) &&
+        isIdentifier(node.expression) &&
+        node.expression.text === "hubPath" &&
+        !(path in HUB_PATH_USERS)
+      ) {
+        report(
+          node.expression,
+          "hubPath is for what Eden's client cannot send or the browser reads itself, listed in scripts/lint/hub-path-door.ts HUB_PATH_USERS with why. Ask the hub through Eden (platform/hub.ts `hub`), read by hub-read's readers."
         );
       }
       const text =
