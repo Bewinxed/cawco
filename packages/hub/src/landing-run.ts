@@ -61,6 +61,8 @@ import { LIVE } from "./work-item-state";
 import type { WorkspacesDeps } from "./workspaces";
 import {
   GIT_TIMEOUT_MS,
+  isFolderOverlay,
+  isHostFolder,
   landingKey,
   outputsFolder,
   refOf,
@@ -79,6 +81,7 @@ export const reportLine = (item: WorkItemRow): string =>
 const DIFFSTAT_LINES = 40;
 /** A full commit id, as a machine names one: never an option or a ref. */
 const COMMIT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/u;
+/** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
 const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
 export const MIB = 1024 * 1024;
@@ -701,7 +704,7 @@ export const createLandingRun = ({
     landing: Exclude<Landed, { kind: "retry" | "stopped" }>
   ): Promise<string> => {
     // A folder has no commits: its landing line names every path it changed.
-    if (workspace.kind === "folder") {
+    if (isFolderOverlay(workspace)) {
       return "";
     }
     const git = (cmd: string) => runIn(workspace, item)(cmd, GIT_TIMEOUT_MS);
@@ -1189,7 +1192,7 @@ export const createLandingRun = ({
       case "main":
         // A folder lands by its change set into the folder itself; a
         // repository by git, on its base or a branch of its own.
-        if (workspace.kind === "folder") {
+        if (isFolderOverlay(workspace)) {
           return landFolder(workspace, item, gate);
         }
         return item.lands === "main"
@@ -1312,7 +1315,7 @@ export const createLandingRun = ({
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<ScratchOutput[]> => {
-    if (workspace.host) {
+    if (isHostFolder(workspace)) {
       const read = await workspaces.onHostScratch<{
         listed: HostOutputListed[];
       }>(workspace, CONTROL_HOST_OUTPUTS, [{ id: workspace.id, read: false }], {
@@ -1343,7 +1346,7 @@ export const createLandingRun = ({
     item: WorkItemRow,
     folder: string
   ): Promise<{ path: string; content: Uint8Array }[]> => {
-    if (workspace.host) {
+    if (isHostFolder(workspace)) {
       const read = await workspaces.hostOutputsRead(workspace);
       return read.files.map((one) => ({
         path: `${folder}/${one.path}`,
@@ -1602,7 +1605,7 @@ export const createLandingRun = ({
       submission.summary,
       landing,
       collected,
-      `${workspace.host ? "" : await reportedChanges(workspace, item, landing)}${findingsBlock(submission.findings)}${shipped}`
+      `${isHostFolder(workspace) ? "" : await reportedChanges(workspace, item, landing)}${findingsBlock(submission.findings)}${shipped}`
     );
     const lines = landingGateLines(landing);
     const gateSaid = `${lines ? `\n\nMerge checks:\n${lines}` : ""}${shipped}`;
@@ -1692,7 +1695,7 @@ export const createLandingRun = ({
       finishing.delete(item.id);
       // A wait an error cut short leaves no words behind it.
       landingWait(item.id, null);
-      // An item stopped while it landed was not settled for it (workspaces.ts `holdOn`).
+      // An item stopped while it landed was not settled for it (workspaces.ts `holdsOf`).
       if (!LIVE.has((db.workItem(item.id) ?? item).state)) {
         workspaces.settleSoon(item.workspaceId);
       }
@@ -1751,7 +1754,7 @@ export const createLandingRun = ({
   ): Promise<{ done: boolean; text: string }> => {
     const [row] = db.getInstancesByIds([item.instanceId]);
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    if (workspace.host) {
+    if (isHostFolder(workspace)) {
       return await reportHost(item, row, workspace, submission);
     }
     const gate = await gateRun.gateSteps(workspace, item);
