@@ -236,7 +236,7 @@ export const lookAtPreTag = (): void => {
  * macOS: SIGKILLs every process that answers to `name` and to none of the
  * names `keep` lists ({@link answering}, {@link killReading}). Nothing off
  * macOS: there a sandbox's processes end with its outer bwrap
- * ({@link stopBoundary}). Answers the pids it killed.
+ * (stop.ts `stopBoundary`). Answers the pids it killed.
  */
 export const killAnswering = (
   name: string,
@@ -254,7 +254,7 @@ export const killAnswering = (
 /**
  * Whether `command` runs the executor `exec`: as `<exec> …`, or as the
  * interpreter its shebang names, `/bin/bash <exec> …`. Naming the path is not
- * enough: the workspace's judge is handed it as an argument (lifecycle.ts `judgeFor`)
+ * enough: the workspace's judge is handed it as an argument (judge-process.ts `judgeFor`)
  * and runs as long as the workspace does, so an older boundary that counted
  * it would never close.
  */
@@ -397,9 +397,9 @@ const COMMAND_DRAIN_MS = 3000;
 const COMMAND_DRAIN_LOOK_MS = 100;
 
 /**
- * Waits, with workspace `id`'s gate up (its caller's, {@link behindGate}),
+ * Waits, with workspace `id`'s gate up (its caller's, decisions.ts `behindGate`),
  * for the commands past it in generation `gen` to end: each command arriving
- * meanwhile waits at the gate with no mark ({@link execScript}), so only
+ * meanwhile waits at the gate with no mark (exec.ts `execScript`), so only
  * those marked are waited on, for {@link COMMAND_DRAIN_MS} at most. It stops
  * waiting at once when an executor this agent started waits at the gate (a
  * preview's server the stage starts): a command past the
@@ -435,8 +435,7 @@ export const commandsEnded = async (
 /**
  * Whether the work `work` found in a boundary a look waits to replace is
  * worth the look's wait at the gate ({@link commandsEnded}): commands alone,
- * none of them among `before`, those running at the look before (staleness.ts
- * `keptRunning`, staleness.ts `stubbed`). One seen then has run a look or more (a
+ * none of them among `before`, those running at the look before (staleness.ts `keptRunning`, staleness.ts `stubbed`). One seen then has run a look or more (a
  * build, a test run), and is waited for with the gate down; a listener is no
  * command, and ends when its work stops it.
  */
@@ -445,7 +444,7 @@ export const drainable = (work: Work, before: readonly number[]): boolean =>
   work.commands.length > 0 &&
   !work.commands.some((pid) => before.includes(pid));
 
-/** What {@link workLeft} found running in a boundary. */
+/** What narrowing.ts `workLeft` found running in a boundary. */
 export interface Work {
   /** Its commands, by executor pid ({@link commandsIn}). */
   readonly commands: readonly number[];
@@ -459,14 +458,14 @@ export interface Work {
 
 /**
  * How long what a session left running in a workspace is given to end on
- * SIGTERM before it is killed ({@link endSessionWork}). Ours: a TERM ends a
+ * SIGTERM before it is killed (work.ts `endSessionWork`). Ours: a TERM ends a
  * shell, a build and a `sleep` at once; a mac-slot keeper's EXIT trap shuts
  * its simulator down and frees its slot, which takes a few seconds on a
  * loaded Mac; five is the boundary's own stop wait ({@link STOP_TIMEOUT_MS}).
  */
 export const WORK_GRACE_MS = STOP_TIMEOUT_MS;
 
-/** How long {@link endSessionWork} waits for its SIGKILL to land before it says what is left. */
+/** How long work.ts `endSessionWork` waits for its SIGKILL to land before it says what is left. */
 export const KILL_WAIT_MS = 2000;
 
 /** How often the boundaries are looked at for quiet ones. Ours: a minute against holding.ts `QUIET_CLOSE_MS`. */

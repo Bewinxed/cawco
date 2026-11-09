@@ -56,7 +56,7 @@ export const armHook = (
   unasked: UnaskedCalls
 ): Promise<Held> => whileArming(id, () => armHookNow(id, held, unasked));
 
-/** {@link armHook}'s writes and starts, counted as {@link arming}. */
+/** {@link armHook}'s writes and starts, counted as judge-process.ts `arming`. */
 const armHookNow = async (
   id: string,
   held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">,
