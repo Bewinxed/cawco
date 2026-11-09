@@ -327,6 +327,7 @@ import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
+import { portOf } from "./boot";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import {
@@ -1331,7 +1332,7 @@ export const createServer = (
     treeStops: () => treeStops,
     unansweredStatus: () => unansweredStatus,
     unpushable: () => unpushable,
-    watch: () => watch,
+    watch: () => watchPort.now(),
     withPresence: () => withPresence,
     workItems: () => workItems,
     workspaceArchived: () => workspaceArchived,
@@ -1375,13 +1376,13 @@ export const createServer = (
     inputRefusal: () => inputRefusal,
     keptAsleep: () => keptAsleep,
     laws: () => laws,
-    leadRuns: () => leadRuns,
+    leadRuns: () => leadRunsPort.now(),
     limitRefused: () => limitRefused,
     machinePresence: () => machinePresence,
     memoryWatch: () => memoryWatch,
     moveJobOf: () => moveJobOf,
     nameFromLiveTurn: () => nameFromLiveTurn,
-    planChanges: () => planChanges,
+    planChanges: () => planChangesPort.now(),
     plans: () => plans,
     processAt: () => processAt,
     push: () => push,
@@ -1498,7 +1499,7 @@ export const createServer = (
     anchors: () => anchors,
     decisions: () => decisions,
     hubAsks: () => hubAsks,
-    lead: () => lead,
+    lead: () => leadPort.now(),
     leftoverWords: () => leftoverWords,
     sentFrame: () => sentFrame,
     withdrawPending: () => withdrawPending,
@@ -1545,7 +1546,7 @@ export const createServer = (
     mcpChanges: () => mcpChanges,
     ownMachineIdRead: () => ownMachineIdRead,
     readSkillFolder: () => readSkillFolder,
-    toolsMayHaveChanged: () => toolsMayHaveChanged,
+    toolsMayHaveChanged: () => toolsMayHaveChangedPort.now(),
     launchRefusal: () => launchRefusal,
     modelRefusal: () => modelRefusal,
     noteFreshStart: () => noteFreshStart,
@@ -1561,20 +1562,20 @@ export const createServer = (
     launches: () => launches,
     processFailed: () => processFailed,
     speaksContract: () => speaksContract,
-    startsFreed: () => startsFreed,
+    startsFreed: () => startsFreedPort.now(),
     homeMovedAccountOn: () => homeMovedAccountOn,
     placementInput: () => placementInput,
-    accountsMoved: () => accountsMoved,
+    accountsMoved: () => accountsMovedPort.now(),
     dispatcher: () => dispatcher,
-    stallOf: () => stallOf,
-    stalledNow: () => stalledNow,
+    stallOf: () => stallOfPort.now(),
+    stalledNow: () => stalledNowPort.now(),
     unansweredFault: () => unansweredFault,
     toolReleases: () => toolReleases,
     boardBase: () => boardBase,
     browsers: () => browsers,
     continuationTable: () => continuationTable,
     damagedRecords: () => damagedRecords,
-    findHears: () => findHears,
+    findHears: () => findHearsPort.now(),
     hubRun: () => hubRun,
     machineCustody: () => machineCustody,
     noticesSeen: () => noticesSeen,
@@ -2444,7 +2445,7 @@ export const createServer = (
   };
   // The relay (relay.ts), made further down with ingress; an approved
   // `relay_create` kept across a restart reaches it through this.
-  let relay: Relay | undefined;
+  const relayPort = portOf<Relay | undefined>("relay", undefined);
   // A session's questions (`ask`) and admin writes from any door are the
   // person's asks (asks.ts): each a row, answered at once, an approved write
   // run by the hub. Made before the settlement listener below, which hears
@@ -2464,6 +2465,7 @@ export const createServer = (
   > = {
     // A relay's opening asks as an admin write does (relay.ts).
     relay_create: async (input) => {
+      const relay = relayPort.now();
       if (!relay) {
         throw new Error("The hub's relay isn't made yet.");
       }
@@ -2471,6 +2473,7 @@ export const createServer = (
     },
     // Caw's project setting he asked about (project-settings.ts).
     [PROJECT_SETTINGS]: async (input, asker) => {
+      const projectSettings = projectSettingsPort.now();
       if (!projectSettings) {
         throw new Error("The hub's project settings aren't made yet.");
       }
@@ -2497,7 +2500,7 @@ export const createServer = (
     instance: (instanceId) => db.getInstancesByIds([instanceId])[0],
     declined: (name, input, asker) => {
       if (name === PROJECT_SETTINGS) {
-        projectSettings?.runDeclined(asker, input);
+        projectSettingsPort.now()?.runDeclined(asker, input);
       }
     },
     // Not kept with the session asks: its row is (pending.ts `askEnvelope`).
@@ -2844,11 +2847,14 @@ export const createServer = (
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
-  let lead: Caw | undefined;
+  const leadPort = portOf<Caw | undefined>("lead", undefined);
   // Caw's own project settings (project-settings.ts), made with connections.
-  let projectSettings: ProjectSettings | undefined;
+  const projectSettingsPort = portOf<ProjectSettings | undefined>(
+    "projectSettings",
+    undefined
+  );
   // The routines (routines.ts), likewise: a send record moves before they are made.
-  let leadRuns: Routines | undefined;
+  const leadRunsPort = portOf<Routines | undefined>("leadRuns", undefined);
   /**
    * What each session's turn has done that taints a memory note written in
    * it (memory.ts): the web read, a subagent running, a routine's wake.
@@ -3107,7 +3113,10 @@ export const createServer = (
    * continuation, {@link StartsHeld}) goes on: bound once that work exists
    * below. {@link flushOwedStarts} is the one place a hold is seen to end.
    */
-  let startsFreed = (_machineId: string): void => undefined;
+  const startsFreedPort = portOf<(_machineId: string) => void>(
+    "startsFreed",
+    (_machineId: string): void => undefined
+  );
 
   /**
    * Standing instructions, enforced on the frame stream this server already
@@ -3537,15 +3546,24 @@ export const createServer = (
    * `accountsChanged`): an account newly signed in, or back from its bench,
    * puts its provider's sessions on the move. Set once the controller exists.
    */
-  let accountsMoved = (): void => undefined;
+  const accountsMovedPort = portOf<() => void>(
+    "accountsMoved",
+    (): void => undefined
+  );
   /**
    * A session stopped at its account's limit, in words (the at-limit
    * controller's `stall`), for its tray chip and `delegate_list`. Set once
    * the controller exists.
    */
-  let stallOf = (_instanceId: string): Stall | undefined => undefined;
+  const stallOfPort = portOf<(_instanceId: string) => Stall | undefined>(
+    "stallOf",
+    (_instanceId: string): Stall | undefined => undefined
+  );
   /** Every session the controller has stopped at its limit now. Set once it exists. */
-  let stalledNow = (): string[] => [];
+  const stalledNowPort = portOf<() => string[]>(
+    "stalledNow",
+    (): string[] => []
+  );
 
   /**
    * What Settings shows of Jev: the route it takes now (jev.ts `jevAccess`;
@@ -3645,7 +3663,7 @@ export const createServer = (
    * Fleet watch (fleet-watch.ts): reads the same frames the rule engine does,
    * and its sessions' pulses. Made once Caw is, whose wake its nudges take.
    */
-  let watch: FleetWatch | undefined;
+  const watchPort = portOf<FleetWatch | undefined>("watch", undefined);
 
   /**
    * A spawn for a session that runs a work item, bounded to its workspace:
@@ -3792,7 +3810,10 @@ export const createServer = (
    * The person's changes to the plans a session hears of (plan-changes.ts),
    * set once the plans are; until then nothing is owed.
    */
-  let planChanges: PlanChanges | undefined;
+  const planChangesPort = portOf<PlanChanges | undefined>(
+    "planChanges",
+    undefined
+  );
   notifications.onPerson((now, before) => {
     if (now.state === "here" && before.state === "away") {
       tellBack();
@@ -5927,14 +5948,14 @@ export const createServer = (
     forgetPending(instanceId, UNREAD.stopped);
     publishInstances(machineId);
   };
-  startsFreed = (machineId) => {
+  startsFreedPort.fill((machineId) => {
     for (const [id, on] of heldJobs) {
       if (on === machineId) {
         heldJobs.delete(id);
         detach(advanceContinuation(id), "continuation");
       }
     }
-  };
+  });
 
   // Jobs that settled before this hub started are kept out their time, then go.
   for (const row of continuationsWhole(true)) {
@@ -6189,7 +6210,10 @@ export const createServer = (
    * The find engine's sessions follow the same change log as the board
    * (find.ts `instancesChanged`): told here, once the engine is made below.
    */
-  let findHears: (ids: string[]) => void = () => undefined;
+  const findHearsPort = portOf<(ids: string[]) => void>(
+    "findHears",
+    () => undefined
+  );
 
   /**
    * The whole board as one message: every row, every machine, and what each
@@ -6823,7 +6847,10 @@ export const createServer = (
    * A session's role, or a delegate type or toolset, may have moved what a
    * live cawco connection lists: bound once the MCP server exists below.
    */
-  let toolsMayHaveChanged = (): void => undefined;
+  const toolsMayHaveChangedPort = portOf<() => void>(
+    "toolsMayHaveChanged",
+    (): void => undefined
+  );
 
   /**
    * Names an unnamed row after what its session was first asked to do, using
@@ -7604,7 +7631,7 @@ export const createServer = (
     call: callMachine,
     db,
     notice: (projectId, note) => {
-      lead?.notice(projectId, note);
+      leadPort.now()?.notice(projectId, note);
     },
   });
   /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (work-items.ts `stageRuns`). */
@@ -7739,12 +7766,12 @@ export const createServer = (
         designVerify.itemEnded(item);
         // A design proposal made in its clone has nowhere to land now.
         detach(designSystem.itemEnded(), "design proposals of an ended item");
-        watch?.itemEnded(item);
+        watchPort.now()?.itemEnded(item);
         endBrowserOf(item);
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
-    stalled: (instanceId) => stallOf(instanceId)?.words,
+    stalled: (instanceId) => stallOfPort.now()(instanceId)?.words,
     machineFree: (machineId) => machinePause.free(machineId),
     // The sweep's wake of work asleep asks the same gate every sender does,
     // and leaves a session to the send already on its way to it.
@@ -7769,8 +7796,8 @@ export const createServer = (
     },
     // A held item's notice in Needs you: fleet watch keeps them, made once
     // the hub is up (`watch`), before any sweep runs.
-    tellYou: (row, title, body) => watch?.tellYou(row, title, body),
-    untellYou: (instanceId) => watch?.untell(instanceId),
+    tellYou: (row, title, body) => watchPort.now()?.tellYou(row, title, body),
+    untellYou: (instanceId) => watchPort.now()?.untell(instanceId),
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     between: (row) => sessionIdle(row),
     // What a work item's session cannot start again without: the type it
@@ -7928,10 +7955,14 @@ export const createServer = (
     folderMoved: () => projectFolderMoved(),
   };
   /** Set once approved actions exist (below): until then no `action` move goes. */
-  let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
+  const actionMovesPort = portOf<NonNullable<TaskStore["actionMove"]>>(
+    "actionMoves",
+    () => false
+  );
   /** The Actions runs a project's tasks wait on, as its GitHub poll reads them, and its inbox (ingress.ts); set once ingress is made. */
-  let githubWaits:
-    Pick<Ingress, "drain" | "githubWait" | "githubWaitRefusal"> | undefined;
+  const githubWaitsPort = portOf<
+    Pick<Ingress, "drain" | "githubWait" | "githubWaitRefusal"> | undefined
+  >("githubWaits", undefined);
   /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
   const sessionByHandle = (
     handle: string
@@ -7953,12 +7984,15 @@ export const createServer = (
     };
   };
   /** Set once the design system exists (below, design-system.ts `approvalRefusal`). */
-  let designApproval: NonNullable<TaskStore["approvalRefusal"]> = () =>
-    Promise.resolve(undefined);
+  const designApprovalPort = portOf<NonNullable<TaskStore["approvalRefusal"]>>(
+    "designApproval",
+    () => Promise.resolve(undefined)
+  );
   const tasks = createTasks({
     actionMove: (projectId, taskId, to, actionId) =>
-      actionMoves(projectId, taskId, to, actionId),
-    approvalRefusal: (projectId, taskId) => designApproval(projectId, taskId),
+      actionMovesPort.now()(projectId, taskId, to, actionId),
+    approvalRefusal: (projectId, taskId) =>
+      designApprovalPort.now()(projectId, taskId),
     project: (id) => db.project(id),
     machines: () => db.listAgents(),
     projectIds: () => db.listProjects().map((project) => project.id),
@@ -8004,7 +8038,7 @@ export const createServer = (
       github: (target) =>
         target.kind === "pr"
           ? externalItems.prWait(projectId, target)
-          : (githubWaits?.githubWait(projectId, target) ?? {
+          : (githubWaitsPort.now()?.githubWait(projectId, target) ?? {
               state: "checking",
               title: null,
             }),
@@ -8025,7 +8059,7 @@ export const createServer = (
         artifacts.waitPin(artifactId, number) !== undefined,
       session: sessionByHandle,
       githubRefusal: () =>
-        githubWaits?.githubWaitRefusal(projectId) ??
+        githubWaitsPort.now()?.githubWaitRefusal(projectId) ??
         "the hub's GitHub poll is not up yet; try again in a moment.",
     }),
     // A wait of a live session's task moved: it hears once, as the hub.
@@ -8142,7 +8176,7 @@ export const createServer = (
     folderChanged: (projectId) => tasks.touched(projectId),
     // The conversation's notes are made further down; read once a call runs.
     notice: (projectId, note) => {
-      lead?.notice(projectId, note);
+      leadPort.now()?.notice(projectId, note);
     },
     park: (envelope) => parkForPerson(envelope),
     settle: settleParked,
@@ -8371,6 +8405,7 @@ export const createServer = (
     // A conversation's start drains the inbound events that waited for it.
     // Ingress is made further down; nothing starts one before the hub is up.
     conversationStarted: (projectId) => {
+      const githubWaits = githubWaitsPort.now();
       if (githubWaits) {
         detach(githubWaits.drain(projectId), "drain a project's inbox");
       }
@@ -8400,7 +8435,7 @@ export const createServer = (
       routines.turnEnded(instanceId, why, gone),
     views,
   });
-  lead = caw;
+  leadPort.fill(caw);
   // The fleet's one finding engine (find.ts): the names the hub holds, and
   // every machine's transcripts, under one ranking.
   const find = createFind({
@@ -8502,53 +8537,55 @@ export const createServer = (
       return result as TranscriptAnswer;
     },
   });
-  findHears = (ids) => find.instancesChanged(ids);
+  findHearsPort.fill((ids) => find.instancesChanged(ids));
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
   // triage run per episode whose word goes to the session's steward.
-  watch = createFleetWatch({
-    // Waiting on someone is no stall: on the person (an ask, a card), or
-    // on its parent agent (an ask routed there).
-    asking: (instanceId) =>
-      waitingNow().has(instanceId) ||
-      pending.list().some((ask) => ask.instanceId === instanceId),
-    db,
-    end: (instanceId) =>
-      endSession(instanceId, "stop", {
-        kind: "hub",
-        why: "fleet watch's triage is over",
-      }),
-    interrupt: (instanceId) =>
-      interruptTurn(
-        instanceId,
-        true,
-        "by fleet watch's triage",
-        turnCutWords.triage
-      ),
-    lifetime,
-    line: (instanceId, content) => noteWatch(instanceId, content),
-    name: (row) => sessionName(row),
-    notices: (notices) =>
-      registry.broadcast({
-        verb: "frames",
-        machineId: "hub",
-        payload: { kind: "fleet_watch.notices", notices },
-      }),
-    online: (machineId) => Boolean(registry.agent(machineId)),
-    push: (notice) => push.watchNotice(notice),
-    send: (envelope) => {
-      deliverSend(envelope);
-    },
-    // Its triage: the hub's own reader of a stuck session, never a person's.
-    spawn: async (machineId, payload, mode) => {
-      await spawnSession(machineId, payload, "check", mode);
-    },
-    stop: (instanceId) =>
-      endSession(instanceId, "stop", {
-        kind: "hub",
-        why: "fleet watch's triage stopped it",
-      }),
-    tell: async (projectId, event) => (await caw.tell(projectId, event)).woke,
-  });
+  watchPort.fill(
+    createFleetWatch({
+      // Waiting on someone is no stall: on the person (an ask, a card), or
+      // on its parent agent (an ask routed there).
+      asking: (instanceId) =>
+        waitingNow().has(instanceId) ||
+        pending.list().some((ask) => ask.instanceId === instanceId),
+      db,
+      end: (instanceId) =>
+        endSession(instanceId, "stop", {
+          kind: "hub",
+          why: "fleet watch's triage is over",
+        }),
+      interrupt: (instanceId) =>
+        interruptTurn(
+          instanceId,
+          true,
+          "by fleet watch's triage",
+          turnCutWords.triage
+        ),
+      lifetime,
+      line: (instanceId, content) => noteWatch(instanceId, content),
+      name: (row) => sessionName(row),
+      notices: (notices) =>
+        registry.broadcast({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "fleet_watch.notices", notices },
+        }),
+      online: (machineId) => Boolean(registry.agent(machineId)),
+      push: (notice) => push.watchNotice(notice),
+      send: (envelope) => {
+        deliverSend(envelope);
+      },
+      // Its triage: the hub's own reader of a stuck session, never a person's.
+      spawn: async (machineId, payload, mode) => {
+        await spawnSession(machineId, payload, "check", mode);
+      },
+      stop: (instanceId) =>
+        endSession(instanceId, "stop", {
+          kind: "hub",
+          why: "fleet watch's triage stopped it",
+        }),
+      tell: async (projectId, event) => (await caw.tell(projectId, event)).woke,
+    })
+  );
   const dispatcher = createDispatcher({
     // A brief a session wrote waits for the fleet's guidance, as a delegate's does.
     briefing: (request) => workItems.briefing(request),
@@ -8966,7 +9003,7 @@ export const createServer = (
     return instanceId;
   };
   // The person's changes to a plan, and who hears them when (plan-changes.ts).
-  planChanges = createPlanChanges({
+  const changesOfPlans = createPlanChanges({
     db,
     busy: (instanceId) => pulses.get(instanceId)?.busy === true,
     goOnFrom,
@@ -8988,8 +9025,8 @@ export const createServer = (
       return woke.woke ? undefined : woke.why;
     },
   });
-  planChanges.resume();
-  const changesOfPlans = planChanges;
+  planChangesPort.fill(changesOfPlans);
+  changesOfPlans.resume();
   // A routine moves a task on once its stage's hold is over (waits.ts).
   const waits = createWaits({
     lifetime,
@@ -9357,7 +9394,7 @@ export const createServer = (
     landingWait: (itemId) => workItems.landingWaitOf(itemId),
     machineName,
     machinePaused: (machineId) => machinePause.words(machineId),
-    stalled: (instanceId) => stallOf(instanceId),
+    stalled: (instanceId) => stallOfPort.now()(instanceId),
     startHeld: startHeldWords,
     unlanded: (instanceId) => workItems.unlanded(instanceId),
     pages: async (instanceId, enough, most) => {
@@ -9453,7 +9490,7 @@ export const createServer = (
         : `the hub does not run from a git checkout (${(found.stderr || found.stdout).trim() || `exit ${found.exitCode}`})`;
     },
   });
-  leadRuns = routines;
+  leadRunsPort.fill(routines);
   offBoot.push(() => {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
@@ -9508,7 +9545,7 @@ export const createServer = (
             row.delegateType
           )?.connections ?? [])
         : [],
-    changed: () => toolsMayHaveChanged(),
+    changed: () => toolsMayHaveChangedPort.now()(),
     // The machines' gh (agent host-gh.ts): each connected machine's
     // accounts, asked together, and one account's token on its machine.
     gh: {
@@ -9598,7 +9635,7 @@ export const createServer = (
       detach(tasks.waitsMoved(projectId), "task waits moved");
     },
   });
-  githubWaits = ingress;
+  githubWaitsPort.fill(ingress);
   // The relay (relay.ts): a project's one public webhook path through
   // Funnel, to a receiver of its own on 127.0.0.1; deliveries go to ingest.
   const relays = createRelay({
@@ -9608,7 +9645,7 @@ export const createServer = (
     ingest: ingress.ingest,
     lifetime,
   });
-  relay = relays;
+  relayPort.fill(relays);
   // Approved actions (actions.ts): one exact call a session proposes, you
   // approve, and the hub runs once at its time.
   const actions = createActions({
@@ -9625,7 +9662,7 @@ export const createServer = (
       }),
   });
   // The stage engine's one door for a `by: action` move (tasks.ts).
-  actionMoves = actions.actionMove;
+  actionMovesPort.fill(actions.actionMove);
   // A project's name, Review before done, where its work lands, its large
   // files and its account: the person's PATCH and Caw's project_settings
   // both change them here (project-edit.ts), its landing through the
@@ -9747,7 +9784,7 @@ export const createServer = (
       }
     },
   });
-  projectSettings = settings;
+  projectSettingsPort.fill(settings);
   // What show_image and send_to_user may show from other workspaces: its
   // delegates', at any depth (shown-files.ts).
   const shownDeps: ShownDeps = {
@@ -9801,7 +9838,7 @@ export const createServer = (
     tellClosed: (instanceId, text, line) =>
       tellProposer(instanceId, text, line),
   });
-  designApproval = designSystem.approvalRefusal;
+  designApprovalPort.fill(designSystem.approvalRefusal);
   // A commit to a project's folder: the open proposals on the files it
   // changed (memory and delegate types, design/) are read again, and one
   // that no longer applies closes then.
@@ -10108,7 +10145,7 @@ export const createServer = (
     relayTools: (actor) => relays.tools(actor),
     memoryTools: (actor, toolUseId) => projectMemory.tools(actor, toolUseId),
     projectSettings: settings,
-    triageTools: (actor) => watch?.tools(actor) ?? [],
+    triageTools: (actor) => watchPort.now()?.tools(actor) ?? [],
     askPerson: (actor, name, input, toolUseId) =>
       hubAsks.ask(actor, name, input, toolUseId),
     bindAdminInput: (actor, name, input) =>
@@ -10137,7 +10174,7 @@ export const createServer = (
       machines: () => withPresence(db.listAgents()),
       ...sessionReads(db, (rows) =>
         withSessionPresence(rows).map((row) => {
-          const stall = stallOf(row.id);
+          const stall = stallOfPort.now()(row.id);
           return stall ? { ...row, stalled: stall } : row;
         })
       ),
@@ -10344,7 +10381,7 @@ export const createServer = (
       }
     },
   });
-  ({ toolsMayHaveChanged } = delegationMcp);
+  toolsMayHaveChangedPort.fill(delegationMcp.toolsMayHaveChanged);
   offBoot.push(() => {
     // Each connection looked at once, off the boot path: its tools for sessions' lists.
     connections.start();
@@ -10781,8 +10818,8 @@ export const createServer = (
     },
     resume: carryOn,
     // A stale hold's notice in Needs you, kept and gone as a held item's is.
-    stale: (row, title, body) => watch?.tellYou(row, title, body),
-    unstale: (row) => watch?.untell(row.id),
+    stale: (row, title, body) => watchPort.now()?.tellYou(row, title, body),
+    unstale: (row) => watchPort.now()?.untell(row.id),
     // Rebalance's move of a session mid-turn waits for its turn's end, as a
     // person's does; its line is written once it lands.
     owe: (row, accountId, move, why) => {
@@ -10835,15 +10872,16 @@ export const createServer = (
       publishStalls();
     },
   });
-  accountsMoved = atLimit.accountsChanged;
-  stallOf = (instanceId) =>
-    atLimit.stall(instanceId) ?? strandedStall(instanceId);
-  stalledNow = () => [
+  accountsMovedPort.fill(atLimit.accountsChanged);
+  stallOfPort.fill(
+    (instanceId) => atLimit.stall(instanceId) ?? strandedStall(instanceId)
+  );
+  stalledNowPort.fill(() => [
     ...new Set([
       ...atLimit.stalled(),
       ...db.accounts.stranded().map((one) => one.instanceId),
     ]),
-  ];
+  ]);
 
   workItems.resumeWaits();
   // Every stored pause armed again; one whose time came while the hub was
