@@ -335,7 +335,7 @@ export interface HubContext {
   discarded: (
     from: string,
     id: string,
-    { approved }?: { approved?: boolean }
+    arg2?: { approved?: boolean }
   ) => Promise<string>;
   dropCompaction: (
     instanceId: string,
