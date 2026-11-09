@@ -184,7 +184,7 @@ import {
   type LaunchedHook,
   launchedHook,
   workspaceHook,
-} from "../boundary";
+} from "../boundary/launched-hook";
 import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
 import { indexedListing, listingRead, watchCatalogDir } from "../catalog-index";
 import { CLAUDE_QUIET_ENV } from "../claude-env";
@@ -1405,13 +1405,13 @@ const sessionEnv = (
   CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
   ...specEnv,
   // A workspace session's temp root, which its shell reads inside the
-  // boundary (boundary.ts `Boundary.claudeTmp`). The CLI's root is
+  // boundary (boundary/state.ts `Boundary.claudeTmp`). The CLI's root is
   // `CLAUDE_CODE_TMPDIR`, else `os.tmpdir()` ("function um(){…let
   // e=a.CLAUDE_CODE_TMPDIR;if(e)return e;return C()}", Claude Code 2.1.302),
   // and a background task's output is `<root>/claude-<uid>/…/tasks/<id>.output`:
   // under the host's /tmp, which the boundary hides, the shell found "No such
   // file or directory" for every one (leaf 74ec1894, 2026-10-19).
-  // And its shell prefix (boundary.ts `claudePrefixScript`): every shell
+  // And its shell prefix (boundary/hook-judge.ts `claudePrefixScript`): every shell
   // command, shell-form hook and stdio MCP start of the CLI runs inside the
   // boundary, after the CLI's permission rules have judged the command as
   // the model wrote it.
@@ -1764,7 +1764,7 @@ type FlagHookEntry = FlagHooks[string][number];
  * under its matcher, in the order the set holds them.
  *
  * Written so no entry reads as the boundary's when an agent adopts the CLI
- * (boundary.ts `launchedHook`, which takes the first `"matcher":…,"hooks":
+ * (boundary/launched-hook.ts `launchedHook`, which takes the first `"matcher":…,"hooks":
  * [{"type":"command","command":…` on the boundary's matchers for its hook,
  * and stops a CLI whose hook it cannot read): a matcher of every tool is
  * left out, as Claude Code reads an absent one ("If you omit the matcher or
@@ -4639,7 +4639,7 @@ class ClaudeSession implements HarnessSession {
    * (shells, monitors, subagents, workflows) through its own `stop_task`, so
    * the CLI holds each one stopped by its host: an interrupted session stays
    * idle, and a task whose command the agent then ends in its workspace
-   * (session.ts, boundary.ts `endSessionWork`) is not one whose end wakes
+   * (session.ts, boundary/work.ts `endSessionWork`) is not one whose end wakes
    * it. A task already gone is no refusal ("`stop_task` control requests
    * now return success when the target task is already gone", SDK 0.3.163).
    */
