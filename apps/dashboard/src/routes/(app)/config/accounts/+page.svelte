@@ -11,9 +11,10 @@
   import AccountListRow from "#lib/cawco/accounts/AccountListRow.svelte";
   import { groupsOf } from "#lib/cawco/accounts/model.svelte.js";
   import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -24,7 +25,7 @@
   const groups = $derived(groupsOf());
 </script>
 
-<SectionFrame ready={cawco.accounts !== null} {section}>
+<SectionFrame ready={accountsStore.accounts !== null} {section}>
   {#snippet actions(down)}
     <Button
       disabled={down !== null}

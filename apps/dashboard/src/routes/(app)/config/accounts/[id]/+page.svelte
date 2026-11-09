@@ -1,20 +1,22 @@
 <script lang="ts">
   import { accountsWords } from "@cawco/core/words/accounts";
   import AccountEditor from "#lib/cawco/accounts/AccountEditor.svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
   import { page } from "$app/state";
 
   const section = sectionOf("accounts");
   const account = $derived(
-    cawco.accounts?.accounts.find((one) => one.id === page.params.id) ?? null
+    accountsStore.accounts?.accounts.find((one) => one.id === page.params.id) ??
+      null
   );
 </script>
 
 <EditorRoute
   found={account !== null}
-  loaded={cawco.accounts !== null}
+  loaded={accountsStore.accounts !== null}
   problem={null}
   saveLabel={accountsWords.editor.save}
   {section}

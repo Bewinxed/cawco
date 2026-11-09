@@ -11,7 +11,7 @@
 import type { AccountJoined, PendingAccountSignin } from "@cawco/core/accounts";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { failureWords } from "#lib/platform/hub-read.js";
-import { beginSignin, completeSignin } from "../client.svelte";
+import { beginSignin, completeSignin } from "../stores/accounts.svelte";
 
 export type SigninPhase =
   "idle" | "opening" | "ready" | "checking" | "signed-in" | "mismatch";
