@@ -113,7 +113,13 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
-import { refusal, refusalAnswer, refuser, StatusRefusal } from "./refusal";
+import {
+  type Refused,
+  refusal,
+  refusalAnswer,
+  refuser,
+  StatusRefusal,
+} from "./refusal";
 import type { CawToolName } from "./roles";
 import {
   SETUP_CARDS,
@@ -583,10 +589,13 @@ export interface CawDeps {
   ) => Promise<{ id: string; path: string; waiting: string }>;
   /**
    * Renames the project as the dashboard's rename does (project-edit.ts),
-   * every client reading it again; answers the name as kept, a refusal
-   * thrown in its sentence.
+   * every client reading it again; answers the name as kept, or its
+   * refusal.
    */
-  readonly rename: (projectId: string, name: string) => Promise<string>;
+  readonly rename: (
+    projectId: string,
+    name: string
+  ) => Promise<string | Refused>;
   /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -1916,7 +1925,8 @@ export const createCaw = ({
                 `The project is named “${now}” already; the person renames it from its details or the setup page's name field.`
               );
             }
-            return { name: await rename(projectId, name) };
+            const renamed = await rename(projectId, name);
+            return typeof renamed === "string" ? { name: renamed } : renamed;
           },
           (named: { name: string }) => `Named the project “${named.name}”.`
         ),
