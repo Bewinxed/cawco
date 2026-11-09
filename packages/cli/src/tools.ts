@@ -93,7 +93,7 @@ export const listTools = async (
   );
   if (!response.ok) {
     throw new ToolError(
-      `${response.status}: ${refusalWords(await response.text())}`
+      `${response.status}: ${refusalWords(await response.text(), response.status)}`
     );
   }
   const { tools } = (await response.json()) as {
@@ -152,7 +152,7 @@ export const callTool = async (
   );
   if (!response.ok) {
     throw new ToolError(
-      `${response.status}: ${refusalWords(await response.text())}`
+      `${response.status}: ${refusalWords(await response.text(), response.status)}`
     );
   }
   const result = (await response.json()) as ToolEnvelope;
