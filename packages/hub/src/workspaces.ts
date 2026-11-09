@@ -300,7 +300,7 @@ type WaitingWords = (ws: string, links: readonly string[]) => string;
  * under way, an artifact showing what it serves, a project's folder inside
  * it.
  */
-export interface WorkspaceHold {
+interface WorkspaceHold {
   kind:
     | "attached"
     | "continuation"
@@ -957,7 +957,7 @@ export const createWorkspaces = ({
       const stage = stageRuns?.(member.place);
       return stage ? [{ kind: "stage", words: stage }] : [];
     }
-    const holds = itemHolds(items);
+    const holds = heldByItems(items);
     if (member.kind === "hostFolder") {
       return holds;
     }
@@ -972,7 +972,7 @@ export const createWorkspaces = ({
     return holds;
   };
   /** What a workspace's ended items hold it by ({@link holdsOf}): an item's landing, then its sessions'. */
-  const itemHolds = (items: readonly WorkItemRow[]): WorkspaceHold[] => {
+  const heldByItems = (items: readonly WorkItemRow[]): WorkspaceHold[] => {
     const holds: WorkspaceHold[] = [];
     // A stopped item's landing runs on in the clone until its next turn or
     // push ends it (landing.ts `stopped`): closing the clone under it would
