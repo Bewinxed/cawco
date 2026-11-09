@@ -1,4 +1,25 @@
 /**
+ * The door every workspace boundary comes through, and everything that door
+ * loops through. In file order:
+ *
+ * - ensuring one ({@link ensureNow}): started, kept, handed over or replaced;
+ * - its hook armed ({@link armHook}): its judge, hook, shims, executor and
+ *   doors written in this build's form;
+ * - a new generation started ({@link start});
+ * - its host or runner and its judge followed, each exit answered
+ *   ({@link watchHost}, {@link watchJudge});
+ * - the look at the older boundaries, each few seconds while there are any
+ *   ({@link lookAtStale}): each handed over, closed, or replaced once idle;
+ * - this agent's arming of its workspaces, as the handover decides it, and
+ *   {@link ensureBoundary}, the door itself, which waits for that arming.
+ *
+ * They are one file because they call each other in a loop: ensuring a
+ * boundary follows its host, whose exit ensures it again. What calls nothing
+ * above it lives in boundary/'s other files, whose imports run one way
+ * (Biome's `noImportCycles`).
+ *
+ * What a boundary is, which all of this keeps true:
+ *
  * A delegation workspace's boundary, on the machine that holds it: the one
  * place every shell command of the workspace's work items runs. What a
  * command reads and writes is the workspace's policy (`workspace-policy.ts`),
@@ -642,10 +663,9 @@ const handOver = async (
 /** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
 const saidUnknown = new Map<string, number>();
 
-/**
- * A workspace's hook armed: its judge, hook, shims, executor and doors written
- * in this build's form for the boundary it names, and the record of them.
- */
+/* ------------------------------------------------------------ */
+/* A workspace's hook armed                                     */
+/* ------------------------------------------------------------ */
 
 /**
  * Starts the workspace's judge in this build's form and writes its hook for
@@ -719,10 +739,9 @@ const armHookNow = async (
   return armed;
 };
 
-/**
- * A boundary of a new generation, started under sessiond from its files to its
- * record, or stopped and cleaned away when it does not start.
- */
+/* ------------------------------------------------------------ */
+/* A boundary of a new generation                               */
+/* ------------------------------------------------------------ */
 
 /**
  * Starts a boundary of a new generation for the workspace under sessiond and
@@ -859,10 +878,9 @@ const launch = async (
   return armHook(ref.id, held);
 };
 
-/**
- * Following a boundary's srt host or runner and a workspace's judge, each exit
- * answered: the moves out of watch.ts and judge-process.ts.
- */
+/* ------------------------------------------------------------ */
+/* A boundary's host and a workspace's judge, followed          */
+/* ------------------------------------------------------------ */
 
 /** Each boundary's srt host or Seatbelt runner followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
 const watchedHosts = new Map<string, SessiondClient>();
@@ -1104,10 +1122,9 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
   });
 };
 
-/**
- * The look at the older boundaries and the timer that starts it: staleness.ts
- * keeps the sets it reads and the timer's handle.
- */
+/* ------------------------------------------------------------ */
+/* The look at the older boundaries                             */
+/* ------------------------------------------------------------ */
 
 /** Replaces workspace `ref`'s boundary once nothing runs in it (staleness.ts `stubbed`). */
 const restartWhenIdle = (ref: WorkspaceRef): void => {
@@ -1159,12 +1176,6 @@ export const closeWhenIdle = (id: string): void => {
   markRetiring(id);
   lookSoon();
 };
-
-/**
- * The look at the older boundaries, each few seconds while there are any: each
- * boundary of an older form handed over, each older one nothing runs in closed,
- * and each one holding an srt mount point replaced once idle.
- */
 
 /**
  * Closes every older boundary of workspace `id` that nothing runs in any
@@ -1424,11 +1435,9 @@ const closeRetiring = async (): Promise<void> => {
   }
 };
 
-/**
- * This agent's arming of its workspaces, as the handover decides it: the
- * start-up reading, each workspace armed now or when a session there needs it,
- * and the wait of whatever must not run before its workspace is.
- */
+/* ------------------------------------------------------------ */
+/* This agent's arming of its workspaces                        */
+/* ------------------------------------------------------------ */
 
 /**
  * Writes one workspace's hook and its script again, in this build's form,
