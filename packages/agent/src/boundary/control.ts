@@ -18,7 +18,6 @@ import {
   ensureBoundary,
   readingMoved,
   rearming,
-  start,
 } from "./lifecycle";
 import { closeQuietly, liveFacts, setProject } from "./looks";
 import { workLeft } from "./narrowing";
@@ -31,6 +30,7 @@ import {
   stale,
   staleLook,
 } from "./staleness";
+import { start } from "./start";
 import {
   type Boundary,
   closing,
