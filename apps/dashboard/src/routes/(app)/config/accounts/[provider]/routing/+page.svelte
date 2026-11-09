@@ -9,9 +9,10 @@
   import { accountsWords } from "@cawco/core/words/accounts";
   import { accountsOf, routingOf } from "#lib/cawco/accounts/model.svelte.js";
   import RoutingEditor from "#lib/cawco/accounts/RoutingEditor.svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
 
@@ -19,7 +20,7 @@
   const provider = $derived(page.params.provider ?? "");
   const accounts = $derived(accountsOf(provider));
   const routing = $derived(routingOf(provider));
-  const loaded = $derived(cawco.accounts !== null);
+  const loaded = $derived(accountsStore.accounts !== null);
   const routes = $derived(hasRouting(accounts.length));
 
   $effect(() => {
