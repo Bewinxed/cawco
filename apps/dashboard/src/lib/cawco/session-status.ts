@@ -11,6 +11,7 @@ import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
 import { cawco } from "./client.svelte";
 import type { BoardRow } from "./links";
 import { boardStore, isFailed, isStale } from "./stores/board.svelte";
+import { projectsStore } from "./stores/projects.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
 
 const STATUS_WORD: Record<MarkStatus, string> = {
@@ -90,7 +91,10 @@ export function sessionStatus(
  */
 export const cawOf = (id: string): CawStatus | null => {
   const projectId = boardStore.rowOf(id)?.projectId;
-  if (!projectId || cawco.project(projectId)?.conversationInstanceId !== id) {
+  if (
+    !projectId ||
+    projectsStore.project(projectId)?.conversationInstanceId !== id
+  ) {
     return null;
   }
   const activity = cawco.activityOf(id);
