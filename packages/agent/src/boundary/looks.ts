@@ -57,7 +57,12 @@ import { type Seen, snapshot } from "./place-guard";
 import { formNow, movedParts, SYNCED_PART } from "./plan";
 import { busyOld, executors, lookAtPreTag, QUIET_SWEEP_MS } from "./processes";
 import { endMembers } from "./sandboxes";
-import { forgetRetiring, forgetStale, forgetStubbed, stale } from "./staleness";
+import {
+  forgetRetiring,
+  forgetStale,
+  forgetStubbed,
+  isStale,
+} from "./staleness";
 import {
   closeEnded,
   closeUnderWay,
@@ -275,7 +280,7 @@ const inUseNow = async (): Promise<string[]> => {
  */
 export const rearmMoved = async (why: string): Promise<void> => {
   for (const id of await inUseNow()) {
-    if (stale.has(id)) {
+    if (isStale(id)) {
       continue;
     }
     const held = await readHeld(id).catch(() => undefined);
