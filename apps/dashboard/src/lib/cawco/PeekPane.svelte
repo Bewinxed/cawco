@@ -248,7 +248,7 @@
     untrack(() => detach(refreshContext(id, machineId), "refreshContext"));
   });
   // The meter draws the peeked session's reading while it runs: its turns'
-  // ends read it again only while one does (client.svelte.ts `showContext`).
+  // ends read it again only while one does (stores/session-detail.svelte.ts `showContext`).
   $effect(() => {
     const id = target.viewId;
     if (running) {
