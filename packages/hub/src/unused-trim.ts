@@ -60,8 +60,8 @@ import {
   type RoleCalls,
 } from "./capability-calls";
 import type { DbShape } from "./db";
+import type { DelegateTypesShape } from "./db/delegate-types";
 import type { KeptItem } from "./db/trim";
-import type { DelegateTypesShape } from "./delegate-types";
 import { mcpUsageName } from "./usage-count";
 
 /** The window a run reads: "nobody has called in 30 days". */
