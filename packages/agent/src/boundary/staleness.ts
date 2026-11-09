@@ -1,7 +1,7 @@
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { lookAtStale } from "./lifecycle";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
+import { lookAtStale } from "./stale-look";
 import { readRetiring, starting } from "./state";
 
 /** How often the boundaries of an older form are looked at. */
