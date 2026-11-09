@@ -38,7 +38,7 @@ import type {
   HarnessFailed,
   HarnessUnanswered,
 } from "@cawco/core/frames";
-import type { AgentBusyReport } from "@cawco/core/harness";
+import type { AgentBusyReport, AgentNotice } from "@cawco/core/harness";
 import {
   ACCOUNT_READ,
   BOUNDARY_RELAUNCH,
@@ -223,6 +223,7 @@ import { mcpGateOf, mcpHost } from "./mcp-host";
 import { retireInstalls } from "./mcp-install";
 import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
+import { noticeMessage } from "./notices";
 import { Outbox } from "./outbox";
 import {
   foldersThere,
@@ -1991,18 +1992,16 @@ export class SessionSupervisor {
             `${instanceId}: ${outdated.words} Not yet: ${slept.awake}.`
           )
         );
-        this.#sayGone({
-          kind: "frame",
+        this.#sayToSession(
           instanceId,
-          harness: session.harness,
-          message: {
-            type: "system",
+          {
             subtype: CLI_OUTDATED,
             uuid: outdated.uuid,
             session_id: session.sessionId ?? "",
             content: outdated.words,
-          } as unknown as NeutralMessage,
-        });
+          },
+          session.harness
+        );
       })
       .catch((error: unknown) =>
         warn(
@@ -2201,14 +2200,12 @@ export class SessionSupervisor {
       kind: "frame",
       instanceId,
       harness,
-      message: {
-        type: "system",
+      message: noticeMessage({
         subtype: ROOM_HELD,
         uuid: `room-${crypto.randomUUID()}`,
         timestamp: new Date().toISOString(),
-        session_id: "",
         content: roomHeldSentence(room.words),
-      } as unknown as NeutralMessage,
+      }),
     });
     try {
       while (!room.ok) {
@@ -2895,18 +2892,15 @@ export class SessionSupervisor {
     // A runtime it reaches with no door: it is told once, as it launches.
     const untracked = containersUntrackedWords(doors?.untracked ?? [], shut);
     if (untracked && !recovery) {
-      this.#sayGone({
-        kind: "frame",
-        instanceId: spec.instanceId,
-        harness: adapter.kind,
-        message: {
-          type: "system",
+      this.#sayToSession(
+        spec.instanceId,
+        {
           subtype: CONTAINERS_UNTRACKED,
           uuid: `containers-untracked-${spec.instanceId}`,
-          session_id: "",
           content: untracked,
-        } as unknown as NeutralMessage,
-      });
+        },
+        adapter.kind
+      );
     }
     const ctx = this.#context(
       spec.instanceId,
@@ -3670,21 +3664,16 @@ export class SessionSupervisor {
     // In order with what else is owed the hub, and on the next connection
     // when this one is down ({@link #sayGone}).
     for (const instanceId of instanceIds) {
-      this.#sayGone({
-        kind: "frame",
+      this.#sayToSession(
         instanceId,
-        harness:
-          this.#placed.get(instanceId)?.harness ??
-          sessionOfProc(message.procId)?.kind ??
-          "claude",
-        message: {
-          type: "system",
+        {
           subtype: LIMIT_REACHED,
           uuid: `limit-${message.group}-${message.limit}-${message.count}`,
-          session_id: "",
           content,
-        } as unknown as NeutralMessage,
-      });
+        },
+        this.#placed.get(instanceId)?.harness ??
+          sessionOfProc(message.procId)?.kind
+      );
     }
   }
 
@@ -3741,19 +3730,11 @@ export class SessionSupervisor {
     found: LeakFound
   ): void {
     for (const instanceId of instanceIds) {
-      this.#sayGone({
-        kind: "frame",
+      this.#sayToSession(
         instanceId,
-        harness: this.#placed.get(instanceId)?.harness ?? "claude",
-        message: {
-          type: "system",
-          subtype: LEAK_FOUND,
-          uuid: id,
-          session_id: "",
-          content,
-          leak: found,
-        } as unknown as NeutralMessage,
-      });
+        { subtype: LEAK_FOUND, uuid: id, content, leak: found },
+        this.#placed.get(instanceId)?.harness
+      );
     }
   }
 
@@ -3764,17 +3745,11 @@ export class SessionSupervisor {
    */
   #leakEnded(instanceIds: string[], id: string): void {
     for (const instanceId of instanceIds) {
-      this.#sayGone({
-        kind: "frame",
+      this.#sayToSession(
         instanceId,
-        harness: this.#placed.get(instanceId)?.harness ?? "claude",
-        message: {
-          type: "system",
-          subtype: LEAK_ENDED,
-          uuid: id,
-          session_id: "",
-        } as unknown as NeutralMessage,
-      });
+        { subtype: LEAK_ENDED, uuid: id },
+        this.#placed.get(instanceId)?.harness
+      );
     }
   }
 
@@ -3786,7 +3761,7 @@ export class SessionSupervisor {
    * else the session. One that fails stays written down for the next
    * agent's start, and is said.
    */
-  #endContainers(instanceId: string, harness: HarnessKind): void {
+  #endContainers(instanceId: string, harness: HarnessKind | undefined): void {
     finishEnding(instanceId)
       .then((ended) => {
         const content = containersEndedWords(ended);
@@ -3794,18 +3769,15 @@ export class SessionSupervisor {
           return;
         }
         console.info(`[containers] ${instanceId}: ${content}`);
-        this.#sayGone({
-          kind: "frame",
+        this.#sayToSession(
           instanceId,
-          harness,
-          message: {
-            type: "system",
+          {
             subtype: CONTAINERS_ENDED,
             uuid: `containers-ended-${instanceId}-${Date.now()}`,
-            session_id: "",
             content,
-          } as unknown as NeutralMessage,
-        });
+          },
+          harness
+        );
       })
       .catch((error: unknown) =>
         warn(
@@ -3834,7 +3806,7 @@ export class SessionSupervisor {
         for (const instanceId of unfinished) {
           this.#endContainers(
             instanceId,
-            this.#placed.get(instanceId)?.harness ?? "claude"
+            this.#placed.get(instanceId)?.harness
           );
         }
         await Promise.all(
@@ -4169,6 +4141,28 @@ export class SessionSupervisor {
       ...(died ? { died } : {}),
     });
     this.#handBack(instanceId);
+  }
+
+  /**
+   * CawCo's own word to session `instanceId`'s transcript ({@link AgentNotice}),
+   * in order with what else is owed the hub ({@link #sayGone}). Its frame
+   * names `harness`, the session's as its caller knows it. A notice of the
+   * machine's about a session this agent knows no harness of (a keeper's
+   * limit, a leak, the containers of a session the hub welcomed this agent
+   * with) still names one, as every frame does: `claude`, which the hub's
+   * reading of a notice by its subtype never looks at.
+   */
+  #sayToSession(
+    instanceId: string,
+    notice: AgentNotice,
+    harness: HarnessKind | undefined
+  ): void {
+    this.#sayGone({
+      kind: "frame",
+      instanceId,
+      harness: harness ?? "claude",
+      message: noticeMessage(notice),
+    });
   }
 
   /** One word of a process gone or a send handed back or taken already, in order, now or on the next connection. */
