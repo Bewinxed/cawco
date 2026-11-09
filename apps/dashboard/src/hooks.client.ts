@@ -1,13 +1,12 @@
+// First, before any module that could make a ResizeObserver: reading
+// frame-observer makes the window's own the shared observer's
+// (`ForeignResizeObserver`; house/resize-delivery-first holds this place).
+import "#lib/platform/frame-observer.js";
 import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
 import { reportError, reportErrorsTo } from "#lib/cawco/error-report.js";
 import { holdReadsWhileLeaving } from "#lib/cawco/leaving.js";
 import { claimRegionDrop } from "#lib/cawco/region-held.js";
-import { installResizeDelivery } from "#lib/platform/frame-observer.js";
 import { version } from "$app/env";
-
-// Before anything on the page makes a ResizeObserver: the window's own is
-// the shared observer's from here on (frame-observer `ForeignResizeObserver`).
-installResizeDelivery();
 
 export const init: ClientInit = () => {
   holdReadsWhileLeaving();
