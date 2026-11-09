@@ -45,6 +45,7 @@
     trackerTargets,
   } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -174,7 +175,7 @@
 
   /** The fleet's accounts, each by the name it shows everywhere. */
   const accountChoices = $derived.by(() => {
-    const all = cawco.accounts?.accounts ?? [];
+    const all = accountsStore.accounts?.accounts ?? [];
     return all.map((one) => ({ id: one.id, name: accountNameAmong(one, all) }));
   });
   /** The account asked while the hub answers; undefined: none asked. */
@@ -190,8 +191,8 @@
   /** Set, and signed in on no machine: nothing of the project starts. */
   const accountSignedOut = $derived(
     project.account !== null &&
-      cawco.accounts !== null &&
-      !cawco.accounts.signins.some(
+      accountsStore.accounts !== null &&
+      !accountsStore.accounts.signins.some(
         (one) => one.accountId === project.account && one.state === "signed-in"
       )
   );
