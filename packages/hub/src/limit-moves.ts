@@ -46,6 +46,7 @@ import type { PublicInstanceRow } from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
 import type { ContinuationAsker, ContinueRequest } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
+import type { MoveOffWhy, StoredRow } from "./hub-shapes";
 import { cacheWarmNow, promptCacheExpiresAt } from "./keep-alive";
 import type { PlacementInput } from "./placement";
 import {
@@ -64,14 +65,8 @@ const AT_REST: ReadonlySet<InstanceStatus> = new Set([
   "error",
 ]);
 
-/** A session's row as the hub stores it. */
-export type StoredRow = ReturnType<DbShape["getInstancesByIds"]>[number];
-
 /** A session's row as a mover reads it. */
 type MoverRow = ReturnType<DbShape["getInstancesByIds"]>[number];
-
-/** Why a session leaves its account ({@link oweMoveOff}). */
-export type MoveOffWhy = "refused" | "removed" | "signed-out";
 
 export type LimitMovesContext = Pick<
   HubContext,
