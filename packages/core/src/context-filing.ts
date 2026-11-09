@@ -4,7 +4,7 @@
  * import("./accounts").Compaction.fileRoom} of the point where its harness
  * compacts it on its own (harness.ts `NeutralResultMessage.compactsAt`),
  * the session takes one turn to file its open items into its records (hub
- * at-limit.ts `fileDue`, server.ts `fileAtThreshold`), and its harness
+ * at-limit.ts `fileDue`, compaction.ts `fileAtThreshold`), and its harness
  * compacts it later on its own. What the person reads of it is the hub's
  * {@link ContextLine}s in its transcript.
  */
