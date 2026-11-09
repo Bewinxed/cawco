@@ -61,27 +61,13 @@ import {
   setupLanding,
 } from "@cawco/core/artifact-needs";
 import type { CanvasAuthor } from "@cawco/core/canvas";
+import type { ArtifactAsked } from "@cawco/core/doc-meta";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { type PlanStep, stepNamesArtifact } from "@cawco/core/plan";
 import { artifactLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactChange, ArtifactRow } from "../db/artifacts";
 import { isSetupPage } from "../setup";
-
-/**
- * The artifact's latest ask, kept in its doc (`meta.asked`): the session
- * whose tool call made it (create, update, revise, show), when, the step
- * it was asked at while the session was at work on its plan (`step`: set,
- * the plan waits on it until it is answered or deleted, {@link planHolds}),
- * and when the writer's next turn ended with its plan not waiting on it and
- * no new show.
- */
-export interface ArtifactAsked {
-  at: string;
-  by: string;
-  movedAt?: string;
-  step?: string;
-}
 
 /** What an artifact's doc and row say, read once per change of either. */
 export interface ArtifactFacts {
