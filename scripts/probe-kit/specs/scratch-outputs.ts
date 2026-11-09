@@ -1,6 +1,6 @@
 /**
  * What a delegate leaves in `$TMPDIR/outputs/` reaches its project's folder
- * under `assets/<item>/` and outlives its workspace (hub work-items.ts
+ * under `assets/<item>/` and outlives its workspace (hub landing-run.ts
  * `scratchOutputs`, `keepScratchOutputs`). On 2026-10-25 a delegate's report
  * written there went with its workspace: the hub copied only outputs named
  * at delegate time. On a scratch fleet (real hub, agent and sessiond; Claude
@@ -214,7 +214,7 @@ interface Handed {
 
 /**
  * The paths the report names, `- <project folder>/assets/…` a line (hub
- * work-items.ts `collectOutputs`), each read on the hub's machine, as the
+ * landing-run.ts `collectOutputs`), each read on the hub's machine, as the
  * parent reads them there: every handed file is at its path and holds what
  * the leaf wrote.
  */
