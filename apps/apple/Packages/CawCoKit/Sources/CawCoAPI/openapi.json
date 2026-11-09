@@ -58703,16 +58703,16 @@
                 "description": "Disabled rows stay in the hub but are removed from the machines.",
                 "type": "boolean"
               },
+              "shared": {
+                "description": "One instance on each machine serves every session there, started at its\nfirst call (the agent's MCP gateway, packages/agent mcp-host.ts), rather\nthan one per session started with it. A stdio fleet server only, and\nonly one whose tools keep nothing per session and resolve no path\nagainst its working directory. Absent: one per session, as the harness\nstarts it.",
+                "type": "boolean"
+              },
               "platforms": {
                 "description": "The machine platforms it can run on, by the name each machine reports in\nits capabilities (`MachineCapabilities.platform`, Node's\n`process.platform`: \"darwin\", \"linux\", \"win32\"). A machine of another\nplatform is never sent it, so it is neither installed nor probed there.\nAbsent: every machine.",
                 "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/ToolPlatform"
                 }
-              },
-              "shared": {
-                "description": "One instance on each machine serves every session there, started at its\nfirst call (the agent's MCP gateway, packages/agent mcp-host.ts), rather\nthan one per session started with it. A stdio fleet server only, and\nonly one whose tools keep nothing per session and resolve no path\nagainst its working directory. Absent: one per session, as the harness\nstarts it.",
-                "type": "boolean"
               },
               "scope": {
                 "$ref": "#/components/schemas/FleetScope",
