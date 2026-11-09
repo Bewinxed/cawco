@@ -499,7 +499,7 @@
       </div>
       <div bind:this={noteField}>
         <div class="flex flex-col gap-space-2">
-          <!-- Its field has its id, as every field of a page does, and `data-cawco-unkept`: the overlay keeps a page's named fields as answers of their own (preview-overlay fields.ts `keyOf`), and the note is this card's, written through `cawco.note` alone. Named by this line. -->
+          <!-- Its field has its id, as every field of a page does, and `data-cawco-unkept`: the overlay keeps a page's named fields as answers of their own (preview overlay/fields.ts `keyOf`), and the note is this card's, written through `cawco.note` alone. Named by this line. -->
           <span
             class="type-label text-ink-muted"
             id={`decision-${id}-note-label`}>Note</span

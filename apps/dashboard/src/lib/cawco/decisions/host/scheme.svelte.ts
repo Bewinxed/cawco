@@ -1,6 +1,6 @@
 /**
  * The scheme the page draws in: the host's, once the overlay names it on the
- * root (`data-theme`, preview-overlay page.ts `themeRoot`), else the
+ * root (`data-theme`, preview overlay/page.ts `themeRoot`), else the
  * reader's. What the page draws by scheme and no token carries (Caw's
  * picture, a frame told its theme) reads it here. A program's page has its
  * root carry the `dark` class while it draws dark (`darkOn`), as

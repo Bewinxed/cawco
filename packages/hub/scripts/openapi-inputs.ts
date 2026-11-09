@@ -30,6 +30,7 @@ const INPUT_DIRS = [
   "packages/auth",
   "packages/core",
   "packages/design-tokens",
+  "packages/preview",
   "packages/jsonl-parser/src",
   "packages/hub",
   "packages/agent/src",
