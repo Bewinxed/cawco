@@ -17,8 +17,8 @@
    */
   import { noticeWords } from "@cawco/core/words/notices";
   import { IconChevronRight as IconChevron, IconInfo } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import MessageBody from "../MessageBody.svelte";
-  import { unfold } from "../motion/fold.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import type { Row } from "./rows";
 

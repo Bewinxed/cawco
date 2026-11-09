@@ -13,13 +13,13 @@
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import {
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
+  import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 
   const section = sectionOf("previews");
 

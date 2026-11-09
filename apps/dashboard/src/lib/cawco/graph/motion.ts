@@ -17,7 +17,7 @@ import {
 } from "@cawco/core/stage-graph";
 import type { TunedRecord } from "@cawco/core/tuned";
 import { graphWords as words } from "@cawco/core/words/graph";
-import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
+import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
 
 /** How the person tuned a clip: when it begins, how long it runs, and its curve. */
 interface Tuning {

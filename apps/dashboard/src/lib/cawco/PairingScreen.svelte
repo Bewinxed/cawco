@@ -17,11 +17,11 @@
   import { onMount } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
   import ErrorText from "./ErrorText.svelte";
   import Caw from "./home/Caw.svelte";
   import { clock } from "./home/home-state.svelte";
   import { hubAuth, resumePairing, startPairing } from "./hub-auth.svelte";
-  import { crossIn, crossOut } from "./motion/curves.svelte";
 
   /** Caw's side, as on the empty fleet. */
   const CAW_SIZE = 80;

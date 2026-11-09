@@ -1,4 +1,4 @@
-import { newId } from "./id";
+import { newId } from "#lib/platform/id.js";
 
 /**
  * One id per browser tab: minted once, kept only in memory (never in

@@ -14,14 +14,14 @@
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { Drawer as Vaul } from "vaul-svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { land, waiting } from "#lib/platform/motion/share.svelte.js";
+  import { visible as visibleArea } from "#lib/platform/visible-viewport.svelte.js";
   import { cawco } from "../client.svelte";
   import { closePeeks } from "../HoverPanel.svelte";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
-  import { land, waiting } from "../motion/share.svelte";
-  import { visible as visibleArea } from "../visible-viewport.svelte";
 
   let {
     instanceId,

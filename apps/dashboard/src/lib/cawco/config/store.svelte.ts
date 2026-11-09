@@ -9,8 +9,8 @@ import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { RuleRow } from "@cawco/core/rules";
 import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
-import { failureWords, hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
-import { dur } from "#lib/cawco/motion/curves.svelte.js";
+import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { dur } from "#lib/platform/motion/curves.svelte.js";
 import type { ProjectRow } from "../client.svelte";
 import type {
   DelegateTypesPayload,

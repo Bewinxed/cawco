@@ -47,13 +47,13 @@
    */
   import type { Component, Snippet } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconTick } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     label,
