@@ -174,6 +174,7 @@
     IconSparkles,
     IconToolTodo,
   } from "#lib/icons.js";
+  import { graceWhile } from "#lib/platform/grace-while.svelte.js";
   import {
     failureClause,
     failureSentence,
@@ -183,7 +184,6 @@
   } from "#lib/platform/hub-read.js";
   import {
     crossOut,
-    dur,
     reveal,
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
@@ -396,17 +396,8 @@
    * nothing of its own.
    */
   const leavingFor = $derived(list === null && listProblem === null);
-  let reading = $state(false);
-  $effect(() => {
-    if (!leavingFor) {
-      reading = false;
-      return;
-    }
-    const grace = setTimeout(() => {
-      reading = true;
-    }, dur("--dur-wait-grace"));
-    return () => clearTimeout(grace);
-  });
+  const readingLong = graceWhile(() => leavingFor);
+  const reading = $derived(readingLong.current);
 
   const lead = new CawLead({
     id: () => projectId,
