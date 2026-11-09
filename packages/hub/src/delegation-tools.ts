@@ -109,12 +109,8 @@ import {
   ownsParameter,
   type TaskTool,
 } from "./task-tools";
-import {
-  SESSION_TITLE_DESCRIPTION,
-  SESSION_TITLE_MAX,
-  WAIT_ITEM_LIMIT,
-  WAIT_ITEM_MAX_MINUTES,
-} from "./work-items";
+import { WAIT_ITEM_LIMIT, WAIT_ITEM_MAX_MINUTES } from "./work-item-state";
+import { SESSION_TITLE_DESCRIPTION, SESSION_TITLE_MAX } from "./work-items";
 
 /**
  * A tool whose answer the hub wrote already in the form asked for
