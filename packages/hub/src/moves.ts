@@ -99,7 +99,7 @@ export interface MovesDeps {
   readonly machineName: (machineId: string) => string;
   /**
    * Why a `harness` session on `machineId` can't start in `mode`, as every
-   * start is refused (server.ts `modeOf`: no mode nobody chose), or nothing.
+   * start is refused (launches.ts `modeOf`: no mode nobody chose), or nothing.
    */
   readonly modeRefusal: (
     machineId: string,
@@ -127,9 +127,9 @@ export interface MovesDeps {
   readonly placesChanged: (machineId: string, projectId: string) => void;
   /** Every dashboard and app: one frame. */
   readonly publish: (frame: MovesFrame) => void;
-  /** A session row on `machineId` changed: every board hears it (server.ts `publishInstances`). */
+  /** A session row on `machineId` changed: every board hears it (board.ts `publishInstances`). */
   readonly rowsChanged: (machineId: string) => void;
-  /** Puts the first prompt into the started session (server.ts `deliverSend`). */
+  /** Puts the first prompt into the started session (sends.ts `deliverSend`). */
   readonly send: (envelope: Envelope<SendPayload>) => void;
   /** Takes a parked ask off the ledger, answered or withdrawn. */
   readonly settle: (
@@ -141,7 +141,7 @@ export interface MovesDeps {
    * (place-repo.ts `settled`): the plan reads the source as it settled.
    */
   readonly settled: (machineId: string, path: string) => Promise<void>;
-  /** Starts the session as every hub-started session starts (server.ts `spawnSession`). */
+  /** Starts the session as every hub-started session starts (spawns.ts `spawnSession`). */
   readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
 }
 

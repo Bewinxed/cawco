@@ -7,7 +7,7 @@
  *   (after a move at its account's limit), before a person's Continue opens
  *   a new session, and once a turn ends with its context within its
  *   compaction policy's `fileRoom` of where its harness compacts it on its
- *   own, later (server.ts `fileAtThreshold`), the session takes one turn
+ *   own, later (compaction.ts `fileAtThreshold`), the session takes one turn
  *   whose only job is to file what is open into its records. On a real
  *   13-hour chat, native compaction alone answered 16% of probes, CawCo's summary 35%, native
  *   compaction with the open items filed first 47%, and with only the

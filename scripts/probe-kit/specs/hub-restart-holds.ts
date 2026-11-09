@@ -72,9 +72,9 @@ const PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const IMAGE_BLOCK = /"type":"image"/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
-/** What the hub tells a session whose move ended its work (server.ts `endedByMoveWords`). */
+/** What the hub tells a session whose move ended its work (account-carry.ts `endedByMoveWords`). */
 const MOVED = "You were moved to another account.";
-/** What every cut's words say of each task (server.ts `cutTasksWords`, `endedByMoveWords`). */
+/** What every cut's words say of each task (account-carry.ts `cutTasksWords`, `endedByMoveWords`). */
 const INTERRUPTED = workWords.interrupted;
 /** The gate steps' log, in each workspace's scratch dir. */
 const STEP_LOG = "probe-restart-steps.log";
