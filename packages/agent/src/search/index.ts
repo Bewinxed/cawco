@@ -96,7 +96,7 @@ export class TranscriptSearchService {
   #syncedAt = 0;
   /**
    * Every transcript as it stood then is in the index, ms epoch: the start
-   * of its last finished sync, kept across restarts ({@link INDEXED_THROUGH}),
+   * of its last finished sync, kept across restarts (`INDEXED_THROUGH`),
    * or how far a catch-up has come (fts5.ts `SyncOptions.progress`); 0 when
    * it can say no time.
    */
