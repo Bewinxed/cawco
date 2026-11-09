@@ -75,6 +75,35 @@ export async function putBackPins(
   }
 }
 
+/**
+ * The harnesses that went on for `version` before the swap put back for
+ * `runs`, the build that runs instead, which refuses them: by `runs`'s own
+ * `binary-pins back` ({@link runBinaryPins}), never by `version`, which may
+ * not start at all. Never throws: what calls it is on its way out already.
+ * `said` is told what went back, or the sentence of what did not, which is
+ * also answered for the caller's record.
+ */
+export async function pinsBackFor(
+  version: string,
+  runs: string,
+  said: {
+    readonly back: (what: string) => Promise<void> | void;
+    readonly failed: (sentence: string) => Promise<void> | void;
+  }
+): Promise<string | undefined> {
+  try {
+    const back = await runBinaryPins(runs, version);
+    if (back) {
+      await said.back(back);
+    }
+    return undefined;
+  } catch (error) {
+    const sentence = `what went on for ${version} did not go back: ${error instanceof Error ? error.message : String(error)}`;
+    await said.failed(sentence);
+    return sentence;
+  }
+}
+
 /** `build` is confirmed: what went on for it stays on. */
 export async function forgetPins(): Promise<void> {
   await rm(recordPath(), { force: true });
