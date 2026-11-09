@@ -317,14 +317,23 @@ export const startUnderWay = (id: string): Promise<Boundary> | undefined =>
 /** Whether a start of workspace `id`'s boundary is under way. */
 export const isStarting = (id: string): boolean => starting.has(id);
 
-/** Records `start` as workspace `id`'s start under way. */
-export const markStarting = (id: string, start: Promise<Boundary>): void => {
-  starting.set(id, start);
-};
-
-/** Workspace `id`'s start is over. */
-export const startEnded = (id: string): void => {
-  starting.delete(id);
+/**
+ * Keeps `underWay` as workspace `id`'s start under way until `work` settles:
+ * the one way a start is recorded, so none forgets its end. Whatever ensures
+ * one meanwhile waits for `underWay`; `work` is what its caller goes on with,
+ * and `ended`, if any, runs in the step the entry goes. Answers `work`.
+ */
+export const withStart = <T>(
+  id: string,
+  underWay: Promise<Boundary>,
+  work: Promise<T>,
+  ended?: () => void
+): Promise<T> => {
+  starting.set(id, underWay);
+  return work.finally(() => {
+    starting.delete(id);
+    ended?.();
+  });
 };
 
 /** Where an older boundary still running beside the current one is recorded ({@link Retiring}). */
@@ -358,14 +367,20 @@ export const closeUnderWay = (id: string): Promise<void> | undefined =>
 /** Whether a close of workspace `id`'s boundary is under way. */
 export const isClosing = (id: string): boolean => closing.has(id);
 
-/** Records `close` as workspace `id`'s close under way, in place of any before it. */
-export const markClosing = (id: string, close: Promise<void>): void => {
-  closing.set(id, close);
-};
-
-/** Workspace `id`'s close `close` is over; one that replaced it stays on record. */
-export const closeEnded = (id: string, close: Promise<void>): void => {
-  if (closing.get(id) === close) {
-    closing.delete(id);
-  }
+/**
+ * Keeps `underWay` as workspace `id`'s close under way, in place of any before
+ * it, until `work` settles: the one way a close is recorded, so none forgets
+ * its end. One that replaced it stays on record. Answers `work`.
+ */
+export const withClose = <T>(
+  id: string,
+  underWay: Promise<void>,
+  work: Promise<T>
+): Promise<T> => {
+  closing.set(id, underWay);
+  return work.finally(() => {
+    if (closing.get(id) === underWay) {
+      closing.delete(id);
+    }
+  });
 };
