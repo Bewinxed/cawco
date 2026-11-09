@@ -1,7 +1,7 @@
 /**
- * A workspace's PreToolUse hook and its judge: the hook's script, the claude
- * shell prefix, the judge process sessiond holds beside the boundary, and the
- * judge's answers.
+ * A workspace's PreToolUse hook and what it asks: the hook's script, the claude
+ * shell prefix, the scripts and arguments of the judge (`judge-process.ts`
+ * starts it), and the judge's answers.
  */
 
 import { createHash } from "node:crypto";
@@ -16,11 +16,10 @@ import { shellQuote } from "@cawco/core/shell-quote";
 import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { bunScriptRuntime } from "../bun-runtime";
-import { isJudgeOf, JUDGE_FORM_LENGTH } from "../proc-id";
-import type { SessiondClient } from "../sessiond-client";
+import { JUDGE_FORM_LENGTH } from "../proc-id";
 import { JUDGE_BUILD_QUESTION, type JudgeArgs } from "./protocol";
 import { scriptText } from "./shims";
-import { closing, refusal, starting, stateDir } from "./state";
+import { refusal, stateDir } from "./state";
 
 /** Claude Code's own limit on the boundary hook, in seconds; its default is 600. */
 export const HOOK_TIMEOUT_S = 90;
@@ -252,52 +251,6 @@ export const judgeBuildOf = ([judgeText, serverText, protocolText]: [
     .digest("hex")
     .slice(0, JUDGE_FORM_LENGTH);
 
-/** The judges starting now, by their sessiond id: one start each, however many ask. */
-export const judging = new Map<string, Promise<void>>();
-
-/**
- * How many arms of each workspace's hook are under way ({@link armHook}),
- * from a judge's exit to its start again too (lifecycle.ts `watchJudge`): its hook
- * may name a judge that is going while it is.
- */
-const arming = new Map<string, number>();
-
-/** Runs `arm` with workspace `id` counted as {@link arming}. */
-export const whileArming = async <T>(
-  id: string,
-  arm: () => Promise<T>
-): Promise<T> => {
-  arming.set(id, (arming.get(id) ?? 0) + 1);
-  try {
-    return await arm();
-  } finally {
-    const left = (arming.get(id) ?? 1) - 1;
-    if (left > 0) {
-      arming.set(id, left);
-    } else {
-      arming.delete(id);
-    }
-  }
-};
-
-/** The judges whose exit this agent watches, by their sessiond id, each with the connection it watches on. */
-export const watchedJudges = new Map<string, SessiondClient>();
-
-/**
- * The workspace's judge, running: `boundary-judge.ts` on {@link bunRuntime},
- * held by sessiond like the boundary, so it outlives the agent and every CLI
- * keeps asking it. It and the judge beside it (which OpenCode's plugin
- * imports too) are written into the state dir first.
- *
- * Its form is a hash of what it runs and is handed, the keeper it runs on and
- * the dir it listens in; one of each form runs,
- * on its own socket (`judge-<form>.sock` in `workspaceDoorDir`), under its own sessiond id. So a new
- * build's judge starts beside the old one, and the hook is pointed at it only
- * once it answers: a hook already running still reaches the old one, which
- * leaves on its own once the hook has not named it for as long as a hook
- * lives (`boundary-judge.ts`). One that exits otherwise is started again
- * (lifecycle.ts `watchJudge`). Refuses the workspace when it cannot start.
- */
 /** What a workspace's judge is handed besides its socket and its build. */
 export type JudgeHanded = Omit<JudgeArgs, "socket" | "build">;
 
@@ -375,16 +328,6 @@ const judgeWords = (read: Bounded<string>): string => {
       unhandled("read", read);
   }
 };
-
-/**
- * Whether workspace `id` is between states its hook and judge move through:
- * its boundary starting or closing, its hook being armed, its judge starting.
- */
-export const settling = (id: string): boolean =>
-  starting.has(id) ||
-  closing.has(id) ||
-  arming.has(id) ||
-  [...judging.keys()].some((procId) => isJudgeOf(procId, id));
 
 /** A judge's socket file name (`judgeFor`): its form. */
 export const JUDGE_SOCKET = /^judge-([0-9a-f]+)\.sock$/u;
