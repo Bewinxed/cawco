@@ -33,7 +33,7 @@ import { ANY_TYPE } from "@cawco/core/delegate-types";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { decidesWords } from "@cawco/core/words/decides";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { DECIDES_FILE, decidesTable, decidesText } from "./decides-file";
@@ -44,7 +44,7 @@ import {
   writeFolderFile,
   YOU,
 } from "./project-folder";
-import { StatusRefusal } from "./refusal";
+import { refusal, StatusRefusal } from "./refusal";
 
 /** A harness on the fleet, as the page draws setup from it. */
 export interface HarnessOffer {
@@ -104,7 +104,7 @@ const answered = async <T>(work: () => T | Promise<T>) => {
     return await work();
   } catch (error) {
     if (error instanceof DecidesRefusal) {
-      return status(error.status, error.message);
+      return refusal(error.status, "decides-refused", error.message);
     }
     return refused(error);
   }
