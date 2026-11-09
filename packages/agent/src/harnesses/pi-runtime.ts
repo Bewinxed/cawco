@@ -4,11 +4,7 @@ import { readFile } from "node:fs/promises";
 import { atProviderLimit } from "@cawco/core/accounts";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { piToolsFor } from "@cawco/core/delegate-types";
-import {
-  CONTROL_REFRESH_CAWCO_TOOLS,
-  INSTALL_SESSION_CREDENTIAL,
-  VERIFY_SESSION_CREDENTIAL,
-} from "@cawco/core/harness";
+import { CONTROL_REFRESH_CAWCO_TOOLS } from "@cawco/core/harness";
 import type { HookEvent } from "@cawco/core/hooks";
 import { hookToolCall, hookToolInputBack } from "@cawco/core/hooks";
 import type { SpawnPayload } from "@cawco/core/protocol";
@@ -100,6 +96,7 @@ import {
   toBlocks,
 } from "./pi-services";
 import { PI_ASKS_NOTHING, piOpenTurns } from "./pi-sessiond";
+import { credentialControls } from "./session-ledger";
 
 type BashExec = BashOperations["exec"];
 
@@ -1388,38 +1385,49 @@ class PiSession implements HarnessSession {
     this.#ctx.rejected(uuid, error);
   }
 
-  async control(method: string, args: unknown[]): Promise<unknown> {
-    if (method === INSTALL_SESSION_CREDENTIAL) {
-      const [credential] = args;
-      if (typeof credential !== "string" || !credential) {
-        throw new Error("Session credential is missing.");
-      }
-      await this.#session.waitForIdle();
-      this.#credential.value = credential;
-      // This host runs one session: its shells act as that session.
-      process.env[CAWCO_ENV.sessionCredential] = credential;
-      // The ACK is authenticated by the credential itself (the hub refuses
-      // one it does not know), and the hub minted it in this session's own
-      // spawn: the proof its tools will be taken as this session. No
-      // `list_sessions` first: it read the whole fleet twice inside the hub
-      // under 5 s timeouts, and a machine restoring twenty sessions at once
-      // timed its own gates out (2026-10-09).
-      await acknowledgeSessionCredential(credential);
-      return {
-        installed: true,
-        harness: "pi",
-        instanceId: this.#ctx.instanceId,
-      };
+  /** The session credential's install and verify ({@link credentialControls}). */
+  readonly #credentialControls = credentialControls(
+    (credential) => this.#installCredential(credential),
+    () => this.#verifyCredential()
+  );
+
+  /** The credential the hub granted this session, installed: its tools and its shells act as it. */
+  async #installCredential(credential: string): Promise<unknown> {
+    await this.#session.waitForIdle();
+    this.#credential.value = credential;
+    // This host runs one session: its shells act as that session.
+    process.env[CAWCO_ENV.sessionCredential] = credential;
+    // The ACK is authenticated by the credential itself (the hub refuses
+    // one it does not know), and the hub minted it in this session's own
+    // spawn: the proof its tools will be taken as this session. No
+    // `list_sessions` first: it read the whole fleet twice inside the hub
+    // under 5 s timeouts, and a machine restoring twenty sessions at once
+    // timed its own gates out (2026-10-09).
+    await acknowledgeSessionCredential(credential);
+    return {
+      installed: true,
+      harness: "pi",
+      instanceId: this.#ctx.instanceId,
+    };
+  }
+
+  /**
+   * The host outlived the agent that started it and still holds the
+   * credential its tools send. The ACK is authenticated by it, so one the
+   * hub no longer knows is refused, as is a host that holds none.
+   */
+  async #verifyCredential(): Promise<undefined> {
+    if (!this.#credential.value) {
+      throw new Error("This pi host holds no CawCo session credential.");
     }
-    // The host outlived the agent that started it and still holds the
-    // credential its tools send. The ACK is authenticated by it, so one the
-    // hub no longer knows is refused, as is a host that holds none.
-    if (method === VERIFY_SESSION_CREDENTIAL) {
-      if (!this.#credential.value) {
-        throw new Error("This pi host holds no CawCo session credential.");
-      }
-      await acknowledgeSessionCredential(this.#credential.value);
-      return undefined;
+    await acknowledgeSessionCredential(this.#credential.value);
+    return undefined;
+  }
+
+  async control(method: string, args: unknown[]): Promise<unknown> {
+    const credential = this.#credentialControls(method, args);
+    if (credential) {
+      return await credential;
     }
     switch (method) {
       case CONTROL_REFRESH_CAWCO_TOOLS: {
