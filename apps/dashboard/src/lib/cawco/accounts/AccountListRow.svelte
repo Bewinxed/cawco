@@ -23,7 +23,7 @@
    */
   import type { Account, RefusalVerdict } from "@cawco/core/accounts";
   import { accountsWords as words } from "@cawco/core/words/accounts";
-  import { checkRefusalOf } from "#lib/cawco/client.svelte.js";
+  import { checkRefusalOf } from "#lib/cawco/stores/accounts.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
