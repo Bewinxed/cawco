@@ -11,6 +11,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
+import { parsed } from "./parse-source";
 import { ROOT } from "./repo-files";
 import { fileAt, targetOf } from "./workspace-imports";
 
@@ -24,36 +25,6 @@ export interface Import {
   /** Whether it loads nothing at runtime (`import type`, `export type`, an `import("x")` type). */
   typeOnly: boolean;
 }
-
-const SCRIPT = /<script\b[^>]*>([\s\S]*?)<\/script>/gu;
-const SVELTE = /\.svelte$/u;
-
-/**
- * A file's source as TypeScript reads it: a component's `<script>` blocks
- * in place, everything else blanked, so a line number is the file's own.
- */
-const scriptOf = (file: string, text: string): string => {
-  if (!SVELTE.test(file)) {
-    return text;
-  }
-  let out = text.replace(/[^\n]/gu, " ");
-  for (const match of text.matchAll(SCRIPT)) {
-    const body = match[1] ?? "";
-    const at = (match.index ?? 0) + match[0].indexOf(body);
-    out = out.slice(0, at) + body + out.slice(at + body.length);
-  }
-  return out;
-};
-
-/** A file's syntax tree, a component's scripts in place. */
-const parsed = (file: string, text: string): ts.SourceFile =>
-  ts.createSourceFile(
-    SVELTE.test(file) ? `${file}.ts` : file,
-    scriptOf(file, text),
-    ts.ScriptTarget.Latest,
-    true,
-    file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-  );
 
 const importIsTypeOnly = (node: ts.ImportDeclaration): boolean => {
   const clause = node.importClause;
