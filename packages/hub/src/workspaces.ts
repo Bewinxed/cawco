@@ -147,7 +147,7 @@ class WorkspaceHoldsWork extends WorkItemRefusal {
  */
 const ARCHIVE_STOP_WAIT_MS = 30_000;
 
-/** A failed settle's first wait before the sweep tries it again (work-items.ts `settleFailed`): the sweep's minute. */
+/** A failed settle's first wait before the sweep tries it again (workspaces.ts `settleFailed`): the sweep's minute. */
 const SETTLE_RETRY_MS = MINUTE_MS;
 
 /** The longest a failed settle waits between tries: an hour. */
