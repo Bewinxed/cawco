@@ -1,23 +1,19 @@
 /**
- * A hub request is built through core's door alone (packages/core/src/
- * hub-request.ts `hubRequest`), which holds what it sends to what its route
- * takes; so a hub path (`/api/…`, `/health`) written in a string or a
- * template anywhere else is refused, whether it is fetched there or handed
- * on. The door names a route as the hub declares it
- * (`"PUT /api/accounts/routing/:provider"`), which starts with its method
- * and is no path, and answers the path it built (`.path`) for a link, an
- * image or a beacon.
+ * A hub path is the clients' to write: every TypeScript caller of the hub
+ * reaches it through Eden's typed client (the dashboard's `platform/hub.ts`,
+ * everything else's `packages/agent/src/hub-client.ts`, or their `~path` for
+ * a link), so a hub path (`/api/…`, `/health`) built by hand in a string or
+ * a template anywhere else is refused, whether it is fetched there or handed
+ * on. The client's own transport hands it on as a whole URL, which this rule
+ * reads from no literal.
  *
  * A path that is only compared stands: an operand of `===` or `!==`, the
  * argument of `startsWith`, `endsWith`, `includes` or `indexOf`, or a `case`
  * label (a test that reads a URL the page asked, a stand-in hub that answers
  * by path). So does one in an import or a type, and one in {@link NOT_HUB}:
  * a path on something other than the hub (OpenCode's server, neko, a
- * GitHub Enterprise host). The files below are the door and what serves or
- * proxies the hub's paths rather than asking them.
- *
- * `hubRequestAsGiven` sends a body as given, never held to its route: only
- * the callers {@link AS_GIVEN} lists may, each with why.
+ * GitHub Enterprise host). The files below are the clients' seams and what
+ * serves or proxies the hub's paths rather than asking them.
  *
  * golar.config.ts runs it over the dashboard's source, every script, and
  * the agent's, the CLI's and core's source; scripts/lint/fixtures/
@@ -29,7 +25,6 @@ import {
   isCallExpression,
   isCaseClause,
   isExportDeclaration,
-  isIdentifier,
   isImportDeclaration,
   isImportTypeNode,
   isLiteralTypeNode,
@@ -68,17 +63,6 @@ const OWN: Record<string, string> = {
     "reads the hub paths the shell scripts send, against the route table",
   "scripts/tool-answer-check.ts":
     "names the tool door's path to find the code that calls it",
-};
-
-/** The files that may send a body as given (`hubRequestAsGiven`), each with why. */
-const AS_GIVEN: Record<string, string> = {
-  "packages/core/src/hub-request.fixtures.ts": "the door's own proof",
-  "apps/dashboard/src/lib/cawco/views-api.ts":
-    "a view's own Query arguments, data no type holds, held by the hub's draft check and its 422",
-  "scripts/probe-kit/specs/setup-send.ts":
-    "leg 9 proves the show refuses `{ card }`, its shape before 5646cadda",
-  "scripts/probe-kit/specs/view-args.ts":
-    "proves the view-tool route refuses `{ limit: 5 }`",
 };
 
 /** The calls that only read a string they are given. */
@@ -143,8 +127,8 @@ const onlyRead = (literal: Node): boolean => {
   );
 };
 
-export const hubPathDoor = defineRule({
-  name: "house/hub-path-door",
+export const hubPathByHand = defineRule({
+  name: "house/hub-path-by-hand",
   setup(context) {
     const file: SourceFile = context.sourceFile;
     const path = file.fileName.replace(TO_REPOSITORY, "");
@@ -157,17 +141,6 @@ export const hubPathDoor = defineRule({
         range: { begin: node.getStart(file), end: node.end },
       });
     const visit = (node: Node): void => {
-      if (
-        isCallExpression(node) &&
-        isIdentifier(node.expression) &&
-        node.expression.text === "hubRequestAsGiven" &&
-        !(path in AS_GIVEN)
-      ) {
-        report(
-          node.expression,
-          "hubRequestAsGiven sends a body its route may not take: only for a probe that proves the hub refuses it, listed in scripts/lint/hub-path-door.ts AS_GIVEN with why. Build the request with hubRequest, which holds it to its route."
-        );
-      }
       const text =
         isStringLiteral(node) ||
         isNoSubstitutionTemplateLiteral(node) ||
@@ -187,7 +160,7 @@ export const hubPathDoor = defineRule({
       ) {
         report(
           node,
-          "A hub path built outside the door: build the request with core hubRequest(route, sent) (packages/core/src/hub-request.ts), which holds what it sends to what the route takes; its `.path` is the path for a link."
+          "A hub path built by hand: reach the hub through its Eden client (packages/agent/src/hub-client.ts, the dashboard's platform/hub.ts), which holds what it sends to what the route takes; its `~path` is the path for a link."
         );
       }
       node.forEachChild(visit);
