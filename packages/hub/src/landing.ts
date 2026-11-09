@@ -17,7 +17,7 @@
  * dev server among them, never see a tree between the two), check that
  * this machine may push there ({@link pushCheck}: refused, the landing ends
  * in git's words with no step run), and run the landing gate on that tree
- * (the steps its project declares in gate.md: gate-file.ts, work-items.ts
+ * (the steps its project declares in gate.md: gate-file.ts, gate.ts
  * `gateSteps`), outside the queue, each step waiting there for whatever
  * machine slot or pause it needs. No session writes it. Only a gated item
  * joins the queue. The item's stop cancels whatever command of it runs, its
@@ -46,14 +46,14 @@
  * change can break the iOS app (312b43065). One command runs at most once on
  * one set of inputs: the caller skips a command that already passed on the
  * tree about to be pushed, or, for a step that declares the paths it reads
- * (`on:`), on the same trees of those paths (work-items.ts `gateOnce`), and
+ * (`on:`), on the same trees of those paths (gate.ts `gateOnce`), and
  * runs every other.
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
  * instead ({@link pushBranch}): HEAD where it is, replacing only the commit
  * the hub itself last pushed there; for `pr` the hub then has the workspace's
  * machine open the pull or merge request through its origin's forge adapter
- * (work-items.ts `pullRequestFor`, agent forges/).
+ * (landing-run.ts `pullRequestFor`, agent forges/).
  *
  * Every commit either landing puts on origin carries one `Agent-Logs-Url`
  * trailer, the link to the session that made it at the moment it was made
@@ -450,7 +450,7 @@ const stampCommand = (url: string): string =>
   `m=$(git log -1 --format=%B) && t=$(git log -1 --format=%aI | sed 's/+/%2B/') && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${shellQuote(`${LOGS_TRAILER}: ${url}?at=`)}"$t") && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
 
 /**
- * What a landing's report names as its commits (work-items.ts
+ * What a landing's report names as its commits (landing-run.ts
  * `reportedChanges`): the commits its workspace held that its base did not,
  * as the range `from..to`. Landed on the base (`landed.onto` set), they are
  * what the landing put there: from the commit it rebased onto to the one it

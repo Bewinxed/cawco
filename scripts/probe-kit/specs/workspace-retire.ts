@@ -1,5 +1,5 @@
 /**
- * A workspace lives exactly as long as its work item (hub work-items.ts
+ * A workspace lives exactly as long as its work item (hub workspaces.ts
  * `settle`, workspace-retire.ts; agent workspace.ts `archiveWorkspace`,
  * scripts/lib/disk-room.sh). On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model), boundaries included: run it

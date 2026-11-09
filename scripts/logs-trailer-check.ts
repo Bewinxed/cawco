@@ -103,7 +103,7 @@ const sh = (cmd: string): string => {
   return done.stdout.toString();
 };
 
-/** One command as the hub's landing runs it (work-items.ts `runIn`): the shell function first, its result whatever it exits with. */
+/** One command as the hub's landing runs it (landing-run.ts `runIn`): the shell function first, its result whatever it exits with. */
 const run = (cmd: string): Promise<CommandResult> => {
   const done = Bun.spawnSync(["sh", "-c", `${SAFE_GIT_SHELL}${cmd}`], {
     cwd: dir,
@@ -213,7 +213,7 @@ interface LandedAt {
 
 /**
  * Law J's look, after each landing: the report's commits, listed as the hub
- * lists them (work-items.ts `reportedChanges`: its stdout, whatever it exits
+ * lists them (landing-run.ts `reportedChanges`: its stdout, whatever it exits
  * with) from `landing`, what it came to (none when it put nothing
  * on main), against `range`, the commits it put there.
  */

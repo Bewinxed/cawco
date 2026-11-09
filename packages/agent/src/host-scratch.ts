@@ -87,7 +87,7 @@ export const outputsOf = async (id: string): Promise<WorkspaceOutputs> => {
 /**
  * Each regular file and link under `<scratch>/outputs/` of workspace `id`,
  * by its path under it, in path order, with its size (a link's 0), none of
- * their bytes: what hub work-items.ts `SCRATCH_OUTPUTS_LIST` says of a
+ * their bytes: what hub workspaces.ts `SCRATCH_OUTPUTS_LIST` says of a
  * bounded workspace's. A folder is walked, never through a link.
  */
 const outputsListed = async (id: string): Promise<HostOutputListed[]> => {
