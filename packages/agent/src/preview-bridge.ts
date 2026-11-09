@@ -30,6 +30,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths/workspace";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { until } from "@cawco/core/until";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
@@ -201,10 +202,10 @@ const killGroup = async (
   }
   await rm(socket, { force: true });
   await proc.exited;
-  const deadline = Date.now() + BRIDGE_STOP_MS;
-  while (inGroup(proc.pid).length > 0 && Date.now() < deadline) {
-    await Bun.sleep(10);
-  }
+  await until(() => inGroup(proc.pid).length === 0, {
+    deadline: Date.now() + BRIDGE_STOP_MS,
+    every: 10,
+  });
   const left = inGroup(proc.pid);
   if (left.length > 0) {
     console.warn(
@@ -310,11 +311,11 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
       );
     }
   })();
-  const deadline = Date.now() + BRIDGE_START_MS;
   const exited = () => proc.exitCode !== null || proc.signalCode !== null;
-  while (!(existsSync(socket) || exited() || Date.now() > deadline)) {
-    await Bun.sleep(10);
-  }
+  await until(() => existsSync(socket) || exited(), {
+    deadline: Date.now() + BRIDGE_START_MS,
+    every: 10,
+  });
   if (exited()) {
     await draining;
     throw new Error(
