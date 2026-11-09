@@ -17,6 +17,8 @@ import { fileAt, targetOf } from "./workspace-imports";
 
 /** One import in a file. */
 export interface Import {
+  /** Whether it loads on demand (`import("x")`), not when its file loads. */
+  dynamic: boolean;
   /** The file it lands on, when it is one of the repository's. */
   file?: string;
   /** Its 1-based line. */
@@ -44,16 +46,15 @@ const importIsTypeOnly = (node: ts.ImportDeclaration): boolean => {
   );
 };
 
-/** The specifiers `source` names, each with whether it is a type alone. */
-const specifiersOf = (
-  source: ts.SourceFile
-): { line: number; specifier: string; typeOnly: boolean }[] => {
-  const found: { line: number; specifier: string; typeOnly: boolean }[] = [];
-  const add = (literal: ts.Node, typeOnly: boolean): void => {
+/** The specifiers `source` names, each with whether it is a type alone or loaded on demand. */
+const specifiersOf = (source: ts.SourceFile): Import[] => {
+  const found: Import[] = [];
+  const add = (literal: ts.Node, typeOnly: boolean, dynamic = false): void => {
     if (ts.isStringLiteralLike(literal)) {
       found.push({
         specifier: literal.text,
         typeOnly,
+        dynamic,
         line:
           source.getLineAndCharacterOfPosition(literal.getStart(source)).line +
           1,
@@ -82,7 +83,11 @@ const specifiersOf = (
         (ts.isIdentifier(node.expression) &&
           node.expression.text === "require"))
     ) {
-      add(node.arguments[0] as ts.Expression, false);
+      add(
+        node.arguments[0] as ts.Expression,
+        false,
+        node.expression.kind === ts.SyntaxKind.ImportKeyword
+      );
     }
     ts.forEachChild(node, visit);
   };
