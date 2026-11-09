@@ -627,7 +627,7 @@ export const syncInstalls = async <T>(
 
 /**
  * Runs `work`, the install of the rows one folder takes as its workspace
- * is cut (session.ts `placeClone`), in turn with every retirement, and
+ * is cut (fleet-converger.ts `placeClone`), in turn with every retirement, and
  * names the dirs it answers as the fleet's beside the last sync's: a dir
  * only that folder launches from is not retired before the next sync names
  * it. Nothing is retired here.
