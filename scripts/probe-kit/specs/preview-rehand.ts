@@ -48,6 +48,7 @@
  */
 
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactLink } from "../../../packages/core/src/references";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
@@ -327,7 +328,12 @@ const spec: Spec = {
           },
         })
       );
-      return { status: response.status, text: await response.text() };
+      return {
+        status: response.status,
+        text: response.ok
+          ? await response.text()
+          : refusalWords(await response.text(), response.status),
+      };
     };
 
     for (const tag of ["A", "B", "C"] as const) {
