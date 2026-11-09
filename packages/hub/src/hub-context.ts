@@ -114,6 +114,7 @@ import type { createDesignSystem } from "./design-system";
 import type { AttemptAsk } from "./dispatch";
 import type { createFind } from "./find";
 import type { FleetMcp } from "./fleet-mcp";
+import type { FleetMcpChanges } from "./fleet-mcp-changes";
 import type { FleetSync } from "./fleet-sync";
 import type { FleetWatch } from "./fleet-watch";
 import type { HarnessConfigBody } from "./harness-config-body";
@@ -169,6 +170,7 @@ import type { createRuleRows } from "./rule-rows";
 import type { RuleEngine } from "./rules";
 import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
+import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { StreamHubShape } from "./stream";
 import type { createTailnetHttps } from "./tailnet-https";
@@ -621,6 +623,7 @@ export interface HubContext {
   /** A fleet server as a read says it: every secret as set. */
   maskedMcp: (name: string) => FleetMcpServerView | undefined;
   mayRun: (status: string) => boolean;
+  mcpChanges: FleetMcpChanges;
   mcpReady: Promise<unknown>;
   memoryWatch: ReturnType<typeof createTurnWatch>;
   movedFrom: () => Map<string, string>;
@@ -784,6 +787,7 @@ export interface HubContext {
   >;
   readMachineMemory: (machineId: string, set: RouteSet) => Promise<MemoryRead>;
   readMarketplaceSource: (source: string) => Promise<MarketplaceRead>;
+  readSkillFolder: SkillFolderReader;
   readStoppable: (
     machineId: string,
     method: string,
@@ -1044,6 +1048,7 @@ export interface HubContext {
   tickLeaves: () => void;
   tickMoves: () => void;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
+  toolsMayHaveChanged: () => void;
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
   turnInFlight: ReturnType<typeof turnState>;
