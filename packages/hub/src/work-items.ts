@@ -227,6 +227,7 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
+import { sessionWord } from "./session-word";
 import { shipLanded } from "./ship";
 import { received } from "./stored-json";
 import type { Todo } from "./task-file";
@@ -7478,21 +7479,7 @@ export const createWorkItems = ({
 
   /** A word from the hub about an item, to the item's session: how its send went. */
   const tell = (row: InstanceRow, content: string) =>
-    send({
-      verb: "send",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload: {
-        instanceId: row.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: { role: "user", content },
-          parent_tool_use_id: null,
-          origin: WAKE_ORIGIN,
-        },
-      },
-    });
+    send(sessionWord(row, content, WAKE_ORIGIN));
 
   /**
    * The one expiry path for a wait whose time has passed: a live timer, an
