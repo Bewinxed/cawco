@@ -95,6 +95,7 @@ import {
   HOST_ENV,
   HOST_FILES,
   HOST_GONE_STATUS,
+  HOST_USAGE,
   hostArgsOf,
 } from "./boundary/protocol";
 import { isGitDirSync } from "./git-dir";
@@ -215,9 +216,7 @@ const ask: SandboxAskCallback = ({ host }) => {
 
 const handed = hostArgsOf(process.argv.slice(2));
 if (!handed) {
-  console.error(
-    "usage: boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES [PLACE...]"
-  );
+  console.error(HOST_USAGE);
   process.exit(64);
 }
 const { settingsFile, runnerFile, fifo, clone, readyLine, deniesFile, places } =
@@ -297,7 +296,6 @@ const goneReason = (): string | undefined => {
 };
 
 /** Ends this boundary without a sandbox: the folder it holds is gone ({@link goneReason}). */
-const GONE_STATUS = HOST_GONE_STATUS;
 
 const refuseGone = (reason: string): never => {
   // On stdout, as a line: the agent names a boundary that did not start by
@@ -305,7 +303,7 @@ const refuseGone = (reason: string): never => {
   console.log(
     `cawco: ${reason}, so the workspace's boundary closes and no sandbox starts there`
   );
-  process.exit(GONE_STATUS);
+  process.exit(HOST_GONE_STATUS);
 };
 
 const goneAtStart = goneReason();
@@ -870,7 +868,7 @@ let finishing: Promise<never> | undefined;
  * This boundary's one way out, taken once whoever asks first: the sandbox
  * killed with everything in it, its files gone, srt's proxies, bridges and
  * mount points taken down, then the process exits with the sandbox's status,
- * or with {@link GONE_STATUS} when the folder it holds is gone.
+ * or with {@link HOST_GONE_STATUS} when the folder it holds is gone.
  */
 const finish = (end: { status: number } | { gone: string }): Promise<never> => {
   finishing ??= (async () => {
@@ -886,7 +884,7 @@ const finish = (end: { status: number } | { gone: string }): Promise<never> => {
     if ("gone" in end) {
       refuseGone(end.gone);
     }
-    return process.exit("status" in end ? end.status : GONE_STATUS);
+    return process.exit("status" in end ? end.status : HOST_GONE_STATUS);
   })();
   return finishing;
 };
@@ -908,7 +906,7 @@ const watchClone = (): void => {
         console.error(
           `cawco: the boundary could not close after ${gone}: ${error instanceof Error ? error.message : String(error)}`
         );
-        process.exit(GONE_STATUS);
+        process.exit(HOST_GONE_STATUS);
       });
     }
   };
