@@ -1045,6 +1045,7 @@ import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
+import { sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { applySetupPicks, isSetupPage } from "./setup";
@@ -24191,26 +24192,18 @@ export const createServer = (
     stopped: "limit" | "signin",
     quiet = false
   ): void => {
-    deliverSend({
-      verb: "send",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload: {
-        instanceId: row.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: { role: "user", content: CARRY_ON[stopped] },
-          parent_tool_use_id: null,
-          origin: {
-            kind: "system",
-            name: LIMIT_ORIGIN,
-            line: noticeWords.carryOn[stopped],
-          },
-          ...(quiet ? { shouldQuery: false } : {}),
+    deliverSend(
+      sessionWord(
+        row,
+        CARRY_ON[stopped],
+        {
+          kind: "system",
+          name: LIMIT_ORIGIN,
+          line: noticeWords.carryOn[stopped],
         },
-      },
-    } satisfies Envelope<SendPayload>);
+        quiet ? { shouldQuery: false } : {}
+      )
+    );
   };
 
   /**
@@ -24276,6 +24269,15 @@ export const createServer = (
     if (sent?.state === "failed") {
       queueMicrotask(() => advanceCompaction(row.id));
     }
+  };
+
+  /** A compaction's plan and its row when its session's machine is connected. */
+  const compactionOnline = (instanceId: string) => {
+    const plan = db.atLimit.compaction(instanceId);
+    const [row] = db.getInstancesByIds([instanceId]);
+    return plan && row && registry.agent(row.machineId)
+      ? { plan, row }
+      : undefined;
   };
 
   /** A compaction's own sends, by their uuids: what its hold never holds. */
@@ -24483,11 +24485,11 @@ export const createServer = (
    * its boundary. A step its session refused ends it stopped.
    */
   const advanceCompaction = (instanceId: string): void => {
-    const plan = db.atLimit.compaction(instanceId);
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (!(plan && row && registry.agent(row.machineId))) {
+    const at = compactionOnline(instanceId);
+    if (!at) {
       return;
     }
+    const { plan, row } = at;
     if (stepEnded(plan, row)) {
       nextCompactionStep(plan, row);
     }
@@ -24521,11 +24523,11 @@ export const createServer = (
    * at any look ({@link advanceCompaction}).
    */
   const recoverCompaction = async (instanceId: string): Promise<void> => {
-    const plan = db.atLimit.compaction(instanceId);
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (!(plan && row && registry.agent(row.machineId))) {
+    const at = compactionOnline(instanceId);
+    if (!at) {
       return;
     }
+    const { plan, row } = at;
     const sent = db.sendRecord(stepUuid(plan));
     // Its turn's end was heard and stored before the hub stopped: it goes
     // on from there, whatever the machine says now.
