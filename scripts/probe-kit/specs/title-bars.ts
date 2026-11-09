@@ -19,7 +19,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { BAR_ITEM } from "../../../apps/dashboard/src/lib/components/ui/bar-glass/marks";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { cawPanelWords } from "../../../packages/core/src/words/onboarding";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import { type Kit, open, type Spec, type View } from "../kit";
@@ -80,13 +79,11 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Glass bars",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Glass bars",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const at = `${base}/project/${project.id}`;
@@ -140,12 +137,9 @@ const run = async (kit: Kit) => {
   });
   // Named as his panel's start names it (client `nameConversation`): the
   // conversation the project's row names is the one his panel shows.
-  await fleet.api(
-    hubRequest("POST /api/projects/:id/caw/conversation", {
-      path: { id: project.id },
-      body: {
-        instanceId: talk,
-      },
+  await fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).caw.conversation.post({
+      instanceId: talk,
     })
   );
   await fleet.send(talk, "Walk me through the glass bars, step by step.");
@@ -314,17 +308,14 @@ const run = async (kit: Kit) => {
   );
 
   // A page artifact in the session's panel, for its head.
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: talk },
-      body: {
-        kind: "page",
-        does: "judge",
-        ask: "Judge the glass bars page",
-        name: "glass-page",
-        title: "Glass bars page",
-        html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1 id="head">Glass bars</h1><p id="one">Every bar floats its controls in glass.</p></body></html>',
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: talk }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      ask: "Judge the glass bars page",
+      name: "glass-page",
+      title: "Glass bars page",
+      html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1 id="head">Glass bars</h1><p id="one">Every bar floats its controls in glass.</p></body></html>',
     })
   );
   const SESSION = `${base}/session/${talk}`;
@@ -343,24 +334,21 @@ const run = async (kit: Kit) => {
     }
     await Bun.sleep(1000);
   }
-  const shown = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: busy },
-      body: {
-        kind: "page",
-        does: "judge",
-        ask: "Judge the fullest bar",
-        name: "fullest-bar",
-        title: "Fullest bar",
-        html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fullest bar</title></head><body><h1>Fullest bar</h1></body></html>',
-      },
+  const shown = await fleet.api((hub) =>
+    hub.api.instances({ id: busy }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      ask: "Judge the fullest bar",
+      name: "fullest-bar",
+      title: "Fullest bar",
+      html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fullest bar</title></head><body><h1>Fullest bar</h1></body></html>',
     })
   );
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-      path: { id: busy, artifact: shown.id },
-      body: {},
-    })
+  await fleet.api((hub) =>
+    hub.api
+      .instances({ id: busy })
+      .artifacts({ artifact: shown.id })
+      .show.post({})
   );
   await each("caw preview shown", async (page) => {
     // Showing brings Preview to the front, where the pane's own bar is the

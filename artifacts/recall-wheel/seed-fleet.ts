@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-import { hubRequest } from "../../packages/core/src/hub-request";
 /**
  * A scratch fleet holding one session the reader has sent 40 messages to, for
  * the recall wheel's checks (wheel-check.mjs): a real hub, agent and sessiond
@@ -62,9 +61,7 @@ try {
       `step ${n}'s reply in the transcript`,
       () =>
         fleet
-          .api<{ messages?: unknown[] }>(
-            hubRequest("GET /api/instances/:id/transcript", { path: { id } })
-          )
+          .api((hub) => hub.api.instances({ id }).transcript.get())
           .then((page) => JSON.stringify(page)),
       (text) => text.includes(`Step ${n} is done.`),
       120_000

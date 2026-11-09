@@ -41,12 +41,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
-import {
-  fetchHub,
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { machinePath } from "../../../packages/core/src/machine-path";
 import { judgedWords } from "../../../packages/core/src/words/judged";
 import { CONTROL_HOST_OUTPUTS } from "../../../packages/core/src/workspace/controls";
@@ -54,6 +48,7 @@ import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hu
 import type { DispatchView } from "../../../packages/hub/src/dispatch";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
+import { type HubAsk, handled, hubAt, said as saidOf } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const B = "probe-unmet-machine";
@@ -77,7 +72,7 @@ interface Answer {
 
 interface Rig {
   base: string;
-  board: (request: HubRequest) => Promise<Answer>;
+  board: (request: HubAsk) => Promise<Answer>;
   checkout: ReturnType<typeof machinePath>;
   db: HubDb;
   identities: { mint: (instanceId: string) => string };
@@ -247,10 +242,8 @@ const attempt = (rig: Rig, taskId: string, title: string): ToolSession => {
 
 const read = async (rig: Rig, id: string): Promise<TaskView> =>
   (
-    await rig.board(
-      hubRequest("GET /api/projects/:id/tasks/:taskId", {
-        path: { id: rig.projectId, taskId: id },
-      })
+    await rig.board((client) =>
+      client.api.projects({ id: rig.projectId }).tasks({ taskId: id }).get()
     )
   ).json as TaskView;
 
@@ -283,22 +276,19 @@ const built = async (
   /** Where the hub leaves it without a comment: read once its attempt has ended. */
   judgedElsewhere = false
 ): Promise<TaskView> => {
-  const made = await rig.board(
-    hubRequest("POST /api/projects/:id/tasks", {
-      path: { id: rig.projectId },
-      body: {
-        title,
-        acceptance: ACCEPTANCE.map((line) => `- ${line}`).join("\n"),
-      },
+  const made = await rig.board((client) =>
+    client.api.projects({ id: rig.projectId }).tasks.post({
+      title,
+      acceptance: ACCEPTANCE.map((line) => `- ${line}`).join("\n"),
     })
   );
   const { id } = made.json as { id: string };
   const builder = attempt(rig, id, title);
-  const moved = await rig.board(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/stage", {
-      path: { id: rig.projectId, taskId: id },
-      body: { stage: "working" },
-    })
+  const moved = await rig.board((client) =>
+    client.api
+      .projects({ id: rig.projectId })
+      .tasks({ taskId: id })
+      .stage.post({ stage: "working" })
   );
   if (moved.status >= 400) {
     throw new Error(`${id} did not go to working: ${moved.text}`);
@@ -347,10 +337,8 @@ const legs = async (rig: Rig): Promise<void> => {
 
   // (b) It counts as a failed attempt: off the frontier.
   const view = (
-    await rig.board(
-      hubRequest("GET /api/projects/:id/dispatch", {
-        path: { id: rig.projectId },
-      })
+    await rig.board((client) =>
+      client.api.projects({ id: rig.projectId }).dispatch.get()
     )
   ).json as DispatchView;
   kit.check(
@@ -416,10 +404,8 @@ const legs = async (rig: Rig): Promise<void> => {
   await Bun.sleep(500);
   const dBack = await read(rig, d.id);
   const dView = (
-    await rig.board(
-      hubRequest("GET /api/projects/:id/dispatch", {
-        path: { id: rig.projectId },
-      })
+    await rig.board((client) =>
+      client.api.projects({ id: rig.projectId }).dispatch.get()
     )
   ).json as DispatchView;
   kit.check(
@@ -480,9 +466,7 @@ const legs = async (rig: Rig): Promise<void> => {
   });
   await engine.catchUp(old);
   const oldStages = (
-    await rig.board(
-      hubRequest("GET /api/projects/:id/stages", { path: { id: old } })
-    )
+    await rig.board((client) => client.api.projects({ id: old }).stages.get())
   ).json as { moves: { from: string; to: string }[]; source: string };
   kit.check(
     "e: a stages.md written from the code template before working → ready reads as the code template, and the project then reads today's, working → ready in it",
@@ -531,10 +515,12 @@ export default {
       process.env[CAWCO_ENV.hubUrl] = `${base.replace("http", "ws")}/ws`;
       for (let tries = 0; tries < 50; tries += 1) {
         if (
-          await fetchHub(fetch, base, hubRequest("GET /health")).then(
-            (r) => r.ok,
-            () => false
-          )
+          await hubAt(base)
+            .health.get()
+            .then(
+              (r) => r.error === null,
+              () => false
+            )
         ) {
           break;
         }
@@ -561,21 +547,11 @@ export default {
       });
       // The code template, its Review before done off: review is off.
       db.setProjectTemplate(projectId, "code");
-      const board = async (request: HubRequest): Promise<Answer> => {
-        const response = await hub.handle(
-          new Request(
-            `http://127.0.0.1${request.path}`,
-            hubInit(request, { headers: { [PRESENCE_HEADER]: PRESENCE } })
-          )
+      const board = async (request: HubAsk): Promise<Answer> => {
+        const answer = await request(
+          handled((r) => hub.handle(r), { [PRESENCE_HEADER]: PRESENCE })
         );
-        const text = await response.text();
-        let json: unknown;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          json = undefined;
-        }
-        return { json, status: response.status, text };
+        return saidOf(answer);
       };
       const shell = { checkout, db, projectId };
       const rig: Rig = {

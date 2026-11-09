@@ -43,13 +43,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
+import { type HubAsk, handled, said as saidOf } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-areas-machine";
@@ -63,7 +58,7 @@ interface Answer {
 type Hub = Awaited<ReturnType<typeof inProcess>>;
 
 interface Rig {
-  call: (request: HubRequest) => Promise<Answer>;
+  call: (request: HubAsk) => Promise<Answer>;
   db: Hub["db"];
   kit: Kit;
 }
@@ -133,60 +128,47 @@ const made = async (rig: Rig): Promise<Made> => {
     auth: "unknown",
   });
   const accountArea = idOf(
-    await call(
-      hubRequest("POST /api/accounts", {
-        body: {
-          provider: "anthropic",
-          kind: "subscription",
-          label: "Probe client account",
-        },
+    await call((client) =>
+      client.api.accounts.post({
+        provider: "anthropic",
+        kind: "subscription",
+        label: "Probe client account",
       })
     )
   );
   const accountOwn = idOf(
-    await call(
-      hubRequest("POST /api/accounts", {
-        body: {
-          provider: "anthropic",
-          kind: "subscription",
-          label: "Probe own account",
-        },
+    await call((client) =>
+      client.api.accounts.post({
+        provider: "anthropic",
+        kind: "subscription",
+        label: "Probe own account",
       })
     )
   );
-  const created = await call(
-    hubRequest("POST /api/areas", { body: { name: "Probe client" } })
+  const created = await call((client) =>
+    client.api.areas.post({ name: "Probe client" })
   );
   const area = idOf(created);
-  const set = await call(
-    hubRequest("PATCH /api/areas/:id", {
-      path: { id: area },
-      body: {
-        account: accountArea,
-        accountAtLimit: "move",
-        cawMode: "plan",
-        cap: { usd: 25, period: "month" },
-        onCap: "pause",
-      },
+  const set = await call((client) =>
+    client.api.areas({ id: area }).patch({
+      account: accountArea,
+      accountAtLimit: "move",
+      cawMode: "plan",
+      cap: { usd: 25, period: "month" },
+      onCap: "pause",
     })
   );
-  const decides = await call(
-    hubRequest("PUT /api/areas/:id/folder/file", {
-      path: { id: area },
-      body: {
-        path: "decides.md",
-        content: "---\nScope: advisor\n---\n",
-      },
+  const decides = await call((client) =>
+    client.api.areas({ id: area }).folder.file.put({
+      path: "decides.md",
+      content: "---\nScope: advisor\n---\n",
     })
   );
-  const type = await call(
-    hubRequest("PUT /api/areas/:id/folder/file", {
-      path: { id: area },
-      body: {
-        path: `delegates/${TYPE}.md`,
-        content:
-          "---\nharness: claude\nmodel: claude-opus-5-5\n---\nDrafts in the client's voice.\n",
-      },
+  const type = await call((client) =>
+    client.api.areas({ id: area }).folder.file.put({
+      path: `delegates/${TYPE}.md`,
+      content:
+        "---\nharness: claude\nmodel: claude-opus-5-5\n---\nDrafts in the client's voice.\n",
     })
   );
   const [first, second, outside] = [
@@ -198,66 +180,51 @@ const made = async (rig: Rig): Promise<Made> => {
     db.createProject({ id, name, remote: null });
     return id;
   });
-  const own = await call(
-    hubRequest("PATCH /api/projects/:id", {
-      path: { id: second },
-      body: {
-        account: accountOwn,
-      },
+  const own = await call((client) =>
+    client.api.projects({ id: second }).patch({
+      account: accountOwn,
     })
   );
   const placed = [
-    await call(
-      hubRequest("PUT /api/projects/:id/area", {
-        path: { id: first },
-        body: { areaId: area },
-      })
+    await call((client) =>
+      client.api.projects({ id: first }).area.put({ areaId: area })
     ),
-    await call(
-      hubRequest("PUT /api/projects/:id/area", {
-        path: { id: second },
-        body: { areaId: area },
-      })
+    await call((client) =>
+      client.api.projects({ id: second }).area.put({ areaId: area })
     ),
   ];
-  const doc = await call(
-    hubRequest("PUT /api/fleet/memory/docs", {
-      body: {
-        path: DOC,
-        content: "Write in the client's voice.",
-        scope: { role: "leaf", areaIds: [area] },
-      },
+  const doc = await call((client) =>
+    client.api.fleet.memory.docs.put({
+      path: DOC,
+      content: "Write in the client's voice.",
+      scope: { role: "leaf", areaIds: [area] },
     })
   );
   const connection = "probe-client-drive";
-  const granted = await call(
-    hubRequest("POST /api/connections", {
-      body: {
-        name: connection,
-        service: "drive",
-        account: "client@example.com",
-        transport: "http",
-        url: "https://example.com/mcp",
-        auth: "bearer",
-        areas: [area],
-      },
+  const granted = await call((client) =>
+    client.api.connections.post({
+      name: connection,
+      service: "drive",
+      account: "client@example.com",
+      transport: "http",
+      url: "https://example.com/mcp",
+      auth: "bearer",
+      areas: [area],
     })
   );
-  const rule = await call(
-    hubRequest("POST /api/rules", {
-      body: {
-        name: "Probe area rule",
-        enabled: true,
-        pattern: "probe phrase",
-        matchKind: "phrase",
-        caseSensitive: false,
-        wholeWord: false,
-        watch: "text",
-        reply: "The area's rule fired.",
-        timing: "turn",
-        repeat: true,
-        scope: { areaId: area },
-      },
+  const rule = await call((client) =>
+    client.api.rules.post({
+      name: "Probe area rule",
+      enabled: true,
+      pattern: "probe phrase",
+      matchKind: "phrase",
+      caseSensitive: false,
+      wholeWord: false,
+      watch: "text",
+      reply: "The area's rule fired.",
+      timing: "turn",
+      repeat: true,
+      scope: { areaId: area },
     })
   );
   // The fleet rows bound to it: a skill and a server as their fetch and
@@ -279,26 +246,20 @@ const made = async (rig: Rig): Promise<Made> => {
   });
   db.putMcpServer({ name: MCP, config: { command: "true" }, areaId: area });
   const hook = crypto.randomUUID();
-  const hooked = await call(
-    hubRequest("PUT /api/fleet/hooks/:id", {
-      path: { id: hook },
-      body: {
-        name: "Probe area hook",
-        enabled: true,
-        event: "Stop",
-        handler: { type: "command", command: "true" },
-        scope: "project",
-        areaId: area,
-      },
+  const hooked = await call((client) =>
+    client.api.fleet.hooks({ id: hook }).put({
+      name: "Probe area hook",
+      enabled: true,
+      event: "Stop",
+      handler: { type: "command", command: "true" },
+      scope: "project",
+      areaId: area,
     })
   );
-  const settings = await call(
-    hubRequest("PUT /api/fleet/claude-settings/:name", {
-      path: { name: SETTINGS },
-      body: {
-        settings: { cleanupPeriodDays: 30 },
-        areaId: area,
-      },
+  const settings = await call((client) =>
+    client.api.fleet["claude-settings"]({ name: SETTINGS }).put({
+      settings: { cleanupPeriodDays: 30 },
+      areaId: area,
     })
   );
   const all = [
@@ -342,7 +303,7 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
   const { ruleInScope } = await import("../../../packages/core/src/rules");
   const { sessionTakes } = await import("../../../packages/core/src/fleet");
   const listed = (
-    (await call(hubRequest("GET /api/projects"))).json as {
+    (await call((client) => client.api.projects.get())).json as {
       id: string;
       areaId: string | null;
       cap: Read["cap"];
@@ -378,9 +339,7 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
     ...projectAccountOf(project, (id) => db.areas.get(id)?.name ?? null),
   });
   const { decides } = (
-    await call(
-      hubRequest("GET /api/projects/:id/decides", { path: { id: projectId } })
-    )
+    await call((client) => client.api.projects({ id: projectId }).decides.get())
   ).json as {
     decides: {
       from: Partial<Record<string, string>>;
@@ -388,10 +347,8 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
     };
   };
   const { types } = (
-    await call(
-      hubRequest("GET /api/projects/:id/delegate-types", {
-        path: { id: projectId },
-      })
+    await call((client) =>
+      client.api.projects({ id: projectId })["delegate-types"].get()
     )
   ).json as { types: { name: string; source: string }[] };
   const doc = db.listFleetMemoryDocs().find((one) => one.path === DOC);
@@ -564,12 +521,9 @@ const readersLeg = async (rig: Rig, m: Made): Promise<void> => {
 };
 
 const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
-  const out = await rig.call(
-    hubRequest("PUT /api/projects/:id/area", {
-      path: { id: m.first },
-      body: {
-        areaId: null,
-      },
+  const out = await rig.call((client) =>
+    client.api.projects({ id: m.first }).area.put({
+      areaId: null,
     })
   );
   const said = (out.json as { said?: string[] } | undefined)?.said ?? [];
@@ -584,12 +538,9 @@ const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
       onFleet(after, null),
     JSON.stringify({ status: out.status, said, after })
   );
-  const back = await rig.call(
-    hubRequest("PUT /api/projects/:id/area", {
-      path: { id: m.first },
-      body: {
-        areaId: m.area,
-      },
+  const back = await rig.call((client) =>
+    client.api.projects({ id: m.first }).area.put({
+      areaId: m.area,
     })
   );
   const again = await read(rig, m, m.first);
@@ -605,20 +556,17 @@ const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
 };
 
 const forgetLeg = async (rig: Rig, m: Made): Promise<void> => {
-  const forgot = await rig.call(
-    hubRequest("DELETE /api/projects/:id", { path: { id: m.first } })
+  const forgot = await rig.call((client) =>
+    client.api.projects({ id: m.first }).delete()
   );
   const gone = rig.db.project(m.first);
   const listed = (
-    (await rig.call(hubRequest("GET /api/projects/forgotten"))).json as
+    (await rig.call((client) => client.api.projects.forgotten.get())).json as
       { id: string; forgottenAt: number }[] | undefined
   )?.find((one) => one.id === m.first);
-  const restored = await rig.call(
-    hubRequest("POST /api/projects/:id/restore", {
-      path: { id: m.first },
-      body: {
-        forgottenAt: listed?.forgottenAt,
-      },
+  const restored = await rig.call((client) =>
+    client.api.projects({ id: m.first }).restore.post({
+      forgottenAt: listed?.forgottenAt,
     })
   );
   const back = await read(rig, m, m.first);
@@ -649,8 +597,8 @@ const undo = async (
   id: number,
   back: () => boolean
 ): Promise<Undone> => {
-  const answer = await rig.call(
-    hubRequest("POST /api/trash/:id/restore", { path: { id } })
+  const answer = await rig.call((client) =>
+    client.api.trash({ id }).restore.post()
   );
   return { status: answer.status, text: answer.text, back: back() };
 };
@@ -703,46 +651,39 @@ const trashLeg = async (
     projectId: m.outside,
   });
   const skill = restoreOf(
-    await call(
-      hubRequest("DELETE /api/fleet/skills/:name", {
-        path: { name: OUTSIDE.skill },
-      })
+    await call((client) =>
+      client.api.fleet.skills({ name: OUTSIDE.skill }).delete()
     )
   );
   const server = restoreOf(
-    await call(
-      hubRequest("DELETE /api/fleet/mcp/:name", {
-        path: { name: OUTSIDE.server },
-      })
+    await call((client) =>
+      client.api.fleet.mcp({ name: OUTSIDE.server }).delete()
     )
   );
-  const docs = {
+  const docs: Record<
+    string,
+    { areaIds?: string[]; projectIds?: string[]; role: "leaf" }
+  > = {
     "probe-area-only.md": { role: "leaf", areaIds: [m.area] },
     "probe-project-only.md": { role: "leaf", projectIds: [m.outside] },
-  } as const;
+  };
   const trashed: number[] = [];
   for (const [path, scope] of Object.entries(docs)) {
-    await call(
-      hubRequest("PUT /api/fleet/memory/docs", {
-        body: {
-          path,
-          content: "Only where it is scoped.",
-          scope,
-        },
+    await call((client) =>
+      client.api.fleet.memory.docs.put({
+        path,
+        content: "Only where it is scoped.",
+        scope,
       })
     );
     trashed.push(
       restoreOf(
-        await call(
-          hubRequest("DELETE /api/fleet/memory/docs", { body: { path } })
-        )
+        await call((client) => client.api.fleet.memory.docs.delete({ path }))
       )
     );
   }
   const hook = restoreOf(
-    await call(
-      hubRequest("DELETE /api/fleet/hooks/:id", { path: { id: m.hook } })
-    )
+    await call((client) => client.api.fleet.hooks({ id: m.hook }).delete())
   );
   const [areaDoc = -1, projectDoc = -1] = trashed;
   rig.kit.check(
@@ -779,8 +720,8 @@ const undoLeg = async (
     refused(areaDoc) && refused(hook),
     JSON.stringify({ areaDoc, hook })
   );
-  const forgot = await rig.call(
-    hubRequest("DELETE /api/projects/:id", { path: { id: m.outside } })
+  const forgot = await rig.call((client) =>
+    client.api.projects({ id: m.outside }).delete()
   );
   const projectDoc = await undo(
     rig,
@@ -812,15 +753,12 @@ const undoLeg = async (
     })
   );
   const listed = (
-    (await rig.call(hubRequest("GET /api/projects/forgotten"))).json as
+    (await rig.call((client) => client.api.projects.forgotten.get())).json as
       { id: string; forgottenAt: number }[] | undefined
   )?.find((one) => one.id === m.outside);
-  const restored = await rig.call(
-    hubRequest("POST /api/projects/:id/restore", {
-      path: { id: m.outside },
-      body: {
-        forgottenAt: listed?.forgottenAt,
-      },
+  const restored = await rig.call((client) =>
+    client.api.projects({ id: m.outside }).restore.post({
+      forgottenAt: listed?.forgottenAt,
     })
   );
   const kept = rig.db.listSkills().find((one) => one.name === OUTSIDE.kept);
@@ -832,15 +770,16 @@ const undoLeg = async (
 };
 
 const deleteLeg = async (rig: Rig, m: Made): Promise<void> => {
-  const deleted = await rig.call(
-    hubRequest("DELETE /api/areas/:id", { path: { id: m.area } })
+  const deleted = await rig.call((client) =>
+    client.api.areas({ id: m.area }).delete()
   );
   const answer = deleted.json as
     { projects?: string[]; said?: string[] } | undefined;
   const said = answer?.said ?? [];
   const first = await read(rig, m, m.first);
   const second = await read(rig, m, m.second);
-  const { areas } = (await rig.call(hubRequest("GET /api/areas"))).json as {
+  const { areas } = (await rig.call((client) => client.api.areas.get()))
+    .json as {
     areas: unknown[];
   };
   rig.kit.check(
@@ -888,21 +827,8 @@ export default {
       );
       const rig: Rig = {
         call: async (request) => {
-          const response = await hub.handle(
-            new Request(`http://127.0.0.1${request.path}`, hubInit(request))
-          );
-          const text = await response.text();
-          let json: unknown;
-          try {
-            json = JSON.parse(text);
-          } catch {
-            // Words, not JSON: a refusal.
-          }
-          return {
-            status: response.status,
-            text: response.ok ? text : refusalWords(text, response.status),
-            json,
-          };
+          const answer = await request(handled((r) => hub.handle(r)));
+          return saidOf(answer);
         },
         db,
         kit,

@@ -23,12 +23,19 @@
  *   bun scripts/probe-kit/run.ts preview-waits-held
  */
 
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { downOf } from "../../../packages/preview/src/proxy";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, pressIn, type Spec } from "../kit";
+import { hubAt } from "../hub";
+import {
+  delegateStarted,
+  type Kit,
+  type KitFleet,
+  open,
+  pressIn,
+  type Spec,
+} from "../kit";
 import { passedFetch } from "../preview-pass";
 
 /** How long the fleet's stages run unused before they sleep (agent stage.ts `CAWCO_STAGE_IDLE_MS`). */
@@ -126,24 +133,10 @@ const respond = (request: Seen): Reply => {
   }
   const tag = TAG.exec(request.all)?.[1];
   return tag === "A" || tag === "B" ? work(request, tag) : text("ok");
-};
-
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-}
-
-interface Sweep {
-  kept: { hold: string; workspaceId: string }[];
-}
-
-/** What the artifact's own origin answers at its root: its status, its down page's hop when it is one, and whether it reads `word`. */
+}; /** What the artifact's own origin answers at its root: its status, its down page's hop when it is one, and whether it reads `word`. */
 const originReads = async (fleet: KitFleet, id: string, word: string) => {
-  const { port } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact: id },
-    })
+  const { port } = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id })["preview-address"].post()
   );
   const response = await passedFetch(fleet, `http://127.0.0.1:${port}/`, {
     headers: { "sec-fetch-mode": "navigate" },
@@ -182,9 +175,11 @@ const spec: Spec = {
     await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo held > README.md && git add -A && git commit -qm 'First commit'`
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: { name: "Held previews", machineId: MACHINE, cwd: repo },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Held previews",
+        machineId: MACHINE,
+        cwd: repo,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", repo, {
@@ -200,21 +195,20 @@ const spec: Spec = {
         "SELECT state FROM workspaces WHERE id = ?",
         id
       )[0]?.state;
-    const sweep = () =>
-      fleet.api<Sweep>(hubRequest("POST /api/workspaces/retire"));
+    const sweep = () => fleet.api((hub) => hub.api.workspaces.retire.post());
     /** A delegate's hand-up made, its preview on a decision page of the parent's, and the delegate stopped: its item ended. */
     const handedAndStopped = async (tag: Tag) => {
-      const started = await fleet.api<Started>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      const started = delegateStarted(
+        await fleet.api((hub) =>
+          hub.api["work-items"].post({
             parentInstanceId: parent,
             title: `Hand up page ${tag}`,
             prompt: `PROBE-HELD-${tag}: hand up your page, then wait.`,
             harness: "claude",
             model: "claude-haiku-4-5",
             cwd: repo,
-          },
-        })
+          })
+        )
       );
       await until(
         `${tag} resting in its wait after its hand-up`,
@@ -326,13 +320,10 @@ drawn = Preview("${row.id}", "Page ${tag}")`,
     );
 
     // (3) The other half: deleting the preview lets B retire, its page unanswered.
-    const response = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
-        path: { id: parent, artifact: b.artifact },
-      })
-    );
+    const response = await hubAt(fleet.base)
+      .api.instances({ id: parent })
+      .artifacts({ artifact: b.artifact })
+      .delete();
     const deleted = await until(
       "B's workspace retired",
       async () => {

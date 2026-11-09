@@ -66,11 +66,10 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
-import {
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { movedLine, restoredWords } from "../../../packages/core/src/injected";
 import { commandLines } from "../../../packages/core/src/process-identity";
@@ -81,6 +80,7 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyArgv, copyGone, gitInCopy, inCopy, isView } from "../copy";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const TAG = /PROBE-HOLDS-([NLXSRDUOPT])\b/u;
 type Tag = "N" | "L" | "X" | "S" | "R" | "D" | "U" | "O" | "P" | "T";
@@ -650,7 +650,7 @@ const ownerLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const orphan = await sleeps(OWNER_SLEEP);
   shell.kill("SIGKILL");
   await shell.exited;
-  await scene.fleet.api(hubRequest("POST /api/workspaces/retire"));
+  await scene.fleet.api((hub) => hub.api.workspaces.retire.post());
   const retired = await scene.stateBecomes(wo.id, "archived");
   const named = (await scene.fleet.logs("agent"))
     .split("\n")
@@ -878,7 +878,7 @@ const removalLeg = async (kit: Kit, scene: Scene): Promise<void> => {
     `${item?.state}; ${row.state}; clone ${existsSync(wu.path) ? "stands" : "gone"}; ${removing} ${existsSync(removing) ? "stands" : "gone"}; ${failed ?? (await linesOf(scene.fleet, wu.id))}`
   );
   await Bun.$`chflags -R nouchg ${removing}`.quiet().nothrow();
-  await scene.fleet.api(hubRequest("POST /api/workspaces/retire"));
+  await scene.fleet.api((hub) => hub.api.workspaces.retire.post());
   const retired = await scene.stateBecomes(wu.id, "archived");
   check(
     "(u) once the flag is gone, the next sweep retires it and nothing of it is left",
@@ -967,13 +967,11 @@ const projectAt = async (
       .quiet();
   }
   return (
-    await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name,
-          machineId: MACHINE,
-          cwd: dir,
-        },
+    await fleet.api((hub) =>
+      hub.api.projects.post({
+        name,
+        machineId: MACHINE,
+        cwd: dir,
       })
     )
   ).id;
@@ -1042,9 +1040,9 @@ const spec: Spec = {
           SETTLE_MS
         ).catch(() => workspaceOf(id)),
       delegate: (tag, cwd, extra = {}) =>
-        fleet.api<Started>(
-          hubRequest("POST /api/work-items", {
-            body: {
+        fleet
+          .api((hub) =>
+            hub.api["work-items"].post({
               parentInstanceId: parent,
               title: `Holds probe ${tag}`,
               prompt: `PROBE-HOLDS-${tag}: do your part.`,
@@ -1053,9 +1051,9 @@ const spec: Spec = {
               cwd,
               ...(cwd === tree ? { parentInstanceId: treeParent } : {}),
               ...extra,
-            },
-          })
-        ),
+            })
+          )
+          .then(delegateStarted),
       ended: (started) =>
         until(
           `work item ${started.workItemId} ended`,

@@ -32,6 +32,7 @@
  *
  *   bun scripts/probe-kit/run.ts bodiless-post
  */
+
 import { mkdir } from "node:fs/promises";
 import { connect } from "node:http2";
 import { join } from "node:path";
@@ -39,19 +40,18 @@ import {
   couldNot,
   refusedOf,
 } from "../../../apps/dashboard/src/lib/platform/hub-read";
+import { dataOf, hubPath } from "../../../packages/agent/src/hub-client";
 import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { dashboardRelay } from "../../../packages/hub/src/tailnet-https";
 import { scratchCertificate } from "../cloudflare-front";
+import { hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 import { oauthProvider } from "../oauth-provider";
 import { freePort, publishBuild, serveUnder } from "../socket-served";
 
 /** The fleet's OAuth MCP server, as the person named it. */
 const SERVER = "ProbeOAuth";
-const SIGN_IN = hubRequest("POST /api/fleet/mcp/:name/sign-in", {
-  path: { name: SERVER },
-}).path;
+const SIGN_IN = hubPath.api.fleet.mcp({ name: SERVER })["sign-in"]["~path"];
 
 /** What a request answered: its status, its type, its body, and the protocol it went over. */
 interface Answer {
@@ -124,21 +124,16 @@ const run = async (kit: Kit) => {
     fleet.launch("hub");
     await fleet.hubUp();
     const providerOrigin = `http://127.0.0.1:${provider.port}`;
-    const saved = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("PUT /api/fleet/mcp/:name", {
-        path: { name: SERVER },
-        body: {
-          config: { type: "http", url: `${providerOrigin}/mcp` },
-          enabled: true,
-        },
-      })
-    );
-    const row = (await saved.json()) as { auth?: { mode?: string } };
+    const saved = await hubAt(fleet.base)
+      .api.fleet.mcp({ name: SERVER })
+      .put({
+        config: { type: "http", url: `${providerOrigin}/mcp` },
+        enabled: true,
+      });
+    const row = dataOf(saved);
     kit.check(
       "0: the probe's server is saved to the fleet as an OAuth server",
-      saved.ok && row.auth?.mode === "oauth",
+      saved.error === null && row.auth?.mode === "oauth",
       `${saved.status} ${JSON.stringify(row)}`
     );
 
@@ -186,10 +181,7 @@ const run = async (kit: Kit) => {
       said(overServe)
     );
 
-    const test = await postOverH2(
-      secure,
-      hubRequest("POST /api/push/test").path
-    );
+    const test = await postOverH2(secure, hubPath.api.push.test["~path"]);
     kit.check(
       "3: Send test with no body through the relay answers the hub's own refusal for a fleet with no phone (409), not a parse problem",
       test.status === 409 && !test.type.includes("problem+json"),

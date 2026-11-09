@@ -56,6 +56,16 @@ export interface HubAnswer {
   status: number;
 }
 
+/**
+ * What a successful `answer` holds: what its route answers, Eden's reading of
+ * the body. A route that answers a `Response` for some paths types that
+ * member too, but Eden hands back the body it read, never the `Response`, so
+ * the member is dropped.
+ */
+export type HubData<A> = A extends { data: infer D; error: null }
+  ? Exclude<D, Response>
+  : never;
+
 /** Paths alone (`hubPath.health["~path"]`), for a caller that hands a hub path on rather than asking it. */
 export const hubPath: HubClient = hubClient("", fetch);
 
@@ -73,15 +83,25 @@ export const reached = <A extends HubAnswer>(answer: A): A => {
  * deadline) fails as itself: Eden hands it back as a 503 with no response,
  * which is the hub's refusal to no caller.
  */
-export const unwrap = <A extends HubAnswer>(
+export function unwrap<A extends HubAnswer>(
   answer: A,
   refused: (refusal: HubRefusal) => Error
-): Extract<A, { error: null }>["data"] => {
+): HubData<A>;
+export function unwrap(
+  answer: HubAnswer,
+  refused: (refusal: HubRefusal) => Error
+): unknown {
   if (reached(answer).error === null) {
     return answer.data;
   }
   throw refused({ status: answer.status, value: answer.error?.value });
-};
+}
+
+/** `answer`'s data: for one already known to have no error (`reached` first, then `answer.error` checked). */
+export function dataOf<A extends HubAnswer>(answer: A): HubData<A>;
+export function dataOf(answer: HubAnswer): unknown {
+  return answer.data;
+}
 
 /**
  * A refusal as words: its problem's `detail`, as every hub refusal says it

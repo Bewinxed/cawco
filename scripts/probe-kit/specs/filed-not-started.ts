@@ -31,16 +31,12 @@ import { join } from "node:path";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
-import {
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { presenceLine } from "../../../packages/core/src/injected";
 import { machinePath } from "../../../packages/core/src/machine-path";
 import { NO_REPLY_TOOL } from "../../../packages/core/src/no-reply";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
+import { type HubAsk, handled, said } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-filed-machine";
@@ -135,21 +131,11 @@ const run = async (
   });
 
   /** A board call, as the person. */
-  const board = async (request: HubRequest): Promise<Answer> => {
-    const response = await hub.handle(
-      new Request(
-        `http://127.0.0.1${request.path}`,
-        hubInit(request, { headers: { [PRESENCE_HEADER]: PRESENCE } })
-      )
+  const board = async (request: HubAsk): Promise<Answer> => {
+    const answer = await request(
+      handled((r) => hub.handle(r), { [PRESENCE_HEADER]: PRESENCE })
     );
-    const text = await response.text();
-    let json: unknown;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = undefined;
-    }
-    return { json, status: response.status, text };
+    return said(answer);
   };
   // The session's door is reached as `cawco tool` reaches it: over HTTP.
   const base = serve((request) => hub.handle(request));
@@ -194,27 +180,22 @@ const run = async (
     toolWords(session, "task_create", args);
   const read = async (id: string): Promise<TaskView> =>
     (
-      await board(
-        hubRequest("GET /api/projects/:id/tasks/:taskId", {
-          path: { id: projectId, taskId: id },
-        })
+      await board((client) =>
+        client.api.projects({ id: projectId }).tasks({ taskId: id }).get()
       )
     ).json as TaskView;
   /** The id a task tool's words link, `tsk-<n>`. */
   const idIn = (text: string): string => TASK_ID.exec(text)?.[0] ?? "";
 
   // (a) A proposal: a todo task waiting on a card, ready on his pick.
-  const made = await board(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: sessionId },
-      body: {
-        kind: "page",
-        does: "pick",
-        name: PAGE,
-        title: "Proposals",
-        ask: "Say whether to draft the follow-ups",
-        program: PROGRAM,
-      },
+  const made = await board((client) =>
+    client.api.instances({ id: sessionId }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      name: PAGE,
+      title: "Proposals",
+      ask: "Say whether to draft the follow-ups",
+      program: PROGRAM,
     })
   );
   const pageId = (made.json as { id?: string } | undefined)?.id;
@@ -240,17 +221,17 @@ const run = async (
       held.ready === false,
     proposal.text
   );
-  const picked = await board(
-    hubRequest("POST /api/projects/:id/decisions/:name/send", {
-      path: { id: projectId, name: PAGE },
-      body: {
+  const picked = await board((client) =>
+    client.api
+      .projects({ id: projectId })
+      .decisions({ name: PAGE })
+      .send.post({
         text: "Go ahead.",
         writes: writesOf(db.artifacts.updates(pageId), {
           [CARD]: his(["do"]),
           [OTHER]: his(["not-now"]),
         }),
-      },
-    })
+      })
   );
   const ready = proposalId ? await read(proposalId) : undefined;
   check(

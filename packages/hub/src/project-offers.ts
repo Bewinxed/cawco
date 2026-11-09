@@ -58,19 +58,14 @@ export interface ProjectOffersDeps {
    * Makes the project with Caw, or joins the one that has the folder's
    * remote (project-joining.ts `createOrJoinProject`), or its refusal.
    * Plain-typed: typing it from there closes project-offers →
-   * project-joining → hub-context → project-offers. Its problem is said with
-   * the statuses it answers (an unfit checkout path 400, a paused machine
-   * 409), so the accept route's problem is typed as a refusal in Eden's
-   * client and never as its answer.
+   * project-joining → hub-context → project-offers.
    */
   createProject: (asked: {
     name: string;
     checkout: { machineId: string; cwd: string };
     caw: true;
   }) => Promise<
-    | { project: ProjectRow; placeAdded: boolean; joined: boolean }
-    | ReturnType<typeof problem<400, { code: string; detail: string }>>
-    | ReturnType<typeof problem<409, { code: string; detail: string }>>
+    { project: ProjectRow; placeAdded: boolean; joined: boolean } | AnyProblem
   >;
   db: DbShape;
   /** Sessions moved into a project: their machines' rails are published again. */

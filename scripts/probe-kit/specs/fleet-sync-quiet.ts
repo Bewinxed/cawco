@@ -40,16 +40,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary/decisions";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
+import { answerText, type HubAsk, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const WAIT = "mcp__cawco__wait_item";
 /** How long D's foreground command runs: three syncs and their converges fit well inside it. */
@@ -119,26 +115,17 @@ const respond = (request: Seen): Reply => {
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
 /** The hub's own routes, which the admin tools call (admin-tools.ts). */
-const hubCall = async (fleet: Fleet, request: HubRequest): Promise<unknown> => {
-  const { method, path } = request;
-  const read = await readWithin(30_000, async (signal) => {
-    const response = await fetchHub(fetch, fleet.base, request, { signal });
-    return {
-      status: response.status,
-      text: response.ok
-        ? await response.text()
-        : refusalWords(await response.text(), response.status),
-    };
-  });
+const hubCall = async (fleet: Fleet, request: HubAsk): Promise<unknown> => {
+  const read = await readWithin(30_000, (signal) =>
+    request(hubAt(fleet.base, { signal }))
+  );
   if (read.kind === "unanswered") {
-    throw new Error(`${method} ${path}: no answer within ${read.after} ms`);
+    throw new Error(`the hub: no answer within ${read.after} ms`);
   }
   if (read.value.status >= 400) {
-    throw new Error(
-      `${method} ${path}: ${read.value.status} ${read.value.text}`
-    );
+    throw new Error(`the hub: ${read.value.status} ${answerText(read.value)}`);
   }
-  return JSON.parse(read.value.text || "null") as unknown;
+  return read.value.data;
 };
 
 /** Workspace `id`'s state dir on the agent's machine. */
@@ -259,33 +246,27 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Quiet",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Quiet",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
-  const d = await fleet.api<{
-    instanceId: string;
-    workItemId: string;
-    workspaceId: string;
-  }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const d = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Long command D",
         prompt: `${TAG} run the long command, then wait.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: src,
-      },
-    })
+      })
+    )
   );
   const id = d.workspaceId;
   const clone = await until(
@@ -317,19 +298,15 @@ const run = async (kit: Kit) => {
   // reads.
   const hookId = crypto.randomUUID();
   const hookAs = (row: string, scope: "project" | "user", name: string) =>
-    hubCall(
-      fleet,
-      hubRequest("PUT /api/fleet/hooks/:id", {
-        path: { id: row },
-        body: {
-          enabled: true,
-          handler: { type: "command" },
-          scope,
-          ...(scope === "project" ? { projectId: project.id } : {}),
-          name,
-          event: "Notification",
-          script: `#!${systemProgram("bash")}\nexit 0`,
-        },
+    hubCall(fleet, (hub) =>
+      hub.api.fleet.hooks({ id: row }).put({
+        enabled: true,
+        handler: { type: "command" },
+        scope,
+        ...(scope === "project" ? { projectId: project.id } : {}),
+        name,
+        event: "Notification",
+        script: `#!${systemProgram("bash")}\nexit 0`,
       })
     );
   const hook = (name: string) => hookAs(hookId, "project", name);

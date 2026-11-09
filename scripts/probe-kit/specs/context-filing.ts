@@ -85,7 +85,6 @@ import type {
 } from "../../../packages/core/src/context-filing";
 import { CONTEXT_LINE } from "../../../packages/core/src/harness";
 import { COMPACTION_ORIGIN } from "../../../packages/core/src/harness/kinds";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { contextWords } from "../../../packages/core/src/words/context";
 import { fileDue } from "../../../packages/hub/src/at-limit";
@@ -421,12 +420,7 @@ const reads = (fleet: KitFleet) => {
   /** `id`'s transcript's context lines as the hub draws them: each title and the detail under it. */
   const notes = async (id: string) =>
     (
-      await fleet.api<{
-        blocks: {
-          content?: string;
-          metadata?: { noteTitle?: string; subtype?: string };
-        }[];
-      }>(hubRequest("GET /api/instances/:id/transcript", { path: { id } }))
+      await fleet.api((hub) => hub.api.instances({ id }).transcript.get())
     ).blocks
       .filter((block) => block.metadata?.subtype === CONTEXT_LINE)
       .map((block) => ({

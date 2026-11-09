@@ -287,7 +287,6 @@ import type { PageAnchor } from "../../../packages/core/src/comments/anchor";
 import { type Pin, readPins } from "../../../packages/core/src/comments/model";
 import { PIN_MAPS } from "../../../packages/core/src/doc-maps";
 import { houseFacePieces } from "../../../packages/core/src/house-faces";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { pinName } from "../../../packages/core/src/pin-name";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/relaunch";
 import { unhandled } from "../../../packages/core/src/unhandled";
@@ -298,6 +297,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type BreathRead, readBreath } from "../breath";
 import { type MainTask, traceMain } from "../frames";
+import { requestOf } from "../hub";
 import {
   COMPOSER,
   type Kit,
@@ -4016,13 +4016,13 @@ const roomChecks = async (on: On) => {
   const number = Number(pin.number);
   const replies = 20;
   for (let n = 1; n <= replies; n += 1) {
-    await on.fleet.api(
-      hubRequest("POST /api/instances/:id/artifacts/comments/:pin/reply", {
-        path: { id: on.session, pin: pin.id },
-        body: {
+    await on.fleet.api((hub) =>
+      hub.api
+        .instances({ id: on.session })
+        .artifacts.comments({ pin: pin.id })
+        .reply.post({
           text: `Reply ${n} of ${replies}: made the card's spacing tighter, and this line runs long enough to wrap.`,
-        },
-      })
+        })
     );
   }
   await shutList(on);
@@ -4684,11 +4684,11 @@ const sizingPin = async (on: On) => {
     on.kit.check("sizing: the pins are written", false, "none");
     return null;
   }
-  await on.fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts/comments/:pin/reply", {
-      path: { id: on.session, pin: pin.id },
-      body: { text: SIZING_ANSWER },
-    })
+  await on.fleet.api((hub) =>
+    hub.api
+      .instances({ id: on.session })
+      .artifacts.comments({ pin: pin.id })
+      .reply.post({ text: SIZING_ANSWER })
   );
   return { id, number: pin.number, second: second.number };
 };
@@ -7830,11 +7830,11 @@ const railSendChecks = async (on: On, rig: RailRig, artifactId: string) => {
   await settle(on.page, 400);
   await card.getByRole("button", { name: "Close", exact: true }).click();
   await settle(on.page, 1500);
-  await on.fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts/comments/:pin/reply", {
-      path: { id: on.session, pin: await pinIdOn("#a") },
-      body: { text: "Made it a step larger." },
-    })
+  await on.fleet.api(async (hub) =>
+    hub.api
+      .instances({ id: on.session })
+      .artifacts.comments({ pin: await pinIdOn("#a") })
+      .reply.post({ text: "Made it a step larger." })
   );
   await pressOn("#a", 0.8, 0.5);
   await submit("And its weight, too.");
@@ -12290,10 +12290,9 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   // The session's own title, forty words, as the owner names it.
   const renamed = await on.page.evaluate(
     async (request) => (await fetch(request.path, request)).status,
-    hubRequest("PATCH /api/instances/:id", {
-      path: { id: on.session },
-      body: { title: FORTY_WORDS },
-    })
+    await requestOf((hub) =>
+      hub.api.instances({ id: on.session }).patch({ title: FORTY_WORDS })
+    )
   );
   await agentSays(
     on,

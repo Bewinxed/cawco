@@ -33,15 +33,10 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { delay, MACHINE, until } from "../../scratch-fleet";
+import { answerText, type HubAsk, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { relay } from "../relay";
 
@@ -65,16 +60,14 @@ interface Answered {
 }
 
 /** `path` asked of the hub (POST with `body`), answered or refused, with when. */
-const ask = async (fleet: KitFleet, request: HubRequest): Promise<Answered> => {
+const ask = async (fleet: KitFleet, request: HubAsk): Promise<Answered> => {
   const asked = Date.now();
-  const response = await fetchHub(fetch, fleet.base, request);
+  const answer = await request(hubAt(fleet.base));
   return {
     ms: Date.now() - asked,
-    status: response.status,
-    named: response.headers.get("x-cawco-machine"),
-    said: response.ok
-      ? await response.text()
-      : refusalWords(await response.text(), response.status),
+    status: answer.status,
+    named: answer.response.headers.get("x-cawco-machine"),
+    said: answerText(answer),
   };
 };
 
@@ -155,12 +148,7 @@ const spec: Spec = {
     const freeze = (frozen: boolean) =>
       signal(pid, frozen ? "SIGSTOP" : "SIGCONT");
     const inspect = () =>
-      fleet.api<{ cwd?: string }>(
-        hubRequest("POST /api/agents/:machineId/inspect", {
-          path: { machineId: OTHER },
-          body: {},
-        })
-      );
+      fleet.api((hub) => hub.api.agents({ machineId: OTHER }).inspect.post({}));
     // Back in time.
     const before = await fleet.logMark("hub");
     freeze(true);
@@ -193,12 +181,8 @@ const spec: Spec = {
 
     // Away past the deadline.
     freeze(true);
-    const late = ask(
-      fleet,
-      hubRequest("POST /api/agents/:machineId/inspect", {
-        path: { machineId: OTHER },
-        body: {},
-      })
+    const late = ask(fleet, (hub) =>
+      hub.api.agents({ machineId: OTHER }).inspect.post({})
     );
     await delay(500);
     between.cut();
@@ -216,12 +200,9 @@ const spec: Spec = {
     await until(
       "the second machine is back",
       async () =>
-        (
-          await fleet.api<{ machineId: string; status: string }[]>(
-            hubRequest("GET /api/agents")
-          )
-        ).find((one) => one.machineId === OTHER)?.status === "online" ||
-        undefined,
+        (await fleet.api((hub) => hub.api.agents.get())).find(
+          (one) => one.machineId === OTHER
+        )?.status === "online" || undefined,
       Boolean,
       60_000
     );
@@ -260,10 +241,8 @@ const spec: Spec = {
       (rows) => rows.some((one) => one.state === "read"),
       60_000
     );
-    const sizing = hubRequest("GET /api/instances/:id/continue", {
-      path: { id },
-      query: { asks: true },
-    });
+    const sizing: HubAsk = (hub) =>
+      hub.api.instances({ id }).continue.get({ query: { asks: true } });
     const sized = await ask(fleet, sizing);
     check(
       "the session's continuation is sized while its machine is here",

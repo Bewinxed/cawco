@@ -58,7 +58,7 @@ import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import http2 from "node:http2";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import type { HopByHopHeader } from "../../../packages/core/src/preview/hop-headers";
 import { PREVIEW_WHY_META } from "../../../packages/core/src/preview/protocol";
 import {
@@ -74,6 +74,7 @@ import {
 } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
+import { hubAt } from "../hub";
 import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
 import { passedFetch, passInto } from "../preview-pass";
 
@@ -916,15 +917,11 @@ async function realJoin(kit: Kit): Promise<void> {
   ).catch(() => "no answer")) as string;
   // The sheet's own origin (hub artifact-pages.ts `frameAddress`).
   const id = ANSWERED_ID.exec(created)?.[1] ?? "";
-  const { port } = (await (
-    await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/artifacts/:artifact/preview-address", {
-        path: { artifact: id },
-      })
-    )
-  ).json()) as { port?: number };
+  const { port } = dataOf(
+    await hubAt(fleet.base)
+      .api.artifacts({ artifact: id })
+      ["preview-address"].post()
+  );
   const origin = `http://127.0.0.1:${port ?? 0}`;
   const page: Page = await kit.page("desk");
   // Its port is behind the lock: the person's pass, as the dashboard's frame holds it.

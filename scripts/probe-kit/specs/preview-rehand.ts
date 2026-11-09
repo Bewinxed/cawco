@@ -48,8 +48,6 @@
  */
 
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactLink } from "../../../packages/core/src/references";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { workWords } from "../../../packages/core/src/words/work";
@@ -57,7 +55,14 @@ import { handle } from "../../../packages/hub/src/presenters/words";
 import { downOf } from "../../../packages/preview/src/proxy";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { answerText, hubAt, payloadOf } from "../hub";
+import {
+  delegateStarted,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+} from "../kit";
 import { passedFetch } from "../preview-pass";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
@@ -169,13 +174,6 @@ const respond = (request: Seen): Reply => {
     ? work(request, tag)
     : text("ok");
 };
-
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-}
-
 /** What `page`'s artifact frame shows now: the word its page says, and whether the pane's down state stands. */
 const tabReads = async (page: Parameters<typeof open>[0]) => {
   const word = await page
@@ -214,10 +212,8 @@ const tabReads = async (page: Parameters<typeof open>[0]) => {
  * words.
  */
 const originReads = async (fleet: KitFleet, id: string) => {
-  const { port } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact: id },
-    })
+  const { port } = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id })["preview-address"].post()
   );
   const response = await passedFetch(fleet, `http://127.0.0.1:${port}/`, {
     headers: { "sec-fetch-mode": "navigate" },
@@ -256,13 +252,11 @@ const spec: Spec = {
     await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo rehand > README.md && git add -A && git commit -qm 'First commit'`
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Preview rehand",
-          machineId: MACHINE,
-          cwd: repo,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Preview rehand",
+        machineId: MACHINE,
+        cwd: repo,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", repo, {
@@ -274,18 +268,18 @@ const spec: Spec = {
       credential: await fleet.sessionCredential(id),
     });
     const delegate = (tag: Tag) =>
-      fleet.api<Started>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      fleet
+        .api((hub) =>
+          hub.api["work-items"].post({
             parentInstanceId: parent,
             title: `Hand up page ${tag}`,
             prompt: `PROBE-REHAND-${tag}: hand up your page, then wait.`,
             harness: "claude",
             model: "claude-haiku-4-5",
             cwd: repo,
-          },
-        })
-      );
+          })
+        )
+        .then(delegateStarted);
     const workspaceState = (id: string) =>
       fleet.query<{ state: string }>(
         "SELECT state FROM workspaces WHERE id = ?",
@@ -317,23 +311,13 @@ const spec: Spec = {
 
     /** His own archive of workspace `id` (no credential: the person, on a hub that trusts its network), its unlanded work let go, confirmed or not. */
     const ownerArchive = async (id: string, anyway: boolean) => {
-      const response = await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/workspaces/:id/archive", {
-          path: { id },
-          body: {
-            discard: true,
-            ...(anyway ? { anyway } : {}),
-          },
-        })
-      );
-      return {
-        status: response.status,
-        text: response.ok
-          ? await response.text()
-          : refusalWords(await response.text(), response.status),
-      };
+      const response = await hubAt(fleet.base)
+        .api.workspaces({ id })
+        .archive.post({
+          discard: true,
+          ...(anyway ? { anyway } : {}),
+        });
+      return { status: response.status, text: answerText(response) };
     };
 
     for (const tag of ["A", "B", "C"] as const) {
@@ -396,7 +380,7 @@ const spec: Spec = {
     const retired = await until(
       "WA retired",
       async () => {
-        await fleet.api(hubRequest("POST /api/workspaces/retire"));
+        await fleet.api((hub) => hub.api.workspaces.retire.post());
         return workspaceState(a.workspaceId);
       },
       (state) => state === "archived",
@@ -466,17 +450,11 @@ const spec: Spec = {
     });
     const parked = await until(
       "the discard's ask parked for the person",
-      () =>
-        fleet.api<
-          {
-            requestId?: string;
-            payload?: { input?: { waiting?: string }; toolName?: string };
-          }[]
-        >(hubRequest("GET /api/pending")),
-      (list) => list.some((one) => one.payload?.toolName === DISCARD_TOOL),
+      () => fleet.api((hub) => hub.api.pending.get()),
+      (list) => list.some((one) => payloadOf(one).toolName === DISCARD_TOOL),
       60_000
     ).catch(() => []);
-    const ask = parked.find((one) => one.payload?.toolName === DISCARD_TOOL);
+    const ask = parked.find((one) => payloadOf(one).toolName === DISCARD_TOOL);
     if (ask?.requestId) {
       await fleet.post({
         type: "command",
@@ -502,7 +480,7 @@ const spec: Spec = {
       "(6) the parent's discard with ask is recorded as his approval, its card naming p as still waiting, and his approval discards WB anyway",
       !asked.refused &&
         !!ask?.requestId &&
-        ask.payload?.input?.waiting ===
+        payloadOf({ payload: payloadOf(ask).input }).waiting ===
           workWords.discardAskWaiting([artifactLink(p, TITLE_P)]) &&
         approvedState === "archived",
       JSON.stringify({
@@ -527,11 +505,7 @@ const spec: Spec = {
       target: c.instanceId,
     });
     const named = await fleet
-      .api<{ waiting: { id: string; title: string }[] }>(
-        hubRequest("GET /api/workspaces/:id/waiting", {
-          path: { id: c.workspaceId },
-        })
-      )
+      .api((hub) => hub.api.workspaces({ id: c.workspaceId }).waiting.get())
       .catch(() => ({ waiting: [] }));
     const unconfirmed = await ownerArchive(c.workspaceId, false);
     const confirmed = await ownerArchive(c.workspaceId, true);

@@ -209,12 +209,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright-core";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import {
   commandLines,
@@ -234,6 +229,7 @@ import { shellWords } from "../../../packages/core/src/words/shell";
 import { storyReadWords } from "../../../packages/core/src/words/story-read";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
+import { type HubAsk, hubAt, requestOf } from "../hub";
 import {
   buttonNames,
   type Kit,
@@ -672,10 +668,7 @@ const sweep = async (
   held: unknown[];
   kept: { hold: string; workspaceId: string }[];
   retired: { workspaceId: string }[];
-}> =>
-  (await (
-    await fetchHub(fetch, base, hubRequest("POST /api/workspaces/retire"))
-  ).json()) as Awaited<ReturnType<typeof sweep>>;
+}> => dataOf(await hubAt(base).api.workspaces.retire.post());
 
 /**
  * Leg 9b: the person's Send of the npm canvas leg 9 made and the daemon
@@ -692,15 +685,12 @@ const sentNpm = async (
   const drawnAt = created.match(RENDERED)?.[1];
   const sent = id
     ? await fleet
-        .api<{ sentAt?: string }>(
-          hubRequest("POST /api/instances/:id/artifacts/:artifact/send", {
-            path: { id: who, artifact: id },
-            body: {
-              text: "The card reads right",
-            },
+        .api((hub) =>
+          hub.api.instances({ id: who }).artifacts({ artifact: id }).send.post({
+            text: "The card reads right",
           })
         )
-        .then((answer) => answer.sentAt ?? "no sentAt")
+        .then((answer) => JSON.stringify(answer))
         .catch((error: unknown) => String(error))
     : "no canvas from leg 9";
   kit.check(
@@ -1450,9 +1440,12 @@ async function panelLegs(
             body: (await answer.json().catch(() => null)) as CanvasMap | null,
           };
         },
-        hubRequest("GET /api/instances/:id/artifacts/:artifact/map", {
-          path: { id: session, artifact: madeId },
-        })
+        await requestOf((hub) =>
+          hub.api
+            .instances({ id: session })
+            .artifacts({ artifact: madeId })
+            .map.get()
+        )
       )
     : null;
   const center = mapRead?.body?.center;
@@ -1576,28 +1569,27 @@ async function treeSheetLeg(
   }
   const desk = await panelPage(kit, base, parent, "desk", "light");
   /** A POST from the dashboard's page, as session `who`'s panel makes it. */
-  const panelPost = (request: HubRequest) =>
-    desk.evaluate(async (asked) => {
-      const response = await fetch(asked.path, asked);
-      return {
-        status: response.status,
-        text: response.ok
-          ? await response.text()
-          : refusalWords(await response.text(), response.status),
-      };
-    }, request);
+  const panelPost = async (request: HubAsk) =>
+    desk.evaluate(
+      async (asked) => {
+        const response = await fetch(asked.path, asked);
+        return { status: response.status, text: await response.text() };
+      },
+      await requestOf(request)
+    );
   const sheetPost = (who: string, body: typeof save) =>
-    panelPost(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/sheet", {
-        path: { id: who, artifact: sheet },
-        body,
-      })
+    panelPost((hub) =>
+      hub.api
+        .instances({ id: who })
+        .artifacts({ artifact: sheet })
+        .sheet.post(body)
     );
   const verifyPost = (who: string) =>
-    panelPost(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/verify", {
-        path: { id: who, artifact: sheet },
-      })
+    panelPost((hub) =>
+      hub.api
+        .instances({ id: who })
+        .artifacts({ artifact: sheet })
+        .verify.post()
     );
   const save = {
     args: { story: "One", values: { title: PARENT_TITLE } },
@@ -1686,9 +1678,9 @@ async function neverDrawnLeg(
       await desk.evaluate(
         (request) =>
           fetch(request.path, request).then((response) => response.json()),
-        hubRequest("GET /api/instances/:id/artifacts", {
-          path: { id: session },
-        })
+        await requestOf((hub) =>
+          hub.api.instances({ id: session }).artifacts.get()
+        )
       )
     ).map((one: { name: string }) => one.name) as string[];
   // 25. A canvas whose page never comes: the cover gives way once its stage's time is up.
@@ -2247,15 +2239,11 @@ const run = async (kit: Kit) => {
       short(missing)
     );
     // 5c. The canvas open on its own origin (hub artifact-pages.ts `frameAddress`), its section failed; the file written, it draws there by itself.
-    const { port } = (await (
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/artifacts/:artifact/preview-address", {
-          path: { artifact: String(laterId) },
-        })
-      )
-    ).json()) as { port?: number };
+    const { port } = dataOf(
+      await hubAt(fleet.base)
+        .api.artifacts({ artifact: String(laterId) })
+        ["preview-address"].post()
+    );
     const page = await kit.page("desk");
     await passInto(page.context(), fleet, `http://127.0.0.1:${port ?? 0}`);
     await page.goto(
@@ -2368,15 +2356,11 @@ const run = async (kit: Kit) => {
     );
 
     // 5. The sheet on its own origin (hub artifact-pages.ts `frameAddress`), and the session's edit reaching it.
-    const { port } = (await (
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/artifacts/:artifact/preview-address", {
-          path: { artifact: sheet },
-        })
-      )
-    ).json()) as { port?: number };
+    const { port } = dataOf(
+      await hubAt(fleet.base)
+        .api.artifacts({ artifact: sheet })
+        ["preview-address"].post()
+    );
     const page = await kit.page("desk");
     await passInto(page.context(), fleet, `http://127.0.0.1:${port ?? 0}`);
     await page.goto(

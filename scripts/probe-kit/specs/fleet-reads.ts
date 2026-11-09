@@ -59,8 +59,6 @@ import {
   TREE_STORE_DIR,
 } from "../../../packages/core/src/claude-dirs";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import {
   MACHINE,
@@ -69,7 +67,9 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const SKILL = "probe-reads";
 /** The same files, bound to the project and placed in each clone. */
@@ -336,17 +336,17 @@ const delegate = async (
   const paths = new Map<string, string>();
   for (const leg of among) {
     legs.set(leg.key, leg);
-    const started = await fleet.api<{ workspaceId: string }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const started = delegateStarted(
+      await fleet.api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: parent,
           title: `Read the skill, ${leg.key}`,
           prompt: `${tagOf(leg.key)} read the fleet skills.`,
           harness: leg.harness,
           model: MODEL[leg.harness],
           cwd: src,
-        },
-      })
+        })
+      )
     );
     const [row] = fleet.query<{ path: string }>(
       "SELECT path FROM workspaces WHERE id = ?",
@@ -520,24 +520,16 @@ const spec: Spec = {
     });
     const put = async (name: string, extra: object = {}) => {
       const read = await readWithin(120_000, async (signal) => {
-        const response = await fetchHub(
-          fetch,
-          fleet.base,
-          hubRequest("PUT /api/fleet/skills/:name", {
-            path: { name },
-            body: {
-              source: `http://127.0.0.1:${server.port}/${name}.tar.gz`,
-              ...extra,
-            },
-          }),
-          { signal }
-        );
+        const response = await hubAt(fleet.base, { signal })
+          .api.fleet.skills({ name })
+          .put({
+            source: `http://127.0.0.1:${server.port}/${name}.tar.gz`,
+            ...extra,
+          });
         return {
-          ok: response.ok,
+          ok: response.error === null,
           status: response.status,
-          text: response.ok
-            ? await response.text()
-            : refusalWords(await response.text(), response.status),
+          text: answerText(response),
         };
       });
       switch (read.kind) {
@@ -588,13 +580,11 @@ const spec: Spec = {
         .cwd(src)
         .env({ ...process.env, HOME: home })
         .quiet();
-      const project = await fleet.api<{ id: string }>(
-        hubRequest("POST /api/projects", {
-          body: {
-            name: "Reads",
-            machineId: MACHINE,
-            cwd: src,
-          },
+      const project = await fleet.api((hub) =>
+        hub.api.projects.post({
+          name: "Reads",
+          machineId: MACHINE,
+          cwd: src,
         })
       );
       await put(SKILL);

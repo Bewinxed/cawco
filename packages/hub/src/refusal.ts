@@ -13,9 +13,19 @@ import {
  * status and code its type keeps.
  */
 export interface AnyProblem extends Pick<
-  ElysiaStatus<number, { code: string; detail: string }>,
+  ElysiaStatus<ProblemStatus, { code: string; detail: string }>,
   "~status" | "response" | "status"
 > {}
+
+/**
+ * Every status the hub answers a problem with: a refusal's, never a 2xx. A
+ * problem passed on is said again at one of these, never at `number`:
+ * Elysia keys a status it only knows as `number` `default`, which Eden's
+ * client reads as a possible answer (a 2xx, or an empty body), where one of
+ * these is its refusal.
+ */
+export type ProblemStatus =
+  400 | 401 | 403 | 404 | 409 | 410 | 413 | 415 | 422 | 500 | 502 | 503 | 504;
 
 /**
  * A schema's own refusal, as its `error` (`t.String({ …, error:

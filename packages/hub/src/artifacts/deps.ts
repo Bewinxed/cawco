@@ -23,7 +23,7 @@ import type { ArtifactNamed, BuiltProgram } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
 import type { HubLifetimeShape } from "../lifetime";
 import type { PreviewListeners } from "../preview";
-
+import type { ProblemStatus } from "../refusal";
 import type { SentPage } from "../setup";
 import type { StateAsk } from "./component";
 import type { ArtifactDocs } from "./docs";
@@ -43,7 +43,7 @@ import type {
  * Elysia's `problem`, its status and code typed as a number and a string.
  */
 type Resaid = ReturnType<
-  typeof problem<number, { code: string; detail: string }>
+  typeof problem<ProblemStatus, { code: string; detail: string }>
 >;
 
 /** A machine call of the hub's own wiring that no machine answered: away (503), or not in time (504). */

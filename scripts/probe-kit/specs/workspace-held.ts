@@ -40,11 +40,10 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import {
@@ -57,6 +56,7 @@ import {
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyGone, gitInCopy } from "../copy";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const TAG = /PROBE-HELD-([ASXTUVPQRHZ])/u;
 type Tag = "A" | "S" | "X" | "T" | "U" | "V" | "P" | "Q" | "R" | "H" | "Z";
@@ -316,14 +316,9 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
       (told.body ?? "").includes("discard_workspace"),
     JSON.stringify(notice).slice(0, 1500)
   );
-  const project = (
-    await fleet.api<
-      {
-        id: string;
-        places: { path: string; held?: unknown }[];
-      }[]
-    >(hubRequest("GET /api/projects"))
-  ).find((one) => one.id === scene.projectId);
+  const project = (await fleet.api((hub) => hub.api.projects.get())).find(
+    (one) => one.id === scene.projectId
+  );
   // A workspace is no place of its project (hub migration 0322): its clone
   // is listed nowhere there, and a place at its path holds nothing of it.
   const place = project?.places.find((one) => one.path === ws.path);
@@ -646,13 +641,11 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Held",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Held",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {
@@ -684,9 +677,9 @@ const spec: Spec = {
           SETTLE_MS
         ).catch(() => workspaceOf(id)),
       delegate: (tag, extra = {}) =>
-        fleet.api<Started>(
-          hubRequest("POST /api/work-items", {
-            body: {
+        fleet
+          .api((hub) =>
+            hub.api["work-items"].post({
               parentInstanceId: parent,
               title: `Held probe ${tag}`,
               prompt: `PROBE-HELD-${tag}: commit a file.`,
@@ -694,9 +687,9 @@ const spec: Spec = {
               model: "claude-haiku-4-5",
               ...(tag === "T" ? {} : { cwd: src }),
               ...extra,
-            },
-          })
-        ),
+            })
+          )
+          .then(delegateStarted),
       ended: (started) =>
         until(
           `work item ${started.workItemId} ended`,

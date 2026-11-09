@@ -24,16 +24,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { machinePath } from "../../../packages/core/src/machine-path";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
+import { answerText, type HubAsk, handled } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-start-moves-machine";
@@ -68,7 +63,7 @@ type Db = Awaited<ReturnType<typeof inProcess>>["db"];
 
 interface Rig {
   /** A board call, as the person. */
-  board: (request: HubRequest) => Promise<Answer>;
+  board: (request: HubAsk) => Promise<Answer>;
   db: Db;
   kit: Kit;
   /** A `task_update` of `id` to `stage` as the project's session; its answer's words. */
@@ -108,15 +103,6 @@ const run = async (
     auth: "unknown",
   });
 
-  const handle = async (request: Request): Promise<Answer> => {
-    const response = await hub.handle(request);
-    return {
-      status: response.status,
-      text: response.ok
-        ? await response.text()
-        : refusalWords(await response.text(), response.status),
-    };
-  };
   // The session's door is reached as `cawco tool` reaches it: over HTTP.
   const base = serve((request) => hub.handle(request));
   /** Each project's session: the hub, its id and its credential. */
@@ -132,7 +118,10 @@ const run = async (
     db,
     kit,
     board: (request) =>
-      handle(new Request(`http://127.0.0.1${request.path}`, hubInit(request))),
+      request(handled((r) => hub.handle(r))).then((answer) => ({
+        status: answer.status,
+        text: answerText(answer),
+      })),
     session: (projectId, id, stage) =>
       toolWords(sessionOf(projectId), "task_update", { id, stage }),
     start: (projectId, id) =>
@@ -181,11 +170,8 @@ const run = async (
   };
 
   const file = async (projectId: string, title: string): Promise<string> => {
-    const made = await rig.board(
-      hubRequest("POST /api/projects/:id/tasks", {
-        path: { id: projectId },
-        body: { title },
-      })
+    const made = await rig.board((client) =>
+      client.api.projects({ id: projectId }).tasks.post({ title })
     );
     const id = (JSON.parse(made.text) as { id?: string }).id ?? "";
     if (!id) {
@@ -194,10 +180,8 @@ const run = async (
     return id;
   };
   const stageOf = async (projectId: string, id: string): Promise<string> => {
-    const read = await rig.board(
-      hubRequest("GET /api/projects/:id/tasks/:taskId", {
-        path: { id: projectId, taskId: id },
-      })
+    const read = await rig.board((client) =>
+      client.api.projects({ id: projectId }).tasks({ taskId: id }).get()
     );
     return (JSON.parse(read.text) as TaskView).stage;
   };
@@ -242,11 +226,11 @@ const run = async (
   );
 
   // (c) His own start under the first moves.
-  const hisStart = await rig.board(
-    hubRequest("POST /api/projects/:id/tasks/:taskId/attempts", {
-      path: { id: yours, taskId: yoursTask },
-      body: { parentInstanceId: sessionOf(yours).id },
-    })
+  const hisStart = await rig.board((client) =>
+    client.api
+      .projects({ id: yours })
+      .tasks({ taskId: yoursTask })
+      .attempts.post({ parentInstanceId: sessionOf(yours).id })
   );
   check(
     "c: his own start at the task in review is not refused by the moves",

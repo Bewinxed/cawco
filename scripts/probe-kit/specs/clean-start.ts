@@ -37,8 +37,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { presenceLine } from "../../../packages/core/src/injected";
 import { REFERENCE_GUIDANCE } from "../../../packages/core/src/references";
 import { harnessWords } from "../../../packages/core/src/words/harness";
@@ -50,6 +48,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /**
@@ -308,19 +307,10 @@ const delegate = async (
   fleet: KitFleet,
   body: Record<string, unknown> & { parentInstanceId: string }
 ): Promise<{ status: number; text: string }> => {
-  const response = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/work-items", {
-      body: body as never,
-    })
+  const response = await hubAt(fleet.base).api["work-items"].post(
+    body as never
   );
-  return {
-    status: response.status,
-    text: response.ok
-      ? await response.text()
-      : refusalWords(await response.text(), response.status),
-  };
+  return { status: response.status, text: answerText(response) };
 };
 
 /** The delegate type each harness's delegates run as: its skill is {@link SKILL}. */
@@ -481,26 +471,21 @@ const spec: Spec = {
     await fleet.accountSignedIn();
     // CawCo's role memory documents: a person's session's, and a leaf's.
     for (const role of ["orchestrator", "leaf"] as const) {
-      await fleet.api(
-        hubRequest("PUT /api/fleet/memory/docs", {
-          body: {
-            path: `roles/probe-${role}.md`,
-            content: `${CANARY.memoryDoc}\n`,
-            scope: { role },
-          },
+      await fleet.api((hub) =>
+        hub.api.fleet.memory.docs.put({
+          path: `roles/probe-${role}.md`,
+          content: `${CANARY.memoryDoc}\n`,
+          scope: { role },
         })
       );
     }
     for (const harness of ["claude", "pi"] as const) {
-      await fleet.api(
-        hubRequest("PUT /api/delegate-types/:name", {
-          path: { name: typeFor(harness) },
-          body: {
-            description: `A probe's type on ${harness}, with a skill`,
-            harness,
-            model: MODEL[harness],
-            skills: [SKILL],
-          },
+      await fleet.api((hub) =>
+        hub.api["delegate-types"]({ name: typeFor(harness) }).put({
+          description: `A probe's type on ${harness}, with a skill`,
+          harness,
+          model: MODEL[harness],
+          skills: [SKILL],
         })
       );
     }

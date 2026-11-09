@@ -30,13 +30,11 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import {
-  type PreviewTicket,
-  previewEnterUrl,
-} from "../../../packages/core/src/preview/routes";
+import { dataOf } from "../../../packages/agent/src/hub-client";
+import { previewEnterUrl } from "../../../packages/core/src/preview/routes";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
+import { hubAt } from "../hub";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 import { passInto, previewPass } from "../preview-pass";
@@ -186,15 +184,11 @@ const probe = async (kit: Kit) => {
   // The preview's own origin (hub artifact-pages.ts `frameAddress`).
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
   const address = async () =>
-    (await (
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/artifacts/:artifact/preview-address", {
-          path: { artifact: id },
-        })
-      )
-    ).json()) as { origin?: string; port?: number };
+    dataOf(
+      await hubAt(fleet.base)
+        .api.artifacts({ artifact: id })
+        ["preview-address"].post()
+    );
   const direct = `http://127.0.0.1:${(await address()).port ?? 0}`;
   // Its port is behind the lock too: the person's pass on its host.
   const pass = await previewPass(fleet, direct);
@@ -285,22 +279,18 @@ const probe = async (kit: Kit) => {
   );
 
   // 2. Host mode, its names on the range's first port, behind the lock.
-  const range = (await (
-    await fetchHub(fetch, fleet.base, hubRequest("GET /api/preview-settings"))
-  ).json()) as { ports: string };
+  const range = dataOf(await hubAt(fleet.base).api["preview-settings"].get());
   const first = Number(range.ports.split("–")[0]);
   await storeHostMode(fleet, {
     mode: "host",
     pattern: `https://p-{port}.${PASS_DOMAIN}:${first}`,
   });
-  const stored = await fleet.api<{ mode: string }>(
-    hubRequest("GET /api/preview-settings")
-  );
+  const stored = await fleet.api((hub) => hub.api["preview-settings"].get());
   const origin = (await address()).origin ?? "";
   const host = origin ? new URL(origin).host : "";
-  const { ticket } = (await (
-    await fetchHub(fetch, fleet.base, hubRequest("POST /api/preview-ticket"))
-  ).json()) as PreviewTicket;
+  const { ticket } = dataOf(
+    await hubAt(fleet.base).api["preview-ticket"].post()
+  );
   const byHost = `http://127.0.0.1:${first}`;
   const entered = await read(previewEnterUrl(byHost, ticket, "/src/main.js"), {
     host,

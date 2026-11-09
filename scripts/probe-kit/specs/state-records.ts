@@ -37,29 +37,14 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
-import type {
-  DamagedHubRecord,
-  DamagedRow,
-} from "../../../packages/core/src/protocol";
+import type { DamagedHubRecord } from "../../../packages/core/src/protocol";
 import { clientLine } from "../../../packages/core/src/wire";
 import { MACHINE, MODEL, type Reply, until } from "../../scratch-fleet";
+import { answerText, type HubAsk, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
-
-interface Row {
-  damaged?: DamagedRow;
-  id: string;
-  lastError?: string | null;
-  status: string;
-}
-
 interface Board {
   kind: string;
   noticesDamaged?: DamagedHubRecord | null;
@@ -103,20 +88,16 @@ const delegate = async (
   cwd: string,
   tag: string
 ): Promise<{ instanceId: string; workspaceId: string }> => {
-  const started = await fleet.api<{
-    instanceId: string;
-    workItemId: string;
-    workspaceId: string;
-  }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent.id,
         title: `Hold workspace ${tag}`,
         prompt: `PROBE-${tag}: say ok.`,
         harness: "claude",
         cwd,
-      },
-    })
+      })
+    )
   );
   // Its item fails on its third quiet turn, in under a second against the
   // mock model, and its session sleeps as its item ends (hub server.ts
@@ -152,15 +133,10 @@ const delegate = async (
 /** A POST whose refusal is an answer too: its status and text. */
 const posted = async (
   base: string,
-  request: HubRequest
+  request: HubAsk
 ): Promise<{ status: number; text: string }> => {
-  const response = await fetchHub(fetch, base, request);
-  return {
-    status: response.status,
-    text: response.ok
-      ? await response.text()
-      : refusalWords(await response.text(), response.status),
-  };
+  const answer = await request(hubAt(base));
+  return { status: answer.status, text: answerText(answer) };
 };
 
 /** (f) The hub's notices record, damaged at its start: said, refused, Reset, whole again. */
@@ -176,11 +152,8 @@ const noticesPhase = async (
     damagedBoard.noticesDamaged?.file === noticesFile,
     JSON.stringify(damagedBoard.noticesDamaged)
   );
-  const refusedAck = await posted(
-    base,
-    hubRequest("POST /api/notices/seen", {
-      body: { ids: ["probe:while-damaged"] },
-    })
+  const refusedAck = await posted(base, (hub) =>
+    hub.api.notices.seen.post({ ids: ["probe:while-damaged"] })
   );
   check(
     "(f) an acknowledgement is refused, saying the record is damaged",
@@ -190,7 +163,7 @@ const noticesPhase = async (
       ),
     `${refusedAck.status} ${refusedAck.text}`
   );
-  const reset = await posted(base, hubRequest("POST /api/notices/reset"));
+  const reset = await posted(base, (hub) => hub.api.notices.reset.post());
   check(
     "(f) Reset answers with a fresh record",
     reset.status === 200 && reset.text === JSON.stringify({ seen: [] }),
@@ -208,11 +181,8 @@ const noticesPhase = async (
     healedBoard.noticesDamaged === null,
     JSON.stringify(healedBoard.noticesDamaged)
   );
-  const ack = await posted(
-    base,
-    hubRequest("POST /api/notices/seen", {
-      body: { ids: ["probe:after-reset"] },
-    })
+  const ack = await posted(base, (hub) =>
+    hub.api.notices.seen.post({ ids: ["probe:after-reset"] })
   );
   check(
     "(f) acknowledging works again",
@@ -238,7 +208,7 @@ const spec: Spec = {
       "session-wakeups"
     );
     const noticesFile = join(fleet.sandbox, "hub", "notices-seen.json");
-    const rows = () => fleet.api<Row[]>(hubRequest("GET /api/instances"));
+    const rows = () => fleet.api((hub) => hub.api.instances.get());
     const rowOf = async (id: string) =>
       (await rows()).find((row) => row.id === id);
 
@@ -261,13 +231,11 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Records",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Records",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {
@@ -284,10 +252,8 @@ const spec: Spec = {
       (row) => row?.status === "stopped",
       60_000
     );
-    await fleet.api(
-      hubRequest("POST /api/notices/seen", {
-        body: { ids: ["probe:before-the-crash"] },
-      })
+    await fleet.api((hub) =>
+      hub.api.notices.seen.post({ ids: ["probe:before-the-crash"] })
     );
     const pathOf = (id: string) =>
       fleet.query<{ path: string }>(
@@ -505,11 +471,8 @@ const spec: Spec = {
     // Asked again until its stop has cancelled the item (a live item refuses it).
     const archiveA = async (): Promise<{ state: string }> => {
       try {
-        return await fleet.api<{ state: string }>(
-          hubRequest("POST /api/workspaces/:id/archive", {
-            path: { id: a.workspaceId },
-            body: {},
-          })
+        return await fleet.api((hub) =>
+          hub.api.workspaces({ id: a.workspaceId }).archive.post({})
         );
       } catch (error) {
         return { state: String(error) };
