@@ -14,6 +14,7 @@
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { PairingPoll, PairingStart } from "@cawco/core/hub-auth";
 import { OWNER_SCHEME } from "@cawco/core/hub-auth";
+import { refusalWords } from "@cawco/core/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -55,7 +56,7 @@ const approve = async (origin: string, command: string): Promise<string> => {
       : {
           ok: false as const,
           status: response.status,
-          said: (await response.text()).slice(0, 300),
+          said: refusalWords(await response.text()).slice(0, 300),
         };
   });
   let pairing: PairingStart;
@@ -149,11 +150,13 @@ export const ownerFetch = async (
   const send = () =>
     readWithin(ms, async (signal): Promise<OwnerAnswer> => {
       const response = await fetch(url, { ...withToken(init), signal });
+      const text = await response.text();
       return {
         ok: response.ok,
         status: response.status,
         pairing: response.headers.get("x-cawco-pairing") === "required",
-        said: await response.text(),
+        // A refusal's sentence, an answer's body.
+        said: response.ok ? text : refusalWords(text),
       };
     });
   const first = await send();
