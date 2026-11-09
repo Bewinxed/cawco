@@ -62,6 +62,7 @@
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
@@ -1036,7 +1037,7 @@
   // tasks the hub may have moved while the socket was down.
   let readFor = "";
   $effect(() => {
-    const live = cawco.status === "connected";
+    const live = connectionStore.status === "connected";
     const id = projectId;
     if (!(live && id)) {
       readFor = "";
@@ -2234,7 +2235,9 @@
 {#snippet viewPane()}
   <div
     data-slot="pane"
-    aria-busy={cawco.hub === "unreachable" || awaiting || reading.current}
+    aria-busy={connectionStore.hub === "unreachable" ||
+      awaiting ||
+      reading.current}
     class={[
       "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",

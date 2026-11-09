@@ -1,15 +1,16 @@
 /**
- * The live client's hub seam (hub-seam.ts): its connection, as `cawco.hub`
+ * The live client's hub seam (hub-seam.ts): its connection, as `connectionStore.hub`
  * says it, and the network. A reader of the live store takes it where
  * nothing above provides a stand-in.
  */
 import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
-import { cawco } from "./client.svelte";
+import { connectionStore } from "./hub/socket.svelte";
+
 import { type HubSeam, hubAbove } from "./hub-seam";
 
 const live: HubSeam = {
   get state() {
-    return cawco.hub;
+    return connectionStore.hub;
   },
   read: (request) => hubJson(request, { failure: refusedOrUnreached }),
 };

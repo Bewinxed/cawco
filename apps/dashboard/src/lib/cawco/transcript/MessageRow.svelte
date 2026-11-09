@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { traitsOf } from "@cawco/core/harness/traits";
   import { MediaQuery } from "svelte/reactivity";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
+  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
 
   /** No pointer hovers: the handle stands on the speaker line instead of the strip. One for every row. */
   const coarse = new MediaQuery("(pointer: coarse)");
@@ -15,7 +15,6 @@
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { tick, untrack } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
@@ -46,7 +45,6 @@
     editFailed,
     failedSendPayload,
     forkPointOf,
-    ModeUnchosen,
     relaunchSession,
     removeSend,
     restoreDraft,
@@ -55,6 +53,7 @@
     retrySend,
     userTurnActions,
   } from "../client.svelte";
+  import { ModeUnchosen } from "../hub/socket.svelte";
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { newSession, startFork } from "../spawn/new-session.svelte";

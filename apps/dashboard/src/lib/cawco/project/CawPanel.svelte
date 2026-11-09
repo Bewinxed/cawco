@@ -7,8 +7,9 @@
    * him is his panel over the page (CawFloat).
    */
   import { untrack } from "svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import CawFace from "#lib/cawco/home/CawFace.svelte";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { sheetScroller } from "#lib/components/ui/drawer/sheet-head.js";
   import CawLeadSwitch from "./CawLeadSwitch.svelte";
   import type { CawLead } from "./caw-lead.svelte";
@@ -63,7 +64,7 @@
     <p class="type-meta text-status-attn-ink">{lead.capLine}</p>
   {/if}
   <CawLeadSwitch {lead} {projectId} {projectName} />
-  {#if cawco.hub === "unreachable"}
+  {#if connectionStore.hub === "unreachable"}
     <p class="type-meta text-ink-muted">
       The hub is not answering; what shows was read before.
     </p>

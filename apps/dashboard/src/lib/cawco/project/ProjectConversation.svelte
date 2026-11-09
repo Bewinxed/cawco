@@ -47,6 +47,7 @@
     type PendingPermission,
     type SendExtras,
   } from "#lib/cawco/client.svelte.js";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { rowHref } from "#lib/cawco/links.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
@@ -329,7 +330,7 @@
   const starters = $derived(cawco.startersOf(projectId, "board", startersRead));
   $effect(() => {
     const pid = projectId;
-    if (!(shown === null && pid && cawco.status === "connected")) {
+    if (!(shown === null && pid && connectionStore.status === "connected")) {
       return;
     }
     untrack(() => {
