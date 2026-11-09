@@ -1,5 +1,6 @@
 import { fetchHub, type HubRequest } from "@cawco/core/hub-request";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
+import { streamResponse } from "@elysia/eden/treaty2";
 import { z } from "zod";
 /**
  * A read from the hub that says how it ended: the value, or the status the
@@ -90,32 +91,6 @@ export interface Refused<E extends HubError = HubError> {
 }
 
 /**
- * A refused answer read whole, as Eden reads one ({@link Refused}), for a
- * request sent by `fetch` itself (a stream, a file, one of the dashboard's
- * own routes): its text, as JSON when it is.
- */
-export async function refusedOf(response: Response): Promise<Refused> {
-  const text = await response.text();
-  return {
-    error: { status: response.status, value: textValue(text) },
-    response,
-  };
-}
-
-/** A body's text as Eden reads it: JSON when it parses as an object or a list, else the text. */
-function textValue(text: string): unknown {
-  const trimmed = text.trim();
-  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
-    return text;
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return text;
-  }
-}
-
-/**
  * A refusal as the {@link MachineAwayError} it is when the hub says its
  * machine is away; null otherwise, for the caller's own refusal.
  */
@@ -189,7 +164,7 @@ export function hubSaid(refused: Refused): string {
  * ({@link hubData}). Refused, `failure`'s error is thrown: the hub's
  * refusal in its own words ({@link hubRefusal}) unless the caller words it
  * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`).
- * Answered, its body is read by {@link answerOf}, as {@link readHub} reads a
+ * Answered, its body is read by {@link jsonOf}, as {@link readHub} reads a
  * load's.
  */
 export async function hubJson<T>(
@@ -206,7 +181,7 @@ export async function hubJson<T>(
   if (!response.ok) {
     throw failure(await refusedOf(response));
   }
-  return await answerOf<T>(response);
+  return await jsonOf<T>(response);
 }
 
 /**
@@ -215,7 +190,7 @@ export async function hubJson<T>(
  * route's answer. A body that is no JSON at all (a proxy's page, an empty
  * answer) is the hub not answering, thrown as {@link noAnswer}.
  */
-async function answerOf<T>(response: Response): Promise<T> {
+async function jsonOf<T>(response: Response): Promise<T> {
   try {
     return (await response.json()) as T;
   } catch (error) {
@@ -302,7 +277,111 @@ function refusedFrom<E extends HubError>(answer: {
 }
 
 /** The content types Eden reads a body as JSON by (treaty2's parse by `Content-Type`). */
-export const JSON_TYPE = /^application\/(?:problem\+)?json(?:;|$)/u;
+const JSON_TYPE = /^application\/(?:problem\+)?json(?:;|$)/u;
+
+/**
+ * `response` as Eden may read it. Eden parses a body that says it is JSON
+ * before it looks at the status, and one that doesn't parse rejects the
+ * whole call with the parser's `SyntaxError`: the status is lost, and a
+ * refused write would read as no refusal. Such a body comes on as the text
+ * it is, its status kept, so it is read as every body that is no JSON is:
+ * the hub not answering, at its own status ({@link bodyOf},
+ * {@link hubFailure}).
+ */
+export async function readable(response: Response): Promise<Response> {
+  if (!JSON_TYPE.test(response.headers.get("content-type") ?? "")) {
+    return response;
+  }
+  const text = await response.clone().text();
+  try {
+    JSON.parse(text);
+    return response;
+  } catch {
+    const headers = new Headers(response.headers);
+    headers.set("content-type", "text/plain;charset=utf-8");
+    // Eden reads chunked text with no length as a stream.
+    headers.delete("transfer-encoding");
+    return new Response(text, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
+}
+
+/**
+ * A refused response the dashboard fetched itself (a file, a page's own
+ * route, a read timed apart from its body) as the {@link Refused} Eden's
+ * client would make of it: made readable ({@link readable}), its body read
+ * as treaty2 reads one ({@link bodyIn}), for a refusal reader.
+ */
+export async function refusedOf(fetched: Response): Promise<Refused> {
+  const response = await readable(fetched);
+  return {
+    error: { status: response.status, value: await bodyIn(response) },
+    response,
+  };
+}
+
+/**
+ * `response`'s body as Eden's client reads one, by its `Content-Type`
+ * (@elysia/eden 2.0.0-rc.1, src/treaty2: the `switch` on `Content-Type`
+ * once the answer is in; dates left as strings, `parseDate: false`).
+ */
+async function bodyIn(response: Response): Promise<unknown> {
+  const type = response.headers.get("content-type")?.split(";")[0];
+  if (type === "text/event-stream") {
+    return streamResponse(response, { parseDate: false });
+  }
+  if (type === "application/json" || type === "application/problem+json") {
+    return JSON.parse(await response.text());
+  }
+  if (type === "application/octet-stream") {
+    return await response.arrayBuffer();
+  }
+  if (type === "multipart/form-data") {
+    return Object.fromEntries(await response.formData());
+  }
+  if (
+    type?.startsWith("text/") &&
+    response.headers.get("transfer-encoding") === "chunked" &&
+    !response.headers.has("content-length")
+  ) {
+    return streamResponse(response, { parseDate: false });
+  }
+  return textValue(await response.text());
+}
+
+/**
+ * A text body as Eden reads one (src/utils/parse.ts
+ * `parseStringifiedValue`, `parseDate: false`): empty as it is, a number,
+ * `true` or `false`, an object or a list that parses (`isStringifiedObject`:
+ * first and last character a pair of braces or brackets), else the text.
+ */
+function textValue(text: string): unknown {
+  if (!text) {
+    return text;
+  }
+  if (text.trim().length !== 0 && !Number.isNaN(Number(text))) {
+    return Number(text);
+  }
+  if (text === "true" || text === "false") {
+    return text === "true";
+  }
+  const first = text.at(0);
+  const last = text.at(-1);
+  if ((first === "{" && last === "}") || (first === "[" && last === "]")) {
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      // Not JSON after all: the text, as Eden keeps it.
+      if (!(error instanceof SyntaxError)) {
+        throw error;
+      }
+    }
+  }
+  return text;
+}
 
 /** The status of an answer with no body. */
 const NO_CONTENT = 204;
@@ -606,7 +685,7 @@ export function failureClause(error: unknown): string {
 
 /**
  * Reads `request` through the given fetch (a load's own): refused, why, as
- * the load shows it; answered, its body read by {@link answerOf}, as
+ * the load shows it; answered, its body read by {@link jsonOf}, as
  * {@link hubJson} reads one.
  */
 export async function readHub<T>(
@@ -618,5 +697,5 @@ export async function readHub<T>(
   if (!response.ok) {
     return { ok: false, ...hubFailure(await refusedOf(response)) };
   }
-  return { ok: true, value: await answerOf<T>(response) };
+  return { ok: true, value: await jsonOf<T>(response) };
 }
