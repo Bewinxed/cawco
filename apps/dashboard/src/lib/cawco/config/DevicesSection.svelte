@@ -15,7 +15,6 @@
    */
   import type { FindSettings } from "@cawco/core/find";
   import type { OwnerDevice } from "@cawco/core/hub-auth";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { findSecretWords } from "@cawco/core/words/find-secrets";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -31,11 +30,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconClock, IconLaptop, IconLock, IconSearch } from "#lib/icons.js";
+  import { hub } from "#lib/platform/hub.js";
   import {
     failureClause,
     failureWords,
-    hubJson,
-    hubSend,
+    hubRefusal,
   } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -59,9 +58,11 @@
   async function read() {
     try {
       await readAuth();
-      ({ devices, current } = (await hubJson(
-        hubRequest("GET /api/devices")
-      )) as {
+      const answer = await hub.api.devices.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      ({ devices, current } = answer.data as {
         current: string | null;
         devices: OwnerDevice[];
       });
@@ -78,9 +79,11 @@
 
   async function readFind() {
     try {
-      ({ hideSecrets } = await hubJson<FindSettings>(
-        hubRequest("GET /api/find/settings")
-      ));
+      const answer = await hub.api.find.settings.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      ({ hideSecrets } = answer.data);
     } catch (error) {
       findProblem = findSecretWords.unread(failureClause(error));
     }
@@ -90,11 +93,13 @@
     findSaving = true;
     findProblem = null;
     try {
-      ({ hideSecrets } = await hubJson<FindSettings>(
-        hubRequest("PUT /api/find/settings", {
-          body: { hideSecrets: next } satisfies FindSettings,
-        })
-      ));
+      const answer = await hub.api.find.settings.put({
+        hideSecrets: next,
+      } satisfies FindSettings);
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      ({ hideSecrets } = answer.data);
     } catch (error) {
       findProblem = failureWords(error);
     } finally {
@@ -134,9 +139,10 @@
 
   async function remove(device: OwnerDevice) {
     await act(`device:${device.id}`, async () => {
-      await hubSend(
-        hubRequest("DELETE /api/devices/:id", { path: { id: device.id } })
-      );
+      const answer = await hub.api.devices({ id: device.id }).delete();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
     });
   }
 

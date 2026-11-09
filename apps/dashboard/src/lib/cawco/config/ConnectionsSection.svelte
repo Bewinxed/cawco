@@ -6,7 +6,8 @@
     type ConnectionWay,
   } from "@cawco/core/words/connections";
   import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
-  import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+  import { hub } from "#lib/platform/hub.js";
+  import { refusedOrUnreached } from "#lib/platform/hub-read.js";
 
   /** One way the hub signs in to a service (core `ConnectionWay`). */
   export type Way = ConnectionWay;
@@ -93,8 +94,6 @@
    */
   import type { ConnectionView } from "@cawco/core/connections";
   import { detach } from "@cawco/core/detach";
-  import type { Deleted } from "@cawco/core/fleet";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { configureWords } from "@cawco/core/words/configure";
   import { connectionsWords as words } from "@cawco/core/words/connections";
   import { onMount } from "svelte";
@@ -156,10 +155,11 @@
 
   async function read() {
     try {
-      ({ connections: rows } = await hubJson<{ connections: ConnectionView[] }>(
-        hubRequest("GET /api/connections"),
-        { failure: refusedOrUnreached }
-      ));
+      const answer = await hub.api.connections.get();
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
+      ({ connections: rows } = answer.data);
       loaded = true;
       readError = null;
     } catch (error) {
@@ -171,7 +171,7 @@
   let callbackUrl = $state("");
 
   onMount(() => {
-    callbackUrl = `${window.location.origin}${hubRequest("GET /api/connections/oauth/callback").path}`;
+    callbackUrl = `${window.location.origin}${hub.api.connections.oauth.callback["~path"]}`;
     detach(read(), "read");
     // A GitHub sign-in kept through a reload asks the machines again.
     if (typed.service === "github") {
@@ -325,16 +325,14 @@
     signing[name] = true;
     delete problems[name];
     try {
-      const { authorizationUrl } = await hubJson<{ authorizationUrl: string }>(
-        hubRequest("POST /api/connections/:name/sign-in", {
-          path: { name },
-          body: {
-            origin: window.location.origin,
-            ...(organization ? { organization } : {}),
-          },
-        }),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api.connections({ name })["sign-in"].post({
+        origin: window.location.origin,
+        ...(organization ? { organization } : {}),
+      });
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
+      const { authorizationUrl } = answer.data;
       tab?.location.assign(authorizationUrl);
     } catch (error) {
       tab?.close();
@@ -383,13 +381,12 @@
     keyPending = true;
     delete problems[row.name];
     try {
-      await hubJson<ConnectionView>(
-        hubRequest("PUT /api/connections/:name/key", {
-          path: { name: row.name },
-          body: { key },
-        }),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api
+        .connections({ name: row.name })
+        .key.put({ key });
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
       key = "";
       keying = null;
     } catch (error) {
@@ -430,13 +427,12 @@
     appPending = true;
     delete problems[row.name];
     try {
-      await hubJson<ConnectionView>(
-        hubRequest("PUT /api/connections/:name/app", {
-          path: { name: row.name },
-          body: rowApp,
-        }),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api
+        .connections({ name: row.name })
+        .app.put(rowApp);
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
       rowApp = emptyApp();
       appFor = null;
     } catch (error) {
@@ -545,10 +541,11 @@
     ghProblem = null;
     const offered = typed.way;
     try {
-      gh = await hubJson<{ signIns: GhRow[]; unread: string[] }>(
-        hubRequest("GET /api/github-sign-in/gh"),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api["github-sign-in"].gh.get();
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
+      gh = answer.data;
     } catch (error) {
       ghProblem = words.ghUnread(failureClause(error));
       gh = { signIns: [], unread: [] };
@@ -570,16 +567,14 @@
     ghPending = ghKey(one);
     ghProblem = null;
     try {
-      await hubJson<ConnectionView>(
-        hubRequest("POST /api/github-sign-in/gh", {
-          body: {
-            machineId: one.machineId,
-            host: one.host,
-            login: one.login,
-          },
-        }),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api["github-sign-in"].gh.post({
+        machineId: one.machineId,
+        host: one.host,
+        login: one.login,
+      });
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
       stopAdding();
     } catch (error) {
       ghProblem = failureWords(error);
@@ -616,18 +611,13 @@
       return true;
     }
     try {
-      await hubJson<ConnectionView>(
-        way.auth === "app"
-          ? hubRequest("PUT /api/connections/:name/app", {
-              path: { name },
-              body: typedApp,
-            })
-          : hubRequest("PUT /api/connections/:name/key", {
-              path: { name },
-              body: { key: typedKey },
-            }),
-        { failure: refusedOrUnreached }
-      );
+      const connection = hub.api.connections({ name });
+      const answer = await (way.auth === "app"
+        ? connection.app.put(typedApp)
+        : connection.key.put({ key: typedKey }));
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
       return true;
     } catch (error) {
       problems[name] = failureWords(error);
@@ -658,19 +648,17 @@
     addPending = true;
     typed.problem = null;
     try {
-      await hubJson<ConnectionView>(
-        hubRequest("POST /api/connections", {
-          body: {
-            name,
-            service: service.service,
-            account: typed.account.trim(),
-            transport: "http",
-            url,
-            auth: way.auth,
-          },
-        }),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api.connections.post({
+        name,
+        service: service.service,
+        account: typed.account.trim(),
+        transport: "http",
+        url,
+        auth: way.auth,
+      });
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
     } catch (error) {
       tab?.close();
       typed.problem = failureWords(error);
@@ -702,12 +690,11 @@
     removing = row.name;
     delete problems[row.name];
     try {
-      const deleted = await hubJson<Deleted>(
-        hubRequest("DELETE /api/connections/:name", {
-          path: { name: row.name },
-        }),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api.connections({ name: row.name }).delete();
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
+      const deleted = answer.data;
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
       offerUndo(
@@ -747,13 +734,13 @@
       : row.projects.filter((each) => each !== project);
     delete problems[row.name];
     try {
-      const next = await hubJson<ConnectionView>(
-        hubRequest("PATCH /api/connections/:name", {
-          path: { name: row.name },
-          body: { projects },
-        }),
-        { failure: refusedOrUnreached }
-      );
+      const answer = await hub.api
+        .connections({ name: row.name })
+        .patch({ projects });
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
+      const next = answer.data;
       rows = rows.map((each) => (each.name === next.name ? next : each));
       choosing = next;
     } catch (error) {
