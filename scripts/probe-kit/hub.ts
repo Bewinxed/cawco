@@ -3,6 +3,7 @@
  * (its deadline, its credential headers) beside what Eden sends, and an
  * answer's body as text.
  */
+import type { Page } from "playwright-core";
 import {
   type HubAnswer,
   type HubClient,
@@ -63,36 +64,32 @@ export const said = (answer: HubAnswer): Said => ({
   text: answerText(answer),
 });
 
-/** A request as a browser's page sends it itself (`page.evaluate`): its path and fetch init. */
-export interface RequestForPage {
-  body?: string;
-  headers?: Record<string, string>;
-  method: string;
-  path: string;
-}
-
-/** The request `ask` sends, without sending it: for a page that sends it from the browser, where no client runs. */
-export const requestOf = async (ask: HubAsk): Promise<RequestForPage> => {
-  let sent: RequestForPage | undefined;
-  await ask(
-    hubClient("", (url, init) => {
-      const headers: Record<string, string> = {};
-      new Headers(init.headers).forEach((value, name) => {
-        headers[name] = value;
-      });
-      sent = {
-        path: url,
-        method: init.method ?? "GET",
-        headers,
-        ...(typeof init.body === "string" ? { body: init.body } : {}),
-      };
-      return Promise.resolve(Response.json({}));
-    })
-  );
-  if (!sent) {
-    throw new Error("the request was never made");
-  }
-  return sent;
+/**
+ * The hub as this browser page asks it: Eden from the probe's process, at the
+ * page's own origin, over the page's own credentials. `page.request` "uses
+ * the same cookie jar as its BrowserContext"
+ * (playwright.dev/docs/api/class-apirequestcontext, Cookie management), so a
+ * cookie the page holds is sent and one the answer sets or clears lands on
+ * the page; a write carries the `Origin` the page's own would.
+ */
+export const pageHub = (page: Page): HubClient => {
+  const { origin } = new URL(page.url());
+  return hubClient(origin, async (url, init) => {
+    const method = init.method ?? "GET";
+    const answer = await page.request.fetch(url, {
+      method,
+      headers: {
+        ...Object.fromEntries(new Headers(init.headers)),
+        ...(method === "GET" ? {} : { origin }),
+      },
+      ...(typeof init.body === "string" ? { data: init.body } : {}),
+    });
+    const body = await answer.body();
+    return new Response(body.length > 0 ? Uint8Array.from(body) : null, {
+      status: answer.status(),
+      headers: answer.headers(),
+    });
+  });
 };
 
 /** What a held question's `payload` carries, for a spec that reads a field of it: the hub's route types it `unknown`. */

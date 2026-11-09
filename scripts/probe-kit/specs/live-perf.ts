@@ -108,7 +108,7 @@ import { HUB_TAKE_MEASURE } from "../../../packages/core/src/stream";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
 import { type MainThread, OWN_PASS, traceMain } from "../frames";
-import { type RequestForPage, requestOf } from "../hub";
+import { pageHub } from "../hub";
 import { type Kit, ROOT, type Spec } from "../kit";
 import {
   attributeOn,
@@ -1597,13 +1597,7 @@ function coldBudgets(kit: Kit, loads: Cold[]): void {
 /** Nav: cold loads, then the home's common presses. */
 async function navLeg(live: Live, session: string | undefined) {
   const { kit, page } = live;
-  const projects = await page.evaluate(
-    async (request) => {
-      const answer = await fetch(request.path, request);
-      return answer.ok ? ((await answer.json()) as { id: string }[]) : [];
-    },
-    await requestOf((hub) => hub.api.projects.get())
-  );
+  const projects = (await pageHub(page).api.projects.get()).data ?? [];
   const paths = [
     "/session",
     ...(session ? [`/session/${session}`] : []),
@@ -1708,12 +1702,6 @@ const stillFrames = () =>
     requestAnimationFrame(frame);
   });
 
-/** The board, as this browser is answered it: the rows, or the status refused. */
-const boardRead = async (request: RequestForPage): Promise<unknown> => {
-  const answer = await fetch(request.path, request);
-  return answer.ok ? ((await answer.json()) as unknown) : answer.status;
-};
-
 const spec: Spec = {
   group: "Speed",
   name: "live-perf",
@@ -1798,19 +1786,21 @@ async function measureLive(
   };
   const page = await desk();
   await page.goto(`${base}/session`, { waitUntil: "domcontentloaded" });
-  const board = await page.evaluate(
-    boardRead,
-    await requestOf((hub) => hub.api.instances.get())
-  );
-  if (!Array.isArray(board)) {
+  const board = await pageHub(page).api.instances.get();
+  if (board.data === null) {
     kit.check(
       "the hub's board answers this browser",
       false,
-      `GET /api/instances answered ${String(board)}: a hub that pairs its browsers wants --storage`
+      `GET /api/instances answered ${board.status}: a hub that pairs its browsers wants --storage`
     );
     return;
   }
-  const rows = board as Row[];
+  // The route types these two `Date`; on the wire, and with `parseDate: false`, they are the ISO strings `Row` says.
+  const rows: Row[] = board.data.map((row) => ({
+    ...row,
+    createdAt: String(row.createdAt),
+    updatedAt: String(row.updatedAt),
+  }));
   const running = rows
     .filter((row) => row.status === "running")
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));

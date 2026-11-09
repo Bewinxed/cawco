@@ -217,7 +217,6 @@ import {
 } from "../../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import {
-  type CanvasMap,
   type SectionUndrawn,
   STAGE_ENSURE,
   STAGE_READY_MS,
@@ -229,7 +228,7 @@ import { shellWords } from "../../../packages/core/src/words/shell";
 import { storyReadWords } from "../../../packages/core/src/words/story-read";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type HubAsk, hubAt, requestOf } from "../hub";
+import { answerText, type HubAsk, hubAt, pageHub } from "../hub";
 import {
   buttonNames,
   type Kit,
@@ -1432,21 +1431,14 @@ async function panelLegs(
   // 24. The hub's map of the canvas, read as the panel's Map reads it.
   const madeId = made.match(ID)?.[1];
   const mapRead = madeId
-    ? await desk.evaluate(
-        async (request) => {
-          const answer = await fetch(request.path, request);
-          return {
-            status: answer.status,
-            body: (await answer.json().catch(() => null)) as CanvasMap | null,
-          };
-        },
-        await requestOf((hub) =>
-          hub.api
-            .instances({ id: session })
-            .artifacts({ artifact: madeId })
-            .map.get()
-        )
-      )
+    ? await pageHub(desk)
+        .api.instances({ id: session })
+        .artifacts({ artifact: madeId })
+        .map.get()
+        .then((answer) => ({
+          status: answer.status,
+          body: answer.error === null ? dataOf(answer) : null,
+        }))
     : null;
   const center = mapRead?.body?.center;
   kit.check(
@@ -1569,14 +1561,10 @@ async function treeSheetLeg(
   }
   const desk = await panelPage(kit, base, parent, "desk", "light");
   /** A POST from the dashboard's page, as session `who`'s panel makes it. */
-  const panelPost = async (request: HubAsk) =>
-    desk.evaluate(
-      async (asked) => {
-        const response = await fetch(asked.path, asked);
-        return { status: response.status, text: await response.text() };
-      },
-      await requestOf(request)
-    );
+  const panelPost = async (request: HubAsk) => {
+    const answer = await request(pageHub(desk));
+    return { status: answer.status, text: answerText(answer) };
+  };
   const sheetPost = (who: string, body: typeof save) =>
     panelPost((hub) =>
       hub.api
@@ -1674,15 +1662,9 @@ async function neverDrawnLeg(
   const desk = await panelPage(kit, base, session, "desk", "light");
   /** The session's artifacts by name, as its panel lists them. */
   const panelArtifacts = async () =>
-    (
-      await desk.evaluate(
-        (request) =>
-          fetch(request.path, request).then((response) => response.json()),
-        await requestOf((hub) =>
-          hub.api.instances({ id: session }).artifacts.get()
-        )
-      )
-    ).map((one: { name: string }) => one.name) as string[];
+    dataOf(
+      await pageHub(desk).api.instances({ id: session }).artifacts.get()
+    ).map((one) => one.name);
   // 25. A canvas whose page never comes: the cover gives way once its stage's time is up.
   await desk.route("**/@cawco/canvas**", () => {
     // Held unanswered: the page never comes.

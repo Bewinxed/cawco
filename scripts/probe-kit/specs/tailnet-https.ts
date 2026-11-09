@@ -52,7 +52,7 @@ import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { leasePortRange, until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
-import { hubAt, requestOf } from "../hub";
+import { hubAt, pageHub } from "../hub";
 import {
   type Kit,
   type KitFleet,
@@ -881,14 +881,13 @@ const run = async (kit: Kit) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const named = await context.newPage();
     await open(named, `${https}/`, "[data-needs-caw]");
-    const secure = await named.evaluate(
-      async (request) => ({
+    const secure = {
+      ...(await named.evaluate(() => ({
         secure: window.isSecureContext,
         origin: location.origin,
-        api: (await fetch(request.path, request)).status,
-      }),
-      await requestOf((hub) => hub.api["tailnet-https"].get())
-    );
+      }))),
+      api: (await pageHub(named).api["tailnet-https"].get()).status,
+    };
     kit.check(
       "5: on its name the dashboard loads in a secure context, its API through the relay",
       secure.secure && secure.origin === https && secure.api === 200,
