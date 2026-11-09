@@ -50,7 +50,7 @@ export interface SrtPlace {
   /** The bwrap srt runs (its `bwrapPath`): {@link readOnlyDeniesBwrap}, as the workspace's boundary writes it. */
   readonly bwrap: string;
   /**
-   * The container runtimes' sockets on this machine (boundary/
+   * The container runtimes' sockets on this machine (boundary/runner.ts
    * `containerSockets`): their own dirs, and every socket the runtime
    * registry may dial, each as named and as the file it names.
    */
