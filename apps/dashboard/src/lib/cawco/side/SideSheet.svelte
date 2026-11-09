@@ -1,4 +1,11 @@
 <script lang="ts">
+  import { Portal } from "bits-ui";
+  import type { Snippet } from "svelte";
+  import { tick, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import { Drawer as Vaul } from "vaul-svelte";
+  import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   /**
    * The preview on a phone (SideSplit): a sheet over the transcript and
    * the composer, down to the screen's foot, so the page has the composer's
@@ -9,13 +16,7 @@
    * transcript's place kept as they were. The preview closes it from its
    * own header.
    */
-  import { Portal } from "bits-ui";
-  import type { Snippet } from "svelte";
-  import { tick, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
-  import { Drawer as Vaul } from "vaul-svelte";
-  import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { land, waiting } from "#lib/platform/motion/share.svelte.js";
   import { visible as visibleArea } from "#lib/platform/visible-viewport.svelte.js";
@@ -146,7 +147,7 @@
    * composer at any moment, and every stop stands on it there, opening on
    * `lower`.
    */
-  const covers = new MediaQuery("(width < 640px)");
+  const covers = new MediaQuery(PHONE_QUERY);
   let snap = $state<number | string | null>(null);
   let viewportHeight = $state(0);
   /** The host's height: from the safe area's top to the screen's foot. */

@@ -52,6 +52,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconClose,
     IconFilesLinear,
@@ -108,7 +109,7 @@
   const nothing = () => undefined;
   const fleet = { ...composerFleet, DelegateTray: FixtureTray };
   const draft = new ComposerDraft();
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
 
   /** The asks answered here: their rows and the question's bar go, as the hub takes them. */
   const taken = new SvelteSet<string>();
