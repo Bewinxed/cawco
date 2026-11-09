@@ -2843,7 +2843,9 @@ const attach = (
           providerAccountsChanged();
         }
         if (named.length > 0) {
-          const outcomes = Object.values(await supervisor.carrySessions(named));
+          const outcomes = Object.values(
+            await supervisor.carrier.carrySessions(named)
+          );
           const moved = outcomes.filter(
             (one) => one.state === "carried" && one.entries > 0
           ).length;
