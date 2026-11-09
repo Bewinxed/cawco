@@ -7,8 +7,7 @@
  * if the helper had said yes. A thrown refusal stopped the route by itself;
  * a returned one stops it only where it is read, so this is a finding.
  *
- * golar.config.ts runs it over the hub's source;
- * scripts/lint/fixtures/refusal-kept.ts holds what it must report.
+ * golar.config.ts runs it over the hub's source.
  */
 import { defineRule } from "golar/unstable";
 import {
