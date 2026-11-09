@@ -6,7 +6,7 @@
    * beside each entry are the rows the section shows.
    */
   import { onMount } from "svelte";
-  import { cawco, onFleetFetch } from "#lib/cawco/client.svelte.js";
+  import { onFleetFetch } from "#lib/cawco/client.svelte.js";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
   import {
     LAST_KEY,
@@ -18,6 +18,7 @@
     provideConfig,
   } from "#lib/cawco/config/store.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
+  import { mcpServersStore } from "#lib/cawco/stores/mcp-servers.svelte.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { pageIn, pageOut } from "#lib/platform/motion/route.svelte.js";
   import { store as storeLocally } from "#lib/platform/storage.js";
@@ -30,7 +31,7 @@
   // its rows (an upsert, a removal) never writes into the socket's store,
   // whose next frame is compared against what the hub said before.
   $effect(() => {
-    const servers = cawco.fleetMcp;
+    const servers = mcpServersStore.fleetMcp;
     if (servers && store.fleet.value) {
       store.fleet.value.config.mcp = $state.snapshot(servers);
     }

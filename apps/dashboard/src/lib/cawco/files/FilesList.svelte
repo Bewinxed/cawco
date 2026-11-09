@@ -80,6 +80,7 @@
   import { excerptParts } from "../find/find-rows";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import RowFault from "../RowFault.svelte";
+  import { needsStore } from "../stores/needs.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
     type ArtifactCard,
@@ -161,7 +162,7 @@
   /** The session's artifacts its needs-you mark is raised for (core `waitingOnYou`). */
   const waiting = $derived(
     new Set(
-      cawco.artifactNeedsOpen
+      needsStore.artifactNeedsOpen
         .filter((need) => need.instanceId === instanceId)
         .map((need) => need.artifactId)
     )
