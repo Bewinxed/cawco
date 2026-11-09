@@ -2,6 +2,13 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  type HubAnswer,
+  type HubClient,
+  hubClient,
+  hubPath,
+  refusalText,
+} from "@cawco/agent/hub-client";
+import {
   bindSockets,
   failed,
   installLaunchAgents,
@@ -40,7 +47,6 @@ import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { hubRequest } from "@cawco/core/hub-request";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import {
   launchdEnded,
@@ -55,7 +61,6 @@ import {
   localDashboardPort,
   mcpGatewayPort,
 } from "@cawco/core/ports";
-import type { AgentRow } from "@cawco/core/protocol";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { unhandled } from "@cawco/core/unhandled";
@@ -445,8 +450,27 @@ const asMachine: Fetcher = async (url, init) => {
   return machineFetch(url, init);
 };
 
-const probeJson = <T>(url: string): Promise<Bounded<Said<T>>> =>
-  probe(url, jsonBody<T>(), {}, asMachine);
+/** The data of one of the hub's routes asked as this machine, given what {@link probe} gives a read. */
+const askedHub = <A extends HubAnswer>(
+  hub: string,
+  url: string,
+  ask: (client: HubClient) => Promise<A>
+): Promise<Bounded<Said<Extract<A, { error: null }>["data"]>>> =>
+  readWithin(PROBE_TIMEOUT_MS, async (signal) => {
+    const answer = await ask(
+      hubClient(hub, (target, init) => asMachine(target, { ...init, signal }))
+    );
+    if (answer.response === undefined && answer.error !== null) {
+      throw signal.aborted
+        ? answer.error.value
+        : new Gone(
+            `${url}: ${refusalText({ status: 0, value: answer.error.value })}`
+          );
+    }
+    return answer.error === null
+      ? { ok: true, value: answer.data }
+      : { ok: false, status: answer.status, said: `HTTP ${answer.status}` };
+  });
 
 /** The HTTP status `url` answers with, its body left unread. */
 const probeStatus = (url: string): Promise<Bounded<number>> =>
@@ -455,9 +479,17 @@ const probeStatus = (url: string): Promise<Bounded<number>> =>
     return response.status;
   });
 
+/** The hub at `hub`'s `/health`, and its URL for what is said about it. */
+const hubHealth = async (hub: string) => {
+  const url = `${hub}${hubPath.health["~path"]}`;
+  return {
+    url,
+    health: await askedHub(hub, url, (client) => client.health.get()),
+  };
+};
+
 const probeHub = async (): Promise<string> => {
-  const url = `${hubOrigin()}${hubRequest("GET /health").path}`;
-  const health = await probeJson<{ version: string }>(url);
+  const { url, health } = await hubHealth(hubOrigin());
   switch (health.kind) {
     case "unanswered":
       return noAnswer(url, health);
@@ -503,31 +535,21 @@ const joinedHub = async (): Promise<string | undefined> => {
  * what was said instead of an answer. The fleet's list is the person's (hub
  * hub-auth.ts).
  */
-const ownRow = async (hub: string): Promise<AgentRow | null | string> => {
+const ownRow = async (hub: string) => {
   const { machineId } = await import("@cawco/core/machine-id");
-  const row = jsonBody<AgentRow>();
-  const self = await probe(
-    `${hub}${
-      hubRequest("GET /api/agents/:machineId", {
-        path: { machineId: await machineId() },
-      }).path
-    }`,
-    async (response): Promise<Said<AgentRow | null>> => {
-      if (response.status === 404) {
-        await response.body?.cancel();
-        return { ok: true, value: null };
-      }
-      return row(response);
-    },
-    {},
-    asMachine
+  const id = await machineId();
+  const self = await askedHub(hub, hub, (client) =>
+    client.api.agents({ machineId: id }).get()
   );
   switch (self.kind) {
     case "unanswered":
       return noAnswer(hub, self);
     case "answered":
-      return self.value.ok
-        ? self.value.value
+      if (self.value.ok) {
+        return self.value.value;
+      }
+      return self.value.status === 404
+        ? null
         : `${hub} answered ${self.value.said} for this machine's row`;
     default:
       unhandled("read", self);
@@ -606,8 +628,7 @@ export const awaitFirstMachineReady = async (
     [
       "hub",
       async () => {
-        const url = `${hub}${hubRequest("GET /health").path}`;
-        const health = await probeJson<{ ok: boolean }>(url);
+        const { url, health } = await hubHealth(hub);
         switch (health.kind) {
           case "unanswered":
             return noAnswer(url, health);
@@ -1049,13 +1070,6 @@ const specFor = (
 };
 
 /** What the hub reports for one machine's daemon. */
-interface BusyReport {
-  /** Sessions on this machine with a turn in flight. */
-  busy: number;
-  instances: string[];
-  ready: boolean;
-}
-
 /**
  * How many of this machine's sessions are mid-turn, in words, or why that is
  * unknown: the hub did not answer, or answered without saying (it is old
@@ -1069,12 +1083,11 @@ const sessionsMidTurn = async (): Promise<Cut> => {
   }
   // Imported here rather than at the top so no other verb pays for the agent SDK.
   const { machineId } = await import("@cawco/core/machine-id");
-  const url = `${hub}${
-    hubRequest("GET /api/agents/:machineId/busy", {
-      path: { machineId: await machineId() },
-    }).path
-  }`;
-  const answer = await probeJson<BusyReport>(url);
+  const id = await machineId();
+  const url = `${hub}${hubPath.api.agents({ machineId: id }).busy["~path"]}`;
+  const answer = await askedHub(hub, url, (client) =>
+    client.api.agents({ machineId: id }).busy.get()
+  );
   switch (answer.kind) {
     case "unanswered":
       return { unknown: noAnswer(url, answer) };
@@ -1083,7 +1096,12 @@ const sessionsMidTurn = async (): Promise<Cut> => {
         return { unknown: `the hub answered ${answer.value.said} at ${url}` };
       }
       const report = answer.value.value;
-      if (!(report.ready === true && typeof report.busy === "number")) {
+      // The hub's route types its agent's answer without `ready` (routes/agent-control.ts).
+      if (!(
+        "ready" in report &&
+        report.ready === true &&
+        typeof report.busy === "number"
+      )) {
         return { unknown: "the hub does not know yet" };
       }
       return report.busy > 0
