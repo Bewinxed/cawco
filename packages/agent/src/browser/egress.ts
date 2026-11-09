@@ -39,6 +39,7 @@
 import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import type { Runtime } from "./runtime";
+import type { MachineNetwork } from "./state";
 
 /** Where a container stands: the runtime's media network, or a namespace of its own. */
 export type Placement = "media-network" | "own-namespace";
@@ -118,22 +119,6 @@ const resolverOf = (resolvConf: string): string | undefined =>
     .split("\n")
     .map((line) => line.trim().split(BLANKS))
     .find(([word, address]) => word === "nameserver" && address)?.[1];
-
-/**
- * The machine's network as pasta copies it when a container starts: whether
- * it has an IPv4 default route, the first nameserver, and the IPv4 address
- * of the default route's interface. pasta takes that address as the
- * namespace's own and as the target of `--map-guest-addr` (resolved once, at
- * start), so `host.containers.internal` and `host-gateway` reach the
- * machine only while it holds it.
- */
-export interface MachineNetwork {
-  /** The default route's interface's IPv4 address. */
-  address?: string;
-  /** The first nameserver of /etc/resolv.conf. */
-  resolver?: string;
-  routed: boolean;
-}
 
 /** The machine's interfaces and their addresses, as `os.networkInterfaces()` gives them. */
 type Interfaces = ReturnType<typeof networkInterfaces>;

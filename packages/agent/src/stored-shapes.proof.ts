@@ -4,9 +4,11 @@
  * to be the declared type it is made from. Read by the typecheck through its
  * package's tsconfig `include`.
  */
-import type { MachineNetwork as MachineNetworkType } from "./browser/egress";
 import type { MediaMeasurement as MediaMeasurementType } from "./browser/media-forwarding";
-import type { BrowserRecord as BrowserRecordType } from "./browser/state";
+import type {
+  BrowserRecord as BrowserRecordType,
+  MachineNetwork as MachineNetworkType,
+} from "./browser/state";
 import type {
   FleetHarnessSet as FleetHarnessSetType,
   SetHarnessConfig as SetHarnessConfigType,
