@@ -52,10 +52,10 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
-  import { submitCommand } from "../client.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { hubSeam } from "../hub-live";
   import { boardStore, isStale } from "../stores/board.svelte";
+  import { submitCommand } from "../stores/commands.svelte";
   import { commandRecord } from "../stores/ledger.svelte";
   import { mcpServersStore } from "../stores/mcp-servers.svelte";
   import {
