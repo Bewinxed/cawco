@@ -1,18 +1,11 @@
-import type { ArtifactDoes } from "@cawco/core/artifact-kinds";
 import {
   CANVAS_LIMITS,
   type CanvasEntry,
   canvasOutline,
   excalidrawFile,
 } from "@cawco/core/canvas";
-import type { ChoiceEntry } from "@cawco/core/choices";
 import type { MapChange } from "@cawco/core/doc-maps";
-import {
-  type ChangedItem,
-  docMeta,
-  type MetaMap,
-  setMeta,
-} from "@cawco/core/doc-meta";
+import { type ChangedItem, docMeta, setMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
@@ -27,7 +20,6 @@ import {
   screenJoined,
   stampWrote,
 } from "../canvas";
-import type { ArtifactServiceDeps } from "../deps";
 import { stateOf } from "../facts";
 import { sceneChanges } from "../page-changes";
 import { ArtifactRefusal } from "../refusals";
@@ -42,47 +34,29 @@ import type {
   SkeletonElement,
 } from "../shapes";
 import { routeOf } from "../sync";
-import type { createVersions } from "../versions";
+import type { KindContext } from "./context";
 
-/** What createCanvasKind reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
-export interface CanvasKindContext {
-  askedOf: (input: Pick<ArtifactInput, "does" | "ask" | "title">) => {
-    ask: string;
-    does: ArtifactDoes;
-    title: string;
-  };
-  db: ArtifactServiceDeps["db"];
-  deps: ArtifactServiceDeps;
-  discard: (row: ArtifactRow) => void;
-  docs: ArtifactServiceDeps["docs"];
-  handing: ReturnType<typeof createVersions>["handing"];
-  handOver: ReturnType<typeof createVersions>["handOver"];
-  heldId: ReturnType<typeof createVersions>["heldId"];
-  holdNext: ReturnType<typeof createVersions>["holdNext"];
-  markedLinks: (
-    id: string,
-    items: readonly ChangedItem[]
-  ) => { marked?: string[] };
-  markRevision: (
-    row: ArtifactRow,
-    items: ChangedItem[],
-    revision: (meta: MetaMap) => number
-  ) => ChangedItem[];
-  openedOf: (shown: Opened) => Opened;
-  openNextFirst: ReturnType<typeof createVersions>["openNextFirst"];
-  personChangedAfter: (
-    row: ArtifactRow,
-    since: number,
-    present: Set<string>
-  ) => string[];
-  pictureOf: (id: string) => string | null;
-  readTo: (
-    row: ArtifactRow,
-    state: Record<string, ChoiceEntry>,
-    returned: (key: string) => boolean
-  ) => number;
-  stampMeta: (row: ArtifactRow, given: string | null) => void;
-}
+/** What CanvasKind reads of the artifact service ({@link KindContext}). */
+export type CanvasKindContext = Pick<
+  KindContext,
+  | "askedOf"
+  | "db"
+  | "deps"
+  | "discard"
+  | "docs"
+  | "handOver"
+  | "handing"
+  | "heldId"
+  | "holdNext"
+  | "markRevision"
+  | "markedLinks"
+  | "openNextFirst"
+  | "openedOf"
+  | "personChangedAfter"
+  | "pictureOf"
+  | "readTo"
+  | "stampMeta"
+>;
 
 /** A canvas: the drawing a session makes and changes with the person on one live scene, drawn by a screen the hub opens when no view holds it (headless), its picture what a read with png answers. */
 export const createCanvasKind = (ctx: CanvasKindContext) => {
