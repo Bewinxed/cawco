@@ -2500,7 +2500,7 @@ ws_place() { as_user "$joinerc" cat "$(ws_state)/boundaries/$1/sandbox"; }
 # gone, when a path it guards is renamed or unlinked on the host, which drops that path's bind inside
 # (boundary-host.ts `guard`, then its loop), and the agent says the host's line naming the path ("[workspace] <id>:
 # its boundary <pid> says: cawco: <path> was changed on the host, … so the sandbox <init> was stopped …",
-# boundary/lifecycle.ts `watchHost`). If it has, says so with those lines.
+# boundary/watch.ts `watchHost`). If it has, says so with those lines.
 ws_same_sandbox() {
   local now
   read -r _ now _ <<< "$(ws_place "$1")"
