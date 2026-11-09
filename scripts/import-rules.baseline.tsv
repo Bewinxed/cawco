@@ -87,14 +87,3 @@ kit-reaches-up		apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card-tab-frame.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-outline.ts	2
-kit-reaches-up		apps/dashboard/src/lib/components/ui/markdown/markdown.svelte	1
-reaches-in		apps/cawrier/src/index.ts	2
-reaches-in		apps/cawrier/src/pairing.ts	1
-reaches-in		apps/cawrier/src/storekit.ts	1
-reaches-in		apps/dashboard/scripts/build-tokens-apple.ts	2
-reaches-in		apps/dashboard/scripts/build-tokens.ts	3
-reaches-in		apps/dashboard/scripts/role-order.ts	1
-reaches-in		apps/dashboard/scripts/tab-icon-art.ts	1
-reaches-in		apps/dashboard/scripts/theme-ladder.ts	1
-reaches-in		apps/dashboard/scripts/token-groups.ts	1
-reaches-in		packages/cli/src/cli.ts	1
