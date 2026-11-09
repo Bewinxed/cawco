@@ -63,6 +63,7 @@
     IconSearch,
     IconServerLinear,
   } from "#lib/icons.js";
+  import { hubThrough } from "#lib/platform/hub.js";
   import { isAsk, type WaitingRow } from "../rows";
   import WaitingCard from "../WaitingCard.svelte";
   import WaitingChip from "../WaitingChip.svelte";
@@ -102,7 +103,11 @@
   // The hub as the composer's question reads it: connected, so its Answer is live; nothing here reads the hub's REST.
   provideHub({
     state: "connected",
-    read: () => Promise.reject(new Error("The canvas reaches no hub.")),
+    client: hubThrough(
+      new Proxy(fetch, {
+        apply: () => Promise.reject(new Error("The canvas reaches no hub.")),
+      })
+    ),
   });
 
   /** A press the fixture answers with nothing: the plan's ring and the composer's send are another screen's. */
