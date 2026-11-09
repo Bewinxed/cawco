@@ -12,8 +12,8 @@
 -->
 <script lang="ts">
   import { shellWords } from "@cawco/core/words/shell";
-  import { rise } from "#lib/cawco/motion/curves.svelte.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import { rise } from "#lib/platform/motion/curves.svelte.js";
 </script>
 
 <!-- Comes and goes as "Jump to latest" does, which shares its dock. -->

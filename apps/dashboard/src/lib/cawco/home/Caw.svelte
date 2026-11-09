@@ -295,7 +295,7 @@
     ease,
     motionOk,
     numberOf,
-  } from "#lib/cawco/motion/curves.svelte.js";
+  } from "#lib/platform/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { deviceRatio } from "./device-ratio.svelte";
 
