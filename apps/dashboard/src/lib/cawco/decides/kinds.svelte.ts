@@ -9,7 +9,7 @@
 import { type Kind, slugOf } from "@cawco/core/decides";
 import { decidesWords } from "@cawco/core/words/decides";
 import { z } from "zod";
-import { readJson, unstore, writeJson } from "#lib/cawco/storage.js";
+import { readJson, unstore, writeJson } from "#lib/platform/storage.js";
 
 /** Add a kind's steps, in their order. */
 export const KIND_STEPS = ["name", "example", "to"] as const;

@@ -61,8 +61,6 @@
   import { commonWords } from "@cawco/core/words/common";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { track } from "#lib/cawco/track.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -73,12 +71,14 @@
     IconRefresh,
     IconRefreshLinear,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { newId } from "#lib/platform/id.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
+  import { store, stored } from "#lib/platform/storage.js";
+  import { track } from "#lib/platform/track.js";
   import FaultDetails from "../fault/FaultDetails.svelte";
   import ShowDetails from "../fault/ShowDetails.svelte";
   import { animatedCaw } from "../home/FaultCaw.svelte";
-  import { newId } from "../id";
-  import { appear } from "../motion/curves.svelte";
-  import { store, stored } from "../storage";
   import BrowserAddress from "./BrowserAddress.svelte";
   import { startFromPanel } from "./browser-acts";
   import {

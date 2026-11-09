@@ -17,8 +17,8 @@
     ConfigStore,
     provideConfig,
   } from "#lib/cawco/config/store.svelte.js";
-  import { pageIn, pageOut } from "#lib/cawco/motion/route.svelte.js";
-  import { store as storeLocally } from "#lib/cawco/storage.js";
+  import { pageIn, pageOut } from "#lib/platform/motion/route.svelte.js";
+  import { store as storeLocally } from "#lib/platform/storage.js";
   import { page } from "$app/state";
 
   let { children } = $props();

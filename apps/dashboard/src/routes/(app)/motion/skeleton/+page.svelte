@@ -10,9 +10,9 @@
    * skeleton rows, marked `data-flip-skeleton`, hand their place to its rows.
    */
   import { onMount } from "svelte";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
 
   let waiting = $state(false);
   onMount(() => {

@@ -12,11 +12,11 @@
   import "#lib/theme.svelte.js";
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
-  import { watchEdgeFades } from "#lib/cawco/motion/fade-runs.svelte.js";
-  import { trackKeyed } from "#lib/cawco/motion/keyed.svelte.js";
   import ScreenEdges from "#lib/cawco/ScreenEdges.svelte";
-  import { trackVisibleViewport } from "#lib/cawco/visible-viewport.svelte.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
+  import { watchEdgeFades } from "#lib/platform/motion/fade-runs.svelte.js";
+  import { trackKeyed } from "#lib/platform/motion/keyed.svelte.js";
+  import { trackVisibleViewport } from "#lib/platform/visible-viewport.svelte.js";
 
   let { children }: { children: Snippet } = $props();
 

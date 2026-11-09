@@ -26,7 +26,7 @@ import {
   previewEnterUrl,
 } from "@cawco/core/preview/routes";
 import { previewWords } from "@cawco/core/words/preview";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 
 /**
  * Whether `origin` is an origin's own port: the dashboard's own host (core

@@ -44,12 +44,15 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconHistory } from "#lib/icons.js";
-  import { type BranchOptions, branch } from "./motion/branch.svelte";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import {
+    type BranchOptions,
+    branch,
+  } from "#lib/platform/motion/branch.svelte.js";
   import { failedWords, OLDER_ROWS } from "./older";
   import TreeMark from "./TreeMark.svelte";
   import type { FlatRow } from "./tree-lines";

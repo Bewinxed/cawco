@@ -39,9 +39,9 @@
   import { graphWords } from "@cawco/core/words/graph";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import type { SheetChange } from "../../artifact-api";
   import { SheetInspector } from "../../preview/sheet-inspector.svelte";
   import DesignGraph from "../DesignGraph.svelte";
