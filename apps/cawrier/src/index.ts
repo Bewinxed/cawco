@@ -12,8 +12,8 @@
  * POST /v1/apple/notifications  { signedPayload }: App Store Server Notifications V2
  */
 
-import { readWithin } from "../../../packages/core/src/bounded";
-import { unhandled } from "../../../packages/core/src/unhandled";
+import { readWithin } from "@cawco/core/bounded";
+import { unhandled } from "@cawco/core/unhandled";
 import {
   type ApnsAnswer,
   type ApnsEnvironment,
