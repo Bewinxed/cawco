@@ -33,7 +33,12 @@ import type {
 import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
 import { type DeskState, presenceWords } from "@cawco/core/words/presence";
 import { MediaQuery } from "svelte/reactivity";
-import { failureWords, hubFetch } from "#lib/platform/hub-read.js";
+import {
+  failureWords,
+  hubFetch,
+  hubJson,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 import { store, stored } from "#lib/platform/storage.js";
 import { goto } from "$app/navigation";
 import { conversationHref, type InstanceIndex } from "./links";
@@ -49,7 +54,6 @@ import {
   setDeskReport,
   setDeskThreshold,
 } from "./presence";
-import { send as askHub } from "./project-tasks";
 
 /** Per browser: the onboarding row put away with Skip (core presence-onboarding.ts). */
 const SKIPPED = PRESENCE_ONBOARDING_SKIPPED;
@@ -124,12 +128,12 @@ export async function readPerson(): Promise<void> {
   // already reads it.
   const [permissions, read] = await Promise.all([
     deskPermissions(),
-    askHub<PersonRead>(hubRequest("GET /api/person")).catch(
-      (error: unknown) => {
-        console.error("[cawco] /api/person failed:", error);
-        return null;
-      }
-    ),
+    hubJson<PersonRead>(hubRequest("GET /api/person"), {
+      failure: refusedOrUnreached,
+    }).catch((error: unknown) => {
+      console.error("[cawco] /api/person failed:", error);
+      return null;
+    }),
   ]);
   if (read) {
     const { thisMachine, ...view } = read;
@@ -144,7 +148,9 @@ async function press(key: string, request: HubRequest): Promise<void> {
   state.pending = key;
   state.refusal = null;
   try {
-    takePerson(await askHub<PersonView>(request));
+    takePerson(
+      await hubJson<PersonView>(request, { failure: refusedOrUnreached })
+    );
   } catch (error) {
     state.refusal = {
       blocked: false,
@@ -343,11 +349,12 @@ export async function allowHere(from: "row" | "menu"): Promise<void> {
     state.permissions = await allowed;
     if (agent) {
       takePerson(
-        await askHub<PersonView>(
+        await hubJson<PersonView>(
           hubRequest("POST /api/person/devices/:machineId", {
             path: { machineId: agent },
             body: { counts: true },
-          })
+          }),
+          { failure: refusedOrUnreached }
         )
       );
     }
