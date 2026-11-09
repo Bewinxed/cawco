@@ -57,6 +57,7 @@
   } from "#lib/cawco/project-tasks.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -620,7 +621,7 @@
           />
         </div>
       {/if}
-    {:else if !(fresh || cawco.liveRead)}
+    {:else if !(fresh || boardStore.liveRead)}
       <!-- The fleet's first snapshot is not in: whether the project has a
            conversation is not known yet, so nothing claims it has none. -->
       <TranscriptSkeleton />
