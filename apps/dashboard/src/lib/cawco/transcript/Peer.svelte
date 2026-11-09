@@ -8,10 +8,10 @@
     IconReportFailed,
     IconRules,
   } from "#lib/icons.js";
-  import { cawco } from "../client.svelte";
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { sessionNamed } from "../session-names.svelte";
+  import { boardStore } from "../stores/board.svelte";
   /**
    * What cawco put into this session on someone else's behalf: a rule that
    * fired, a delegate's report or ask, another session's hand-off.
@@ -150,7 +150,7 @@
             <a
               data-slot="name"
               class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--dur-control) can-hover:motion-safe:ease-out"
-              href={conversationHref(senderId, cawco.instanceIndex)}
+              href={conversationHref(senderId, boardStore.instanceIndex)}
               >{row.name}</a
             >
           {:else}
