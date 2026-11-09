@@ -13,6 +13,7 @@ import {
   leavesOf,
   parseContexts,
   parseWorkspace,
+  placeTab,
 } from "#lib/cawco/workspace/tree.js";
 import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
 import { type HubRead, readHub } from "#lib/platform/hub-read.js";
@@ -108,11 +109,7 @@ export const load: LayoutServerLoad = async ({
       leaves.find((l) => l.tabs.includes(urlId)) ??
       leaves.find((l) => l.id === focusedLeaf) ??
       leaves[0];
-    if (!leaf.tabs.includes(urlId)) {
-      // Just after the tab in front, else at the end (workspace `place`).
-      const at = leaf.active ? leaf.tabs.indexOf(leaf.active) : -1;
-      leaf.tabs.splice(at === -1 ? leaf.tabs.length : at + 1, 0, urlId);
-    }
+    placeTab(leaf, urlId);
     leaf.active = urlId;
     workspace.focusedLeaf = leaf.id;
     const machine = untrack(() => url.searchParams.get("machine"));
