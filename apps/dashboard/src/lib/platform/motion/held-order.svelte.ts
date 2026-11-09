@@ -23,7 +23,7 @@
  * held list on each one's timer, each joining its two thousand ids.
  */
 import type { Attachment } from "svelte/attachments";
-import { unlessSame } from "../board.svelte";
+import { unlessSame } from "../unless-same";
 
 const SETTLE_MS = 2000;
 const GAP_MS = 5000;

@@ -9,7 +9,7 @@
  * (submenu-side). Each is set up with its content.
  */
 
-import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
 import { pressedAway } from "./floating-presence.js";
 import { highlight } from "./highlight/highlight.svelte.js";

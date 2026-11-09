@@ -35,8 +35,6 @@
   import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import NoMachines from "#lib/cawco/config/NoMachines.svelte";
-  import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
@@ -53,6 +51,12 @@
     IconTick,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     hue,

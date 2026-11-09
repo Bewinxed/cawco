@@ -1,12 +1,12 @@
 <script lang="ts">
+  import TreeMark, { type MarkStatus } from "#lib/cawco/TreeMark.svelte";
   /**
    * ECHO BENCH — real tree marks in one list on its echo beat
    * (motion/echo), each put through its statuses by hand or from
    * `window.__echo`, so a script can check what plays, how many times, and
    * that it rests. No fleet needed: the marks are TreeMark itself.
    */
-  import { echoBeat } from "#lib/cawco/motion/echo.svelte.js";
-  import TreeMark, { type MarkStatus } from "#lib/cawco/TreeMark.svelte";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
 
   const STATUSES: MarkStatus[] = ["live", "attn", "fail", "done", "idle"];
 
