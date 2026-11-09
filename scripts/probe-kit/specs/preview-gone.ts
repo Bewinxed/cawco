@@ -24,7 +24,6 @@
  *   bun scripts/probe-kit/run.ts preview-gone
  */
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { downOf } from "../../../packages/preview/src/proxy";
@@ -43,10 +42,8 @@ const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
 /** What the artifact's own origin answers at its root and at its ping. */
 const originReads = async (fleet: KitFleet, id: string) => {
-  const { port } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact: id },
-    })
+  const { port } = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id })["preview-address"].post()
   );
   const page = await passedFetch(fleet, `http://127.0.0.1:${port}/`, {
     headers: { "sec-fetch-mode": "navigate" },

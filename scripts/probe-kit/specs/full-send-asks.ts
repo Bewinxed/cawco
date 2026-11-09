@@ -41,9 +41,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
-import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { toolWords } from "../../lib/tool-call";
 import {
   MACHINE,
@@ -52,6 +50,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { hubAt, payloadOf } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const TAG = crypto.randomUUID().slice(0, 8);
@@ -87,24 +86,17 @@ const respond = (request: Seen): Reply => {
 };
 /** What an approve ask's call answers (core asks.ts `askRecordedWords`). */
 const RECORDED = "Recorded as";
-
-interface Parked {
-  instanceId?: string;
-  payload: { toolName?: string };
-  requestId?: string;
-}
-
 /** The approvals `instanceId` has on every screen now. */
 const parkedOf = async (fleet: KitFleet, instanceId: string) =>
-  (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).filter(
+  (await fleet.api((hub) => hub.api.pending.get())).filter(
     (one) => one.instanceId === instanceId && one.requestId?.startsWith("ask_")
   );
 
 /** Whether a rule named `name` is among the fleet's rules. */
 const ruleMade = async (fleet: KitFleet, name: string): Promise<boolean> =>
-  (
-    await fleet.api<{ rules: { name: string }[] }>(hubRequest("GET /api/rules"))
-  ).rules.some((rule) => rule.name === name);
+  (await fleet.api((hub) => hub.api.rules.get())).rules.some(
+    (rule) => rule.name === name
+  );
 
 /** `instanceId`'s `admin_rules_write` making a disabled rule named `name`: the call's words. */
 const writeRule = async (fleet: KitFleet, instanceId: string, name: string) =>
@@ -178,7 +170,7 @@ const promptLeg = async (kit: Kit, fleet: KitFleet) => {
   await fleet.send(prompted, BASH_STEP);
   /** The harness's own prompts `prompted` has on every screen (not the hub's asks). */
   const promptsOf = async () =>
-    (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).filter(
+    (await fleet.api((hub) => hub.api.pending.get())).filter(
       (one) => one.instanceId === prompted && !one.requestId?.startsWith("ask_")
     );
   const [prompt] = await until(
@@ -208,12 +200,12 @@ const promptLeg = async (kit: Kit, fleet: KitFleet) => {
   const agentSaid = await agentMark.since();
   check(
     "(e) a harness's prompt open as the card's mode control switches the session from Bypass to Full Send is approved by Full Send, leaves every screen, and its call runs",
-    prompt?.payload.toolName === "Bash" &&
+    payloadOf(prompt ?? {}).toolName === "Bash" &&
       promptSwitch.stage === "applied" &&
       promptsLeft === 0 &&
       ran.includes("probe-full-send-asked") &&
       agentSaid.includes(APPROVED_LINE),
-    `the prompt: ${prompt ? `${prompt.requestId} (${prompt.payload.toolName})` : "none"}; the switch: ${JSON.stringify(promptSwitch)}; prompts left: ${promptsLeft}; the command said: ${ran.slice(0, 200) || "nothing"}; the agent said Full Send approved it: ${agentSaid.includes(APPROVED_LINE)}`
+    `the prompt: ${prompt ? `${prompt.requestId} (${payloadOf(prompt).toolName})` : "none"}; the switch: ${JSON.stringify(promptSwitch)}; prompts left: ${promptsLeft}; the command said: ${ran.slice(0, 200) || "nothing"}; the agent said Full Send approved it: ${agentSaid.includes(APPROVED_LINE)}`
   );
 };
 
@@ -231,20 +223,13 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
   const caller = await fleet.spawn("claude", "Continuing caller", cwd, {
     permissionMode: "acceptEdits",
   });
-  const paused = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/machines/:machineId/pause", {
-      path: { machineId: MACHINE },
-      body: {
-        until: new Date(Date.now() + 10 * 60_000).toISOString(),
-      },
-    })
-  );
+  const paused = await hubAt(fleet.base)
+    .api.machines({ machineId: MACHINE })
+    .pause.post({
+      until: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
   const before = new Set(
-    (
-      await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
-    ).map((one) => one.id)
+    (await fleet.api((hub) => hub.api.continuations.get())).map((one) => one.id)
   );
   const continuing = toolWords(
     {
@@ -264,9 +249,9 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
   const job = await until(
     "the continuation held at its start",
     async () =>
-      (
-        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
-      ).find((one) => !before.has(one.id)),
+      (await fleet.api((hub) => hub.api.continuations.get())).find(
+        (one) => !before.has(one.id)
+      ),
     (one) => one?.stage === "starting",
     60_000
   ).catch(() => undefined);
@@ -277,21 +262,17 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
     ["fullSend"]
   );
   const callerMode = modeOf(fleet, caller);
-  await fleet.api(
-    hubRequest("POST /api/machines/:machineId/resume", {
-      path: { machineId: MACHINE },
-    })
+  await fleet.api((hub) =>
+    hub.api.machines({ machineId: MACHINE }).resume.post()
   );
   const answered = await continuing;
   const started = job
     ? await until(
         "the continuation started",
         async () =>
-          (
-            await fleet.api<ContinuationJob[]>(
-              hubRequest("GET /api/continuations")
-            )
-          ).find((one) => one.id === job.id),
+          (await fleet.api((hub) => hub.api.continuations.get())).find(
+            (one) => one.id === job.id
+          ),
         (one) => one !== undefined && ["started", "failed"].includes(one.stage),
         180_000
       ).catch(() => undefined)
