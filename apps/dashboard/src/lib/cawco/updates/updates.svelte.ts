@@ -14,12 +14,12 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { updatesWords } from "@cawco/core/words/updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { KeptUpdatesSchema } from "#lib/cawco/stored-shapes.js";
+import { hub } from "#lib/platform/hub.js";
 import {
   failureClause,
   failureSentence,
   hubFailure,
   hubFetch,
-  hubJson,
   hubRefusal,
   hubSaid,
 } from "#lib/platform/hub-read.js";
@@ -165,13 +165,11 @@ class Updates {
    * with) and updates come back on. The hub's refusal is the error.
    */
   async resetPolicy(): Promise<void> {
-    this.policy = await hubJson<BinaryUpdatePolicy>(
-      hubRequest("POST /api/binary-updates/settings/reset"),
-      {
-        failure: (refused) =>
-          hubRefusal(refused, updatesWords.policyNotResetThen),
-      }
-    );
+    const resetAnswer = await hub.api["binary-updates"].settings.reset.post();
+    if (resetAnswer.error) {
+      throw hubRefusal(resetAnswer, updatesWords.policyNotResetThen);
+    }
+    this.policy = resetAnswer.data;
     this.damaged = false;
     this.problem = null;
     await this.loadChannels();
