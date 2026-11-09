@@ -19,7 +19,7 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
-import { traitsOf } from "@cawco/core/harness/traits";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import type { MoveEnded } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
@@ -383,12 +383,14 @@ export const fileDue = (how: {
  */
 export const WHOLE_MOVE_NOTICE_MS = 5 * MINUTE_MS;
 
-/** Whether `harness` is one whose compaction after a move the hub runs ({@link HarnessTraits.compactedByHub}), which `compactBy` names. */
-const compactedByHub = (
-  harness: string
-): harness is NonNullable<
+/**
+ * Each harness as a moved line's stored `compactBy` names the one whose own
+ * `/compact` ran: none for Claude Code, which a line without one means.
+ */
+const COMPACT_BY: Record<
+  HarnessKind,
   Extract<AccountMove, { kind: "moved" }>["compactBy"]
-> => traitsOf(harness).compactedByHub;
+> = { claude: undefined, opencode: "opencode", pi: "pi" };
 
 /**
  * `move`, a move's line, as one `plan` compacts says it: natively, its
@@ -396,6 +398,13 @@ const compactedByHub = (
  * harness `harness` names when it is not Claude Code. A plan that doesn't
  * compact natively leaves it as it is.
  */
+/** The `compactBy` a moved line of `harness` stores, when it names one. */
+const compactByOf = (harness: string) => {
+  const kind = harnessNamed(harness);
+  const by = kind ? COMPACT_BY[kind] : undefined;
+  return by ? { compactBy: by } : {};
+};
+
 export const compactedLine = (
   move: Extract<AccountMove, { kind: "moved" }>,
   plan: CompactionPlan,
@@ -406,7 +415,7 @@ export const compactedLine = (
         ...move,
         compact: "filing",
         ...(plan.when === "before" ? { compactFirst: true as const } : {}),
-        ...(compactedByHub(harness) ? { compactBy: harness } : {}),
+        ...compactByOf(harness),
       }
     : move;
 
