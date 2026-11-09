@@ -453,7 +453,8 @@ export const HUB_TAKE_MEASURE = "cawco hub messages";
 
 /**
  * Everything the stream protocol can put on the dashboard socket.
- * @public Read by name by packages/hub/scripts/wire-compat.ts.
+ * @public No module imports it: packages/hub/scripts/wire-compat.ts finds it
+ * by the socketFrame tag below.
  *
  * @socketFrame fromHub
  */
