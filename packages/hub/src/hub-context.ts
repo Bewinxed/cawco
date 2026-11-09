@@ -177,6 +177,7 @@ import type { StreamHubShape } from "./stream";
 import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
+import type { ToolReleases } from "./tool-releases";
 import type { createTranscripts } from "./transcripts";
 import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
@@ -1095,6 +1096,7 @@ export interface HubContext {
   tickLeaves: () => void;
   tickMoves: () => void;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
+  toolReleases: ToolReleases;
   toolsMayHaveChanged: () => void;
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
