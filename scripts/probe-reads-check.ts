@@ -25,8 +25,9 @@ import { join, relative } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 /** A wait for the notice: its tag's name, however the probe matches it. */
 const WAITS = /artifact-responses/u;
-/** The session's read route, as core's request door names it; its `/view` is the person's. */
-const SESSION_READ = '"GET /api/instances/:id/artifacts/:artifact"';
+/** The session's read of an artifact through Eden (`.instances({…}).artifacts({…}).get(`); its `/view` is the person's. */
+const SESSION_READ =
+  /\.instances\(\{[^)]*\}\)\s*\.artifacts\(\{[^)]*\}\)\s*\.get\(/gu;
 
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
@@ -42,22 +43,19 @@ const filesUnder = (dir: string): string[] =>
 /** Each line of `text` (from `file`) that reads the session's read route, when `text` waits for a responses notice. */
 export const sessionReads = (file: string, text: string): string[] =>
   WAITS.test(text)
-    ? text
-        .split("\n")
-        .flatMap((line, at) =>
-          line.includes(SESSION_READ)
-            ? [`${relative(ROOT, file)}:${at + 1}`]
-            : []
-        )
+    ? [...text.matchAll(SESSION_READ)].map(
+        (read) =>
+          `${relative(ROOT, file)}:${text.slice(0, read.index).split("\n").length}`
+      )
     : [];
 
 /** Planted: a probe waiting for the notice that polls the session's read (line 3) and reads his view (line 4); one that waits for nothing may read it. */
 const PLANTED_WAITS = `const told = (one: Seen) => one.last.includes("[cawco:artifact-responses id=");
 const read = () =>
-  fleet.api(hubRequest("GET /api/instances/:id/artifacts/:artifact", { path }));
-const view = () => fleet.api(hubRequest("GET /api/instances/:id/artifacts/:artifact/view", { path }));`;
+  fleet.api((hub) => hub.api.instances({ id }).artifacts({ artifact }).get());
+const view = () => fleet.api((hub) => hub.api.instances({ id }).artifacts({ artifact }).view.get());`;
 const PLANTED_QUIET = `const read = () =>
-  fleet.api(hubRequest("GET /api/instances/:id/artifacts/:artifact", { path }));`;
+  fleet.api((hub) => hub.api.instances({ id }).artifacts({ artifact }).get());`;
 
 if (import.meta.main) {
   const planted = [
