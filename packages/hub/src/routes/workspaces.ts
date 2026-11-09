@@ -7,7 +7,7 @@ import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
-import { WorkItemRefusal } from "../work-items";
+import { WorkItemRefusal } from "../work-item-state";
 import { sessionCallerRefusal } from "./session-caller";
 
 export const workspaceRoutes = ({
