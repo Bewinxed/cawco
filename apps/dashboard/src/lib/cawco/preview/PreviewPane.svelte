@@ -2,7 +2,6 @@
   import type { TakeoverLayout } from "@cawco/core/browser";
   import {
     type ActivityLine,
-    type ChangedItem,
     keepAside,
     newAnswer,
     type Pin,
@@ -18,6 +17,7 @@
   } from "@cawco/core/comments/model";
   import { pinProblem } from "@cawco/core/comments/validate";
   import { detach } from "@cawco/core/detach";
+  import type { ChangedItem } from "@cawco/core/doc-meta";
   import { hubRequest } from "@cawco/core/hub-request";
   import { machineLabel } from "@cawco/core/machine-names";
   import { pinName } from "@cawco/core/pin-name";

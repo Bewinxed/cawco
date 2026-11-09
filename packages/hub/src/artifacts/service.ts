@@ -59,14 +59,12 @@ import {
 } from "@cawco/core/comments/deliver";
 import {
   ACTIVITY_LIMIT,
-  type ArtifactChanges,
   activityLines,
   activityOf,
   answerChanges,
   answeredLines,
   bindChanges,
   CHANGES_LIMIT,
-  type ChangedItem,
   COMMENT_LIMITS,
   type CommentAttachment,
   carryChanges,
@@ -103,6 +101,15 @@ import {
 } from "@cawco/core/decisions";
 import type { PictureSize } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
+import {
+  type ArtifactAsked,
+  type ArtifactChanges,
+  type ChangedItem,
+  type DrawnKept,
+  QUESTIONS_CLOSED,
+  type QuestionClose,
+  type SentBy,
+} from "@cawco/core/doc-meta";
 import {
   excerptOf,
   field,
@@ -238,7 +245,6 @@ import {
   COMPONENT_EXAMPLE,
   CREATE_SHAPE,
   canvasProblem,
-  type DrawnKept,
   drawingUnseen,
   drawsHeld,
   errorsSaid,
@@ -256,7 +262,6 @@ import {
 import type { ArtifactDocs } from "./docs";
 import { heldPictures } from "./held-pictures";
 import {
-  type ArtifactAsked,
   type ArtifactFacts,
   type ArtifactSessions,
   answeredWhole,
@@ -285,9 +290,7 @@ import { pagePictures } from "./page-pictures";
 import {
   answersOf,
   noneOpen,
-  QUESTIONS_CLOSED,
   type Question,
-  type QuestionClose,
   questionsOf,
   stillAsked,
 } from "./questions";
@@ -1269,14 +1272,6 @@ const stateOf = (doc: Doc): Record<string, ChoiceEntry> => {
 
 /** A source common practice cites: a web link. */
 const WEB_SOURCE = /^https:\/\/\S+$/u;
-
-/**
- * Who sent a page: the person pressing Send, or the hub, once every
- * question had his answer (`sendAnswered`). A send from before the hub
- * kept it (2026-11-05) reads as his.
- */
-export type SentBy = "person" | "hub";
-
 const metaOf = (doc: Doc) => {
   const meta = doc.getMap("meta");
   const sentAt = (meta.get("sentAt") as string | null | undefined) ?? null;
