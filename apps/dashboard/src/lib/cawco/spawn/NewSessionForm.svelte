@@ -104,7 +104,6 @@
     type ForkSource,
     forkSession,
     machineFs,
-    placementFor,
     projectAtFolder,
     spawnSession,
   } from "../client.svelte";
@@ -139,6 +138,7 @@
     rememberSpawn,
     spawnPrefs,
   } from "../spawnPrefs.svelte";
+  import { accountsStore, placementFor } from "../stores/accounts.svelte";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -467,7 +467,7 @@
    * places on. Null while unread and for no machine. A new answer replaces
    * the last only when it lands: until then the chip keeps what it showed.
    * Placement weighs every account's readings and bench, so it is asked again
-   * whenever the hub's accounts view moves (`cawco.accounts` is replaced only
+   * whenever the hub's accounts view moves (`accountsStore.accounts` is replaced only
    * when it differs): Auto never names an account that has since run out.
    */
   /** How long a folder being typed rests before placement is asked about it, ms. */
@@ -483,7 +483,7 @@
    */
   let placementRefusal = $state<string | null>(null);
   $effect(() => {
-    const view = cawco.accounts;
+    const view = accountsStore.accounts;
     const query = {
       harness,
       machineId,
@@ -508,7 +508,7 @@
               // OpenCode model can bill to more than one (core
               // accountProvidersOf), and the first may have none here.
               provider:
-                (cawco.accounts?.accounts ?? []).find(
+                (accountsStore.accounts?.accounts ?? []).find(
                   (one) => one.id === preview.accountId
                 )?.provider ?? providerOf(query.harness, preview.model),
             };
@@ -558,13 +558,13 @@
     // The provider's accounts signed in on the chosen machine: those a
     // session there can run on.
     const signedIn = new Set(
-      (cawco.accounts?.signins ?? [])
+      (accountsStore.accounts?.signins ?? [])
         .filter(
           (one) => one.machineId === machineId && one.state === "signed-in"
         )
         .map((one) => one.accountId)
     );
-    const own = (cawco.accounts?.accounts ?? [])
+    const own = (accountsStore.accounts?.accounts ?? [])
       .filter((one) => one.provider === provider && signedIn.has(one.id))
       .sort((a, b) => a.order - b.order);
     if (continueFrom || forking || own.length < 2) {
@@ -610,7 +610,7 @@
         }
         return {
           id: one.id,
-          name: accountNameAmong(one, cawco.accounts?.accounts ?? []),
+          name: accountNameAmong(one, accountsStore.accounts?.accounts ?? []),
           nick: one.label,
           email: one.email,
           color: `var(--account-${one.hue})`,
