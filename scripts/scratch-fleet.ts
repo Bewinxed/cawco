@@ -2562,23 +2562,6 @@ async function standUp(
         unhandled("read", read);
     }
   };
-  /**
-   * POST `path` as the person, its body sent as given, never held to the
-   * route: only for a spec that proves the hub refuses it (a 422 naming the
-   * field). What Eden cannot send: its call takes what the route types.
-   */
-  const postGiven = async (path: string, body: unknown): Promise<unknown> => {
-    const response = await fetch(`${base}${path}`, {
-      method: "POST",
-      headers: { ...ownerHeaders(), "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`${path}: ${response.status} ${text}`);
-    }
-    return JSON.parse(text) as unknown;
-  };
   /** `request` as the person. */
   const api = <A extends HubAnswer>(request: (hub: HubClient) => Promise<A>) =>
     answer(request, ownerHeaders());
@@ -3414,7 +3397,6 @@ async function standUp(
     heldProcs,
     api,
     sessionApi,
-    postGiven,
     post,
     command,
     controlAnswer,
