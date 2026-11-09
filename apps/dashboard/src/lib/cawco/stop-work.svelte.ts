@@ -48,8 +48,8 @@ import { route } from "#lib/platform/motion/route.svelte.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
-import { cawco } from "./client.svelte";
 import { offerBringBack } from "./project-end.svelte";
+import { asksStore } from "./stores/asks.svelte";
 import {
   cawOf,
   configureCaw,
@@ -178,7 +178,7 @@ const asRows = (
  */
 const midTurn = (
   job: StopJob,
-  activityOf: (id: string) => Activity = (id) => cawco.activityOf(id)
+  activityOf: (id: string) => Activity = (id) => asksStore.activityOf(id)
 ): StopRow[] =>
   job.rows.filter(
     (row) => row.state === "running" && activityOf(row.s.id) !== "idle"

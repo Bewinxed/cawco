@@ -51,7 +51,6 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
-    cawco,
     commandFault,
     holdForStart,
     type SendExtras,
@@ -85,6 +84,7 @@
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
+  import { asksStore } from "./stores/asks.svelte";
   import { boardStore, machineConnected } from "./stores/board.svelte";
   import { sendFailureNotice } from "./stores/ledger.svelte";
   import { offersStore } from "./stores/offers.svelte";
@@ -1021,7 +1021,7 @@
    * `asksUnder`), each with the name of the delegate that asked.
    */
   const asksUnder = $derived(
-    cawco.asksUnder(viewId).map((row) => {
+    asksStore.asksUnder(viewId).map((row) => {
       const asker = boardStore.instanceIndex.byId.get(row.instanceId);
       return {
         ...row,
@@ -1055,7 +1055,7 @@
         request,
         machine: machineId || undefined,
       })),
-    ...cawco.blocked
+    ...asksStore.blocked
       .filter((row) => row.request.originInstanceId === viewId)
       .map((row) => ({ request: row.request, machine: row.machineId })),
     ...asksUnder
