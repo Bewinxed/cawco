@@ -13,10 +13,19 @@ import { lookAtOlder } from "./unasked";
 const STALE_LOOK_MS = 5000;
 
 /** The workspaces whose boundary is of an older form, to hand over. */
-export const stale = new Map<string, WorkspaceRef>();
+const stale = new Map<string, WorkspaceRef>();
+
+/** Whether workspace `id`'s boundary waits to be handed over ({@link stale}). */
+export const isStale = (id: string): boolean => stale.has(id);
+
+/** The workspaces whose boundary waits to be handed over, now. */
+export const staleNow = (): WorkspaceRef[] => [...stale.values()];
 
 /** The workspaces with an older boundary still running beside the current one. */
-export const retiring = new Set<string>();
+const retiring = new Set<string>();
+
+/** The workspaces with an older boundary still beside the current one, now. */
+export const retiringNow = (): string[] => [...retiring];
 
 /**
  * The workspaces whose running sandbox holds an srt mount point, a file,
@@ -27,10 +36,33 @@ export const retiring = new Set<string>();
  * with the commands running at the last look that left it as it is
  * ({@link drainable}).
  */
-export const stubbed = new Map<
+const stubbed = new Map<
   string,
   { readonly ref: WorkspaceRef; commands: readonly number[] }
 >();
+
+/** One of the workspaces {@link stubbed} holds, as a look reads it. */
+export interface StubbedWorkspace {
+  readonly commands: readonly number[];
+  readonly ref: WorkspaceRef;
+}
+
+/** Whether workspace `id` waits for its boundary to be replaced ({@link stubbed}). */
+export const isStubbed = (id: string): boolean => stubbed.has(id);
+
+/** The workspaces waiting for their boundary to be replaced, now. */
+export const stubbedNow = (): StubbedWorkspace[] => [...stubbed.values()];
+
+/** The commands running at the last look that left `entry` as it is, as long as `entry` is still the one waiting. */
+export const noteStubbedCommands = (
+  entry: StubbedWorkspace,
+  commands: readonly number[]
+): void => {
+  const waiting = stubbed.get(entry.ref.id);
+  if (waiting === entry) {
+    waiting.commands = commands;
+  }
+};
 
 /**
  * Why the start-up pass left each older boundary of workspaces `ids`
@@ -59,6 +91,12 @@ export const sayWhyLeft = async (ids: readonly string[]): Promise<void> => {
   }
 };
 
+/** What keeps a boundary of an older form, or on a retiring keeper, as it is ({@link keptRunning}). */
+export interface KeptRunning {
+  readonly commands: readonly number[];
+  readonly said: string;
+}
+
 /**
  * The workspaces whose boundary of an older form, or on a retiring keeper,
  * is kept as it is because its work still runs (lifecycle.ts `replaceOlder`), each
@@ -67,10 +105,16 @@ export const sayWhyLeft = async (ids: readonly string[]): Promise<void> => {
  * drainable}). Each stays {@link stale}, looked at until the last of its
  * work ends, then handed over.
  */
-export const keptRunning = new Map<
-  string,
-  { readonly said: string; readonly commands: readonly number[] }
->();
+const keptRunning = new Map<string, KeptRunning>();
+
+/** What is kept running in workspace `id`'s boundary, if it is kept ({@link keptRunning}). */
+export const keptRunningOf = (id: string): KeptRunning | undefined =>
+  keptRunning.get(id);
+
+/** Records why workspace `id`'s boundary is kept as it is ({@link keptRunning}). */
+export const markKeptRunning = (id: string, kept: KeptRunning): void => {
+  keptRunning.set(id, kept);
+};
 
 let staleTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -88,7 +132,10 @@ export const forgetStubbed = (id: string): void => {
 };
 
 /** The look at the older boundaries under way ({@link lookAtStale}): one at a time. */
-export let staleLook: Promise<void> | undefined;
+let staleLook: Promise<void> | undefined;
+
+/** The look at the older boundaries under way, if any. */
+export const lookUnderWay = (): Promise<void> | undefined => staleLook;
 
 /** A look at the older boundaries: the one under way, or one begun now. Never throws: what fails is said. */
 export const lookOnce = (): Promise<void> => {
