@@ -5,6 +5,7 @@
 import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 import { toolResultRefused } from "../tool-call-keys";
 
 export const delegationRoutes = ({
@@ -24,29 +25,35 @@ export const delegationRoutes = ({
           lister: t.Optional(t.Literal("pi")),
         }),
       },
-      ({ query, status }) =>
+      ({ query }) =>
         delegationMcp.list(query.instanceId, query.lister !== undefined) ??
-        status(404, `No session ${query.instanceId} on this hub.`)
+        refusal(
+          404,
+          "no-session",
+          `No session ${query.instanceId} on this hub.`
+        )
     )
     .post(
       "/api/delegation/call/:instanceId",
       { ...hidden, body: t.Any() },
-      ({ params, body, request, server, status }) => {
+      ({ params, body, request, server }) => {
         // The caller is its credential's session; the path only says which
         // one it claims to be, and must agree.
         const authorization = request.headers.get("authorization");
         const identity = identities.resolve(authorization);
         if (!identity) {
-          return status(
+          return refusal(
             401,
+            "cawco-tool-call-needs",
             authorization === null
               ? "A CawCo tool call needs its session credential"
               : "Invalid session credential"
           );
         }
         if (identity.instanceId !== params.instanceId) {
-          return status(
+          return refusal(
             403,
+            "session-credential-does-not",
             "Session credential does not belong to the named instanceId"
           );
         }
@@ -61,8 +68,9 @@ export const delegationRoutes = ({
               body.arguments === null ||
               Array.isArray(body.arguments)))
         ) {
-          return status(
+          return refusal(
             400,
+            "delegation-call-needs-non",
             "delegation call needs a non-empty tool name and object arguments"
           );
         }

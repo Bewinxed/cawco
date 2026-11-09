@@ -58,6 +58,8 @@ import { Elysia, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import { recordHubEvent } from "./hub-record";
 import { HUB_SELF_HEADER, isHubSelf } from "./hub-self";
+import type { RouteSet } from "./machine-answers";
+import { refusal } from "./refusal";
 import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
 
 /** A machine's own row, which its join wait reads (cli await-joined.ts). */
@@ -659,44 +661,56 @@ export const createHubAuth = ({
   };
 
   /** The answer to a request its caller may not make, by what the caller is. */
-  const refusal = (caller: Caller, method: string, path: string): Response => {
+  const gateRefusal = (
+    caller: Caller,
+    method: string,
+    path: string,
+    set: RouteSet
+  ) => {
     if (caller.kind === "session" && TAKEOVER_ROUTE.test(path)) {
-      return new Response(TAKEOVER_REFUSED, { status: 403 });
+      return refusal(403, "takeover-refused", TAKEOVER_REFUSED);
     }
     if (caller.kind === "session" && REMOVE_ROUTE.test(path)) {
-      return new Response(REMOVE_REFUSED, { status: 403 });
+      return refusal(403, "remove-refused", REMOVE_REFUSED);
     }
     const read = sessionReadOf(method, path);
     // An unpaired client is told to pair, as on any route.
     if (read !== null && caller.kind !== "anonymous") {
-      return new Response(sessionReadRefused(caller, path, read), {
-        status: 403,
-      });
+      return refusal(
+        403,
+        "session-read-refused",
+        sessionReadRefused(caller, path, read)
+      );
     }
     if (caller.kind === "session") {
-      return new Response(
-        `A session's credential reaches its own tools and work items, never the person's routes: ${method} ${path} is the person's.`,
-        { status: 403 }
+      return refusal(
+        403,
+        "person-route",
+        `A session's credential reaches its own tools and work items, never the person's routes: ${method} ${path} is the person's.`
       );
     }
     if (caller.kind === "machine") {
-      return new Response(
-        `A machine's proof reaches what machines read and report, never the person's routes: ${method} ${path} is the person's.`,
-        { status: 403 }
+      return refusal(
+        403,
+        "person-route",
+        `A machine's proof reaches what machines read and report, never the person's routes: ${method} ${path} is the person's.`
       );
     }
     if (caller.kind === "owner") {
-      return new Response(
-        `${method} ${path} needs a machine's proof of its key: an admitted machine's agent makes this call.`,
-        { status: 403 }
+      return refusal(
+        403,
+        "machine-route",
+        `${method} ${path} needs a machine's proof of its key: an admitted machine's agent makes this call.`
       );
     }
     // An MCP client told 401 starts OAuth discovery against the hub (fleet-mcp.ts):
     // a refused one is told the hub is unavailable to it instead.
-    return new Response(PAIRING_REQUIRED, {
-      status: path.startsWith("/mcp/") ? 503 : 401,
-      headers: { "x-cawco-pairing": "required" },
-    });
+    set.headers["x-cawco-pairing"] = "required";
+    return refusal(
+      path.startsWith("/mcp/") ? 503 : 401,
+      "pairing-required",
+      PAIRING_REQUIRED
+    );
   };
 
   /** Each request's caller as the gate classified it, for its handler ({@link callerOf}). */
@@ -707,7 +721,7 @@ export const createHubAuth = ({
    * go on, or the refusal. The address is the one the request came from, or
    * the one a dashboard relay says its page came from.
    */
-  const gate = (request: Request, address: string | null) => {
+  const gate = (request: Request, address: string | null, set: RouteSet) => {
     const path = new URL(request.url).pathname;
     const header: Headers = (name) => request.headers.get(name);
     // A command route's join wait asks after its own row with its install's
@@ -737,7 +751,7 @@ export const createHubAuth = ({
       method: request.method,
       path,
     });
-    return refusal(caller, request.method, path);
+    return gateRefusal(caller, request.method, path, set);
   };
 
   const clientAddress = (header: Headers, address: string | null) =>
@@ -1067,10 +1081,11 @@ export const createHubAuth = ({
             name: t.Optional(t.String({ maxLength: 200 })),
           }),
         },
-        ({ body, request, server, status }) => {
+        ({ body, request, server }) => {
           if (mode() === "trusted") {
-            return status(
+            return refusal(
               409,
+              "hub-trusts-network-so",
               "This hub trusts its network, so there is nothing to pair: every device on it reaches the fleet."
             );
           }
@@ -1108,19 +1123,21 @@ export const createHubAuth = ({
         }
       )
       .get("/api/pair/requests", () => frame().requests)
-      .post("/api/pair/requests/:userCode/approve", ({ params, status }) =>
+      .post("/api/pair/requests/:userCode/approve", ({ params }) =>
         answer(params.userCode, true)
           ? { ok: true }
-          : status(
+          : refusal(
               404,
+              "no-pairing-waits-code",
               "No pairing waits with that code: it was answered, or it expired."
             )
       )
-      .post("/api/pair/requests/:userCode/deny", ({ params, status }) =>
+      .post("/api/pair/requests/:userCode/deny", ({ params }) =>
         answer(params.userCode, false)
           ? { ok: true }
-          : status(
+          : refusal(
               404,
+              "no-pairing-waits-code",
               "No pairing waits with that code: it was answered, or it expired."
             )
       )
@@ -1130,14 +1147,19 @@ export const createHubAuth = ({
           state(callerOf(request, addressOf(server, request))).device?.id ??
           null,
       }))
-      .delete("/api/devices/:id", ({ params, status }) => {
+      .delete("/api/devices/:id", ({ params }) => {
         const devices = db.devices();
         if (!devices.some((row) => row.id === params.id)) {
-          return status(404, "No paired device has that id.");
+          return refusal(
+            404,
+            "no-paired-device-has",
+            "No paired device has that id."
+          );
         }
         if (mode() === "pairing" && devices.length === 1) {
-          return status(
+          return refusal(
             409,
+            "only-paired-device-pair",
             "This is the only paired device. Pair another device, or turn off Require paired devices, before removing it."
           );
         }
@@ -1198,19 +1220,21 @@ export const createHubAuth = ({
         }
       )
       .get("/api/machines/waiting", () => frame().waiting)
-      .post("/api/machines/waiting/:machineId/admit", ({ params, status }) =>
+      .post("/api/machines/waiting/:machineId/admit", ({ params }) =>
         admit(params.machineId)
           ? { ok: true }
-          : status(
+          : refusal(
               404,
+              "machine-not-waiting-left",
               "That machine is not waiting: it left, or was answered."
             )
       )
-      .post("/api/machines/waiting/:machineId/refuse", ({ params, status }) =>
+      .post("/api/machines/waiting/:machineId/refuse", ({ params }) =>
         refuse(params.machineId)
           ? { ok: true }
-          : status(
+          : refusal(
               404,
+              "machine-not-waiting-left",
               "That machine is not waiting: it left, or was answered."
             )
       );

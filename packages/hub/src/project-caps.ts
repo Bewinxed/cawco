@@ -20,9 +20,10 @@
 import type { CapPeriod, OnCap, ProjectCap } from "@cawco/core/areas";
 import type { ProjectCapFrame } from "@cawco/core/frames";
 import { capHolds } from "@cawco/core/project-conversation";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
+import { refusal } from "./refusal";
 
 /** The period `at` falls in, in the hub's zone: when it began and when the next one begins. */
 const periodOf = (
@@ -183,17 +184,22 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
           ({ params, body }) => {
             const project = db.project(params.id);
             if (!project) {
-              return status(404, `No project ${params.id}.`);
+              return refusal(404, "no-project", `No project ${params.id}.`);
             }
             if (
               body.usd !== null &&
               !(Number.isFinite(body.usd) && body.usd > 0)
             ) {
-              return status(400, "The budget is a number of dollars above 0.");
+              return refusal(
+                400,
+                "budget-number-dollars-above",
+                "The budget is a number of dollars above 0."
+              );
             }
             if ((body.usd === null) !== (body.period === null)) {
-              return status(
+              return refusal(
                 400,
+                "budget-has-both-amount",
                 "A budget has both an amount and a period (day or month), or neither."
               );
             }
