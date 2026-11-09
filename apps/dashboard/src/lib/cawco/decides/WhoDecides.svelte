@@ -32,6 +32,7 @@
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { listTasks, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconFolder, IconGlobe } from "#lib/icons.js";
@@ -55,7 +56,7 @@
     who.lead = new CawLead({
       id: () => projectId ?? "",
       project: () => project ?? null,
-      machinesOnline: () => cawco.onlineMachines.length > 0,
+      machinesOnline: () => boardStore.onlineMachines.length > 0,
       tasks: () => tasks,
       reading: () => false,
     });

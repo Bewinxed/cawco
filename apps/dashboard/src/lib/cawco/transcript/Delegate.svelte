@@ -36,6 +36,7 @@
     sessionPlace,
     sessionTitle,
   } from "../session-names.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import type { Message } from "../types";
   import { disclosure } from "./disclosure.svelte";
   import InlineTranscript from "./InlineTranscript.svelte";
@@ -57,7 +58,7 @@
   const id = $derived(meta.delegateInstanceId ?? null);
   const started = $derived(meta.handoffKind === "start");
 
-  const row = $derived(id ? cawco.instanceIndex.byId.get(id) : undefined);
+  const row = $derived(id ? boardStore.instanceIndex.byId.get(id) : undefined);
   const branch = $derived(id ? cawco.session(id) : null);
   /**
    * The delegate as the hub's names have it, when the board no longer holds
@@ -542,7 +543,7 @@
         <a
           aria-label="Open {label} in its own view"
           class="touch-hit flex-none size-c-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
-          href={conversationHref(id, cawco.instanceIndex)}
+          href={conversationHref(id, boardStore.instanceIndex)}
           title="Open {label} in its own view"
         >
           <IconExternal class="size-icon-sm block" />

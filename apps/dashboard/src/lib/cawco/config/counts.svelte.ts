@@ -1,7 +1,7 @@
 import { accountFaults } from "../accounts/model.svelte";
-import { cawco } from "../client.svelte";
 import { hubFaults, machineFaults, SCOPE_ANCHOR } from "../fleet-faults";
 import { accountsStore } from "../stores/accounts.svelte";
+import { boardStore } from "../stores/board.svelte";
 import { attention } from "../updates/model";
 import { updates } from "../updates/updates.svelte";
 import type { ConfigSection, SectionSlug } from "./sections";
@@ -60,10 +60,10 @@ function allFaults(store: ConfigStore) {
       ? hubFaults(
           fleet.skills,
           fleet.config.plugins,
-          cawco.machines.map((machine) => machine.fleet)
+          boardStore.machines.map((machine) => machine.fleet)
         )
       : []),
-    ...cawco.machines.flatMap((machine) =>
+    ...boardStore.machines.flatMap((machine) =>
       machineFaults(machine.machineId, machine.fleet)
     ),
   ];
@@ -72,7 +72,7 @@ function allFaults(store: ConfigStore) {
 /** Machines whose update waits on the operator: Updates' rail badge. */
 function updatesWaiting(): number {
   const { policy } = updates;
-  return policy ? attention(cawco.machines, policy) : 0;
+  return policy ? attention(boardStore.machines, policy) : 0;
 }
 
 /**

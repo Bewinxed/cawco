@@ -6,7 +6,7 @@ import type {
 } from "@cawco/core/hooks";
 import { hubRequest } from "@cawco/core/hub-request";
 import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
-import type { Machine } from "./client.svelte";
+import type { Machine } from "./stores/board.svelte";
 
 /**
  * The dashboard's side of hooks (packages/core's hooks.ts): plain REST against
