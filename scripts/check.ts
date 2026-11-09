@@ -511,6 +511,21 @@ const gated: Gated[] = [
     "scripts/",
     "site/",
   ]),
+  // A comment names files and symbols that are there. It reads every code
+  // file's identifiers and the platform's types, which bun.lock pins.
+  bun("scripts/stale-references-check.ts", [
+    "apps/dashboard/",
+    "apps/cawrier/",
+    "packages/",
+    "scripts/",
+    "site/",
+    "biome.jsonc",
+    "knip.ts",
+    "golar.config.ts",
+    "ARCHITECTURE.md",
+    "README.md",
+    "bun.lock",
+  ]),
   bun("scripts/css-scope-check.ts", DASH),
   bun("scripts/browser-core-check.ts", [
     "apps/dashboard/src/",

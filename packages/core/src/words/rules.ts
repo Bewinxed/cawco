@@ -1,8 +1,6 @@
 /**
  * What Configure › Rules says: its empty states, its starters, a rule's
- * menu and editor. The dashboard renders them from here, and the probe kit
- * finds them by these same words (scripts/probe-words-check.ts refuses a
- * copy).
+ * menu and editor. The dashboard renders them from here.
  */
 export const rulesWords = {
   /** No rule yet. */

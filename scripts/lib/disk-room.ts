@@ -3,8 +3,7 @@
  * disk-room.sh's threshold (10 GB free, `CAWCO_MIN_FREE_GB`) it is refused
  * with one sentence naming the free space and the biggest folders under
  * CawCo's workspace roots, and starts nothing. The runs that write a build
- * root, a scratch fleet or a release checkout check it as they start: a probe
- * kit run's fleet (scripts/scratch-fleet.ts), `bun run check`, the
+ * root, a scratch fleet or a release checkout check it as they start: `bun run check`, the
  * release and its stage-2 builds, a Mac simulator. Added on 2026-10-14
  * (d31b2f5ac): the Mac's Catalyst link died at 120 MB free (`ld: write()
  * failed, errno=28`) instead of refusing up front.
