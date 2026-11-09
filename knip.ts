@@ -149,6 +149,8 @@ export default {
         // scripts/check.ts
         "scripts/tool-answer-check.ts",
         "scripts/route-families-check.ts",
+        // scripts/check.ts, beside route-families-check.ts
+        "scripts/boundary-check.ts",
         // scripts/check.ts
         "scripts/icon-imports-check.ts",
         // scripts/check.ts
