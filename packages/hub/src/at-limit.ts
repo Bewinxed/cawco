@@ -81,7 +81,7 @@ import { isLive } from "./work-items";
  * moves at (core `Compaction`, {@link compactionPlan}, the one rule every
  * mover reads): its harness's own `/compact` before the move, warm, or after
  * it, cold (server.ts `compactions`); a fresh conversation of the same
- * session opened on a summary (server.ts `continueAsMove`); or moved whole,
+ * session opened on a summary (limit-moves.ts `continueAsMove`); or moved whole,
  * announced first ({@link WHOLE_MOVE_NOTICE_MS}). Every outcome is one line
  * in its transcript saying what it cost (core `AccountMove`). Moves happen only
  * between turns. A session stopped at its limit, or on its refused sign-in,
@@ -113,7 +113,7 @@ import { isLive } from "./work-items";
  * decided as above, and goes on where it is when none has room.
  *
  * It also answers a Claude session whose turn died on its account's
- * credential. Refused for good (server.ts `settleRefusal` signed the account
+ * credential. Refused for good (ask-routing.ts `settleRefusal` signed the account
  * out on its machine): the session moves whole the same way, to an account
  * of the same organization first, and carries on there; with none to take
  * it, it is held, what it is sent waiting at the hub, until its account is
@@ -354,7 +354,7 @@ export const compactionPlan = (how: {
  * THE ONE FILING RULE: whether a turn's end finds a session's context within
  * its policy's `fileRoom` of the point where its harness compacts it on its
  * own (core `NeutralResultMessage.compactsAt`), so that it files its open
- * items before that (server.ts `fileAtThreshold`, which sends it only
+ * items before that (compaction.ts `fileAtThreshold`, which sends it only
  * between turns, once per rise, and never beside a compaction, a
  * continuation or a hold at its limit, nor for a compaction's own result:
  * after a boundary it files only once a turn of the session's own work has

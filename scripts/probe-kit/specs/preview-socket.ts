@@ -309,7 +309,7 @@ const probe = async (kit: Kit) => {
     Boolean,
     180_000
   );
-  // The preview's own origin (hub server.ts `frameAddress`).
+  // The preview's own origin (hub artifact-pages.ts `frameAddress`).
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
   const address = async () =>
     (await (
@@ -519,7 +519,7 @@ const probe = async (kit: Kit) => {
     Boolean,
     180_000
   );
-  // The Vite preview's own origin (hub server.ts `frameAddress`).
+  // The Vite preview's own origin (hub artifact-pages.ts `frameAddress`).
   const viteAddress = await fleet.api<{ port?: number }>(
     hubRequest("POST /api/artifacts/:artifact/preview-address", {
       path: { artifact: viteMade.match(ANSWERED_ID)?.[1] ?? "" },

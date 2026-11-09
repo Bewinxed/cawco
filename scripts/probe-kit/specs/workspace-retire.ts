@@ -40,7 +40,7 @@
  *     that path and M's landed file. While that handoff, released after the
  *     cut under a new hand-off, is still pending, its record keeps it whole
  *     as it was handed: the line and that hand-off's id, which is what a
- *     machine that comes back is handed again (hub server.ts `handAgain`),
+ *     machine that comes back is handed again (hub machine-calls.ts `handAgain`),
  *     never the envelope recorded as it was accepted and held. It finishes
  *     again and its workspace retires again.
  * (q) Q commits a file and a package.json whose typecheck sleeps, then
@@ -720,7 +720,7 @@ const RELEASE_POLL_MS = 20;
 /**
  * The first send to session `instanceId` whose body holds `mark` seen
  * pending under a hand-off other than the one it was accepted under: it was
- * released after its hold (hub server.ts `handReleased`), and the record
+ * released after its hold (hub sends.ts `handReleased`), and the record
  * still holds what it was handed (`envelope`), which a send no longer
  * pending does not. Missed when every such send left pending unseen so, or
  * none was released within `ms`.
@@ -771,7 +771,7 @@ const watchRelease = async (
 /**
  * (r) The handoff released after the cut is kept as it was handed: its
  * record's envelope, what a machine that comes back is handed again (hub
- * server.ts `handAgain`), carries the hub's line and the hand-off it was
+ * machine-calls.ts `handAgain`), carries the hub's line and the hand-off it was
  * released under.
  */
 const keptAsHanded = (kit: Kit, released: Released): void => {
