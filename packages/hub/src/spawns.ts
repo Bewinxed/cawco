@@ -39,8 +39,8 @@ import { kindBurn, readForecast } from "./rebalance";
 import { UNREAD } from "./sends";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
+import { WorkItemRefusal } from "./work-item-state";
 import type { ItemPlacement } from "./work-items";
-import { WorkItemRefusal } from "./work-items";
 
 /**
  * What a request to a machine gets when its own deadline passes with the
