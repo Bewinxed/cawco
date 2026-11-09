@@ -87,6 +87,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconAlert,
     IconArchive,
@@ -1568,7 +1569,7 @@
   });
   const inspecting = $derived(!!inspector && inspectOpen);
   /** A phone's screen (DESIGN.md's phone line). */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /**
    * The inspector: a right panel beside the page where the well holds the
    * stage at its least and the inspector (graph/beside.ts), picked from the

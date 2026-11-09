@@ -61,6 +61,7 @@
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { depart } from "#lib/platform/motion/share.svelte.js";
   import { page } from "$app/state";
 
@@ -388,7 +389,7 @@
     // he arrives put away, as on the project's page (its `sheetCovers`).
     lead.open =
       !page.url.searchParams.has("closed") &&
-      (at === "set" || !matchMedia("(max-width: 639px)").matches);
+      (at === "set" || !matchMedia(PHONE_QUERY).matches);
   });
 
   const asks = $derived(
@@ -416,7 +417,7 @@
    * it (its `sheetQuery` line is CawFloat's sheet's): the bench follows a
    * resize as the page does, never a width read once at load.
    */
-  const phoneQuery = new MediaQuery("(max-width: 639px)");
+  const phoneQuery = new MediaQuery(PHONE_QUERY);
   /** A desk's pads (the column's own, `desk:`), which the draft's scroller reaches through. */
   const desk = new MediaQuery("(min-width: 900px)");
   const phone = $derived(phoneQuery.current);
