@@ -40,10 +40,11 @@
  *
  *   bun scripts/probe-kit/run.ts continuation-held-start
  */
+
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { ACCOUNT, delay, MACHINE, MODEL, until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** How long the pause is asked for: past every read below, ended by hand. */
@@ -78,27 +79,18 @@ const turnTaken = async (fleet: KitFleet, title: string): Promise<string> => {
 /** `source` continued from its asks, as another session's `continue_session` asks it: no filing turn, no summary. */
 const continueFromAsks = (fleet: KitFleet, source: string) =>
   readWithin(30_000, async (signal) => {
-    const response = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/instances/:id/continue", {
-        path: { id: source },
-        body: {
-          asksOnly: true,
-          askedBy: source,
-          target: {
-            harness: "claude",
-            model: MODEL.claude,
-            permissionMode: "bypassPermissions",
-          },
+    const response = await hubAt(fleet.base, { signal })
+      .api.instances({ id: source })
+      .continue.post({
+        asksOnly: true,
+        askedBy: source,
+        target: {
+          harness: "claude",
+          model: MODEL.claude,
+          permissionMode: "bypassPermissions",
         },
-      }),
-      { signal }
-    );
-    const body = (await response.json().catch(() => ({}))) as {
-      continuationId?: string;
-      targetInstanceId?: string;
-    };
+      });
+    const body = dataOf(response);
     return { status: response.status, body };
   });
 
@@ -107,9 +99,9 @@ const settled = (fleet: KitFleet, id: string) =>
   until(
     `continuation ${id}'s end`,
     async () =>
-      (
-        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
-      ).find((one) => one.id === id),
+      (await fleet.api((hub) => hub.api.continuations.get())).find(
+        (one) => one.id === id
+      ),
     (one) => one !== undefined && ["started", "failed"].includes(one.stage),
     180_000
   ).catch((error: Error) => ({ stage: `none: ${error.message}` }));
@@ -147,9 +139,9 @@ const healthLook = async (
 ): Promise<{ ms: number; ok: boolean }> => {
   const from = performance.now();
   const read = await readWithin(HEALTH_MS, (signal) =>
-    fetchHub(fetch, base, hubRequest("GET /health"), { signal }).then(
-      (response) => response.ok
-    )
+    hubAt(base, { signal })
+      .health.get()
+      .then((response) => response.error === null)
   );
   return {
     ms: Math.round(performance.now() - from),
@@ -174,19 +166,14 @@ export default {
 
     const source = await turnTaken(fleet, "held-start source");
 
-    const paused = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/machines/:machineId/pause", {
-        path: { machineId: MACHINE },
-        body: {
-          until: new Date(Date.now() + PAUSE_MS).toISOString(),
-        },
-      })
-    );
+    const paused = await hubAt(fleet.base)
+      .api.machines({ machineId: MACHINE })
+      .pause.post({
+        until: new Date(Date.now() + PAUSE_MS).toISOString(),
+      });
     if (paused.status !== 200) {
       throw new Error(
-        `the machine could not be paused: ${paused.status} ${await paused.text()}`
+        `the machine could not be paused: ${paused.status} ${answerText(paused)}`
       );
     }
 
@@ -213,9 +200,7 @@ export default {
       return;
     }
 
-    const jobs = await fleet.api<ContinuationJob[]>(
-      hubRequest("GET /api/continuations")
-    );
+    const jobs = await fleet.api((hub) => hub.api.continuations.get());
     const standing = jobs.find((one) => one.id === job.continuationId);
     const said = (await mark.since())
       .split("\n")
@@ -228,10 +213,8 @@ export default {
       `job ${JSON.stringify(standing)}; lines ${JSON.stringify(said)}`
     );
 
-    await fleet.api(
-      hubRequest("POST /api/machines/:machineId/resume", {
-        path: { machineId: MACHINE },
-      })
+    await fleet.api((hub) =>
+      hub.api.machines({ machineId: MACHINE }).resume.post()
     );
     const ended = await settled(fleet, job.continuationId);
     const target = job.targetInstanceId

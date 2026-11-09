@@ -34,7 +34,6 @@ import {
   HARNESSES,
   type HarnessKind,
 } from "../../../packages/core/src/harness/kinds";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   MACHINE,
   MODEL,
@@ -44,6 +43,7 @@ import {
 } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const tagOf = (harness: HarnessKind) => `PROBE-ONCE-${harness.toUpperCase()}:`;
 const TAG = /PROBE-ONCE-([A-Z]+):/u;
@@ -149,20 +149,17 @@ const oneHarness = async (
   src: string,
   harness: HarnessKind
 ): Promise<void> => {
-  const started = await fleet.api<{
-    instanceId: string;
-    workspaceId: string;
-  }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: `Run once, ${harness}`,
         prompt: `${tagOf(harness)} run the command once, then wait.`,
         harness,
         model: MODEL[harness],
         cwd: src,
-      },
-    })
+      })
+    )
   );
   const mark = ranMark(harness);
   const ran = await until(
@@ -247,13 +244,11 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Once",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Once",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {

@@ -31,10 +31,11 @@
  *     naming the id, never a 500, and removes nothing.
  */
 
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
+import { answerText, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -116,46 +117,30 @@ const run = async (kit: Kit) => {
   };
   /** The person's press as the dashboard sends it (artifact-api.ts `showArtifact`). */
   const personShows = async (id: string) => {
-    const response = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-        path: { id: session, artifact: id },
-      })
-    );
-    await response.text();
+    const response = await hubAt(fleet.base)
+      .api.instances({ id: session })
+      .artifacts({ artifact: id })
+      .show.post();
+    answerText(response);
   };
   /** The person's Remove in the panel's menu (artifact-api.ts `removeArtifact`). */
   const personRemoves = async (id: string) => {
-    const response = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
-        path: { id: session, artifact: id },
-      })
-    );
-    return (await response.json()) as { showing: { id: string } | null };
+    const response = await hubAt(fleet.base)
+      .api.instances({ id: session })
+      .artifacts({ artifact: id })
+      .delete();
+    return dataOf(response);
   };
   /** The person's Close (artifact-api.ts `deletePreview`). */
   const personCloses = async () => {
-    await (
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("DELETE /api/instances/:id/preview", {
-          path: { id: session },
-        })
-      )
-    ).text();
+    answerText(
+      await hubAt(fleet.base).api.instances({ id: session }).preview.delete()
+    );
   };
   /** What the session's panel shows now, by the hub: an id, or null. */
   const panel = async (): Promise<string | null> => {
-    const { artifacts } = await fleet.api<{
-      artifacts: { id: string; shown: boolean }[];
-    }>(
-      hubRequest("GET /api/instances/:id/artifacts/list", {
-        path: { id: session },
-      })
+    const { artifacts } = await fleet.api((hub) =>
+      hub.api.instances({ id: session }).artifacts.list.get()
     );
     return artifacts.find((row) => row.shown)?.id ?? null;
   };
@@ -239,10 +224,8 @@ const run = async (kit: Kit) => {
   // (e)
   const listed = async (): Promise<string[]> =>
     (
-      await fleet.api<{ id: string }[]>(
-        hubRequest("GET /api/instances/:id/artifacts", {
-          path: { id: session },
-        })
+      await fleet.api((hub) =>
+        hub.api.instances({ id: session }).artifacts.get()
       )
     ).map((row) => row.id);
   const ways: [string, string, (id: string, name: string) => string][] = [

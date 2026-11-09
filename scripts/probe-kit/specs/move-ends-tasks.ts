@@ -44,7 +44,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   isAlive,
@@ -61,7 +60,9 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 /** The account the delegate moves to, beside the fleet's own (R). */
 const W = "acct-move-ends-w";
@@ -211,22 +212,17 @@ const spec: Spec = {
         W,
         Date.now()
       );
-      const routed = await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("PUT /api/accounts/routing/:provider", {
-          path: { provider: "anthropic" },
-          body: {
-            yours: { strategy: "fill-first" },
-            delegates: { strategy: "fill-first" },
-            atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
-          },
-        })
-      );
+      const routed = await hubAt(fleet.base)
+        .api.accounts.routing({ provider: "anthropic" })
+        .put({
+          yours: { strategy: "fill-first" },
+          delegates: { strategy: "fill-first" },
+          atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+        });
       check(
         "setup: routing fills R first, then W",
-        routed.ok,
-        `${routed.status} ${await routed.text()}`
+        routed.error === null,
+        `${routed.status} ${answerText(routed)}`
       );
       await furnish(home, W, W_TOKEN, "w");
       fleet.launch("agent");
@@ -255,29 +251,27 @@ const spec: Spec = {
       await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo moved > README.md && git add -A && git commit -qm 'First commit'`
         .env({ ...process.env, HOME: home })
         .quiet();
-      const project = await fleet.api<{ id: string }>(
-        hubRequest("POST /api/projects", {
-          body: {
-            name: "Move ends tasks",
-            machineId: MACHINE,
-            cwd: repo,
-          },
+      const project = await fleet.api((hub) =>
+        hub.api.projects.post({
+          name: "Move ends tasks",
+          machineId: MACHINE,
+          cwd: repo,
         })
       );
       const parent = await fleet.spawn("claude", "Parent", repo, {
         projectId: project.id,
       });
-      const item = await fleet.api<{ instanceId: string; workItemId: string }>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      const item = delegateStarted(
+        await fleet.api((hub) =>
+          hub.api["work-items"].post({
             parentInstanceId: parent,
             title: "Sleep, then move",
             prompt: `${TAG}: start the sleep.`,
             harness: "claude",
             model: MODEL.claude,
             cwd: repo,
-          },
-        })
+          })
+        )
       );
       const delegate = item.instanceId;
 

@@ -18,10 +18,10 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { identifiedPid, signal } from "../../../packages/core/src/signal";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { leasePortRange, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -104,11 +104,9 @@ const spec: Spec = {
         said.includes("CAWCO_DB_PATH"),
       said.trim().split("\n").at(-1) ?? ""
     );
-    const answers = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("GET /health")
-    ).then((r) => r.ok);
+    const answers = await hubAt(fleet.base)
+      .health.get()
+      .then((r) => r.error === null);
     kit.check(
       "the first hub still answers and still holds the lock",
       answers && (await holderOf(lock))?.pid === first.pid,

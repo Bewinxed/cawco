@@ -74,7 +74,6 @@ import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary/decisions";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { HOUR_MS } from "../../../packages/core/src/time";
 import {
   envOf,
@@ -85,7 +84,9 @@ import {
 } from "../../scratch-fleet";
 import { decisionsOf, startedSince } from "../agent-records";
 import { type CopyRef, copyText, inCopyExists } from "../copy";
+import { answerText, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const WAIT = "mcp__cawco__wait_item";
 /** How long a round 0 foreground command runs: past an agent restart and its start-up pass. */
@@ -344,13 +345,11 @@ const standUp = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Beat",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Beat",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   // The project's folder on the hub, which its workspaces read (core
@@ -361,22 +360,18 @@ const standUp = async (kit: Kit) => {
   });
   /** A delegate of the parent's, in a workspace of its own. */
   const delegate = (title: string, prompt: string) =>
-    fleet.api<{
-      instanceId: string;
-      workItemId: string;
-      workspaceId: string;
-    }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    fleet
+      .api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: parent,
           title,
           prompt,
           harness: "claude",
           model: "claude-haiku-4-5",
           cwd: src,
-        },
-      })
-    );
+        })
+      )
+      .then(delegateStarted);
   return { delegate, fleet, home, parent, project: project.id };
 };
 
@@ -820,12 +815,10 @@ const deletedStops = async (
   );
   const running = await boundariesOf(fleet, h.id);
   const asked = Date.now();
-  const deleted = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("DELETE /api/projects/:id", { path: { id: h.project } })
-  );
-  const answer = `${deleted.status} ${await deleted.text()}`;
+  const deleted = await hubAt(fleet.base)
+    .api.projects({ id: h.project })
+    .delete();
+  const answer = `${deleted.status} ${answerText(deleted)}`;
   const after = await until(
     "H's boundary replaced",
     () => boundariesOf(fleet, h.id),
@@ -849,7 +842,7 @@ const deletedStops = async (
   ).catch(() => "");
   kit.check(
     `6: the project's delete trashes its folder, and within ${LOOK_BOUND_MS / 1000} s H's boundary is replaced on the fleet sync that follows, its look held off`,
-    deleted.ok &&
+    deleted.error === null &&
       !existsSync(folder) &&
       after.length === 1 &&
       !running.includes(after[0] as string) &&

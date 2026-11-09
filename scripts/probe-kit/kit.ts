@@ -35,8 +35,8 @@ import {
   unlock,
 } from "../../packages/core/src/flock";
 import { HEAVY_SLOT_ENV } from "../../packages/core/src/heavy-slots";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import { unhandled } from "../../packages/core/src/unhandled";
+import type { DelegateResult } from "../../packages/hub/src/delegate-result";
 import {
   type Fleet,
   type HubAddress,
@@ -67,7 +67,18 @@ import {
   watchContext,
 } from "./crash-watch";
 import type { SpecGroup } from "./groups";
+import { answerText, hubAt } from "./hub";
 import { probeSlot } from "./slot";
+
+/** A delegation's answer as a started delegate's (`POST /api/work-items`): the session and work item it runs in, or the failure of a spec that expected it to start. */
+export const delegateStarted = (
+  result: DelegateResult
+): Extract<DelegateResult, { state: "started" }> => {
+  if (result.state !== "started") {
+    throw new Error(`the delegate did not start: ${JSON.stringify(result)}`);
+  }
+  return result;
+};
 
 export const ROOT = resolve(import.meta.dir, "../..");
 
@@ -1569,12 +1580,10 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
   for (const { id, title } of instances) {
     const name = `${(title ?? "untitled").replace(/[^\w-]+/gu, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
     try {
-      const response = await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("GET /api/instances/:id/transcript", { path: { id } })
-      );
-      await writeFile(join(dir, "transcripts", name), await response.text());
+      const response = await hubAt(fleet.base)
+        .api.instances({ id })
+        .transcript.get();
+      await writeFile(join(dir, "transcripts", name), answerText(response));
     } catch (error) {
       unread.push(`transcript of ${id} (${title}): ${error}`);
     }

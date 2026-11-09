@@ -35,7 +35,6 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import {
   ACCOUNT,
@@ -46,6 +45,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const FAR = "machine-no-place";
 const TAG = "PROBE-CUT-NO-PLACE";
@@ -110,11 +110,7 @@ const repository = async (
     .quiet();
 };
 
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-}
+type Started = ReturnType<typeof delegateStarted>;
 
 /** Delegates on the far machine in `cwd`, landing none: the start's answer, or its refusal's words. */
 const delegateIn = (
@@ -124,20 +120,19 @@ const delegateIn = (
   title: string
 ): Promise<Started | string> =>
   fleet
-    .api<Started>(
-      hubRequest("POST /api/work-items", {
-        body: {
-          parentInstanceId: parent,
-          title,
-          prompt: `${TAG}: say ok.`,
-          harness: "claude",
-          model: MODEL.claude,
-          machineId: FAR,
-          cwd,
-          lands: "none",
-        },
+    .api((hub) =>
+      hub.api["work-items"].post({
+        parentInstanceId: parent,
+        title,
+        prompt: `${TAG}: say ok.`,
+        harness: "claude",
+        model: MODEL.claude,
+        machineId: FAR,
+        cwd,
+        lands: "none",
       })
     )
+    .then(delegateStarted)
     .catch((error: unknown) =>
       error instanceof Error ? error.message : String(error)
     );
@@ -187,13 +182,11 @@ const spec: Spec = {
     );
     const src = join(fleet.sandbox, "src");
     await repository(src, home, false);
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Cut with no place",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Cut with no place",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {

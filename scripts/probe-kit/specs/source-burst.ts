@@ -48,7 +48,6 @@ import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CATALOG_SETTLE_MS } from "../../../packages/agent/src/harnesses/opencode-client";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   MACHINE,
   MODEL,
@@ -57,6 +56,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 import { type Relay, relay } from "../relay";
 
 /** The second machine, which reaches the hub through the relay. */
@@ -527,22 +527,17 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Source burst",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Source burst",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
-    await fleet.api(
-      hubRequest("POST /api/projects/:id/places", {
-        path: { id: project.id },
-        body: {
-          machineId: OTHER,
-          path: src,
-        },
+    await fleet.api((hub) =>
+      hub.api.projects({ id: project.id }).places.post({
+        machineId: OTHER,
+        path: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {
@@ -552,9 +547,9 @@ const spec: Spec = {
     // 1. Every create at once, half on each machine.
     const calls = await Promise.allSettled(
       Array.from({ length: DELEGATES }, (_, lane) =>
-        fleet.api(
-          hubRequest("POST /api/work-items", {
-            body: {
+        fleet
+          .api((hub) =>
+            hub.api["work-items"].post({
               parentInstanceId: parent,
               title: `Source burst ${lane}`,
               prompt: "Say ok.",
@@ -563,9 +558,9 @@ const spec: Spec = {
               cwd: src,
               lands: "none",
               ...(lane % 2 === 1 ? { machineId: OTHER } : {}),
-            },
-          })
-        )
+            })
+          )
+          .then(delegateStarted)
       )
     );
     const refusals = calls.flatMap((call, lane) =>

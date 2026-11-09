@@ -35,15 +35,11 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { CLAUDE_DIR_NAME } from "../../../../packages/core/src/claude-dirs";
 import { HOOK_TEMPLATES } from "../../../../packages/core/src/hooks";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../../../../packages/core/src/hub-request";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { skillsWords } from "../../../../packages/core/src/words/skills";
 import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { MACHINE } from "../../../scratch-fleet";
+import { answerText, type HubAsk, hubAt } from "../../hub";
 import {
   type Engine,
   type Kit,
@@ -196,21 +192,16 @@ async function machineFile(path: string, holding: string): Promise<string> {
 }
 
 /** `request` asked of the hub, refused loudly. */
-async function hubSend(fleet: KitFleet, request: HubRequest) {
-  const response = await fetchHub(fetch, fleet.base, request);
-  if (!response.ok) {
-    throw new Error(
-      `${request.method} ${request.path}: ${response.status} ${await response.text()}`
-    );
+async function hubSend(fleet: KitFleet, request: HubAsk) {
+  const answer = await request(hubAt(fleet.base));
+  if (answer.error !== null) {
+    throw new Error(`the hub: ${answer.status} ${answerText(answer)}`);
   }
 }
 
 /** The machine drifted from the fleet on its memory and on a hook, and holding a skill the fleet adopted from it. */
 async function fixtures(fleet: KitFleet) {
-  await hubSend(
-    fleet,
-    hubRequest("PUT /api/fleet/memory", { body: { content: MEMORY } })
-  );
+  await hubSend(fleet, (hub) => hub.api.fleet.memory.put({ content: MEMORY }));
   // The machine's user layer, where the fleet writes (agent fleet.ts `userLayerPath`).
   const layer = join(fleet.home, CLAUDE_DIR_NAME);
   const memory = await machineFile(
@@ -225,20 +216,16 @@ async function fixtures(fleet: KitFleet) {
   // `saveHook`): a template's draft also carries its placement's `cwd` and
   // `placeId` and a push's `force`, which are the hub's own to set.
   const { draft } = template;
-  await hubSend(
-    fleet,
-    hubRequest("PUT /api/fleet/hooks/:id", {
-      path: { id: HOOK_ID },
-      body: {
-        name: draft.name,
-        enabled: draft.enabled,
-        event: draft.event,
-        matcher: draft.matcher ?? null,
-        handler: draft.handler,
-        script: draft.script ?? null,
-        scope: draft.scope ?? null,
-        projectId: draft.projectId ?? null,
-      },
+  await hubSend(fleet, (hub) =>
+    hub.api.fleet.hooks({ id: HOOK_ID }).put({
+      name: draft.name,
+      enabled: draft.enabled,
+      event: draft.event,
+      matcher: draft.matcher ?? null,
+      handler: { ...draft.handler },
+      script: draft.script ?? null,
+      scope: draft.scope ?? null,
+      projectId: draft.projectId ?? null,
     })
   );
   // A hook's script lands in the machine's fleet hooks dir, outside the
@@ -265,18 +252,13 @@ async function fixtures(fleet: KitFleet) {
     join(skill, "SKILL.md"),
     `---\nname: ${SKILL}\ndescription: A skill the machine-away probe adopts.\n---\nPROBE-AWAY skill body\n`
   );
-  await hubSend(
-    fleet,
-    hubRequest("PUT /api/fleet/skills/:name", {
-      path: { name: SKILL },
-      body: {
-        fromMachine: MACHINE,
-      },
+  await hubSend(fleet, (hub) =>
+    hub.api.fleet.skills({ name: SKILL }).put({
+      fromMachine: MACHINE,
     })
   );
-  await hubSend(
-    fleet,
-    hubRequest("POST /api/fleet/sync", { body: { machineId: MACHINE } })
+  await hubSend(fleet, (hub) =>
+    hub.api.fleet.sync.post({ machineId: MACHINE })
   );
 }
 

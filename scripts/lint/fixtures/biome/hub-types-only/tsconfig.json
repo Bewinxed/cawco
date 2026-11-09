@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // A project of its own: hub.d.ts declares the hub's modules for the planted
+  // imports here, and in scripts' program it would shadow the hub's real
+  // types for every Eden client.
+  "extends": "../../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["**/*.ts"]
+}
