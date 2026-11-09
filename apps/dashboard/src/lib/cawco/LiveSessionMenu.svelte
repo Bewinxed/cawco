@@ -1,5 +1,6 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
+  import type { InstanceRow } from "@cawco/core/protocol";
   /**
    * Right-click (long-press on touch, the menu key on a focused row) on a
    * session, wherever one is listed: the rail, a project's page, the Fleet
@@ -47,7 +48,6 @@
     deleteTranscript,
     didntAnswer,
     discardSession,
-    type InstanceRow,
     keepSession,
     machineControl,
     removeSession,
