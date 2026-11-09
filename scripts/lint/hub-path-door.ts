@@ -79,8 +79,6 @@ const OWN: Record<string, string> = {
  * Eden, read by hub-read's readers (house/eden-answers-read).
  */
 const HUB_PATH_USERS: Record<string, string> = {
-  "apps/dashboard/src/lib/cawco/presence.ts":
-    "the beat a closing page leaves: only a beacon goes with it",
   "apps/dashboard/src/lib/cawco/transcript/file-upload.ts":
     "an upload that says how far it has gone: only an XHR does",
   "apps/dashboard/src/lib/cawco/views-api.ts":
