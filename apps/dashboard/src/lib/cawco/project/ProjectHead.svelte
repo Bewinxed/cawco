@@ -57,8 +57,6 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import { editProject } from "#lib/cawco/client.svelte.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import ProjectEndTray from "#lib/cawco/ProjectEndTray.svelte";
   import { askEnd, endHost } from "#lib/cawco/project-end.svelte.js";
@@ -92,6 +90,12 @@
     IconSparkles,
     IconUsage,
   } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import {
+    dur,
+    easeInOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { goto } from "$app/navigation";
   import { fullSize } from "../workspace/full-size.svelte";
   import CawPanel from "./CawPanel.svelte";

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * The grid: a tree of splits, drawn recursively.
    *
@@ -17,6 +16,7 @@
    */
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { gridView } from "./grid-view.svelte";
   import Self from "./PaneGrid.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";

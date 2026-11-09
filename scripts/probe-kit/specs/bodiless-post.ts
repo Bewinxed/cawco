@@ -35,7 +35,7 @@
 import { mkdir } from "node:fs/promises";
 import { connect } from "node:http2";
 import { join } from "node:path";
-import { couldNot } from "../../../apps/dashboard/src/lib/cawco/hub-read";
+import { couldNot } from "../../../apps/dashboard/src/lib/platform/hub-read";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { dashboardRelay } from "../../../packages/hub/src/tailnet-https";
 import { scratchCertificate } from "../cloudflare-front";

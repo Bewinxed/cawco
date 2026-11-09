@@ -40,7 +40,6 @@
   import { commonWords } from "@cawco/core/words/common";
   import { type Snippet, untrack } from "svelte";
   import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -54,11 +53,16 @@
   import * as Select from "#lib/components/ui/select/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconError, IconNeedsYou, IconWorking } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import {
+    afterSkeleton,
+    reveal,
+    revealOut,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
   import { artifactNamed } from "../artifact-names.svelte";
   import { cawco } from "../client.svelte";
   import { rowHref } from "../links";
-  import { afterSkeleton, reveal, revealOut } from "../motion/curves.svelte";
   import {
     addComment,
     addTodo,

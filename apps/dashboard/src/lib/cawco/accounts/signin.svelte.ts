@@ -10,8 +10,8 @@
  */
 import type { AccountJoined, PendingAccountSignin } from "@cawco/core/accounts";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { failureWords } from "#lib/platform/hub-read.js";
 import { beginSignin, completeSignin } from "../client.svelte";
-import { failureWords } from "../hub-read";
 
 export type SigninPhase =
   "idle" | "opening" | "ready" | "checking" | "signed-in" | "mismatch";

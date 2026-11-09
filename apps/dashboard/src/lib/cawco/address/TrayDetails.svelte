@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import {
@@ -8,6 +7,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { IconChevronDown } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import FactList from "./FactList.svelte";
   import type { AddressTray, Fact } from "./tray.svelte";
 

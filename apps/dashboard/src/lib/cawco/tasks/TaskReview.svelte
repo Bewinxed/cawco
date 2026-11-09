@@ -35,7 +35,6 @@
   } from "@cawco/core/deliverables";
   import { commonWords } from "@cawco/core/words/common";
   import { taskReviewWords as words } from "@cawco/core/words/task-review";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -46,10 +45,11 @@
     IconError,
     IconLink,
   } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/platform/id.js";
   import { artifactNamed } from "../artifact-names.svelte";
   import { cawco } from "../client.svelte";
-  import { failureWords as message } from "../hub-read";
-  import { idForWords, type SentWords } from "../id";
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { plainMarkdown } from "../plain-markdown";

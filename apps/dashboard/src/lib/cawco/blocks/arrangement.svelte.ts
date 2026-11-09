@@ -20,7 +20,7 @@ import {
   viewBlock,
 } from "@cawco/core/blocks";
 import { hubRequest } from "@cawco/core/hub-request";
-import { failureWords } from "../hub-read";
+import { failureWords } from "#lib/platform/hub-read.js";
 import { send } from "../project-tasks";
 
 export const isBlockPage = (value: string): value is ShownBlockPage =>
