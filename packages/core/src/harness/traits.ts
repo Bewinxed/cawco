@@ -15,12 +15,13 @@ import { HARNESSES, type HarnessKind, harnessNamed } from "./kinds";
 
 export interface HarnessTraits {
   /**
-   * What a session's account is. `dir`: a place on disk, and the login moves
-   * with its session (`~/.claude`, an account's config dir). `provider`: the
-   * harness signs in to a provider; a session's account only picks whose
-   * credential it uses.
+   * Whether a session runs in its account's own config dir, which holds the
+   * account's login and its conversations: a launch picks the dir, a session
+   * that changes account has its conversation carried to the new one, and
+   * the machine reports each dir's sign-in. Without one, an account is a
+   * credential the harness is handed, and a session's model picks which.
    */
-  readonly accountModel: "dir" | "provider";
+  readonly accountDir: boolean;
   /** A model id on it may be bare, one unique among its providers' rows, and is read to its full id off the harness's report. */
   readonly bareModelIds: boolean;
   /** After a compaction's boundary the session may still report the compaction failed (hub compaction.ts `compactionFailedAfterBoundary`). */
@@ -54,6 +55,12 @@ export interface HarnessTraits {
   readonly custody: "keeper" | "server";
   /** A session that names no model runs its harness's pick for its directory, asked first (hub server.ts `asksPiDefault`). */
   readonly defaultModelFromDirectory: boolean;
+  /**
+   * What the machine's own sign-in to it is, the one CawCo can move into an
+   * account. `dir`: one login, its whole home config dir (`~/.claude`).
+   * `credentials`: a store holding a credential per provider.
+   */
+  readonly homeLogin: "dir" | "credentials";
   /** Whether an idle session's prompt cache is kept warm by keep-alive turns: only a measured cache lifetime can be. */
   readonly keepAlive: boolean;
   /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
@@ -86,6 +93,11 @@ export interface HarnessTraits {
    * itself. `assistant-before`: the assistant frame before it.
    */
   readonly rewindAnchor: "user-turn" | "assistant-before";
+  /**
+   * The one provider every account of it is of, or null when a session's
+   * model names its provider.
+   */
+  readonly soleProvider: string | null;
   /** A row can start with no conversation of its own and take one at its first send; until then it is never started, not ended. */
   readonly startsWithoutConversation: boolean;
   /** A session whose turns were not recorded is bounded by its last activity instead (hub server.ts `followupState`). */
@@ -95,7 +107,7 @@ export interface HarnessTraits {
 }
 
 const CLAUDE_TRAITS = {
-  accountModel: "dir",
+  accountDir: true,
   bareModelIds: false,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: true,
@@ -110,19 +122,21 @@ const CLAUDE_TRAITS = {
   liveSkillReload: true,
   modelCatalog: "account",
   ownProviderIds: false,
+  homeLogin: "dir",
   permissionModes: true,
   providerLimit: "account",
   queuesSends: true,
   readsStoredContext: true,
   requiredOnEveryMachine: true,
   rewindAnchor: "assistant-before",
+  soleProvider: "anthropic",
   startsWithoutConversation: false,
   unrecordedTurnsBoundByActivity: true,
   withdrawSend: true,
 } as const satisfies HarnessTraits;
 
 const OPENCODE_TRAITS = {
-  accountModel: "provider",
+  accountDir: false,
   bareModelIds: false,
   boundaryBeforeCompactionFailure: true,
   catalogProvesGone: false,
@@ -137,19 +151,21 @@ const OPENCODE_TRAITS = {
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: true,
+  homeLogin: "credentials",
   permissionModes: true,
   providerLimit: "go",
   queuesSends: false,
   readsStoredContext: false,
   requiredOnEveryMachine: false,
   rewindAnchor: "user-turn",
+  soleProvider: null,
   startsWithoutConversation: true,
   unrecordedTurnsBoundByActivity: false,
   withdrawSend: false,
 } as const satisfies HarnessTraits;
 
 const PI_TRAITS = {
-  accountModel: "provider",
+  accountDir: false,
   bareModelIds: true,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
@@ -164,12 +180,14 @@ const PI_TRAITS = {
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: false,
+  homeLogin: "credentials",
   permissionModes: false,
   providerLimit: "none",
   queuesSends: false,
   readsStoredContext: false,
   requiredOnEveryMachine: false,
   rewindAnchor: "assistant-before",
+  soleProvider: null,
   startsWithoutConversation: false,
   unrecordedTurnsBoundByActivity: false,
   withdrawSend: false,
@@ -184,12 +202,12 @@ export const HARNESS_TRAITS = {
 
 /**
  * The traits of a name this build does not know, or of none: every question
- * answered as a compare with the name answers it, "not this harness". A
- * `dir` account, a server's custody or a capability is never claimed for it,
+ * answered as a compare with the name answers it, "not this harness". An
+ * account dir, a server's custody or a capability is never claimed for it,
  * and a `!==` reads as true of it, as it always did.
  */
 const UNKNOWN_TRAITS: HarnessTraits = {
-  accountModel: "provider",
+  accountDir: false,
   bareModelIds: false,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
@@ -204,12 +222,14 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: false,
+  homeLogin: "credentials",
   permissionModes: true,
   providerLimit: "none",
   queuesSends: false,
   readsStoredContext: false,
   requiredOnEveryMachine: false,
   rewindAnchor: "assistant-before",
+  soleProvider: null,
   startsWithoutConversation: false,
   unrecordedTurnsBoundByActivity: false,
   withdrawSend: false,
