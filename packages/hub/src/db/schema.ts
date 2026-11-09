@@ -3578,7 +3578,7 @@ export const claudeContextWindows = sqliteTable("claude_context_windows", {
 export const continuations = sqliteTable("continuations", {
   id: text("id").primaryKey(),
   sourceInstanceId: text("source_instance_id").notNull(),
-  /** The request as asked, and its inputs as read then (continuation.ts). */
+  /** The request as asked, and its inputs as read then (continuations.ts). */
   request: storedJson(ContinueRequestSchema)("request").notNull(),
   prepared: storedJson(PreparedContinuationSchema)("prepared").notNull(),
   /** The summariser answering now; a resumed job may have replaced it. */
