@@ -363,7 +363,7 @@ export function followFiles(instanceId: string | null): void {
   if (waits?.on === "board") {
     return;
   }
-  // The machine back, its transcript is read again first (client.svelte.ts
+  // The machine back, its transcript is read again first (stores/transcript-reads.svelte.ts
   // `readBehind`): the attachments are read once that lands, by the newest
   // message it brings, not before it and again after.
   if (

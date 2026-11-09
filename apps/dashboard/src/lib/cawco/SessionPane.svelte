@@ -495,7 +495,7 @@
       });
       return;
     }
-    // A read that failed waits on what can answer it (client.svelte.ts
+    // A read that failed waits on what can answer it (stores/transcript-reads.svelte.ts
     // `readFailed`: the backoff, its machine's deadline or return) or on Try
     // again: the socket's status moving is neither, and read again on it, a
     // transcript whose machine is away was asked once per status it passed.
@@ -1195,7 +1195,7 @@
    * Why this session's last send failed, said over its composer's field; or
    * else a command of it that failed with nowhere else to say it (a stop, a
    * model change with its details card closed, an answer whose card has
-   * gone), with Try again where a try can go (client.svelte.ts
+   * gone), with Try again where a try can go (stores/commands.svelte.ts
    * `commandFault`).
    */
   const failedCommand = $derived(commandFault(viewId));
