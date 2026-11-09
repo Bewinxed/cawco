@@ -119,15 +119,17 @@ export const inOneOrder = (value: unknown, key?: string): unknown => {
   );
 };
 
-/** Two literal lists hold no value in common. */
-const apart = (one: unknown[], other: unknown[]): boolean => {
-  const texts = new Set(one.map((value) => JSON.stringify(value)));
-  return !other.some((value) => texts.has(JSON.stringify(value)));
-};
-
-/** Reading schemas against the document's components, refs followed. */
-const readerOf = (components: Record<string, unknown>) => {
-  /** A schema with its refs followed. */
+/**
+ * Where a `oneOf` has no discriminator, or has one that is not one literal of
+ * its own on a property every member requires. swift-openapi-generator decodes
+ * an `anyOf` by trying every member, so its order decides nothing; a `oneOf`
+ * without a discriminator by trying its members in order, so {@link inOneOrder}
+ * would choose what decodes. Each `oneOf` that fails is named by its path.
+ */
+export const unionsOrderDecides = (
+  document: unknown,
+  components: Record<string, unknown>
+): string[] => {
   const resolve = (schema: unknown): Schema | undefined => {
     let at = schema;
     for (let hops = 0; isSchema(at) && typeof at.$ref === "string"; hops += 1) {
@@ -138,117 +140,29 @@ const readerOf = (components: Record<string, unknown>) => {
     }
     return isSchema(at) ? at : undefined;
   };
-
-  /** The JSON kinds a schema admits; undefined when it could be any. */
-  const kindsOf = (
-    schema: unknown,
-    seen: Schema[] = []
-  ): Set<string> | undefined => {
-    const shape = resolve(schema);
-    if (!shape || seen.includes(shape)) {
-      return undefined;
-    }
-    const union = UNIONS.map((key) => shape[key]).find(Array.isArray);
-    if (union) {
-      const each = union.map((member) => kindsOf(member, [...seen, shape]));
-      return each.every((one) => one !== undefined)
-        ? new Set(each.flatMap((one) => [...one]))
+  /** The one literal a member requires of `name`. */
+  const tagOf = (member: unknown, name: string): string | undefined => {
+    const shape = resolve(member);
+    const values =
+      (shape?.required as string[] | undefined)?.includes(name) &&
+      isSchema(shape?.properties)
+        ? literals(shape.properties[name])
         : undefined;
-    }
-    if (shape.type === undefined) {
-      return undefined;
-    }
-    const types = Array.isArray(shape.type) ? shape.type : [shape.type];
-    // An integer is a number to a decoder.
-    return new Set(
-      types.map((type) => (type === "integer" ? "number" : String(type)))
-    );
+    return values?.length === 1 ? JSON.stringify(values[0]) : undefined;
   };
-
-  /** The literals a member holds a property it requires to. */
-  const requiredLiterals = (
-    shape: Schema,
-    name: string
-  ): unknown[] | undefined =>
-    (shape.required as string[] | undefined)?.includes(name) &&
-    isSchema(shape.properties)
-      ? literals(shape.properties[name])
-      : undefined;
-
-  /**
-   * Whether no payload decodes as both: they admit no JSON kind in common, or
-   * both require one property that each holds to literals the other's does
-   * not have. An enum read open (a ref to its own component) holds no
-   * literals here: it decodes any string.
-   */
-  const disjoint = (a: unknown, b: unknown): boolean => {
-    const [kindsA, kindsB] = [kindsOf(a), kindsOf(b)];
-    if (kindsA && kindsB && ![...kindsA].some((kind) => kindsB.has(kind))) {
-      return true;
-    }
-    const [x, y] = [resolve(a), resolve(b)];
-    if (!(x && y)) {
-      return false;
-    }
-    const [valuesX, valuesY] = [literals(x), literals(y)];
-    if (valuesX && valuesY) {
-      return apart(valuesX, valuesY);
-    }
-    return ((x.required as string[] | undefined) ?? []).some((name) => {
-      const [one, other] = [
-        requiredLiterals(x, name),
-        requiredLiterals(y, name),
-      ];
-      return one !== undefined && other !== undefined && apart(one, other);
-    });
-  };
-
-  /** What is wrong with one `oneOf`, if its order could decide what decodes. */
-  const problems = (union: Schema, at: string): string[] => {
-    const members = union.oneOf as unknown[];
+  const problem = (union: Schema, at: string): string[] => {
     const tag = (union.discriminator as { propertyName?: string } | undefined)
       ?.propertyName;
-    if (tag) {
-      const tags = members.map((member) => {
-        const shape = resolve(member);
-        const values = shape && requiredLiterals(shape, tag);
-        return values?.length === 1 ? JSON.stringify(values[0]) : undefined;
-      });
-      return tags.includes(undefined) || new Set(tags).size !== tags.length
-        ? [
-            `${at}: its discriminator \`${tag}\` is not one literal of its own that every member requires`,
-          ]
-        : [];
+    if (!tag) {
+      return [`${at}: a oneOf with no discriminator`];
     }
-    return members.flatMap((a, i) =>
-      members.flatMap((b, j) =>
-        j > i && !disjoint(a, b)
-          ? [
-              `${at}: oneOf members ${i} and ${j} can both decode one payload, and it has no discriminator`,
-            ]
-          : []
-      )
-    );
+    const tags = (union.oneOf as unknown[]).map((member) => tagOf(member, tag));
+    return tags.includes(undefined) || new Set(tags).size !== tags.length
+      ? [
+          `${at}: its discriminator \`${tag}\` is not one literal of its own that every member requires`,
+        ]
+      : [];
   };
-
-  return { problems };
-};
-
-/**
- * Where the order of a union's members could decide what a reader decodes.
- * swift-openapi-generator decodes an `anyOf` by trying every member, so its
- * order decides nothing; a `oneOf` with no discriminator by trying its
- * members in order and keeping the first that decodes, so two members that
- * could decode one payload would make {@link inOneOrder} choose between
- * them. Every such `oneOf` either has members no payload decodes as twice,
- * or a discriminator on a property every member requires as one literal of
- * its own: each one that has neither is named.
- */
-export const unionsOrderDecides = (
-  document: unknown,
-  components: Record<string, unknown>
-): string[] => {
-  const { problems } = readerOf(components);
   const walk = (value: unknown, at: string): string[] => {
     if (Array.isArray(value)) {
       return value.flatMap((item, index) => walk(item, `${at}/${index}`));
@@ -257,7 +171,7 @@ export const unionsOrderDecides = (
       return [];
     }
     return [
-      ...(Array.isArray(value.oneOf) ? problems(value, at) : []),
+      ...(Array.isArray(value.oneOf) ? problem(value, at) : []),
       ...Object.entries(value).flatMap(([field, item]) =>
         walk(item, `${at}/${field}`)
       ),
