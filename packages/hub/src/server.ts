@@ -110,7 +110,6 @@ import {
   attachedPictureLine,
   pictureName,
 } from "@cawco/core/attachments";
-import { readTrial } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
   BINARY_UPDATE_PHASES,
@@ -892,6 +891,7 @@ import {
 } from "./harness-config-body";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
+import { type HubContext, hubContextOf } from "./hub-context";
 import { hubId } from "./hub-id";
 import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
@@ -918,7 +918,6 @@ import { boardTitle, type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { createLaws } from "./laws";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
-import { localNameOf } from "./local-name";
 import {
   type ControlResult,
   isToolStatus,
@@ -942,7 +941,6 @@ import {
   whenStopped,
 } from "./machine-pause";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { localHubName } from "./mdns";
 import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
@@ -1089,6 +1087,7 @@ import { createRepoPublish } from "./repo-publish";
 import { makesRoutines, talksWithPerson } from "./roles";
 import { bearerOf } from "./routes/bearer";
 import { harnessSchema } from "./routes/harness-schema";
+import { hubInfoRoutes } from "./routes/hub-info";
 import { continueBody, permissionModeSchema } from "./routes/session-bodies";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
@@ -3350,6 +3349,116 @@ export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
 ) => {
+  // What the route families read of this closure (hub-context.ts).
+  const ctx: HubContext = hubContextOf({
+    TOOL_SIGNIN_BEGIN_MS: () => TOOL_SIGNIN_BEGIN_MS,
+    TOOL_SIGNIN_COMPLETE_MS: () => TOOL_SIGNIN_COMPLETE_MS,
+    agentMoved: () => agentMoved,
+    announceMcp: () => announceMcp,
+    announceSkill: () => announceSkill,
+    archiveView: () => archiveView,
+    artifactLane: () => artifactLane,
+    autoInstall: () => autoInstall,
+    awayWords: () => awayWords,
+    boundProblem: () => boundProblem,
+    callAgent: () => callAgent,
+    caw: () => caw,
+    checkSources: () => checkSources,
+    coldReading: () => coldReading,
+    coldWork: () => coldWork,
+    connections: () => connections,
+    contact: () => contact,
+    db: () => db,
+    delegateTypeFor: () => delegateTypeFor,
+    delegateTypes: () => delegateTypes,
+    delegatedAttempt: () => delegatedAttempt,
+    delegationMcp: () => delegationMcp,
+    deliverSend: () => deliverSend,
+    discardAsked: () => discardAsked,
+    discarded: () => discarded,
+    dropMarketplaceLink: () => dropMarketplaceLink,
+    fanOutAgents: () => fanOutAgents,
+    fanOutFetched: () => fanOutFetched,
+    fetchPlugins: () => fetchPlugins,
+    fetchSkill: () => fetchSkill,
+    find: () => find,
+    fleetChanged: () => fleetChanged,
+    fleetMcp: () => fleetMcp,
+    fleetSyncs: () => fleetSyncs,
+    followupState: () => followupState,
+    forgetInstances: () => forgetInstances,
+    handoffs: () => handoffs,
+    harnessConfigDelete: () => harnessConfigDelete,
+    harnessConfigList: () => harnessConfigList,
+    harnessConfigPut: () => harnessConfigPut,
+    hookDraftOf: () => hookDraftOf,
+    hubAuth: () => hubAuth,
+    hubBuild: () => hubBuild,
+    identities: () => identities,
+    installFromFolder: () => installFromFolder,
+    installSessionIdentity: () => installSessionIdentity,
+    jevView: () => jevView,
+    keepHookVersion: () => keepHookVersion,
+    keepRemovedMemory: () => keepRemovedMemory,
+    keepReplacedDoc: () => keepReplacedDoc,
+    keepReplacedMemory: () => keepReplacedMemory,
+    launchStarted: () => launchStarted,
+    lfsMachineProject: () => lfsMachineProject,
+    lifetime: () => lifetime,
+    linkMarketplace: () => linkMarketplace,
+    machineCredentials: () => machineCredentials,
+    machineFault: () => machineFault,
+    machineFleetItems: () => machineFleetItems,
+    machineName: () => machineName,
+    machinePause: () => machinePause,
+    machineRow: () => machineRow,
+    marketplaceLinks: () => marketplaceLinks,
+    mcpReady: () => mcpReady,
+    moves: () => moves,
+    noteFetch: () => noteFetch,
+    notifications: () => notifications,
+    pending: () => pending,
+    pendingToolSignins: () => pendingToolSignins,
+    pluginRow: () => pluginRow,
+    projectTypes: () => projectTypes,
+    publishInstances: () => publishInstances,
+    publishUsage: () => publishUsage,
+    pushAgents: () => pushAgents,
+    readAgent: () => readAgent,
+    readMachineHookScript: () => readMachineHookScript,
+    readMachineMedia: () => readMachineMedia,
+    readMachineMemory: () => readMachineMemory,
+    readMarketplaceSource: () => readMarketplaceSource,
+    readStoppable: () => readStoppable,
+    registry: () => registry,
+    retryFromTray: () => retryFromTray,
+    returned: () => returned,
+    sessionName: () => sessionName,
+    sharedProblem: () => sharedProblem,
+    skillChoices: () => skillChoices,
+    skillRow: () => skillRow,
+    spendNow: () => spendNow,
+    sshTunnels: () => sshTunnels,
+    streams: () => streams,
+    tailnetHttps: () => tailnetHttps,
+    toolCallKeys: () => toolCallKeys,
+    treeStops: () => treeStops,
+    unansweredStatus: () => unansweredStatus,
+    unpushable: () => unpushable,
+    watch: () => watch,
+    withPresence: () => withPresence,
+    workItems: () => workItems,
+    workspaceArchived: () => workspaceArchived,
+    workspaceRetire: () => workspaceRetire,
+    say: () => (payload) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload,
+      } satisfies Envelope<FramePayload>),
+    online: () => (machineId) => Boolean(registry.agent(machineId)),
+  });
+
   // Honest ground, before anything is served. A fresh process holds no agent
   // sockets, so every row still claiming `online` is a leftover from a hub that
   // was killed before its close handlers could run. The read-time overlay
@@ -32393,238 +32502,14 @@ export const createServer = (
     }
   }
 
-  return Object.assign(
-    // Every body, query and params schema closed (Elysia's
-    // `nonAdditionalProperties`): a field a route doesn't take is refused,
-    // never dropped. Normalizing dropped it, so a caller on an old shape
-    // (setup-send's `{ card }` once the show took `{ at: { card } }`,
-    // 5646cadda) was answered as if it had sent nothing. No route declares
-    // a response schema, so none is held to one.
-    new Elysia({ normalize: false })
-      // A request with a field its route doesn't take: a 422 naming each
-      // (unknown-fields.ts), before any plugin's or route's own error
-      // words, which would say only that the shape was wrong.
-      .onError("global", ({ error }) => {
-        const unknown = unknownFieldsOf(error);
-        return unknown
-          ? new Response(
-              hubFailureWords.unknownFields(unknown.on, unknown.fields),
-              {
-                status: 422,
-                headers: { "content-type": "text/plain; charset=utf-8" },
-              }
-            )
-          : undefined;
-      })
-      // Every answer the hub sends, its text compressed for the client that
-      // asked (core compress-answer.ts): the phone and the machines reach
-      // the hub here, and the dashboard's server asks it for none. A
-      // socket's upgrade answers nothing to compress.
-      .wrap((fetch) => async (request: Request, ...rest: unknown[]) => {
-        const answer: Response | undefined = await fetch(request, ...rest);
-        return answer ? compressAnswer(request, answer) : answer;
-      })
-      // No page of another origin calls the hub with the browser's cookies:
-      // a previewed app on its own port of this host least of all.
-      .onRequest(({ request }) => {
-        // The work the hub started last, for its loop's watch (hub-loop.ts).
-        doing(`${request.method} ${new URL(request.url).pathname}`);
-        const refused = crossSiteRefusal(
-          request.method,
-          (name) => request.headers.get(name),
-          new URL(request.url).origin
-        );
-        if (refused) {
-          console.warn(
-            `[hub] refused ${refused} to ${request.method} ${new URL(request.url).pathname}`
-          );
-          return new Response(
-            "The hub answers its own dashboard only: this request came from another page.",
-            { status: 403 }
-          );
-        }
-      })
-      // Who is calling, and whether they may (hub-auth.ts): every route is
-      // the person's unless it is listed for sessions, machines or anyone.
-      // A socket's upgrade passes here too.
-      .onRequest(({ request, server }) =>
-        hubAuth.gate(request, addressOf(server, request))
-      )
-      // Each route's body cap, met before a request is routed or its body
-      // read (body-limits.ts).
-      .onRequest(async ({ request }) => await bodyLimitRefusal(request))
-      .use(
-        previewRoutes({
-          deviceOf: (request) => {
-            const caller = hubAuth.callerOf(request, null);
-            return caller.kind === "owner" ? (caller.device?.id ?? null) : null;
-          },
-          hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
-          hasProject: (id) => db.project(id) !== undefined,
-          // Its newest version's (a next one held for its owner's panel
-          // included), as artifact_browse and a decision page's Preview
-          // take it: the version the owner's panel opened last may be older.
-          artifactAddress: (id) => {
-            const row = artifacts.newest(id);
-            const owner = row && originKeyOf(row.id);
-            if (!(row && owner)) {
-              return;
-            }
-            return frameOrigin(row.instanceId ?? owner, {
-              artifact: shownArtifact(row),
-              revision: "",
-            });
-          },
-          panelSees: (instanceId, artifactId) =>
-            artifacts.panelSees(instanceId, artifactId),
-          listener: artifactListener,
-          listeners: previewListeners,
-          passes: db.previewPasses,
-          portNames: () => {
-            const host = new URL(dashboardUrl(registry)).hostname;
-            return isIP(host.replace(IPV6_BRACKETS, ""))
-              ? null
-              : { patterns: [host], sample: host };
-          },
-          republish: () => {
-            for (const [instanceId, target] of previewTargets) {
-              const moved = { ...target, revision: crypto.randomUUID() };
-              previewTargets.set(instanceId, moved);
-              db.artifacts.show(instanceId, target.artifact.id, moved.revision);
-              publishPreview(instanceId, "open", moved);
-            }
-            // The board's publish carries the mode (`previewSettings`, which
-            // a dashboard's Decisions page follows) and refreshes every
-            // artifact's tab, whose revision names the mode (`tabTarget`):
-            // each frame of a page or a machine's preview loads again at its
-            // new origin, its listener opened there.
-            publishInstances("");
-          },
-        })
-      )
-      // Every route's large JSON answer is written as it is sent.
-      .mapResponse("global", streamLargeJson)
-      // The route plugins, in one `.use` of a list: each chained `.use` nests
-      // the app's type one level deeper, and a chain of all of them runs past
-      // TypeScript's instantiation depth (TS2589). A list is folded by
-      // Elysia's tail-recursive MergeElysiaInstances, which TypeScript lets
-      // run far deeper. Elysia uses them one by one, in this order, as it
-      // would chained (elysiajs.com/patterns/typescript).
-      .use([
-        websocket(),
-        hubAuth.routes(),
-        dashboardErrorsRoutes(),
-        delegateTypesRoutes(
-          delegateTypes,
-          (name) =>
-            db.trash.put({ kind: "delegateType", key: name }, Date.now()),
-          (id) => db.accounts.get(id) !== undefined
-        ),
-        projectDelegateTypesRoutes(projectTypes, (id) =>
-          db.listProjects().some((project) => project.id === id)
-        ),
-        browserRoutes(browsers),
-        browserStreamRoutes(browserStream),
-        relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
-          addressOf(server as Parameters<typeof addressOf>[0], request)
-        ),
-        projectFolderRoutes(
-          (id) => db.listProjects().some((project) => project.id === id),
-          (id) => {
-            tasks.touched(id);
-            decisionsChanged(id);
-          }
-        ),
-        gateRoutes((id) => db.project(id) !== undefined),
-        decidesRoutes({
-          db: db.decides,
-          types: delegateTypes,
-          trashType: (name) =>
-            db.trash.put({ kind: "delegateType", key: name }, Date.now()),
-          project: (id) => db.project(id),
-          projects: () => db.listProjects(),
-          harnesses: harnessOffers,
-          skills: () =>
-            db
-              .listSkills()
-              .filter(
-                (skill) => skill.enabled && !skill.projectId && !skill.areaId
-              )
-              .map((skill) => ({ id: skill.name, note: skill.source })),
-          spend: (instances, since) => db.decides.spend(instances, since),
-          cawRecord: (projectId, since) => ({
-            ...db.cawThreads(projectId),
-            spendUsd: db.cawSpentSince(projectId, since.getTime()),
-          }),
-          live: (id) => {
-            const state = db.workItem(id)?.state;
-            return state === "starting" || state === "running";
-          },
-          waitingUnder: (kind) => artifacts.waitingUnder(kind),
-          refile: async (artifactId, program, cards, from, to) => {
-            const row = db.artifacts.get(artifactId);
-            const owner = row?.madeBy ?? row?.instanceId;
-            const statements = refiledStatements(program, cards, from, to);
-            if (!(owner && statements)) {
-              return false;
-            }
-            try {
-              await artifacts.revise(owner, artifactId, statements);
-              return true;
-            } catch (error) {
-              console.warn(
-                `[decides] ${artifactId}: its cards did not move to ${to}: ${error instanceof Error ? error.message : String(error)}`
-              );
-              return false;
-            }
-          },
-        }),
-        taskRoutes(tasks),
-        artifactRoutes(artifacts),
-        decisionRoutes(decisions),
-        pushRoutes(db, push),
-        notificationRoutes(db, notifications),
-        // The hub as a git remote and LFS server, for fleet machines and
-        // sessions only (git-remote.ts).
-        gitRemoteRoutes({
-          root: GIT_ROOT,
-          lfsRoot: LFS_ROOT,
-          projectExists: (projectId) => db.project(projectId) !== undefined,
-          authenticate: (authorization) =>
-            basicCaller(
-              authorization,
-              machineCredentials,
-              (credential) =>
-                identities.resolve(`Bearer ${credential}`)?.instanceId
-            ),
-        }),
-        faviconRoutes(),
-        appleDiagnosticsRoutes(),
-        projectOfferRoutes(projectOffers, YOU_ACTOR),
-        designOfferRoutes(designOffers, YOU_ACTOR),
-        lfsOfferRoutes(lfsOffers),
-        starterRoutes(projectStarters),
-        planRoutes(plans),
-        planChangeRoutes(changesOfPlans),
-        dispatchRoutes(dispatcher),
-        cawRoutes(caw),
-        phoneRequestRoutes(jevTasks),
-        memoryRoutes(projectMemory),
-        routineRoutes(routines),
-        connectionRoutes(connections),
-        trackerRoutes(trackers),
-        ingressRoutes(ingress),
-        relayRoutes(relays),
-        actionRoutes(actions),
-        caps.routes(),
-        projectAreas.routes(),
-        sessionLimitRoutes(db),
-        viewRoutes(views, blocks),
-        blockRoutes(blocks),
-        noticesSeen.routes,
-        joinRoutes({ installs, offered: () => binaryUpdates.offered() }),
-        binaryUpdates.routes,
-      ])
+  // The hub's HTTP routes after the plugins above, in the order the generated
+  // OpenAPI document lists its paths (`hub.routes`' order is the contract:
+  // a family moved out of this order moves a path in openapi.json). One
+  // composite, built from one `.use` of a list: more `.use` calls on the root
+  // app run the checker past its instantiation depth (TS2589; see the list
+  // above), where one more plugin does not.
+  const hubRoutes = new Elysia().use([
+    new Elysia()
       .all("/mcp/cawco", hidden, ({ request, body, server }) => {
         // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
         server?.timeout(request, 0);
@@ -32890,39 +32775,9 @@ export const createServer = (
             toolResultRefused
           );
         }
-      )
-      // The hub's own build rides along (NEW.md §12), so a machine's can be read
-      // against something rather than taken on faith. `dashboard` is where the
-      // web dashboard is reached: the app takes a person there for what it
-      // has no screen of its own for yet. `secureDashboard` is its https
-      // address, or null: where the app's OpenRouter sign-in returns
-      // (dashboard-url.ts `secureDashboardUrl`).
-      .get("/health", hidden, async () => ({
-        ok: true,
-        version: HUB_VERSION,
-        build: hubBuild,
-        // Which hub this is, whatever address answered (hub-id.ts).
-        hubId: hubId(),
-        dashboard: dashboardUrl(registry),
-        secureDashboard: secureDashboardUrl(registry),
-        // The `.local` name it holds on its networks (mdns.ts), or null:
-        // what the app keeps for a hub it found on this network.
-        localName: localHubName() ?? null,
-        // An update of the hub's own machine is on trial (core
-        // binary-installation.ts `readTrial`): the build answering here may
-        // yet be rolled back, so a machine waiting for it (agent
-        // binary-update.ts `hubWaitFor`) goes on only once it is confirmed.
-        trial: (await readTrial()) !== undefined,
-      }))
-      // HTTPS on the machine's tailnet name (tailnet-https.ts): where it
-      // stands, the step that needs the person while one does. Every change
-      // after it comes as a `tailnet.https` frame.
-      .get("/api/tailnet-https", () => tailnetHttps.state())
-      // The hub's `.local` name (mdns.ts) and the dashboard's address at
-      // it, with its port; none while the hub holds no name.
-      .get("/api/local-name", () =>
-        localNameOf(osHostname(), DASHBOARD_PORT, localHubName())
-      )
+      ),
+    hubInfoRoutes(ctx),
+    new Elysia()
       // The fleet's list is the person's. A machine reads its own row alone,
       // by its own id (hub-auth.ts): what its CLI's health, install and
       // service checks ask.
@@ -38043,7 +37898,242 @@ export const createServer = (
             machineId: query.machineId,
             groupBy: query.groupBy,
           })
+      ),
+  ]);
+
+  return Object.assign(
+    // Every body, query and params schema closed (Elysia's
+    // `nonAdditionalProperties`): a field a route doesn't take is refused,
+    // never dropped. Normalizing dropped it, so a caller on an old shape
+    // (setup-send's `{ card }` once the show took `{ at: { card } }`,
+    // 5646cadda) was answered as if it had sent nothing. No route declares
+    // a response schema, so none is held to one.
+    new Elysia({ normalize: false })
+      // A request with a field its route doesn't take: a 422 naming each
+      // (unknown-fields.ts), before any plugin's or route's own error
+      // words, which would say only that the shape was wrong.
+      .onError("global", ({ error }) => {
+        const unknown = unknownFieldsOf(error);
+        return unknown
+          ? new Response(
+              hubFailureWords.unknownFields(unknown.on, unknown.fields),
+              {
+                status: 422,
+                headers: { "content-type": "text/plain; charset=utf-8" },
+              }
+            )
+          : undefined;
+      })
+      // Every answer the hub sends, its text compressed for the client that
+      // asked (core compress-answer.ts): the phone and the machines reach
+      // the hub here, and the dashboard's server asks it for none. A
+      // socket's upgrade answers nothing to compress.
+      .wrap((fetch) => async (request: Request, ...rest: unknown[]) => {
+        const answer: Response | undefined = await fetch(request, ...rest);
+        return answer ? compressAnswer(request, answer) : answer;
+      })
+      // No page of another origin calls the hub with the browser's cookies:
+      // a previewed app on its own port of this host least of all.
+      .onRequest(({ request }) => {
+        // The work the hub started last, for its loop's watch (hub-loop.ts).
+        doing(`${request.method} ${new URL(request.url).pathname}`);
+        const refused = crossSiteRefusal(
+          request.method,
+          (name) => request.headers.get(name),
+          new URL(request.url).origin
+        );
+        if (refused) {
+          console.warn(
+            `[hub] refused ${refused} to ${request.method} ${new URL(request.url).pathname}`
+          );
+          return new Response(
+            "The hub answers its own dashboard only: this request came from another page.",
+            { status: 403 }
+          );
+        }
+      })
+      // Who is calling, and whether they may (hub-auth.ts): every route is
+      // the person's unless it is listed for sessions, machines or anyone.
+      // A socket's upgrade passes here too.
+      .onRequest(({ request, server }) =>
+        hubAuth.gate(request, addressOf(server, request))
       )
+      // Each route's body cap, met before a request is routed or its body
+      // read (body-limits.ts).
+      .onRequest(async ({ request }) => await bodyLimitRefusal(request))
+      .use(
+        previewRoutes({
+          deviceOf: (request) => {
+            const caller = hubAuth.callerOf(request, null);
+            return caller.kind === "owner" ? (caller.device?.id ?? null) : null;
+          },
+          hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
+          hasProject: (id) => db.project(id) !== undefined,
+          // Its newest version's (a next one held for its owner's panel
+          // included), as artifact_browse and a decision page's Preview
+          // take it: the version the owner's panel opened last may be older.
+          artifactAddress: (id) => {
+            const row = artifacts.newest(id);
+            const owner = row && originKeyOf(row.id);
+            if (!(row && owner)) {
+              return;
+            }
+            return frameOrigin(row.instanceId ?? owner, {
+              artifact: shownArtifact(row),
+              revision: "",
+            });
+          },
+          panelSees: (instanceId, artifactId) =>
+            artifacts.panelSees(instanceId, artifactId),
+          listener: artifactListener,
+          listeners: previewListeners,
+          passes: db.previewPasses,
+          portNames: () => {
+            const host = new URL(dashboardUrl(registry)).hostname;
+            return isIP(host.replace(IPV6_BRACKETS, ""))
+              ? null
+              : { patterns: [host], sample: host };
+          },
+          republish: () => {
+            for (const [instanceId, target] of previewTargets) {
+              const moved = { ...target, revision: crypto.randomUUID() };
+              previewTargets.set(instanceId, moved);
+              db.artifacts.show(instanceId, target.artifact.id, moved.revision);
+              publishPreview(instanceId, "open", moved);
+            }
+            // The board's publish carries the mode (`previewSettings`, which
+            // a dashboard's Decisions page follows) and refreshes every
+            // artifact's tab, whose revision names the mode (`tabTarget`):
+            // each frame of a page or a machine's preview loads again at its
+            // new origin, its listener opened there.
+            publishInstances("");
+          },
+        })
+      )
+      // Every route's large JSON answer is written as it is sent.
+      .mapResponse("global", streamLargeJson)
+      // The route plugins, in one `.use` of a list: each chained `.use` nests
+      // the app's type one level deeper, and a chain of all of them runs past
+      // TypeScript's instantiation depth (TS2589). A list is folded by
+      // Elysia's tail-recursive MergeElysiaInstances, which TypeScript lets
+      // run far deeper. Elysia uses them one by one, in this order, as it
+      // would chained (elysiajs.com/patterns/typescript).
+      .use([
+        websocket(),
+        hubAuth.routes(),
+        dashboardErrorsRoutes(),
+        delegateTypesRoutes(
+          delegateTypes,
+          (name) =>
+            db.trash.put({ kind: "delegateType", key: name }, Date.now()),
+          (id) => db.accounts.get(id) !== undefined
+        ),
+        projectDelegateTypesRoutes(projectTypes, (id) =>
+          db.listProjects().some((project) => project.id === id)
+        ),
+        browserRoutes(browsers),
+        browserStreamRoutes(browserStream),
+        relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
+          addressOf(server as Parameters<typeof addressOf>[0], request)
+        ),
+        projectFolderRoutes(
+          (id) => db.listProjects().some((project) => project.id === id),
+          (id) => {
+            tasks.touched(id);
+            decisionsChanged(id);
+          }
+        ),
+        gateRoutes((id) => db.project(id) !== undefined),
+        decidesRoutes({
+          db: db.decides,
+          types: delegateTypes,
+          trashType: (name) =>
+            db.trash.put({ kind: "delegateType", key: name }, Date.now()),
+          project: (id) => db.project(id),
+          projects: () => db.listProjects(),
+          harnesses: harnessOffers,
+          skills: () =>
+            db
+              .listSkills()
+              .filter(
+                (skill) => skill.enabled && !skill.projectId && !skill.areaId
+              )
+              .map((skill) => ({ id: skill.name, note: skill.source })),
+          spend: (instances, since) => db.decides.spend(instances, since),
+          cawRecord: (projectId, since) => ({
+            ...db.cawThreads(projectId),
+            spendUsd: db.cawSpentSince(projectId, since.getTime()),
+          }),
+          live: (id) => {
+            const state = db.workItem(id)?.state;
+            return state === "starting" || state === "running";
+          },
+          waitingUnder: (kind) => artifacts.waitingUnder(kind),
+          refile: async (artifactId, program, cards, from, to) => {
+            const row = db.artifacts.get(artifactId);
+            const owner = row?.madeBy ?? row?.instanceId;
+            const statements = refiledStatements(program, cards, from, to);
+            if (!(owner && statements)) {
+              return false;
+            }
+            try {
+              await artifacts.revise(owner, artifactId, statements);
+              return true;
+            } catch (error) {
+              console.warn(
+                `[decides] ${artifactId}: its cards did not move to ${to}: ${error instanceof Error ? error.message : String(error)}`
+              );
+              return false;
+            }
+          },
+        }),
+        taskRoutes(tasks),
+        artifactRoutes(artifacts),
+        decisionRoutes(decisions),
+        pushRoutes(db, push),
+        notificationRoutes(db, notifications),
+        // The hub as a git remote and LFS server, for fleet machines and
+        // sessions only (git-remote.ts).
+        gitRemoteRoutes({
+          root: GIT_ROOT,
+          lfsRoot: LFS_ROOT,
+          projectExists: (projectId) => db.project(projectId) !== undefined,
+          authenticate: (authorization) =>
+            basicCaller(
+              authorization,
+              machineCredentials,
+              (credential) =>
+                identities.resolve(`Bearer ${credential}`)?.instanceId
+            ),
+        }),
+        faviconRoutes(),
+        appleDiagnosticsRoutes(),
+        projectOfferRoutes(projectOffers, YOU_ACTOR),
+        designOfferRoutes(designOffers, YOU_ACTOR),
+        lfsOfferRoutes(lfsOffers),
+        starterRoutes(projectStarters),
+        planRoutes(plans),
+        planChangeRoutes(changesOfPlans),
+        dispatchRoutes(dispatcher),
+        cawRoutes(caw),
+        phoneRequestRoutes(jevTasks),
+        memoryRoutes(projectMemory),
+        routineRoutes(routines),
+        connectionRoutes(connections),
+        trackerRoutes(trackers),
+        ingressRoutes(ingress),
+        relayRoutes(relays),
+        actionRoutes(actions),
+        caps.routes(),
+        projectAreas.routes(),
+        sessionLimitRoutes(db),
+        viewRoutes(views, blocks),
+        blockRoutes(blocks),
+        noticesSeen.routes,
+        joinRoutes({ installs, offered: () => binaryUpdates.offered() }),
+        binaryUpdates.routes,
+      ])
+      .use([hubRoutes])
       .ws("/ws", {
         // An agent on this build sends parts of at most 4 MiB
         // (`@cawco/core/wire`), joined in `guardedAgentMessage`; one on the
