@@ -1,26 +1,22 @@
 /**
- * The browser end of the Envelope spine: one WebSocket to the hub, and each
- * session's transcript as the hub built it — a page fetched once, then the
- * changes its stream carries (NEW.md §6).
+ * The browser end of the Envelope spine (NEW.md §6): the stores (stores/),
+ * each owning its state, its frames and its reads, wired to the hub's one
+ * socket (hub/socket.svelte.ts). Here every frame kind is routed to the
+ * store that takes it, what the stores do as the hub is reached or lost is
+ * listed in order, the ledger's ports are plugged into the stores, and the
+ * fleet's read on connect is made and made again until the board's reads
+ * land. Nothing reads this module but the app's layout (`ensureConnected`).
  */
 
 import { detach } from "@cawco/core/detach";
-
 import type { FramePayload } from "@cawco/core/frames";
-
 import { hubRequest } from "@cawco/core/hub-request";
-
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
-
 import type { SessionStreamFrame } from "@cawco/core/stream";
-
 import type { UsageLimitsResponse } from "@cawco/core/usage/types";
-
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
-
 import { devDebug } from "./dev-debug";
 import { heardSince } from "./heard";
-
 import {
   type BoardFrame,
   type FrameOf,
@@ -45,15 +41,11 @@ import {
   wireHub,
 } from "./hub/socket.svelte";
 import { takeAuthFrame } from "./hub-auth.svelte";
-
 import { notices } from "./notices.svelte";
-
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { handlePlanMessage } from "./plan";
 import { presenceAgain } from "./presence";
-
 import { checkServedBuild } from "./served-build.svelte";
-
 import { readAccounts } from "./stores/accounts.svelte";
 import {
   adoptAskMachine,
@@ -69,8 +61,6 @@ import {
   instanceIndex,
   type Machine,
   patchBoardRows,
-  pulses,
-  takePulse,
 } from "./stores/board.svelte";
 import { takeBrowsers } from "./stores/browsers.svelte";
 import { loadCatalog, refreshCatalogs } from "./stores/catalog.svelte";
@@ -88,7 +78,7 @@ import { takeBoardContinuations } from "./stores/continuations.svelte";
 import { hearDelegateEvent, rereadDelegates } from "./stores/delegates.svelte";
 import { watchedIds } from "./stores/follows.svelte";
 import { plugLedger, streamHost, streamState } from "./stores/ledger.svelte";
-import { fleetFetchListeners, takeFleetFetch } from "./stores/machines";
+import { dropFleetFetches, takeFleetFetch } from "./stores/machines";
 import { takeFleetMcp } from "./stores/mcp-servers.svelte";
 import { takeBoardMoves, takeMoves } from "./stores/moves.svelte";
 import {
@@ -117,16 +107,15 @@ import {
   takeProjectStop,
 } from "./stores/projects.svelte";
 import { keepRelayJourney, readRelayJourney } from "./stores/relay.svelte";
-
-import { equal, patchRows } from "./stores/same";
-
+import { patchRows } from "./stores/same";
 import { settleOpenings } from "./stores/session-start.svelte";
 import {
-  applyPulse,
   hydrate,
   session,
   sessionsState,
   TOUCH_KINDS,
+  takeBoardPulses,
+  takePulseFrame,
   touchSession,
   trackWorking,
 } from "./stores/sessions.svelte";
@@ -159,7 +148,6 @@ import {
   resumePendingSends,
 } from "./stream";
 import { errorMessage } from "./transcript/local";
-
 import { updates } from "./updates/updates.svelte";
 
 // Lets the store be asserted from the console while developing, and a
@@ -416,50 +404,6 @@ function takeBoardRows(frame: BoardFrame): void {
   }
 }
 
-/**
- * Every connection seeds now-state; subsequent changes arrive as pulses.
- * A merge, not a replace: a per-instance `pulse` frame is not ordered
- * against a snapshot the hub took moments before the `instances` frame
- * carrying it left, so whichever pulse actually happened later, by its
- * own `at`, is the one kept.
- */
-function takeBoardPulses(frame: BoardFrame): void {
-  if (frame.kind !== "instances") {
-    return;
-  }
-  for (const [id, pulse] of Object.entries(frame.pulses)) {
-    const held = pulses.get(id);
-    if (!held || pulse.at >= held.at) {
-      takePulse(id, pulse);
-    }
-  }
-  for (const [id, pulse] of pulses) {
-    const held = sessionsState.sessions[id];
-    if (held) {
-      applyPulse(held, pulse);
-    }
-  }
-  if (!equal(boardState.hubBuild, frame.hubBuild)) {
-    boardState.hubBuild = frame.hubBuild;
-  }
-}
-
-function takePulseFrame(frame: FrameOf<"pulse">): void {
-  const previous = pulses.get(frame.instanceId);
-  if (previous && previous.at > frame.pulse.at) {
-    return;
-  }
-  // The daemon's coarse now-state, broadcast — this is the whole of what the
-  // rail knows about a session this browser has not subscribed to. Field
-  // by field: a pulse inside a turn moves its row's time and tool, and
-  // wakes no list that files the session by its activity.
-  takePulse(frame.instanceId, frame.pulse);
-  const held = sessionsState.sessions[frame.instanceId];
-  if (held) {
-    applyPulse(held, frame.pulse);
-  }
-}
-
 function takeError(frame: FrameOf<"error">): void {
   const { instanceId, message, modeAsk } = frame;
   if (
@@ -591,11 +535,7 @@ wireHub({
   ],
   onClose: [
     cancelFleetRead,
-    () => {
-      for (const listener of fleetFetchListeners) {
-        listener.dropped();
-      }
-    },
+    dropFleetFetches,
     // Subscriptions, resumes and unanswered commands all died with the socket,
     // and the next one reads every followed transcript again (`rereadFollowed`).
     // With the host, for the same reason the traffic sweep passes it: a socket
