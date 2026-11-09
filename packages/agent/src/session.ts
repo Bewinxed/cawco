@@ -842,6 +842,7 @@ export class SessionSupervisor {
     adopting: (instanceId) => this.#adopting.has(instanceId),
     keptAlive: (instanceId) => this.#keepAlive.has(instanceId),
     sink: (frame) => this.sink(frame),
+    forget: (instanceId) => this.#forgetProcess(instanceId),
   });
   /** The sessions this daemon put to sleep, until their next start ({@link sleep}). */
   readonly #asleep = new Set<string>();
@@ -1968,8 +1969,7 @@ export class SessionSupervisor {
       (error: unknown) =>
         error instanceof Error ? error : new Error(String(error))
     );
-    this.#live.sessions.delete(instanceId);
-    this.#forgetPulse(instanceId);
+    this.#live.drop(instanceId, { why: "slept" });
     if (left) {
       // Still running past its kill: not asleep, and the hub hears why.
       this.#fail(instanceId, left, processGeneration);
@@ -2230,10 +2230,7 @@ export class SessionSupervisor {
     if (running && held?.exited.has(instanceId)) {
       // Its process is gone and nothing told this daemon: nothing of it can
       // answer a stop, and nothing writes its conversation.
-      this.#live.sessions.delete(instanceId);
-      this.#live.busy.delete(instanceId);
-      this.#forgetPulse(instanceId);
-      this.#live.ending.add(running);
+      this.#live.drop(instanceId, { why: "exited", ended: running });
       running
         .dispose()
         .catch((error: unknown) =>
@@ -2310,10 +2307,8 @@ export class SessionSupervisor {
         `[carry] ${instanceId}: no keeper lists its process, yet this daemon holds it running; it is stopped as any other`
       );
     }
-    this.#live.sessions.delete(instanceId);
-    this.#forgetPulse(instanceId);
     // Ended by this daemon for a move: its end is no failure.
-    this.#live.ending.add(running);
+    this.#live.drop(instanceId, { why: "carried", ended: running });
     const at = Date.now();
     const stopped = await readWithin(CARRY_STOP_MS, () => running.stop());
     switch (stopped.kind) {
@@ -2391,36 +2386,26 @@ export class SessionSupervisor {
   }
 
   /**
-   * Drops every trace of an instance's pulse — its process is gone. Not its
-   * preview: a relaunch comes through here too, and the session it continues
-   * still has the preview open. The hub owns that lifetime and ends it on an
-   * explicit close or a stop.
+   * What the supervisor itself holds of a process that is gone, dropped with
+   * it ({@link LiveSessions.drop}). Not its preview: a relaunch comes
+   * through here too, and the session it continues still has the preview
+   * open. The hub owns that lifetime and ends it on an explicit close or a
+   * stop.
    */
-  #forgetPulse(instanceId: string): void {
+  #forgetProcess(instanceId: string): void {
     this.#cacheCold.delete(instanceId);
     this.#keepAlive.delete(instanceId);
     this.#failureRun.delete(instanceId);
-    this.#live.busy.delete(instanceId);
-    this.#live.activeAt.delete(instanceId);
     this.#line.delete(instanceId);
     this.#streams.forget(instanceId);
     // The process this mark counted in is over — a relaunch or a death.
     // Whatever produces frames next is not replaying the hub's own past.
     this.#ingested.delete(instanceId);
-    this.#live.pulseTool.delete(instanceId);
-    this.#live.pulseBlocked.delete(instanceId);
     for (const [requestId, ask] of this.#openAsks) {
       if ("instanceId" in ask && ask.instanceId === instanceId) {
         this.#openAsks.delete(requestId);
       }
     }
-    this.#live.pulseSubagents.delete(instanceId);
-    this.#live.pulseAt.delete(instanceId);
-    const timer = this.#live.pulseTimers.get(instanceId);
-    if (timer) {
-      clearTimeout(timer);
-    }
-    this.#live.pulseTimers.delete(instanceId);
     // A fleet MCP install no row names any more may have waited on this
     // session's process alone (mcp-install.ts).
     retireInstalls(() => this.instanceIds).catch((error: unknown) =>
@@ -2451,8 +2436,7 @@ export class SessionSupervisor {
     // written down and ended, and the next daemon starts it again at its port.
     carryStages();
     for (const instanceId of [...this.#live.sessions.keys()]) {
-      this.#live.sessions.delete(instanceId);
-      this.#forgetPulse(instanceId);
+      this.#live.drop(instanceId, { why: "detached" });
     }
   }
 
@@ -2646,10 +2630,7 @@ export class SessionSupervisor {
       if (alive === false || this.#live.sessions.get(instanceId) !== session) {
         return;
       }
-      this.#live.ending.add(session);
-      this.#live.sessions.delete(instanceId);
-      this.#live.busy.delete(instanceId);
-      this.#forgetPulse(instanceId);
+      this.#live.drop(instanceId, { why: "unverified", ended: session });
       // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
       await session.stop().catch(() => {});
       this.#fail(
@@ -2918,10 +2899,8 @@ export class SessionSupervisor {
         running = this.#live.sessions.get(instanceId);
       }
       if (running) {
-        this.#live.sessions.delete(instanceId);
-        this.#forgetPulse(instanceId);
         // Ended by this daemon: its end is no failure ({@link LiveSessions.ending}).
-        this.#live.ending.add(running);
+        this.#live.drop(instanceId, { why: "relaunched", ended: running });
         await running.stop();
       }
       // What the process this replaces was handed and never read goes back to
@@ -3015,7 +2994,7 @@ export class SessionSupervisor {
       if (refused) {
         throw refused;
       }
-      this.#live.sessions.set(instanceId, session);
+      this.#live.carry(instanceId, session);
       if (boundary && this.#failOpen.delete(instanceId)) {
         console.info(
           `boundary: relaunched ${instanceId} onto the fail-closed hook`
@@ -3488,9 +3467,7 @@ export class SessionSupervisor {
           }
           return;
         }
-        this.#live.sessions.delete(instanceId);
-        this.#live.busy.delete(instanceId);
-        this.#forgetPulse(instanceId);
+        this.#live.drop(instanceId, { why: "died" });
         this.#gone(instanceId, processGeneration, {
           signal,
           error: `its process was ended by ${signal} from outside CawCo`,
@@ -3510,10 +3487,7 @@ export class SessionSupervisor {
       refused: (error) => {
         const { session } = holder;
         if (session && this.#live.sessions.get(instanceId) === session) {
-          this.#live.ending.add(session);
-          this.#live.sessions.delete(instanceId);
-          this.#live.busy.delete(instanceId);
-          this.#forgetPulse(instanceId);
+          this.#live.drop(instanceId, { why: "refused", ended: session });
         }
         this.#fail(instanceId, error, processGeneration);
       },
@@ -3543,9 +3517,7 @@ export class SessionSupervisor {
           holder.session &&
           this.#live.sessions.get(instanceId) === holder.session
         ) {
-          this.#live.sessions.delete(instanceId);
-          this.#live.busy.delete(instanceId);
-          this.#forgetPulse(instanceId);
+          this.#live.drop(instanceId, { why: "closed" });
           // Its process went away of its own accord: a failure has said so
           // (`#fail`), and anything else is the session at rest, its next
           // message waking it ({@link #gone}). One this daemon is stopping
@@ -3875,7 +3847,7 @@ export class SessionSupervisor {
     });
     holder.session = session;
     // Attached: the live child is this session's process from here, running.
-    this.#live.sessions.set(spec.instanceId, session);
+    this.#live.carry(spec.instanceId, session);
     detach(
       this.#dateActivity(spec.instanceId, adapter, session, spec.cwd),
       "dateActivity"
@@ -4203,9 +4175,7 @@ export class SessionSupervisor {
     }
     warn(`${instanceId}: ${error.reason} (${error.procId})`);
     this.#keeperRefused.set(instanceId, error);
-    this.#live.sessions.delete(instanceId);
-    this.#live.busy.delete(instanceId);
-    this.#forgetPulse(instanceId);
+    this.#live.drop(instanceId, { why: "input-refused" });
     // The keeper refused its input, not its life: the process may run on,
     // driven by nothing. It alone is ended, by its pid ({@link
     // KeeperRefused.pid}), before the hub hears the failure. A refusal that
@@ -4835,16 +4805,16 @@ export class SessionSupervisor {
           return;
         }
         ({ ended, sharedConversation } = stopped);
-        this.#live.sessions.delete(instanceId);
-        this.#forgetPulse(instanceId);
+        this.#live.drop(instanceId, { why: "stopped" });
       } else if (session) {
-        this.#forgetPulse(instanceId);
         // Carried, and listed on every beat, until the stop is over: a stop
         // waits for the turn it interrupts, and a beat that no longer listed
         // the session meanwhile had the hub settle it as ended — what it was
         // holding failed "ended" before this said "stopped".
-        await session.stop();
-        this.#live.sessions.delete(instanceId);
+        await this.#live.drop(instanceId, {
+          why: "stopping",
+          listedWhile: () => session.stop(),
+        });
       }
       if (custody?.kind !== "server") {
         await endHeld(instanceId);
