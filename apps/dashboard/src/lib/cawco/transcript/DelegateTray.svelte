@@ -79,6 +79,7 @@
   import { pressOutside } from "../press-outside";
   import RowFault from "../RowFault.svelte";
   import { sessionPlace } from "../session-names.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import { composerLayerOf } from "./composer-layer.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { layoutScale } from "./grown";
@@ -626,7 +627,7 @@
     // Its account's limit stopped it: where or when it continues, by itself,
     // and the way out its row says (switch.svelte.ts `stopWords`).
     if (chip.item.stalled) {
-      const row = cawco.instanceIndex.byId.get(chip.item.instanceId);
+      const row = boardStore.instanceIndex.byId.get(chip.item.instanceId);
       return (row && stopWords(row)) ?? chip.item.stalled;
     }
     switch (chip.tone) {
@@ -646,7 +647,7 @@
   const questionWords = (n: number) =>
     n === 1 ? "1 question" : `${n} questions`;
   const hrefOf = (item: TrayChild) =>
-    conversationHref(item.instanceId, cawco.instanceIndex);
+    conversationHref(item.instanceId, boardStore.instanceIndex);
 
   /* ---- what the tray says out loud ------------------------------------ */
 

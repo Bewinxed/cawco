@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { FleetMcpServer } from "@cawco/core/fleet";
   import { mcpWords as words } from "@cawco/core/words/mcp";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import { deleteMcpServer } from "#lib/cawco/config/deletes.js";
   import FleetEmpty from "#lib/cawco/config/FleetEmpty.svelte";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
@@ -23,6 +23,7 @@
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -45,7 +46,7 @@
   const servers = $derived(store.fleet.value?.config.mcp ?? []);
   /** The rows whose sign-in is under way (McpSignIn's `waiting`), by name: their line says so. */
   let waiting = $state<Record<string, boolean>>({});
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   let syncing = $state(false);
   let syncFailed = $state(false);
 
