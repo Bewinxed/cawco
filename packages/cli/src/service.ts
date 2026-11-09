@@ -444,9 +444,9 @@ const noAnswer = (
     ? `no answer from ${url} within ${(missed.after / 1000).toFixed(1)}s`
     : `nothing answers at ${url}`;
 
-/** As this machine (core machine-key.ts): a hub that requires paired devices answers what machines read to an admitted machine. */
+/** As this machine (agent machine-fetch.ts): a hub that requires paired devices answers what machines read to an admitted machine. */
 const asMachine: Fetcher = async (url, init) => {
-  const { machineFetch } = await import("@cawco/core/machine-key");
+  const { machineFetch } = await import("@cawco/agent/machine-fetch");
   return machineFetch(url, init);
 };
 
@@ -530,7 +530,7 @@ const joinedHub = async (): Promise<string | undefined> => {
 };
 
 /**
- * This machine's own row at its hub, as this machine (core machine-key.ts):
+ * This machine's own row at its hub, as this machine (agent machine-fetch.ts):
  * the row, `null` when the hub answered it knows no such machine (404), or
  * what was said instead of an answer. The fleet's list is the person's (hub
  * hub-auth.ts).

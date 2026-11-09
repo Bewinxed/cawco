@@ -419,7 +419,7 @@ export interface BinaryUpdateState {
   hubFetch?: BinaryDownload;
   /**
    * How many trials of `failedVersion` in a row were rolled back because
-   * the hub gave no answer for this machine's row (core binary-health.ts
+   * the hub gave no answer for this machine's row (cli binary-health.ts
    * `HealthProblem`), not for the build's own fault; absent when its last
    * rollback was the build's own. Written with `failedVersion`, always.
    */
