@@ -44,6 +44,7 @@ import {
   writeFolderFile,
   YOU,
 } from "./project-folder";
+import { StatusRefusal } from "./refusal";
 
 /** A harness on the fleet, as the page draws setup from it. */
 export interface HarnessOffer {
@@ -95,13 +96,7 @@ export interface DecidesDeps {
 }
 
 /** A refusal in Who decides' words, with its status. */
-class DecidesRefusal extends Error {
-  readonly status: 403 | 404 | 409 | 422;
-  constructor(code: 403 | 404 | 409 | 422, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+class DecidesRefusal extends StatusRefusal<403 | 404 | 409 | 422> {}
 
 /** A route's work, its refusal answered in its status and words. */
 const answered = async <T>(work: () => T | Promise<T>) => {
