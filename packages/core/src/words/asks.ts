@@ -2,8 +2,7 @@
  * What an ask says, wherever it stands (its card in the transcript, its row
  * in Needs you, the peek): its title, its answer field, a browser ask's
  * Take over. The dashboard and the app render them from here (the app as
- * `Words.Asks`, CawCoCore/Words.generated.swift), and the probe kit finds
- * them by these same words (scripts/probe-words-check.ts refuses a copy).
+ * `Words.Asks`, CawCoCore/Words.generated.swift).
  */
 import { commonWords } from "./common";
 

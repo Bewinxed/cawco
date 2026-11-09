@@ -1,15 +1,12 @@
 /**
  * The machine's room on memory, measured on the machine itself, and its
- * contention, one reading. Two readers:
+ * contention, one reading.
  *
- * - A SESSION'S START waits only while the machine cannot give it memory
- *   ({@link measureMemoryRoom}; agent session.ts `#roomForStart`), and
- *   starts by itself once it can. Nothing else holds a start: no limit is
- *   set on what runs, and what a run leaks is told to the session that
- *   started it (agent leak-watch.ts), and nothing is stopped.
- * - Every timing leg of the probe kit (quiet.ts) reads the machine's
- *   pressure ({@link machinePressure}) so a leg measured on a loaded machine
- *   is void and taken again.
+ * A session's start waits only while the machine cannot give it memory
+ * ({@link measureMemoryRoom}; agent session.ts `#roomForStart`), and
+ * starts by itself once it can. Nothing else holds a start: no limit is
+ * set on what runs, and what a run leaks is told to the session that
+ * started it (agent leak-watch.ts), and nothing is stopped.
  *
  * Linux reads one number, the kernel's own answer to "can a start get
  * memory": `/proc/meminfo` MemAvailable, "An estimate of how much memory is

@@ -3,7 +3,7 @@
  * the refusal of a delegate there (agent workspace.ts, place-repo.ts,
  * boundary.ts; hub work-items.ts passes it on whole) and the fault under the
  * machine's row (dashboard MachinesList.svelte), both read from the
- * machine's one report of it (agent workspace-needs.ts, the `workspace`
+ * machine's one report of it (core workspace-needs.ts, the `workspace`
  * capability). The install command always stands apart, so it is copied as
  * it is: on its own last line of the refusal, in its own copy well on the
  * row. The app draws none of it, so these are not written into it

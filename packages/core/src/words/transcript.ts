@@ -1,8 +1,6 @@
 /**
  * What a session's transcript and its composer say: a message's actions,
- * an edit's controls, the send. The dashboard renders them from here, and
- * the probe kit finds them by these same words
- * (scripts/probe-words-check.ts refuses a copy).
+ * an edit's controls, the send. The dashboard renders them from here.
  */
 export const transcriptWords = {
   /** A tab's details card, and the tabs of a pane's group. */
