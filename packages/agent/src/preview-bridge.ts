@@ -29,6 +29,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths/workspace";
+import { PreviewStartDown } from "@cawco/core/preview/protocol";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
@@ -39,9 +40,9 @@ import { listeners, workspaceNetworks } from "./boundary";
 import { bridgeRelay } from "./bridge-relay";
 
 /** The workspace a preview names has no boundary running on this machine. */
-export class WorkspaceDown extends Error {
+export class WorkspaceDown extends PreviewStartDown {
   constructor() {
-    super(DOWN_WORDS.workspace);
+    super("workspace", DOWN_WORDS.workspace);
   }
 }
 
