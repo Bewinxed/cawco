@@ -43,6 +43,7 @@ import type {
   SessionMessage,
 } from "@cawco/core/session-messages";
 import { SEND_STATES } from "@cawco/core/session-messages";
+import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
 import type { PersonsSend } from "./caw";
@@ -1814,14 +1815,12 @@ export const createSends = (ctx: SendsContext) => {
           : []
       )
       .join("\n");
-    const pasted = attachments
-      .map((attachment) =>
-        attachment.kind === "text"
-          ? `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`
-          : ""
+    const lines = withPastedText(
+      files ? `\n\n${files}` : "",
+      attachments.flatMap((attachment) =>
+        attachment.kind === "text" ? [attachment] : []
       )
-      .join("");
-    const lines = `${files ? `\n\n${files}` : ""}${pasted}`;
+    );
     const said = message.message.content;
     return {
       ...message,
