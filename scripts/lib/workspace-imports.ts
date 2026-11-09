@@ -142,19 +142,6 @@ export const targetOf = (
   return path ? normalize(join(pkg.dir, path)) : pkg.dir;
 };
 
-/** Whether `specifier` names package `pkg` by its name, through what its manifest exports. */
-export const throughExports = (pkg: Manifest, specifier: string): boolean => {
-  const named = WORKSPACE_IMPORT.exec(specifier);
-  if (named?.[1] !== pkg.name) {
-    return false;
-  }
-  const sub = named[2] ? `./${named[2]}` : ".";
-  return (
-    exportedAt(pkg.exports, sub) !== undefined ||
-    (sub === "." && pkg.main !== undefined)
-  );
-};
-
 /** The forms a module's file takes for an extensionless path its importer wrote. */
 const FORMS = [
   "",
