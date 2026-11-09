@@ -13,7 +13,6 @@ import {
   type ModelInfo,
 } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
   LONG_CONTEXT,
@@ -22,7 +21,8 @@ import {
   modelNameIn,
 } from "@cawco/core/model-names";
 import { z } from "zod";
-import { hubJson } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubRefusal } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import {
   admittedOn,
@@ -250,11 +250,11 @@ const listingsOn = (harness: HarnessKind, machineIds?: string[]): ListingsOn =>
 
 /** Reads the claude windows the hub has observed, for pickers that size models. */
 export async function loadModelWindows(): Promise<void> {
-  store.claudeWindows = (
-    await hubJson<{ claude: Record<string, number> }>(
-      hubRequest("GET /api/model-windows")
-    )
-  ).claude;
+  const answer = await hub.api["model-windows"].get();
+  if (answer.error) {
+    throw hubRefusal(answer);
+  }
+  store.claudeWindows = answer.data.claude;
 }
 
 export const models = {
