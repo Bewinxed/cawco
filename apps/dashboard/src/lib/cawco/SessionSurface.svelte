@@ -30,7 +30,6 @@
   import { onMount, untrack } from "svelte";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
   import {
-    cawco,
     readTranscript,
     type ServerTail,
     syncSubscriptions,
@@ -52,6 +51,8 @@
   import { presenceWorkspace } from "#lib/cawco/presence.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { continuationsStore } from "#lib/cawco/stores/continuations.svelte.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
+  import { sessionsStore } from "#lib/cawco/stores/sessions.svelte.js";
   import { fullSize } from "#lib/cawco/workspace/full-size.svelte.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
@@ -463,12 +464,12 @@
      the projects are read, its tab is taken away as a tab that names
      nothing is (workspace `drop`), never walked back to. */
   $effect(() => {
-    if (!(workspace.restored && cawco.projectsRead)) {
+    if (!(workspace.restored && projectsStore.projectsRead)) {
       return;
     }
     const gone = workspace.openTabs.filter((tab) => {
       const projectId = projectOfTab(tab);
-      return projectId !== null && !cawco.project(projectId);
+      return projectId !== null && !projectsStore.project(projectId);
     });
     untrack(() => {
       for (const tab of gone) {
@@ -506,7 +507,7 @@
   // skeleton is one that beats the active tab's own read.
   $effect(() => {
     const active = workspace.activeSessionId;
-    const held = active ? cawco.session(active) : null;
+    const held = active ? sessionsStore.session(active) : null;
     const ready =
       active === null ||
       (held !== null && (held.initialized || held.messages.length > 0));

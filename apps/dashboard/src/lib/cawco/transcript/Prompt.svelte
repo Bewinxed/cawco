@@ -81,16 +81,14 @@
   } from "#lib/icons.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
-  import {
-    commandRecord,
-    type PendingPermission,
-    permissionAnswer,
-  } from "../client.svelte";
+  import { permissionAnswer } from "../client.svelte";
   import { hubSeam } from "../hub-live";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { boardStore, isStale } from "../stores/board.svelte";
   import { takeOverBrowser } from "../stores/browsers.svelte";
+  import { commandRecord } from "../stores/ledger.svelte";
+  import type { PendingPermission } from "../stores/sessions.svelte";
 
   let {
     request,
