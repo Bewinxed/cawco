@@ -3,10 +3,12 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   artifacts,
   instances,
+  PREVIEW_SETTINGS_ID,
   previewPorts,
   previewSettings,
   projects,
 } from "./schema";
+import { singleton } from "./singleton";
 
 /** The fleet's preview mode as stored; no row reads as port mode. */
 interface StoredPreviewSettings {
@@ -68,8 +70,6 @@ export interface PreviewsDb {
   /** Origin `key` was used at `at` (preview.ts `used`, at most once a minute). */
   readonly used: (key: string, at: Date) => void;
 }
-
-const ID = "preview";
 
 /** The row origin `key` owns. */
 const owned = (key: string) => {
@@ -169,18 +169,14 @@ export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
     db.delete(previewPorts).where(owned(key)).run();
   },
   settings: () => {
-    const row = db
-      .select()
-      .from(previewSettings)
-      .where(eq(previewSettings.id, ID))
-      .get();
+    const row = singleton(db, previewSettings, PREVIEW_SETTINGS_ID);
     return row
       ? { mode: row.mode, pattern: row.pattern }
       : { mode: "port", pattern: null };
   },
   setSettings: ({ mode, pattern }) => {
     db.insert(previewSettings)
-      .values({ id: ID, mode, pattern })
+      .values({ id: PREVIEW_SETTINGS_ID, mode, pattern })
       .onConflictDoUpdate({
         target: previewSettings.id,
         set: { mode, pattern },
