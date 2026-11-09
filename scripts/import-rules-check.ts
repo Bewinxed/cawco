@@ -30,7 +30,7 @@ import { join } from "node:path";
 import { cycles, type Import, importGraph } from "./lib/import-graph";
 import { type Found, holdRatchet } from "./lib/ratchet";
 import { ROOT, repoFiles } from "./lib/repo-files";
-import { packageOf, packages } from "./lib/workspace-imports";
+import { packageOf } from "./lib/workspace-imports";
 
 const RULES = {
   cycle:
@@ -40,18 +40,6 @@ const RULES = {
 };
 type Rule = keyof typeof RULES;
 
-/** Packages with no import cycle today: none may start one, and the baseline may hold none for them. */
-const FREE_OF_CYCLES = [
-  "@cawco/auth",
-  "@cawco/cawrier",
-  "@cawco/cli",
-  "@cawco/core",
-  "@cawco/design-tokens",
-  "@cawco/icons",
-  "@cawco/jsonl-parser",
-  "@cawco/sessiond",
-  "cawco-site",
-];
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
 const SCOPE = /^(?:apps|packages|scripts|site)\//u;
 const SKIPPED = /\/fixtures\//u;
@@ -91,49 +79,39 @@ for (const [file, edges] of graph) {
 }
 
 /* kit-reaches-up: the modules outside the kit that reach it, however far down. */
-const reachesKit = new Map<string, boolean>();
-const reaches = (file: string): boolean => {
-  const known = reachesKit.get(file);
-  if (known !== undefined) {
-    return known;
+const importers = new Map<string, string[]>();
+for (const [file, edges] of graph) {
+  for (const { file: to } of edges) {
+    if (to) {
+      importers.set(to, [...(importers.get(to) ?? []), file]);
+    }
   }
-  // A cycle back to a file being read adds nothing it does not already add.
-  reachesKit.set(file, false);
-  const answer = (graph.get(file) ?? []).some(
-    (edge) =>
-      edge.file !== undefined &&
-      (edge.file.startsWith(KIT) || reaches(edge.file))
-  );
-  reachesKit.set(file, answer);
-  return answer;
-};
+}
+/** Every file that reaches the kit, walked back from it, so a cycle cannot change an answer. */
+const reachesKit = new Set<string>();
+const walking = [...graph.keys()].filter((file) => file.startsWith(KIT));
+for (let file = walking.pop(); file !== undefined; file = walking.pop()) {
+  for (const importer of importers.get(file) ?? []) {
+    if (!reachesKit.has(importer)) {
+      reachesKit.add(importer);
+      walking.push(importer);
+    }
+  }
+}
 
 for (const [file, edges] of graph) {
   if (!file.startsWith(KIT)) {
     continue;
   }
   for (const edge of edges) {
-    if (edge.file && !edge.file.startsWith(KIT) && reaches(edge.file)) {
+    if (edge.file && !edge.file.startsWith(KIT) && reachesKit.has(edge.file)) {
       count("kit-reaches-up", file, edge);
     }
   }
 }
-
-const freeDirs = FREE_OF_CYCLES.map((name) => packages.get(name)?.dir);
-const startedCycle = found.filter(
-  (one) => one.rule === "cycle" && freeDirs.includes(packageOf(one.file).dir)
-);
 
 holdRatchet(found, {
   name: "import-rules",
   baseline: join(ROOT, "scripts/import-rules.baseline.tsv"),
   rules: RULES,
 });
-if (startedCycle.length > 0) {
-  process.stdout.write(
-    `import-rules: a package that had no import cycle has one (${FREE_OF_CYCLES.join(", ")} stay free):\n${startedCycle
-      .map((one) => `  ${one.file}:${one.line}`)
-      .join("\n")}\n`
-  );
-  process.exitCode = 1;
-}
