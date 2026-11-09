@@ -157,8 +157,6 @@ export default {
         "scripts/browser-image-check.ts",
         // scripts/check.ts
         "scripts/fixed-ports-check.ts",
-        // scripts/check.ts, beside fixed-ports-check.ts
-        "scripts/doc-links-check.ts",
         // scripts/check.ts
         "scripts/border-width-check.ts",
         // scripts/check.ts
