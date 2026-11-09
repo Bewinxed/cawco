@@ -8,7 +8,7 @@ import type { RuleRow } from "@cawco/core/rules";
 import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
 import { hub } from "#lib/platform/hub.js";
-import { failureWords, hubRefusal } from "#lib/platform/hub-read.js";
+import { failureWords, hubData } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import type { ProjectDelegateType, ProjectTypes } from "../delegate-types";
 import type {
@@ -72,27 +72,15 @@ const flashMs = () => dur("--dur-fade") * 3;
 
 export class ConfigStore {
   readonly rules = new Slot("the rules", async () => {
-    const answer = await hub.api.rules.get();
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    const payload = answer.data;
+    const payload = await hubData(hub.api.rules.get());
     return payload.rules;
   });
   readonly hooks = new Slot("the hooks", async () => {
-    const answer = await hub.api.fleet.hooks.get();
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    const payload = answer.data;
+    const payload = await hubData(hub.api.fleet.hooks.get());
     return payload.hooks;
   });
   readonly types = new Slot("the delegate types", async () => {
-    const answer = await hub.api["delegate-types"].get();
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    const payload = answer.data;
+    const payload = await hubData(hub.api["delegate-types"].get());
     return payload.types;
   });
   /**
@@ -102,20 +90,12 @@ export class ConfigStore {
   readonly projectTypes = new Slot(
     "the projects' delegate types",
     async (): Promise<ProjectTypes[]> => {
-      const answer = await hub.api.projects.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      const projects = answer.data;
+      const projects = await hubData(hub.api.projects.get());
       const catalogs = await Promise.all(
         projects.map(async ({ id, name }) => {
-          const catalogAnswer = await hub.api
-            .projects({ id })
-            ["delegate-types"].get();
-          if (catalogAnswer.error) {
-            throw hubRefusal(catalogAnswer);
-          }
-          const catalog = catalogAnswer.data;
+          const catalog = await hubData(
+            hub.api.projects({ id })["delegate-types"].get()
+          );
           return {
             project: { id, name },
             types: catalog.types.filter(
@@ -133,11 +113,7 @@ export class ConfigStore {
   readonly fleet = new Slot(
     "the fleet's setup",
     async (): Promise<FleetState> => {
-      const answer = await hub.api.fleet.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      const snapshot = answer.data;
+      const snapshot = await hubData(hub.api.fleet.get());
       return {
         config: snapshot.config,
         links: snapshot.links,
@@ -151,11 +127,7 @@ export class ConfigStore {
   readonly tools = new Slot(
     "the tool catalog",
     async (): Promise<ToolsState> => {
-      const answer = await hub.api.tools.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      const snapshot = answer.data;
+      const snapshot = await hubData(hub.api.tools.get());
       return {
         catalog: snapshot.catalog,
         policies: snapshot.policies,
