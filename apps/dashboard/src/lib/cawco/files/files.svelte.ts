@@ -35,6 +35,7 @@ import type { Excerpt } from "../find/find-rows";
 import { extensionOf } from "../lightbox/extension";
 import { boardStore } from "../stores/board.svelte";
 import { needsStore } from "../stores/needs.svelte";
+import { previewsStore } from "../stores/previews.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 import { onArtifactReached } from "./reached";
@@ -350,7 +351,7 @@ export function followFiles(instanceId: string | null): void {
   if (!instanceId) {
     return;
   }
-  const held = `${cawco.previews[instanceId]?.artifacts?.join(",") ?? ""}|${waitingKey(instanceId)}`;
+  const held = `${previewsStore.previews[instanceId]?.artifacts?.join(",") ?? ""}|${waitingKey(instanceId)}`;
   if (artifactsReadAt.get(instanceId) !== held) {
     artifactsReadAt.set(instanceId, held);
     readArtifacts(instanceId);
