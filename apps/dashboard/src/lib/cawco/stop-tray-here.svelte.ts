@@ -8,9 +8,9 @@
 import { bringIntoView } from "@cawco/core/bring-into-view";
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
-import { cawco } from "./client.svelte";
 import { span } from "./home/home-state.svelte";
 import { type StopJob, type StopRow, stopWork } from "./stop-work.svelte";
+import { boardStore } from "./stores/board.svelte";
 
 /**
  * Called in a tray's script: the clock its slow rows read while the stops
@@ -53,7 +53,7 @@ export function trailOf(job: StopJob, row: StopRow, now: number): string {
   if (row.state === "stopping" && waited >= 5) {
     return `${waited}s`;
   }
-  const since = cawco.turnSince(row.s.id);
+  const since = boardStore.turnSince(row.s.id);
   return row.state === "running" && since ? span(Date.now() - since) : "";
 }
 
