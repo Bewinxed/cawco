@@ -35,8 +35,8 @@ import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { decidesWords } from "@cawco/core/words/decides";
 import { Elysia, status, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
+import type { DelegateTypesShape } from "./db/delegate-types";
 import { DECIDES_FILE, decidesTable, decidesText } from "./decides-file";
-import type { DelegateTypesShape } from "./delegate-types";
 import {
   FolderRefusal,
   MESSAGE_LIMIT,
