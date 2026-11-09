@@ -7,6 +7,7 @@ import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { NamedSpawn } from "@cawco/core/protocol";
+import type { DbShape } from "./db";
 
 /**
  * A step or a read that could not finish because its machine went away. Not
@@ -102,3 +103,40 @@ export type LoginMoveResults = Map<
     storeProvider: string;
   }
 >;
+
+/** A session's row as the hub stores it. */
+export type StoredRow = ReturnType<DbShape["getInstancesByIds"]>[number];
+
+/** Why a session leaves its account ({@link oweMoveOff}). */
+export type MoveOffWhy = "refused" | "removed" | "signed-out";
+
+/**
+ * What becomes of a pending send its harness has not taken up, once a
+ * transcript read has looked: `fail` — it did not go, for the reason given:
+ * the session will never run again; `owe` — the process it was handed to
+ * is gone and the session runs again, so it is owed to the next process
+ * ({@link oweUnread}), a machine that cannot be asked counting as having
+ * taken none; `wait` — a live process may still hand it over and say so;
+ * `unheld` — what the process holds is known, so a send it neither stored
+ * nor said it held ({@link SentMessageRow.held}), or one a later send
+ * overtook, never reached it, and is owed to it again. That is decided only
+ * on a read the machine answered.
+ */
+export type Unstored = "fail" | "owe" | "wait" | "unheld";
+
+export interface ContinueOutcome {
+  /** Whether the source had been compacted: its live context starts at a summary. */
+  compacted: boolean;
+  /** Messages read: the live chain, the whole transcript, and the live scope. */
+  entries: { live: number; whole: number; scope: number };
+  liveContextTokens: number;
+  /** The new session's first message, as sent. */
+  opening: string;
+  openingTokens: number;
+  sizes: { artifacts: number; middle: number; tail: number };
+  summariseInputTokens: number;
+  /** Null when there was nothing before the tail, so no summariser ran. */
+  summariserInstanceId: string | null;
+  summary: string | null;
+  targetInstanceId: string;
+}
