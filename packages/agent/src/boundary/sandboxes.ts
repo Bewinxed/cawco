@@ -79,9 +79,8 @@ const hostsSandbox = async (host: number, outer: number): Promise<boolean> => {
 
 /**
  * Linux: the generations of workspace `id` whose sandbox runs now, the
- * current one first, then each older one still running beside it ({@link
- * handOver}), newest first. A generation's sandbox runs while the outer bwrap
- * its srt host names ({@link placeOf}) is alive and is that host's own child:
+ * current one first, then each older one still running beside it (ensure.ts `handOver`), newest first. A generation's sandbox runs while the outer bwrap
+ * its srt host names (state.ts `placeOf`) is alive and is that host's own child:
  * the host removes the name as it ends, and the bwrap ends with the host
  * (`--die-with-parent`). Read off the generation's own files and `/proc`
  * alone, never a keeper: what a keeper answers or not, during a keeper's
@@ -194,7 +193,7 @@ export const workspaceNetworks = async (
  * every generation, recorded or not, but those of the generations `keep`
  * names, by the name each answers to ({@link killAnswering}): what a runner
  * started outlives it there. Nothing on Linux, where each sandbox's
- * processes end with it ({@link stopBoundary}).
+ * processes end with it (stop.ts `stopBoundary`).
  */
 export const endMembers = async (
   id: string,
