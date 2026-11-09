@@ -24,7 +24,7 @@ const moveBody = t.Object({
     // expired, then required (core move.ts MoveRequest).
     harness: t.Optional(harnessSchema),
     model: t.Optional(t.String({ minLength: 1 })),
-    effort: t.Optional(t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))),
+    effort: t.Optional(t.UnionEnum(EFFORT_LEVELS)),
     permissionMode: t.Optional(permissionModeSchema),
     account: t.Optional(t.String({ minLength: 1 })),
     title: t.Optional(t.String()),

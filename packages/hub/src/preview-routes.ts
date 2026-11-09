@@ -9,7 +9,7 @@
  */
 
 import type { PreviewNames } from "@cawco/core/browser";
-import { SEND_CONTROLS } from "@cawco/core/comments/model";
+import { SEND_CONTROL_NAMES } from "@cawco/core/comments/model";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
@@ -171,11 +171,7 @@ export const previewRoutes = (deps: {
         {
           body: t.Object({
             again: t.Optional(t.Array(t.String())),
-            control: t.Optional(
-              t.Union(
-                Object.keys(SEND_CONTROLS).map((control) => t.Literal(control))
-              )
-            ),
+            control: t.Optional(t.UnionEnum(SEND_CONTROL_NAMES)),
             pins: t.Optional(t.Array(t.String())),
             text: t.Optional(t.String()),
             writes: t.Optional(t.String()),
