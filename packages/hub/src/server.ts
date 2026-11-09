@@ -7835,10 +7835,10 @@ export const createServer = (
     resolveHanded: (caller, input) => handedInputs.resolve(caller, input),
     stageRuns: stageHold,
     // What a workspace serves that waits on the person refuses its archive
-    // or discard (work-items.ts `waitingFrom`); the artifacts service is
+    // or discard (workspaces.ts `waitingFrom`); the artifacts service is
     // made above.
     waitingOnPerson: (served) => artifacts.waitingOnPerson(served),
-    // What it serves that its retirement still waits on (work-items.ts
+    // What it serves that its retirement still waits on (workspaces.ts
     // `owedFrom`); released as the person answers the page that showed it.
     servedOwed: (served) => artifacts.servedOwed(served),
     makingFrom: (id) => artifacts.makingFrom(id),
