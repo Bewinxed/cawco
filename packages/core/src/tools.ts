@@ -250,6 +250,7 @@ export const CONTROL_COMPLETE_TOOL_SIGNIN = "completeToolSignin";
 export type ToolState =
   "installed" | "missing" | "installing" | "failed" | "unsupported";
 
+/** @socketFrame fromHub */
 export interface ToolStatus {
   /** When this was learnt, ms epoch. */
   at: number;
