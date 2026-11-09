@@ -10,33 +10,6 @@ import type { PreviewFrame } from "@cawco/core/frames";
 import type { PageFaultReport } from "@cawco/core/page-faults";
 import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
 import {
-  asksUpgrade,
-  cachePreview,
-  causeOf,
-  compressed,
-  decodedHeaders,
-  downOf,
-  downResponse,
-  errorWhy,
-  folderKey,
-  heldWhileServed,
-  IMMUTABLE,
-  injectOverlay,
-  keyOverlay,
-  notUpYet,
-  OVERLAY_KEY,
-  overlayResponse,
-  PREVIEW_SERVED_HEADER,
-  type PreviewSocket,
-  previewFailed,
-  previewWebSocket,
-  proxyHeaders,
-  RELAY_HEADER,
-  upgradePreview,
-  versionAssets,
-  versionedFile,
-} from "@cawco/core/preview/proxy";
-import {
   type HubReach,
   PREVIEW_HELD_HEADER,
   PREVIEW_PING_HEADER,
@@ -62,6 +35,33 @@ import {
   type PortHolders,
   previewPortWords,
 } from "@cawco/core/words/preview-ports";
+import {
+  asksUpgrade,
+  cachePreview,
+  causeOf,
+  compressed,
+  decodedHeaders,
+  downOf,
+  downResponse,
+  errorWhy,
+  folderKey,
+  heldWhileServed,
+  IMMUTABLE,
+  injectOverlay,
+  keyOverlay,
+  notUpYet,
+  OVERLAY_KEY,
+  overlayResponse,
+  PREVIEW_SERVED_HEADER,
+  type PreviewSocket,
+  previewFailed,
+  previewWebSocket,
+  proxyHeaders,
+  RELAY_HEADER,
+  upgradePreview,
+  versionAssets,
+  versionedFile,
+} from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { serveCanvas } from "./artifacts/canvas";
 import {

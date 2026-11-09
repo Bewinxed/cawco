@@ -132,7 +132,6 @@ import type {
   PreviewSource,
   ShownFailure,
 } from "@cawco/core/preview/protocol";
-import { type FolderWeight, pageHash } from "@cawco/core/preview/proxy";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type {
   AgentRow,
@@ -195,6 +194,7 @@ import {
   wroteLine,
 } from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
+import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactServed, ArtifactsDb } from "../db/artifacts";
@@ -1093,7 +1093,7 @@ const HANDED = "handed";
 /** The doc meta key of a held next version: its artifact's seq when it was forked ({@link holdNext}), after which the person's answers there are newer than it ({@link promote}). */
 const FORKED_AT = "forkedAt";
 
-/** The doc meta key a decision page's open views follow for its pieces' versions: the last piece moved and the version it stands at (service `versionMoved`, agent preview-overlay page.ts `mediaMoved`). */
+/** The doc meta key a decision page's open views follow for its pieces' versions: the last piece moved and the version it stands at (service `versionMoved`, preview overlay/page.ts `mediaMoved`). */
 const MEDIA_AT = "mediaAt";
 
 /** The doc meta key of what a browser met drawing a page or preview at its revision now (core page-faults.ts, service `pageFault`). */
@@ -1665,7 +1665,7 @@ const MARKS_QUIET_MS = 10_000;
  * How long the person's comments, replies, resolves and ink stay quiet
  * before they go to the session, since their last one: the owner's pick,
  * "Go by themselves" (2026-10-23), a few seconds after they're written. Past
- * the page's own pause before it posts their pictures (preview-overlay
+ * the page's own pause before it posts their pictures (preview overlay/
  * page.ts `PICTURES_AFTER_MS`, 1.5 s), so the delivery carries them. 3 s,
  * our call.
  */
@@ -3459,7 +3459,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * or it was made again): every decision page of its delegation tree or
    * its project that shows it as a Canvas or Preview piece hears it (doc
    * meta {@link MEDIA_AT}), and one open takes its media again in place,
-   * its picks and notes kept (agent preview-overlay page.ts).
+   * its picks and notes kept (preview overlay/page.ts).
    */
   const versionMoved = (row: ArtifactRow): void => {
     const id = row.heldFor ?? row.id;
@@ -7918,7 +7918,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * What artifact `id`'s machine said of its folder at its preview's last
      * start (preview-service.ts `reach`): `gone`, the daemon's
-     * words that it isn't there (core preview-proxy `isFolderGone`), takes it
+     * words that it isn't there (preview proxy `isFolderGone`), takes it
      * out of Needs you and keeps it in Files; null, it was there.
      */
     /**
