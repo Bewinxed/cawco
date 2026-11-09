@@ -59,6 +59,7 @@ import {
   TREE_STORE_DIR,
 } from "../../../packages/core/src/claude-dirs";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import {
@@ -534,7 +535,9 @@ const spec: Spec = {
         return {
           ok: response.ok,
           status: response.status,
-          text: await response.text(),
+          text: response.ok
+            ? await response.text()
+            : refusalWords(await response.text(), response.status),
         };
       });
       switch (read.kind) {
