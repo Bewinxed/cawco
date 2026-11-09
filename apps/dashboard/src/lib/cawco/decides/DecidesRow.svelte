@@ -8,9 +8,9 @@
    */
   import { decidesWords } from "@cawco/core/words/decides";
   import { untrack } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { readProject } from "./decides-client";
 
   let { projectId }: { projectId: string } = $props();

@@ -46,6 +46,7 @@
     IconStop,
     IconTick,
   } from "#lib/icons.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
   import { smoothText } from "#lib/utils/smooth-text.svelte.js";
   import { goto } from "$app/navigation";
   import {
@@ -76,7 +77,6 @@
   } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
-  import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
   import { planProgress } from "./plan/PlanPane.svelte";

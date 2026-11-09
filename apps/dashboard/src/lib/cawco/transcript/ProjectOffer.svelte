@@ -11,9 +11,9 @@
    * the last word: a session is never offered again.
    */
   import { offerWords } from "@cawco/core/words/offers";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose, IconFolder } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { goto } from "$app/navigation";
   import { answerProjectOffer, dismissProjectJoin } from "../client.svelte";
   import { rowHref } from "../links";

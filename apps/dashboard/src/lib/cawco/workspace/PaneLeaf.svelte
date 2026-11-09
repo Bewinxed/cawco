@@ -23,9 +23,9 @@
     ease,
     easeOut,
     motionOk,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { holdSkipped } from "#lib/cawco/motion/rest.js";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { holdSkipped } from "#lib/platform/motion/rest.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
   import type { ServerTail } from "../client.svelte";
