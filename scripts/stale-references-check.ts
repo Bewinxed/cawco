@@ -15,8 +15,10 @@
  *   \`reload.svelte.ts\``): some file of that member ends in it. One under a
  *   folder the member has none of is another project's, and not read.
  * - **link**: a JSDoc `@link` to a name names an identifier the code holds
- *   (this file's, the repository's, or the platform's), and one to
- *   `import("<module>").Name` a name that module declares.
+ *   (this file's, the repository's, or the platform's); one to a member of
+ *   an interface, class, enum or object type this module declares, a member
+ *   it has; and one to `import("<module>").Name`, a name that module
+ *   declares.
  *
  * A path anchored nowhere (`src/x.ts`, `lib/modem.js`, `.claude/settings.json`)
  * can name another project's file, a build's output or a scratch repo's, so
@@ -63,6 +65,7 @@ const MEMBER_FOLDER = /^(?:apps|packages)\//u;
 const LOOSE = /^(?:scripts|site)\//u;
 const URL_SCHEME = /^[a-z][\w+.-]*:/iu;
 const CALL_PARENS = /\(\)$/u;
+/** A link's name from its member: `Name.member`, `Name#member`, `Name~inner`. */
 const MEMBER_SEPARATOR = /[.#~]/u;
 /** A JSDoc line's leading ` * `. */
 const GUTTER = /^[ \t]*\*[ \t]?/gmu;
@@ -201,6 +204,53 @@ for (const dir of [
   }
 }
 
+/** A member's name as its declaration spells it (`#field` keeps its `#`). */
+const memberName = (name: ts.PropertyName | undefined): string | undefined =>
+  name &&
+  (ts.isIdentifier(name) ||
+    ts.isPrivateIdentifier(name) ||
+    ts.isStringLiteral(name))
+    ? name.text
+    : undefined;
+
+/**
+ * The members of `name` when this module declares it as an interface or a
+ * class that extends nothing, an enum, or an object type: what a link to one
+ * of its members may name. Undefined for anything whose members come from
+ * elsewhere too.
+ */
+const membersOf = (
+  source: ts.SourceFile | undefined,
+  name: string
+): Set<string> | undefined => {
+  for (const statement of source?.statements ?? []) {
+    if (
+      (ts.isInterfaceDeclaration(statement) ||
+        ts.isClassDeclaration(statement)) &&
+      statement.name?.text === name &&
+      !statement.heritageClauses?.length
+    ) {
+      return new Set(
+        statement.members.flatMap((item) => memberName(item.name) ?? [])
+      );
+    }
+    if (ts.isEnumDeclaration(statement) && statement.name.text === name) {
+      return new Set(
+        statement.members.flatMap((item) => memberName(item.name) ?? [])
+      );
+    }
+    if (
+      ts.isTypeAliasDeclaration(statement) &&
+      statement.name.text === name &&
+      ts.isTypeLiteralNode(statement.type)
+    ) {
+      return new Set(
+        statement.type.members.flatMap((item) => memberName(item.name) ?? [])
+      );
+    }
+  }
+};
+
 /** Why a link names nothing, when it does. */
 const staleLink = (file: string, target: string): string | undefined => {
   const imported = IMPORTED_LINK.exec(target);
@@ -220,11 +270,21 @@ const staleLink = (file: string, target: string): string | undefined => {
   if (URL_SCHEME.test(target)) {
     return;
   }
-  const [head] = target.replace(CALL_PARENS, "").split(MEMBER_SEPARATOR);
-  if (!head || own.get(file)?.has(head) || everywhere.has(head)) {
+  const [head, member] = target
+    .replace(CALL_PARENS, "")
+    .split(MEMBER_SEPARATOR);
+  if (!head) {
     return;
   }
-  return `no ${head} in the code`;
+  if (!(own.get(file)?.has(head) || everywhere.has(head))) {
+    return `no ${head} in the code`;
+  }
+  const declaredMembers = member
+    ? membersOf(sources.get(file), head)
+    : undefined;
+  if (member && declaredMembers && !declaredMembers.has(member)) {
+    return `${head} has no member ${member}`;
+  }
 };
 
 const stale: string[] = [];

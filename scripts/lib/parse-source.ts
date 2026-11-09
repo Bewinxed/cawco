@@ -1,7 +1,7 @@
 /**
  * A source file's syntax as TypeScript reads it, a Svelte component's
  * `<script>` blocks included: what the checks that read code's shape parse
- * (import-graph.ts, swallow-cast-ratchet.ts, stale-references-check.ts).
+ * (import-graph.ts, escape-hatch-ratchet.ts, stale-references-check.ts).
  */
 import ts from "typescript";
 
