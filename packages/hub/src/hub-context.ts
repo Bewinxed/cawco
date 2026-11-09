@@ -260,8 +260,10 @@ import type { turnUsageOf } from "./turn-usage";
 import type { UsageCounter } from "./usage-count";
 import type { WelcomeConverge } from "./welcome-converge";
 import type { HubSocket } from "./wire-socket";
-import type { createWorkItems, Unlanded, WorkItemRequest } from "./work-items";
+import type { createWorkItems, WorkItemRequest } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
+import type { Unlanded } from "./workspaces";
+
 export interface HubContext {
   accountKindRefusal: (
     provider: string,
