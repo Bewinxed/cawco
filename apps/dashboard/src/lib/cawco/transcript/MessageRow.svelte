@@ -36,7 +36,6 @@
   import { hueVar, nameOf } from "../accounts/model.svelte";
   import { moveTo, movingTo } from "../accounts/switch.svelte";
   import {
-    answeredOr,
     canWithdraw,
     cawco,
     commandRecord,
@@ -53,6 +52,7 @@
     retrySend,
     userTurnActions,
   } from "../client.svelte";
+  import { answeredOr } from "../hub/control";
   import { ModeUnchosen } from "../hub/socket.svelte";
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
