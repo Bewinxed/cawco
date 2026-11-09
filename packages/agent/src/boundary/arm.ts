@@ -20,8 +20,9 @@ import {
   claudePrefixOf,
   claudePrefixScript,
   hookScript,
+  socketAddress,
 } from "./hook-judge";
-import { judgeFor, whileArming } from "./judge-process";
+import { judgeFor, watchJudge, whileArming } from "./judge-process";
 import {
   writeChromiumShim,
   writeGitShim,
@@ -74,7 +75,9 @@ const armHookNow = async (
     `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
     0o644
   );
-  const judge = await judgeFor(id, held, hook, policy, unasked);
+  const { procId, socket } = await judgeFor(id, held, hook, policy);
+  await watchJudge(id, procId, unasked);
+  const judge = { socket, address: await socketAddress(id, socket) };
   await writeWhole(hook, hookScript(id, hook, judge), 0o755);
   const runtime = await bunRuntime(id);
   if (process.platform === "darwin") {
