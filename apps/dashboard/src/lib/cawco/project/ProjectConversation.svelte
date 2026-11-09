@@ -57,6 +57,7 @@
   } from "#lib/cawco/project-tasks.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
@@ -327,7 +328,9 @@
   /** The project's starters its stages carried, read for the hero. */
   let startersRead = $state<ProjectStarter[] | undefined>(undefined);
   /** The project's starters, live: a new set the hub writes replaces the read one. */
-  const starters = $derived(cawco.startersOf(projectId, "board", startersRead));
+  const starters = $derived(
+    tickersStore.startersOf(projectId, "board", startersRead)
+  );
   $effect(() => {
     const pid = projectId;
     if (!(shown === null && pid && connectionStore.status === "connected")) {
