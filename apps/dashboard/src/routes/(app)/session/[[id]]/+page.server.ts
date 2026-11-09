@@ -1,9 +1,9 @@
-import { hubRequest } from "@cawco/core/hub-request";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { transcriptUrl } from "#lib/cawco/links.js";
 import type { ServerTail } from "#lib/cawco/stores/transcript-reads.svelte.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";
-import { hubFailure, hubFetch, machineAway } from "#lib/platform/hub-read.js";
+import { hubThrough } from "#lib/platform/hub.js";
+import { hubFailure, hubRead, machineAway } from "#lib/platform/hub-read.js";
 import type { PageServerLoad } from "./$types";
 
 /** Whether the hub holds an ask parked under `viewId` (`/api/pending`). */
@@ -11,12 +11,11 @@ const askHeldFor = async (
   fetch: typeof globalThis.fetch,
   viewId: string
 ): Promise<boolean> => {
-  const response = await hubFetch(hubRequest("GET /api/pending"), {}, fetch);
-  if (!response.ok) {
-    return false;
-  }
-  const pending = (await response.json()) as { instanceId?: string }[];
-  return pending.some((envelope) => envelope.instanceId === viewId);
+  const pending = await hubRead(hubThrough(fetch).api.pending.get());
+  return (
+    pending.ok &&
+    pending.value.some((envelope) => envelope.instanceId === viewId)
+  );
 };
 
 /**

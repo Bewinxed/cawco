@@ -5,7 +5,6 @@
     type ProjectAtLimit,
   } from "@cawco/core/accounts";
   import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
   import { machineLabel } from "@cawco/core/machine-names";
   import type { DeclaredStep, ProjectGate } from "@cawco/core/project-gate";
@@ -103,9 +102,10 @@
    * (RowFault). Every value is the project as the hub last said it, which
    * `projects.changed` brings to every open dashboard.
    */
+  import { hub } from "#lib/platform/hub.js";
   import {
     failureWords,
-    hubJson,
+    hubData,
     refusedOrUnreached,
   } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
@@ -456,9 +456,9 @@
     picking = next;
     usable = null;
     try {
-      const { connections } = await hubJson<{ connections: ConnectionView[] }>(
-        hubRequest("GET /api/connections"),
-        { failure: refusedOrUnreached }
+      const { connections } = await hubData(
+        hub.api.connections.get(),
+        refusedOrUnreached
       );
       usable = connections.filter(
         (each) =>

@@ -24,7 +24,6 @@
 import type { Activity } from "@cawco/core/activity";
 import { detach } from "@cawco/core/detach";
 import type { ProjectStopFrame } from "@cawco/core/frames";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { PlaceProject } from "@cawco/core/place-nesting";
 import type {
   CawRunning,
@@ -38,12 +37,7 @@ import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
-import {
-  failureWords,
-  hubData,
-  hubFetch,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { failureWords, hubData, hubRefusal } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { route } from "#lib/platform/motion/route.svelte.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -987,11 +981,11 @@ class StopWork {
 
 /** What of the project still runs, as the hub lists it. */
 async function runningSessions(job: StopJob): Promise<RunningSession[]> {
-  const answer = await hubData(
+  const { sessions } = await hubData(
     hub.api.projects({ id: job.projectId }).running.get(),
     (refused) => hubRefusal(refused, projectWords.sessionsNotListedThen)
   );
-  return answer.sessions;
+  return sessions;
 }
 
 function jobKey(job: StopJob): string {
@@ -1003,18 +997,14 @@ async function stillRunning(
   job: StopJob
 ): Promise<RunningSession[] | "gone" | { refused: string }> {
   try {
-    const response = await hubFetch(
-      hubRequest("GET /api/projects/:id/running", {
-        path: { id: job.projectId },
-      })
-    );
-    if (response.status === 404) {
+    const answer = await hub.api.projects({ id: job.projectId }).running.get();
+    if (answer.error?.status === 404) {
       return "gone";
     }
-    if (!response.ok) {
-      throw await hubRefusal(response, cawOffWords.stillRunningUnreadThen);
-    }
-    return ((await response.json()) as { sessions: RunningSession[] }).sessions;
+    const { sessions } = await hubData(answer, (refused) =>
+      hubRefusal(refused, cawOffWords.stillRunningUnreadThen)
+    );
+    return sessions;
   } catch (error) {
     return { refused: failureWords(error) };
   }
