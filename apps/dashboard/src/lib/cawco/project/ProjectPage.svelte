@@ -93,6 +93,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
+  import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import BulkBar from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
@@ -276,14 +277,22 @@
   const notSetUp = $derived(board.stages?.source === "none");
   /** The project's starters, live: a new set the hub writes replaces the one its stages carried. */
   const starters = $derived(
-    cawco.startersOf(projectId, "board", board.stages?.starters)
+    tickersStore.startersOf(projectId, "board", board.stages?.starters)
   );
   /** The empty Routines page's starters and the empty Decisions tab's, live as the board's. */
   const routineStarters = $derived(
-    cawco.startersOf(projectId, "routines", board.stages?.routineStarters)
+    tickersStore.startersOf(
+      projectId,
+      "routines",
+      board.stages?.routineStarters
+    )
   );
   const decisionStarters = $derived(
-    cawco.startersOf(projectId, "decisions", board.stages?.decisionStarters)
+    tickersStore.startersOf(
+      projectId,
+      "decisions",
+      board.stages?.decisionStarters
+    )
   );
   /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
   const openTask = $derived(here.searchParams.get("task"));
@@ -1094,7 +1103,7 @@
   // hub says so, and the list is read again.
   let changesSeen = -1;
   $effect(() => {
-    const changes = cawco.tasksChangedOf(projectId);
+    const changes = tickersStore.tasksChangedOf(projectId);
     if (changesSeen !== -1 && changes !== changesSeen && board.list) {
       untrack(() => board.refresh());
     }
@@ -1106,7 +1115,8 @@
   let decisionsSeen = -1;
   $effect(() => {
     const changes =
-      cawco.decisionsChangedOf(projectId) + cawco.tasksChangedOf(projectId);
+      tickersStore.decisionsChangedOf(projectId) +
+      tickersStore.tasksChangedOf(projectId);
     if (decisionsSeen !== -1 && changes !== decisionsSeen) {
       untrack(() => decisions.read());
     }
@@ -1117,7 +1127,7 @@
   // and the views with it, since a view placed or made a tab moves the strip.
   let blocksSeen = -1;
   $effect(() => {
-    const changes = cawco.blocksChangedOf(projectId);
+    const changes = tickersStore.blocksChangedOf(projectId);
     if (blocksSeen !== -1 && changes !== blocksSeen) {
       untrack(() => {
         blocks.read();

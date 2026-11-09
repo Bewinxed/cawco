@@ -12,7 +12,7 @@
   import {
     answerDesignOffer,
     readDesignOffer,
-  } from "#lib/cawco/client.svelte.js";
+  } from "#lib/cawco/stores/offers.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import type { MessageMetadata } from "../types";
