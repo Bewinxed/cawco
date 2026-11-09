@@ -3,6 +3,5 @@
 import "#lib/components/features/tool-cards/Other.svelte";
 import "../../features/x";
 import "../../../../routes/+page.svelte";
-// Its named exception, and its own files, stand.
-import "#lib/components/features/tool-cards/OutputBlock.svelte";
+// Its own files stand.
 import "./other";
