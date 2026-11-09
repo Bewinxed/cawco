@@ -1,4 +1,3 @@
-import { hubRequest } from "./hub-request";
 /**
  * What a turn carries beside its typed words, other than pictures: a text
  * the reader attached or pasted at length, folded into the prompt as quoted
@@ -121,11 +120,7 @@ export function attachedFiles(text: string): {
         name,
         mediaType,
         size: sizeOf(size),
-        ...(hash.length === 64
-          ? {
-              ref: hubRequest("GET /api/files/:hash", { path: { hash } }).path,
-            }
-          : {}),
+        ...(hash.length === 64 ? { ref: `/api/files/${hash}` } : {}),
       });
       return "";
     }
