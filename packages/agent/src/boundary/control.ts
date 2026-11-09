@@ -15,19 +15,22 @@ import {
   armHook,
   armState,
   armStep,
-  closeWhenIdle,
   ensureBoundary,
-  lookOnce,
   readingMoved,
   rearming,
-  replaceSoon,
-  staleLook,
   start,
 } from "./lifecycle";
 import { closeQuietly, liveFacts, setProject } from "./looks";
 import { workLeft } from "./narrowing";
 import { commandsEnded } from "./processes";
-import { sayWhyLeft, stale } from "./staleness";
+import {
+  closeWhenIdle,
+  lookOnce,
+  replaceSoon,
+  sayWhyLeft,
+  stale,
+  staleLook,
+} from "./staleness";
 import {
   type Boundary,
   closing,
