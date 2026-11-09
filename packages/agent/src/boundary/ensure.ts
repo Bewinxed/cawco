@@ -21,19 +21,19 @@
  *   signals inside its own sandbox and refuses `launchctl`, and every
  *   process a runner starts answers, wherever it moves, to its workspace's
  *   and its generation's names, by which it is found and ended
- *   (boundary-policy.ts `MEMBERSHIP_PREFIX`, {@link answering}). macOS has no
+ *   (boundary-policy.ts `MEMBERSHIP_PREFIX`, processes.ts `answering`). macOS has no
  *   private pid or port space to give it, and Chromium cannot start inside
  *   srt there until srt can allow it its `mach-register` names (srt #210,
  *   PR #598). `swift`, `xcodebuild` and `log` run through shims that keep them
- *   working inside ({@link writeShims}).
+ *   working inside (shims.ts `writeShims`).
  *
- * Both run the same runner ({@link runnerText}), which takes every command of the
+ * Both run the same runner (runner.ts `runnerText`), which takes every command of the
  * workspace over a FIFO and runs it inside: one network namespace on Linux,
  * so a dev server one command starts answers the next. Commands go in
  * through one executor, `~/.cawco/workspaces/<id>/exec [--session [--cwd-out
- * FILE] | --claude] COMMAND` ({@link execScript}), that every harness runs its shell commands
+ * FILE] | --claude] COMMAND` (exec.ts `execScript`), that every harness runs its shell commands
  * through: claude by its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`, the
- * workspace's `claude-prefix` script, {@link claudePrefixScript}), which the
+ * workspace's `claude-prefix` script, hook-judge.ts `claudePrefixScript`), which the
  * CLI applies after its permission rules have judged the command as the
  * model wrote it; OpenCode by its plugin's `shell` tool, pi by its bash
  * tool's operations, the hub's commands by `runHubCommand`. A workspace holds no credential of any host: its git reaches
@@ -58,9 +58,9 @@
  * one's pid namespace and network are others, where the delegate's next
  * command would find nothing of what it left running. Every boundary and judge
  * process is found and stopped on whichever keeper holds it. A boundary runs
- * only while something holds it ({@link liveWhy}); one nothing has held for
+ * only while something holds it (holding.ts `liveWhy`); one nothing has held for
  * holding.ts `QUIET_CLOSE_MS` closes with its judge, its clone and state left as
- * they are, and its next command starts it again ({@link closeQuietly}). A
+ * they are, and its next command starts it again (looks.ts `closeQuietly`). A
  * machine that
  * cannot hold a boundary refuses the work: a work item never runs without
  * one.
@@ -142,10 +142,10 @@ import {
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
 
 /**
- * {@link ensureBoundary} with the hook already armed: the start-up rewrite's
+ * arming.ts `ensureBoundary` with the hook already armed: the start-up rewrite's
  * own hand-over (arming.ts `rearmOne`). A quiet close under way finishes first
- * ({@link closeQuietly}), and this one starts the boundary again. Each ensure
- * is a use: the workspace's quiet time counts from it ({@link liveAt}).
+ * (looks.ts `closeQuietly`), and this one starts the boundary again. Each ensure
+ * is a use: the workspace's quiet time counts from it (holding.ts `liveAt`).
  */
 export const ensureNow = (
   ref: WorkspaceRef,
@@ -169,8 +169,7 @@ export const ensureNow = (
  * Refuses a boundary for a workspace whose folder is not there to hold
  * (`why`), and closes each of its boundaries still running, on every keeper,
  * with everything in them: nothing runs in a path that is gone, and a
- * handover of one (stale-look.ts `handOverStale`) or a restart (stale-look.ts
- * `restartStubbed`) is never tried again. Its records stay for its archive.
+ * handover of one (stale-look.ts `handOverStale`) or a restart (stale-look.ts `restartStubbed`) is never tried again. Its records stay for its archive.
  */
 const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
   forgetStale(ref.id);
@@ -195,7 +194,7 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
  * The folder a boundary holds, ready for it: a place, whatever folder it is
  * over, which stays as the person keeps it; or a delegate's layer of its
  * folder (layer.ts): a folder there, and on Linux its view running, which
- * the srt host then enters ({@link viewOfBoundary}). A delegate's copy that
+ * the srt host then enters (decisions.ts `viewOfBoundary`). A delegate's copy that
  * held a repository and whose `.git` is no repository any more (a deleted
  * clone a sandbox refilled with stand-ins, `stand-ins.ts`) has no boundary:
  * one would stand in there again; retirement takes it away. One that is not
@@ -479,7 +478,7 @@ const handOverWhenIdle = (
  * policy as it stands starts, on the keeper taking over when one is owed the
  * endpoint ({@link keeperTakingOver}). What their work still ran is said,
  * each process by its command and the pid its commands saw: in the agent's
- * log, and as a line the delegate's next command shows ({@link noticeOf}),
+ * log, and as a line the delegate's next command shows (state.ts `noticeOf`),
  * so it can start it again. Nothing it ran is lost silently, and no access
  * outlives its removal. Said in the log and recorded ({@link
  * recordDecision}) with `cause`, what looked. Answers the boundary that runs.

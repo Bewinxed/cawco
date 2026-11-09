@@ -36,12 +36,12 @@ import {
 
 /**
  * Linux: the ports the work of the older boundary `old` listens on, when a
- * newer generation of the workspace whose sandbox runs ({@link sandboxes})
+ * newer generation of the workspace whose sandbox runs (sandboxes.ts `sandboxes`)
  * listens on every one of them: its work was started again there (a
  * delegate's dev server, restarted after an update on the port it had), so
  * the older one is done. Undefined when its work listens on no port (a job, a
  * build: it closes once that ends), or on one no newer generation listens on
- * (it stays, reached there, {@link workspaceNetworks}). Its work's ports are
+ * (it stays, reached there, sandboxes.ts `workspaceNetworks`). Its work's ports are
  * {@link workPorts}; a newer generation listens on a port when its network's
  * tables list it listening, whoever holds it.
  */
@@ -96,7 +96,7 @@ const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
 
 /**
  * What the work of workspace `id`'s running boundary `held` still runs;
- * nothing once nothing does ({@link busyOld}). Its work is every process in
+ * nothing once nothing does (processes.ts `busyOld`). Its work is every process in
  * it its runner did not start with ({@link workProcesses}), what a command
  * left behind with `&`, `nohup`, `setsid` or a double fork among them,
  * whatever its session or process group: on Linux each descends from the
@@ -166,14 +166,14 @@ const letThrough = (
 const ALLOW_OR_DENY = /^(allow|deny)/u;
 
 /**
- * How a boundary's recorded grant ({@link grantedOf}) stands against the
+ * How a boundary's recorded grant (state.ts `grantedOf`) stands against the
  * policy `now`: comparable, with how it narrows ({@link narrowing}), or not
  * comparable, with why. NOT COMPARABLE IS NO NARROWING: a record that is
  * missing, unreadable, or of another set of fields than this build's policy
  * (a build before the record, or one that added or dropped a field) says
  * nothing about which way access moved, so the boundary is never stopped for
  * it with a command in it; it is kept while its work runs and handed over
- * once that ends ({@link ensure}), and its replacement starts with this
+ * once that ends (ensure.ts `ensure`), and its replacement starts with this
  * build's record. On 2026-10-19 the install of the build that introduced the
  * record stopped 20 running boundaries as "narrowed (what its boundary
  * started with is not on record)", a leaf's probe run among them, cut off
@@ -206,7 +206,7 @@ const narrowedBy = (grant: Grant): readonly string[] =>
 
 /**
  * How policy `now` narrows `was`, the policy a boundary started with
- * ({@link grantedOf}), the two of one set of fields ({@link compareGrant}),
+ * (state.ts `grantedOf`), the two of one set of fields ({@link compareGrant}),
  * each in words; none when it widens it or leaves it as it was. Read off the
  * policy's own fields, whatever they are: each pair of lists named
  * `allow<X>` and `deny<X>` narrows when a path one of its lists names was let
@@ -282,7 +282,7 @@ const nsPids = async (pid: number): Promise<number[]> =>
 
 /**
  * What the work of workspace `id`'s generation `boundary` runs now, as
- * {@link busyOld} counts it: the processes the rest descend from (the work's
+ * processes.ts `busyOld` counts it: the processes the rest descend from (the work's
  * roots), as its commands saw them. Linux: each pid in the sandbox's own pid
  * namespace; macOS: the processes that answer to that generation's name,
  * its runner aside ({@link answering}).
@@ -404,12 +404,12 @@ export const unknownGrant = async (
 
 /**
  * The keeper a boundary replaced while this build's keeper is owed the
- * machine's endpoint ({@link ownKeeperOwed}) starts on: this build's own
+ * machine's endpoint (decisions.ts `ownKeeperOwed`) starts on: this build's own
  * keeper, which an update's helper starts at its own endpoint before the
  * machine's names it, once it answers there. Until then there is none to
  * start on but the current one (`client`), and the boundary started there is
  * handed over to this build's keeper once that is the machine's, as every
- * boundary on a retiring keeper is ({@link leaveRetiringKeepers}).
+ * boundary on a retiring keeper is (control.ts `leaveRetiringKeepers`).
  */
 export const keeperTakingOver = async (
   client: SessiondClient,
