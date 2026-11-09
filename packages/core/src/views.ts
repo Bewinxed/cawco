@@ -194,7 +194,7 @@ export interface ViewTasksOutput {
 }
 
 /** One stage with its count. */
-export interface ViewStage {
+interface ViewStage {
   /** Tasks in it now. */
   count: number;
   kind: StageKind;
@@ -217,7 +217,7 @@ export interface ViewRoutinesInput {
 }
 
 /** One run of a routine. */
-export interface ViewRoutineRun {
+interface ViewRoutineRun {
   endedAt: number | null;
   /** How it ended: `delivered`, `silent`, `failed`; null while it runs or when it was skipped. */
   outcome: string | null;
@@ -231,7 +231,7 @@ export interface ViewRoutineRun {
 }
 
 /** One routine of the project, with its newest runs. */
-export interface ViewRoutine {
+interface ViewRoutine {
   cron: string;
   delegateType: string | null;
   enabled: boolean;
@@ -274,7 +274,7 @@ export interface ViewEventsInput {
 }
 
 /** One inbound event from outside (GitHub, a polled connection). */
-export interface ViewEvent {
+interface ViewEvent {
   /** When a routine took it, or null while none has. */
   handledAt: number | null;
   id: string;
