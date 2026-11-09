@@ -35,6 +35,7 @@
  */
 import { Doc, encodeStateAsUpdate } from "yjs";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { sessionReadOf } from "../../../packages/hub/src/hub-auth";
@@ -59,7 +60,12 @@ const asked = async (
   headers: Record<string, string> = {}
 ): Promise<{ status: number; text: string }> => {
   const response = await fetch(`${base}${path}`, { headers });
-  return { status: response.status, text: await response.text() };
+  return {
+    status: response.status,
+    text: response.ok
+      ? await response.text()
+      : refusalWords(await response.text(), response.status),
+  };
 };
 
 /** (r1): what `sessionReadOf` names for each route of the hub's table at the read's depth, by its key. */

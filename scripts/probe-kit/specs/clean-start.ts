@@ -37,6 +37,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { presenceLine } from "../../../packages/core/src/injected";
 import { REFERENCE_GUIDANCE } from "../../../packages/core/src/references";
@@ -314,7 +315,12 @@ const delegate = async (
       body: body as never,
     })
   );
-  return { status: response.status, text: await response.text() };
+  return {
+    status: response.status,
+    text: response.ok
+      ? await response.text()
+      : refusalWords(await response.text(), response.status),
+  };
 };
 
 /** The delegate type each harness's delegates run as: its skill is {@link SKILL}. */

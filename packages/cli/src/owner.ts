@@ -56,7 +56,10 @@ const approve = async (origin: string, command: string): Promise<string> => {
       : {
           ok: false as const,
           status: response.status,
-          said: refusalWords(await response.text()).slice(0, 300),
+          said: refusalWords(await response.text(), response.status).slice(
+            0,
+            300
+          ),
         };
   });
   let pairing: PairingStart;
@@ -156,7 +159,7 @@ export const ownerFetch = async (
         status: response.status,
         pairing: response.headers.get("x-cawco-pairing") === "required",
         // A refusal's sentence, an answer's body.
-        said: response.ok ? text : refusalWords(text),
+        said: response.ok ? text : refusalWords(text, response.status),
       };
     });
   const first = await send();
