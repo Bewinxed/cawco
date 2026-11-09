@@ -8,8 +8,8 @@
   import type { Account } from "@cawco/core/accounts";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { tick } from "svelte";
-  import { dur, ease, motionOk } from "../motion/curves.svelte";
-  import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { REFLOW_REREAD, reflow } from "#lib/platform/motion/rows.svelte.js";
   import AccountName from "./AccountName.svelte";
   import { hueVar, nameOf } from "./model.svelte";
 

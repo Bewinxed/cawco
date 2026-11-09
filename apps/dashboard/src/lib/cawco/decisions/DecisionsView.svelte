@@ -13,7 +13,6 @@
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -22,6 +21,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconDecisions } from "#lib/icons.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import DecisionPage from "./DecisionPage.svelte";
   import DecisionsList from "./DecisionsList.svelte";
   import type { ProjectDecisions } from "./decisions.svelte";

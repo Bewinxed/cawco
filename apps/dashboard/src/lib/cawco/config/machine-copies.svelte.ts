@@ -4,8 +4,9 @@
  * waits until it is compared, adopted or overwritten. Each ask waits out a
  * machine that is away (MachineWait). Made as its editor starts.
  */
+
+import { failureWords as message } from "#lib/platform/hub-read.js";
 import type { Machine } from "../client.svelte";
-import { failureWords as message } from "../hub-read";
 import { MachineWait } from "../machine-wait.svelte";
 
 export class MachineCopies {

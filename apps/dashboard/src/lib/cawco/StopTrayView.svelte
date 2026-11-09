@@ -67,17 +67,17 @@
     IconPause as Pause,
     IconRenew as Working,
   } from "#lib/icons.js";
+  import { nestFrom } from "#lib/platform/motion/branch.svelte.js";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
+  import { fold, unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
+  import { departBox, land } from "#lib/platform/motion/share.svelte.js";
   import { cn } from "#lib/utils.js";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import FromDiskBox from "./FromDiskBox.svelte";
   import { resolveSessionTitle } from "./links";
   import { sessionSprite } from "./mark";
-  import { nestFrom } from "./motion/branch.svelte";
-  import { CURVE, dur, motionOk } from "./motion/curves.svelte";
-  import { echoBeat } from "./motion/echo.svelte";
-  import { fold, unfold } from "./motion/fold.svelte";
-  import { glyphIn, glyphOut } from "./motion/glyph";
-  import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import type { StopJob, StopRow } from "./stop-work.svelte";
   import TreeMark from "./TreeMark.svelte";

@@ -25,7 +25,6 @@
   import { decidesWords } from "@cawco/core/words/decides";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { EFFORT_OPTIONS } from "#lib/cawco/effort-levels.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import CawLeadSwitch from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { folderFileHref } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -39,6 +38,7 @@
   } from "#lib/components/ui/option-group/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconClose, IconFolder, IconGlobe, IconPen } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import type { WhoDecides } from "./decides.svelte";
   import { readRecord } from "./decides-client";
   import { showFirstProblem } from "./first-problem";

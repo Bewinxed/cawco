@@ -8,12 +8,12 @@
   import { memoryDocProblem } from "@cawco/core/fleet";
   import { memoryWords as words } from "@cawco/core/words/memory";
   import Coded from "#lib/cawco/Coded.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { goto } from "$app/navigation";
   import { type FleetMemoryDocRow, saveMemoryDoc } from "../fleet";
   import Field from "./Field.svelte";

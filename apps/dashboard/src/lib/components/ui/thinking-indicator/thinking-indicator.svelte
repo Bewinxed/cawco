@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import type { HTMLAttributes } from "svelte/elements";
   import type { VariantProps } from "tailwind-variants";
-  import { restOffscreen } from "#lib/cawco/motion/rest.js";
+  import { restOffscreen } from "#lib/platform/motion/rest.js";
   import { tv, type WithElementRef } from "#lib/utils.js";
   import type { SizeVariant } from "./size-context";
 

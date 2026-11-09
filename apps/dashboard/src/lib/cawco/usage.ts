@@ -14,7 +14,7 @@ import type {
   UsageSummary,
 } from "@cawco/core/usage/types";
 import { windowLabel, windowSpan } from "@cawco/core/usage/windows";
-import { hubFetch, hubRefusal } from "./hub-read";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start

@@ -5,7 +5,7 @@
  */
 
 import { graphWords as words } from "@cawco/core/words/graph";
-import { ease } from "#lib/cawco/motion/curves.svelte.js";
+import { ease } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
 import { curveGlyph, springEasing, springOf } from "./motion";
 

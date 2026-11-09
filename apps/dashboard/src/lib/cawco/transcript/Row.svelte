@@ -3,7 +3,7 @@
     deliverWithRoot,
     type FrameObserver,
     frameObserver,
-  } from "#lib/cawco/frame-observer.js";
+  } from "#lib/platform/frame-observer.js";
 
   /**
    * What rows ask of the next frame's callbacks (whether virtua has drawn
@@ -138,7 +138,7 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import {
     type Handoff,
     type Motion,

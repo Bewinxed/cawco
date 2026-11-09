@@ -14,11 +14,11 @@
    */
   import { configureWords } from "@cawco/core/words/configure";
   import { type Snippet, untrack } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { reveal } from "#lib/cawco/motion/curves.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { reveal } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
   import { cawco } from "../client.svelte";
   import RowFault from "../RowFault.svelte";

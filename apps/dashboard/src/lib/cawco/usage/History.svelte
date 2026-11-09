@@ -17,10 +17,10 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { cawco } from "../client.svelte";
-  import { reveal, revealOut } from "../motion/curves.svelte";
-  import { ListSwap } from "../motion/list-swap.svelte";
-  import { morph } from "../motion/morph.svelte";
   import { hubMidnight, money, summaryReader } from "../usage";
   import ReadFailed from "./ReadFailed.svelte";
 

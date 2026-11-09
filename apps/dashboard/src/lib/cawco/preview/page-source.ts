@@ -18,7 +18,7 @@ import {
 } from "@cawco/core/preview/routes";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { previewWords } from "@cawco/core/words/preview";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { enterPreviews } from "./pass";
 
 /** The origin that serves a page: its project's, or (a page outside any project) its session's. */
