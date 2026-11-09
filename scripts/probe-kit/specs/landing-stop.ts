@@ -1,7 +1,7 @@
 /**
  * A landing spends no gate on a push that will be refused, and a stopped
  * item's landing ends every gate step it started (hub landing.ts
- * `pushCheck`, work-items.ts `landingStops`). On a scratch fleet (real hub, agent and
+ * `pushCheck`, landing-run.ts `landingStops`). On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model). This spec delegates, so its
  * fleet cuts workspaces: it is `host`, run outside every boundary.
  *
@@ -55,7 +55,7 @@ const GATES: Record<Tag, string> = {
   A: `---\nsh -c 'echo "ran A" >> "$TMPDIR/${STEP_LOG}"'\n  name: step log\n---\n`,
   B: `---\nsh -c 'echo "started B" >> "$TMPDIR/${STEP_LOG}"; exec ${SLEEP.join(" ")}'\n  name: long step\n---\n`,
 };
-/** How the push check's refusal reads (work-items.ts `refusedLine`). */
+/** How the push check's refusal reads (landing-run.ts `refusedLine`). */
 const CHECK_REFUSED =
   "Not landed: the push check (git push --dry-run to main, before any merge check) from ";
 const NO_STEP = "was refused, so no gate step ran";
