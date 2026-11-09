@@ -15,10 +15,10 @@
   import type { Snippet } from "svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
+  import ContextMenuItem from "#lib/components/ui/context-menu/context-menu-item.svelte";
   import { IconCheck, IconCopy } from "#lib/icons.js";
   import { copyRefused, copyToClipboard } from "#lib/platform/copy.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
-  import ContextMenuItem from "./context-menu-item.svelte";
 
   let {
     what,
