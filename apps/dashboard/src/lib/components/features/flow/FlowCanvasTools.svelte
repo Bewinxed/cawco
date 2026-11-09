@@ -1,6 +1,5 @@
 <script lang="ts">
   import { useSvelteFlow } from "@xyflow/svelte";
-  import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import {
     IconMaximizeLinear,
@@ -9,6 +8,11 @@
     IconRedoLinear,
     IconUndoLinear,
   } from "#lib/icons.js";
+  import {
+    dur,
+    easeInOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     zoom,

@@ -18,13 +18,13 @@
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { inlineBlockSlug } from "@cawco/core/inline-blocks";
   import { transcriptWords } from "@cawco/core/words/transcript";
+  import { frameSize } from "../../platform/frame-observer";
+  import { failureWords } from "../../platform/hub-read";
+  import { motionOk } from "../../platform/motion/curves.svelte";
   import { keepBlock, showArtifact } from "../artifact-api";
   import { revealPreview } from "../client.svelte";
   import { readArtifacts } from "../files/files.svelte";
-  import { frameSize } from "../frame-observer";
-  import { failureWords } from "../hub-read";
   import type { MarkdownBlockProps } from "../markdown-blocks";
-  import { motionOk } from "../motion/curves.svelte";
   import {
     type BlockPlace,
     blockKey,

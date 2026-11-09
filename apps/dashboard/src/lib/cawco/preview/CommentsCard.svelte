@@ -14,8 +14,8 @@
   import { type Snippet, untrack } from "svelte";
   import { BarCard } from "#lib/components/ui/bar-glass/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { frameObserver } from "../frame-observer";
-  import { numberOf } from "../motion/curves.svelte";
+  import { frameObserver } from "../../platform/frame-observer";
+  import { numberOf } from "../../platform/motion/curves.svelte";
 
   let {
     open,

@@ -12,10 +12,10 @@
    */
   import type { ArtifactSummary } from "@cawco/core/protocol";
   import { untrack } from "svelte";
+  import { failureClause } from "#lib/platform/hub-read.js";
   import { showArtifact } from "../artifact-api";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
-  import { failureClause } from "../hub-read";
   import { refusals } from "../refusals.svelte";
   import { askOpenAt } from "../transcript/open-at.svelte";
   import FilesList from "./FilesList.svelte";

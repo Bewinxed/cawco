@@ -19,6 +19,7 @@
  * so the first press lands.
  */
 import { SETUP_PAGE, setupPageAt } from "@cawco/core/artifact-needs";
+import { failureClause } from "#lib/platform/hub-read.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { showArtifact } from "./artifact-api";
@@ -31,7 +32,6 @@ import {
 } from "./artifact-names.svelte";
 import { barGlass } from "./bar-glass.svelte";
 import { cawco, revealPreview } from "./client.svelte";
-import { failureClause } from "./hub-read";
 import { askPlan, type Thing } from "./reference-things.svelte";
 import { refusals } from "./refusals.svelte";
 
