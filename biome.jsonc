@@ -53,6 +53,9 @@
     "./scripts/lint/no-harness-compare.grit",
     // An artifact doc's meta map is reached through core doc-meta.ts.
     "./scripts/lint/doc-meta-door.grit",
+    // The dashboard and the agent import the hub's types alone, for their
+    // Eden clients (packages/hub/src/app.ts).
+    "./scripts/lint/hub-types-only.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

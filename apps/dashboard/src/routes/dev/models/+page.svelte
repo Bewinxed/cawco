@@ -161,15 +161,18 @@
   // skeleton), and the section's reads run once it is in the browser.
   if (typeof window !== "undefined") {
     const real = window.fetch;
-    window.fetch = (input, init) => {
-      const url = new URL(
-        typeof input === "string" || input instanceof URL ? input : input.url,
-        location.href
-      );
-      return url.origin === location.origin && url.pathname.startsWith("/api/")
-        ? answer(url.pathname, init)
-        : real(input, init);
-    };
+    window.fetch = new Proxy(real, {
+      apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) => {
+        const url = new URL(
+          typeof input === "string" || input instanceof URL ? input : input.url,
+          location.href
+        );
+        return url.origin === location.origin &&
+          url.pathname.startsWith("/api/")
+          ? answer(url.pathname, init)
+          : real(input, init);
+      },
+    });
     onDestroy(() => {
       window.fetch = real;
     });
