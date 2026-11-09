@@ -20,12 +20,9 @@
 import { createHash } from "node:crypto";
 import type { CanvasElement, CanvasEntry } from "@cawco/core/canvas";
 import { ANCHOR_IDENTITIES, generatedId } from "@cawco/core/comments/anchor";
-import {
-  CHANGE_WORDS_MOST,
-  CHANGES_LIMIT,
-  type ChangedItem,
-} from "@cawco/core/comments/model";
+import { CHANGE_WORDS_MOST, CHANGES_LIMIT } from "@cawco/core/comments/model";
 import type { DecisionCard } from "@cawco/core/decisions";
+import type { ChangedItem } from "@cawco/core/doc-meta";
 import { elementName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 
 /** Elements whose insides are no part of what the person sees. */
