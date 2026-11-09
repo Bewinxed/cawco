@@ -2,8 +2,7 @@
  * `fetch` is the platform's own, everywhere a caller of the hub reads it: no
  * module or function binds the name to another sender (`const fetch =
  * provenFetch`, `import { provenFetch as fetch }`). A sender that carries a
- * credential (the agent's `provenFetch`, a machine's `machineFetch`, the
- * owner's `ownerFetch`) is called by its own name, so a call that reads
+ * credential (the agent's `provenFetch`, a machine's `machineFetch`) is called by its own name, so a call that reads
  * `fetch` sends without one, and a reader sees that it does.
  *
  * The agent's update loop bound `fetch` to `provenFetch` this way; moved onto
@@ -27,7 +26,7 @@ import {
 } from "golar/unstable-tsgo";
 
 const MESSAGE =
-  "`fetch` bound to another sender: call a credentialed sender by its own name (provenFetch, machineFetch, ownerFetch), so a call that reads `fetch` is the platform's and sends no credential.";
+  "`fetch` bound to another sender: call a credentialed sender by its own name (provenFetch, machineFetch), so a call that reads `fetch` is the platform's and sends no credential.";
 
 export const noFetchAlias = defineRule({
   name: "house/no-fetch-alias",
