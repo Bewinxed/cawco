@@ -1892,7 +1892,7 @@ export function createPreviewListeners(
 
   /**
    * Whether origin `key`'s address is told to every screen that shows it
-   * (server.ts `toldAddress`): its owner (the session, the project, the
+   * (artifact-pages.ts `toldAddress`): its owner (the session, the project, the
    * artifact) is a row, and it is in use ({@link inUse}) or is a project's
    * that still keeps its stored port. Every origin keeps the port it stores
    * until the range is full and it is the one least recently used that

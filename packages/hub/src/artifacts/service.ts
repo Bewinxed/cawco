@@ -1893,7 +1893,7 @@ export interface ArtifactServiceDeps {
   askedAt: (instanceId: string, artifactId: string) => string | null;
   /**
    * Where session `instance`'s own browser opens artifact `row`, which it
-   * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
+   * may read (`artifact_browse`, preview-browse.ts `browseAt`): its address, behind
    * a one-time entry and a pass of the session's own in host mode.
    */
   browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
@@ -1982,7 +1982,7 @@ export interface ArtifactServiceDeps {
    * Tells `parent` once that its delegate `maker` handed it `artifact`, not
    * opened, or changed it while its panel shows it, the change held as
    * `next` (core `artifactHandedNotice`), on the channel the person's picks
-   * take (server.ts `handArtifactUp`).
+   * take (artifact-events.ts `handArtifactUp`).
    */
   handedUp: (
     parent: InstanceRow,
@@ -5406,7 +5406,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * it, what went is stamped heard ({@link stampDelivered}); when no one
    * did, it stays owed, each pin of it says why ({@link notSent}), and the
    * outcome says why (the writer's transcript keeps it as not sent:
-   * server.ts `deliverArtifactMarks`). Nothing owed, nothing goes
+   * artifact-events.ts `deliverArtifactMarks`). Nothing owed, nothing goes
    * (`nothing`).
    */
   const deliverMarks = async (
@@ -7947,7 +7947,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * The folder previews on machine `machineId` that are in Needs you, or
      * would be but for a gone folder recorded: each one's folder, for the
-     * machine to read as it registers (server.ts `foldersSeen`).
+     * machine to read as it registers (artifact-pages.ts `foldersSeen`).
      */
     foldersAsking: (machineId: string): { dir: string; id: string }[] =>
       db.asking().flatMap((row) => {

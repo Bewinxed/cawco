@@ -1,6 +1,6 @@
 /**
  * A session proves its own decision page with real clicks (`artifact_browse`,
- * hub server.ts `browseAt`, preview-access.ts's session pass), in its own
+ * hub preview-browse.ts `browseAt`, preview-access.ts's session pass), in its own
  * gated browser: the agent's project browser behind the DevTools gate, a
  * container where a runtime answers, else the local Chromium.
  *

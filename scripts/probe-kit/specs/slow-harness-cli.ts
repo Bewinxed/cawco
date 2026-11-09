@@ -17,7 +17,7 @@
  *     dashboard's form does, is refused in the hub's sentence (placement.ts
  *     `unreportedHarnessRefusal`), and nothing is left of it. (A start that
  *     names none is refused for want of a mode first: the machine's modes
- *     are not known yet, server.ts `settleMode`.)
+ *     are not known yet, launches.ts `settleMode`.)
  * (c) The first read waits 5 s for `--version` and gets no answer, so it
  *     runs no `auth status` (claude-version.ts `claudeToStart`): the agent
  *     says once that the account's dir was not read, naming the dir and
@@ -26,7 +26,7 @@
  *     Claude start is still refused, in the sentence the machine's row says
  *     (core harness-refusal.ts `harnessRefusal`): its version not said yet,
  *     clearing as it answers, not "no account" (hub
- *     server.ts `placeSpawn`). The machine's capabilities arrive as their
+ *     spawns.ts `placeSpawn`). The machine's capabilities arrive as their
  *     own update.
  * (d) The stand-in answers at once from here, and the `--version` it was
  *     already asked goes on to its answer: Claude's report on the agent's
@@ -41,7 +41,7 @@
  * (h) Claude Code's file changes and it is slow to say its version again:
  *     another session's hand-off to a sleeping session there is refused by
  *     the hub before it is taken, in the row's sentence, and nothing is
- *     launched for it (hub server.ts `launchAccount`).
+ *     launched for it (hub launch-accounts.ts `launchAccount`).
  * (f) Reconnect: the hub restarts, and the agent reads online within 3 s of
  *     the hub answering.
  * (g) A new agent process (what a binary update starts) reads online within
@@ -236,7 +236,7 @@ const drive = (fleet: Fleet) => {
         machineId: MACHINE,
         instanceId: id,
         // The dashboard's form names a mode: one that names none is
-        // refused for it before anything else (server.ts `settleMode`).
+        // refused for it before anything else (launches.ts `settleMode`).
         payload: {
           instanceId: id,
           cwd: fleet.workdir,
@@ -541,7 +541,7 @@ const timeouts = async ({
  * version again, so Claude stands refused once more, its account still
  * signed in. Another session's hand-off to a sleeping session there, which
  * would wake it, is refused by the hub before it is taken, in the sentence the machine's row
- * says (hub server.ts `launchAccount`), and nothing is launched for it.
+ * says (hub launch-accounts.ts `launchAccount`), and nothing is launched for it.
  */
 const stoppedSend = async ({
   check,

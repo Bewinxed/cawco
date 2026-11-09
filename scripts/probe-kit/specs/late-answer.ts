@@ -1,6 +1,6 @@
 /**
  * The hub's own call to a machine, answered after its deadline (hub
- * server.ts `awaitReply`, `lateAnswer`): its caller is told no answer came,
+ * machine-calls.ts `awaitReply`, `lateAnswer`): its caller is told no answer came,
  * and the answer that comes later is said as that call's, late, never as a
  * reply nobody asked for.
  *
@@ -40,9 +40,9 @@ import type { Kit, Spec } from "../kit";
 const OTHER = "late-answer-other";
 /** The hub's read deadline (machine-read-timeouts.ts `READ_TIMEOUT_MS`). */
 const READ_DEADLINE_MS = 10_000;
-/** The hub's line for a reply nobody waits on (server.ts `logUnroutedReply`). */
+/** The hub's line for a reply nobody waits on (machine-calls.ts `logUnroutedReply`). */
 const UNROUTED = "[hub] unrouted reply";
-/** The hub's line for a late answer to one of its calls (server.ts `lateAnswer`). */
+/** The hub's line for a late answer to one of its calls (machine-calls.ts `lateAnswer`). */
 const LATE = "past its 10 s deadline; its caller had been told no answer came";
 /** Leg (c)'s picture: its answer, base64, is several of the wire's 1 MiB parts (core wire.ts `WIRE_PART_CHARS`). */
 const PICTURE_BYTES = 3 * 1024 * 1024;

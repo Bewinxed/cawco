@@ -1,7 +1,7 @@
 /**
  * The person's own Continue of a session never runs that session again once
  * the new session has its opening, whether or not it holds a work item
- * (server.ts `separateSession` → `retireContinued`).
+ * (continuations.ts `separateSession` → `retireContinued`).
  *
  * 2026-11-07, obelisk's hub: the person chose Continue in a new session on a
  * top-level orchestrator (no work item). The hub had it file its open work,

@@ -8,7 +8,7 @@
  * origin, the pane's probe never ran, and the panel's own Show had said the
  * refusal where the pane said nothing. An artifact's own tab
  * (routes/artifact/[id]) draws the same pane on the same socket's frame
- * (hub server.ts `shownFrame` with `open`), so it stands for every such pane
+ * (hub artifact-pages.ts `shownFrame` with `open`), so it stands for every such pane
  * here.
  *
  *   bun scripts/probe-kit/run.ts preview-full-tab

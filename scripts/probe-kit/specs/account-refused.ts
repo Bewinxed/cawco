@@ -13,7 +13,7 @@
  *   machine, `authentication_failed` the one machine's credential, whatever
  *   their words; `server_error` refuses nothing.
  * - B, the sign-out: the hub's own rule (accounts.ts `signOutRefused`, which
- *   server.ts `settleRefusal` runs on a session's refused turn) signs the
+ *   ask-routing.ts `settleRefusal` runs on a session's refused turn) signs the
  *   account out with the refusal's words on every machine it was signed in
  *   on, and leaves the other account alone; one reach `machine` signs it out
  *   on the refusing machine alone.

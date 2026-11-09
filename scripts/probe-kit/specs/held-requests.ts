@@ -14,7 +14,7 @@
  * - Away past the deadline: asked again, frozen, cut, and kept away. The ask
  *   (a read: it runs nothing) fails only at its deadline, as its machine
  *   away: 503 naming it (`X-Cawco-Machine`), never "whether it ran is not
- *   known" (a write's words, server.ts `asRead`) nor "Completion is
+ *   known" (a write's words, machine-calls.ts `asRead`) nor "Completion is
  *   unknown".
  * - Asked while away: its link cut first, the machine is asked while it is
  *   away inside its reconnecting window, and let back 1 s later. The ask is
@@ -24,7 +24,7 @@
  *   first on its PATH that holds `git status` in the session's repo while a
  *   hold file stands. A session's continuation is sized (GET
  *   …/continue: the session's start, its continuation inputs, then its git
- *   changes, server.ts `gitChangesOf`); once the git read is held there, the
+ *   changes, context-reads.ts `gitChangesOf`); once the git read is held there, the
  *   agent is killed and kept away. The sizing answers at the read's deadline
  *   503 naming the machine, never "whether it ran is not known"; with the
  *   agent back, the same sizing answers.
@@ -45,7 +45,7 @@ import type { Kit, KitFleet, Spec } from "../kit";
 import { relay } from "../relay";
 
 const OTHER = "held-requests-other";
-/** What the hub says as it sends held requests again (server.ts `resendHeld`). */
+/** What the hub says as it sends held requests again (machine-calls.ts `resendHeld`). */
 const RESENT = "request(s) held for it sent again under their own ids";
 /** The hub's words for a write whose deadline passed with its machine away: never a read's. */
 const UNKNOWN = "whether it ran is not known";
