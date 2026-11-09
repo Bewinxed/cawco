@@ -323,7 +323,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
     },
 
     /**
-     * `instanceId`'s session ended (hub server.ts `forgetPending`): each of
+     * `instanceId`'s session ended (hub ask-routing.ts `forgetPending`): each of
      * its calls still waiting is refused, its card with it, so none
      * outlives its session.
      */
