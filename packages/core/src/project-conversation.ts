@@ -116,7 +116,7 @@ export interface CawInitiated {
  * What Caw shows: the product's status words, each drawn as its own file,
  * assets/mascot/caw/<status>.riv. A conversation's live state (find.ts `FindLiveState`) are said in these words.
  */
-export const CAW_STATUSES = [
+const CAW_STATUSES = [
   "ready",
   "working",
   "needs-you",

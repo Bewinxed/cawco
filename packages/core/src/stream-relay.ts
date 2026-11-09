@@ -46,7 +46,7 @@ export const STREAM_RELAY_PORT = 3478;
 export const STREAM_RELAY_TLS_PORT = 5349;
 
 /** The relay's UDP relay range, as `relay.start` carries it. */
-export type RelayRange = readonly [first: number, last: number];
+type RelayRange = readonly [first: number, last: number];
 
 /** Whether `port` is one of the ports the stream relay may hold on its machine, on either transport. */
 export const isStreamRelayPort = (port: number): boolean =>
@@ -345,7 +345,7 @@ export type RelayStep =
 export type RuntimeStep = Extract<RelayStep, { step: "runtime" }>;
 
 /** One port's last STUN answer, as Settings' chips show it. */
-export interface RelayPortChip {
+interface RelayPortChip {
   error?: string;
   name: RelayPortName;
   up: boolean;

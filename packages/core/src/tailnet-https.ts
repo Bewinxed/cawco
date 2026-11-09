@@ -21,7 +21,7 @@
  *   and HTTPS ({@link TailnetHttpsTodo});
  * - `serving`: the dashboard and the previews answer over HTTPS on the name.
  */
-export type TailnetHttpsState = "absent" | "signed-out" | "needs" | "serving";
+type TailnetHttpsState = "absent" | "signed-out" | "needs" | "serving";
 
 /**
  * A step of the person's on the path to HTTPS:
@@ -35,7 +35,7 @@ export type TailnetHttpsState = "absent" | "signed-out" | "needs" | "serving";
  * - `port`: a listener the hub can't share holds a port on the tailnet
  *   address (the dashboard's socket from before it shared its port).
  */
-export type TailnetHttpsStep =
+type TailnetHttpsStep =
   "enable-magicdns" | "enable-https" | "operator" | "userspace" | "port";
 
 /**
