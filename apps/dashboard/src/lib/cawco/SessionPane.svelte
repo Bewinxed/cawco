@@ -50,12 +50,6 @@
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import {
-    commandFault,
-    holdForStart,
-    type SendExtras,
-    submitCommand,
-  } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
@@ -86,6 +80,11 @@
   import { setSkills, skillsOf } from "./skill-chips";
   import { asksStore } from "./stores/asks.svelte";
   import { boardStore, machineConnected } from "./stores/board.svelte";
+  import {
+    commandFault,
+    type SendExtras,
+    submitCommand,
+  } from "./stores/commands.svelte";
   import { sendFailureNotice } from "./stores/ledger.svelte";
   import { offersStore } from "./stores/offers.svelte";
   import { plansStore } from "./stores/plans.svelte";
@@ -93,6 +92,7 @@
     loadMcpServers,
     refreshCommands,
   } from "./stores/session-detail.svelte";
+  import { holdForStart } from "./stores/session-start.svelte";
   import {
     type PendingPermission,
     type ReadFault,
