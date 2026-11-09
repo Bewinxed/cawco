@@ -25,7 +25,7 @@ export const CONFIG_GROUPS = [
   "Hub",
 ] as const;
 
-export type ConfigGroup = (typeof CONFIG_GROUPS)[number];
+type ConfigGroup = (typeof CONFIG_GROUPS)[number];
 
 export type ConfigSlug =
   | "rules"
@@ -55,8 +55,7 @@ export type ConfigSlug =
  *   signed in nowhere;
  * - `updates-waiting`: machines whose update waits on the operator.
  */
-export type ConfigBadgeRule =
-  "fleet-faults" | "account-faults" | "updates-waiting";
+type ConfigBadgeRule = "fleet-faults" | "account-faults" | "updates-waiting";
 
 /** One entry of the Configure rail: where it lives and what it is for. */
 export interface ConfigSectionDefinition {
