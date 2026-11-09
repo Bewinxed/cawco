@@ -33,6 +33,7 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { land, waiting } from "#lib/platform/motion/share.svelte.js";
+  import { plainClick } from "#lib/platform/plain-click.js";
   import { dragTask } from "./board-dnd.svelte.js";
   import { actionsOf, asksOf, taskProject } from "./needs.svelte";
   import TodoCount from "./TodoCount.svelte";
@@ -73,14 +74,7 @@
   const flying = $derived(waiting(key));
 
   function open(event: MouseEvent) {
-    if (
-      !onopen ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
+    if (!(onopen && plainClick(event))) {
       return;
     }
     event.preventDefault();
