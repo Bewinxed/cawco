@@ -50,6 +50,7 @@
   import { instanceForSession } from "#lib/cawco/links.js";
   import MachinesEmpty from "#lib/cawco/MachinesEmpty.svelte";
   import { presenceWorkspace } from "#lib/cawco/presence.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { continuationsStore } from "#lib/cawco/stores/continuations.svelte.js";
   import { fullSize } from "#lib/cawco/workspace/full-size.svelte.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
@@ -329,7 +330,7 @@
       return;
     }
     for (const id of drawnChats) {
-      const row = id ? cawco.instanceIndex.byId.get(id) : undefined;
+      const row = id ? boardStore.instanceIndex.byId.get(id) : undefined;
       if (row && endedUnseen(row) && !picked.has(row.id)) {
         untrack(() => markOpened(row.id));
       }
@@ -433,7 +434,7 @@
      (a session whose continuations the hub folded into one) is that
      session's tab, under its id now. */
   $effect(() => {
-    const index = cawco.instanceIndex;
+    const index = boardStore.instanceIndex;
     const former = continuationsStore.formerIds;
     if (!workspace.restored) {
       return;
