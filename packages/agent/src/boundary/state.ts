@@ -284,7 +284,25 @@ export const running = async (
   return proc?.pid === held.pid ? proc : undefined;
 };
 
-export const starting = new Map<string, Promise<Boundary>>();
+/** Each workspace's start of a boundary under way: one at a time, and whatever ensures one meanwhile waits for it. */
+const starting = new Map<string, Promise<Boundary>>();
+
+/** Workspace `id`'s start under way, if any. */
+export const startUnderWay = (id: string): Promise<Boundary> | undefined =>
+  starting.get(id);
+
+/** Whether a start of workspace `id`'s boundary is under way. */
+export const isStarting = (id: string): boolean => starting.has(id);
+
+/** Records `start` as workspace `id`'s start under way. */
+export const markStarting = (id: string, start: Promise<Boundary>): void => {
+  starting.set(id, start);
+};
+
+/** Workspace `id`'s start is over. */
+export const startEnded = (id: string): void => {
+  starting.delete(id);
+};
 
 /** Where an older boundary still running beside the current one is recorded ({@link Retiring}). */
 export const retiringFileOf = (id: string, old: Pick<Held, "gen">): string =>
@@ -308,4 +326,23 @@ export const readRetiring = async (id: string): Promise<Retiring[]> => {
 };
 
 /** Each workspace's close under way (quiet, {@link closeQuietly}, or an archive's, {@link closedWhile}); it never rejects. An ensure waits for it. */
-export const closing = new Map<string, Promise<void>>();
+const closing = new Map<string, Promise<void>>();
+
+/** Workspace `id`'s close under way, if any. */
+export const closeUnderWay = (id: string): Promise<void> | undefined =>
+  closing.get(id);
+
+/** Whether a close of workspace `id`'s boundary is under way. */
+export const isClosing = (id: string): boolean => closing.has(id);
+
+/** Records `close` as workspace `id`'s close under way, in place of any before it. */
+export const markClosing = (id: string, close: Promise<void>): void => {
+  closing.set(id, close);
+};
+
+/** Workspace `id`'s close `close` is over; one that replaced it stays on record. */
+export const closeEnded = (id: string, close: Promise<void>): void => {
+  if (closing.get(id) === close) {
+    closing.delete(id);
+  }
+};
