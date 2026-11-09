@@ -1,8 +1,8 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
+import { hub, hubPath } from "#lib/platform/hub.js";
 
 /**
  * A row the lists draw: a session's. Its `harness` is null where the row
@@ -40,13 +40,10 @@ export const transcriptUrl = (
   viewId: string,
   page: { cursor?: string; limit?: number } = {}
 ): string =>
-  hubRequest("GET /api/instances/:id/transcript", {
-    path: { id: viewId },
-    query: {
-      ...(page.cursor ? { before: page.cursor } : {}),
-      ...(page.limit ? { limit: String(page.limit) } : {}),
-    },
-  }).path;
+  hubPath(hub.api.instances({ id: viewId }).transcript, {
+    ...(page.cursor ? { before: page.cursor } : {}),
+    ...(page.limit ? { limit: String(page.limit) } : {}),
+  });
 
 /**
  * Every instance row, looked up by id and by session. Built once per change to

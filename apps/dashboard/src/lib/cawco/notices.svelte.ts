@@ -6,11 +6,11 @@
  * is never shown after a reload. Nothing here is kept in the tab.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import type { DamagedHubRecord } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { SvelteSet } from "svelte/reactivity";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 
 class Notices {
   /** Notice ids acknowledged anywhere, plus this tab's own on their way to the hub. */
@@ -48,10 +48,9 @@ class Notices {
    * frame that follows says so. The hub's refusal is the error.
    */
   async reset(): Promise<void> {
-    const response = await hubFetch(hubRequest("POST /api/notices/reset"));
-    if (!response.ok) {
-      throw await hubRefusal(response, noticeWords.recordNotResetThen);
-    }
+    await hubDone(hub.api.notices.reset.post(), (refused) =>
+      hubRefusal(refused, noticeWords.recordNotResetThen)
+    );
   }
 
   /**
@@ -67,11 +66,10 @@ class Notices {
     for (const id of fresh) {
       this.seen.add(id);
     }
-    const response = await hubFetch(
-      hubRequest("POST /api/notices/seen", { body: { ids: fresh } }),
-      { keepalive: true }
-    ).catch(() => null);
-    if (!response?.ok) {
+    const answer = await hub.api.notices.seen
+      .post({ ids: fresh }, { fetch: { keepalive: true } })
+      .catch(() => null);
+    if (!answer || answer.error) {
       for (const id of fresh) {
         this.seen.delete(id);
       }
