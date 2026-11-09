@@ -15,7 +15,7 @@
  * The hub reads each kept CLI's release (upstreams.ts `TOOL_RELEASES`, the
  * catalog's URLs) as it starts and every {@link RELEASE_READ_MS}, and each
  * machine whose copy says a version older than it is sent the catalog's
- * install, with that release to reach (server.ts `keepCurrent`): the same
+ * install, with that release to reach (tool-installs.ts `keepCurrent`): the same
  * control a press sends, so the agent runs the copy's own updater (`claude
  * update`) and answers what the copy says after it (agent tools.ts
  * `install`). An update never stops a process: Claude Code's updater puts
@@ -179,7 +179,7 @@ export interface ToolReleasesDeps {
  * The newest release of each CLI CawCo keeps current, read as the hub starts
  * and every {@link RELEASE_READ_MS}, and what each machine was last sent to
  * reach. After each read, `read` runs: the hub sends every machine what it
- * is owed (server.ts `keepCurrent`).
+ * is owed (tool-installs.ts `keepCurrent`).
  */
 export class ToolReleases {
   readonly #deps: ToolReleasesDeps;
