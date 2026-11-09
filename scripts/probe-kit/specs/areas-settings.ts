@@ -352,7 +352,7 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
   if (!(listed && project)) {
     throw new Error(`no project ${projectId}`);
   }
-  // Placement as a spawn in the project asks it (server.ts `spawnAsks`):
+  // Placement as a spawn in the project asks it (spawns.ts `spawnAsks`):
   // the account in effect, the area named when it is the area's.
   const accounts = db.accounts.list();
   const now = Date.now();

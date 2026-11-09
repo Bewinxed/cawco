@@ -2,7 +2,7 @@
  * A device that goes quiet after saying its machine is locked never reads as
  * the person being here: only fresh input does (hub notifications.ts
  * `rollup`, rules 2 and 3). Since the person's return sends every session
- * holding news its recap (server.ts `tellBack`), a false away→here costs
+ * holding news its recap (sends.ts `tellBack`), a false away→here costs
  * turns as well as a wrong presence line.
  *
  * 2026-11-05, read from the code: a lock counted only while its device still
