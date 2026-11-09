@@ -81,12 +81,7 @@ import {
 import { takeErrorReport } from "./dashboard-errors";
 import type { ArtifactRow } from "./db/artifacts";
 import type { PreviewPassesDb } from "./db/preview-passes";
-import {
-  artifactOrigin,
-  originOfKey,
-  type PreviewsDb,
-  projectOfOrigin,
-} from "./db/previews";
+import { type PreviewsDb, projectOfOrigin } from "./db/previews";
 import { decisionHostFile } from "./decision-host";
 import { DECISION_ASSETS } from "./decision-program";
 import {
@@ -106,6 +101,7 @@ import {
   PreviewRefusal,
   parsePattern,
 } from "./preview-hosts";
+import { isEmbed } from "./preview-origin";
 import { FolderRefusal, folderPath } from "./project-folder";
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
@@ -150,22 +146,6 @@ export const shownArtifact = (
   title: row.title,
   ...(row.ask ? { ask: row.ask } : {}),
 });
-
-/**
- * A machine artifact's own origin (a dev server's or a folder's preview, a
- * sheet), which its session's panel, its own tab and every decision page's
- * Preview of it load: its listener on a port of its own and its machine's
- * listener are keyed by the origin its row points at (schema.ts
- * `artifacts.origin`), apart from every session's, and both last as long as
- * that origin, whichever session opened or held it (preview-service.ts
- * `end`); its port stays its own until the range is full and it is the
- * least recently used of those nothing uses (`reclaimOne`). A dev server
- * and a stage serve from their root, so no other origin can show one under
- * a path of its own; the machine keys its listener by the same key.
- */
-export const embedKey = artifactOrigin;
-const isEmbed = (key: string): boolean => originOfKey(key) !== null;
-
 /**
  * The dashboard origins this hub is reached from: each one a dashboard or an
  * artifact's tab opened its socket from (server.ts, from the origin the
