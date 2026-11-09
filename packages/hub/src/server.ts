@@ -190,6 +190,7 @@ import type {
   MachineHookScript,
   MarketplaceLink,
   MarketplaceRead,
+  SkillFile,
 } from "@cawco/core/fleet";
 import {
   FLEET_DELTA,
@@ -3373,6 +3374,10 @@ export const createServer = (
     workItems: () => workItems,
     workspaceArchived: () => workspaceArchived,
     workspaceRetire: () => workspaceRetire,
+    awayAnswer: () => awayAnswer,
+    hookCopyOff: () => hookCopyOff,
+    pushTarget: () => pushTarget,
+    skillFilesOff: () => skillFilesOff,
     say: () => (payload) =>
       registry.broadcast({
         verb: "frames",
@@ -25069,6 +25074,80 @@ export const createServer = (
       ? awayStatus(set, machineId)
       : { code: 504, said: machineFault(machineId, "silent") };
 
+  /** What a route answers for a read `machineId` left unanswered. */
+  const awayAnswer = <Answer>(
+    set: RouteSet,
+    machineId: string,
+    answer: Unanswered,
+    status: (code: 503 | 504, said: string) => Answer
+  ): Answer => {
+    const away = unansweredStatus(set, machineId, answer);
+    return status(away.code, away.said);
+  };
+
+  /** A skill's files read off `machineId`, or what the route answers when it could not read them. */
+  const skillFilesOff = async <Refused>(
+    machineId: string,
+    args: unknown[],
+    set: RouteSet,
+    status: (code: 400 | 503 | 504, said: string) => Refused
+  ): Promise<{ files: SkillFile[] } | { refused: Refused }> => {
+    const asked = await readAgent(
+      machineId,
+      READ_SKILL_FILES,
+      args,
+      READ_TIMEOUT_MS
+    );
+    switch (asked.kind) {
+      case "unanswered": {
+        const away = unansweredStatus(set, machineId, asked);
+        return { refused: status(away.code, away.said) };
+      }
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
+    }
+    const answer = asked.value;
+    if (!answer.ok) {
+      return {
+        refused: status(
+          400,
+          answer.error ?? "the machine could not read the skill"
+        ),
+      };
+    }
+    return { files: machineSkillFiles(answer.result) };
+  };
+
+  /** A fleet hook and the copy of its script `machineId` holds, or what the route answers when either is missing. */
+  const hookCopyOff = async <Refused>(
+    body: { id: string; machineId: string },
+    set: RouteSet,
+    status: (code: 404 | 500 | 503 | 504, said: string) => Refused
+  ) => {
+    const current = db.getFleetHook(body.id);
+    if (!current) {
+      return { refused: status(404, `the fleet keeps no hook ${body.id}`) };
+    }
+    const read = await readMachineHookScript(body.machineId, body.id, set);
+    if (!read.ok) {
+      return { refused: status(read.code, read.said) };
+    }
+    return { current, copy: read.copy };
+  };
+
+  /** The fleet to push to `machineId`, or what the route answers when that machine is not connected. */
+  const pushTarget = <Refused>(
+    machineId: string,
+    status: (code: 404, said: string) => Refused
+  ) => {
+    if (!registry.agent(machineId)) {
+      return { refused: status(404, machineFault(machineId, "offline")) };
+    }
+    return { config: db.fleetConfig() };
+  };
+
   /**
    * A window of the stored conversation under `where`, as its machine
    * answers, or why it could not: the conversation as it was said, every
@@ -33250,10 +33329,8 @@ export const createServer = (
           BUSY_TIMEOUT_MS
         );
         switch (answer.kind) {
-          case "unanswered": {
-            const away = unansweredStatus(set, params.machineId, answer);
-            return status(away.code, away.said);
-          }
+          case "unanswered":
+            return awayAnswer(set, params.machineId, answer, status);
           case "answered":
             return answer.value.ok
               ? (answer.value.result as { busy: number; instances: string[] })
@@ -33317,10 +33394,8 @@ export const createServer = (
             READ_TIMEOUT_MS
           );
           switch (answer.kind) {
-            case "unanswered": {
-              const away = unansweredStatus(set, params.machineId, answer);
-              return status(away.code, away.said);
-            }
+            case "unanswered":
+              return awayAnswer(set, params.machineId, answer, status);
             case "answered":
               return answer.value.ok
                 ? // A machine's own connectors carry their keys: said as set.
@@ -33367,10 +33442,8 @@ export const createServer = (
             query.harness
           );
           switch (answer.kind) {
-            case "unanswered": {
-              const away = unansweredStatus(set, params.machineId, answer);
-              return status(away.code, away.said);
-            }
+            case "unanswered":
+              return awayAnswer(set, params.machineId, answer, status);
             case "answered":
               return answer.value.ok
                 ? (answer.value.result as SupportedCommands)
@@ -34061,31 +34134,16 @@ export const createServer = (
           }
 
           if (body.fromMachine) {
-            const asked = await readAgent(
+            const read = await skillFilesOff(
               body.fromMachine,
-              READ_SKILL_FILES,
               [params.name, body.cwd],
-              READ_TIMEOUT_MS
+              set,
+              status
             );
-            switch (asked.kind) {
-              case "unanswered": {
-                const away = unansweredStatus(set, body.fromMachine, asked);
-                return status(away.code, away.said);
-              }
-              case "answered":
-                break;
-              default:
-                throw unreachable(asked);
+            if ("refused" in read) {
+              return read.refused;
             }
-            const answer = asked.value;
-            if (!answer.ok) {
-              return status(
-                400,
-                answer.error ?? "the machine could not read the skill"
-              );
-            }
-
-            const files = machineSkillFiles(answer.result);
+            const { files } = read;
             const skill = db.putSkill({
               name: params.name,
               source: `machine:${body.fromMachine}`,
@@ -34192,31 +34250,16 @@ export const createServer = (
           // "the same source, again" reads from.
           if (stored.source.startsWith("machine:")) {
             const machineId = stored.source.slice("machine:".length);
-            const asked = await readAgent(
+            const read = await skillFilesOff(
               machineId,
-              READ_SKILL_FILES,
               [stored.name],
-              READ_TIMEOUT_MS
+              set,
+              status
             );
-            switch (asked.kind) {
-              case "unanswered": {
-                const away = unansweredStatus(set, machineId, asked);
-                return status(away.code, away.said);
-              }
-              case "answered":
-                break;
-              default:
-                throw unreachable(asked);
+            if ("refused" in read) {
+              return read.refused;
             }
-            const answer = asked.value;
-            if (!answer.ok) {
-              return status(
-                400,
-                answer.error ?? "the machine could not read the skill"
-              );
-            }
-
-            const files = machineSkillFiles(answer.result);
+            const { files } = read;
             const skill = db.putSkill({
               name: stored.name,
               source: stored.source,
@@ -34312,11 +34355,11 @@ export const createServer = (
         "/api/fleet/skills/:name/push",
         { body: t.Object({ machineId: t.String() }) },
         async ({ params, body, set, status }) => {
-          const agent = registry.agent(body.machineId);
-          if (!agent) {
-            return status(404, machineFault(body.machineId, "offline"));
+          const target = pushTarget(body.machineId, status);
+          if ("refused" in target) {
+            return target.refused;
           }
-          const config = db.fleetConfig();
+          const { config } = target;
           const fleetCopy = config.skills.find(
             (skill) => skill.name === params.name
           );
@@ -34511,16 +34554,9 @@ export const createServer = (
         "/api/fleet/hooks/peek",
         { body: t.Object({ machineId: t.String(), id: t.String() }) },
         async ({ body, set, status }) => {
-          if (!db.getFleetHook(body.id)) {
-            return status(404, `the fleet keeps no hook ${body.id}`);
-          }
-          const read = await readMachineHookScript(
-            body.machineId,
-            body.id,
-            set
-          );
-          if (!read.ok) {
-            return status(read.code, read.said);
+          const read = await hookCopyOff(body, set, status);
+          if ("refused" in read) {
+            return read.refused;
           }
           // 204: the machine has no copy of this hook's script.
           return read.copy ?? status(204);
@@ -34534,18 +34570,11 @@ export const createServer = (
         "/api/fleet/hooks/adopt",
         { body: t.Object({ machineId: t.String(), id: t.String() }) },
         async ({ body, set, status }) => {
-          const current = db.getFleetHook(body.id);
-          if (!current) {
-            return status(404, `the fleet keeps no hook ${body.id}`);
+          const read = await hookCopyOff(body, set, status);
+          if ("refused" in read) {
+            return read.refused;
           }
-          const read = await readMachineHookScript(
-            body.machineId,
-            body.id,
-            set
-          );
-          if (!read.ok) {
-            return status(read.code, read.said);
-          }
+          const { current } = read;
           if (!read.copy) {
             return status(
               404,
@@ -34588,12 +34617,11 @@ export const createServer = (
           body: t.Object({ machineId: t.String(), id: t.Optional(t.String()) }),
         },
         async ({ body, set, status }) => {
-          const agent = registry.agent(body.machineId);
-          if (!agent) {
-            return status(404, machineFault(body.machineId, "offline"));
+          const target = pushTarget(body.machineId, status);
+          if ("refused" in target) {
+            return target.refused;
           }
-
-          const config = db.fleetConfig();
+          const { config } = target;
           if (config.hooks.length === 0) {
             return status(400, "the fleet keeps no hooks to push");
           }
