@@ -95,6 +95,7 @@ import type {
   QuestionClose,
   SentBy,
 } from "../../../packages/core/src/doc-meta";
+import { type DocMeta, setMeta } from "../../../packages/core/src/doc-meta";
 import { artifactResponsesNotice } from "../../../packages/core/src/injected";
 import type { InstanceRow } from "../../../packages/core/src/protocol";
 import { DAY_MS, MINUTE_MS } from "../../../packages/core/src/time";
@@ -652,10 +653,12 @@ const run = async ({ check }: Kit) => {
     } as unknown as HubLifetimeShape,
     updated: (_id, by) => told.push(by),
   });
-  docs.transact(PAGE, "hub", (doc) => doc.getMap("meta").set("drawn", AT));
-  docs.transact(PAGE, "agent", (doc) =>
-    doc.getMap("meta").set("revisedAt", AT)
+  // A page keeps no `drawn` (a component canvas's, by states file): this
+  // write, a time, is read by nothing, and stays as the probe wrote it.
+  docs.transact(PAGE, "hub", (doc) =>
+    setMeta(doc, "drawn", AT as unknown as DocMeta["drawn"])
   );
+  docs.transact(PAGE, "agent", (doc) => setMeta(doc, "revisedAt", AT));
   docs.transact(PAGE, { client: {} as ArtifactClient }, (doc) =>
     doc.getMap("state").set("head-name", heard["head-name"])
   );
