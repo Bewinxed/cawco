@@ -206,7 +206,7 @@ import { unlessSame } from "#lib/platform/unless-same.js";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 import { page as servedPage } from "$app/state";
-import { activityOf, runningSubagents, sessionActivity } from "./activity";
+import { activityOf, sessionActivity } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { Keyed, Pulse, type PulseReading } from "./board.svelte";
 import { currentClientId } from "./client-id";
@@ -227,7 +227,6 @@ import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { presenceAgain, presenceClientId } from "./presence";
-import { placedOn } from "./projects";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
 import { noteChange } from "./repeated-keys";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
@@ -304,10 +303,6 @@ const OUTAGE_GRACE = 4000;
 
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
 export type Machine = AgentRow;
-
-/** A session the hub knows about (`GET /api/instances`, and `instances` frames). */
-export type { InstanceRow } from "@cawco/core/protocol";
-export type { BoardRow } from "./links";
 
 /**
  * Where a project's files are (place): a checkout on a machine, a
@@ -1082,13 +1077,6 @@ const state = $state({
    */
   hubBuild: undefined as BuildInfo | undefined,
   /**
-   * Sessions that have been handed work and have not yet taken a turn on it.
-   * Keyed by the target: the question the rail answers is what *that* session
-   * is carrying. A hand-off whose arrival is invisible is one you have to go
-   * and check for, which is the thing it was supposed to replace.
-   */
-  handoffs: {} as Record<string, { from: string; at: number }>,
-  /**
    * The continuations the hub is carrying, as it publishes them: what the
    * Continue dialog follows, and what opens the new session of one this tab
    * started after its dialog was dismissed.
@@ -1152,13 +1140,6 @@ const state = $state({
    */
   starters: {} as Record<string, ProjectStarter[]>,
   sessions: {} as Record<string, SessionState>,
-  /**
-   * The line an ask leaves when it ends with no answer from this tab:
-   * withdrawn before it was answered (the turn interrupted, the session
-   * gone), or answered somewhere else, keyed by its request id. A session's
-   * transcript draws it as a note.
-   */
-  askEnds: {} as Record<string, Message>,
   /**
    * The socket's first full `instances` frame has landed: the hub's own
    * now-state (pulses) for every session is in, so "nothing is working" can
@@ -3417,11 +3398,7 @@ function handleFrame(frame: FramePayload): void {
       const question = parked
         ? questionsOf(parked.toolName, parked.input) !== null
         : frame.toolName === ASK_USER_QUESTION;
-      sayAskEnd(
-        target,
-        frame.requestId,
-        withdrawnNote(frame.instanceId, question, frame.reason)
-      );
+      addNote(target, withdrawnNote(frame.instanceId, question, frame.reason));
     }
     // Answered somewhere else while this tab held the card (another tab, the
     // app, a session, the harness): it says what won and where.
@@ -3438,7 +3415,7 @@ function handleFrame(frame: FramePayload): void {
       if (answeredHere(frame.requestId)) {
         answeredWhileOurs.set(frame.requestId, note);
       } else {
-        sayAskEnd(target, frame.requestId, note);
+        addNote(target, note);
       }
     }
     return;
@@ -3495,12 +3472,6 @@ function handleFrame(frame: FramePayload): void {
           (row) => row.machineId
         )
       );
-    }
-    // The hub's own record of what each session is carrying. Kept there rather
-    // than learnt by watching, so it is the same on every device and survives a
-    // reload — a hand-off only this tab saw is one your phone never knows about.
-    if (frame.handoffs && !equal(state.handoffs, frame.handoffs)) {
-      state.handoffs = frame.handoffs;
     }
     if (frame.continuations) {
       adoptContinuations(frame.continuations);
@@ -4378,7 +4349,6 @@ function sweepOnTraffic(): void {
 }
 
 /** Re-exported so a component reads one import for a command and its stages. */
-export type { CommandRecord } from "./stream";
 
 /** One command's record, by the id {@link submitCommand} returned. */
 export function commandRecord(commandId: string): CommandRecord | null {
@@ -4405,16 +4375,6 @@ export function answerFor(requestId: string): CommandRecord | null {
  * lost to another device), dropped once ours is the one applied.
  */
 const answeredWhileOurs = new Map<string, Message>();
-
-/** The line an ask leaves in its session, kept by request id. */
-function sayAskEnd(
-  target: SessionState,
-  requestId: string,
-  note: Message
-): void {
-  state.askEnds[requestId] = note;
-  addNote(target, note);
-}
 
 /** Whether this tab answered the ask `requestId` itself, with an answer the hub has not refused. */
 function answeredHere(requestId: string): boolean {
@@ -5313,7 +5273,7 @@ function streamEffectsFor<K extends CommandKind>(
             // that dropped with ours out leaves it unknown whose won, so
             // nothing is said of it.
             if (elsewhere && commandRecord(commandId)?.refusedByHub) {
-              sayAskEnd(target, requestId, elsewhere);
+              addNote(target, elsewhere);
             }
             return;
           }
@@ -9497,33 +9457,6 @@ const sameAsk = (a: BlockedRequest, b: BlockedRequest | undefined): boolean =>
   a.cwd === b.cwd &&
   a.stale === b.stale;
 
-/**
- * A branch is a real subagent iff it was spawned with a `subagent_type` that is
- * not the `branchFor` placeholder default. Background Bash tasks fire
- * `task_started` without a `subagent_type`, so they keep the default and are
- * filtered out of the rail's subagent list.
- */
-const isRealSubagent = (branch: SubagentState): boolean =>
-  branch.subagentType !== "subagent";
-
-/** Running first, then starting, then error, then complete; within each, newest activity first. */
-const STATUS_RANK: Record<string, number> = {
-  running: 0,
-  starting: 1,
-  error: 2,
-  complete: 3,
-};
-const branchOrder = (a: SubagentState, b: SubagentState): number => {
-  const rankA = STATUS_RANK[a.status] ?? 3;
-  const rankB = STATUS_RANK[b.status] ?? 3;
-  if (rankA !== rankB) {
-    return rankA - rankB;
-  }
-  const timeA = Date.parse(a.lastEventAt ?? a.startedAt);
-  const timeB = Date.parse(b.lastEventAt ?? b.startedAt);
-  return timeB - timeA;
-};
-
 export const cawco = {
   get fleetMcp() {
     return state.fleetMcp;
@@ -9584,9 +9517,6 @@ export const cawco = {
   get olderWire(): boolean {
     return state.older;
   },
-  /** What a session has been handed and not yet answered; `null` for most. */
-  handoffFor: (instanceId: string): { from: string; at: number } | null =>
-    state.handoffs[instanceId] ?? null,
   /** The continuations the hub is carrying, settled ones for a few minutes after. */
   get continuations(): ContinuationJob[] {
     return state.continuations;
@@ -9599,9 +9529,6 @@ export const cawco = {
   get previewSettings(): PreviewSettings | null {
     return state.previewSettings;
   },
-  /** One continuation the hub is carrying, while it keeps it in its table. */
-  continuation: (id: string): ContinuationJob | undefined =>
-    state.continuations.find((job) => job.id === id),
   /** The project moves the hub is carrying, settled ones for a few minutes after (move.svelte.ts). */
   get moves(): MoveJob[] {
     return state.moves;
@@ -9675,25 +9602,12 @@ export const cawco = {
   get staleInstances(): InstanceRow[] {
     return staleInstances;
   },
-  /** Mainline sessions on one machine — what the sidebar groups under it. */
-  listedOn,
   /** The ones the hub can still reach: what this machine is doing right now. */
   liveOn: (machineId: string): InstanceRow[] =>
     listedOn(machineId).filter(isLive),
-  /**
-   * The ones whose process is gone — asleep, or failed. A different question
-   * from the live list, so it is a different list rather than a heading that
-   * changes its mind about what it is over.
-   */
-  notRunningOn: (machineId: string): InstanceRow[] =>
-    listedOn(machineId).filter((row) => !isLive(row)),
   /** Every session the rail lists: live work, plus what failed or fell asleep. */
   get listedInstances(): InstanceRow[] {
     return listedInstances;
-  },
-  /** Spin-offs across the fleet — kept in their own section, not per machine. */
-  get scratchInstances(): InstanceRow[] {
-    return instances.filter((row) => isListed(row) && row.kind === "scratch");
   },
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
@@ -9711,8 +9625,6 @@ export const cawco = {
   get projectsRead() {
     return state.projectsRead;
   },
-  projectsOn: (machineId: string): ProjectRow[] =>
-    state.projects.filter((project) => placedOn(project, machineId)),
   project: (id: string): ProjectRow | null =>
     state.projects.find((project) => project.id === id) ?? null,
   /** The project's spend cap while it holds the project back now; null otherwise. */
@@ -9900,8 +9812,6 @@ export const cawco = {
   /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
   turnSince: (instanceId: string): number | undefined =>
     heldPulse(instanceId)?.since,
-  /** The line an ask left: withdrawn unanswered, or answered elsewhere; none for one answered here or still waiting. */
-  askEnd: (requestId: string): Message | undefined => state.askEnds[requestId],
   /**
    * The ledger stats the fleet table shows per session — turns, context %.
    * Only populated for a session this browser has state for (subscribed / a turn
@@ -9944,24 +9854,6 @@ export const cawco = {
   commandsOf: (instanceId: string): AvailableCommand[] => {
     const target = state.sessions[instanceId];
     return target ? availableCommands(target.commands) : [];
-  },
-  /** The subagents a session has out, sorted by state then recency. */
-  subagentsOf: (instanceId: string): SubagentState[] =>
-    Object.values(state.sessions[instanceId]?.subagents ?? {})
-      .filter(isRealSubagent)
-      .sort(branchOrder),
-  /** Background tasks that are not real subagents. */
-  backgroundTasksOf: (instanceId: string): number =>
-    Object.values(state.sessions[instanceId]?.subagents ?? {}).filter(
-      (branch) => !isRealSubagent(branch)
-    ).length,
-  /** Just the count of running *real* subagents, for the badge. */
-  runningSubagentsOf: (instanceId: string): number => {
-    const target = state.sessions[instanceId];
-    if (target && isSubscribed(instanceId)) {
-      return runningSubagents(target.subagents);
-    }
-    return pulseOf(instanceId)?.runningSubagents ?? 0;
   },
   get blocked(): BlockedRequest[] {
     return blocked;
