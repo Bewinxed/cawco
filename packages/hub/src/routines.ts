@@ -137,11 +137,10 @@ import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import { budgetParameter } from "./task-tools";
 import { BUDGET, LANDS, MODE } from "./tasks";
 import { TRIM_CRON, TRIM_NAME, TRIM_PROMPT } from "./unused-trim";
+import { isRoutineParent, routineParent } from "./work-item-state";
 import {
   budgetProblem,
   DEFAULT_DELEGATE_TYPE,
-  isRoutineParent,
-  routineParent,
   titleProblem,
   type WorkItemRequest,
   type WorkItems,
