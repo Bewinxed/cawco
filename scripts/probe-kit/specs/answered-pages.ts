@@ -133,7 +133,7 @@ import type {
   ArtifactRead,
   AskedOf,
   PageHearer,
-} from "../../../packages/hub/src/artifacts/service";
+} from "../../../packages/hub/src/artifacts/shapes";
 import { artifactTaker } from "../../../packages/hub/src/artifacts/taker";
 import type {
   ArtifactChange,
