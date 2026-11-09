@@ -77,6 +77,7 @@ import type {
   SessionOrigin,
   SessionPulse,
   SpawnPayload,
+  TabNamed,
 } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type {
@@ -94,6 +95,11 @@ import type {
   SessionMessage,
 } from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
+import type {
+  TranscriptWhere,
+  TranscriptWindow,
+  WindowAsk,
+} from "@cawco/core/transcript-types";
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { createAdmission } from "./admission";
@@ -208,7 +214,7 @@ import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
 import type { ToolReleases } from "./tool-releases";
-import type { createTranscripts } from "./transcripts";
+import type { createTranscripts, HistoryRead } from "./transcripts";
 import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
 import type { UsageCounter } from "./usage-count";
@@ -561,6 +567,7 @@ export interface HubContext {
     remember?: boolean
   ) => boolean;
   gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
+  handMoveRefusal: (row: StoredRow, account: Account) => string | undefined;
   handoffs: Map<string, { from: string; at: number }>;
   harnessConfigDelete: (
     kind: HarnessConfigKind,
@@ -762,6 +769,17 @@ export interface HubContext {
     harness: HarnessKind,
     model: string | undefined
   ) => string | undefined;
+  moveByHand: (
+    row: StoredRow,
+    account: Account
+  ) => Promise<
+    | {
+        accountId: string;
+        state: "moved" | "pending";
+        why: string;
+      }
+    | { refusal: string }
+  >;
   movedFrom: () => Map<string, string>;
   moveJobOf: (instanceId: string) => ContinuationSlip | undefined;
   moveKey: ({
@@ -1004,6 +1022,11 @@ export interface HubContext {
   replaceAtWake: (
     row: ReturnType<HubContext["db"]["getInstancesByIds"]>[number]
   ) => void;
+  reportedContextOf: (
+    row: KeepAliveRow
+  ) => Promise<
+    { tokens: number; readAt: number } | { reason: string } | Unanswered
+  >;
   reportedMachinePath: (
     machineId: string,
     raw: string
@@ -1255,6 +1278,10 @@ export interface HubContext {
   stopCompaction: (instanceId: string) => void;
   stopProjectBrowsers: (projectId: string) => Promise<string | undefined>;
   storedAnswer: (id: string, ended: boolean) => Promise<string | undefined>;
+  storedWindow: (
+    where: TranscriptWhere,
+    window: WindowAsk
+  ) => Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>>;
   streams: StreamHubShape;
   summariserRun: (
     source: ContinuationSource & { machineId: string },
@@ -1272,6 +1299,7 @@ export interface HubContext {
   summaryMoveFailed: (row: ContinuationRow, reason: string) => void;
   TOOL_SIGNIN_BEGIN_MS: 90000;
   TOOL_SIGNIN_COMPLETE_MS: 180000;
+  tabNamed: (asked: string, machine: string | null) => Promise<TabNamed>;
   tailnetHttps: ReturnType<typeof createTailnetHttps>;
   takenUpBy: (
     row: { parentInstanceId?: string | null | undefined } | undefined,
