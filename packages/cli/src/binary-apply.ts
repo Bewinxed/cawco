@@ -40,8 +40,11 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { holdAwake } from "@cawco/agent/awake-hold";
-import { type KeeperJob, keeperJob } from "@cawco/agent/keeper-jobs";
 import { forgetPins, runBinaryPins } from "@cawco/agent/pin-record";
+import {
+  type KeeperJob,
+  keeperJob,
+} from "@cawco/agent/service-manager/keeper-job";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
 import { AwakeTime } from "@cawco/core/awake-time";
 import { type HealthProblem, probeHealth } from "@cawco/core/binary-health";
@@ -113,9 +116,10 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
+import { stopService } from "../../agent/src/service-manager/install";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
-import { service, stopService } from "./service";
+import { service } from "./service";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
