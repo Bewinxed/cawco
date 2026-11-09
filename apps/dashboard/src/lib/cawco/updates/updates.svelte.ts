@@ -19,6 +19,7 @@ import {
   failureSentence,
   hubFailure,
   hubFetch,
+  hubJson,
   hubRefusal,
   hubSaid,
 } from "#lib/platform/hub-read.js";
@@ -164,13 +165,13 @@ class Updates {
    * with) and updates come back on. The hub's refusal is the error.
    */
   async resetPolicy(): Promise<void> {
-    const response = await hubFetch(
-      hubRequest("POST /api/binary-updates/settings/reset")
+    this.policy = await hubJson<BinaryUpdatePolicy>(
+      hubRequest("POST /api/binary-updates/settings/reset"),
+      {
+        failure: (refused) =>
+          hubRefusal(refused, updatesWords.policyNotResetThen),
+      }
     );
-    if (!response.ok) {
-      throw await hubRefusal(response, updatesWords.policyNotResetThen);
-    }
-    this.policy = (await response.json()) as BinaryUpdatePolicy;
     this.damaged = false;
     this.problem = null;
     await this.loadChannels();
