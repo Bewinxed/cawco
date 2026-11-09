@@ -43,6 +43,7 @@ import {
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
+import type { Refused } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import {
@@ -122,7 +123,7 @@ export interface TaskToolContext {
   writePlan?: (
     row: InstanceRow,
     written: { steps?: WrittenStep[]; spec?: string }
-  ) => Promise<SessionPlan & { personChanged?: string }>;
+  ) => Promise<(SessionPlan & { personChanged?: string }) | Refused>;
 }
 
 /**
