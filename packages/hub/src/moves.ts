@@ -61,6 +61,7 @@ import {
 import { DAY_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { MoveRow } from "./db/moves";
 import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
@@ -68,7 +69,7 @@ import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
-import { StatusRefusal } from "./refusal";
+import { refusal } from "./refusal";
 import { received } from "./stored-json";
 
 /** A machine a step needs is away: the job waits for its next register. */
@@ -145,14 +146,6 @@ export interface MovesDeps {
   /** Starts the session as every hub-started session starts (spawns.ts `spawnSession`). */
   readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
 }
-
-/** A refusal a route answers with its status. */
-export class MoveRefused extends StatusRefusal<400 | 404 | 409> {}
-
-/** Throws a {@link MoveRefused}: for a refusal where a value is wanted. */
-const refuseMove = (status: 400 | 404 | 409, message: string): never => {
-  throw new MoveRefused(status, message);
-};
 
 /** How long a step may take before the hub stops waiting on its answer. */
 const STEP_TIMEOUT_MS = DAY_MS;
@@ -563,10 +556,7 @@ export const createMoves = (deps: MovesDeps) => {
    * id), else the project's primary, as the shipped apps that name none
    * read it. Refused when `from` names none of the project's checkouts.
    */
-  const sourceOf = (
-    project: ProjectRow,
-    from: string | undefined
-  ): PlaceRow | undefined => {
+  const sourceOf = (project: ProjectRow, from: string | undefined) => {
     if (from === undefined) {
       return checkoutOf(project);
     }
@@ -574,8 +564,9 @@ export const createMoves = (deps: MovesDeps) => {
       project.places.find(
         (place) => place.id === from && place.kind === "checkout"
       ) ??
-      refuseMove(
+      refusal(
         404,
+        "folder-not-in-project",
         `That folder is no longer in ${project.name}. Pick another under Move from.`
       )
     );
@@ -692,6 +683,21 @@ export const createMoves = (deps: MovesDeps) => {
     },
   });
 
+  /** Where the target's checkout goes: the folder asked for, else the source's name under home. */
+  const targetPathOf = (
+    targetMachineId: string,
+    sourcePlace: PlaceRow,
+    path: string | undefined
+  ) => {
+    const targetPath = db.machinePathOn(
+      targetMachineId,
+      path ?? `~/${posix.basename(sourcePlace.path)}`
+    );
+    return targetPath instanceof MachinePathRefused
+      ? refusal(400, "target-path", targetPath.message)
+      : targetPath;
+  };
+
   /**
    * What moving the project's checkout `asked.from` (its primary when none
    * is named) to `targetMachineId` takes: whether it is needed, where it
@@ -707,12 +713,15 @@ export const createMoves = (deps: MovesDeps) => {
     projectId: string,
     targetMachineId: string,
     asked: { from?: string; path?: string }
-  ): Promise<Plan> => {
+  ) => {
     const project = db.project(projectId);
     if (!project) {
-      throw new MoveRefused(404, `There is no project ${projectId}.`);
+      return refusal(404, "no-project", `There is no project ${projectId}.`);
     }
     const sourcePlace = sourceOf(project, asked.from);
+    if (sourcePlace instanceof ElysiaStatus) {
+      return sourcePlace;
+    }
     // A folder asked for is where it goes, whatever else is checked out there.
     const theres = asked.path
       ? []
@@ -730,12 +739,9 @@ export const createMoves = (deps: MovesDeps) => {
     if (refused || !sourcePlace) {
       return refusedPlan(project, asked.path ?? "", refused ?? "");
     }
-    const targetPath = db.machinePathOn(
-      targetMachineId,
-      asked.path ?? `~/${posix.basename(sourcePlace.path)}`
-    );
-    if (targetPath instanceof MachinePathRefused) {
-      throw new MoveRefused(400, targetPath.message, { cause: targetPath });
+    const targetPath = targetPathOf(targetMachineId, sourcePlace, asked.path);
+    if (targetPath instanceof ElysiaStatus) {
+      return targetPath;
     }
     // A plain folder being made a repository is read once it is one (or
     // stayed a folder): what the move asks never depends on which finished first.
@@ -830,14 +836,15 @@ export const createMoves = (deps: MovesDeps) => {
   type Placed = Required<Plan>;
 
   /** A plan that can move, or the refusal that says why not. */
-  const movable = (planned: Plan, request: MoveRequest): Placed => {
+  const movable = (planned: Plan, request: MoveRequest) => {
     const { project, estimate: estimated, source, target } = planned;
     if (estimated.refused) {
-      throw new MoveRefused(409, estimated.refused);
+      return refusal(409, "move-refused", estimated.refused);
     }
     if (!(estimated.needed && source && target)) {
-      throw new MoveRefused(
+      return refusal(
         409,
+        "already-there",
         `${project.name} is already on ${deps.machineName(request.machineId)} at ${estimated.path}: start the session there.`
       );
     }
@@ -976,8 +983,11 @@ export const createMoves = (deps: MovesDeps) => {
     projectId: string,
     targetMachineId: string,
     asked: { from?: string; path?: string }
-  ): Promise<MoveEstimate> => {
+  ) => {
     const planned = await plan(projectId, targetMachineId, asked);
+    if (planned instanceof ElysiaStatus) {
+      return planned;
+    }
     const { estimate: estimated, source, target } = planned;
     if (!(estimated.needed && source && target) || estimated.refused) {
       return estimated;
@@ -1057,16 +1067,14 @@ export const createMoves = (deps: MovesDeps) => {
   };
 
   /** A move: `POST /api/projects/:id/moves`. Answers the job once it is recorded. */
-  const start = async (
-    projectId: string,
-    asked: MoveRequest
-  ): Promise<MoveJob> => {
+  const start = async (projectId: string, asked: MoveRequest) => {
     // Its session starts on the harness it names, and nothing stands in for
     // one it left out.
     const { harness } = asked.spawn;
     if (!harness) {
-      throw new MoveRefused(
+      return refusal(
         400,
+        "move-needs-harness",
         "A move names the harness its session starts on. Pick one, then move it again."
       );
     }
@@ -1078,19 +1086,23 @@ export const createMoves = (deps: MovesDeps) => {
       asked.spawn.permissionMode
     );
     if (unfit) {
-      throw new MoveRefused(400, unfit);
+      return refusal(400, "mode-refused", unfit);
     }
     const request: NamedMoveRequest = {
       ...asked,
       spawn: { ...asked.spawn, harness },
     };
-    const planned = movable(
-      await plan(projectId, request.machineId, {
-        ...(request.from === undefined ? {} : { from: request.from }),
-        ...(request.path === undefined ? {} : { path: request.path }),
-      }),
-      request
-    );
+    const plotted = await plan(projectId, request.machineId, {
+      ...(request.from === undefined ? {} : { from: request.from }),
+      ...(request.path === undefined ? {} : { path: request.path }),
+    });
+    if (plotted instanceof ElysiaStatus) {
+      return plotted;
+    }
+    const planned = movable(plotted, request);
+    if (planned instanceof ElysiaStatus) {
+      return planned;
+    }
     const { project, source, target } = planned;
     const from = fromOf(source.inspection);
     const steps = await stepsFor(planned, from);
@@ -1101,8 +1113,9 @@ export const createMoves = (deps: MovesDeps) => {
       ask.key !== undefined &&
       request.approved !== ask.key
     ) {
-      throw new MoveRefused(
+      return refusal(
         409,
+        "move-changed",
         `What moving ${project.name} does changed since you looked. Check it again.`
       );
     }
@@ -1466,20 +1479,22 @@ export const createMoves = (deps: MovesDeps) => {
    * register when it is away), what is done stays on disk and `kept` says
    * so. A job already starting its session is past stopping.
    */
-  const cancel = (id: string, kept?: string): MoveJob => {
+  const cancel = (id: string, kept?: string) => {
     const row = db.moveRow(id);
     if (!row) {
-      throw new MoveRefused(404, "That move is not running.");
+      return refusal(404, "move-not-running", "That move is not running.");
     }
     if (row.stage === "started" || row.stage === "cancelled") {
-      throw new MoveRefused(
+      return refusal(
         409,
+        "move-over",
         `That move has already ${row.stage === "started" ? "started its session" : "been cancelled"}.`
       );
     }
     if (row.stage === "start") {
-      throw new MoveRefused(
+      return refusal(
         409,
+        "move-starting",
         "The session is already starting; it can't be cancelled now."
       );
     }
@@ -1510,13 +1525,17 @@ export const createMoves = (deps: MovesDeps) => {
   };
 
   /** Retry: a failed job runs its failed step again, and on from there. */
-  const retry = (id: string): MoveJob => {
+  const retry = (id: string) => {
     const row = db.moveRow(id);
     if (!row) {
-      throw new MoveRefused(404, "That move is not running.");
+      return refusal(404, "move-not-running", "That move is not running.");
     }
     if (row.stage !== "failed" || !row.state.error) {
-      throw new MoveRefused(409, "Only a move that failed can be retried.");
+      return refusal(
+        409,
+        "move-not-failed",
+        "Only a move that failed can be retried."
+      );
     }
     const { stage } = row.state.error;
     const moved = update(id, stage, ({ error: _error, ...state }) => state);
@@ -1548,7 +1567,12 @@ export const createMoves = (deps: MovesDeps) => {
     if (choice === DONT_MOVE) {
       db.setProjectMoveDeclined(row.projectId, new Date());
     }
-    cancel(row.id, "Nothing moved.");
+    // Its row waits on this approval, so the cancel has nothing to refuse;
+    // were it to, the log says so.
+    const cancelled = cancel(row.id, "Nothing moved.");
+    if (cancelled instanceof ElysiaStatus) {
+      console.warn(`[moves] ${row.id}: ${cancelled.response.detail}`);
+    }
     return true;
   };
 

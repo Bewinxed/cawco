@@ -15,6 +15,7 @@ import { answerFind, FIND_PLACES_QUERY, FIND_QUERY } from "../find";
 import { PLACES_LIMIT, placesForScreens, placesHeard } from "../find-places";
 import { forScreens } from "../find-secrets";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 
 /**
  * Who asks `GET /api/find`, as the hub's log names a slow machine's search
@@ -68,10 +69,10 @@ export const findRoutes = ({
     .get(
       "/api/find/places",
       { query: FIND_PLACES_QUERY },
-      async ({ query, request, status }) => {
+      async ({ query, request }) => {
         const [row] = db.find.instances([query.session]);
         if (!row) {
-          return status(404, `no session ${query.session}`);
+          return refusal(404, "no-session", `no session ${query.session}`);
         }
         const named = (
           took: PlacesHeard,

@@ -6,6 +6,7 @@ import { agentProblem, parseAgentFrontMatter } from "@cawco/core/fleet";
 import { Elysia, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 
 export const fleetAgentRoutes = ({
   agentMoved,
@@ -46,7 +47,7 @@ export const fleetAgentRoutes = ({
           params.name
         );
         if (problem) {
-          return status(400, problem);
+          return refusal(400, "agent-invalid", problem);
         }
         const moved = agentMoved(params.name, body.expectedHash);
         if (moved) {
@@ -77,6 +78,9 @@ export const fleetAgentRoutes = ({
           { kind: "agent", key: params.name },
           Date.now()
         );
+        // A plain sentence, as `agentMoved`'s 404: the shipped app's
+        // openapi.json types this 404 as `agentMoved`'s union, so its body
+        // stays what that app reads (scripts/wire-compat.ts).
         if (trashed === undefined) {
           return status(404, `the fleet keeps no subagent ${params.name}`);
         }

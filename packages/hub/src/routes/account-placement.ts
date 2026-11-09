@@ -13,6 +13,7 @@ import { Elysia, t } from "elysia";
 import { accountForecasts, carrySequence, historyPoints } from "../forecast";
 import type { HubContext } from "../hub-context";
 import { place as placeAccount } from "../placement";
+import { refusal } from "../refusal";
 import { accountProvider } from "../routes/accounts";
 import { harnessSchema } from "../routes/harness-schema";
 
@@ -82,7 +83,7 @@ export const accountPlacementRoutes = ({
           }),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         // Spread and Soonest reset weigh the limits CawCo reads; a provider
         // it reads none for can only be routed Pinned or Fill first.
         const offered = strategiesFor(params.provider);
@@ -95,8 +96,9 @@ export const accountPlacementRoutes = ({
                     ?.name ?? params.provider);
             const asked =
               choice.strategy === "spread" ? "Spread" : "Soonest reset";
-            return status(
+            return refusal(
               400,
+              "cant-route-cawco-reads",
               `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`
             );
           }
@@ -105,8 +107,9 @@ export const accountPlacementRoutes = ({
             choice.pinnedAccountId &&
             !db.accounts.get(choice.pinnedAccountId)
           ) {
-            return status(
+            return refusal(
               400,
+              "no-account-pin",
               `There is no account ${choice.pinnedAccountId} to pin.`
             );
           }
@@ -211,7 +214,7 @@ export const accountPlacementRoutes = ({
         // that refuses the harness refuses it (`placeSpawn`).
         const refused = refusedHarness(query.machineId, asked.harness);
         if (refused) {
-          return status(400, refused);
+          return refusal(400, "harness-refused", refused);
         }
         const input = placementInput(
           query.machineId,
@@ -245,7 +248,7 @@ export const accountPlacementRoutes = ({
         }
         const placed = placeAccount(input);
         if (!placed.ok) {
-          return status(400, placed.refusal);
+          return refusal(400, "not-placed", placed.refusal);
         }
         const { ok: _ok, ...explain } = placed;
         return { ...explain, model: resolved } satisfies PlacementPreview;

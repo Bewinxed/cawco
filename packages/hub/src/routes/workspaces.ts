@@ -144,8 +144,7 @@ export const workspaceRoutes = ({
             identities,
             request,
             body.from,
-            "Session credential does not belong to the discard's requester",
-            status
+            "Session credential does not belong to the discard's requester"
           );
           if (stranger !== undefined) {
             return stranger;

@@ -5,6 +5,7 @@
 import { areaWords } from "@cawco/core/words/areas";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 import { unreachable } from "../unreachable";
 
 export const trashRoutes = ({
@@ -20,20 +21,22 @@ export const trashRoutes = ({
     .post(
       "/api/trash/:id/restore",
       { params: t.Object({ id: t.Numeric() }) },
-      async ({ params, status }) => {
+      async ({ params }) => {
         const back = db.trash.take(params.id, Date.now());
         if (!back.ok) {
           switch (back.why) {
             case "taken":
-              return status(
+              return refusal(
                 409,
+                "trash-name-taken",
                 "Something of the same name was made while it waited, and that one stays."
               );
             case "unbound":
-              return status(409, areaWords.undoUnbound);
+              return refusal(409, "undo-unbound", areaWords.undoUnbound);
             case "gone":
-              return status(
+              return refusal(
                 404,
+                "trash-gone",
                 "It can no longer be brought back: its undo has run out."
               );
             default:

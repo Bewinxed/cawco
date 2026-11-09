@@ -8,6 +8,7 @@ import {
 } from "@cawco/core/protocol";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 
 export const delegateEventRoutes = ({ db }: Pick<HubContext, "db">) =>
   new Elysia()
@@ -25,9 +26,13 @@ export const delegateEventRoutes = ({ db }: Pick<HubContext, "db">) =>
           before: t.Optional(t.Numeric({ minimum: 1 })),
         }),
       },
-      ({ query, status }) => {
+      ({ query }) => {
         if (!(query.parent || query.instance)) {
-          return status(400, "name a parent or an instance");
+          return refusal(
+            400,
+            "name-parent-instance",
+            "name a parent or an instance"
+          );
         }
         return db.delegateEventsPage(query);
       }

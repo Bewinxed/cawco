@@ -22,6 +22,7 @@
  */
 import { MAX_REQUEST_BYTES } from "./config";
 import { FILE_LIMIT_BYTES } from "./media";
+import { refusal } from "./refusal";
 
 /** Bodies outside git and attachments: the model API's own request limit. */
 const JSON_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
@@ -40,12 +41,13 @@ const bodyLimitOf = (path: string): number => {
 const megabytes = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MB`;
 
-const tooLarge = (path: string, limit: number): Response =>
-  new Response(
+const tooLarge = (path: string, limit: number) =>
+  refusal(
+    413,
+    "body-too-large",
     path === FILES_PATH
       ? `Files up to ${megabytes(limit)}.`
-      : `This route takes bodies up to ${megabytes(limit)}.\n`,
-    { status: 413 }
+      : `This route takes bodies up to ${megabytes(limit)}.`
   );
 
 /** Whether a body that declares no length ends within `limit` bytes; reading stops past it. */
@@ -72,12 +74,10 @@ const endsWithin = async (
  * The refusal of a request whose body its route does not take, before the
  * route reads the body; undefined when it may go on.
  */
-export const bodyLimitRefusal = async (
-  request: Request
-): Promise<Response | undefined> => {
+export const bodyLimitRefusal = async (request: Request) => {
   const path = new URL(request.url).pathname;
   if (path.startsWith(GIT_PATH)) {
-    return undefined;
+    return;
   }
   const limit = bodyLimitOf(path);
   const declared = request.headers.get("content-length");

@@ -111,13 +111,14 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { readsOnly } from "./connection-writes";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
 import type { ConnectionAppSecret, ConnectionSecret } from "./db/stored-types";
 import { undoable } from "./db/trash";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
+import { refusal } from "./refusal";
 import { connectionToolsFor, roleOf } from "./roles";
 import {
   GITHUB_API,
@@ -2891,7 +2892,7 @@ const plainText = (text: string, code = 200) =>
 /** A refusal as a 400 in words; anything else is the hub's own failure. */
 const refused = (error: unknown) => {
   if (error instanceof ConnectionProblem) {
-    return status(400, error.message);
+    return refusal(400, "connection-problem", error.message);
   }
   throw error;
 };
@@ -2961,8 +2962,9 @@ export const connectionRoutes = (connections: Connections) =>
       async ({ params, body }) => {
         try {
           if (!("clientId" in body)) {
-            return status(
+            return refusal(
               400,
+              "github-app-registers",
               connectionsWords.githubAppRegisters(params.name)
             );
           }

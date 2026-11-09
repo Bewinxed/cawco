@@ -20,6 +20,7 @@ import { hidden } from "./hidden";
 import type { PreviewListenerDeps, PreviewListeners } from "./preview";
 import { mintTicket, presentedPasses } from "./preview-access";
 import { PreviewRefusal } from "./preview-hosts";
+import { refusal } from "./refusal";
 
 /** A panel asked for an artifact its session doesn't see. */
 const NO_SUCH_ARTIFACT = "This session has no such artifact.";
@@ -91,7 +92,7 @@ export const previewRoutes = (deps: {
       // A session's preview origin, its listener started when it has none.
       .post("/api/instances/:id/preview-address", ({ params }) => {
         if (!deps.hasInstance(params.id)) {
-          return new Response("No such session.", { status: 404 });
+          return refusal(404, "no-such-session", "No such session.");
         }
         try {
           return deps.listeners.address(params.id);
@@ -139,9 +140,11 @@ export const previewRoutes = (deps: {
           try {
             return (
               deps.artifactAddress(params.artifact) ??
-              new Response("No session or project holds that artifact.", {
-                status: 404,
-              })
+              refusal(
+                404,
+                "no-session-project-holds",
+                "No session or project holds that artifact."
+              )
             );
           } catch (error) {
             return refused(error);
@@ -152,7 +155,7 @@ export const previewRoutes = (deps: {
       // §5.8): one for the project's life, its listener started when it has none.
       .post("/api/projects/:id/preview-address", ({ params }) => {
         if (!deps.hasProject(params.id)) {
-          return new Response("No such project.", { status: 404 });
+          return refusal(404, "no-such-project", "No such project.");
         }
         try {
           return deps.listeners.address(projectOrigin(params.id));
@@ -189,7 +192,7 @@ export const previewRoutes = (deps: {
                 owner,
                 params.artifact
               )
-            : new Response(NO_SUCH_ARTIFACT, { status: 404 });
+            : refusal(404, "no-such-artifact", NO_SUCH_ARTIFACT);
         }
       )
       // The pane's link to the artifact's document (artifact-doc.ts).

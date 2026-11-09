@@ -206,12 +206,12 @@ const refusalWords = (error: unknown, status: number | null): string => {
  * Why a sign-in ended at the token endpoint: its refusal, and the tries of
  * the same renewal that got no answer before it.
  */
-const endedWords = (refusal: string, unanswered: number): string => {
+const endedWords = (said: string, unanswered: number): string => {
   const earlier =
     unanswered > 0
       ? ` ${unanswered} earlier ${unanswered === 1 ? "try" : "tries"} of this renewal got no answer, so the provider may have rotated the refresh token then.`
       : "";
-  return `The token endpoint refused to renew it: ${refusal}.${earlier}`;
+  return `The token endpoint refused to renew it: ${said}.${earlier}`;
 };
 
 const BEARER_ERROR = /\berror="([^"]*)"/u;
