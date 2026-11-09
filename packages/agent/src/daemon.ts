@@ -208,8 +208,8 @@ import {
 } from "./binary-update";
 import { rearmHooks, settleGonePlaces } from "./boundary/control";
 import { checkBoundaryHost } from "./boundary/decisions";
+import { liveWorkItems } from "./boundary/holding";
 import { accountsChangedHere, watchQuietBoundaries } from "./boundary/looks";
-import { liveWorkItems } from "./boundary/watch";
 import {
   browserFrame,
   removeBrowser,
