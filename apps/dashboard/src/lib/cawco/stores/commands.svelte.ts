@@ -24,7 +24,13 @@ import type { FrameOf } from "../hub/frames";
 import { standingBench } from "../hub/socket.svelte";
 import { presenceClientId } from "../presence";
 import { type CommandRefusal, refusals } from "../refusals.svelte";
-import { forgetSend, keepSend, keptSends, refuseSend } from "../send-store";
+import {
+  forgetSend,
+  keepSend,
+  keptSends,
+  refuseSend,
+  type SendExtras,
+} from "../send-store";
 import {
   type CommandRecord,
   failLocally,
@@ -1327,9 +1333,6 @@ function userMessage(text: string, uuid: string): SendPayload["message"] {
     origin: { kind: "human" },
   };
 }
-
-/** What a turn carries besides its typed text — pastes turned into chips, images. */
-export type SendExtras = Pick<SendPayload, "attachments" | "images">;
 
 /**
  * What a send does to the LOCAL store: the row it draws under the message's

@@ -27,7 +27,7 @@
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconChevronDown, IconLayers } from "#lib/icons.js";
-  import type { SendExtras } from "../stores/commands.svelte";
+  import type { SendExtras } from "../send-store";
   import Composer from "../transcript/Composer.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
 

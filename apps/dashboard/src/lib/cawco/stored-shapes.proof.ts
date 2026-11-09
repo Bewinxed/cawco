@@ -108,7 +108,10 @@ import type {
   RoutineAct as RoutineActType,
   RoutineRefusal as RoutineRefusalType,
 } from "./routines/refusals.svelte";
-import type { KeptSend as KeptSendType } from "./send-store";
+import type {
+  KeptSend as KeptSendType,
+  SendExtras as SendExtrasType,
+} from "./send-store";
 import type { ModelUse as ModelUseType } from "./spawn/modelUse.svelte";
 import type {
   KeptForm as KeptFormType,
@@ -221,7 +224,6 @@ import type {
   UserQuestionResultOutput,
   VisitOutput,
 } from "./stored-shapes";
-import type { SendExtras as SendExtrasType } from "./stores/commands.svelte";
 import type { RunningSession as RunningSessionType } from "./stores/projects.svelte";
 import type { ForkSource as ForkSourceType } from "./stores/session-start.svelte";
 import type { Beside as BesideType } from "./tasks/beside.svelte";
