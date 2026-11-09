@@ -968,7 +968,7 @@ const FLEET_DIR = /^cawco-[0-9a-f]{8}$/u;
  * above a location (its config discovery, 2.0.29 to 2.0.32), and Bun
  * resolves a folder on macOS by opening it, which the boundary refuses for
  * every folder above one under home, where a folder answers a lookup alone
- * (core boundary-policy.ts `seatbeltProfile`): "EPERM … lstat
+ * (agent boundary-policy.ts `seatbeltProfile`): "EPERM … lstat
  * '/Users/…/.cawco/tmp'", and every location read answered 500. Nothing
  * above the user's temp folder is refused. No socket goes here: the boundary
  * keeps the host's sockets in it out of reach, so the runtime dirs, where
