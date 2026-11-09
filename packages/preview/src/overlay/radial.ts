@@ -308,7 +308,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
   /**
    * The part of the viewport the page stands in: the host's box, `inset: 0`
    * and fixed. `innerWidth` counts a scrollbar and the gutter kept for one
-   * (core preview-proxy `GUTTER_FLOOR`), where a press reaches no element.
+   * (preview proxy `GUTTER_FLOOR`), where a press reaches no element.
    */
   const room = () => shadow.host.getBoundingClientRect();
 

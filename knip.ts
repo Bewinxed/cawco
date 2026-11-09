@@ -313,7 +313,11 @@ export default {
         // The file viewer's Bun.build entrypoint: packages/core/src/file-viewer.ts `buildViewerScript`.
         "src/file-viewer/viewer.ts",
       ],
-      // Read by Bun.resolveSync (src/preview-overlay/glyphs.ts:21), which
+    },
+    "packages/preview": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      includeEntryExports: true,
+      // Read by Bun.resolveSync (src/overlay/glyphs.ts:21), which
       // Knip does not follow (it follows require.resolve and
       // import.meta.resolve: knip.dev/explanations/entry-files).
       ignoreDependencies: ["@iconify-json/solar"],
