@@ -72,8 +72,9 @@ import type { createAdmission } from "./admission";
 import type { createArtifactSessions } from "./artifact-session";
 import type { createArtifactLane } from "./artifacts/lane";
 import type { Artifacts } from "./artifacts/service";
+import type { createAsks } from "./asks";
 import type { createAtLimit, Kept, TakenUpBy } from "./at-limit";
-import type { createCaw } from "./caw";
+import type { Caw, createCaw } from "./caw";
 import type { createConnections } from "./connections";
 import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
@@ -92,6 +93,7 @@ import type {
   PreparedContinuation,
   StoredSendRefusal,
 } from "./db/stored-types";
+import type { createDecisions } from "./decisions";
 import type { DelegateTypesShape } from "./delegate-types";
 import type { DelegateResult } from "./delegation-actions";
 import type { createDelegationMcp } from "./delegation-mcp";
@@ -181,6 +183,7 @@ export interface HubContext {
     | { answer: FleetAgent; status: 409 }
     | { answer: string; status: 404 }
     | undefined;
+  anchors: Map<string, string>;
   announceMcp: () => void;
   announceSkill: (name: string, source: string) => void;
   archiveView: () => ArchiveView;
@@ -285,6 +288,7 @@ export interface HubContext {
   credentialTurns: Set<string>;
   cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   db: DbShape;
+  decisions: ReturnType<typeof createDecisions>;
   decisionsChanged: (projectId: string) => void;
   delegatedAttempt: ({
     task,
@@ -409,6 +413,7 @@ export interface HubContext {
       projectId?: string | null;
     }
   ) => HookDraft;
+  hubAsks: ReturnType<typeof createAsks>;
   hubAuth: ReturnType<typeof createHubAuth>;
   hubBuild: BuildInfo;
   hubStep: (event: HandoverEvent) => HandoverCommand[];
@@ -470,7 +475,9 @@ export interface HubContext {
   launchInFlight: (instanceId: string) => boolean;
   launchStarted: (instanceId: string, why: string) => void;
   laws: ReturnType<typeof createLaws>;
+  lead: Caw | undefined;
   leadRuns: Routines | undefined;
+  leftoverWords: (workspaceId: string, from: string) => string;
   lfsMachineProject: (
     id: string,
     caller: Caller
@@ -729,6 +736,7 @@ export interface HubContext {
         refusal?: StoredSendRefusal | undefined;
       }
     | undefined;
+  sentFrame: (arg0: SendPayload) => SentMessage;
   sessionAsleep: (machineId: string, instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
   sessionName: (row: {
@@ -886,6 +894,10 @@ export interface HubContext {
     status: string;
   }) => boolean;
   watch: FleetWatch | undefined;
+  withdrawPending: (
+    row: SentMessageRow,
+    machineId: string
+  ) => Promise<"withdrawn" | "started">;
   withPresence: (rows: AgentRow[]) => AgentRow[];
   workItems: ReturnType<typeof createWorkItems>;
   workspaceArchived: (workspace: WorkspaceRow) => void;
