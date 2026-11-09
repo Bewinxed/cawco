@@ -1,5 +1,6 @@
 import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
+import { refusalWords } from "@cawco/core/hub-refusal";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { END_TURN_META } from "@cawco/core/no-reply";
@@ -136,7 +137,7 @@ export async function callDelegationTool(
   const take = async (response: Response) => {
     if (!response.ok) {
       // A refusal says why in its body (a restarting agent: not started, retry), and the model reads it.
-      const why = await response.text().catch(() => "");
+      const why = refusalWords(await response.text().catch(() => ""));
       throw new Error(
         `CawCo tool ${name}: HTTP ${response.status}${why ? `: ${why}` : ""}`
       );
