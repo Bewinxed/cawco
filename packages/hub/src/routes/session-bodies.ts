@@ -11,9 +11,7 @@ import { harnessSchema } from "./harness-schema";
  * were built to send. `settleMode` refuses a mode the machine does not
  * report, in the machine's own list.
  */
-export const permissionModeSchema = t.Union(
-  WIRE_PERMISSION_MODES.map((mode) => t.Literal(mode))
-);
+export const permissionModeSchema = t.UnionEnum(WIRE_PERMISSION_MODES);
 
 /** Continue in new session: every field of the summariser and target is the caller's to name. */
 export const continueBody = t.Object({
@@ -34,7 +32,7 @@ export const continueBody = t.Object({
     model: t.Optional(t.String({ minLength: 1 })),
     machineId: t.Optional(t.String({ minLength: 1 })),
     cwd: t.Optional(t.String({ minLength: 1 })),
-    effort: t.Optional(t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))),
+    effort: t.Optional(t.UnionEnum(EFFORT_LEVELS)),
     // The mode the new session is asked to run in. Asked none, it takes the
     // mode of the session that asked for it (`askedBy`) as it starts
     // (`continuationCauseMode`). A harness with modes gets an explicit mode,
