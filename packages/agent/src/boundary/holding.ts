@@ -38,7 +38,20 @@ const QUIET_CLOSE_MS = 10 * 60_000;
  * agent counts from that look, so a restart gives every boundary its full
  * quiet time again.
  */
-export const liveAt = new Map<string, number>();
+const liveAt = new Map<string, number>();
+
+/** Workspace `id`'s boundary was ensured or seen held at `at` ({@link liveAt}). */
+export const sawHeld = (id: string, at: number): void => {
+  liveAt.set(id, at);
+};
+
+/** When workspace `id`'s boundary was last ensured or seen held, if this agent has seen it. */
+export const heldSince = (id: string): number | undefined => liveAt.get(id);
+
+/** Workspace `id`'s boundary is closed: nothing counts its quiet time now. */
+export const forgetHeld = (id: string): void => {
+  liveAt.delete(id);
+};
 
 /**
  * Runs an archive's close of workspace `id` (`close`) as one step against its
