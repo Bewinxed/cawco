@@ -27,7 +27,7 @@ const MachineNetworkShape = declared(
     routed: z.boolean(),
   }),
   "MachineNetwork",
-  "packages/agent/src/browser/egress.ts"
+  "packages/agent/src/browser/state.ts"
 );
 export type MachineNetworkOutput = z.output<typeof MachineNetworkShape>;
 
