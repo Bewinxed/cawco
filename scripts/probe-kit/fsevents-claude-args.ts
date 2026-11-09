@@ -2,7 +2,7 @@
  * fsevents-scope's Claude CLI as one launched before CawCo asked it for its
  * hook events: the arguments a session's `claude` is started with, without
  * `--include-hook-events` and with a boundary hook in its `--settings` (the
- * form boundary.ts `launchedHook` reads off a CLI's command line). The
+ * form boundary/launched-hook.ts `launchedHook` reads off a CLI's command line). The
  * fleet's `claude` on PATH is a zsh script that `exec`s the real CLI with
  * these, so the process sessiond holds is the CLI itself, under this command
  * line; an agent that adopts it follows its transcript for the hook's
