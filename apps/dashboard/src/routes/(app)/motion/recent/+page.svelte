@@ -816,11 +816,15 @@
   onMount(() => {
     // Done, answered as the hub would (the row's `doneAt`).
     const fetchWas = window.fetch;
-    window.fetch = (input, init) =>
-      answerSeen(input, init) ??
-      answerNamed(input, init) ??
-      answerTranscript(input) ??
-      fetchWas(input, init);
+    // A proxy of the native fetch, so what else it carries (Bun types its
+    // `preconnect`) stays as it is.
+    window.fetch = new Proxy(fetchWas, {
+      apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) =>
+        answerSeen(input, init) ??
+        answerNamed(input, init) ??
+        answerTranscript(input) ??
+        fetchWas(input, init),
+    });
     debug.standHub(
       (instanceId, kind, intent, commandId) => {
         commands.push({ instanceId, kind, intent, commandId });
