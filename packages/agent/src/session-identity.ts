@@ -34,7 +34,7 @@ export const acknowledgeSessionCredential = async (
     NOT_ACKNOWLEDGED
   );
   if (!response.ok) {
-    const said = `${NOT_ACKNOWLEDGED}: ${refusalWords(await response.text())}`;
+    const said = `${NOT_ACKNOWLEDGED}: ${refusalWords(await response.text(), response.status)}`;
     throw response.status === 401
       ? new CredentialUnknown(said)
       : new Error(said);
