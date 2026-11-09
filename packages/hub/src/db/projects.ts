@@ -373,7 +373,7 @@ export interface ProjectsDb {
   /**
    * The projects with a work item on `machineId`: in a workspace there,
    * whatever checkout the project has there. The machine is sent their rows
-   * (server.ts `machineFleetItems`).
+   * (fleet-sources.ts `machineFleetItems`).
    */
   readonly projectsWorkedOn: (machineId: string) => string[];
   /** Stores what a session has done that taints its memory notes (memory.ts), replacing what it had. */

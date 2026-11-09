@@ -1,7 +1,7 @@
 /**
  * Every machine artifact serves its own content on its own origin, whatever
  * else is open, and a decision card's Preview of a folder shows the folder
- * as it is now (hub server.ts `frameAddress`, `tabTarget`; preview.ts
+ * as it is now (hub artifact-pages.ts `frameAddress`, `tabTarget`; preview.ts
  * `openEmbed`). The owner: "the comments here were replied to but there was
  * nothing changed"; a browser check: opening one preview's tab loaded
  * another session artifact's and flipped the dashboard to it.

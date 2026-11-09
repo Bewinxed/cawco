@@ -2,7 +2,7 @@
  * A session files its open items once its context comes within its
  * compaction policy's `fileRoom` of the point where its own harness compacts
  * it, and every harness lists them after each of its compactions (hub
- * at-limit.ts `fileDue`, server.ts `fileAtThreshold` and
+ * at-limit.ts `fileDue`, compaction.ts `fileAtThreshold` and
  * `observeCompaction`, open-items.ts, the agent's compaction-points.ts).
  *
  * First the rules, pure: `fileDue` below, at and past the room, a reading
