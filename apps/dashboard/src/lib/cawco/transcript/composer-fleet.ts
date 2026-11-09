@@ -27,6 +27,7 @@ import {
 import CawFace from "../home/CawFace.svelte";
 import { hubSeam } from "../hub-live";
 import SkillChip from "../SkillChip.svelte";
+import { mcpServersStore } from "../stores/mcp-servers.svelte";
 import { CanvasRoom } from "./canvas-room.svelte";
 import DelegateTray from "./DelegateTray.svelte";
 import {
@@ -78,6 +79,7 @@ export const composerFleet = {
     watchReplace,
     writesTo,
   },
+  mcpServersStore,
   mcpSignInIntent,
   readOlderPage,
   relaunchRefusalOf,
