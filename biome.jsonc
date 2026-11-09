@@ -18,7 +18,7 @@
     "./scripts/lint/uncaught-handlers-exit.grit",
     "./scripts/lint/stored-json.grit",
     // An artifact's row goes through dropArtifacts alone, which ends its
-    // preview origin (packages/hub/src/db/index.ts).
+    // preview origin (packages/hub/src/db/artifacts.ts).
     "./scripts/lint/artifact-rows-drop.grit",
     // A preview origin's upstream is the hub's preview-service.ts's alone,
     // and what serves an artifact is read off its row
