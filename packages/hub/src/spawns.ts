@@ -831,7 +831,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
   /**
    * A new workspace's first session placed before the workspace is cut
    * (work-items `ItemPlacement`): its account by {@link placedOrRefused}, and
-   * the Claude account its launch runs on as {@link grantLaunch} will name it
+   * the Claude account its launch runs on as `grantLaunch` will name it
    * ({@link launchAccount} on the row it opens with: the machine's own login
    * while that moves into CawCo, else its account). The agent adds that one
    * to the workspace's accounts as the boundary first starts, as its spawn
@@ -872,7 +872,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
 
   /**
    * The Claude account session `instanceId`'s next launch on `machineId`
-   * runs on, as {@link grantLaunch} will name it (the account a move owed to
+   * runs on, as `grantLaunch` will name it (the account a move owed to
    * it names over its row's, {@link owedOn}), read without taking anything:
    * what its workspace cut again names (work-items `launchesOn`).
    */
@@ -971,7 +971,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
   /**
    * Why `machineId` takes no start now, or nothing. A machine inside its
    * reconnect window takes it on its register, under the request id its
-   * caller waits on ({@link flushOwedStarts}); a caller `asking` and waiting
+   * caller waits on (`flushOwedStarts`); a caller `asking` and waiting
    * on any other hold is told now rather than left to time out.
    */
   const startRefusal = (
