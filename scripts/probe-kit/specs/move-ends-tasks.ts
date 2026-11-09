@@ -1,7 +1,7 @@
 /**
  * A move that ends a session's background work ends what that work runs in
  * its workspace, as the session is told it did (agent session.ts
- * `#stopForCarry`, hub server.ts `endedByMoveWords`).
+ * `#stopForCarry`, hub account-carry.ts `endedByMoveWords`).
  *
  * 2026-11-04: a session moved to another account read "the move ended what
  * your old process was still running", while its background command ran on
@@ -25,7 +25,7 @@
  * request on R is refused 403 (an organization whose subscription access is
  * refused, `oauth_org_not_allowed`), which signs R out and moves the
  * delegate, stopped on its refused sign-in, to W, ending the work its
- * process holds for later (hub server.ts `moveRowsToAccount`, `endLater`).
+ * process holds for later (hub account-carry.ts `moveRowsToAccount`, `endLater`).
  *
  * - (a) Before the refusal, the background `sleep` runs. (A bare `sleep`, in
  *   its command's group, ended with the CLI's cut-off before the move's own

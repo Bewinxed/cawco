@@ -236,7 +236,7 @@ export function createDelegationMcp(options: {
   formerIds: () => Record<string, string>;
   /** Whether `leadId` is the conversation of the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
-  /** The sessions `instanceId` was forked from, nearest first (server.ts `forkLineage`). */
+  /** The sessions `instanceId` was forked from, nearest first (launches.ts `forkLineage`). */
   forkOrigins?: (instanceId: string) => ForkOrigin[];
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
   /** A session's start_session, held until the session is in place; answers its settled folder (delegation-actions `spawn`). */
@@ -381,7 +381,7 @@ export function createDelegationMcp(options: {
    * An admin call's input with what the caller's own place means bound in,
    * before it is asked or run, in Full Send too: a skill installed from a
    * folder names the caller's machine and pins the files read there
-   * (server.ts `bindFolderInstall`). Throws, in a sentence, for input that
+   * (machine-calls.ts `bindFolderInstall`). Throws, in a sentence, for input that
    * cannot be bound, so nothing is asked or stored.
    */
   bindAdminInput?: (

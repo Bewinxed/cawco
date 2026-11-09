@@ -486,7 +486,7 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
 
 /**
  * The hub's word to a session holding news for the person as they come back
- * from being away (hub server.ts `tellBack`): it starts a turn whose reply
+ * from being away (hub sends.ts `tellBack`): it starts a turn whose reply
  * is the recap; its presence line carries the notes ({@link PresenceSaid}
  * `recap`).
  */
@@ -495,7 +495,7 @@ export const BACK_MESSAGE =
 
 /**
  * Where the person is, as a session is told at the start of each turn (hub
- * server.ts `presenced`, from notifications.ts `person`):
+ * sends.ts `presenced`, from notifications.ts `person`):
  * - `on`: on this chat now, or this is their own message: talk normally.
  *   With `recap`, the person has just come back from being away since
  *   `recap.since` (the hub's own word on when they left), and this turn is
