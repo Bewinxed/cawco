@@ -71,8 +71,8 @@ export const PREVIEW_DOWNS = [
  * preview.ts), the status and the error's first line as its why
  * (`errorLineOf`), never the browser's own error face. `crashed`: the page
  * loaded, but a script of its threw before its load and it shows nothing:
- * its overlay names it, the thrown message as its why (agent
- * preview-overlay embeds.ts `tellDrawn`).
+ * its overlay names it, the thrown message as its why (@cawco/preview
+ * overlay embeds.ts `tellDrawn`).
  */
 export type PreviewDown = (typeof PREVIEW_DOWNS)[number];
 export const PREVIEW_DOWN_META = "cawco-preview-down";
