@@ -271,7 +271,7 @@
   />
   <Button
     data-specimen
-    data-site="routes/(app)/config/connections/+page.svelte:483"
+    data-site="lib/cawco/config/ConnectionsSection.svelte:483"
     label="Sign in"
     pendingLabel="Signing in…"
     size="sm"
@@ -279,7 +279,7 @@
   />
   <Button
     data-specimen
-    data-site="routes/(app)/config/connections/+page.svelte:591"
+    data-site="lib/cawco/config/ConnectionsSection.svelte:591"
     label="Save key"
     pendingLabel="Saving…"
     size="xs"
@@ -287,7 +287,7 @@
   />
   <Button
     data-specimen
-    data-site="routes/(app)/config/devices/+page.svelte:178"
+    data-site="lib/cawco/config/DevicesSection.svelte:178"
     label="Require paired devices"
     pendingLabel="Pairing this browser…"
     size="sm"
@@ -295,7 +295,7 @@
   />
   <Button
     data-specimen
-    data-site="routes/(app)/config/devices/+page.svelte:204"
+    data-site="lib/cawco/config/DevicesSection.svelte:204"
     label="Stop requiring paired devices"
     pendingLabel="Stopping…"
     size="sm"
@@ -335,7 +335,7 @@
   />
   <Button
     data-specimen
-    data-site="routes/(app)/config/phone/+page.svelte:138"
+    data-site="lib/cawco/config/PhoneSection.svelte:138"
     label="Send test push"
     pendingLabel="Sending…"
     size="sm"
@@ -343,7 +343,7 @@
   />
   <Button
     data-specimen
-    data-site="routes/(app)/config/previews/+page.svelte:210"
+    data-site="lib/cawco/config/PreviewsSection.svelte:210"
     label="Save"
     pendingLabel="Saving…"
     size="sm"
