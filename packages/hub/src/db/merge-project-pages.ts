@@ -15,9 +15,6 @@
 import type { Database } from "bun:sqlite";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
 
-/** Migration 0275's journal `when`: the merge runs while no applied migration is as new. */
-export const PROJECT_PAGES_MIGRATION_WHEN = 1_792_462_132_027;
-
 interface PageRow {
   created_at: number;
   id: string;
@@ -45,7 +42,7 @@ export const docOf = (client: Database, id: string): Doc => {
 };
 
 /** Whether the database holds a migration as new as 0275, or no artifacts at all: nothing to fold. */
-const settled = (client: Database): boolean => {
+const settled = (client: Database, when: number): boolean => {
   const tables = new Set(
     (
       client
@@ -61,7 +58,7 @@ const settled = (client: Database): boolean => {
   const newest = client
     .query("SELECT max(created_at) AS at FROM __drizzle_migrations")
     .get() as { at: number | null };
-  return (newest.at ?? 0) >= PROJECT_PAGES_MIGRATION_WHEN;
+  return (newest.at ?? 0) >= when;
 };
 
 /** An artifact's rows by its id, and its held next version's: its log, its keys' changes, the panel that shows it. */
@@ -132,8 +129,8 @@ const foldInto = (
  * Folds each project page name's rows into its newest, in one transaction;
  * how many older rows went. Nothing once 0275 is applied.
  */
-export const mergeProjectPages = (client: Database): number => {
-  if (settled(client)) {
+export const mergeProjectPages = (client: Database, when: number): number => {
+  if (settled(client, when)) {
     return 0;
   }
   const rows = client
