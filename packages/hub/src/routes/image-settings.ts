@@ -10,6 +10,7 @@ import {
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 
 export const imageSettingRoutes = ({ db }: Pick<HubContext, "db">) =>
   new Elysia()
@@ -26,25 +27,28 @@ export const imageSettingRoutes = ({ db }: Pick<HubContext, "db">) =>
           model: t.Optional(t.Union([t.String(), t.Null()])),
         }),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         const provider = imageProviderOf(body.provider);
         if (!provider) {
-          return status(
+          return refusal(
             400,
+            "no-such-provider",
             imageGenerationWords.noSuchProvider(body.provider)
           );
         }
         const model = body.model?.trim() || null;
         const models = IMAGE_PROVIDER_MODELS[provider];
         if (model && !offersModelChoice(provider)) {
-          return status(
+          return refusal(
             400,
+            "settings-no-model-choice",
             imageGenerationWords.settingsNoModelChoice(provider, models[0])
           );
         }
         if (model && !models.includes(model)) {
-          return status(
+          return refusal(
             400,
+            "settings-unknown-model",
             imageGenerationWords.settingsUnknownModel(provider, model, [
               ...models,
             ])

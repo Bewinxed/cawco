@@ -84,7 +84,7 @@ import { projectWords } from "@cawco/core/words/project";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
@@ -113,7 +113,7 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
-import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
+import { refusal, refusalAnswer, refuser, StatusRefusal } from "./refusal";
 import type { CawToolName } from "./roles";
 import {
   SETUP_CARDS,
@@ -1938,7 +1938,11 @@ export const createCaw = ({
 export type Caw = ReturnType<typeof createCaw>;
 
 const answer = refusalAnswer(CawRefusal, (error) =>
-  status(502, error instanceof Error ? error.message : String(error))
+  refusal(
+    502,
+    "caw-failed",
+    error instanceof Error ? error.message : String(error)
+  )
 );
 
 const HARNESS = t.UnionEnum(HARNESSES);
