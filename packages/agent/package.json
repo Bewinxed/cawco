@@ -11,12 +11,12 @@
     "./daemon": "./src/daemon.ts",
     "./discovery": "./src/discovery.ts",
     "./awake-hold": "./src/awake-hold.ts",
-    "./keeper-jobs": "./src/keeper-jobs.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
     "./pi-mcp-list": "./src/harnesses/pi-mcp-list.ts",
     "./pin-record": "./src/pin-record.ts",
     "./sessiond-client": "./src/sessiond-client.ts",
-    "./tools": "./src/tools.ts"
+    "./tools": "./src/tools.ts",
+    "./service-manager/*": "./src/service-manager/*.ts"
   },
   "scripts": {
     "dev": "bun --watch src/cli.ts",
