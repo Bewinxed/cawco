@@ -65,14 +65,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
-import type {
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
+import type { Sending } from "../../../packages/core/src/sending";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { askCollapseId } from "../../../packages/hub/src/notifications";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { doorOf, liveBrowser, servedSite } from "../gated-pages";

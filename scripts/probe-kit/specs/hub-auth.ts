@@ -61,14 +61,11 @@ import {
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
 import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import type {
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
 import { httpProof } from "../../../packages/core/src/machine-key";
+import type { Sending } from "../../../packages/core/src/sending";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { askRecordedWords } from "../../../packages/core/src/words/ask-lines";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { answerText, type HubAsk, pageHub, payloadOf } from "../hub";
