@@ -134,7 +134,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
       stopped !== undefined &&
       (laterSince === undefined || waitedOut(laterSince));
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
-      traitsOf(row.harness).accountModel === "dir" && row.sessionId
+      traitsOf(row.harness).accountDir && row.sessionId
         ? [
             {
               instanceId: row.id,
