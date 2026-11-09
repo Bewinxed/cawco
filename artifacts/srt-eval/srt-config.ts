@@ -1,6 +1,6 @@
 /**
  * Prototype: the srt settings one CawCo workspace runs under, derived from what
- * boundary/ grants today (packages/agent/src/boundary.ts), with the review's
+ * boundary/ grants today (packages/agent/src/boundary/), with the review's
  * escapes closed in the config itself.
  *
  *   bun srt-config.ts <clone> <state> <out.json>
