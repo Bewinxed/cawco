@@ -71,11 +71,7 @@ import type {
 } from "@cawco/core/project-gate";
 import { Elysia, ElysiaStatus } from "elysia";
 import { readFolderFile } from "./project-folder";
-import {
-  ProjectRefusal,
-  projectRefusalOf,
-  projectRefused,
-} from "./project-refusal";
+import { refusal } from "./refusal";
 import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
 
 /** The file in the project's folder that declares its gate. */
@@ -351,28 +347,26 @@ export const readGate = (content: string): GateReading => {
   return { ok: true, steps, ...(ship ? { ship } : {}) };
 };
 
-/** The project's gate as its folder holds it now. */
-export const projectGate = async (projectId: string): Promise<ProjectGate> => {
+/** The project's gate as its folder holds it now; the folder's refusal when gate.md does not read off it. */
+export const projectGate = async (projectId: string) => {
   const reading = await gateReading(projectId);
-  if (!reading) {
-    return { kind: "none" };
+  if (reading instanceof ElysiaStatus) {
+    return reading;
   }
-  if (!reading.ok) {
-    return { kind: "unreadable", problems: reading.problems };
+  let gate: ProjectGate = { kind: "none" };
+  if (reading?.ok) {
+    gate = { kind: "declared", steps: reading.steps };
+  } else if (reading) {
+    gate = { kind: "unreadable", problems: reading.problems };
   }
-  return { kind: "declared", steps: reading.steps };
+  return gate;
 };
 
-/** gate.md as the project's folder holds it now, read; undefined with no gate.md. */
-const gateReading = async (
-  projectId: string
-): Promise<GateReading | undefined> => {
+/** gate.md as the project's folder holds it now, read; undefined with no gate.md, the folder's refusal when it does not read off the folder. */
+const gateReading = async (projectId: string) => {
   const file = await readFolderFile(projectId, GATE_FILE);
   if (file instanceof ElysiaStatus) {
-    if (file.status === 404) {
-      return;
-    }
-    throw projectRefusalOf(file);
+    return file.status === 404 ? undefined : file;
   }
   return readGate(file.content);
 };
@@ -380,12 +374,14 @@ const gateReading = async (
 /**
  * The project's `Ship:` command, as its gate.md declares it now (ship.ts
  * runs it); undefined when it declares none, or gate.md does not read (no
- * item lands through such a gate).
+ * item lands through such a gate); the folder's refusal when it does not
+ * read off the folder.
  */
-export const projectShip = async (
-  projectId: string
-): Promise<string | undefined> => {
+export const projectShip = async (projectId: string) => {
   const reading = await gateReading(projectId);
+  if (reading instanceof ElysiaStatus) {
+    return reading;
+  }
   return reading?.ok ? reading.ship : undefined;
 };
 
@@ -397,14 +393,18 @@ export const projectShip = async (
  */
 export const gateRoutes = (projectExists: (id: string) => boolean) =>
   new Elysia().get("/api/projects/:id/gate", async ({ params }) => {
-    try {
-      if (!projectExists(params.id)) {
-        throw new ProjectRefusal(404, `The hub keeps no project ${params.id}.`);
-      }
-      return { file: GATE_FILE, gate: await projectGate(params.id) };
-    } catch (error) {
-      return projectRefused(error);
+    if (!projectExists(params.id)) {
+      return refusal(
+        404,
+        "gate-project-unknown",
+        `The hub keeps no project ${params.id}.`
+      );
     }
+    const gate = await projectGate(params.id);
+    if (gate instanceof ElysiaStatus) {
+      return gate;
+    }
+    return { file: GATE_FILE, gate };
   });
 
 /** Whether `inputs` covers `path`: the path itself, or one under a folder it names. */
