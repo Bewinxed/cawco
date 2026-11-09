@@ -15,7 +15,7 @@ export interface TurnWords {
  * assistant frames.
  *
  * One rule keeps it the turn's own: it starts empty when the turn starts
- * ({@link began}, server.ts `turnUnderWay`). A turn that ends with no result
+ * ({@link began}, sends.ts `turnUnderWay`). A turn that ends with no result
  * (its process died, slept or was stopped inside it, a limit's refusal whose
  * result never came) leaves nothing for the next turn to start with.
  *
@@ -30,7 +30,7 @@ export interface TurnWords {
  *   no-reply.ts `END_TURN_META`): its tool result is the turn's last frame
  *   before a `success` result, with no assistant frame after it.
  * - Whether it has called a tool: it has done work, which a credential's
- *   refusal never runs again (server.ts `takeCredentialTurn`).
+ *   refusal never runs again (limit-moves.ts `takeCredentialTurn`).
  */
 export const turnState = () => {
   const said = new Map<string, string[]>();
