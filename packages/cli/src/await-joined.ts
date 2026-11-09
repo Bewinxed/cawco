@@ -7,8 +7,8 @@
  * this very code.
  */
 import { hostname } from "node:os";
+import { hubClient, reached } from "@cawco/agent/hub-client";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import {
   INSTALL_CODE_ENV,
   INSTALL_CODE_HEADER,
@@ -44,26 +44,21 @@ const readOwnRow = (
 ): Promise<Bounded<{ pairing: string | null; row?: AgentRow }>> =>
   readWithin(5000, async (signal) => {
     const code = process.env[INSTALL_CODE_ENV];
-    const response = await machineFetch(
-      ...hubAt(
-        hubUrl,
-        hubRequest("GET /api/agents/:machineId", { path: { machineId: id } }),
-        {
+    const answer = reached(
+      await hubClient(hubUrl, (url, init) =>
+        machineFetch(url, {
+          ...init,
           signal,
-          ...(code ? { headers: { [INSTALL_CODE_HEADER]: code } } : {}),
-        }
+          ...(code
+            ? { headers: { ...init.headers, [INSTALL_CODE_HEADER]: code } }
+            : {}),
+        })
       )
+        .api.agents({ machineId: id })
+        .get()
     );
-    const pairing = response.headers.get("x-cawco-pairing");
-    if (!response.ok) {
-      await response.body?.cancel();
-      return { pairing };
-    }
-    try {
-      return { pairing, row: (await response.json()) as AgentRow };
-    } catch {
-      return { pairing };
-    }
+    const pairing = answer.response.headers.get("x-cawco-pairing");
+    return answer.error ? { pairing } : { pairing, row: answer.data };
   });
 
 /**
