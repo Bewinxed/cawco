@@ -65,14 +65,18 @@
   import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { browser } from "$app/env";
-  import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
+  import {
+    connectionStore,
+    hubSocketUrl,
+    reconnectNow,
+  } from "./hub/socket.svelte";
   import { reloadedFor } from "./reload.svelte";
   import { newerBuild } from "./served-build.svelte";
 
   /** Whether this tab has ever had the hub: a drop retries, a first miss is a wrong address. */
   let everConnected = $state(false);
   $effect(() => {
-    if (cawco.status === "connected") {
+    if (connectionStore.status === "connected") {
       everConnected = true;
     }
   });
@@ -88,7 +92,7 @@
 
   /** The socket's fault, once there is evidence of one; null while none. */
   const fault = $derived.by((): "lost" | "refused" | "retrying" | null => {
-    const s = cawco.status;
+    const s = connectionStore.status;
     if (s === "connected") {
       return null;
     }
@@ -97,7 +101,7 @@
     // hub answers) instead of shutting each time a try goes out.
     const shown =
       s === "disconnected" || s === "error" || !everConnected
-        ? cawco.connectFailed || graceOver
+        ? connectionStore.connectFailed || graceOver
         : graceOver;
     if (!shown) {
       return null;
@@ -117,8 +121,8 @@
   let wasDown: { updated: string | null | undefined } | null = null;
   let backTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    const connected = cawco.status === "connected";
-    const { restart } = cawco;
+    const connected = connectionStore.status === "connected";
+    const { restart } = connectionStore;
     const down = !connected && (fault !== null || restart !== null);
     untrack(() => {
       if (down) {
@@ -141,14 +145,14 @@
     if (!browser) {
       return null;
     }
-    if (cawco.olderWire) {
+    if (connectionStore.olderWire) {
       const build = newerBuild();
       return {
         kind: "older",
         offered: build !== null && !reloadedFor(build),
       };
     }
-    const { restart } = cawco;
+    const { restart } = connectionStore;
     if (restart) {
       return { kind: "updating", ...restart };
     }
@@ -193,12 +197,14 @@
     return () => clearInterval(timer);
   });
   const retryIn = $derived(
-    cawco.retryAt ? Math.max(0, Math.ceil((cawco.retryAt - now) / 1000)) : 0
+    connectionStore.retryAt
+      ? Math.max(0, Math.ceil((connectionStore.retryAt - now) / 1000))
+      : 0
   );
 
   /** The retry, as the countdown or the try that is out now. */
   const retry = $derived(
-    cawco.status === "connecting" || retryIn === 0
+    connectionStore.status === "connecting" || retryIn === 0
       ? "retrying now"
       : `retrying in ${retryIn}s`
   );
@@ -345,11 +351,11 @@
                rest glyph's slot takes the spinner and its words turn to
                "Reconnecting…" (DESIGN.md, Pending), never a bare spinner. -->
           <Button
-            failed={cawco.status !== "connecting"}
+            failed={connectionStore.status !== "connecting"}
             icon={IconRefresh}
             label="Reconnect now"
             onclick={reconnectNow}
-            pending={cawco.status === "connecting"}
+            pending={connectionStore.status === "connecting"}
             pendingLabel="Reconnecting…"
             size="sm"
             variant="outline"

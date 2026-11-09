@@ -6,12 +6,13 @@
 
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import type {
-    EffortLevel,
-    HarnessKind,
-    PermissionMode,
+  import {
+    EFFORT_NONE,
+    type EffortLevel,
+    type HarnessKind,
+    isEffortLevel,
+    type PermissionMode,
   } from "@cawco/core/harness/kinds";
-  import { EFFORT_NONE, isEffortLevel } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { commonWords } from "@cawco/core/words/common";
   import { spawnWords } from "@cawco/core/words/spawn";
@@ -56,6 +57,7 @@
   } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
+  import { connectionStore } from "../hub/socket.svelte";
   import { describingRow, modelLabel } from "../models.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
   import RowFault from "../RowFault.svelte";
@@ -215,7 +217,7 @@
   const machineAway = $derived(!(machineId && machineConnected(machineId)));
   const editable = $derived(!machineAway && cawco.liveId(sessionId));
   /** A move can be asked: the hub takes it in any state of the session (accounts/switch.svelte.ts). */
-  const accountOpen = $derived(cawco.status === "connected");
+  const accountOpen = $derived(connectionStore.status === "connected");
   /** Why the live controls are locked, and until when. */
   const lockedWords = $derived.by(() => {
     const what = kept
