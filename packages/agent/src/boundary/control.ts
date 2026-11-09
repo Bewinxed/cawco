@@ -10,15 +10,15 @@ import { isPlace } from "@cawco/core/workspace-policy";
 import { recordAgentState } from "../agent-state";
 import { boundaryProcId, isBoundaryOf, isJudgeOf } from "../proc-id";
 import { armHook } from "./arm";
-import { addAccount, addSpill, behindGate } from "./decisions";
-import { closedWhile, liveWhy, recentlyHeld } from "./holding";
 import {
   armState,
   armStep,
   ensureBoundary,
   readingMoved,
   rearming,
-} from "./lifecycle";
+} from "./arming";
+import { addAccount, addSpill, behindGate } from "./decisions";
+import { closedWhile, liveWhy, recentlyHeld } from "./holding";
 import { closeQuietly, liveFacts, setProject } from "./looks";
 import { workLeft } from "./narrowing";
 import { commandsEnded } from "./processes";
