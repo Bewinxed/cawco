@@ -6,8 +6,10 @@
  * (lib/ratchet.ts).
  *
  * - **catch-drops-reason**: a `.catch(…)` handler, or a `.then(…, …)`
- *   rejection handler, written in place that takes no rejection reason or
- *   never reads the one it takes.
+ *   rejection handler, that runs something or nothing and never reads the
+ *   reason it is handed: one written in place, or `noop` passed by name. A
+ *   handler that only yields a value (`() => undefined`, `() => []`,
+ *   `() => dir`) says what the failure becomes, and is not counted.
  * - **empty-catch**: a `catch` block with no statement in it (a comment
  *   alone is none).
  * - **as-any**: a value asserted to `any` (`x as any`, `<any>x`).
@@ -81,8 +83,75 @@ const reads = (body: ts.Node, name: string): boolean => {
   return found;
 };
 
-/** Whether a handler written in place drops the reason it is handed. */
+type Handler = ts.ArrowFunction | ts.FunctionExpression;
+
+/** An expression that computes nothing but a value: no call, no `await`, no assignment. */
+const isValue = (node: ts.Expression): boolean => {
+  if (
+    ts.isIdentifier(node) ||
+    ts.isLiteralExpression(node) ||
+    ts.isNoSubstitutionTemplateLiteral(node) ||
+    [
+      ts.SyntaxKind.TrueKeyword,
+      ts.SyntaxKind.FalseKeyword,
+      ts.SyntaxKind.NullKeyword,
+    ].includes(node.kind)
+  ) {
+    return true;
+  }
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isPropertyAccessExpression(node) ||
+    ts.isPrefixUnaryExpression(node)
+  ) {
+    return isValue(
+      ts.isPrefixUnaryExpression(node) ? node.operand : node.expression
+    );
+  }
+  if (ts.isArrayLiteralExpression(node)) {
+    return node.elements.every(isValue);
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    return node.properties.every(
+      (property) =>
+        ts.isShorthandPropertyAssignment(property) ||
+        (ts.isPropertyAssignment(property) && isValue(property.initializer))
+    );
+  }
+  if (ts.isTemplateExpression(node)) {
+    return node.templateSpans.every((span) => isValue(span.expression));
+  }
+  if (ts.isBinaryExpression(node)) {
+    return (
+      node.operatorToken.kind !== ts.SyntaxKind.EqualsToken &&
+      isValue(node.left) &&
+      isValue(node.right)
+    );
+  }
+  return ts.isNewExpression(node) && (node.arguments?.length ?? 0) === 0;
+};
+
+/** The value a handler's body is, when all it does is yield one. */
+const yieldedValue = (handler: Handler): ts.Expression | undefined => {
+  if (!ts.isBlock(handler.body)) {
+    return handler.body;
+  }
+  const [only] = handler.body.statements;
+  return handler.body.statements.length === 1 &&
+    only !== undefined &&
+    ts.isReturnStatement(only)
+    ? (only.expression ?? undefined)
+    : undefined;
+};
+
+/** Whether a handler drops the reason it is handed, without saying what the failure becomes. */
 const dropsReason = (handler: ts.Expression | undefined): boolean => {
+  if (handler && ts.isIdentifier(handler)) {
+    return handler.text === "noop";
+  }
   if (!(
     handler &&
     (ts.isArrowFunction(handler) || ts.isFunctionExpression(handler))
@@ -90,19 +159,27 @@ const dropsReason = (handler: ts.Expression | undefined): boolean => {
     return false;
   }
   const [reason] = handler.parameters;
-  if (!reason) {
-    return true;
+  if (
+    reason &&
+    !(ts.isIdentifier(reason.name) && !reads(handler.body, reason.name.text))
+  ) {
+    return false;
   }
-  return ts.isIdentifier(reason.name) && !reads(handler.body, reason.name.text);
+  const value = yieldedValue(handler);
+  return !(value && isValue(value));
 };
 
-type Handler = ts.ArrowFunction | ts.FunctionExpression;
-
 /** What the handler's body is: its statement kind, never a name it reads. */
-const handlerShape = (handler: Handler): string =>
-  ts.isBlock(handler.body)
-    ? `${handler.body.statements.length === 0 ? "empty" : "block"}`
-    : ts.SyntaxKind[handler.body.kind];
+const handlerShape = (handler: ts.Expression): string => {
+  if (ts.isIdentifier(handler)) {
+    return handler.text;
+  }
+  const { body } = handler as Handler;
+  if (ts.isBlock(body)) {
+    return body.statements.length === 0 ? "empty" : "block";
+  }
+  return ts.SyntaxKind[body.kind] ?? "";
+};
 
 /** The rejection handler a call passes, when it is a `.catch` or a two-argument `.then`. */
 const rejectionHandler = (
@@ -130,7 +207,10 @@ const kindOf = (
   if (ts.isCallExpression(node)) {
     const handler = rejectionHandler(node);
     return dropsReason(handler)
-      ? { kind: "catch-drops-reason", shape: handlerShape(handler as Handler) }
+      ? {
+          kind: "catch-drops-reason",
+          shape: handlerShape(handler as ts.Expression),
+        }
       : undefined;
   }
   if (ts.isCatchClause(node) && node.block.statements.length === 0) {
