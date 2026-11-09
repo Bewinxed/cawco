@@ -9,13 +9,27 @@
  * not isolated by port (RFC 6265 §8.5): it can neither read these nor
  * overwrite them, and the hub's preview listener strips them on the way in.
  */
+export const RAIL_PREF = "cawco-rail-width";
+export const NARROW_PREF = "cawco-narrow";
+export const CONFIG_CARDS_PREF = "cawco-config-cards";
+/**
+ * The server's copy of the workspace localStorage keeps (workspace.svelte.ts,
+ * Persistence): the whole tree or none, never a part. The first client render
+ * draws from what the app's layout load gives it, so hydration keeps what was served.
+ * Read with the tree's own module (workspace/tree.ts), which the server
+ * imports without the client store and its module-level `$state`.
+ */
+export const WORKSPACE_PREF = "cawco-workspace";
+/** The addresses of what the workspace's tree holds, kept apart from it. */
+export const WORKSPACE_CTX_PREF = "cawco-workspace-ctx";
+export const FOLD_BOXES_PREF = "cawco-tab-boxes";
 export const PREFS = [
-  "cawco-rail-width",
-  "cawco-narrow",
-  "cawco-config-cards",
-  "cawco-workspace",
-  "cawco-workspace-ctx",
-  "cawco-tab-boxes",
+  RAIL_PREF,
+  NARROW_PREF,
+  CONFIG_CARDS_PREF,
+  WORKSPACE_PREF,
+  WORKSPACE_CTX_PREF,
+  FOLD_BOXES_PREF,
 ] as const;
 export type Pref = (typeof PREFS)[number];
 
