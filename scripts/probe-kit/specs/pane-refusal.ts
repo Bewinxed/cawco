@@ -57,7 +57,7 @@ import {
 } from "../../../packages/core/src/comments/model";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commentWords } from "../../../packages/core/src/words/comments";
-import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
+import type { CommentRead } from "../../../packages/hub/src/artifacts/shapes";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
