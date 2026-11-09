@@ -634,7 +634,7 @@ const foregroundAcross = async (
   );
 };
 
-/** How soon after a narrowing no event says the look replaces a boundary in use: its {@link NARROW_LOOK_MS}, a stop and a start. */
+/** How soon after a narrowing no event says the look replaces a boundary in use: its `NARROW_LOOK_MS`, a stop and a start. */
 const LOOK_BOUND_MS = 10_000;
 
 /**
