@@ -20,9 +20,10 @@ import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
 import {
   generationDir,
   type Held,
+  heldProc,
   isClosing,
   isStarting,
-  keepers,
+  procsHeld,
   READY,
   readHeld,
   type UnaskedCalls,
@@ -249,7 +250,7 @@ export const heldBy = async (
   if (hubLive.has(ref.id)) {
     return "its work item is live on the hub";
   }
-  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const procs = (await procsHeld()).filter((proc) => proc.alive);
   if (procs.some((proc) => isBoundaryOf(proc.procId, ref.id))) {
     return "a boundary of it runs";
   }
@@ -304,7 +305,7 @@ export const watchHost = async (
   afterSeq?: number
 ): Promise<void> => {
   const procId = boundaryProcId(id, held.gen);
-  const proc = await keepers.holding(procId);
+  const proc = await heldProc(procId);
   if (!proc || watchedHosts.get(procId) === proc.client) {
     return;
   }
