@@ -30,6 +30,7 @@ import { gateOf } from "./exec";
 import { attachedIn, commandsNow, inUse } from "./holding";
 import { unknownGrant } from "./narrowing";
 import { formOf } from "./plan";
+import { lookAtStale } from "./stale-look";
 import { closeWhenIdle, replaceSoon, restartWhenIdle } from "./staleness";
 import {
   type Boundary,
@@ -39,6 +40,7 @@ import {
   running,
   stateDir,
 } from "./state";
+import { answerUnasked } from "./unasked";
 import { watchCloneOf } from "./watch";
 
 /**
@@ -367,3 +369,12 @@ export const ensureBoundary = async (ref: WorkspaceRef): Promise<Boundary> => {
   await hookArmed(ref.id);
   return ensureNow(ref);
 };
+
+answerUnasked({
+  ensureAgain: ensureBoundary,
+  judgeExited: (id, held) => {
+    armStep({ kind: "judge-exit", id, held });
+    return rearming.get(id);
+  },
+  lookAtOlder: lookAtStale,
+});
