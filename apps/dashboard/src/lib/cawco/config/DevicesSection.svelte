@@ -59,11 +59,7 @@
   async function read() {
     try {
       await readAuth();
-      const answer = await hubData(hub.api.devices.get());
-      ({ devices, current } = answer as {
-        current: string | null;
-        devices: OwnerDevice[];
-      });
+      ({ devices, current } = await hubData(hub.api.devices.get()));
       loaded = true;
     } catch (error) {
       readError = `Could not read the paired devices — ${failureClause(error)}.`;
