@@ -734,7 +734,7 @@ export interface InstancesDb {
     /**
      * What is there or on its way: the processes sessiond still holds,
      * attached yet or not, and the sessions whose launch to the machine is in
-     * flight (server.ts `launches`).
+     * flight (launches.ts `launches`).
      */
     heldIds: string[],
     graceMs: number
@@ -815,7 +815,7 @@ export interface InstancesDb {
    */
   /**
    * Each continuation left half done by a hub before the one-session rule's
-   * steps committed together (server.ts `oneSession`): a running session
+   * steps committed together (continuations.ts `oneSession`): a running session
    * (`targetId`) that opened on a `continued` line no conversation of it
    * names (its source was never folded into it), whose first send came from
    * a session still running and folded into nothing (`sourceId`). Each pair
