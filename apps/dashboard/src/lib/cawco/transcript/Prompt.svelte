@@ -1,5 +1,9 @@
 <script lang="ts" module>
-  import { QUESTION_STANDING } from "../question";
+  import {
+    QUESTION_STANDING,
+    questionAnswer,
+    questionDismissal,
+  } from "../question";
 
   /**
    * An answer (or a dismissal) given from inside a question's card: the
@@ -83,12 +87,11 @@
     isStale,
     type PendingPermission,
     permissionAnswer,
-    takeOverBrowser,
   } from "../client.svelte";
   import { hubSeam } from "../hub-live";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
-  import { questionAnswer, questionDismissal } from "../question";
+  import { takeOverBrowser } from "../stores/browsers.svelte";
 
   let {
     request,
