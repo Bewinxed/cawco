@@ -61,6 +61,7 @@ import {
   versionedFile,
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import { ElysiaStatus } from "elysia";
 import { serveCanvas } from "./artifacts/canvas";
 import {
   ARTIFACT_PATH,
@@ -101,7 +102,7 @@ import {
   parsePattern,
 } from "./preview-hosts";
 import { isEmbed } from "./preview-origin";
-import { FolderRefusal, folderPath } from "./project-folder";
+import { folderPath } from "./project-folder";
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
@@ -298,18 +299,15 @@ async function servePage(
   const asked = versioned ?? pathname;
   try {
     root = await realpath(join(ARTIFACTS_ROOT, artifactId));
-    file = await realpath(
-      join(
-        root,
-        folderPath(
-          decodeURIComponent(asked === "/" ? "/index.html" : asked).slice(1)
-        )
-      )
+    const rel = folderPath(
+      decodeURIComponent(asked === "/" ? "/index.html" : asked).slice(1)
     );
-  } catch (error) {
-    return error instanceof FolderRefusal
-      ? new Response(error.message, { status: error.status })
-      : new Response("Not found", { status: 404 });
+    if (rel instanceof ElysiaStatus) {
+      return new Response(rel.response.detail, { status: rel.status });
+    }
+    file = await realpath(join(root, rel));
+  } catch {
+    return new Response("Not found", { status: 404 });
   }
   const inside = relative(root, file);
   if (inside === ".." || inside.startsWith(`..${sep}`)) {

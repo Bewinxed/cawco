@@ -56,7 +56,7 @@ import { Elysia, ElysiaStatus } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
-import { folderAttempt } from "./project-folder";
+import { projectAttempt } from "./project-refusal";
 import { refusal } from "./refusal";
 import type { TaskEvent, Tasks } from "./tasks";
 
@@ -939,10 +939,10 @@ export type Plans = ReturnType<typeof createPlans>;
 export const planRoutes = (plans: Plans) =>
   new Elysia()
     .get("/api/instances/:id/plan", ({ params }) =>
-      folderAttempt(() => plans.read(params.id))
+      projectAttempt(() => plans.read(params.id))
     )
     .post("/api/instances/:id/plan/seen", ({ params }) =>
-      folderAttempt(async () => {
+      projectAttempt(async () => {
         const seen = await plans.seeAway(params.id);
         return typeof seen === "boolean" ? { seen } : seen;
       })

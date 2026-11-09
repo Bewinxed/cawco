@@ -30,11 +30,9 @@ import {
 } from "./preview";
 import { PreviewRefusal } from "./preview-hosts";
 import { embedKey } from "./preview-origin";
-import {
-  changeFolderFiles,
-  FolderRefusal,
-  readFolderFile,
-} from "./project-folder";
+import { changeFolderFiles, readFolderFile } from "./project-folder";
+import { ProjectRefusal, projectRefusalOf } from "./project-refusal";
+import type { Refused } from "./refusal";
 import { unreachable } from "./unreachable";
 
 /**
@@ -412,14 +410,14 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     projectId: string,
     path: string
   ): Promise<string | undefined> => {
-    try {
-      return (await readFolderFile(projectId, path)).content;
-    } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
+    const file = await readFolderFile(projectId, path);
+    if (file instanceof ElysiaStatus) {
+      if (file.status === 404) {
         return undefined;
       }
-      throw error;
+      throw projectRefusalOf(file);
     }
+    return file.content;
   };
 
   /** page.html in the project folder's `decisions/<page>/`, and what it names there; undefined when it has none. */
@@ -674,9 +672,15 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       : { bytes: read.bytes };
   };
 
-  /** A folder's refusal of a page's commit, as the page's refusal; anything else throws. */
+  /** A folder's refusal of a page's commit, as the page's refusal. */
+  const pageRefusalOf = (refused: Refused): PageRefusal => ({
+    code: refused.status === 413 ? 413 : 400,
+    refused: refused.response.detail,
+  });
+
+  /** A folder's refusal thrown on by {@link folderText}, as the page's refusal; anything else throws. */
   const folderPageRefusal = (error: unknown): PageRefusal => {
-    if (!(error instanceof FolderRefusal)) {
+    if (!(error instanceof ProjectRefusal)) {
       throw error;
     }
     return { code: error.status === 413 ? 413 : 400, refused: error.message };
@@ -706,7 +710,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       if (kept === keep.content && dropped === undefined) {
         return;
       }
-      await changeFolderFiles(
+      const changed = await changeFolderFiles(
         projectId,
         {
           writes: kept === keep.content ? [] : [keep],
@@ -717,6 +721,9 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
           message: `decisions: ${name}`,
         }
       );
+      if (changed instanceof ElysiaStatus) {
+        return pageRefusalOf(changed);
+      }
     } catch (error) {
       return folderPageRefusal(error);
     }
@@ -772,7 +779,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       if (deletes.length === 0) {
         return;
       }
-      await changeFolderFiles(
+      const changed = await changeFolderFiles(
         projectId,
         { writes: [], deletes },
         {
@@ -780,6 +787,9 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
           message: `decisions: ${name} deleted`,
         }
       );
+      if (changed instanceof ElysiaStatus) {
+        return pageRefusalOf(changed);
+      }
     } catch (error) {
       return folderPageRefusal(error);
     }

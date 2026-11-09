@@ -625,8 +625,10 @@ export default {
       const { hubInProcess } =
         await import("../../../packages/hub/scripts/hub-in-process");
       const { db, hub } = await hubInProcess(dbPath, join(scratch, "home"));
-      const { PROJECT_TRASH_DIR, projectRoot } =
+      const { PROJECT_TRASH_DIR } =
         await import("../../../packages/hub/src/project-folder");
+      const { projectRootOf } =
+        await import("../../../packages/hub/src/project-refusal");
       const listening = (
         hub as unknown as {
           listen: (options: object) => { server?: { port?: number } };
@@ -681,7 +683,7 @@ export default {
         journal,
         kit,
         raw,
-        root: projectRoot,
+        root: projectRootOf,
         trash: async () =>
           (await readdir(PROJECT_TRASH_DIR).catch(() => [] as string[])).sort(),
       };

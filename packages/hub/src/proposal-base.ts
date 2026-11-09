@@ -63,15 +63,18 @@ const mergeThree = async (
 /**
  * Whether `files` still apply, each read as it is now by `read`: their
  * writes (each file's change merged into it), or the first file that no
- * longer takes it.
+ * longer takes it; a read's refusal is answered as it is.
  */
-export const appliesNow = async (
+export const appliesNow = async <Refused>(
   files: readonly ProposedFile[],
-  read: (path: string) => Promise<string>
-): Promise<Applies> => {
+  read: (path: string) => Promise<string | Refused>
+): Promise<Applies | Refused> => {
   const writes: { content: string; path: string }[] = [];
   for (const file of files) {
     const now = await read(file.path);
+    if (typeof now !== "string") {
+      return now;
+    }
     const next =
       now === file.before
         ? file.content

@@ -39,16 +39,13 @@ import type { AreaDeleted, AreaSettingsChange } from "./db/areas";
 import type { ProjectRow } from "./db/projects";
 import {
   areaFolder,
-  deleteFolderFile,
+  deleteAsked,
   deleteProjectFolder,
   FOLDER_WRITE,
-  folderAttempt,
-  folderContent,
   listFolder,
   MESSAGE_LIMIT,
   readFolderFile,
-  writeFolderFile,
-  YOU,
+  writeAsked,
 } from "./project-folder";
 import { refusal, schemaRefusal } from "./refusal";
 
@@ -318,7 +315,10 @@ export const createAreas = ({
     if (!deleted) {
       return refusal(404, "no-area", areaWords.noArea(id));
     }
-    await deleteProjectFolder(areaFolder(id));
+    const folderGone = await deleteProjectFolder(areaFolder(id));
+    if (folderGone instanceof ElysiaStatus) {
+      return folderGone;
+    }
     changed();
     return {
       name: area.name,
@@ -441,9 +441,7 @@ export const createAreas = ({
           const area = known(params.id);
           return area instanceof ElysiaStatus
             ? area
-            : folderAttempt(() =>
-                listFolder(areaFolder(params.id), query.path ?? "", true)
-              );
+            : listFolder(areaFolder(params.id), query.path ?? "", true);
         }
       )
       .get(
@@ -453,28 +451,17 @@ export const createAreas = ({
           const area = known(params.id);
           return area instanceof ElysiaStatus
             ? area
-            : folderAttempt(() =>
-                readFolderFile(areaFolder(params.id), query.path)
-              );
+            : readFolderFile(areaFolder(params.id), query.path);
         }
       )
       .put(
         "/api/areas/:id/folder/file",
         { body: FOLDER_WRITE },
-        ({ params, body }) => {
+        async ({ params, body }) => {
           const area = known(params.id);
           return area instanceof ElysiaStatus
             ? area
-            : folderAttempt(async () => {
-                const written = await writeFolderFile(
-                  areaFolder(params.id),
-                  body.path,
-                  folderContent(body.content, body.encoding),
-                  { author: YOU, message: body.message }
-                );
-                changed();
-                return written;
-              });
+            : await writeAsked(areaFolder(params.id), body, changed);
         }
       )
       .delete(
@@ -485,19 +472,11 @@ export const createAreas = ({
             message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
           }),
         },
-        ({ params, query }) => {
+        async ({ params, query }) => {
           const area = known(params.id);
           return area instanceof ElysiaStatus
             ? area
-            : folderAttempt(async () => {
-                const deleted = await deleteFolderFile(
-                  areaFolder(params.id),
-                  query.path,
-                  { author: YOU, message: query.message }
-                );
-                changed();
-                return deleted;
-              });
+            : await deleteAsked(areaFolder(params.id), query, changed);
         }
       );
 
