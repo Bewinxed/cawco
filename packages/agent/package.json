@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
     "./browser": "./src/browser/browsers.ts",
     "./capabilities": "./src/capabilities.ts",
     "./claude-settings": "./src/claude-settings.ts",
     "./config": "./src/config.ts",
+    "./daemon": "./src/daemon.ts",
     "./discovery": "./src/discovery.ts",
     "./awake-hold": "./src/awake-hold.ts",
     "./keeper-jobs": "./src/keeper-jobs.ts",
@@ -18,8 +18,6 @@
     "./sessiond-client": "./src/sessiond-client.ts",
     "./tools": "./src/tools.ts"
   },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
   "scripts": {
     "dev": "bun --watch src/cli.ts",
     "fmt": "bun ../../scripts/fmt.ts .",
