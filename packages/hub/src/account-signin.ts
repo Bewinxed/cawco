@@ -167,15 +167,15 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
         error: read.error ?? `${machine} could not say what its stores hold.`,
       };
     }
-    const { homeLogin, soleProvider } = traitsOf(store);
-    if (homeLogin === "dir" && soleProvider !== null) {
+    const traits = traitsOf(store);
+    if (traits.homeLogin === "dir") {
       const home = read.result as HomeLogin;
       return home.loggedIn && home.identity
         ? {
             identity: home.identity,
             kind: home.kind ?? "subscription",
-            provider: soleProvider,
-            storeProvider: soleProvider,
+            provider: traits.soleProvider,
+            storeProvider: traits.soleProvider,
           }
         : {
             status: 409,
