@@ -94,11 +94,11 @@
        window's scrollbar width of it stands empty beside the page. */
     scrollbar-gutter: auto;
     /* What a host's docked composer covers of the page's foot (the
-       project's Decisions tab says it, preview-overlay page.ts): none until
+       project's Decisions tab says it, preview overlay/page.ts): none until
        it says. */
     --page-inset-bottom: 0px;
     /* What a host's floating head covers of the page's top (the artifact
-       panel's, preview-overlay page.ts `takeHeadRoom`, heard because the
+       panel's, preview overlay/page.ts `takeHeadRoom`, heard because the
        page's root says `data-cawco-head-room`): the scroller pads its top
        by it, so the cards scroll beneath the head. None until it says. */
     --page-inset-top: 0px;
