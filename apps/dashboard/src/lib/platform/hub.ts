@@ -14,7 +14,7 @@
 import type { HubApp } from "@cawco/hub/app";
 import { treaty } from "@elysia/eden";
 
-const hubThrough = (through?: typeof fetch) =>
+export const hubThrough = (through?: typeof fetch) =>
   treaty<HubApp>("", {
     keepDomain: true,
     parseDate: false,
@@ -23,3 +23,6 @@ const hubThrough = (through?: typeof fetch) =>
 
 /** The hub, from this page. */
 export const hub = hubThrough();
+
+/** Eden's client of the hub: the live one, or a states file's stand-in (hub-stand-in.ts). */
+export type HubClient = ReturnType<typeof hubThrough>;
