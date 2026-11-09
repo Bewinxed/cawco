@@ -163,8 +163,8 @@
     globalThis as unknown as {
       __cawcoDebug: {
         frame: (frame: PulseFrame) => void;
-        state: {
-          projects: unknown[];
+        projectsState: { projects: unknown[] };
+        sessionsState: {
           sessions: Record<string, ReturnType<typeof blankSession>>;
         };
         adoptInstances: (rows: InstanceRow[]) => void;
@@ -193,7 +193,7 @@
     review: false,
   };
   if (beat !== "first-run") {
-    debug.state.projects.push(row);
+    debug.projectsState.projects.push(row);
     debug.adoptInstances([
       {
         id: ID,
@@ -219,7 +219,7 @@
     if (beat === "questions") {
       session.pending = PR_ASKS.map((ask) => ask.request);
     }
-    debug.state.sessions[ID] = session;
+    debug.sessionsState.sessions[ID] = session;
     // Held on a question with nothing else to do, he has ended his turn
     // (core asks.ts `askQuestionWords`): at rest, so his composer offers
     // Send, not Stop.
@@ -256,7 +256,7 @@
   const STAGE_BEAT_MS = 900;
   let writing: ReturnType<typeof setInterval> | undefined;
   function answered(requestId: string, result: PermissionResult) {
-    const session = debug.state.sessions[ID];
+    const session = debug.sessionsState.sessions[ID];
     const parked = session?.pending.find((one) => one.requestId === requestId);
     if (!(session && parked)) {
       return;
@@ -359,7 +359,7 @@
       }
       sending = false;
       at = "set";
-      const session = debug.state.sessions[ID];
+      const session = debug.sessionsState.sessions[ID];
       if (session) {
         session.messages = [...session.messages, doneOf(draft.length)];
       }
@@ -431,9 +431,12 @@
   onMount(() => () => {
     clearInterval(writing);
     debug.leaveHub();
-    delete debug.state.sessions[ID];
+    delete debug.sessionsState.sessions[ID];
     debug.adoptInstances([]);
-    debug.state.projects.splice(debug.state.projects.indexOf(row), 1);
+    debug.projectsState.projects.splice(
+      debug.projectsState.projects.indexOf(row),
+      1
+    );
   });
 </script>
 
