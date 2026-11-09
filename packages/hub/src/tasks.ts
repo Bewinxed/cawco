@@ -212,12 +212,8 @@ import {
   type WaitWorld,
 } from "./task-waits";
 import { runsOf, skillTypes, templateTypes, typeFiles } from "./template-types";
-import {
-  budgetProblem,
-  isLive,
-  outputsFolder,
-  ownsProblem,
-} from "./work-items";
+import { isLive } from "./work-item-state";
+import { budgetProblem, outputsFolder, ownsProblem } from "./work-items";
 
 /** Who is changing a task: what stage moves they may make, and whom the commit is by. */
 export interface TaskActor {
