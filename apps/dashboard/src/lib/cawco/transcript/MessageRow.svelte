@@ -37,8 +37,6 @@
   import { moveTo, movingTo } from "../accounts/switch.svelte";
   import {
     canWithdraw,
-    cawco,
-    commandRecord,
     discardUnreached,
     editAndResend,
     editFailed,
@@ -58,6 +56,8 @@
   import MessageBody from "../MessageBody.svelte";
   import { newSession, startFork } from "../spawn/new-session.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { commandRecord } from "../stores/ledger.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
@@ -384,7 +384,7 @@
       return retrying ? SENDING : "not sent";
     }
     if (waiting) {
-      const here = cawco.session(message.instanceId);
+      const here = sessionsStore.session(message.instanceId);
       if (!traitsOf(here?.harness).queuesSends) {
         return "sent";
       }

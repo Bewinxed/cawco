@@ -100,6 +100,7 @@
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
   import { boardStore, isFailed, isStale } from "../stores/board.svelte";
+  import { projectsStore } from "../stores/projects.svelte";
   import TreeMark from "../TreeMark.svelte";
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
@@ -167,7 +168,7 @@
    * project's mark as the rail draws it.
    */
   function resolveProject(id: string, projectId: string): Tab {
-    const project = cawco.project(projectId);
+    const project = projectsStore.project(projectId);
     const served = servedNames[id];
     const name = project?.name ?? (served?.ok ? served.value : null);
     return {
@@ -1672,7 +1673,7 @@
                 {#if tab.projectId}
                   <!-- A project's tab leads with its mark as the rail draws
                        it, on every width: it has no status rim to say it. -->
-                  {@const project = cawco.project(tab.projectId)}
+                  {@const project = projectsStore.project(tab.projectId)}
                   <TreeMark
                     faceAlways
                     fill="var(--mark-{markHue(
