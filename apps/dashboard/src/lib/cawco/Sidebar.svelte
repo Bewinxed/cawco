@@ -97,6 +97,7 @@
     isResumable,
     isStale,
   } from "./stores/board.svelte";
+  import { catalogStore } from "./stores/catalog.svelte";
   import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { projectTab, tabOfPath } from "./workspace/tabs";
@@ -222,7 +223,7 @@
     if (!boardStore.fleetRead) {
       return 1;
     }
-    return cawco.catalogsRead ? 3 : 2;
+    return catalogStore.catalogsRead ? 3 : 2;
   };
   let stage = $state(untrack(readSoFar));
   $effect(() => {

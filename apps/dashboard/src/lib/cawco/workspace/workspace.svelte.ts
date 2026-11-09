@@ -34,10 +34,10 @@ import {
 import { store, stored as storedIn } from "#lib/platform/storage.js";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
-import { cawco } from "../client.svelte";
 import { conversationHref, isSessionRow } from "../links";
 import { openArtifactIn } from "../reference-open.svelte";
 import { boardStore } from "../stores/board.svelte";
+import { catalogStore } from "../stores/catalog.svelte";
 import { askOpenAt, carryOpenAt, MATCH } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -451,7 +451,7 @@ export function contextOf(sessionId: string): SessionContext | null {
     if (machine.status !== "online") {
       continue;
     }
-    const stored = cawco
+    const stored = catalogStore
       .catalogOf(machine.machineId)
       .find((entry) => entry.sessionId === sessionId);
     if (stored) {
