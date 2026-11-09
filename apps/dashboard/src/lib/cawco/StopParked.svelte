@@ -11,8 +11,8 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { departBox, land } from "#lib/platform/motion/share.svelte.js";
   import { cn } from "#lib/utils.js";
-  import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import {
     parkedWords,

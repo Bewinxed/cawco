@@ -22,9 +22,9 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { track } from "#lib/cawco/track.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import MessageBody from "../MessageBody.svelte";
   import { useVoice } from "../turn/voice";
   import Who from "../turn/Who.svelte";

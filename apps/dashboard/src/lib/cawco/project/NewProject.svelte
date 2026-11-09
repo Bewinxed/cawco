@@ -28,13 +28,6 @@
   import type { createProject } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import {
-    failureWords,
-    PROMPT_UNREACHED,
-    unreachable,
-  } from "#lib/cawco/hub-read.js";
-  import { idForWords, type SentWords } from "#lib/cawco/id.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import {
     fitOf,
     STARTERS,
     TEMPLATE_CARDS,
@@ -50,6 +43,13 @@
     chipsVariants,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
+  import {
+    failureWords,
+    PROMPT_UNREACHED,
+    unreachable,
+  } from "#lib/platform/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/platform/id.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
 
   let {
     fleet,

@@ -35,8 +35,8 @@
   import type { DecidesTable } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import { untrack } from "svelte";
-  import { HUB_UNREACHABLE } from "#lib/cawco/hub-read.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { HUB_UNREACHABLE } from "#lib/platform/hub-read.js";
   import { WhoDecides } from "../decides.svelte";
   import { drawPopoversInPlace, holdsPanels } from "../in-place";
   import KindsOfChoice from "../KindsOfChoice.svelte";

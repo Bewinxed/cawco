@@ -54,11 +54,11 @@
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { on } from "svelte/events";
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, fitPadding, ZOOM } from "#lib/components/features/flow/fit.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { browser } from "$app/env";
   import { layoutWhole } from "./layout";

@@ -1,4 +1,4 @@
-import type { HubRead } from "#lib/cawco/hub-read.js";
+import type { HubRead } from "#lib/platform/hub-read.js";
 
 export const ssr = false;
 

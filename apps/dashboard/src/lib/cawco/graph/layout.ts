@@ -17,7 +17,7 @@ import dagre, {
   type GraphLabel,
   type NodeLabel,
 } from "@dagrejs/dagre";
-import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import type { Review } from "./model";
 
 interface Box {

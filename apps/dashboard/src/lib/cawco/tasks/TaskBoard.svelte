@@ -24,13 +24,13 @@
   import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
   import type { StageKind } from "@cawco/core/views";
   import { tick } from "svelte";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import {
     type Stage,
     stageLabel,
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
   import { IconArchive } from "#lib/icons.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { boardDrag, stageDropTarget } from "./board-dnd.svelte.js";
   import NewTaskForm from "./NewTaskForm.svelte";
   import TaskColumn from "./TaskColumn.svelte";
