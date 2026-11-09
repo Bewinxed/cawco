@@ -15,7 +15,7 @@ import { ASK_ORIGIN } from "@cawco/core/harness/kinds";
 import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
 import type { ToolGlance } from "@cawco/core/transcript-types";
 import type { SubagentState } from "#lib/utils/flow-types.js";
-import type { SessionState } from "../client.svelte";
+import type { SessionState } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import { parkedAsks } from "./present";
 

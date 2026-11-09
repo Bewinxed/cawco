@@ -27,9 +27,10 @@ import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import { failureWords } from "#lib/platform/hub-read.js";
-import { cawco, relaunchSession } from "./client.svelte";
+import { relaunchSession } from "./client.svelte";
 import { didntAnswer } from "./hub/control";
 import { boardStore, type Machine } from "./stores/board.svelte";
+import { sessionsStore } from "./stores/sessions.svelte";
 import { TabDraft } from "./tab-draft.svelte";
 import { installTool } from "./tools";
 import { TRY_AGAIN } from "./unanswered";
@@ -326,7 +327,7 @@ async function startAgain(
     const read = await relaunchSession(
       instanceId,
       machineId,
-      cawco.session(instanceId)?.permissionMode ?? "default"
+      sessionsStore.session(instanceId)?.permissionMode ?? "default"
     );
     if (read.kind === "unanswered") {
       refuse(

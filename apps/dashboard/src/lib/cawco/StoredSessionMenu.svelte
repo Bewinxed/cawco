@@ -23,12 +23,12 @@
   import { goto } from "$app/navigation";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import { deleteTranscript } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { answeredOr } from "./hub/control";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
   import { startFork } from "./spawn/new-session.svelte";
   import { boardStore } from "./stores/board.svelte";
+  import { deleteTranscript } from "./stores/machines";
   import OpenItems from "./workspace/OpenItems.svelte";
   import { focusAfterMenu } from "./workspace/open-beside.svelte";
 

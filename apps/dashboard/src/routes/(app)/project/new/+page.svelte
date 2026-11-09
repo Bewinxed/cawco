@@ -7,11 +7,11 @@
    * first message: the board and the conversation in sight together.
    */
   import { barGlass } from "#lib/cawco/bar-glass.svelte.js";
-  import { createProject } from "#lib/cawco/client.svelte.js";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import { home } from "#lib/cawco/home/home-state.svelte.js";
   import { openOnArrival } from "#lib/cawco/project/caw-lead.svelte.js";
   import NewProject from "#lib/cawco/project/NewProject.svelte";
+  import { createProject } from "#lib/cawco/stores/projects.svelte.js";
   import { goto } from "$app/navigation";
 </script>
 
