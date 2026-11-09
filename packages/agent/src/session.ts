@@ -81,7 +81,11 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
+import {
+  harnessesWith,
+  type KeeperHarnessKind,
+  traitsOf,
+} from "@cawco/core/harness/traits";
 import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
@@ -291,7 +295,7 @@ import {
   stopPreview,
   stopPreviews,
 } from "./preview";
-import { parseProcId, type SESSION_PROC_KINDS, sessionOfProc } from "./proc-id";
+import { parseProcId, sessionOfProc } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { removeTree } from "./remove-tree";
 import { arrive, keepAnswer } from "./request-record";
@@ -4266,7 +4270,7 @@ export class SessionSupervisor {
    * that is decided ({@link takeHeld}). What waits on one session waits for
    * that alone, never for the rows after it or another harness.
    */
-  custodyReader(kind: (typeof SESSION_PROC_KINDS)[number]):
+  custodyReader(kind: KeeperHarnessKind):
     | {
         keepers: () => Promise<string[]>;
         read: (keeper: string) => Promise<KeeperReading>;
@@ -4293,7 +4297,7 @@ export class SessionSupervisor {
    * reattach takes a row between its check and its hold.
    */
   takeHeld(
-    kind: (typeof SESSION_PROC_KINDS)[number],
+    kind: KeeperHarnessKind,
     ackPayload: unknown,
     spec: SpawnPayload,
     proc: Claimed["proc"]

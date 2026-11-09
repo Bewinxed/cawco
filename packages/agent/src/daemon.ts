@@ -73,7 +73,11 @@ import {
 import type { MachineHarnessReport } from "@cawco/core/harness";
 import { MACHINE_PART_MS } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { traitsOf } from "@cawco/core/harness/traits";
+import {
+  KEEPER_HARNESSES,
+  type KeeperHarnessKind,
+  traitsOf,
+} from "@cawco/core/harness/traits";
 import { invariant, lawPolicy } from "@cawco/core/invariant";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
@@ -293,12 +297,7 @@ import { placePush } from "./place-push";
 import { placeLfs, placeRepo, repoRoot } from "./place-repo";
 import { listenBrowsers, previewNetworks, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
-import {
-  parseProcId,
-  procIdFor,
-  SESSION_PROC_KINDS,
-  sessionOfProc,
-} from "./proc-id";
+import { parseProcId, procIdFor, sessionOfProc } from "./proc-id";
 import {
   accountLent,
   beginProviderLogin,
@@ -626,7 +625,7 @@ const errorWords = (error: unknown): string =>
 
 /** A keeper's reading as one harness's custody reads it: the sessions whose children of that harness it holds alive. */
 const custodyWord = (
-  kind: (typeof SESSION_PROC_KINDS)[number],
+  kind: KeeperHarnessKind,
   reading: KeeperReading
 ): KeeperWord =>
   reading.kind === "listed"
@@ -1573,7 +1572,7 @@ const adoptable = (payload: SpawnPayload | undefined): payload is NamedSpawn =>
   payload.instanceId.length > 0 &&
   typeof payload.cwd === "string" &&
   payload.cwd.length > 0 &&
-  SESSION_PROC_KINDS.some((kind) => kind === payload.harness) &&
+  KEEPER_HARNESSES.some((kind) => kind === payload.harness) &&
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
@@ -2615,7 +2614,7 @@ const attach = (
       const obeyCustody = (command: HandoverCommand): void => {
         switch (command.kind) {
           case "read-keeper": {
-            const kind = command.unit as (typeof SESSION_PROC_KINDS)[number];
+            const kind = command.unit as KeeperHarnessKind;
             const reader = supervisor.custodyReader(kind);
             reader
               ?.read(command.keeper)
@@ -2648,14 +2647,11 @@ const attach = (
                 (one) =>
                   one.alive &&
                   one.procId ===
-                    procIdFor(
-                      command.unit as (typeof SESSION_PROC_KINDS)[number],
-                      command.id
-                    )
+                    procIdFor(command.unit as KeeperHarnessKind, command.id)
               );
             if (envelope && proc) {
               supervisor.takeHeld(
-                command.unit as (typeof SESSION_PROC_KINDS)[number],
+                command.unit as KeeperHarnessKind,
                 ackPayload,
                 envelope.payload as SpawnPayload,
                 proc
@@ -2765,7 +2761,7 @@ const attach = (
       // harness that keeps none has no keeper to ask, and its rows start.
       detach(
         Promise.all(
-          SESSION_PROC_KINDS.flatMap((kind) => {
+          KEEPER_HARNESSES.flatMap((kind) => {
             const mine = spawns.filter(
               (envelope) => envelope.payload.harness === kind
             );
