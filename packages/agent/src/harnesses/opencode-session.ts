@@ -39,13 +39,7 @@ import {
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { SessionInstruction } from "@cawco/core/fleet";
-import {
-  byPerson,
-  EFFORT_READ,
-  INSTALL_SESSION_CREDENTIAL,
-  offeredMode,
-  VERIFY_SESSION_CREDENTIAL,
-} from "@cawco/core/harness";
+import { byPerson, EFFORT_READ, offeredMode } from "@cawco/core/harness";
 import type {
   EffortLevel,
   ModelInfo,
@@ -141,6 +135,7 @@ import {
   toolNameOf,
   toolResultOf,
 } from "./opencode-transcript";
+import { credentialControls } from "./session-ledger";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 const RECOVERY_TIMEOUT_MS = 10_000;
@@ -3336,11 +3331,9 @@ export class OpencodeSession implements HarnessSession {
     ) {
       throw new Error(`${method} blocked: config reload in progress`);
     }
-    if (method === INSTALL_SESSION_CREDENTIAL) {
-      return await this.#installCredential(args[0]);
-    }
-    if (method === VERIFY_SESSION_CREDENTIAL) {
-      return await this.#verifyCredential();
+    const credential = this.#credentialControls(method, args);
+    if (credential) {
+      return await credential;
     }
     switch (method) {
       case CONTROL_INTERRUPT:
@@ -3519,10 +3512,13 @@ export class OpencodeSession implements HarnessSession {
    * OpenCode session id and acknowledged with itself: a session this agent
    * launched installs the one the hub minted for this spawn.
    */
-  async #installCredential(credential: unknown) {
-    if (typeof credential !== "string" || !credential) {
-      throw new Error("Session credential is missing.");
-    }
+  /** The session credential's install and verify ({@link credentialControls}). */
+  readonly #credentialControls = credentialControls(
+    (credential) => this.#installCredential(credential),
+    () => this.#verifyCredential()
+  );
+
+  async #installCredential(credential: string) {
     await storeOpencodeCredential(this.#opencodeSessionId(), {
       containerEnv: this.#ctx.containerEnv ?? {},
       credential,
