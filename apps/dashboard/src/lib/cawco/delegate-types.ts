@@ -1,7 +1,7 @@
 import type { DelegateType } from "@cawco/core/delegate-types";
 import type { Deleted } from "@cawco/core/fleet";
 import { hubRequest } from "@cawco/core/hub-request";
-import { hubCall } from "#lib/platform/hub-read.js";
+import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
 
 /**
  * The dashboard's side of delegate types: fetch wrappers in the shape
@@ -57,7 +57,7 @@ export interface ProjectTypes {
  * is a project type file's alone (core `DelegateType`).
  */
 export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
-  hubCall<DelegateType>(
+  hubJson<DelegateType>(
     hubRequest("PUT /api/delegate-types/:name", {
       path: { name: draft.name },
       body: {
@@ -73,14 +73,14 @@ export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
         startingSet: draft.startingSet,
       },
     }),
-    `save ${draft.name || "the delegate type"}`
+    { failure: couldNotOrAway(`save ${draft.name || "the delegate type"}`) }
   );
 
 /** Deletes a type, into the hub's trash for its Undo (config/undo.ts). */
 export const removeDelegateType = (name: string): Promise<Deleted> =>
-  hubCall<Deleted>(
+  hubJson<Deleted>(
     hubRequest("DELETE /api/delegate-types/:name", { path: { name } }),
-    `delete ${name}`
+    { failure: couldNotOrAway(`delete ${name}`) }
   );
 
 /** A blank draft, on the defaults that make the common case one field of typing. */
