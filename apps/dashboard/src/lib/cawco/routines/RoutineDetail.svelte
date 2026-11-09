@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { ApprovedActionView } from "@cawco/core/actions";
   import { routinesWords as words } from "@cawco/core/words/routines";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   /**
    * A routine opened in place under its row: only what the row does not say
    * (the owner: "why are you repeating this info that is already up
@@ -25,6 +24,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import ActionsTable from "./ActionsTable.svelte";
   import RunStatus, { type Status } from "./RunStatus.svelte";
   import type { Routine, RoutineRun } from "./routines-api";

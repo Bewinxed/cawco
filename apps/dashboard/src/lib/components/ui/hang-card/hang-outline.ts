@@ -16,8 +16,8 @@
  *   drawn only outside the shape (an `out` composite), so it draws no edge
  *   of its own, and cut at the shelf, so none falls on the tab.
  */
-import type { HangGeometry } from "#lib/cawco/motion/hang-shape.js";
-import { hangClip, hangOutline } from "#lib/cawco/motion/hang-shape.js";
+import type { HangGeometry } from "#lib/platform/motion/hang-shape.js";
+import { hangClip, hangOutline } from "#lib/platform/motion/hang-shape.js";
 
 const NS = "http://www.w3.org/2000/svg";
 

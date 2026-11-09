@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   /**
    * Show details (gradual revelation): a ghost text link that unfolds, in
    * the tray, the state's few facts, drawn by their marks, and on a failure
@@ -10,9 +12,7 @@
    * `part`: the link alone (it stands in the actions' row on a desk), the
    * fold alone (under that row), or both, the link over its fold.
    */
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import FactList from "../FactList.svelte";
   import { hasClipboard } from "./FlowObject.svelte";
   import type { AddressFlow } from "./flow.svelte";

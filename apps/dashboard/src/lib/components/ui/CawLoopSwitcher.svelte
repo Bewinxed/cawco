@@ -1,13 +1,13 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconPause, IconPlay } from "#lib/icons.js";
   /**
    * Caw's motion while a project's conversation works, beside the theme and sound:
    * his `working` loop plays (the default), or he holds its still
    * (feel.svelte.ts `cawLoop`).
    */
-  import { cawLoop, setCawLoop } from "#lib/cawco/feel.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconPause, IconPlay } from "#lib/icons.js";
+  import { cawLoop, setCawLoop } from "#lib/platform/feel.svelte.js";
 
   const label = $derived(
     cawLoop.on

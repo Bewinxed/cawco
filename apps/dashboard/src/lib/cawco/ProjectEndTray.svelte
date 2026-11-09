@@ -28,8 +28,8 @@
    * still runs, and the tray says so.
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { cn } from "#lib/utils.js";
   import CawOffTray from "./CawOffTray.svelte";
   import { type ProjectRow, projectRunning } from "./client.svelte";

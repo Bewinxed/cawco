@@ -5,7 +5,7 @@ import type {
   HookVersion as KeptHookVersion,
 } from "@cawco/core/hooks";
 import { hubRequest } from "@cawco/core/hub-request";
-import { hubCall } from "#lib/cawco/hub-read.js";
+import { hubCall } from "#lib/platform/hub-read.js";
 import type { Machine } from "./client.svelte";
 
 /**

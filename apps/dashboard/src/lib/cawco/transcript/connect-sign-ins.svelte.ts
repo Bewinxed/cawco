@@ -18,9 +18,9 @@ import type { ConnectAccess } from "@cawco/core/frames";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { ConnectSignInSchema } from "#lib/cawco/stored-shapes.js";
+import { failureWords } from "#lib/platform/hub-read.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { signInToMcp } from "../fleet";
-import { failureWords } from "../hub-read";
-import { readJson, writeJson } from "../storage";
 
 type ConnectStage =
   /** Asked: the address shown, nothing opened yet. */

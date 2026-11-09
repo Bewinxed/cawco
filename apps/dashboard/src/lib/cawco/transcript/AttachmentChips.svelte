@@ -16,10 +16,10 @@
    */
   import { humanSize } from "@cawco/core/attachments";
   import type { Component } from "svelte";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { pressVariants } from "#lib/components/ui/button/index.js";
   import { IconArtifactCanvas, IconClose } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import type { ComposerDraft } from "./composer-draft.svelte";
   import { glyphOf, linesLine, nameParts } from "./doc-face";

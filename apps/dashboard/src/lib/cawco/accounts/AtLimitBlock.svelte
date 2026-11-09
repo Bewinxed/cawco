@@ -21,12 +21,12 @@
   import { HARNESSES } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import { IconArrowUpRight } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { hueVar, nameOf, TERMS_URL } from "./model.svelte";
   import StrategyFigure from "./StrategyFigure.svelte";
 

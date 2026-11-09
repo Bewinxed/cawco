@@ -28,16 +28,16 @@
     readAuth,
     setPairingRequired,
   } from "#lib/cawco/hub-auth.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { IconClock, IconLaptop, IconLock, IconSearch } from "#lib/icons.js";
   import {
     failureClause,
     failureWords,
     hubFetch,
     hubRefusal,
-  } from "#lib/cawco/hub-read.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconClock, IconLaptop, IconLock, IconSearch } from "#lib/icons.js";
+  } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
 
   const section = sectionOf("devices");

@@ -18,17 +18,7 @@
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import {
-    failureClause,
-    failureWords,
-    hubFetch,
-    hubRefusal,
-    hubSaid,
-  } from "#lib/cawco/hub-read.js";
   import { leaveThePage } from "#lib/cawco/leaving.js";
-  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import {
     type JevState,
@@ -41,6 +31,16 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconGlobe, IconJev, IconRules } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import {
+    failureClause,
+    failureWords,
+    hubFetch,
+    hubRefusal,
+    hubSaid,
+  } from "#lib/platform/hub-read.js";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";

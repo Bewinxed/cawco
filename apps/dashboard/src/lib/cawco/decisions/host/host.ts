@@ -9,8 +9,8 @@
  */
 
 import { mount } from "svelte";
+import { watchEdgeFades } from "#lib/platform/motion/fade-runs.svelte.js";
 import { reportErrorsTo } from "../../error-report.js";
-import { watchEdgeFades } from "../../motion/fade-runs.svelte";
 import { relayAway } from "./away";
 import Host from "./Host.svelte";
 import { bridge, picks, sent, takeServed } from "./page.svelte.js";

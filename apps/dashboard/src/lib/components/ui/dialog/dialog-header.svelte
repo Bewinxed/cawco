@@ -26,7 +26,7 @@
    */
   import type { Attachment } from "svelte/attachments";
   import type { HTMLAttributes } from "svelte/elements";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
   import { headRoom } from "./head-room.svelte.js";
 
