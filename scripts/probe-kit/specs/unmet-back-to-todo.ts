@@ -549,7 +549,9 @@ export default {
       db.setProjectTemplate(projectId, "code");
       const board = async (request: HubAsk): Promise<Answer> => {
         const answer = await request(
-          handled((r) => hub.handle(r), { [PRESENCE_HEADER]: PRESENCE })
+          handled((r) => hub.handle(r), {
+            headers: { [PRESENCE_HEADER]: PRESENCE },
+          })
         );
         return saidOf(answer);
       };

@@ -43,9 +43,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gitUntil } from "../../../packages/agent/src/git/run";
-import { hubPath } from "../../../packages/agent/src/hub-client";
+import type {
+  HubAnswer,
+  HubClient,
+} from "../../../packages/agent/src/hub-client";
 import { lfsCheckout } from "../../../packages/agent/src/workspace";
-import { hubRequested } from "../hub";
+import { answerText, handled } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const FILTERS = [
@@ -537,13 +540,6 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
   );
 };
 
-/** A hub request as the in-process hub reads it, with `headers`. */
-const asked = (
-  path: string,
-  method: string,
-  headers: Record<string, string> = {}
-) => new Request(`http://127.0.0.1${path}`, { method, headers });
-
 /**
  * E: the hub's side, a real hub in this process. The person declares the
  * project's Large files with a connection that holds a key; a machine with
@@ -590,113 +586,84 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
       checkout: { machineId: "probe-place", path: "/srv/probe" as never },
       remote: null,
     });
-    const said = async (response: Response) =>
-      `${response.status} ${(await response.text()).slice(0, 300)}`;
-    const made = await hub.handle(
-      await hubRequested((client) =>
-        client.api.connections.post({
-          name: "probe-store",
-          service: "github",
-          account: "@probe",
-          transport: "http",
-          url: "http://127.0.0.1:9/mcp",
-          auth: "bearer",
-        })
-      )
-    );
-    const keyed = await hub.handle(
-      await hubRequested((client) =>
-        client.api
-          .connections({ name: "probe-store" })
-          .key.put({ key: "probe-connection-key" })
-      )
-    );
-    kit.note(`E: connection ${await said(made)}; key ${keyed.status}`);
-    const plain = await hub.handle(
-      await hubRequested((client) =>
-        client.api.projects({ id: "probe-project" }).patch({
-          lfs: {
-            url: "http://lfs.example.com/o/r.git",
-            connection: "probe-store",
-          },
-        })
-      )
-    );
+    const said = (reply: HubAnswer) =>
+      `${reply.status} ${answerText(reply).slice(0, 300)}`;
+    const asked = handled((request) => hub.handle(request));
+    /** The hub as `machineId` signs for it: its proof set per request from the request's own path and method. */
+    const signedBy = (machine: string, key: string) =>
+      handled((request) => hub.handle(request), {
+        onRequest: (path, init) => ({
+          headers: proven(machine, key, init.method ?? "GET", path),
+        }),
+      });
+    const made = await asked.api.connections.post({
+      name: "probe-store",
+      service: "github",
+      account: "@probe",
+      transport: "http",
+      url: "http://127.0.0.1:9/mcp",
+      auth: "bearer",
+    });
+    const keyed = await asked.api
+      .connections({ name: "probe-store" })
+      .key.put({ key: "probe-connection-key" });
+    kit.note(`E: connection ${said(made)}; key ${keyed.status}`);
+    const plain = await asked.api.projects({ id: "probe-project" }).patch({
+      lfs: {
+        url: "http://lfs.example.com/o/r.git",
+        connection: "probe-store",
+      },
+    });
     kit.check(
       "E: a Large files URL over plain http is refused",
       plain.status === 400,
-      await said(plain)
+      said(plain)
     );
-    const declared = await hub.handle(
-      await hubRequested((client) =>
-        client.api.projects({ id: "probe-project" }).patch({
-          lfs: {
-            url: "https://lfs.example.com/o/r.git",
-            connection: "probe-store",
-          },
-        })
-      )
-    );
-    const row = (await declared
-      .clone()
-      .json()
-      .catch(() => ({}))) as {
-      lfsConnection?: string;
-      lfsUrl?: string;
-    };
+    const declared = await asked.api.projects({ id: "probe-project" }).patch({
+      lfs: {
+        url: "https://lfs.example.com/o/r.git",
+        connection: "probe-store",
+      },
+    });
+    const row = declared.data;
     kit.check(
       "E: the person declares the project's Large files, the clone URL read as its LFS endpoint",
       declared.status === 200 &&
-        row.lfsUrl === "https://lfs.example.com/o/r.git/info/lfs" &&
+        row?.lfsUrl === "https://lfs.example.com/o/r.git/info/lfs" &&
         row.lfsConnection === "probe-store",
-      await said(declared)
+      said(declared)
     );
-    const path = hubPath.api.lfs.projects({ id: "probe-project" })["~path"];
-    const answer = await hub.handle(
-      asked(path, "GET", proven("probe-place", keyOf.place, "GET", path))
-    );
-    const read = (await answer
-      .clone()
-      .json()
-      .catch(() => ({}))) as {
-      declared?: { basic: string; endpoint: string };
-    };
+    const lfsOf = (hubAs: HubClient) =>
+      hubAs.api.lfs.projects({ id: "probe-project" }).get();
+    const answer = await lfsOf(signedBy("probe-place", keyOf.place));
+    const read = answer.data;
     kit.check(
       "E: a machine holding a place of the project, by its proof, is answered the endpoint and the connection's key",
       answer.status === 200 &&
-        read.declared?.endpoint ===
+        read?.declared?.endpoint ===
           "https://lfs.example.com/o/r.git/info/lfs" &&
         read.declared.basic === btoa("x-access-token:probe-connection-key"),
-      await said(answer)
+      said(answer)
     );
-    const stranger = await hub.handle(
-      asked(path, "GET", proven("probe-none", keyOf.none, "GET", path))
-    );
-    const session = await hub.handle(
-      asked(path, "GET", { authorization: "Bearer probe-session" })
+    const stranger = await lfsOf(signedBy("probe-none", keyOf.none));
+    const session = await lfsOf(
+      handled((request) => hub.handle(request), {
+        headers: { authorization: "Bearer probe-session" },
+      })
     );
     kit.check(
       "E: a machine with no place of the project, and a session, are refused",
       stranger.status === 403 && session.status === 403,
-      `${await said(stranger)} / ${await said(session)}`
+      `${said(stranger)} / ${said(session)}`
     );
     const endpoint = "https://third.example.com/x.git/info/lfs";
-    const refusalPath = hubPath.api.lfs.projects({ id: "probe-project" })
-      .refused["~path"];
-    const told = await hub.handle(
-      new Request(`http://127.0.0.1${refusalPath}`, {
-        method: "POST",
-        headers: {
-          ...proven("probe-place", keyOf.place, "POST", refusalPath),
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          root: "/srv/probe",
-          endpoint,
-          machineId: "probe-place",
-        }),
-      })
-    );
+    const told = await signedBy("probe-place", keyOf.place)
+      .api.lfs.projects({ id: "probe-project" })
+      .refused.post({
+        root: "/srv/probe",
+        endpoint,
+        machineId: "probe-place",
+      });
     // A project with no conversation yet keeps the note for the next one.
     db.projectNotes.adopt("probe-project", "probe-conversation");
     const note = db.projectNotes
@@ -711,7 +678,7 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
       told.status === 200 &&
         (note?.body ?? "").includes(endpoint) &&
         (note?.body ?? "").includes("Project details › Large files"),
-      `${await said(told)}; ${note?.body ?? "no note"}`
+      `${said(told)}; ${note?.body ?? "no note"}`
     );
   } finally {
     lifetime.close();

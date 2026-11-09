@@ -33,9 +33,22 @@ const fetcherOf = (send: HubSender): typeof fetch =>
 /** Eden's client of the hub. */
 export type HubClient = Treaty.Create<HubApp>;
 
+/**
+ * What a caller adds to every request of its client: fixed `headers`, or an
+ * `onRequest` that sets a request's headers from its path and method
+ * (next.elysiajs.com/eden/treaty/config: "shallow merge it into the current
+ * RequestInit, merging its headers").
+ */
+export type HubConfig = Pick<Treaty.Config, "headers" | "onRequest">;
+
 /** The hub at `base` (its origin), asked through `send`. */
-export const hubClient = (base: string, send: HubSender): HubClient =>
+export const hubClient = (
+  base: string,
+  send: HubSender,
+  config: HubConfig = {}
+): HubClient =>
   treaty<HubApp>(base, {
+    ...config,
     keepDomain: true,
     parseDate: false,
     fetcher: fetcherOf(send),

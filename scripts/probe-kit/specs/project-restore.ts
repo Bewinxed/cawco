@@ -991,7 +991,9 @@ export default {
         },
         call: async (request) => {
           const answer = await request(
-            handled((r) => hub.handle(r), { [PRESENCE_HEADER]: PRESENCE })
+            handled((r) => hub.handle(r), {
+              headers: { [PRESENCE_HEADER]: PRESENCE },
+            })
           );
           return said(answer);
         },
