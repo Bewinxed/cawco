@@ -79,11 +79,9 @@ export class MachineAwayError extends Error {
 }
 
 /**
- * A request the hub refused, as Eden's client hands it back (`if
- * (answer.error)`, the answer itself): the status and the body Eden read
- * (`error`), and the answer, for its headers. A request that got no answer
- * comes back so too, as Eden's 503, its `value` the error `fetch` rejected
- * with and no answer beside it.
+ * A request the hub refused: the status and the body Eden read (`error`, as
+ * the route types them), and its answer, for its headers. Only an answer
+ * makes one ({@link refusedFrom}).
  */
 export interface Refused<E extends HubError = HubError> {
   error: E;
@@ -117,31 +115,11 @@ function textValue(text: string): unknown {
 }
 
 /**
- * Whether `refused` is a request that got no answer at all: Eden hands back
- * what `fetch` rejected with as its value, with no answer beside it.
- */
-const unanswered = (refused: Refused): boolean =>
-  refused.error.value instanceof Error;
-
-/**
- * The answer of `refused`. A request that got no answer at all rejects here
- * with what `fetch` threw (a `TypeError` with the browser's words, an
- * abort's `AbortError`), as it rejected before Eden: every reader of a
- * refusal goes through this first.
- */
-function refusedAnswer(refused: Refused): Response {
-  if (unanswered(refused)) {
-    throw refused.error.value;
-  }
-  return refused.response;
-}
-
-/**
  * A refusal as the {@link MachineAwayError} it is when the hub says its
  * machine is away; null otherwise, for the caller's own refusal.
  */
 export function awayOf(refused: Refused): MachineAwayError | null {
-  const { away, reconnectingMs } = machineAway(refusedAnswer(refused));
+  const { away, reconnectingMs } = machineAway(refused.response);
   return away
     ? new MachineAwayError(
         away,
@@ -160,7 +138,7 @@ export function awayOf(refused: Refused): MachineAwayError | null {
  * is the hub not answering: that, with its status ({@link noAnswer}).
  */
 export function hubFailure(refused: Refused): HubFailure {
-  const { status } = refusedAnswer(refused);
+  const { status } = refused.response;
   const problem = problemOf(refused.error.value);
   return {
     status,
@@ -243,7 +221,14 @@ async function answerOf<T>(response: Response): Promise<T> {
  * refused, its `error` and the answer itself ({@link Refused}).
  */
 export type HubAnswer<T, E extends HubError = HubError> =
-  Answered<T> | { data: null; error: E; response: Response; status: number };
+  | Answered<T>
+  | {
+      data: null;
+      error: E;
+      /** None when the request got no answer (treaty2: `response: void 0`, `error` its 503 with what `fetch` rejected with). */
+      response: Response | undefined;
+      status: number;
+    };
 
 /** Eden's answer when the route answered, its body as Eden read it. */
 interface Answered<T> {
@@ -287,23 +272,22 @@ export async function hubAsk<T, E extends HubError>(
   if (answered(answer)) {
     return { ok: true, value: bodyOf(answer) };
   }
-  const refused = { error: answer.error, response: answer.response };
-  refusedAnswer(refused);
-  return { ok: false, refused };
+  return { ok: false, refused: refusedFrom(answer) };
 }
 
 /**
- * A refused answer as `refusal` words it. A request that got no answer
- * rejects with what `fetch` threw, before any refusal reads it
- * ({@link refusedAnswer}).
+ * Eden's refusal as a {@link Refused}. With no answer beside it the request
+ * got none: what `fetch` rejected with (a `TypeError` with the browser's
+ * words, an abort's `AbortError`) is thrown, as it rejected before Eden.
  */
-function refusalOf(
-  answer: { error: Refused["error"]; response: Response },
-  refusal: Refusal
-): Error {
-  const refused = { error: answer.error, response: answer.response };
-  refusedAnswer(refused);
-  return refusal(refused);
+function refusedFrom<E extends HubError>(answer: {
+  error: E;
+  response: Response | undefined;
+}): Refused<E> {
+  if (!answer.response) {
+    throw answer.error.value;
+  }
+  return { error: answer.error, response: answer.response };
 }
 
 /** The content types Eden reads a body as JSON by (treaty2's parse by `Content-Type`). */
@@ -360,8 +344,8 @@ export async function hubDone(
   refusal: Refusal = hubRefusal
 ): Promise<void> {
   const answer = await call;
-  if (answer.error) {
-    throw refusalOf(answer, refusal);
+  if (!answered(answer)) {
+    throw refusal(refusedFrom(answer));
   }
 }
 
@@ -373,8 +357,9 @@ export async function hubReached(
   call: Promise<HubAnswer<unknown>>
 ): Promise<void> {
   const answer = await call;
-  if (answer.error && unanswered(answer)) {
-    throw answer.error.value;
+  if (!answered(answer)) {
+    // A refusal is as good as an answer here: only none at all throws.
+    refusedFrom(answer);
   }
 }
 
@@ -406,7 +391,7 @@ export const couldNotOrAway =
  * is (it already says what to do).
  */
 export function refusedOrUnreached(refused: Refused): Error {
-  return unreachedAnswer(refusedAnswer(refused))
+  return unreachedAnswer(refused.response)
     ? new HubUnreachable(HUB_UNREACHABLE)
     : hubRefusal(refused);
 }
