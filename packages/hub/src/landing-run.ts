@@ -1645,6 +1645,9 @@ export const createLandingRun = ({
       return "Not shipped: only work that lands on main ships, and this item put nothing there.";
     }
     const ship = item.projectId ? await projectShip(item.projectId) : undefined;
+    if (ship instanceof ElysiaStatus) {
+      throw projectRefusalOf(ship);
+    }
     if (!(ship && item.projectId)) {
       return `Not shipped: this project's ${GATE_FILE} declares no Ship: command, so the hub has nothing to ship it with. The nightly ships it.`;
     }
