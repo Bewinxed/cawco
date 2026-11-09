@@ -474,16 +474,3 @@ const endWork = async (
     left: left.map((one) => one.pid),
   };
 };
-
-/**
- * The workspaces whose boundary of an older form, or on a retiring keeper,
- * is kept as it is because its work still runs (lifecycle.ts `replaceOlder`), each
- * with what it runs as last said ({@link workLeft}), said once per change,
- * and the commands running at the last look that kept it ({@link
- * drainable}). Each stays {@link stale}, looked at until the last of its
- * work ends, then handed over.
- */
-export const keptRunning = new Map<
-  string,
-  { readonly said: string; readonly commands: readonly number[] }
->();
