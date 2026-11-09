@@ -55,11 +55,11 @@
   import type { FleetMarketplace, MarketplaceLink } from "@cawco/core/fleet";
   import { skillsWords as words } from "@cawco/core/words/skills";
   import Coded from "#lib/cawco/Coded.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconShop } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { linkMarketplace, readMarketplaceName } from "../fleet";
   import Field from "./Field.svelte";
   import HubAskFoot from "./HubAskFoot.svelte";

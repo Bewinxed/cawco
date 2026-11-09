@@ -50,10 +50,10 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { OptionGroup } from "#lib/components/ui/option-group/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { frameObserver } from "../../frame-observer.js";
-  import { dur, ease } from "../../motion/curves.svelte";
-  import { fold, landFold } from "../../motion/fold.svelte";
-  import { morph } from "../../motion/morph.svelte";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
+  import { fold, landFold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import DecidedBy from "./DecidedBy.svelte";
   import { DECIDED_BY, type DecidedByShown } from "./decided-by.js";

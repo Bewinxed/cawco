@@ -23,9 +23,7 @@
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { hubSeam } from "#lib/cawco/hub-live.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
-  import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import {
     type CalledArtifact,
     calledArtifact,
@@ -53,6 +51,12 @@
     IconUser,
     IconWindow,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { browser } from "$app/env";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a

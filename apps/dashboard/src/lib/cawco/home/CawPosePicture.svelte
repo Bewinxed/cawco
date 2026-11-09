@@ -17,7 +17,7 @@
     ease,
     motionOk,
     numberOf,
-  } from "#lib/cawco/motion/curves.svelte.js";
+  } from "#lib/platform/motion/curves.svelte.js";
   import type { CawPose } from "./Caw.svelte";
   import { cawPose, copyStill, whenDrawn } from "./caw-still.svelte";
 

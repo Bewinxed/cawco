@@ -1,15 +1,15 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   /**
    * One of a task file's own text sections (its description, its acceptance
    * criteria): read as markdown, edited as the text it is. Save writes it
    * back through the hub, which commits it; a refusal stays under the field
    * with the draft kept.
    */
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   let {
     heading,

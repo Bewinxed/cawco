@@ -6,7 +6,7 @@
  * strip's box) and the room's margins. The room is the hang layer the card
  * stands in (hang-layer): the window in the app, a frame's box on a canvas.
  */
-import { placeHang } from "#lib/cawco/motion/hang-shape.js";
+import { placeHang } from "#lib/platform/motion/hang-shape.js";
 
 /** Their corner (`radius-lg`) and the level run from a foot's tip to it. */
 const HANG_CORNER = 12;

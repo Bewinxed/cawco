@@ -21,9 +21,9 @@
     dur,
     ease,
     motionOk,
-  } from "../../../../apps/dashboard/src/lib/cawco/motion/curves.svelte.js";
-  import { morph } from "../../../../apps/dashboard/src/lib/cawco/motion/morph.svelte.js";
-  import { popOut } from "../../../../apps/dashboard/src/lib/cawco/motion/pop.svelte.js";
+  } from "../../../../apps/dashboard/src/lib/platform/motion/curves.svelte.js";
+  import { morph } from "../../../../apps/dashboard/src/lib/platform/motion/morph.svelte.js";
+  import { popOut } from "../../../../apps/dashboard/src/lib/platform/motion/pop.svelte.js";
   import { IN_THE_BOX, oneClock, putIn, typedOf } from "../clock.js";
   import Composer from "../Composer.svelte";
   import Surround from "../Surround.svelte";
