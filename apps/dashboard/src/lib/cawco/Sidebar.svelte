@@ -54,6 +54,7 @@
     holdWhileInside,
   } from "#lib/platform/motion/held-order.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
+  import { plainClick } from "#lib/platform/plain-click.js";
   import { stored } from "#lib/platform/storage.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
@@ -171,15 +172,7 @@
    * its link is followed) follows its link.
    */
   function openProjectTab(event: MouseEvent, projectId: string) {
-    if (
-      sheet ||
-      !onWorkspace ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
+    if (sheet || !onWorkspace || !plainClick(event)) {
       return;
     }
     event.preventDefault();
