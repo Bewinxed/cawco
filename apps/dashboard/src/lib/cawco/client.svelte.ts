@@ -205,9 +205,7 @@ import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { type FleetFault, fleetFaults } from "./convergence";
 import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
-import type { ServedBoard } from "./first-paint";
 import { heardFrame, heardSince, readLeaves } from "./heard";
-import type { Area } from "./home/areas.svelte";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   deadlineIn,
@@ -228,7 +226,6 @@ import {
   resolveSessionTitle,
   transcriptUrl,
 } from "./links";
-import type { MachineVerdict } from "./machine-verdict";
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
@@ -240,6 +237,7 @@ import { placedOn } from "./projects";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
 import { noteChange } from "./repeated-keys";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
+import type { Area, MachineVerdict, ServedBoard } from "./served-board";
 import { checkServedBuild, newerBuild } from "./served-build.svelte";
 import {
   answeredCommands,
@@ -793,8 +791,11 @@ const storedInfos = new SvelteMap<
  * state is the client's alone. Null where the server could not read the hub
  * whole.
  */
-function servedBoard(): ServedBoard | null {
-  return (servedPage.data as { board?: ServedBoard | null }).board ?? null;
+function servedBoard(): ServedBoard<ProjectRow> | null {
+  return (
+    (servedPage.data as { board?: ServedBoard<ProjectRow> | null }).board ??
+    null
+  );
 }
 
 /** Recent's stored transcripts as drawn: the hub's last word, else the served board's. */
@@ -802,12 +803,17 @@ const storedNow = (): StoredRecent =>
   storedHeard ?? servedBoard()?.stored ?? { rows: [], transcripts: [] };
 
 /** The served board while the socket's first snapshot is not in: its rows, pulses and machines are the ones drawn. */
-const servedLive = (): ServedBoard | null =>
+const servedLive = (): ServedBoard<ProjectRow> | null =>
   state.liveRead ? null : servedBoard();
 
 /** The served rows (the board's, then the older ones its stored list holds) looked up by id and by session, built once per board (on the server, once per request). */
-const servedIndexes = new WeakMap<ServedBoard, InstanceIndex<InstanceRow>>();
-function servedIndex(board: ServedBoard): InstanceIndex<InstanceRow> {
+const servedIndexes = new WeakMap<
+  ServedBoard<ProjectRow>,
+  InstanceIndex<InstanceRow>
+>();
+function servedIndex(
+  board: ServedBoard<ProjectRow>
+): InstanceIndex<InstanceRow> {
   const held = servedIndexes.get(board);
   if (held) {
     return held;
