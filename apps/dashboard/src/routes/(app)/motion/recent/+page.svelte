@@ -4,6 +4,7 @@
   import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
   import { onMount } from "svelte";
   import { z } from "zod";
+  import Home from "#lib/cawco/home/Home.svelte";
 
   /**
    * The sidebar's one Recent list (tsk-323) on a bench: the real rail around
@@ -373,8 +374,32 @@
     return Promise.resolve(Response.json({ at }));
   }
 
-  onMount(() => {
-    debug.standHub(() => undefined);
+  /**
+   * A live hub's own rows, when a check stands them in before the page loads
+   * (`__rbReal`: `/api/instances`, `/api/projects`, `/api/agents` and
+   * `/api/areas` from a hub opened on a copy of its database): the bench
+   * draws them instead of its own.
+   */
+  interface Real {
+    agents: unknown[];
+    areas: { areas: Bench["areas"]["areas"] };
+    instances: InstanceRow[];
+    projects: unknown[];
+  }
+  const real = (globalThis as unknown as { __rbReal?: Real }).__rbReal;
+  /** `?fleet`: the page is Fleet on a desk, beside the rail. */
+  const fleet = params.has("fleet");
+
+  function standReal(from: Real): void {
+    debug.state.machines = from.agents;
+    debug.areas.areas = from.areas.areas;
+    debug.state.projects = from.projects;
+    debug.state.projectsRead = true;
+    rows = from.instances;
+    adopt();
+  }
+
+  function standSketch(): void {
     debug.state.machines = [
       { machineId: OBELISK, hostname: OBELISK, os: "linux-x64" },
       { machineId: MINI, hostname: MINI, os: "darwin-arm64" },
@@ -425,6 +450,15 @@
       }
     }
     pulse(delegates[1]?.id ?? "", "working");
+  }
+
+  onMount(() => {
+    debug.standHub(() => undefined);
+    if (real) {
+      standReal(real);
+    } else {
+      standSketch();
+    }
     // Done, answered as the hub would: the row's `doneAt`.
     const fetchWas = window.fetch;
     window.fetch = (input, init) =>
@@ -450,10 +484,16 @@
 
 <svelte:head><title>Recent bench | CawCo</title></svelte:head>
 
-<div class="flex flex-col gap-space-3 p-space-5 type-body text-ink-muted">
-  <p class="m-0">
-    The sidebar's Recent list on a bench: {seeds.length} sessions, three delegates
-    under “Fix tray chip overflow”. Drive it from the console with
-    <code>__rb</code>.
-  </p>
-</div>
+{#if fleet}
+  <!-- Fleet on a desk, as SessionSurface draws it beside the rail. -->
+  <Home variant="page" wide />
+{:else}
+  <div class="flex flex-col gap-space-3 p-space-5 type-body text-ink-muted">
+    <p class="m-0">
+      The sidebar's Recent list on a bench: {real
+        ? `${real.instances.length} rows from a live hub's database`
+        : `${seeds.length} sessions, three delegates under “Fix tray chip overflow”`}.
+      Drive it from the console with <code>__rb</code>.
+    </p>
+  </div>
+{/if}
