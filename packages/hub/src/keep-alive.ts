@@ -51,9 +51,10 @@ export const promptCacheExpiresAt = (
       row.lastRequestAt.getTime() + (row.cacheTtl === "1h" ? HOUR_MS : 300_000)
     );
   }
-  // Without a measurement, only the longest Claude lifetime proves expiry.
-  return traitsOf(row.harness).keepAlive && lastTurnAt
-    ? new Date(lastTurnAt).getTime() + HOUR_MS
+  // Without a measurement, only the harness's longest lifetime proves expiry.
+  const longest = traitsOf(row.harness).promptCacheMaxMs;
+  return longest !== null && lastTurnAt
+    ? new Date(lastTurnAt).getTime() + longest
     : null;
 };
 
@@ -232,7 +233,7 @@ const tickKeepAlive = async (
   for (const row of ports.rows()) {
     if (!(
       row.keepAliveEnabled &&
-      traitsOf(row.harness).keepAlive &&
+      traitsOf(row.harness).promptCacheMaxMs !== null &&
       row.status === "running" &&
       !row.keepAliveTurn
     )) {
