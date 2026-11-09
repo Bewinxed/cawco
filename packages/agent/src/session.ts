@@ -264,6 +264,7 @@ import {
 import { keepOnlyPlaceSets, keepPlaceSet } from "./fleet-place-set";
 import { laidOver } from "./fleet-report";
 import { expandHome, runFs } from "./fs";
+import { fetchDefaultBranch, hostGit } from "./git/run";
 import type {
   Harness,
   HarnessContext,
@@ -281,7 +282,6 @@ import {
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
-import { fetchDefaultBranch, hostGit } from "./host-git";
 import { hostScratchReady } from "./host-scratch";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
