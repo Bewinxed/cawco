@@ -10,12 +10,7 @@ import {
   ROOM_HELD,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import type {
-  ControlPayload,
-  Envelope,
-  InstanceRow,
-  SendPayload,
-} from "@cawco/core/protocol";
+import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type { EndedTask } from "@cawco/core/session/controls";
 import { workWords } from "@cawco/core/words/work";
@@ -29,6 +24,7 @@ import type { HubContext } from "./hub-context";
 import { isKeepAlive } from "./keep-alive";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { uuidOf } from "./named-uuid";
+import { sessionControl } from "./session-word";
 import { unreachable } from "./unreachable";
 
 /** A clock time as a hand-back says it: `12:09 UTC`. */
@@ -206,18 +202,10 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       await ctx.awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
         const agent = ctx.registry.agent(row.machineId);
         return agent
-          ? ctx.sendAnswerable(agent, {
-              verb: "control",
-              machineId: row.machineId,
-              instanceId: row.id,
-              requestId,
-              payload: {
-                instanceId: row.id,
-                requestId,
-                method: "getTaskOutput",
-                args: [taskId],
-              },
-            } satisfies Envelope<ControlPayload>)
+          ? ctx.sendAnswerable(
+              agent,
+              sessionControl(row, requestId, "getTaskOutput", [taskId])
+            )
           : undefined;
       })
     );
