@@ -109,7 +109,7 @@ function contextCell(read: ContextRead): string {
 /**
  * The sessions file: a header line, then one row per session. Every live
  * session's context is read for it, all at once, each within the read's own
- * bound (client.svelte.ts `refreshContext`).
+ * bound (stores/session-detail.svelte.ts `refreshContext`).
  */
 export async function sessionsCsv(spend: SessionSpend): Promise<string> {
   const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
