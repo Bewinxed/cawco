@@ -883,7 +883,6 @@ suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/lint/switch-
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/probe-kit/specs/held-reorder.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/probe-kit/specs/host-scratch.ts	1
 suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/core/src/process-identity.ts	1
-suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/hub/src/areas.ts	1
 suppression	biome-ignore lint/suspicious/noControlCharactersInRegex	packages/hub/src/project-edit.ts	1
 suppression	biome-ignore lint/suspicious/noDuplicateSelectors	apps/dashboard/src/design.css	2
 suppression	biome-ignore lint/suspicious/noDuplicateSelectors	apps/dashboard/src/lib/cawco/spawn/ns-theme.css	3
