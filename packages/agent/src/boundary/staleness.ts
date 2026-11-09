@@ -1,8 +1,8 @@
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
-import { lookAtStale } from "./stale-look";
 import { readRetiring, starting } from "./state";
+import { lookAtOlder } from "./unasked";
 
 /** How often the boundaries of an older form are looked at. */
 const STALE_LOOK_MS = 5000;
@@ -87,7 +87,7 @@ export let staleLook: Promise<void> | undefined;
 
 /** A look at the older boundaries: the one under way, or one begun now. Never throws: what fails is said. */
 export const lookOnce = (): Promise<void> => {
-  staleLook ??= lookAtStale()
+  staleLook ??= lookAtOlder()
     .catch((error: unknown) => {
       console.warn(
         `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
