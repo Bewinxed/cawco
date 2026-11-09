@@ -5,7 +5,7 @@ import type {
   HookVersion as KeptHookVersion,
 } from "@cawco/core/hooks";
 import { hub } from "#lib/platform/hub.js";
-import { couldNotOrAway } from "#lib/platform/hub-read.js";
+import { couldNotOrAway, hubData } from "#lib/platform/hub-read.js";
 import type { Machine } from "./stores/board.svelte";
 
 /**
@@ -36,51 +36,43 @@ export const hooksOf = (machine: Machine): HookFleetReport | undefined =>
  *  set. The hub merges a PUT over the stored hook, so an optional field the
  *  draft leaves empty goes as `null`, which clears it; an absent one would keep
  *  the stored value. */
-export const saveHook = async (id: string, draft: HookDraft) => {
-  const answer = await hub.api.fleet.hooks({ id }).put({
-    name: draft.name,
-    enabled: draft.enabled,
-    event: draft.event,
-    matcher: draft.matcher ?? null,
-    handler: { ...draft.handler },
-    script: draft.script ?? null,
-    scope: draft.scope ?? null,
-    projectId: draft.projectId ?? null,
-  });
-  if (answer.error) {
-    throw couldNotOrAway(`save ${draft.name || "the hook"}`)(answer);
-  }
-  return answer.data;
-};
+export const saveHook = (id: string, draft: HookDraft) =>
+  hubData(
+    hub.api.fleet.hooks({ id }).put({
+      name: draft.name,
+      enabled: draft.enabled,
+      event: draft.event,
+      matcher: draft.matcher ?? null,
+      handler: { ...draft.handler },
+      script: draft.script ?? null,
+      scope: draft.scope ?? null,
+      projectId: draft.projectId ?? null,
+    }),
+    couldNotOrAway(`save ${draft.name || "the hook"}`)
+  );
 
 /** Deletes a hook everywhere, into the hub's trash for its Undo (config/undo.ts). */
-export const removeHook = async (id: string, name: string) => {
-  const answer = await hub.api.fleet.hooks({ id }).delete();
-  if (answer.error) {
-    throw couldNotOrAway(`delete ${name}`)(answer);
-  }
-  return answer.data;
-};
+export const removeHook = (id: string, name: string) =>
+  hubData(
+    hub.api.fleet.hooks({ id }).delete(),
+    couldNotOrAway(`delete ${name}`)
+  );
 
 /** What this hook used to be, newest first — the hub keeps a version on every
  *  save or delete over one that already existed. */
-export const loadHookVersions = async (hookId: string) => {
-  const answer = await hub.api.fleet.hooks.history.get({ query: { hookId } });
-  if (answer.error) {
-    throw couldNotOrAway("load this hook’s history")(answer);
-  }
-  return answer.data;
-};
+export const loadHookVersions = (hookId: string) =>
+  hubData(
+    hub.api.fleet.hooks.history.get({ query: { hookId } }),
+    couldNotOrAway("load this hook’s history")
+  );
 
 /** Writes a past version back as the current one — through the same save door,
  *  so restoring keeps what it replaces, same as any other edit. */
-export const restoreHookVersion = async (versionId: number) => {
-  const answer = await hub.api.fleet.hooks.restore.post({ id: versionId });
-  if (answer.error) {
-    throw couldNotOrAway("restore that version")(answer);
-  }
-  return answer.data;
-};
+export const restoreHookVersion = (versionId: number) =>
+  hubData(
+    hub.api.fleet.hooks.restore.post({ id: versionId }),
+    couldNotOrAway("restore that version")
+  );
 
 /** A blank hook, on the defaults that make the common case one field of typing. */
 export const blankHook = (): HookDraft => ({
