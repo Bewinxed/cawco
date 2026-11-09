@@ -55,7 +55,7 @@
 import type { Frame, Page } from "playwright-core";
 import { PREVIEW_PASS_COOKIE } from "../../../packages/core/src/preview/routes";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { answerText, hubAt, requestOf } from "../hub";
+import { answerText, hubAt, pageHub } from "../hub";
 import { type Kit, open, type Spec } from "../kit";
 import {
   hear,
@@ -386,13 +386,8 @@ const run = async (kit: Kit) => {
     );
 
     // (d) Revoked: every frame locks at its next load.
-    const revoked = await tab.evaluate(
-      async (request) => {
-        const answer = await fetch(request.path, request);
-        return `${answer.status} ${await answer.text()}`;
-      },
-      await requestOf((hub) => hub.api["preview-pass"].delete())
-    );
+    const revokedAnswer = await pageHub(tab).api["preview-pass"].delete();
+    const revoked = `${revokedAnswer.status} ${answerText(revokedAnswer)}`;
     const before = heard.length;
     const shown = await pageFrame(tab);
     if (shown) {

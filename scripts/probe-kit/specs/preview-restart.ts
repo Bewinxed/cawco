@@ -14,9 +14,10 @@
  *    again: a write on it reaches the hub's doc through the new socket.
  */
 import type { Page } from "playwright-core";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { requestOf } from "../hub";
+import { pageHub } from "../hub";
 import { COMPOSER, type Kit, open, type Spec } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -45,25 +46,20 @@ const passOn = (page: Page) => ({
     );
     return pass ? `${pass.name}=${pass.value}` : "";
   },
-  enter: async (origin: string) =>
-    page.evaluate(
-      async ({ at, ticketing }) => {
-        const given = await fetch(ticketing.path, ticketing);
-        const { ticket } = (await given.json()) as { ticket: string };
-        await fetch(
-          `${at}/__cawco/enter?ticket=${encodeURIComponent(ticket)}`,
-          {
-            mode: "no-cors",
-            credentials: "include",
-            cache: "no-store",
-          }
-        );
+  enter: async (origin: string) => {
+    const { ticket } = dataOf(await pageHub(page).api["preview-ticket"].post());
+    // The preview's own door, not the hub: its cookie lands only in the browser.
+    await page.evaluate(
+      async ({ at, entry }) => {
+        await fetch(`${at}/__cawco/enter?ticket=${encodeURIComponent(entry)}`, {
+          mode: "no-cors",
+          credentials: "include",
+          cache: "no-store",
+        });
       },
-      {
-        at: origin,
-        ticketing: await requestOf((hub) => hub.api["preview-ticket"].post()),
-      }
-    ),
+      { at: origin, entry: ticket }
+    );
+  },
 });
 
 /** The link of the page at `origin`, as its overlay holds it; empty while it holds none. */
