@@ -171,13 +171,13 @@ const decisionSaid = (
 /** The agent's line for a form move a sync made (agent boundary/looks.ts `rearmMoved`): the workspace, and what moved. */
 const MOVED_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary's form moved \(([^)]*)\)/u;
-/** The agent's line for a hand-over (agent boundary/lifecycle.ts `handOver`): the workspace, the older boundary and the new one. */
+/** The agent's line for a hand-over (agent boundary/ensure.ts `handOver`): the workspace, the older boundary and the new one. */
 const HANDOVER_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(form \w+\) is handed over to (\d+)/u;
 /** The host's line for a sandbox that ended unasked (agent boundary-host.ts), as the agent says it: the workspace, its boundary, the sandbox, its status. */
 const UNASKED_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) says: cawco: the sandbox (\d+) ended with status (\d+)/u;
-/** The agent's line for a boundary's exit (agent boundary/lifecycle.ts `watchHost`): the workspace, its boundary, how it exited. */
+/** The agent's line for a boundary's exit (agent boundary/watch.ts `watchHost`): the workspace, its boundary, how it exited. */
 const EXIT_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(\S+\) exited, (status \S+|killed by \S+)/u;
 
