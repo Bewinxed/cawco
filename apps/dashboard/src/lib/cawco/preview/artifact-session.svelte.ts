@@ -23,8 +23,8 @@ import type { FsEntry, FsPayload } from "@cawco/core/protocol";
 import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
+import { newId } from "#lib/platform/id.js";
 import { deletePreview } from "../artifact-api";
-import { newId } from "../id";
 import { rowHref } from "../links";
 import { TRY_AGAIN, unansweredWords } from "../unanswered";
 import type {

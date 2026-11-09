@@ -14,15 +14,6 @@
   import { ruleSentence } from "@cawco/core/words/rule-lines";
   import { rulesWords } from "@cawco/core/words/rules";
   import { onMount, untrack } from "svelte";
-  import { hubFetch } from "#lib/cawco/hub-read.js";
-  import {
-    crossIn,
-    crossOut,
-    dur,
-    ease,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { folds, unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import type { JevState } from "#lib/cawco/suggest.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -33,6 +24,15 @@
     IconPin,
     IconPlain,
   } from "#lib/icons.js";
+  import { hubFetch } from "#lib/platform/hub-read.js";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    ease,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { folds, unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
   import { cawco } from "../../client.svelte";
   import RuleActivity from "../../RuleActivity.svelte";

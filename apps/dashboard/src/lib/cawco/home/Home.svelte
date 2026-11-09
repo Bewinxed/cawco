@@ -19,9 +19,9 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import MachinesEmpty from "../MachinesEmpty.svelte";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import StartingRows from "../spawn/StartingRows.svelte";
   import UsageMeter from "../UsageMeter.svelte";

@@ -7,8 +7,8 @@ import {
 } from "@cawco/core/harness/kinds";
 import { z } from "zod";
 import { SpawnPrefsShape } from "#lib/cawco/stored-shapes.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { MODEL_DEFAULT } from "./models.svelte";
-import { readJson, writeJson } from "./storage";
 
 /**
  * What the new-session form was last set to. A user who picks Fable and a

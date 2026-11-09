@@ -8,21 +8,21 @@
   } from "@cawco/core/session-messages";
   import { untrack } from "svelte";
   import {
+    chipsVariants,
+    chipVariants,
+  } from "#lib/components/ui/chip/index.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import { IconAsk, IconCheck, IconClose } from "#lib/icons.js";
+  import {
     CURVE,
     crossIn,
     dur,
     easeOut,
     lifting,
     motionOk,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { fold } from "#lib/cawco/motion/fold.svelte.js";
-  import { depart, land } from "#lib/cawco/motion/share.svelte.js";
-  import {
-    chipsVariants,
-    chipVariants,
-  } from "#lib/components/ui/chip/index.js";
-  import { Kbd } from "#lib/components/ui/kbd/index.js";
-  import { IconAsk, IconCheck, IconClose } from "#lib/icons.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { fold } from "#lib/platform/motion/fold.svelte.js";
+  import { depart, land } from "#lib/platform/motion/share.svelte.js";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
    * history — the same `.hitl` anatomy as the live prompt, but read-only: the
