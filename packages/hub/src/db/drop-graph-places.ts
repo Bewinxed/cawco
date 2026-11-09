@@ -15,14 +15,11 @@ import type { Database } from "bun:sqlite";
 import { encodeStateAsUpdate, encodeStateVector } from "yjs";
 import { docOf } from "./merge-project-pages";
 
-/** Migration 0317's journal `when`: the key is dropped while no applied migration is as new. */
-export const GRAPH_PLACES_MIGRATION_WHEN = 1_792_915_298_473;
-
 /** The state key the graph kept its places under. */
 const PLACES = "graph.places";
 
 /** Whether the database holds a migration as new as 0317, or no artifacts at all: nothing to drop. */
-const settled = (client: Database): boolean => {
+const settled = (client: Database, when: number): boolean => {
   const tables = new Set(
     (
       client
@@ -38,15 +35,15 @@ const settled = (client: Database): boolean => {
   const newest = client
     .query("SELECT max(created_at) AS at FROM __drizzle_migrations")
     .get() as { at: number | null };
-  return (newest.at ?? 0) >= GRAPH_PLACES_MIGRATION_WHEN;
+  return (newest.at ?? 0) >= when;
 };
 
 /**
  * Takes `graph.places` out of every page's state, in one transaction; how
  * many pages held it. Nothing once 0317 is applied.
  */
-export const dropGraphPlaces = (client: Database): number => {
-  if (settled(client)) {
+export const dropGraphPlaces = (client: Database, when: number): number => {
+  if (settled(client, when)) {
     return 0;
   }
   const pages = client
