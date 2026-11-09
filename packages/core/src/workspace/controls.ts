@@ -427,7 +427,7 @@ export interface WorkspaceOutputs {
 
 /**
  * Ends what the sessions of a workspace's ended items left running in its
- * boundary (agent boundary.ts `endSessionWork`, as an interrupt and a stop
+ * boundary (agent boundary/work.ts `endSessionWork`, as an interrupt and a stop
  * of a session do), in each session's lane: the boundary runs on, and each
  * session keeps its transcript, clone and files, so a handoff resumes it
  * there. The hub sends it as it settles a workspace whose items have all

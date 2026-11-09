@@ -284,8 +284,8 @@ user_cache=$(getconf DARWIN_USER_CACHE_DIR)mac-check-$short
 var_tmp=/private/var/tmp/mac-check-$short
 # A simulator launchd's own socket dirs, as each boot makes them: iOS 18 under
 # /private/tmp, newer runtimes under /private/var/tmp. Of their sockets only
-# testmanagerd's is reached (boundary.ts TEST_MANAGER_SOCKET), and its remote
-# automation under /private/var/tmp (boundary.ts REMOTE_AUTOMATION_SOCKET).
+# testmanagerd's is reached (boundary/ TEST_MANAGER_SOCKET), and its remote
+# automation under /private/var/tmp (boundary/ REMOTE_AUTOMATION_SOCKET).
 sim_tmp=/private/tmp/com.apple.launchd.maccheck$short
 sim_var=/private/var/tmp/com.apple.launchd.maccheck$short
 testmanagerd=com.apple.testmanagerd.unix-domain.socket

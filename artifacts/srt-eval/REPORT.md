@@ -92,7 +92,7 @@ running in parallel.
 
 | capability | how | where |
 |---|---|---|
-| Writes only to the clone, the scratch dir and the caches | Linux: everything remounted read-only with `mount_setattr(AT_RECURSIVE)`, then those paths bound back rw; macOS: `(deny file-write*)` + allow list | `boundary.ts:142-165` (cachesOf), `:834-863` (ANCHOR, 838-846), `:960-1017` (profileOf) |
+| Writes only to the clone, the scratch dir and the caches | Linux: everything remounted read-only with `mount_setattr(AT_RECURSIVE)`, then those paths bound back rw; macOS: `(deny file-write*)` + allow list | `boundary/:142-165` (cachesOf), `:834-863` (ANCHOR, 838-846), `:960-1017` (profileOf) |
 | Scratch dir as `/tmp`, not removable from inside | bind of `~/.cawco/workspaces/<id>/tmp` on `/tmp`; macOS `deny file-write-unlink` | `:91-97`, `:847`, `:1009` |
 | Service-manager bus and sessiond hidden | private runtime dir over `$XDG_RUNTIME_DIR`, tmpfs over sessiond's dir; macOS unix-socket outbound deny on `~/.cawco` | `:848-849`, `:910-911`, `:987-1014` |
 | Harness sign-ins unreadable | empty-file binds over three sign-in files, tmpfs over `~/.cli-proxy-api`; macOS read denies plus `session-identity` | `:850-860`, `:966-1001` |
@@ -367,7 +367,7 @@ Options, each with its risk:
 3. **Don't adopt; close the escapes in the hand-rolled code.**
    - Risk: CawCo keeps owning a mount namespace setup that already needed a
      direct `mount_setattr` syscall because util-linux lied about recursion
-     (`boundary.ts:810-816`), plus a hand-written Seatbelt profile.
+     (`boundary/:810-816`), plus a hand-written Seatbelt profile.
    - It must still add everything this report found: read denies, socket
      hiding, harness config, loopback, caches.
    - None of srt's mandatory protections, network filtering or credential
@@ -396,7 +396,7 @@ Options, each with its risk:
      binary's own runtime (`BUN_BE_BUN=1`, as the hook does).
    - Linux machines need `bwrap`, `socat` and `rg`. A machine without them
      refuses the work, as one that cannot hold a boundary does today
-     (`boundary.ts:670-675`).
+     (`boundary/:670-675`).
 2. **Config.** Port `srt-config.ts` into the agent as the one place a
    workspace's policy is written (`~/.cawco/workspaces/<id>/srt.json`, read-only
    inside), with the state layout `ro/`, `tmp/`, `cache/`.
@@ -404,7 +404,7 @@ Options, each with its risk:
    - sessiond holds `srt --settings srt.json -c ro/runner.sh ro/runner.fifo`,
      with cwd = the clone, `TMPDIR` = the short private dir, and
      `CLAUDE_CODE_TMPDIR` = `tmp/`.
-   - Ready is the runner's ready line, as today (`boundary.ts:1077-1119`).
+   - Ready is the runner's ready line, as today (`boundary/:1077-1119`).
    - Record the outer bwrap pid (Linux) for close and for the mount check.
 4. **Executor.** One FIFO executor for both platforms (today's `darwinExec`).
    It adds:
@@ -418,9 +418,9 @@ Options, each with its risk:
 6. **Close.** SIGKILL the outer bwrap (Linux) or the marked processes (macOS),
    then the state dir.
 7. **Form replacement.** Hash `srt.json`, the runner and the executor into the
-   form, so a policy change replaces idle runners (`boundary.ts:716-807`, now
+   form, so a policy change replaces idle runners (`boundary/:716-807`, now
    on both platforms).
-8. **Delete** from `boundary.ts`:
+8. **Delete** from `boundary/`:
    - `ANCHOR`, `linuxSpec`, `linuxExec`, `copySshIncludes`/`SSH_INCLUDES`,
      `hideable`, `runOf`, `userNamespaceOf` identity checks;
    - `profileOf`, `secretRealpath`, `sbString`, `darwinSpec`'s profile writing;
