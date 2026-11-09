@@ -26,7 +26,7 @@
    * wider. If the runtime or the file does not load, the box stays empty.
    */
   import { untrack } from "svelte";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     status,

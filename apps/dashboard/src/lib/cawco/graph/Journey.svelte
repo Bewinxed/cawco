@@ -11,9 +11,9 @@
    * its foot.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { placeOpen } from "./list-place";
   import { pathOf, type Review } from "./model";
   import StateItem from "./StateItem.svelte";

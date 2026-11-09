@@ -6,7 +6,7 @@
  * comes back. Only the newest read's answer is kept.
  */
 import type { DecisionsList } from "@cawco/core/decisions";
-import { failureWords } from "#lib/cawco/hub-read.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 import { listDecisions } from "./decisions-api";
 
 export class ProjectDecisions {

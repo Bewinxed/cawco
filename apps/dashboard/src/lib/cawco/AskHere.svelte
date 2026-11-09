@@ -1,6 +1,9 @@
 <script lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import type { Snippet } from "svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
+  import { IconShield } from "#lib/icons.js";
   /**
    * A question standing in the page, under the control that asked it
    * (ask-here.svelte.ts; DESIGN.md, The Open Page Rule). It unfolds where it
@@ -18,14 +21,11 @@
    * control above; a host that sets `--ask-indent` and `--ask-end` for every
    * question inside it passes neither.
    */
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
-  import { IconShield } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { cn } from "#lib/utils.js";
   import AskItems from "./AskItems.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
-  import { unfold } from "./motion/fold.svelte";
   import RowFault from "./RowFault.svelte";
 
   let {

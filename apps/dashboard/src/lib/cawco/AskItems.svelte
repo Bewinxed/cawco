@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { nestFrom } from "#lib/platform/motion/branch.svelte.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
   /**
    * What a heavy question reaches, named (AskHere's `items`): each thing as
    * the rail draws a row, its lead mark, its title and its status word at
@@ -7,8 +9,6 @@
    * pushing its buttons out of reach.
    */
   import type { AskItem } from "./ask-here.svelte";
-  import { nestFrom } from "./motion/branch.svelte";
-  import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
   import SessionMark from "./SessionMark.svelte";
 

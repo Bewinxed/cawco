@@ -9,7 +9,7 @@
  * type's line unfolds where the failure stood.
  */
 import type { ClipRead, ClipValue } from "@cawco/core/stage-graph";
-import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
+import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
 
 /** The page's ids for the things the form moves: a row names and rings one. */
 const BUTTON = "create-routine";

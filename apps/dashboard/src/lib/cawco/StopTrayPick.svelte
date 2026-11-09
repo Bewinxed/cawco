@@ -77,12 +77,12 @@
     IconPause as Pause,
     IconStop as StopGlyph,
   } from "#lib/icons.js";
+  import { nestFrom } from "#lib/platform/motion/branch.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
   import { cn } from "#lib/utils.js";
   import { ACTIVITY_LABEL, STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { markHue, sessionSprite } from "./mark";
-  import { nestFrom } from "./motion/branch.svelte";
-  import { unfold } from "./motion/fold.svelte";
-  import { glyphIn, glyphOut } from "./motion/glyph";
   import RowFault from "./RowFault.svelte";
   import TreeMark from "./TreeMark.svelte";
 
