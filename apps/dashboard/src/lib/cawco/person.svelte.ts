@@ -33,6 +33,7 @@ import type {
 import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
 import { type DeskState, presenceWords } from "@cawco/core/words/presence";
 import { MediaQuery } from "svelte/reactivity";
+import { hub } from "#lib/platform/hub.js";
 import {
   failureWords,
   hubFetch,
@@ -348,15 +349,13 @@ export async function allowHere(from: "row" | "menu"): Promise<void> {
   try {
     state.permissions = await allowed;
     if (agent) {
-      takePerson(
-        await hubJson<PersonView>(
-          hubRequest("POST /api/person/devices/:machineId", {
-            path: { machineId: agent },
-            body: { counts: true },
-          }),
-          { failure: refusedOrUnreached }
-        )
-      );
+      const answer = await hub.api.person
+        .devices({ machineId: agent })
+        .post({ counts: true });
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
+      takePerson(answer.data);
     }
     state.reportOn = deskReportOn();
     state.answered = deskAnswered();
