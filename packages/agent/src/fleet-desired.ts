@@ -10,7 +10,7 @@
  * says what it holds (`fleetHeld`), through a restart too, so the hub sends
  * only what moved since: an agent that starts again is no full welcome and
  * converges nothing that did not move. A workspace cut before that welcome
- * places its project's rows from here (session.ts `placeClone`).
+ * places its project's rows from here (fleet-converger.ts `placeClone`).
  */
 import {
   type FleetDelta,
