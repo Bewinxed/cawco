@@ -11,6 +11,7 @@ import {
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { peekToolStatus } from "../machine-answers";
+import { refusal } from "../refusal";
 import { unreachable } from "../unreachable";
 
 export const toolRoutes = ({
@@ -49,10 +50,14 @@ export const toolRoutes = ({
     // browser. A sign-in already waiting there answers its kept link.
     .post(
       "/api/machines/:machineId/tools/:toolId/signin",
-      async ({ params, status }) => {
+      async ({ params }) => {
         const spec = toolSpec(params.toolId);
         if (!spec?.signin) {
-          return status(404, `${params.toolId} has no sign-in of its own.`);
+          return refusal(
+            404,
+            "has-no-sign-own",
+            `${params.toolId} has no sign-in of its own.`
+          );
         }
         const key = `${params.machineId}:${params.toolId}`;
         const kept = pendingToolSignins.get(key);
@@ -68,11 +73,16 @@ export const toolRoutes = ({
         );
         switch (answer.kind) {
           case "unanswered":
-            return status(503, awayWords(params.machineId, answer));
+            return refusal(
+              503,
+              "machine-away",
+              awayWords(params.machineId, answer)
+            );
           case "answered": {
             if (!answer.value.ok) {
-              return status(
+              return refusal(
                 422,
+                "tool-signin-not-started",
                 answer.value.error ?? "The sign-in did not start."
               );
             }
@@ -91,10 +101,14 @@ export const toolRoutes = ({
     .post(
       "/api/machines/:machineId/tools/:toolId/signin/complete",
       { body: t.Object({ code: t.String() }) },
-      async ({ params, body, status }) => {
+      async ({ params, body }) => {
         const spec = toolSpec(params.toolId);
         if (!spec?.signin) {
-          return status(404, `${params.toolId} has no sign-in of its own.`);
+          return refusal(
+            404,
+            "has-no-sign-own",
+            `${params.toolId} has no sign-in of its own.`
+          );
         }
         const answer = await callAgent(
           params.machineId,
@@ -104,14 +118,19 @@ export const toolRoutes = ({
         );
         switch (answer.kind) {
           case "unanswered":
-            return status(503, awayWords(params.machineId, answer));
+            return refusal(
+              503,
+              "machine-away",
+              awayWords(params.machineId, answer)
+            );
           case "answered": {
             // Used or refused, the machine's sign-in is spent.
             pendingToolSignins.delete(`${params.machineId}:${params.toolId}`);
             const tool = peekToolStatus({ result: answer.value.result });
             if (!(answer.value.ok && tool)) {
-              return status(
+              return refusal(
                 422,
+                "tool-signin-not-finished",
                 answer.value.error ?? "The sign-in did not finish."
               );
             }
@@ -132,9 +151,9 @@ export const toolRoutes = ({
           pinnedVersion: t.Optional(t.Union([t.String(), t.Null()])),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         if (!toolSpec(params.id)) {
-          return status(404, `no tool ${params.id}`);
+          return refusal(404, "no-tool", `no tool ${params.id}`);
         }
 
         const policy = db.putToolPolicy(params.id, body);
