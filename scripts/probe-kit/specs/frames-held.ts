@@ -30,13 +30,14 @@
  *
  *   bun scripts/probe-kit/run.ts frames-held
  */
+
+import type { DrawnKept } from "../../../packages/core/src/doc-meta";
 import type {
   FrameRender,
   RenderReport,
   SectionRender,
 } from "../../../packages/core/src/stage";
 import {
-  type DrawnKept,
   drawsHeld,
   renderSaid,
 } from "../../../packages/hub/src/artifacts/component";
