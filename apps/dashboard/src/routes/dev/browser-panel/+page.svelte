@@ -1,4 +1,16 @@
 <script lang="ts">
+  import type { ListedBrowser } from "@cawco/core/browser";
+  import { browserWords } from "@cawco/core/words/browser";
+  import { MediaQuery } from "svelte/reactivity";
+  import { z } from "zod";
+  import BrowserAddress from "#lib/cawco/preview/BrowserAddress.svelte";
+  import BrowserView from "#lib/cawco/preview/BrowserView.svelte";
+  import { browserHead } from "#lib/cawco/preview/browser-head.js";
+  import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
+  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
+  import { BarItem, BarSegments } from "#lib/components/ui/bar-glass/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   /**
    * A browser artifact in the artifact panel, for judging it at its widths:
    * the panel's card and floating head (SideSurface) with a browser's head
@@ -28,18 +40,7 @@
    * browser as the shield does; while held the head adds Reload page on a
    * desk, as PreviewPane's does.
    */
-  import type { ListedBrowser } from "@cawco/core/browser";
-  import { browserWords } from "@cawco/core/words/browser";
-  import { MediaQuery } from "svelte/reactivity";
-  import { z } from "zod";
-  import BrowserAddress from "#lib/cawco/preview/BrowserAddress.svelte";
-  import BrowserView from "#lib/cawco/preview/BrowserView.svelte";
-  import { browserHead } from "#lib/cawco/preview/browser-head.js";
-  import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
-  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
-  import { BarItem, BarSegments } from "#lib/components/ui/bar-glass/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconExternalLinear,
     IconMonitorLinear,
@@ -77,7 +78,7 @@
     acting = false;
   }
   let view = $state<BrowserView>();
-  const phone = new MediaQuery("max-width: 639px");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The stream is drawn: there is a page to take over. */
   let viewing = $state(false);
   /** The layout the held page is in: the head's switch. */
