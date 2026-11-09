@@ -1,4 +1,23 @@
-import type { PageError, RenderReport, SectionRender } from "./stage";
+/**
+ * An artifact's doc's `meta` map, typed: every key the hub, a page, a
+ * canvas's screen and the panel read or write there ({@link DocMeta}), who
+ * may write each ({@link META_WRITERS}), and the one door to the map
+ * ({@link docMeta}, {@link getMeta}, {@link setMeta}). The keys are the
+ * stored strings; nothing else names the map.
+ */
+import type { ArtifactDoes, ArtifactKind } from "./artifact-kinds";
+import type { MapChange, MapDoc } from "./doc-maps";
+import type { PageFaultsKept } from "./page-faults";
+import type { ArtifactPromotion } from "./protocol";
+import type {
+  CanvasShapes,
+  PageError,
+  RenderReport,
+  SectionRender,
+  SheetRead,
+  StageState,
+  StageUnreached,
+} from "./stage";
 
 /**
  * The artifact's latest ask, kept in its doc (`meta.asked`): the session
@@ -22,9 +41,6 @@ export interface DrawnKept {
   errors: PageError[];
   section: SectionRender;
 }
-
-/** The doc's `meta` key holding the agent's closes, by question key: the hub's alone to write. */
-export const QUESTIONS_CLOSED = "questionsClosed";
 
 /** The agent's close of a question: acted on his answer (`taken`), or superseded (`withdrawn`). */
 export interface QuestionClose {
@@ -103,3 +119,191 @@ export interface HeldNote {
   at: string;
   text: string;
 }
+
+/**
+ * What an artifact's doc keeps in its `meta` map, by key. Every key is
+ * optional: a doc made before a key was kept, or one the hub never wrote,
+ * reads it as absent.
+ */
+export interface DocMeta {
+  /** The panel head's one line: what the person does here, in his words (hub `stampMeta`). */
+  ask: string;
+  /** Its latest ask: who asked, when, at which plan step (hub artifacts needs.ts). */
+  asked: ArtifactAsked;
+  /** What its revisions changed that the person hasn't looked at. */
+  changes: ArtifactChanges;
+  /** Who may answer it and how (hub `stampMeta`). */
+  does: ArtifactDoes;
+  /** A draft: a canvas the person started, or a page not yet shown. */
+  draft: boolean;
+  /** A component canvas's last draw of each states file, by file. */
+  drawn: Record<string, DrawnKept>;
+  /** A component canvas's frames as a browser drew them, by frame. */
+  drawnShapes: CanvasShapes["drawn"];
+  /** A served artifact's page errors the agent has been told of. */
+  errorsHeard: string[];
+  /** What a browser met drawing a page or preview at its revision now (core page-faults.ts, hub `pageFault`). */
+  faults: PageFaultsKept;
+  /** A held next version: its artifact's seq when it was forked (hub `holdNext`), after which the person's answers there are newer than it (hub `promote`). */
+  forkedAt: number;
+  /** An artifact handed to its parent and not opened since (hub `handOver`). */
+  handed: true;
+  /** The person's note with what they held, until the delivery that carries them. */
+  heldNote: HeldNote;
+  /** The artifact's kind, copied from its row (hub `stampMeta`). */
+  kind: ArtifactKind;
+  /** When the person last looked at it. */
+  lookedAt: string;
+  /** The last piece a decision page shows that moved to another version, and that version (hub `versionMoved`, preview overlay/page.ts `mediaMoved`). */
+  mediaAt: string;
+  /** An option's media whose decision page went: the page's id (hub `discard`). */
+  mediaOf: string;
+  /** Its name (hub `stampMeta`). */
+  name: string;
+  /** A page that asks choices carries its own Send at its foot (hub `stampMeta`). */
+  ownSend: boolean;
+  /** Its page's hash: its program's for a decision page, its HTML's for a page, its canvas address's for a component. */
+  pageHash: string;
+  /** Excalidraw's pen mode, once a pen touched a canvas: its screen's to write. */
+  penDetected: boolean;
+  penMode: boolean;
+  /** When a canvas's latest picture was kept; null once it holds nothing (hub artifacts sync.ts `artifactPicture`). */
+  pictureAt: string | null;
+  /** A decision page's: the machine each picture it shows was read on, by the name its Image gives. */
+  pictureMachines: Record<string, string>;
+  /** A decision page's: the work folder its relative Images were last published from. */
+  programDir: string;
+  /** A decision page's: the machine that folder is on. */
+  programMachine: string;
+  /** A project page's last commit into the project's folder. */
+  promoted: ArtifactPromotion;
+  /** The agent's closes of its questions, by question key: the hub's alone to write. */
+  questionsClosed: Record<string, QuestionClose>;
+  /** When the session last changed it, a revision or a new ask. */
+  revisedAt: string;
+  /** Its revision, copied from its row (hub `stampMeta`). */
+  revision: number;
+  /** A component canvas's frames as the agent said them, by frame. */
+  saidShapes: CanvasShapes["said"];
+  /** A sheet's saved sections the agent has not heard yet. */
+  saves: string[];
+  /** A canvas's scene version, which each of the agent's updates moves. */
+  sceneVersion: number;
+  /** When the person last pressed Send. */
+  sentAt: string;
+  /** Who sent it last: the person, or the hub once every question had his answer. */
+  sentBy: SentBy;
+  /** The words a page's `cawco.send(text)` sent with the last send. */
+  sentText: string | null;
+  /** The address the person's last send was made on. */
+  sentUrl: string;
+  /** A component canvas's sheet as its stage last read it. */
+  sheet: SheetRead;
+  /** A preview whose folder its machine said is gone at its last start, with the daemon's words (hub `sourceSeen`). */
+  sourceGone: { at: string; why: string };
+  /** A served artifact's stage as it last stood. */
+  stage: StageState;
+  /** Its title, as the session last named it. */
+  title: string;
+  /** A served artifact whose stage could not be reached, and why. */
+  unreached: StageUnreached;
+  /** When the agent's last write to a canvas landed (hub artifacts/canvas.ts): a picture posted before it (`pictureAt`) shows the drawing as it was before that write. */
+  wroteAt: string;
+}
+
+export type DocMetaKey = keyof DocMeta;
+
+/**
+ * Who may write each key: the hub; the person, on any artifact (Send all's
+ * note); or the person's canvas screen, on a canvas. The hub's socket gate
+ * (hub artifacts sync.ts) keeps a client's change to any other key out.
+ */
+export const META_WRITERS = {
+  asked: "hub",
+  ask: "hub",
+  changes: "hub",
+  does: "hub",
+  draft: "hub",
+  drawn: "hub",
+  drawnShapes: "hub",
+  errorsHeard: "hub",
+  faults: "hub",
+  forkedAt: "hub",
+  handed: "hub",
+  heldNote: "person",
+  kind: "hub",
+  lookedAt: "hub",
+  mediaAt: "hub",
+  mediaOf: "hub",
+  name: "hub",
+  ownSend: "hub",
+  pageHash: "hub",
+  penDetected: "canvas",
+  penMode: "canvas",
+  pictureAt: "hub",
+  pictureMachines: "hub",
+  programDir: "hub",
+  programMachine: "hub",
+  promoted: "hub",
+  questionsClosed: "hub",
+  revision: "hub",
+  revisedAt: "hub",
+  saidShapes: "hub",
+  saves: "hub",
+  sceneVersion: "hub",
+  sentAt: "hub",
+  sentBy: "hub",
+  sentText: "hub",
+  sentUrl: "hub",
+  sheet: "hub",
+  sourceGone: "hub",
+  stage: "hub",
+  title: "hub",
+  unreached: "hub",
+  wroteAt: "hub",
+} as const satisfies { [K in DocMetaKey]-?: "hub" | "person" | "canvas" };
+
+/** The keys a client writes: the person's on any artifact, his canvas screen's on a canvas. */
+export type ClientMetaKey = {
+  [K in DocMetaKey]: (typeof META_WRITERS)[K] extends "hub" ? never : K;
+}[DocMetaKey];
+
+/** Who may write `key`, any string a client sent; undefined for a key the doc does not keep. */
+export const metaWriter = (
+  key: string
+): (typeof META_WRITERS)[DocMetaKey] | undefined =>
+  Object.hasOwn(META_WRITERS, key)
+    ? META_WRITERS[key as DocMetaKey]
+    : undefined;
+
+/** A doc's `meta` map, its keys and values {@link DocMeta}'s. */
+export interface MetaMap {
+  delete: (key: DocMetaKey) => void;
+  /** Every key and value it holds, a key a client wrote that the doc does not keep included. */
+  entries: () => IterableIterator<[string, unknown]>;
+  get: <K extends DocMetaKey>(key: K) => DocMeta[K] | undefined;
+  has: (key: DocMetaKey) => boolean;
+  keys: () => IterableIterator<string>;
+  observe: (watcher: (change: MapChange) => void) => void;
+  set: <K extends DocMetaKey>(key: K, value: DocMeta[K]) => unknown;
+  unobserve: (watcher: (change: MapChange) => void) => void;
+}
+
+/** `doc`'s `meta` map: the one place a doc's map is named "meta". */
+export const docMeta = (doc: MapDoc): MetaMap =>
+  doc.getMap("meta") as unknown as MetaMap;
+
+/** `doc`'s `meta` value at `key`; undefined when it holds none. */
+export const getMeta = <K extends DocMetaKey>(
+  doc: MapDoc,
+  key: K
+): DocMeta[K] | undefined => docMeta(doc).get(key);
+
+/** Writes `value` at `key` of `doc`'s `meta` (inside the caller's transaction, when it has one). */
+export const setMeta = <K extends DocMetaKey>(
+  doc: MapDoc,
+  key: K,
+  value: DocMeta[K]
+): void => {
+  docMeta(doc).set(key, value);
+};
