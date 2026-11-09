@@ -62,6 +62,7 @@ import { z } from "zod";
 import { DB_PATH, HUB_PORT } from "./config";
 import { INSTALL_CODE, type Installs } from "./installs";
 import { localHubName } from "./mdns";
+import { refusal } from "./refusal";
 import { CONNECT_S } from "./ssh-tunnels";
 
 /** How long a short command gets to answer. Our choice. */
@@ -735,14 +736,19 @@ export const joinRoutes = ({
   >;
 }) =>
   new Elysia()
-    .get("/install.sh", async ({ request, status, set }) => {
+    .get("/install.sh", async ({ request, set }) => {
       const host = request.headers.get("host");
       if (!(host && HOST_HEADER.test(host))) {
-        return status(400, "The request has no usable Host header.");
+        return refusal(
+          400,
+          "request-has-no-usable",
+          "The request has no usable Host header."
+        );
       }
       if (!RELEASE_PUBLIC_KEY) {
-        return status(
+        return refusal(
           503,
+          "hubs-build-cannot-install",
           "This hub's build cannot install machines yet: it carries no release key to check a download against, so it would hand out an installer that verifies nothing. Install a released build of CawCo on this hub to enable it."
         );
       }
@@ -822,14 +828,18 @@ export const joinRoutes = ({
     )
     .get(
       "/api/installs/:id/output",
-      ({ params, status }) =>
+      ({ params }) =>
         installs.output(params.id) ??
-        status(404, "No install with that id on this hub.")
+        refusal(404, "no-install", "No install with that id on this hub.")
     )
     .post("/api/installs/:id/stop", async ({ params, status }) => {
       const stopped = await installs.stop(params.id);
       if (!stopped) {
-        return status(404, "No install with that id on this hub.");
+        return refusal(
+          404,
+          "no-install",
+          "No install with that id on this hub."
+        );
       }
       return "status" in stopped && typeof stopped.status === "number"
         ? status(stopped.status, (stopped as { message: string }).message)
@@ -845,7 +855,11 @@ export const joinRoutes = ({
       ({ params, body, status }) => {
         const again = installs.retry(params.id, body.password);
         if (!again) {
-          return status(404, "No install with that id on this hub.");
+          return refusal(
+            404,
+            "no-install",
+            "No install with that id on this hub."
+          );
         }
         return "status" in again ? status(again.status, again.message) : again;
       }
@@ -853,7 +867,11 @@ export const joinRoutes = ({
     .delete("/api/installs/:id", ({ params, status }) => {
       const gone = installs.remove(params.id);
       if (gone === false) {
-        return status(404, "No install with that id on this hub.");
+        return refusal(
+          404,
+          "no-install",
+          "No install with that id on this hub."
+        );
       }
       return gone === true
         ? installs.read()
@@ -868,7 +886,7 @@ export const joinRoutes = ({
           host: t.Optional(t.String({ maxLength: 255 })),
         }),
       },
-      ({ params, body, status }) =>
+      ({ params, body }) =>
         installs.ended(
           params.code,
           body.status,
@@ -876,7 +894,11 @@ export const joinRoutes = ({
           body.host ?? ""
         )
           ? { ok: true }
-          : status(410, "That code no longer names a running install.")
+          : refusal(
+              410,
+              "code-no-longer-names",
+              "That code no longer names a running install."
+            )
     )
     .post(
       "/api/machines/ssh",
@@ -926,19 +948,27 @@ export const joinRoutes = ({
         return job;
       }
     )
-    .get("/api/machines/ssh/:id", ({ params, status }) => {
+    .get("/api/machines/ssh/:id", ({ params }) => {
       const job = installs.job(params.id);
-      return job ?? status(404, "No SSH add with that id on this hub.");
+      return (
+        job ??
+        refusal(404, "no-ssh-add-id", "No SSH add with that id on this hub.")
+      );
     })
-    .post("/api/machines/ssh/:id/stop", async ({ params, status }) => {
+    .post("/api/machines/ssh/:id/stop", async ({ params }) => {
       const job = installs.job(params.id);
       if (!job) {
-        return status(404, "No SSH add with that id on this hub.");
+        return refusal(
+          404,
+          "no-ssh-add-id",
+          "No SSH add with that id on this hub."
+        );
       }
       const stopped = await installs.stop(params.id);
       if (stopped && "message" in stopped) {
-        return status(
+        return refusal(
           409,
+          "ssh-add-has-already",
           `That SSH add to ${job.target} has already ended, so there is nothing to stop.`
         );
       }
