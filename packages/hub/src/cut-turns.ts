@@ -695,7 +695,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
   /**
    * A session starting again fresh under its id: its first start never
    * began, so there was no conversation to resume. Kept on its row, said in
-   * its transcript now and at every later read ({@link readRowHistory}).
+   * its transcript now and at every later read (`readRowHistory`).
    */
   const noteFreshStart = (row: InstanceRow): void => {
     // One that went on from a summary starts its fresh conversation under
