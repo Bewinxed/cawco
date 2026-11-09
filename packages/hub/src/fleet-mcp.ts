@@ -24,6 +24,7 @@ import { z } from "zod";
 import type { DbShape } from "./db";
 import { type Exchange, FleetMcpRelay, wholeResponse } from "./fleet-mcp-relay";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { refusal } from "./refusal";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 /**
@@ -317,9 +318,10 @@ const reachHead = (
  * hub hands every live session the change (`sendMcpChanges` in server.ts).
  */
 const signedOut = () =>
-  new Response(
-    `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
-    { status: 503 }
+  refusal(
+    503,
+    "mcp-signed-out",
+    `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`
   );
 
 export class FleetMcp {
@@ -1162,9 +1164,9 @@ export class FleetMcp {
     if (response.status !== 401) {
       return response;
     }
-    const refusal = bearerWords(response);
+    const said = bearerWords(response);
     await response.body?.cancel();
-    row = await this.#refused(name, row.tokens?.access_token ?? "", refusal);
+    row = await this.#refused(name, row.tokens?.access_token ?? "", said);
     response = await call(row);
     if (response.status === 401) {
       const again = bearerWords(response);
@@ -1179,11 +1181,14 @@ export class FleetMcp {
     return response;
   }
 
-  async forward(name: string, request: Request): Promise<Response> {
+  async forward(name: string, request: Request) {
     await this.#probing.get(name);
-    const server = this.#server(name);
+    const server = this.#db.getMcpServer(name);
+    if (!server) {
+      return refusal(404, "no-mcp-server", "This MCP server no longer exists.");
+    }
     if (!server.enabled) {
-      return new Response("This server is disabled.", { status: 403 });
+      return refusal(403, "mcp-server-disabled", "This server is disabled.");
     }
     const row = this.#db.getMcpOauth(name);
     if (!(row?.tokens && server.authMode === "oauth")) {
@@ -1200,11 +1205,12 @@ export class FleetMcp {
       if (!this.#db.getMcpOauth(name)?.tokens) {
         return signedOut();
       }
-      return new Response(
+      return refusal(
+        502,
+        "mcp-upstream-failed",
         error instanceof NotNow
           ? error.message
-          : "The upstream MCP server could not be reached. Retry the request.",
-        { status: 502 }
+          : "The upstream MCP server could not be reached. Retry the request."
       );
     }
   }
