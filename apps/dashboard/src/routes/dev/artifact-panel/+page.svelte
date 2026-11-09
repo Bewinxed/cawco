@@ -1,4 +1,35 @@
 <script lang="ts">
+  import { type Pin, pinHeld } from "@cawco/core/comments/model";
+  import { hubRequest } from "@cawco/core/hub-request";
+  import { commentWords } from "@cawco/core/words/comments";
+  import { onMount } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import { pressOutside } from "#lib/cawco/press-outside.js";
+  import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
+  import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
+  import ChangesTag from "#lib/cawco/preview/ChangesTag.svelte";
+  import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
+  import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
+  import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
+  import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
+  import type { RailList, RailSort } from "#lib/cawco/preview/comment-rows.js";
+  import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
+  import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
+  import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
+  import ModeSwitch from "#lib/cawco/preview/ModeSwitch.svelte";
+  import PinCard from "#lib/cawco/preview/PinCard.svelte";
+  import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
+  import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
+  import type { Box } from "#lib/cawco/preview/pin-place.svelte.js";
+  import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
+  import { setSideExpand } from "#lib/cawco/side/expand.js";
+  import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
+  import RailFloat from "#lib/cawco/side/RailFloat.svelte";
+  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
+  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   /**
    * The artifact panel whole, for judging it at its widths: its head (the
    * artifact's title and its menu, the mode, the glass, Close), the page in
@@ -44,37 +75,7 @@
    * (overlay `data-cawco-bare-scroll`). The head is the owner's picks: the
    * title over its description, the Comments beside the page.
    */
-  import { type Pin, pinHeld } from "@cawco/core/comments/model";
-  import { hubRequest } from "@cawco/core/hub-request";
-  import { commentWords } from "@cawco/core/words/comments";
-  import { onMount } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
-  import { pressOutside } from "#lib/cawco/press-outside.js";
-  import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
-  import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
-  import ChangesTag from "#lib/cawco/preview/ChangesTag.svelte";
-  import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
-  import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
-  import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
-  import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
-  import type { RailList, RailSort } from "#lib/cawco/preview/comment-rows.js";
-  import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
-  import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
-  import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
-  import ModeSwitch from "#lib/cawco/preview/ModeSwitch.svelte";
-  import PinCard from "#lib/cawco/preview/PinCard.svelte";
-  import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
-  import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
-  import type { Box } from "#lib/cawco/preview/pin-place.svelte.js";
-  import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
-  import { setSideExpand } from "#lib/cawco/side/expand.js";
-  import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
-  import RailFloat from "#lib/cawco/side/RailFloat.svelte";
-  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
-  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
-  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconChat,
     IconExternal,
@@ -97,7 +98,7 @@
   /** The hub's show of an artifact: its id. */
   const SHOW_PATH = /\/artifacts\/([^/]+)\/show$/u;
   const asked = page.url.searchParams.get("state") ?? "rail";
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The picture stands scrolled to its foot. */
   const scrolled = asked === "scrolled" || asked === "changes";
 
