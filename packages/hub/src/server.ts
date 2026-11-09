@@ -275,6 +275,7 @@ import {
 import { isPlace } from "@cawco/core/workspace-policy";
 import type { FolderWeight } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus } from "elysia";
+import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
 import { createAccountCarry } from "./account-carry";
 import { createAccountProbes } from "./account-probes";
@@ -5118,10 +5119,14 @@ export const createServer = (
     // A decision page's Preview heard a canvas of its media say its shape, or a whole screen tell its least words: kept for the next Preview of it.
     keepShape: async (request, pageId) => {
       if (request.method !== "POST") {
-        return new Response("Tell a shape with a POST.", {
-          status: 405,
-          headers: { allow: "POST" },
-        });
+        return problemResponse(
+          {
+            status: 405,
+            code: "tell-shape-post",
+            detail: "Tell a shape with a POST.",
+          },
+          { allow: "POST" }
+        );
       }
       const told = (await request.json().catch(() => null)) as {
         artifact?: unknown;
@@ -5140,14 +5145,18 @@ export const createServer = (
         told.stories.every((one) => typeof one === "string") &&
         isEmbedShape(shape)
       )) {
-        return new Response(
-          "A shape is { artifact: id, stories: string[], width: the Preview's px or null, h: px, w: px or null }.",
-          { status: 400 }
-        );
+        return problemResponse({
+          status: 400,
+          code: "shape-artifact-id-stories",
+          detail:
+            "A shape is { artifact: id, stories: string[], width: the Preview's px or null, h: px, w: px or null }.",
+        });
       }
       if (!artifacts.pageShows(pageId, canvas)) {
-        return new Response("This page shows no such canvas.", {
+        return problemResponse({
           status: 404,
+          code: "page-shows-such-canvas",
+          detail: "This page shows no such canvas.",
         });
       }
       return artifacts.keepSaidShape(
@@ -5156,7 +5165,11 @@ export const createServer = (
         shape
       )
         ? new Response(null, { status: 204 })
-        : new Response("No component canvas of that id.", { status: 404 });
+        : problemResponse({
+            status: 404,
+            code: "component-canvas-id",
+            detail: "No component canvas of that id.",
+          });
     },
   };
   /**
