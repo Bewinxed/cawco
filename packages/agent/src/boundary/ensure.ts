@@ -125,7 +125,8 @@ import {
   type Boundary,
   closeUnderWay,
   type Held,
-  keepers,
+  heldProc,
+  procsHeld,
   type Retiring,
   readHeld,
   readRetiring,
@@ -175,7 +176,7 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
   forgetStale(ref.id);
   forgetStubbed(ref.id);
   forgetRetiring(ref.id);
-  const alive = (await keepers.held()).filter(
+  const alive = (await procsHeld()).filter(
     (proc) => proc.alive && isBoundaryOf(proc.procId, ref.id)
   );
   await Promise.all(
@@ -414,13 +415,12 @@ const stopUnvouched = async (
 ): Promise<void> => {
   const older = await readRetiring(id);
   const kept = new Set(older.map((old) => boundaryProcId(id, old.gen)));
-  const recorded =
-    held && (await keepers.holding(boundaryProcId(id, held.gen)));
+  const recorded = held && (await heldProc(boundaryProcId(id, held.gen)));
   if (held) {
     await stopBoundary(id, held);
     await cleanGeneration(id, held);
   }
-  const unrecorded = (await keepers.held()).filter(
+  const unrecorded = (await procsHeld()).filter(
     (proc) =>
       proc.alive && isBoundaryOf(proc.procId, id) && !kept.has(proc.procId)
   );
