@@ -1,5 +1,6 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import type { ControlRefusal } from "@cawco/core/frames";
 import {
   PREVIEW_START,
   PREVIEW_STOP,
@@ -14,8 +15,7 @@ import {
 } from "@cawco/core/preview/upstream";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { DOWN_WORDS } from "@cawco/core/words/preview-down";
-import { isFolderGone } from "@cawco/preview/proxy";
+import { isFolderGone, startRefused } from "@cawco/preview/proxy";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { originOfKey } from "./db/previews";
 import {
@@ -30,6 +30,7 @@ import {
 interface Answered {
   error?: string;
   ok: boolean;
+  refusal?: ControlRefusal;
   result?: unknown;
 }
 
@@ -226,15 +227,8 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     }
     const answer = asked.value;
     if (!answer.ok) {
-      const error = answer.error ?? "Preview failed";
-      return {
-        ok: false,
-        // The daemon refuses a workspace no boundary runs in these words
-        // (preview-bridge.ts `WorkspaceDown`); anything else kept the way to
-        // the server from opening.
-        down: error === DOWN_WORDS.workspace ? "workspace" : "reach",
-        error,
-      };
+      const { down, why } = startRefused(answer);
+      return { ok: false, down, error: why };
     }
     const { port } = answer.result as { port: number };
     return await upstreamAt(machineId, key, port, start);
