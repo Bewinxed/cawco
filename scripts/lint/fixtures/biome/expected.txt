@@ -35,6 +35,9 @@ no-raw-motion/apps/dashboard/src/planted.css:6:31 no-raw-motion
 no-raw-motion/packages/hub/skills/decision-page/kit/page.css:3:25 no-raw-motion
 no-raw-motion/packages/hub/skills/decision-page/kit/page.css:3:30 no-raw-motion
 artifact-rows-drop/packages/hub/src/db/planted.ts:7:1 artifact-rows-drop
+workspace-member/packages/hub/src/planted.ts:9:18 workspace-member
+workspace-member/packages/hub/src/planted.ts:10:18 workspace-member
+workspace-member/packages/hub/src/planted.ts:11:18 workspace-member
 hub-refusal-words/planted.ts:5:30 hub-refusal-words
 hub-refusal-words/planted.ts:6:30 hub-refusal-words
 preview-upstream/packages/hub/src/planted.ts:7:21 preview-upstream

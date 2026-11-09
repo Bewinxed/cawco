@@ -20,6 +20,9 @@
     // An artifact's row goes through dropArtifacts alone, which ends its
     // preview origin (packages/hub/src/db/artifacts.ts).
     "./scripts/lint/artifact-rows-drop.grit",
+    // What a workspace is reads through workspaces.ts `workspaceOf`, never
+    // its host, checksFor or stageFor column (packages/hub/src/workspaces.ts).
+    "./scripts/lint/workspace-member.grit",
     // A preview origin's upstream is the hub's preview-service.ts's alone,
     // and what serves an artifact is read off its row
     // (packages/core/src/preview/upstream.ts).
