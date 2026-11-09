@@ -72,6 +72,7 @@ import type { createAtLimit, Kept, TakenUpBy } from "./at-limit";
 import type { createCaw } from "./caw";
 import type { createConnections } from "./connections";
 import type { DbShape } from "./db";
+import type { LoginMove } from "./db/accounts";
 import type { LimitCompaction } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { InstanceKind, PublicInstanceRow } from "./db/instances";
@@ -447,6 +448,7 @@ export interface HubContext {
     } & { id: string; parentInstanceId?: string | null | undefined }
   ) => boolean;
   keptNextWords: (why: Kept, toName: string) => string;
+  keptWarm: (machineId: string, ids: string[]) => string[];
   knownProviders: () => ProviderInfo[];
   lastRequestContext: Map<string, number>;
   launchClaims: Map<string, { accountId: string; at: number }>;
@@ -480,7 +482,13 @@ export interface HubContext {
   marketplaceLinks: Map<string, MarketplaceLink>;
   mcpReady: Promise<unknown>;
   memoryWatch: ReturnType<typeof createTurnWatch>;
+  movedFrom: () => Map<string, string>;
   moveJobOf: (instanceId: string) => ContinuationSlip | undefined;
+  moveKey: ({
+    machineId,
+    store,
+    storeProvider,
+  }: Pick<LoginMove, "machineId" | "store" | "storeProvider">) => string;
   moveRowsToAccount: (
     machineId: string,
     rows: readonly {
@@ -498,6 +506,13 @@ export interface HubContext {
     moved: string[];
   }>;
   moves: ReturnType<typeof createMoves>;
+  movingFor: (row: {
+    accountId?: string | null;
+    harness: HarnessKind;
+    machineId: string;
+    model?: string | null;
+  }) => LoginMove | undefined;
+  movingLogins: () => LoginMove[];
   nameFromLiveTurn: (
     machineId: string,
     instanceId: string,
@@ -536,6 +551,7 @@ export interface HubContext {
   parkForPerson: (envelope: Envelope<unknown>, outlivesHub?: boolean) => void;
   pending: PendingShape;
   pendingToolSignins: Map<string, ToolSigninChallenge>;
+  placedOn: (machineId: string, accountId: string) => boolean;
   planChanges: PlanChanges | undefined;
   plans: ReturnType<typeof createPlans>;
   pluginRow: (row: FleetPlugin) => FleetPlugin;
@@ -757,6 +773,7 @@ export interface HubContext {
       shouldQuery,
     }: { origin: NeutralOrigin; shouldQuery?: boolean | undefined }
   ) => boolean;
+  stepping: Set<string>;
   stepUuids: (plan: LimitCompaction) => string[];
   stepWords: (stage: "compacting" | "filing" | "carrying") => string;
   stopCompaction: (instanceId: string) => void;
