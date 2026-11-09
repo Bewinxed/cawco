@@ -22,6 +22,7 @@ import {
 } from "@cawco/core/comments/model";
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS, mapsOf } from "@cawco/core/doc-maps";
+import { getMeta } from "@cawco/core/doc-meta";
 import { keepTuned, TUNED_MAP, type TunedRecord } from "@cawco/core/tuned";
 import {
   type AbstractType,
@@ -60,7 +61,7 @@ export const MAPS = [
 function moveTunedOut(doc: Doc): boolean {
   const state = doc.getMap("state");
   const entry = state.get(TUNED_MAP) as ChoiceEntry | undefined;
-  if (!entry || doc.getMap("meta").get("kind") !== "component") {
+  if (!entry || getMeta(doc, "kind") !== "component") {
     return false;
   }
   const records = Array.isArray(entry.value)
