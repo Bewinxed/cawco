@@ -21,12 +21,11 @@ export const fleetMemoryRoutes = ({
   keepRemovedMemory,
   keepReplacedDoc,
   keepReplacedMemory,
-  machineFault,
   machineName,
   projectTypes,
   publishInstances,
   readMachineMemory,
-  registry,
+  pushTarget,
 }: Pick<
   HubContext,
   | "db"
@@ -36,12 +35,11 @@ export const fleetMemoryRoutes = ({
   | "keepRemovedMemory"
   | "keepReplacedDoc"
   | "keepReplacedMemory"
-  | "machineFault"
   | "machineName"
   | "projectTypes"
   | "publishInstances"
   | "readMachineMemory"
-  | "registry"
+  | "pushTarget"
 >) =>
   new Elysia()
     // The fleet's user-scope memory (NEW.md §11): the main CLAUDE.md every
@@ -315,12 +313,11 @@ export const fleetMemoryRoutes = ({
       },
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and pushes every field of a memory write in one place; splitting it would scatter the validation order this route depends on.
       async ({ body, set, status }) => {
-        const agent = registry.agent(body.machineId);
-        if (!agent) {
-          return status(404, machineFault(body.machineId, "offline"));
+        const target = pushTarget(body.machineId, status);
+        if ("refused" in target) {
+          return target.refused;
         }
-
-        const config = db.fleetConfig();
+        const { config } = target;
         if (!config.memory) {
           return status(400, "the fleet keeps no memory to push");
         }
