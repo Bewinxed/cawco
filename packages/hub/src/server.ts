@@ -203,10 +203,8 @@ import type {
   FleetSyncReport,
   FleetVersioned,
   MachineHookScript,
-  MachineMemorySet,
   MarketplaceLink,
   MarketplaceRead,
-  SkillFile,
 } from "@cawco/core/fleet";
 import {
   agentProblem,
@@ -557,7 +555,6 @@ import {
   MachineCapabilitiesSchema,
   OpenCodeGoLimitsSchema,
   ScratchWorktreeSchema,
-  SkillFileSchema,
   ToolSigninSchema,
 } from "@cawco/core/stored-shapes";
 import type { CommandAck, RegisterAckPayload } from "@cawco/core/stream";
@@ -574,7 +571,6 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type {
   ToolSigninChallenge,
   ToolSpec,
-  ToolState,
   ToolStatus,
 } from "@cawco/core/tools";
 import {
@@ -598,7 +594,7 @@ import type {
   UsageSpend,
 } from "@cawco/core/usage/types";
 import { windowWords } from "@cawco/core/usage/windows";
-import { STAGES_TEMPLATES, type StagesTemplate } from "@cawco/core/views";
+import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { waitArtifact } from "@cawco/core/wait-targets";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
@@ -675,7 +671,6 @@ import {
 import { isPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
-import { z } from "zod";
 import {
   type AccountProber,
   accountOfIdentity,
@@ -760,6 +755,7 @@ import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { withAncestors } from "./board-ancestors";
 import { bodyLimitRefusal } from "./body-limits";
+import type { BridgedHeldPlace } from "./bridged-held-place";
 import { briefingsObserve } from "./briefings";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
@@ -911,6 +907,10 @@ import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
 import { createHandedInputs } from "./handed-inputs";
 import { handleId, isHandle } from "./handles";
+import {
+  HARNESS_CONFIG_BODY,
+  type HarnessConfigBody,
+} from "./harness-config-body";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
@@ -947,6 +947,17 @@ import { createLaws } from "./laws";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { localNameOf } from "./local-name";
+import {
+  type ControlResult,
+  isToolStatus,
+  type MachineMemory,
+  type MemoryRead,
+  machineSkillFiles,
+  peekToolStatus,
+  type ReadRefused,
+  type RouteSet,
+  type Unanswered,
+} from "./machine-answers";
 import { createMachineContact } from "./machine-contact";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import {
@@ -958,6 +969,7 @@ import {
   WouldWait,
   whenStopped,
 } from "./machine-pause";
+import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { localHubName } from "./mdns";
 import { MeaningJudge } from "./meaning";
 import {
@@ -1005,6 +1017,7 @@ import {
   outlivesSession,
   type PendingShape,
 } from "./pending";
+import { PlaceRefusal } from "./place-refusal";
 import { createPlaceRepos } from "./place-repo";
 import {
   noAccountRefusal,
@@ -1068,6 +1081,7 @@ import {
   readFolderBytes,
   readFolderFile,
 } from "./project-folder";
+import type { ProjectAsk, ProjectMade } from "./project-making";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import {
@@ -1110,6 +1124,8 @@ import {
 } from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
 import { makesRoutines, talksWithPerson } from "./roles";
+import { bearerOf } from "./routes/bearer";
+import { harnessSchema } from "./routes/harness-schema";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import {
@@ -1189,6 +1205,7 @@ import { createTreeStops } from "./tree-stops";
 import { turnState } from "./turn-state";
 import { turnUsageOf } from "./turn-usage";
 import { unknownFieldsOf } from "./unknown-fields";
+import { unreachable } from "./unreachable";
 import { createTrim } from "./unused-trim";
 import { unwatchedMode } from "./unwatched-mode";
 import { TOOL_RELEASES } from "./upstreams";
@@ -1226,28 +1243,6 @@ import {
 import { type WorkAsk, type WorkPlace, workPlace } from "./work-place";
 import { createWorkspaceRetire } from "./workspace-retire";
 
-/**
- * What a put of a Claude Code settings row, an OpenCode plugin or a pi
- * extension takes (core harness-config.ts): each field optional, `null`
- * clearing it. The row's own check is `harnessConfigProblem`.
- */
-interface HarnessConfigBody {
-  areaId?: string | null;
-  enabled?: boolean;
-  module?: string | null;
-  package?: string | null;
-  projectId?: string | null;
-  settings?: Record<string, unknown> | null;
-}
-const HARNESS_CONFIG_BODY = t.Object({
-  enabled: t.Optional(t.Boolean()),
-  settings: t.Optional(t.Nullable(t.Record(t.String(), t.Unknown()))),
-  module: t.Optional(t.Nullable(t.String())),
-  package: t.Optional(t.Nullable(t.String())),
-  projectId: t.Optional(t.Nullable(t.String())),
-  areaId: t.Optional(t.Nullable(t.String())),
-});
-
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
 /**
  * The name of a delegate-wait notice's send (delegate-waits.ts): its ask
@@ -1282,36 +1277,6 @@ const NAME_ENDS = /^-+|-+$/gu;
 const NAME_TAIL = /-+$/u;
 /** A URL's IPv6 host in its brackets, as `URL.hostname` keeps it. */
 const IPV6_BRACKETS = /^\[|\]$/gu;
-
-/** The frame a forwarded `control` comes back as, whoever asked for it. */
-type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
-
-/**
- * A project place's `held` as installable apps' documents declare it, which
- * the places list once showed for the person's Continue and Discard: always
- * null now, its shape kept for the wire only. The wire check (openapi.ts
- * `--check`) refuses to stop sending it while TestFlight 20261017 or
- * 20261018 can be installed, though no app reads it; it goes in the change
- * that expires them (bash apps/apple/scripts/testflight.sh --expire 20261018).
- */
-export interface BridgedHeldPlace {
-  heldAt: string;
-  holds: string;
-  instanceId: string;
-  size: string;
-  title: string;
-  workspaceId: string;
-}
-
-/** A machine ask that got no answer: not connected ("dead") or silent past its deadline ("timeout"). */
-type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
-
-/**
- * The `default` of a `switch` over a read's kinds: takes only `never`, so a
- * kind left unhandled fails the build.
- */
-const unreachable = (value: never): Error =>
-  new Error(`unhandled read: ${JSON.stringify(value)}`);
 
 /**
  * What a delegate's report carries beside its body: the turn it closes, that
@@ -1400,9 +1365,6 @@ const findCaller = (request: Request): string => {
 const WORKSPACE_READ_MS = 15_000;
 /** How often the hub reads every skill's and plugin's source for an update. */
 const UPDATE_CHECK_MS = 6 * HOUR_MS;
-
-/** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
-const BUSY_TIMEOUT_MS = 5000;
 
 /** A `Range: bytes=a-b` header (one range, either end open). */
 const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/u;
@@ -1780,8 +1742,6 @@ const HEARTBEAT_SETTLE_GRACE_MS = 45_000;
 /** An update is a pull, an install and a dashboard build — minutes, not seconds. */
 const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
-/** Reading one file off a machine: it answers about as fast as a disk does. */
-const READ_TIMEOUT_MS = 10_000;
 /**
  * A folder's `/` menu read before a session: a harness started without a
  * turn (Claude Code answers its initialize in 0.3–2.4 s, measured
@@ -2048,13 +2008,6 @@ const TITLE_ASK_LIMIT = 64;
 const TITLE_WINDOW = 40;
 
 /**
- * A rule draft as the wire carries it — shared by create (POST, the hub mints
- * the id) and edit (PUT to an id that already exists). Validated loosely here
- * and strictly by `ruleProblem`, so the form and the hub refuse in the same
- * sentences.
- */
-const harnessSchema = t.Union(HARNESSES.map((harness) => t.Literal(harness)));
-/**
  * A permission mode as a route takes it: core's `PermissionMode`, the
  * offered `PERMISSION_MODES` and the two the installable TestFlight builds
  * were built to send. `settleMode` refuses a mode the machine does not
@@ -2201,12 +2154,6 @@ const isEnvelope = (value: unknown): value is Envelope =>
   value !== null &&
   typeof (value as Envelope).verb === "string" &&
   typeof (value as Envelope).machineId === "string";
-
-/** A request's session credential (`Authorization: Bearer …`), or null: never the person's `Owner` token. */
-const bearerOf = (request: Request): string | null => {
-  const authorization = request.headers.get("authorization");
-  return authorization?.startsWith("Bearer ") ? authorization : null;
-};
 
 const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
   verb: envelope.verb,
@@ -2514,10 +2461,6 @@ const resolveDelegatePermissionMode = (
   }
   return undefined;
 };
-
-/** A skill's files as a machine read them, taken into CawCo's type as they are kept (hub stored-json.ts `received`). */
-const machineSkillFiles = (result: unknown): SkillFile[] =>
-  received(z.array(SkillFileSchema), result, "a machine's skill files");
 
 /** The report beat's word on what each harness adapter on the machine can do. */
 const peekHarnesses = (
@@ -2940,21 +2883,6 @@ const sameBinaryUpdate = (
   JSON.stringify({ ...a, updatedAt: 0 }) ===
   JSON.stringify({ ...b, updatedAt: 0 });
 
-/** The states a daemon may claim for a tool; anything else is not a status. */
-const TOOL_STATES: readonly ToolState[] = [
-  "installed",
-  "missing",
-  "installing",
-  "failed",
-  "unsupported",
-];
-
-const isToolStatus = (value: unknown): value is ToolStatus =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as ToolStatus).id === "string" &&
-  TOOL_STATES.includes((value as ToolStatus).state);
-
 /**
  * The report beat's word on what the machine has of the tool catalog (NEW.md §10).
  * Empty from a beat sent before the machine's probe has asked its tools, which
@@ -3031,15 +2959,6 @@ const peekAnswers = (result: unknown): Record<string, unknown> | undefined => {
     : undefined;
 };
 
-/** And what the machine answered it with. */
-const peekToolStatus = (payload: unknown): ToolStatus | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { result } = payload as { result?: unknown };
-  return isToolStatus(result) ? result : undefined;
-};
-
 const isRecord = (value: unknown): boolean =>
   typeof value === "object" && value !== null;
 
@@ -3090,9 +3009,6 @@ const mcpProblem = (
 /** What a skill may be called: it names a directory under `~/.claude/skills`. */
 const SKILL_NAME = /^[A-Za-z0-9._-]+$/u;
 
-/** What a machine answered `readMemoryFile` with: its own memory set, or nothing. */
-type MachineMemory = MachineMemorySet | null;
-
 /** The answer, read off the wire: a malformed set is no set. */
 const peekMemoryFile = (result: unknown): MachineMemory => {
   if (typeof result !== "object" || result === null) {
@@ -3123,21 +3039,6 @@ const peekMemoryFile = (result: unknown): MachineMemory => {
   });
   return { content, hash, docs: read };
 };
-
-/** A read off a machine refused, as the status its route answers with. */
-interface ReadRefused {
-  code: 500 | 503 | 504;
-  ok: false;
-  said: string;
-}
-
-/** A read of a machine's memory, or the status the route should answer with. */
-type MemoryRead = { ok: true; copy: MachineMemory } | ReadRefused;
-
-/** A route's `set`, on which a read whose machine is away names it (`awayStatus`). */
-interface RouteSet {
-  headers: Record<string, string | number | string[]>;
-}
 
 /**
  * What an `init` frame announces: the SDK session, which is what lets a
@@ -14319,15 +14220,6 @@ export const createServer = (
     });
     return refused ? { status: refused.code, refused: refused.refused } : built;
   };
-
-  /**
-   * Why a place was not added, or a name not taken: the route's status and
-   * its sentence, which a setup page's send answers as it answers any
-   * refusal of its own.
-   */
-  class PlaceRefusal extends ArtifactRefusal {
-    declare readonly status: 400 | 404;
-  }
 
   /**
    * The fleet's stream relay (stream-relay.ts): coturn on a machine with a
@@ -26339,27 +26231,6 @@ export const createServer = (
   }): string | undefined =>
     body.name ??
     (body.prompt?.trim() ? projectWords.placeholderName : undefined);
-
-  interface ProjectAsk {
-    /** Made with Caw: a new project's Caw starts on. */
-    caw?: boolean;
-    checkout?: { machineId: string; cwd: string };
-    name: string;
-    /** What its setup conversation opens with: your prompt, or a note of where the project came from. */
-    setup?: {
-      note?: ProjectNote;
-      prompt?: string;
-      promptId?: string;
-    };
-    /** The template tapped on New project, kept as tapped until the setup page is sent. */
-    tapped?: StagesTemplate;
-  }
-  interface ProjectMade {
-    joined: boolean;
-    place: PlaceRow;
-    placeAdded: boolean;
-    project: ProjectRow;
-  }
 
   /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
   const projectsMaking = new Map<string, Promise<ProjectMade>>();
