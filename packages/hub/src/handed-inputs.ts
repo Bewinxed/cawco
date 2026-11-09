@@ -21,11 +21,9 @@ import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import { INPUTS_LIMIT_BYTES } from "@cawco/core/workspace/controls";
-import {
-  ArtifactRefusal,
-  type Artifacts,
-  type HandedReceiver,
-} from "./artifacts/service";
+import { ArtifactRefusal } from "./artifacts/refusals";
+import type { Artifacts } from "./artifacts/service";
+import type { HandedReceiver } from "./artifacts/shapes";
 import type { WorkItemRow } from "./db/project-work";
 import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
