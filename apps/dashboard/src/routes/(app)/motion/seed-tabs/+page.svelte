@@ -19,10 +19,9 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconWindow } from "#lib/icons.js";
+  import { WORKSPACE_PREF } from "#lib/platform/prefs.js";
   import { store } from "#lib/platform/storage.js";
   import { page } from "$app/state";
-
-  const KEY = "cawco-workspace";
 
   const ids = $derived(
     (page.url.searchParams.get("ids") ?? "")
@@ -41,11 +40,11 @@
       focusedLeaf: "preview-leaf",
       ctx: {},
     });
-    store("local", KEY, layout);
+    store("local", WORKSPACE_PREF, layout);
     await fetch("/prefs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ [KEY]: layout }),
+      body: JSON.stringify({ [WORKSPACE_PREF]: layout }),
     });
     leaveThePage(() => location.replace(`/session/${ids[0]}`));
   });
