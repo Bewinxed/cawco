@@ -153,6 +153,7 @@ import { takeBrowsers } from "./stores/browsers.svelte";
 import { loadCatalog, refreshCatalogs } from "./stores/catalog.svelte";
 import { ahead } from "./stores/clock.svelte";
 import { takeBoardContinuations } from "./stores/continuations.svelte";
+import { openTabs, tabMachine, tabNamed } from "./stores/follows.svelte";
 import {
   commandRecord,
   latestCommandFor,
@@ -265,7 +266,6 @@ import { routedToParent } from "./transcript/present";
 import { speakerName } from "./transcript/speaker";
 import type { Message } from "./types";
 import { updates } from "./updates/updates.svelte";
-import { contextOf, workspace } from "./workspace/workspace.svelte";
 
 /**
  * What each hub row's session needs from you ({@link activityNow}), held
@@ -2697,7 +2697,7 @@ const watchedDelegates = new Map<string, number>();
  * is clicked (activating a tab does not visit it).
  */
 function isSubscribed(instanceId: string): boolean {
-  return workspace.openIds.includes(instanceId) || peekedId === instanceId;
+  return openTabs().includes(instanceId) || peekedId === instanceId;
 }
 
 /**
@@ -2707,7 +2707,7 @@ function isSubscribed(instanceId: string): boolean {
  * before the tab was asked keeps its `seq`.
  */
 function watchedIds(): string[] {
-  const ids = new Set(workspace.openIds);
+  const ids = new Set(openTabs());
   if (peekedId) {
     ids.add(peekedId);
   }
@@ -2723,7 +2723,7 @@ function watchedIds(): string[] {
  * has (workspace `named`).
  */
 function subscriptionIds(): string[] {
-  return watchedIds().filter((id) => workspace.named(id));
+  return watchedIds().filter((id) => tabNamed(id));
 }
 
 /** The last watched set synced, so an unchanged set of tabs stays quiet. */
@@ -3777,7 +3777,7 @@ export function readTranscript(
 ): Promise<TranscriptOutcome> {
   // A tab the hub has not named yet is read once it has (workspace
   // `named`), if it names one.
-  if (!workspace.named(viewId)) {
+  if (!tabNamed(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
   }
   const target = session(viewId);
@@ -3847,7 +3847,7 @@ export function storedReadWaits(viewId: string): StoredWait | null {
   if (instanceIndex.byId.has(viewId)) {
     return null;
   }
-  const machineId = contextOf(viewId)?.machine;
+  const machineId = tabMachine(viewId);
   if (!machineId) {
     return null;
   }
