@@ -2,7 +2,7 @@
  * Strings that name a path on something other than the hub, by file and
  * pattern: none of them is a hub route. agent-calls.ts leaves them out of
  * what a hub must keep answering, and the ban on hub paths built outside
- * core's request door (scripts/lint/hub-path-door.ts) lets them stand.
+ * the ban on hand-built hub paths (scripts/lint/hub-path-by-hand.ts) lets them stand.
  * A pattern is the path as written, each piece that is no known string a
  * `*`, and a trailing `/**` any rest.
  */
