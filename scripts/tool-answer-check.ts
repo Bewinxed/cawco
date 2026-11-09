@@ -31,7 +31,7 @@ const DOOR_OWNERS = new Set([
   "packages/cli/src/tools.ts",
   "packages/agent/src/delegation.ts",
   "packages/agent/src/tool-door.ts",
-  "packages/hub/src/server.ts",
+  "packages/hub/src/routes/delegation.ts",
   "packages/core/src/hub-routes.gen.ts",
 ]);
 
