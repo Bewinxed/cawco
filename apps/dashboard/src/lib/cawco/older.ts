@@ -15,7 +15,8 @@
  */
 
 import { DAY_MS } from "@cawco/core/time";
-import { type BoardRow, cawco } from "./client.svelte";
+import { cawco } from "./client.svelte";
+import type { BoardRow } from "./links";
 import { sessionStatus } from "./session-status";
 
 /** A project lists every session that moved in the last day. */
