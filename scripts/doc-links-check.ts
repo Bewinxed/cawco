@@ -28,6 +28,23 @@ const LINK =
   /\{@link(?:code|plain)?\s+import\((["'])([^"']+)\1\)\.([\w$]+)(?:\.[\w$.]+)?(?:(?:\s*\|\s*|\s+)[^}]*)?\}/gu;
 
 /**
+ * The names `export * from "<specifier>"` brings in: not the other module's
+ * default. One that does not resolve, or names a package, adds nothing: the
+ * compiler refuses the first, and a package's names are no link's target.
+ */
+const starExports = (file: string, specifier: string): string[] => {
+  let target: string;
+  try {
+    target = Bun.resolveSync(specifier, dirname(file));
+  } catch {
+    return [];
+  }
+  return target.includes("/node_modules/")
+    ? []
+    : [...exported(target)].filter((name) => name !== "default");
+};
+
+/**
  * The names one statement of `file` exports: its declarations, an
  * `export { … }` list's, an `export * as name`'s name, everything an
  * `export * from` module exports, or `default`.
@@ -48,10 +65,7 @@ const exportedBy = (file: string, statement: ts.Statement): string[] => {
     if (!(from && ts.isStringLiteral(from))) {
       return [];
     }
-    // `export * from` leaves out the other module's default.
-    return [...exported(Bun.resolveSync(from.text, dirname(file)))].filter(
-      (exportName) => exportName !== "default"
-    );
+    return starExports(file, from.text);
   }
   const modifiers = ts.canHaveModifiers(statement)
     ? (ts.getModifiers(statement) ?? [])
@@ -73,14 +87,22 @@ const exportedBy = (file: string, statement: ts.Statement): string[] => {
 
 /** The names a module exports, by the parser. */
 const exportsOf = new Map<string, Set<string>>();
+const reading = new Set<string>();
+/** How many times a read met a module already being read. */
+let cuts = 0;
 function exported(file: string): Set<string> {
   const known = exportsOf.get(file);
   if (known) {
     return known;
   }
   const names = new Set<string>();
-  // Held while it is read: two modules exporting each other's `*` end there.
-  exportsOf.set(file, names);
+  if (reading.has(file)) {
+    // Two modules exporting each other's `*` end here, with what is known so far.
+    cuts += 1;
+    return names;
+  }
+  reading.add(file);
+  const before = cuts;
   const source = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
@@ -90,6 +112,11 @@ function exported(file: string): Set<string> {
     for (const name of exportedBy(file, statement)) {
       names.add(name);
     }
+  }
+  reading.delete(file);
+  // A read that met a cycle may hold a partial set; only the outermost one is whole.
+  if (cuts === before || reading.size === 0) {
+    exportsOf.set(file, names);
   }
   return names;
 }
