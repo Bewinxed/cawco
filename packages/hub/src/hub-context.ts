@@ -10,7 +10,7 @@
  * closure has run, as a closure's names are.
  */
 
-import type { AccountMove, CompactStage } from "@cawco/core/accounts";
+import type { AccountMove, CompactStage, EndedBy } from "@cawco/core/accounts";
 import type { ArchiveView } from "@cawco/core/archive";
 import type { Bounded } from "@cawco/core/bounded";
 import type {
@@ -31,7 +31,7 @@ import type {
   HandoverEvent,
   Presence,
 } from "@cawco/core/handover";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
 import type {
   FleetHarnessConfig,
   HarnessConfigKind,
@@ -42,11 +42,21 @@ import type {
   AgentRow,
   BuildInfo,
   Envelope,
+  InstanceRow,
+  NamedSpawn,
   SendPayload,
+  SessionEndIntent,
+  SessionOrigin,
   SessionPulse,
 } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
-import type { NeutralOrigin } from "@cawco/core/session-messages";
+import type { GitChanges } from "@cawco/core/session/controls";
+import type {
+  NeutralOrigin,
+  SendMode,
+  SendState,
+  SentMessage,
+} from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { createArtifactLane } from "./artifacts/lane";
@@ -55,15 +65,22 @@ import type { createCaw } from "./caw";
 import type { createConnections } from "./connections";
 import type { DbShape } from "./db";
 import type { LimitCompaction } from "./db/at-limit";
-import type { ContinuationSlip } from "./db/continuations";
+import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
+import type { InstanceKind } from "./db/instances";
+import type { OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
 import type { TrashKind } from "./db/schema";
 import type { SentMessageRow } from "./db/sends";
-import type { StoredSendRefusal } from "./db/stored-types";
+import type {
+  ContinuationSource,
+  SendHold,
+  StoredSendRefusal,
+} from "./db/stored-types";
 import type { DelegateTypesShape } from "./delegate-types";
 import type { DelegateResult } from "./delegation-actions";
 import type { createDelegationMcp } from "./delegation-mcp";
+import type { createDesignSystem } from "./design-system";
 import type { AttemptAsk } from "./dispatch";
 import type { createFind } from "./find";
 import type { FleetMcp } from "./fleet-mcp";
@@ -71,7 +88,9 @@ import type { FleetSync } from "./fleet-sync";
 import type { FleetWatch } from "./fleet-watch";
 import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
+import type { Located, MachineAway, SessionLocation } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
+import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape } from "./lifetime";
 import type {
@@ -84,9 +103,10 @@ import type {
 import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
 import type { MachinePause } from "./machine-pause";
-import type { createTurnWatch } from "./memory";
+import type { createMemory, createTurnWatch } from "./memory";
 import type { createMoves } from "./moves";
 import type { createNotifications } from "./notifications";
+import type { createOpenItems } from "./open-items";
 import type { PendingShape } from "./pending";
 import type { PlanChanges } from "./plan-changes";
 import type { createPlans } from "./plans";
@@ -105,6 +125,7 @@ import type { Routines } from "./routines";
 import type { createRuleRows } from "./rule-rows";
 import type { RuleEngine } from "./rules";
 import type { createSessionIdentities } from "./session-identity";
+import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { StreamHubShape } from "./stream";
 import type { createTailnetHttps } from "./tailnet-https";
@@ -141,6 +162,7 @@ export interface HubContext {
     prompt?: string;
   }) => string | undefined;
   askerOf: (request: Request) => string;
+  askersOf: (row: InstanceRow | undefined) => string[];
   atLimit: ReturnType<typeof createAtLimit>;
   autoInstall: (machineId: string, agent: HubSocket) => void;
   /** Sends a hub frame to every dashboard. */
@@ -150,6 +172,7 @@ export interface HubContext {
     answer: Unanswered,
     status: (code: 503 | 504, said: string) => Answer
   ) => Answer;
+  awayError: (machineId: string) => MachineAway;
   awayWords: (machineId: string, answer: Unanswered) => string;
   boundProblem: ({
     projectId,
@@ -182,6 +205,15 @@ export interface HubContext {
   ) => Promise<Unlanded | { error: string } | null>;
   connections: ReturnType<typeof createConnections>;
   contact: ReturnType<typeof createMachineContact>;
+  contextTokensOf: (
+    row: KeepAliveRow | undefined,
+    scopeChars: number
+  ) => Promise<number>;
+  contextWindowOf: (
+    machineId: string,
+    harness: HarnessKind,
+    model: string | undefined
+  ) => Promise<number | undefined>;
   createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade>;
   credentialTurns: Set<string>;
   db: DbShape;
@@ -216,6 +248,7 @@ export interface HubContext {
     asked: Envelope<SendPayload>,
     ahead?: boolean
   ) => SentMessageRow | undefined;
+  designSystem: ReturnType<typeof createDesignSystem>;
   discardAsked: (
     from: string,
     id: string,
@@ -226,7 +259,17 @@ export interface HubContext {
     id: string,
     { approved }?: { approved?: boolean }
   ) => Promise<string>;
+  dropCompaction: (
+    instanceId: string,
+    plan: ReturnType<DbShape["atLimit"]["compaction"]>
+  ) => void;
   dropMarketplaceLink: (source: string) => boolean;
+  endSession: (
+    instanceId: string,
+    intent: SessionEndIntent,
+    by: EndedBy,
+    requestId?: string
+  ) => void;
   fanOutAgents: () => void;
   fanOutFetched: (what: string) => void;
   fetchPlugins: (ids: readonly string[]) => Promise<boolean>;
@@ -255,6 +298,7 @@ export interface HubContext {
   ) => void;
   forgottenProjects: ProjectTrash;
   forkNoticeFor: (instanceId: string) => string | undefined;
+  gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
   handoffs: Map<string, { from: string; at: number }>;
   harnessConfigDelete: (
     kind: HarnessConfigKind,
@@ -350,9 +394,11 @@ export interface HubContext {
   ) =>
     | { machineId: string | null; row: ProjectRow }
     | { refused: string; status: 403 | 404 };
+  lifecycle: ReturnType<typeof createSessionLifecycle>;
   lifetime: HubLifetimeShape;
   limitRefused: Set<string>;
   linkMarketplace: (source: string) => MarketplaceLink;
+  locateSession: (id: string) => Promise<Located>;
   machineCredentials: ReturnType<typeof createMachineCredentials>;
   machineFault: (
     machineId: string,
@@ -386,6 +432,18 @@ export interface HubContext {
     instanceId: string,
     message: unknown
   ) => void;
+  noteAtLimit: (
+    row: {
+      derivedTitle?: string | null;
+      harness: HarnessKind;
+      id: string;
+      sessionId: string | null;
+      title?: string | null;
+    },
+    move: AccountMove,
+    id?: string,
+    at?: number
+  ) => void;
   noteFetch: (
     row: { skill: string } | { plugin: string },
     before: FleetVersioned & { hash?: string; source?: string },
@@ -395,6 +453,15 @@ export interface HubContext {
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
+  openItems: ReturnType<typeof createOpenItems>;
+  owedMoves: {
+    get: (instanceId: string) => OwedMove | undefined;
+    has: (instanceId: string) => boolean;
+    list: () => [string, OwedMove][];
+    set: (instanceId: string, owed: OwedMove) => void;
+    delete: (instanceId: string) => void;
+  };
+  parkForPerson: (envelope: Envelope<unknown>, outlivesHub?: boolean) => void;
   pending: PendingShape;
   pendingToolSignins: Map<string, ToolSigninChallenge>;
   planChanges: PlanChanges | undefined;
@@ -404,6 +471,7 @@ export interface HubContext {
   previewListeners: ReturnType<typeof createPreviewListeners>;
   processAt: Map<string, number>;
   projectEdits: ReturnType<typeof createProjectEdits>;
+  projectMemory: ReturnType<typeof createMemory>;
   projectMoved: (
     projectId: string,
     machines: Iterable<string>,
@@ -413,6 +481,128 @@ export interface HubContext {
   projectStops: ReturnType<typeof createProjectStops>;
   projectTypes: ProjectDelegateTypes;
   publishInstances: (machineId: string) => void;
+  publishSend: (row: {
+    reason: string | null;
+    uuid: string;
+    anchor: string | null;
+    instanceId: string;
+    mode: SendMode;
+    acceptedAt: Date;
+    readAt: Date | null;
+    answeredAt: Date | null;
+    harnessId: string | null;
+    body: {
+      message: {
+        role: "user";
+        content:
+          | string
+          | (
+              | { type: "text"; text: string }
+              | {
+                  type: "thinking";
+                  thinking: string;
+                  signature?: string | undefined;
+                }
+              | { type: "redacted_thinking" }
+              | {
+                  type: "tool_use";
+                  id: string;
+                  name: string;
+                  input: Record<string, unknown>;
+                }
+              | {
+                  type: "tool_result";
+                  tool_use_id: string;
+                  content: unknown;
+                  is_error?: boolean | undefined;
+                  structuredContent?: Record<string, unknown> | undefined;
+                  questionResult?:
+                    | {
+                        answers: Record<string, string | string[]>;
+                        outcome: "answered";
+                        questions: {
+                          header: string;
+                          multiSelect: boolean;
+                          options: { label: string; description: string }[];
+                          question: string;
+                        }[];
+                        annotations?:
+                          | Record<
+                              string,
+                              {
+                                notes?: string | undefined;
+                                preview?: string | undefined;
+                              }
+                            >
+                          | undefined;
+                        response?: string | undefined;
+                      }
+                    | {
+                        outcome: "dismissed";
+                        questions: {
+                          header: string;
+                          multiSelect: boolean;
+                          options: { label: string; description: string }[];
+                          question: string;
+                        }[];
+                      }
+                    | undefined;
+                }
+              | {
+                  type: "image";
+                  source:
+                    | { type: "base64"; media_type: string; data: string }
+                    | { type: "url"; media_type: string; url: string };
+                }
+            )[];
+        harnessNote?:
+          | {
+              body: string;
+              kind: "task-notification" | "system-reminder";
+              status: string;
+              title: string;
+              toolUseId?: string | undefined;
+            }
+          | undefined;
+      };
+      type: "user";
+      compactSummary?: true | undefined;
+      keepAlive?: true | undefined;
+      origin?:
+        | { kind: "human" }
+        | {
+            kind: "peer";
+            from?: string | undefined;
+            name?: string | undefined;
+            fromSession?: string | undefined;
+            body?: string | undefined;
+          }
+        | {
+            kind: "system";
+            line?: string | undefined;
+            live?: "ended" | "running" | undefined;
+            name?: string | undefined;
+          }
+        | undefined;
+      parent_tool_use_id?: string | null | undefined;
+      raw?: unknown;
+      reminder?: string | undefined;
+      replaces?: string | undefined;
+      session_id?: string | undefined;
+      shouldQuery?: boolean | undefined;
+      timestamp?: string | undefined;
+      uuid?: string | undefined;
+    };
+    replaces: string | null;
+    state: SendState;
+    refusal: StoredSendRefusal | null;
+    replacedBy: string | null;
+    held: boolean;
+    owed: Envelope<SendPayload> | null;
+    hold: SendHold | null;
+    envelope: Envelope<SendPayload> | null;
+    delivery: string | null;
+  }) => void;
   publishUsage: (machineId?: string) => void;
   pulses: Map<string, SessionPulse>;
   push: ReturnType<typeof createPush>;
@@ -454,16 +644,32 @@ export interface HubContext {
   ) => Promise<Bounded<ControlResult> | null>;
   reconnectingFor: (machineId: string) => number;
   registry: RegistryShape;
+  releaseOwed: (of: { instanceId: string } | { machineId: string }) => void;
+  retireSession: (machineId: string, instanceId: string) => void;
   retryFromTray: (item: WorkItemRow) => Promise<string | undefined>;
   returned: (kind: TrashKind, key: string) => Promise<unknown>;
   ruleEngine: RuleEngine;
   ruleRowsOf: ReturnType<typeof createRuleRows>;
+  saidCompactionFolded: (
+    row: { id: string },
+    plan: ReturnType<DbShape["atLimit"]["compaction"]>,
+    to: string
+  ) => void;
   say: (payload: FramePayload) => void;
   sayCompaction: (
     plan: { instanceId: string; lineId: string; move: AccountMove | null },
     stage: CompactStage
   ) => void;
   sendFrame: (socket: HubSocket, frame: unknown) => void;
+  sendFromHub: (
+    machineId: string,
+    instanceId: string,
+    content: string,
+    from: LabelledRow,
+    uuid: string,
+    extras?: Pick<SendPayload, "images" | "attachments">,
+    origin?: SentMessage["origin"]
+  ) => void;
   sendRefusal: (
     instanceId: string,
     origin: NeutralOrigin
@@ -474,11 +680,13 @@ export interface HubContext {
         refusal?: StoredSendRefusal | undefined;
       }
     | undefined;
+  sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
   sessionName: (row: {
     derivedTitle?: string | null;
     id: string;
     title?: string | null;
   }) => string;
+  sessionStartOf: (where: SessionLocation) => Promise<string>;
   sharedProblem: (
     name: string,
     config: Record<string, unknown>,
@@ -497,6 +705,23 @@ export interface HubContext {
     status: (code: 400 | 503 | 504, said: string) => Refused
   ) => Promise<{ files: SkillFile[] } | { refused: Refused }>;
   skillRow: (row: FleetSkillMeta) => FleetSkillMeta;
+  spawnFromHub: (
+    machineId: string,
+    asked: NamedSpawn,
+    kind: InstanceKind,
+    origin: SessionOrigin,
+    fallbackMode?: string,
+    workItemId?: string,
+    continues?: Pick<
+      InstanceRow,
+      | "delegateType"
+      | "delegateTypeProject"
+      | "harness"
+      | "mayStart"
+      | "role"
+      | "startingSet"
+    >
+  ) => Promise<void>;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
   startHold: (
@@ -514,7 +739,21 @@ export interface HubContext {
   stepWords: (stage: "compacting" | "filing" | "carrying") => string;
   stopCompaction: (instanceId: string) => void;
   stopProjectBrowsers: (projectId: string) => Promise<string | undefined>;
+  storedAnswer: (id: string, ended: boolean) => Promise<string | undefined>;
   streams: StreamHubShape;
+  summariserRun: (
+    source: ContinuationSource & { machineId: string },
+    summarizer: { harness: HarnessKind; model?: string; account?: string },
+    prompt: string,
+    id: string,
+    cancelled: () => boolean,
+    mode: PermissionMode
+  ) => Promise<string>;
+  summarizerOf: (row: { accountId?: string | null }) => {
+    harness: HarnessKind;
+    model: string;
+  };
+  summaryMoveFailed: (row: ContinuationRow, reason: string) => void;
   TOOL_SIGNIN_BEGIN_MS: 90000;
   TOOL_SIGNIN_COMPLETE_MS: 180000;
   tailnetHttps: ReturnType<typeof createTailnetHttps>;
@@ -527,11 +766,21 @@ export interface HubContext {
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
   turnInFlight: ReturnType<typeof turnState>;
+  turnWaiters: Map<
+    string,
+    { machineId: string; resolve: () => void; reject: (error: Error) => void }
+  >;
+  unansweredError: (
+    machineId: string,
+    answer: Unanswered,
+    what: string
+  ) => Error;
   unansweredStatus: (
     set: RouteSet,
     machineId: string,
     answer: Unanswered
   ) => { code: 503 | 504; said: string };
+  unlocatedWords: (id: string, machines: string[]) => string;
   unpushable: Map<string, string>;
   waitingForProcess: Set<string>;
   wakeForSend: (
