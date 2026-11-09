@@ -17,6 +17,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   type HubRequest,
   hubInit,
@@ -93,7 +94,12 @@ const run = async (
 
   const handle = async (request: Request): Promise<Answer> => {
     const response = await hub.handle(request);
-    return { status: response.status, text: await response.text() };
+    return {
+      status: response.status,
+      text: response.ok
+        ? await response.text()
+        : refusalWords(await response.text(), response.status),
+    };
   };
   // The session's door is reached as `cawco tool` reaches it: over HTTP.
   const base = serve((request) => hub.handle(request));

@@ -20,6 +20,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   type HubSent,
   hubInit,
@@ -55,7 +56,12 @@ export default {
         const response = await hub.handle(
           new Request(`http://127.0.0.1${request.path}`, hubInit(request))
         );
-        return { status: response.status, text: await response.text() };
+        return {
+          status: response.status,
+          text: response.ok
+            ? await response.text()
+            : refusalWords(await response.text(), response.status),
+        };
       };
 
       const unset = await call();
