@@ -40,7 +40,6 @@ const ROOT = join(import.meta.dir, "..");
 const HUB_CALLS = /^(?:api|sessionApi)/u;
 const TOOL = /artifact_create$/u;
 const NAMES_TOOL = /artifact_create/u;
-/** Core's request door (hub-request.ts), whose route types hold what it sends. */
 
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
