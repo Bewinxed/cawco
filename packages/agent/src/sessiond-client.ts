@@ -157,7 +157,7 @@ const ADHOC_START_TIMEOUT_MS = 10_000;
  *   placeholder instead, which is why the value — not merely its presence —
  *   is what decides.
  * - `CAWCO_SERVICE_MODE` is cawco's own unit-set marker
- *   (`cli/src/service.ts:45`, `MODE_ENV`); honoured here so a dev-mode unit is
+ *   (`cli/src/service.ts` `MODE_ENV`); honoured here so a dev-mode unit is
  *   still recognised as service-managed.
  */
 export const serviceManaged = (
