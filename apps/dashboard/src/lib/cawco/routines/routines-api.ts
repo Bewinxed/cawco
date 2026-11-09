@@ -8,12 +8,16 @@
  */
 
 import type { ApprovedActionView } from "@cawco/core/actions";
-import type { ConnectionView } from "@cawco/core/connections";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
-import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import { type HubClient, hub } from "#lib/platform/hub.js";
+import {
+  hubJson,
+  type Refused,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 
 /** One run, as the hub answers it (times in ms). */
 export type RoutineRun = RoutineRunView;
@@ -87,60 +91,40 @@ export interface RoutinesPage {
   trimOffered: boolean;
 }
 
-/** What the page reads of `GET /api/projects/:id/ingress`. */
-interface IngressRead {
-  connectorPolls: {
-    connection: string;
-    enabled: boolean;
-    id: string;
-    intervalS: number;
-    polledAt: number | null;
-    reason: string | null;
-    tool: string;
-  }[];
-  github: {
-    connection: string | null;
-    polled: boolean;
-    polledAt: number | null;
-    /** Every GitHub repository the project links, `owner/repo`. */
-    repos: string[];
-    state: string;
-  };
-  routes: Omit<EventRoute, "service">[];
+/**
+ * A read through Eden's client: its answer, or its refusal thrown as
+ * {@link refusedOrUnreached} reads it.
+ */
+async function answered<T>(
+  answer: Promise<
+    | { data: T; error: null }
+    | { data: null; error: Refused["error"]; response: Response }
+  >
+): Promise<T> {
+  const read = await answer;
+  if (read.error) {
+    throw refusedOrUnreached(read);
+  }
+  return read.data;
 }
 
 /**
- * The project's routines page, each part read at once, through `read`: the
- * live client's `send`, or a states file's stand-in hub (hub-seam.ts).
+ * The project's routines page, each part read at once, through `client`:
+ * the live hub, or a states file's stand-in (hub-seam.ts).
  */
 export async function readRoutinesPage(
   projectId: string,
-  read: <T>(request: HubRequest) => Promise<T> = (request) =>
-    hubJson(request, { failure: refusedOrUnreached })
+  client: HubClient = hub
 ): Promise<RoutinesPage> {
-  const id = encodeURIComponent(projectId);
+  const project = client.api.projects({ id: projectId });
   const [routines, ingress, relays, actions, connections, trim] =
     await Promise.all([
-      read<Routine[]>(
-        hubRequest("GET /api/routines", { query: { projectId: id } })
-      ),
-      read<IngressRead>(
-        hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } })
-      ),
-      read<RelayView[]>(
-        hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } })
-      ),
-      read<{ actions: ApprovedActionView[] }>(
-        hubRequest("GET /api/actions", { query: { projectId: id } })
-      ),
-      read<{ connections: ConnectionView[] }>(
-        hubRequest("GET /api/connections")
-      ),
-      read<{ offered: boolean }>(
-        hubRequest("GET /api/projects/:id/trim-routine", {
-          path: { id: projectId },
-        })
-      ),
+      answered(client.api.routines.get({ query: { projectId } })),
+      answered(project.ingress.get()),
+      answered(project.relays.get()),
+      answered(client.api.actions.get({ query: { projectId } })),
+      answered(client.api.connections.get()),
+      answered(project["trim-routine"].get()),
     ]);
   /** Each connection by its name: what polls and `conn:` sources name it by. */
   const connectionOf = new Map(
