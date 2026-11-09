@@ -44,7 +44,6 @@
   import {
     cawco,
     type HeldSend,
-    type PendingPermission,
     type SendExtras,
   } from "#lib/cawco/client.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
@@ -59,6 +58,7 @@
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
+  import type { PendingPermission } from "#lib/cawco/stores/sessions.svelte.js";
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";

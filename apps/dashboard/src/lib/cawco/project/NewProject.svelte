@@ -25,7 +25,6 @@
   import { detach } from "@cawco/core/detach";
   import { onboardingWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
-  import type { createProject } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import {
     fitOf,
@@ -35,6 +34,7 @@
   } from "#lib/cawco/project/new-project.js";
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
   import { TypedExamples } from "#lib/cawco/project/typed-examples.svelte.js";
+  import type { createProject } from "#lib/cawco/stores/projects.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";

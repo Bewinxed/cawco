@@ -23,6 +23,7 @@
   } from "./session-names.svelte";
   import { cawOf } from "./session-status";
   import { boardStore, isFailed } from "./stores/board.svelte";
+  import { sessionsStore } from "./stores/sessions.svelte";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
@@ -50,7 +51,9 @@
     if (row?.status === "stopping") {
       return "stopping";
     }
-    if ((cawco.session(of)?.pending ?? []).some((each) => !each.routedTo)) {
+    if (
+      (sessionsStore.session(of)?.pending ?? []).some((each) => !each.routedTo)
+    ) {
       return "needs";
     }
     if (cawco.activityOf(of) === "working") {
@@ -70,7 +73,7 @@
   /** The row the tail ends on: the question waiting, or the failure. */
   const noteOf = (of: string, shownTone: Tone): TailNote | null => {
     if (shownTone === "needs") {
-      const asking = (cawco.session(of)?.pending ?? []).find(
+      const asking = (sessionsStore.session(of)?.pending ?? []).find(
         (each) => !each.routedTo
       );
       if (asking) {

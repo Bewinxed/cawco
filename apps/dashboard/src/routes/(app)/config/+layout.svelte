@@ -6,7 +6,6 @@
    * beside each entry are the rows the section shows.
    */
   import { onMount } from "svelte";
-  import { onFleetFetch } from "#lib/cawco/client.svelte.js";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
   import {
     LAST_KEY,
@@ -18,6 +17,7 @@
     provideConfig,
   } from "#lib/cawco/config/store.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
+  import { onFleetFetch } from "#lib/cawco/stores/machines.js";
   import { mcpServersStore } from "#lib/cawco/stores/mcp-servers.svelte.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { pageIn, pageOut } from "#lib/platform/motion/route.svelte.js";

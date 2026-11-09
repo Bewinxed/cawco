@@ -61,7 +61,6 @@
   import {
     cawco,
     openSession,
-    type PendingPermission,
     type PermissionAnswer,
     permissionAnswer,
     readTranscript,
@@ -92,6 +91,10 @@
   } from "./stores/board.svelte";
   import { takeOverBrowser } from "./stores/browsers.svelte";
   import { plansStore } from "./stores/plans.svelte";
+  import {
+    type PendingPermission,
+    sessionsStore,
+  } from "./stores/sessions.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
@@ -122,14 +125,14 @@
     const id = target.viewId;
     untrack(() => {
       openSession(id);
-      const held = cawco.session(id);
+      const held = sessionsStore.session(id);
       if (!(held?.initialized && held.messages.length > 0)) {
         detach(readTranscript(id), "readTranscript");
       }
     });
   });
 
-  const session = $derived(cawco.session(target.viewId) ?? null);
+  const session = $derived(sessionsStore.session(target.viewId) ?? null);
   const row = $derived(
     boardStore.instanceIndex.byId.get(target.viewId) ?? null
   );

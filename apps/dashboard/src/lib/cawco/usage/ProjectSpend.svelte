@@ -1,13 +1,14 @@
 <script lang="ts">
   import type { CapPeriod, OnCap } from "@cawco/core/areas";
   import type { ProjectSpend } from "@cawco/core/project-conversation";
+
+  import StatTile from "#lib/cawco/StatTile.svelte";
   import {
-    cawco,
     projectSpend,
+    projectsStore,
     setProjectBudget,
     setProjectCap,
-  } from "#lib/cawco/client.svelte.js";
-  import StatTile from "#lib/cawco/StatTile.svelte";
+  } from "#lib/cawco/stores/projects.svelte.js";
   import { usd } from "#lib/cawco/usage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -133,9 +134,9 @@
   };
   /** The cap, as the hub keeps it live (`project.cap`), else as the spend read had it. */
   const cap = $derived(
-    cawco.project(projectId)?.cap === undefined
+    projectsStore.project(projectId)?.cap === undefined
       ? (spend?.cap ?? null)
-      : (cawco.project(projectId)?.cap ?? null)
+      : (projectsStore.project(projectId)?.cap ?? null)
   );
   const share = $derived(
     cap ? Math.round((cap.spentUsd / cap.usd) * 100) : null

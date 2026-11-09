@@ -17,13 +17,13 @@
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
-    cawco,
     faultMessage,
     readOlderPage,
     readTranscript,
     reconnectingNow,
   } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import Behind from "./Behind.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
@@ -52,7 +52,7 @@
     afterCount?: number;
   } = $props();
 
-  const branch = $derived(id ? cawco.session(id) : null);
+  const branch = $derived(id ? sessionsStore.session(id) : null);
 
   /**
    * Where the well begins: at the session's newest compaction, the divider

@@ -22,8 +22,9 @@ import { untrack } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
 import { departBox } from "#lib/platform/motion/share.svelte.js";
-import { cawco, commandRecord } from "../client.svelte";
 import { readAs } from "../find/mention.svelte";
+import { commandRecord } from "../stores/ledger.svelte";
+import { sessionsStore } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import type { ComposerDraft } from "./composer-draft.svelte";
 
@@ -322,7 +323,7 @@ export function watchReplace(
       }
       if (
         withdrawn &&
-        cawco.session(instanceId)?.messages.some((m) => m.id === id)
+        sessionsStore.session(instanceId)?.messages.some((m) => m.id === id)
       ) {
         return;
       }

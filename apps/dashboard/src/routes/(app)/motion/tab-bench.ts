@@ -3,7 +3,7 @@
  * they draw, and the clicks the bench takes from the strip.
  */
 import type { PulseFrame } from "@cawco/core/frames";
-import type { blankSession } from "#lib/cawco/client.svelte.js";
+import type { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
 import type { LeafNode } from "#lib/cawco/workspace/tree.js";
 
 /**

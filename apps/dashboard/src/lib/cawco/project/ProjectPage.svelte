@@ -53,12 +53,7 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
-  import {
-    type BlockedRequest,
-    cawco,
-    type PendingPermission,
-    requestView,
-  } from "#lib/cawco/client.svelte.js";
+
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
@@ -95,6 +90,15 @@
   import Split from "#lib/cawco/side/Split.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
+  import {
+    projectsStore,
+    requestView,
+  } from "#lib/cawco/stores/projects.svelte.js";
+  import {
+    type BlockedRequest,
+    type PendingPermission,
+    sessionsStore,
+  } from "#lib/cawco/stores/sessions.svelte.js";
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import BulkBar from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
@@ -226,7 +230,7 @@
   });
 
   const project = $derived(
-    cawco.project(projectId) ?? untrack(() => seed?.project) ?? null
+    projectsStore.project(projectId) ?? untrack(() => seed?.project) ?? null
   );
   const machine = $derived.by(() => {
     const primary = project ? checkoutOf(project) : undefined;
@@ -1336,7 +1340,7 @@
       return null;
     }
     const progress = setupProgressOf({
-      messages: id ? (cawco.session(id)?.messages ?? []) : [],
+      messages: id ? (sessionsStore.session(id)?.messages ?? []) : [],
       name: project.name,
       named: project.name !== projectWords.placeholderName,
       open: setupAsks.map((one) => ({

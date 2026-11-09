@@ -52,16 +52,16 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
-  import {
-    cawco,
-    commandRecord,
-    type PendingPermission,
-    submitCommand,
-  } from "../client.svelte";
+  import { submitCommand } from "../client.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { hubSeam } from "../hub-live";
   import { boardStore, isStale } from "../stores/board.svelte";
+  import { commandRecord } from "../stores/ledger.svelte";
   import { mcpServersStore } from "../stores/mcp-servers.svelte";
+  import {
+    type PendingPermission,
+    sessionsStore,
+  } from "../stores/sessions.svelte";
   import type { Message } from "../types";
   import ConnectAddress from "./ConnectAddress.svelte";
   import ConnectRow from "./ConnectRow.svelte";
@@ -92,7 +92,7 @@
   const ask = $derived(
     answer
       ? null
-      : ((cawco.session(instanceId)?.pending ?? []).find(
+      : ((sessionsStore.session(instanceId)?.pending ?? []).find(
           (request) =>
             request.connectAsk &&
             (!(request.toolUseId && message?.toolCallId) ||
@@ -217,7 +217,7 @@
     connectSignIns.forget(card.requestId);
     declined = submitCommand(
       instanceId,
-      cawco.session(instanceId)?.machineId ?? "",
+      sessionsStore.session(instanceId)?.machineId ?? "",
       "permission.answer",
       {
         requestId: card.requestId,

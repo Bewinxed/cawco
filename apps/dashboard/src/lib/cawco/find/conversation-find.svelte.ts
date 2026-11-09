@@ -29,9 +29,9 @@ import {
   IconToolTerminal,
   IconUser,
 } from "#lib/icons.js";
-import { cawco } from "../client.svelte";
 import { cawOf } from "../session-status";
 import { boardStore } from "../stores/board.svelte";
+import { sessionsStore } from "../stores/sessions.svelte";
 import { askOpenAt } from "../transcript/open-at.svelte";
 import { speakerName } from "../transcript/speaker";
 import type { Message } from "../types";
@@ -350,7 +350,7 @@ export class ConversationFind {
 
   /** The places in the turns loaded now, the live one too. */
   readonly #held = $derived.by((): Place[] => {
-    const session = cawco.session(this.viewId);
+    const session = sessionsStore.session(this.viewId);
     if (!((this.open || this.landed) && session)) {
       return [];
     }
@@ -542,7 +542,7 @@ export class ConversationFind {
   }
 
   #machine(): string {
-    const machineId = cawco.session(this.viewId)?.machineId ?? "";
+    const machineId = sessionsStore.session(this.viewId)?.machineId ?? "";
     return (
       boardStore.machines.find((machine) => machine.machineId === machineId)
         ?.hostname ?? machineId
@@ -698,7 +698,7 @@ export function findIn(viewId: string): ConversationFind {
       (id, words, signal) => asker(id, words, signal),
       () =>
         cawOf(viewId) === null
-          ? speakerName(cawco.session(viewId)?.harness)
+          ? speakerName(sessionsStore.session(viewId)?.harness)
           : "Caw"
     );
   });

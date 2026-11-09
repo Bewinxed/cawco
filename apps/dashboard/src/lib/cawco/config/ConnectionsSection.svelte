@@ -5,6 +5,7 @@
     type ConnectionService,
     type ConnectionWay,
   } from "@cawco/core/words/connections";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
   /** One way the hub signs in to a service (core `ConnectionWay`). */
@@ -98,7 +99,7 @@
   import { connectionsWords as words } from "@cawco/core/words/connections";
   import { onMount } from "svelte";
   import { z } from "zod";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import Choice from "#lib/cawco/config/Choice.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -280,7 +281,7 @@
   /** Up to two of the projects that may use it, then "+N". */
   const shownOf = (row: ConnectionView) => {
     const names = row.projects.flatMap((id) => {
-      const project = cawco.projects.find((each) => each.id === id);
+      const project = projectsStore.projects.find((each) => each.id === id);
       return project ? [project.name] : [];
     });
     return { chips: names.slice(0, 2), more: names.length - 2 };
@@ -1358,7 +1359,7 @@
         {words.projectsFor(labelOf(row))}
       </p>
       <ul class="flex flex-col">
-        {#each cawco.projects as project (project.id)}
+        {#each projectsStore.projects as project (project.id)}
           <li>
             <label
               class={menuItemVariants({

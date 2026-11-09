@@ -30,12 +30,13 @@ import { z } from "zod";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { listAttachments, listFiles } from "../artifact-api";
-import { cawco, storedReadWaits } from "../client.svelte";
+import { storedReadWaits } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { extensionOf } from "../lightbox/extension";
 import { boardStore } from "../stores/board.svelte";
 import { needsStore } from "../stores/needs.svelte";
 import { previewsStore } from "../stores/previews.svelte";
+import { sessionsStore } from "../stores/sessions.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 import { onArtifactReached } from "./reached";
@@ -305,7 +306,7 @@ const attachmentsReadAt = new Map<string, string>();
 
 /** The newest of the session's loaded messages that carried an attachment, by its id; "" for none. */
 const newestCarrying = (instanceId: string): string => {
-  const messages = cawco.session(instanceId)?.messages ?? [];
+  const messages = sessionsStore.session(instanceId)?.messages ?? [];
   for (let at = messages.length - 1; at >= 0; at -= 1) {
     const message = messages[at];
     if (
@@ -368,7 +369,7 @@ export function followFiles(instanceId: string | null): void {
   if (
     !waits &&
     attachmentsReadAt.get(instanceId)?.startsWith("away:") &&
-    cawco.session(instanceId)?.loading
+    sessionsStore.session(instanceId)?.loading
   ) {
     return;
   }

@@ -2,6 +2,7 @@
   import { bucketStart } from "@cawco/core/usage/tokens";
   import type { LimitWindow } from "@cawco/core/usage/types";
   import { openedAt } from "@cawco/core/usage/windows";
+  import { cawOf, projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   /**
    * Usage: will it last, first. The Limits block
    * leads with the window that stops you first and every window under it;
@@ -12,7 +13,7 @@
    * spend today and this month, its conversations' share, the budget an
    * attempt runs under, and the ledger of its attempts and sessions.
    */
-  import { cawco, cawOf } from "#lib/cawco/client.svelte.js";
+
   import { readSpend, usageStore } from "#lib/cawco/stores/usage.svelte.js";
   import History from "#lib/cawco/usage/History.svelte";
   import LimitsBlock from "#lib/cawco/usage/LimitsBlock.svelte";
@@ -33,7 +34,7 @@
 
   /** The project the page is filtered to, by `?project=`; null: the fleet. */
   const filtered = $derived(
-    cawco.projects.find(
+    projectsStore.projects.find(
       (project) => project.id === page.url.searchParams.get("project")
     ) ?? null
   );
@@ -201,7 +202,7 @@
         </Select.Trigger>
         <Select.Content>
           <Select.Item label="All projects" value="all" />
-          {#each cawco.projects as project (project.id)}
+          {#each projectsStore.projects as project (project.id)}
             <Select.Item label={project.name} value={project.id} />
           {/each}
         </Select.Content>
