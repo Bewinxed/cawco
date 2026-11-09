@@ -24,6 +24,7 @@ import type { Harness } from "./harness";
 import { harness as harnessOf } from "./harnesses";
 import { isDirectory } from "./is-directory";
 import { readJson, writeJson } from "./json-file";
+import { gaugeTables } from "./memory";
 import { repoTop } from "./repo-top";
 import { warn } from "./session-log";
 
@@ -68,19 +69,88 @@ export class SpinOffs {
 
   constructor(host: SpinOffHost) {
     this.#host = host;
+    gaugeTables("supervisor", {
+      worktrees: this.#worktrees,
+      spinOffs: this.#running,
+    });
   }
 
   /** Outlives its session: a discard can arrive after the query already ended. */
-  readonly worktrees = new Map<string, Worktree>();
+  readonly #worktrees = new Map<string, Worktree>();
   /** Spin-offs running here, by instance — for the same reason, same lifetime. */
-  readonly running = new Map<string, SpinOff>();
+  readonly #running = new Map<string, SpinOff>();
+
+  /** The checkout `instanceId` runs in, when it is a spin-off this agent knows. */
+  worktree(instanceId: string): Worktree | undefined {
+    return this.#worktrees.get(instanceId);
+  }
+
+  /** The hub's record names `worktree` as `instanceId`'s checkout. */
+  worktreeRecorded(instanceId: string, worktree: Worktree): void {
+    this.#worktrees.set(instanceId, worktree);
+  }
+
+  /**
+   * `instanceId` is spawned in `dir` on `harness`, as a spin-off or not
+   * (`scratch`): each spawn says for itself, so a relaunch of one that has
+   * since been kept stops being tagged as scratch.
+   */
+  spawned(
+    instanceId: string,
+    {
+      dir,
+      harness,
+      scratch,
+    }: { dir: string; harness: HarnessKind; scratch: boolean }
+  ): void {
+    if (scratch) {
+      this.#running.set(instanceId, {
+        ...this.#running.get(instanceId),
+        dir,
+        harness,
+      });
+    } else {
+      this.#running.delete(instanceId);
+    }
+  }
+
+  /**
+   * A discarded spin-off: its worktree removed ({@link #removeWorktree}), and
+   * its transcript with it unless `keepTranscript`. `worktree` and
+   * `transcript` are what the stop names of it, for a spin-off this agent
+   * no longer holds.
+   */
+  async discard(
+    instanceId: string,
+    {
+      worktree,
+      transcript,
+      keepTranscript,
+    }: {
+      worktree: Worktree | undefined;
+      transcript:
+        { dir: string; sessionId: string; harness: HarnessKind } | undefined;
+      keepTranscript: boolean;
+    }
+  ): Promise<void> {
+    if (worktree) {
+      this.#worktrees.set(instanceId, worktree);
+    }
+    await this.#removeWorktree(instanceId);
+    if (!this.#running.has(instanceId) && transcript) {
+      this.#running.set(instanceId, transcript);
+    }
+    if (!keepTranscript) {
+      await this.#removeQuestSession(instanceId);
+    }
+  }
   /** The harness session a spin-off turned out to be writing, from its init frame. */
   noteQuestSession(
     instanceId: string,
     sessionId: string,
     harness: HarnessKind
   ): void {
-    const spinOff = this.running.get(instanceId);
+    const spinOff = this.#running.get(instanceId);
     if (!spinOff || spinOff.sessionId === sessionId) {
       return;
     }
@@ -95,7 +165,7 @@ export class SpinOffs {
    * tried again next turn if it does not land.
    */
   tagQuest(instanceId: string, adapter: Harness): void {
-    const spinOff = this.running.get(instanceId);
+    const spinOff = this.#running.get(instanceId);
     if (!spinOff?.sessionId || spinOff.tagged) {
       return;
     }
@@ -113,7 +183,7 @@ export class SpinOffs {
   }
   /** A session whose tag someone has just set by hand is no longer ours to set. */
   closeTagging(sessionId: unknown): void {
-    for (const spinOff of this.running.values()) {
+    for (const spinOff of this.#running.values()) {
       if (spinOff.sessionId === sessionId) {
         spinOff.tagged = true;
       }
@@ -131,7 +201,7 @@ export class SpinOffs {
   async addWorktree(instanceId: string, baseCwd: string): Promise<string> {
     const recorded = await readJson<Worktree>(worktreeRecord(instanceId));
     if (recorded) {
-      this.worktrees.set(instanceId, recorded);
+      this.#worktrees.set(instanceId, recorded);
       this.#recordWorktree(instanceId, recorded);
       return recorded.dir;
     }
@@ -191,7 +261,7 @@ export class SpinOffs {
     };
     await mkdir(dirname(worktreeRecord(instanceId)), { recursive: true });
     await writeJson(worktreeRecord(instanceId), worktree);
-    this.worktrees.set(instanceId, worktree);
+    this.#worktrees.set(instanceId, worktree);
     this.#recordWorktree(instanceId, worktree);
     return dir;
   }
@@ -214,7 +284,7 @@ export class SpinOffs {
   /** A spin-off's worktree, as this agent holds it or its record names it. */
   async #worktreeOf(instanceId: string): Promise<Worktree | undefined> {
     return (
-      this.worktrees.get(instanceId) ??
+      this.#worktrees.get(instanceId) ??
       (await readJson<Worktree>(worktreeRecord(instanceId))) ??
       undefined
     );
@@ -239,13 +309,13 @@ export class SpinOffs {
    * untracked files) is saved to a carry (carry.ts). A carry that cannot be
    * written refuses the removal, and the worktree stays.
    */
-  async removeWorktree(instanceId: string): Promise<void> {
+  async #removeWorktree(instanceId: string): Promise<void> {
     const worktree = await this.#worktreeOf(instanceId);
     if (!worktree) {
       return;
     }
     if (!(await isDirectory(worktree.path))) {
-      this.worktrees.delete(instanceId);
+      this.#worktrees.delete(instanceId);
       await rm(worktreeRecord(instanceId), { force: true });
       return;
     }
@@ -263,12 +333,12 @@ export class SpinOffs {
       );
     }
     await hostGit(worktree.root, ["worktree", "prune"]);
-    this.worktrees.delete(instanceId);
+    this.#worktrees.delete(instanceId);
     await rm(worktreeRecord(instanceId), { force: true });
   }
   /** Discarding a spin-off throws its transcript away too. */
-  async removeQuestSession(instanceId: string): Promise<void> {
-    const spinOff = this.running.get(instanceId);
+  async #removeQuestSession(instanceId: string): Promise<void> {
+    const spinOff = this.#running.get(instanceId);
     if (!spinOff?.sessionId) {
       return;
     }
@@ -277,7 +347,7 @@ export class SpinOffs {
       await adapter?.deleteSession(spinOff.sessionId, spinOff.dir);
       await this.#host.transcriptDeleted(spinOff.sessionId);
     }
-    this.running.delete(instanceId);
+    this.#running.delete(instanceId);
   }
 }
 
