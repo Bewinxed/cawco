@@ -12,7 +12,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { STOPPING_LABEL } from "./activity";
-  import { cawco, isFailed } from "./client.svelte";
+  import { cawco } from "./client.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
   import {
@@ -22,6 +22,7 @@
     sessionTitle,
   } from "./session-names.svelte";
   import { cawOf } from "./session-status";
+  import { boardStore, isFailed } from "./stores/board.svelte";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
@@ -41,7 +42,7 @@
 
   type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
   const toneOf = (of: string): Tone => {
-    const row = cawco.instanceIndex.byId.get(of);
+    const row = boardStore.instanceIndex.byId.get(of);
     if (row && isFailed(row)) {
       return "failed";
     }
@@ -87,7 +88,7 @@
       const why =
         item?.state === "failed"
           ? item.firstLines.error
-          : cawco.instanceIndex.byId.get(of)?.lastError;
+          : boardStore.instanceIndex.byId.get(of)?.lastError;
       return {
         key: "fail",
         kind: "fail",
@@ -97,7 +98,7 @@
     return null;
   };
 
-  const row = $derived(cawco.instanceIndex.byId.get(id));
+  const row = $derived(boardStore.instanceIndex.byId.get(id));
   /** The hub's answer, for a session this browser holds no row of (session-names.svelte.ts). */
   const answer = $derived(row ? undefined : sessionAnswer(id));
   const tone = $derived(answer ? NAMED_TONE[answer.state] : toneOf(id));
