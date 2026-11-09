@@ -9,6 +9,10 @@ import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
 import {
+  requireLinger,
+  systemdActive,
+} from "@cawco/agent/service-manager/install";
+import {
   type BinaryInstallation,
   binaryRoot,
   currentDirectory,
@@ -36,10 +40,6 @@ import { runtimeVersion } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
-import {
-  requireLinger,
-  systemdActive,
-} from "../../agent/src/service-manager/install";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
 import { keepJoinedHub } from "./joined-hub";

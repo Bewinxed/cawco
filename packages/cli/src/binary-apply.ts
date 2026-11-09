@@ -41,6 +41,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { holdAwake } from "@cawco/agent/awake-hold";
 import { forgetPins, pinsBackFor } from "@cawco/agent/pin-record";
+import { stopService } from "@cawco/agent/service-manager/install";
 import {
   type KeeperJob,
   keeperJob,
@@ -116,7 +117,6 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
-import { stopService } from "../../agent/src/service-manager/install";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
 import { service } from "./service";

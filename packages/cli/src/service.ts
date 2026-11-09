@@ -1,6 +1,41 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
+import {
+  bindSockets,
+  failed,
+  installLaunchAgents,
+  installSystemdUnits,
+  launchAgentLogs,
+  loadLaunchAgent,
+  restartLaunchAgent,
+  restartSystemdUnit,
+  run,
+  ServiceError,
+  systemdLogs,
+  uninstallLaunchAgents,
+  uninstallSystemdUnits,
+  writeSocketUnits,
+  writeUnit,
+} from "@cawco/agent/service-manager/install";
+import {
+  label,
+  launchAgentPath,
+  socketName,
+  socketPath,
+  systemdPath,
+  unitName,
+} from "@cawco/agent/service-manager/names";
+import {
+  listenAddress,
+  MODE_ENV,
+  plist,
+  type ServiceMode,
+  type ServiceSpec,
+  type SocketSpec,
+  socketUnit,
+  unit,
+} from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
@@ -25,41 +60,6 @@ import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
-import {
-  bindSockets,
-  failed,
-  installLaunchAgents,
-  installSystemdUnits,
-  launchAgentLogs,
-  loadLaunchAgent,
-  restartLaunchAgent,
-  restartSystemdUnit,
-  run,
-  ServiceError,
-  systemdLogs,
-  uninstallLaunchAgents,
-  uninstallSystemdUnits,
-  writeSocketUnits,
-  writeUnit,
-} from "../../agent/src/service-manager/install";
-import {
-  label,
-  launchAgentPath,
-  socketName,
-  socketPath,
-  systemdPath,
-  unitName,
-} from "../../agent/src/service-manager/names";
-import {
-  listenAddress,
-  MODE_ENV,
-  plist,
-  type ServiceMode,
-  type ServiceSpec,
-  type SocketSpec,
-  socketUnit,
-  unit,
-} from "../../agent/src/service-manager/units";
 
 /**
  * The machine's keeper endpoint, as this machine derives it
