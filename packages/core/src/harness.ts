@@ -110,7 +110,7 @@ export interface SessionCredentialInstall {
  * clean.
  */
 export const cleanStartRefusal = (harness: HarnessKind): string | undefined =>
-  traitsOf(harness).cleanStart ? undefined : harnessWords.openCodeNotClean;
+  traitsOf(harness).cleanStartRefused ?? undefined;
 
 /**
  * `mode` as one CawCo offers, or none when none was named. One it does not
