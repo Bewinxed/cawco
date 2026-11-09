@@ -2106,9 +2106,7 @@ export const FOLDER_WRITE = t.Object({
   path: t.String(),
   content: t.String({ maxLength: FOLDER_CONTENT_LIMIT }),
   // `base64`: `content` is the file's bytes (a font, an image).
-  encoding: t.Optional(
-    t.Union(FOLDER_ENCODINGS.map((each) => t.Literal(each)))
-  ),
+  encoding: t.Optional(t.UnionEnum(FOLDER_ENCODINGS)),
   message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
 });
 
