@@ -13,6 +13,7 @@ import {
   messageCollapseId,
   turnCollapseId,
 } from "../notifications";
+import { refusal } from "../refusal";
 
 export const pendingRoutes = ({
   archiveView,
@@ -55,7 +56,7 @@ export const pendingRoutes = ({
           ]),
         }),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         if (body.kind === "archive") {
           const view = archiveView();
           const refused = body.ids.flatMap((id) => {
@@ -63,8 +64,9 @@ export const pendingRoutes = ({
             return why ? [`${id}: ${why}`] : [];
           });
           if (refused.length > 0) {
-            return status(
+            return refusal(
               409,
+              "not-archived-still-doing",
               `Not archived, still doing something. ${refused.join(" ")}`
             );
           }
