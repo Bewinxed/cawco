@@ -6,7 +6,6 @@
  * is listed here, or in {@link KNOWN_UNOWNED}, which migrations:check holds
  * to the schema.
  */
-import { sql } from "drizzle-orm";
 
 /** One column that names an owner, and what each row-moving operation does with its rows. */
 export interface OwnedRow {
@@ -223,10 +222,3 @@ export const MACHINE_MOVED = rowsOf(
 export const GO_WITH_MACHINE = rowsOf((row) => row.goesWithMachine);
 export const PROJECT_MOVED = rowsOf((row) => row.foldProject === "move");
 export const SESSION_GOES = rowsOf((row) => row.drop === "delete");
-
-/** A list of ids, as a statement's `IN (...)` holds them. */
-export const idList = (ids: readonly string[]) =>
-  sql.join(
-    ids.map((id) => sql`${id}`),
-    sql`, `
-  );
