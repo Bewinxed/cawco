@@ -108,7 +108,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
 import type { DbShape } from "./db";
@@ -166,18 +166,18 @@ import {
   changeFolderFiles,
   type FolderAuthor,
   FolderRefusal,
+  folderAttempt,
   folderBlame,
   folderFileNames,
   folderHistory,
   folderPath,
   listFolder,
   readFolderFile,
-  refused,
   writeFolderFile,
   YOU,
 } from "./project-folder";
 import { type Applies, appliesNow } from "./proposal-base";
-import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
+import { refusal } from "./refusal";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
@@ -262,10 +262,9 @@ const NOT_LASTING = [
 ] as const satisfies readonly Verdict[];
 const VERDICTS: readonly Verdict[] = ["lasting", ...NOT_LASTING];
 
-/** A refusal with the status a route answers and the words a tool returns. */
-class MemoryRefusal extends StatusRefusal {}
-
-const refuse = refuser(MemoryRefusal);
+/** The refusal of a session in no project, which has no memory of its own: `why`, the sentence that says so. */
+const noProject = (why: string) =>
+  refusal(409, "memory-session-no-project", why);
 
 /** Your answer to a proposal for `paths`, as its note in the project's conversation: `sha` is your commit, null when you declined; it links the first file. */
 const answeredNote = (
@@ -606,21 +605,23 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/u;
  * A note's `since` as its writer gave it: a day before `today` is kept, today
  * is the note's own day (none kept), a day to come or no day is refused.
  */
-const sinceAsked = (
-  since: string | undefined,
-  today: string
-): string | null => {
+const sinceAsked = (since: string | undefined, today: string) => {
   if (since === undefined) {
     return null;
   }
   if (!(DAY.test(since) && !Number.isNaN(Date.parse(since)))) {
-    refuse(
+    return refusal(
       400,
+      "memory-since-unread",
       `since is "${since}": give the day as YYYY-MM-DD, like {"text": "…", "since": "2026-09-01"}.`
     );
   }
   if (since > today) {
-    refuse(400, `since is ${since}, a day to come: note a fact once it holds.`);
+    return refusal(
+      400,
+      "memory-since-to-come",
+      `since is ${since}, a day to come: note a fact once it holds.`
+    );
   }
   return since < today ? since : null;
 };
@@ -905,12 +906,16 @@ const candidate = (note: Note, cited: ReadonlySet<string>): boolean =>
  * A project file a proposal may change: AGENTS.md, or a markdown file under
  * `knowledge/`; refused with the reason otherwise.
  */
-const proposable = (raw: string): string => {
+const proposable = (raw: string) => {
   let rel: string;
   try {
     rel = folderPath(raw);
   } catch (error) {
-    return refuse(400, (error as Error).message);
+    return refusal(
+      400,
+      "memory-path-unfit",
+      error instanceof Error ? error.message : String(error)
+    );
   }
   if (rel === AGENTS_FILE) {
     return rel;
@@ -918,8 +923,9 @@ const proposable = (raw: string): string => {
   if (rel.startsWith(`${KNOWLEDGE_DIR}/`) && rel.endsWith(".md")) {
     return rel;
   }
-  return refuse(
+  return refusal(
     400,
+    "memory-file-not-memory",
     `${raw} is not a memory file: propose AGENTS.md or knowledge/<topic>.md.`
   );
 };
@@ -955,11 +961,15 @@ const withNote = (agents: string, text: string): string => {
 };
 
 /** A proposal's reason, one line under {@link WHY_LIMIT}; refused blank or longer. */
-const reasonOf = (raw: string): string => {
-  const why = raw.trim() || refuse(400, "Say why, in one line.");
+const reasonOf = (raw: string) => {
+  const why = raw.trim();
+  if (!why) {
+    return refusal(400, "memory-why-missing", "Say why, in one line.");
+  }
   if (why.length > WHY_LIMIT) {
-    refuse(
+    return refusal(
       400,
+      "memory-why-too-long",
       `why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`
     );
   }
@@ -1011,7 +1021,7 @@ const rulingsOf = (files: FactFile[]): Set<string> =>
   );
 
 /** Every line a proposal writes reads as a fact line; one already in its file unread is the person's to fix, and stays. */
-const checkReadable = (facts: ProposalFile[]): void => {
+const checkReadable = (facts: ProposalFile[]) => {
   const bad = facts.flatMap((file) => {
     const was = new Set(file.before.split("\n"));
     return parseFactFile(file.path, file.content).unreadable.filter(
@@ -1019,8 +1029,9 @@ const checkReadable = (facts: ProposalFile[]): void => {
     );
   });
   if (bad.length > 0) {
-    refuse(
+    return refusal(
       400,
+      "memory-facts-unread",
       `These lines do not read as facts: ${bad.map(lineWords).join("; ")}. Write each as \`- <fact> (since <date>, from <note ids>, used <date>)\`, with at most one indented \`  Why: <grounding>\` line under it; a replaced one under \`## Formerly\` with \`until\` and \`replaced by\`.`
     );
   }
@@ -1036,7 +1047,7 @@ const checkSourcesKept = (
   after: FactFile[],
   archive: string,
   writer: Writer
-): void => {
+) => {
   const now = sourcesOf(after);
   const rulings = new Set(
     after.flatMap((file) =>
@@ -1053,8 +1064,9 @@ const checkSourcesKept = (
     (id) => !(now.has(id) || archive.includes(id) || regrounded(id))
   );
   if (lost.length > 0) {
-    refuse(
+    return refusal(
       409,
+      "memory-sources-dropped",
       `The change drops what ${lost.join(", ")} grounded. A fact's change keeps its history: a replaced line moves under \`## Formerly\`, an unused one moves to ${KNOWLEDGE_ARCHIVE}/.`
     );
   }
@@ -1065,7 +1077,7 @@ const checkSourcesCited = (
   before: FactFile[],
   after: FactFile[],
   cites: string[]
-): void => {
+) => {
   const was = sourcesOf(before);
   const converted = new Set(
     before.filter((file) => isProse(file)).map((file) => beforeFacts(file.path))
@@ -1074,8 +1086,9 @@ const checkSourcesCited = (
     (id) => !(was.has(id) || cites.includes(id) || converted.has(id))
   );
   if (unsourced.length > 0) {
-    refuse(
+    return refusal(
       400,
+      "memory-sources-uncited",
       `Its lines rest on ${unsourced.join(", ")}, which it does not cite: cite every inbox note a new line comes from in \`notes\`.`
     );
   }
@@ -1086,15 +1099,16 @@ const checkSourcesCited = (
  * there was, words and date, in the fact files (moved, or under Formerly
  * when a cited note replaced it): never folded, archived or withdrawn.
  */
-const checkRulings = (before: FactFile[], after: FactFile[]): void => {
+const checkRulings = (before: FactFile[], after: FactFile[]) => {
   const was = rulingsOf(before);
   const now = rulingsOf(after);
   const written = after
     .flatMap((file) => file.facts)
     .filter((fact) => fact.ruling && !was.has(rulingForm(fact)));
   if (written.length > 0) {
-    refuse(
+    return refusal(
       400,
+      "memory-ruling-written",
       `Only the person writes a ruling: ${written.map((fact) => fact.raw).join("; ")}. Write the line with \`since\` and \`from\`, citing its notes.`
     );
   }
@@ -1102,8 +1116,9 @@ const checkRulings = (before: FactFile[], after: FactFile[]): void => {
     .flatMap((file) => file.facts)
     .filter((fact) => fact.ruling && !now.has(rulingForm(fact)));
   if (dropped.length > 0) {
-    refuse(
+    return refusal(
       409,
+      "memory-ruling-dropped",
       `A ruling is the person's word and stays in its fact file, word for word: ${dropped.map((fact) => fact.raw).join("; ")}.`
     );
   }
@@ -1130,7 +1145,7 @@ const checkWholeLines = (
   before: FactFile[],
   after: FactFile[],
   archive: string
-): void => {
+) => {
   const was = linesCounted(before);
   const now = linesCounted(after);
   const reworded = [...was].filter(
@@ -1149,8 +1164,9 @@ const checkWholeLines = (
     .flatMap((file) => file.facts)
     .filter((fact) => (fact.why?.length ?? 0) > (why.get(lineForm(fact)) ?? 0));
   if (reworded.length > 0 || added.length > 0 || grown.length > 0) {
-    refuse(
+    return refusal(
       400,
+      "memory-lines-changed-uncited",
       `Citing no notes, a change folds or reshapes: a fold shortens or drops \`Why:\` lines and leaves every fact line word for word, never merging or rewording one; a reshape moves lines whole across files. These changed: ${[
         ...[...reworded, ...added].map(([form]) => form),
         ...grown.map((fact) => `${fact.text} (its Why: grew)`),
@@ -1160,7 +1176,7 @@ const checkWholeLines = (
 };
 
 /** A fact keeps one Formerly line: a change that leaves two under one fact moves the older to the archive. */
-const checkOneFormerly = (before: FactFile[], after: FactFile[]): void => {
+const checkOneFormerly = (before: FactFile[], after: FactFile[]) => {
   const was = new Set(
     before
       .flatMap((file) => file.facts)
@@ -1180,15 +1196,16 @@ const checkOneFormerly = (before: FactFile[], after: FactFile[]): void => {
       )
   );
   if (crowded.length > 0) {
-    refuse(
+    return refusal(
       400,
+      "memory-formerly-crowded",
       `A fact keeps one Formerly line: move the older to ${KNOWLEDGE_ARCHIVE}/<topic>.md in the same change. Under one fact: ${crowded.map((formerly) => formerly.map((each) => each.text).join(" | ")).join("; ")}.`
     );
   }
 };
 
 /** A reshape that empties fact files never leaves fewer than {@link RESHAPE_BELOW}: below it, a reshape only splits. */
-const checkReshapeFloor = (facts: ProposalFile[], standing: number): void => {
+const checkReshapeFloor = (facts: ProposalFile[], standing: number) => {
   const emptied = facts.filter(
     (file) => file.before.trim() !== "" && file.content.trim() === ""
   ).length;
@@ -1197,8 +1214,9 @@ const checkReshapeFloor = (facts: ProposalFile[], standing: number): void => {
   ).length;
   const left = standing - emptied + made;
   if (emptied > made && left < RESHAPE_BELOW) {
-    refuse(
+    return refusal(
       400,
+      "memory-reshape-below-floor",
       `A reshape merging files would leave ${left} fact files; below ${RESHAPE_BELOW} a reshape only splits a file whose facts fall under two descriptions.`
     );
   }
@@ -1217,29 +1235,32 @@ const checkFacts = (
   cites: string[],
   writer: Writer,
   standing: number
-): void => {
+) => {
   const facts = files.filter((file) => isFactFile(file.path));
   if (facts.length === 0) {
     return;
   }
-  checkReadable(facts);
   const before = facts.map((file) => parseFactFile(file.path, file.before));
   const after = facts.map((file) => parseFactFile(file.path, file.content));
   const archive = files
     .filter((file) => file.path.startsWith(`${KNOWLEDGE_ARCHIVE}/`))
     .map((file) => file.content)
     .join("\n");
-  checkSourcesKept(before, after, archive, writer);
-  checkSourcesCited(before, after, cites);
-  if (writer === "person") {
-    return;
+  const kept =
+    checkReadable(facts) ??
+    checkSourcesKept(before, after, archive, writer) ??
+    checkSourcesCited(before, after, cites);
+  if (kept || writer === "person") {
+    return kept;
   }
-  checkRulings(before, after);
-  checkOneFormerly(before, after);
-  if (cites.length === 0) {
-    checkWholeLines(before, after, archive);
-    checkReshapeFloor(facts, standing);
-  }
+  return (
+    checkRulings(before, after) ??
+    checkOneFormerly(before, after) ??
+    (cites.length === 0
+      ? (checkWholeLines(before, after, archive) ??
+        checkReshapeFloor(facts, standing))
+      : undefined)
+  );
 };
 
 /** AGENTS.md's `## Notes`: the person's own notes ("Make a note"), as they stand. */
@@ -1259,11 +1280,12 @@ const personsNotes = (agents: string): string => {
 };
 
 /** The curator's change to AGENTS.md leaves its `## Notes`, the person's own, as they are. */
-const checkPersonsNotes = (files: ProposalFile[]): void => {
+const checkPersonsNotes = (files: ProposalFile[]) => {
   const agents = files.find((file) => file.path === AGENTS_FILE);
   if (agents && personsNotes(agents.before) !== personsNotes(agents.content)) {
-    refuse(
+    return refusal(
       403,
+      "memory-persons-notes-changed",
       "AGENTS.md's `## Notes` are the person's own notes (Make a note): leave that section as it stands and propose the change elsewhere in the file or in knowledge/."
     );
   }
@@ -1412,7 +1434,7 @@ const FACT_EDITS = {
 } as const;
 
 /** The files the person edited in a card's diff, by path: each `{ path, content }` of a file the proposal changes. */
-const editsOf = (proposal: Proposal, asked: unknown[]): Map<string, string> => {
+const editsOf = (proposal: Proposal, asked: unknown[]) => {
   const edits = new Map<string, string>();
   for (const each of asked) {
     const { path, content } = (each ?? {}) as {
@@ -1420,10 +1442,18 @@ const editsOf = (proposal: Proposal, asked: unknown[]): Map<string, string> => {
       path?: unknown;
     };
     if (typeof path !== "string" || typeof content !== "string") {
-      return refuse(400, "Each edited file is `{ path, content }`.");
+      return refusal(
+        400,
+        "memory-edit-unshaped",
+        "Each edited file is `{ path, content }`."
+      );
     }
     if (!proposal.files.some((file) => file.path === path)) {
-      refuse(400, `${path} is not a file this proposal changes.`);
+      return refusal(
+        400,
+        "memory-edit-not-proposed",
+        `${path} is not a file this proposal changes.`
+      );
     }
     edits.set(path, content);
   }
@@ -1690,9 +1720,17 @@ export const createMemory = ({
   /** Proposals being closed ({@link closeStale}): each closes once. */
   const closing = new Set<string>();
 
-  const projectOf = (projectId: string): ProjectRow =>
-    db.project(projectId) ??
-    refuse(404, `The hub keeps no project ${projectId}.`);
+  const projectOf = (projectId: string) => {
+    const project = db.project(projectId);
+    if (!project) {
+      return refusal(
+        404,
+        "memory-project-unknown",
+        `The hub keeps no project ${projectId}.`
+      );
+    }
+    return project;
+  };
 
   const row = (id: string): InstanceRow | undefined =>
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
@@ -1795,25 +1833,34 @@ export const createMemory = ({
     };
   };
 
+  /** The project whose inbox a session's note goes to, or the refusal: a session in no project, or a project the hub does not keep. */
+  const inboxOf = (actor: InstanceRow) =>
+    actor.projectId
+      ? projectOf(actor.projectId)
+      : noProject(
+          "This session is in no project; a note goes to a project's inbox."
+        );
+
   /**
    * An agent's note into its project's inbox, one commit, its taint the
    * hub's. `since`: the day its fact became true, when that is before today
    * (a backfill); a day to come is refused.
    */
   const note = async (actor: InstanceRow, raw: string, since?: string) => {
-    const projectId =
-      actor.projectId ??
-      refuse(
-        409,
-        "This session is in no project; a note goes to a project's inbox."
-      );
-    projectOf(projectId);
+    const project = inboxOf(actor);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const projectId = project.id;
     const words = raw.trim();
     if (!words) {
-      refuse(400, "A note needs words.");
+      return refusal(400, "memory-note-empty", "A note needs words.");
     }
     const at = new Date();
     const held = sinceAsked(since, dayOf(at));
+    if (held instanceof ElysiaStatus) {
+      return held;
+    }
     const { text, verdict } = await byRules(projectId, words);
     const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
     const made: Note = {
@@ -2352,12 +2399,11 @@ export const createMemory = ({
    * `none` when nothing is left for it; Jev on but failing throws its words,
    * and the run fails with them.
    */
-  const curatorBrief = async (
-    projectId: string
-  ): Promise<
-    { kind: "none"; reason: string } | { kind: "run"; text: string }
-  > => {
+  const curatorBrief = async (projectId: string) => {
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const cited = new Set(
       (await proposalsOf(projectId)).flatMap((proposal) => proposal.notes)
     );
@@ -2411,15 +2457,16 @@ export const createMemory = ({
     );
     const reshape = factFiles.length > RESHAPE_ABOVE;
     if (left.length === 0 && fold.length === 0 && !reshape) {
-      return {
+      const none: { kind: "none"; reason: string } = {
         kind: "none",
         reason:
           taken.size > 0
             ? `Jev's sort proposed every note (${taken.size})`
             : "the inbox holds no notes to curate",
       };
+      return none;
     }
-    return {
+    const run: { kind: "run"; text: string } = {
       kind: "run",
       text: briefText(project, {
         agents: await fileOr(project.id, AGENTS_FILE),
@@ -2432,6 +2479,7 @@ export const createMemory = ({
         sortOf,
       }),
     };
+    return run;
   };
 
   /** What the curator reads after its routine's prompt: the notes with their lines, what the files ask of it, AGENTS.md, the fact files, the lines that do not read. */
@@ -2574,14 +2622,18 @@ export const createMemory = ({
     asked: string[],
     curatorRun: boolean,
     paths: string[]
-  ): Promise<string[]> => {
+  ) => {
     const notes = [...new Set(asked)];
     if (
       curatorRun &&
       notes.length === 0 &&
       !paths.every((path) => path.startsWith(`${KNOWLEDGE_DIR}/`))
     ) {
-      refuse(400, "Cite the inbox notes the change comes from.");
+      return refusal(
+        400,
+        "memory-notes-uncited",
+        "Cite the inbox notes the change comes from."
+      );
     }
     if (notes.length === 0) {
       return notes;
@@ -2591,8 +2643,9 @@ export const createMemory = ({
     );
     const missing = notes.filter((id) => !waiting.has(id));
     if (missing.length > 0) {
-      refuse(
+      return refusal(
         409,
+        "memory-notes-not-waiting",
         `${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not a note waiting in the inbox (tainted, sorted out, or in another proposal).`
       );
     }
@@ -2615,10 +2668,14 @@ export const createMemory = ({
     asked: { content: string; path: string }[],
     notes: string[],
     curatorRun: boolean
-  ): Promise<ProposalFile[]> => {
+  ) => {
     const twice = paths.find((path, index) => paths.indexOf(path) !== index);
     if (twice) {
-      refuse(400, `${twice} is named twice; give each file once.`);
+      return refusal(
+        400,
+        "memory-file-named-twice",
+        `${twice} is named twice; give each file once.`
+      );
     }
     const files: ProposalFile[] = await Promise.all(
       asked.map(async (file, index) => {
@@ -2631,19 +2688,59 @@ export const createMemory = ({
       })
     );
     if (files.every((file) => file.before === file.content)) {
-      refuse(
+      return refusal(
         409,
+        "memory-change-empty",
         `${paths.join(", ")} already ${paths.length === 1 ? "says" : "say"} exactly that; nothing to change.`
       );
     }
-    if (curatorRun) {
-      checkPersonsNotes(files);
+    const unfit =
+      (curatorRun ? checkPersonsNotes(files) : undefined) ??
+      checkFacts(files, notes, "agent", await standingFiles(projectId));
+    if (unfit) {
+      return unfit;
     }
-    checkFacts(files, notes, "agent", await standingFiles(projectId));
-    return files.map((file) => ({
+    const stamped: ProposalFile[] = files.map((file) => ({
       ...file,
       content: stampUses(projectId, file.path, file.content),
     }));
+    return stamped;
+  };
+
+  /** A proposal's paths, reason, cited notes and files, each checked; or the first refusal. */
+  const askedChange = async (
+    projectId: string,
+    asked: {
+      files: { content: string; path: string }[];
+      notes: string[];
+      why: string;
+    },
+    curatorRun: boolean
+  ) => {
+    const paths: string[] = [];
+    for (const file of asked.files) {
+      const path = proposable(file.path);
+      if (path instanceof ElysiaStatus) {
+        return path;
+      }
+      paths.push(path);
+    }
+    const why = reasonOf(asked.why);
+    if (why instanceof ElysiaStatus) {
+      return why;
+    }
+    const notes = await citable(projectId, asked.notes, curatorRun, paths);
+    if (notes instanceof ElysiaStatus) {
+      return notes;
+    }
+    const files = await proposedFiles(
+      projectId,
+      paths,
+      asked.files,
+      notes,
+      curatorRun
+    );
+    return files instanceof ElysiaStatus ? files : { paths, why, notes, files };
   };
 
   /**
@@ -2664,21 +2761,20 @@ export const createMemory = ({
     },
     toolUseId: string | undefined
   ) => {
-    const projectId =
-      actor.projectId ??
-      refuse(409, "This session is in no project, so it has no memory.");
+    const { projectId } = actor;
+    if (!projectId) {
+      return noProject("This session is in no project, so it has no memory.");
+    }
     const project = projectOf(projectId);
-    const paths = asked.files.map((file) => proposable(file.path));
-    const why = reasonOf(asked.why);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const curatorRun = actor.role === "curator";
-    const notes = await citable(projectId, asked.notes, curatorRun, paths);
-    const files = await proposedFiles(
-      projectId,
-      paths,
-      asked.files,
-      notes,
-      curatorRun
-    );
+    const change = await askedChange(projectId, asked, curatorRun);
+    if (change instanceof ElysiaStatus) {
+      return change;
+    }
+    const { paths, why, notes, files } = change;
     const { at, opened } = await openProposal(projectId, files);
     const proposal: Proposal = {
       ...opened,
@@ -2745,17 +2841,31 @@ export const createMemory = ({
     content: string,
     toolUseId: string | undefined
   ) => {
-    const projectId =
-      actor.projectId ??
-      refuse(409, "This session is in no project, so it has no delegates/.");
+    const { projectId } = actor;
+    if (!projectId) {
+      return noProject(
+        "This session is in no project, so it has no delegates/."
+      );
+    }
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const problem = typeFileProblem(path, content);
     if (problem) {
-      refuse(400, `${path} was not proposed: ${problem}`);
+      return refusal(
+        400,
+        "memory-type-unfit",
+        `${path} was not proposed: ${problem}`
+      );
     }
     const before = await fileOr(projectId, path);
     if (before === content) {
-      refuse(409, `${path} already says exactly that; nothing to change.`);
+      return refusal(
+        409,
+        "memory-change-empty",
+        `${path} already says exactly that; nothing to change.`
+      );
     }
     const name = path.slice(DELEGATES_DIR.length, -".md".length);
     const { at, opened } = await openProposal(projectId, [
@@ -3006,10 +3116,7 @@ export const createMemory = ({
    * re-grounding of a fact whose only source is withdrawn), and a delegate
    * type must still make a type. Unedited, the proposal as it was.
    */
-  const asApproved = (
-    proposal: Proposal,
-    result: PermissionResult
-  ): Proposal => {
+  const asApproved = (proposal: Proposal, result: PermissionResult) => {
     const asked =
       result.behavior === "allow"
         ? (result.updatedInput as { edits?: unknown } | undefined)?.edits
@@ -3018,6 +3125,9 @@ export const createMemory = ({
       return proposal;
     }
     const edits = editsOf(proposal, asked);
+    if (edits instanceof ElysiaStatus) {
+      return edits;
+    }
     const files = proposal.files.map((file) => ({
       ...file,
       content: edits.get(file.path) ?? file.content,
@@ -3034,11 +3144,15 @@ export const createMemory = ({
     )) {
       const problem = typeFileProblem(file.path, file.content);
       if (problem) {
-        refuse(400, `${file.path} was not approved: ${problem}`);
+        return refusal(
+          400,
+          "memory-type-unfit",
+          `${file.path} was not approved: ${problem}`
+        );
       }
     }
-    checkFacts(files, proposal.notes, "person", 0);
-    return { ...proposal, files };
+    const approved: Proposal = { ...proposal, files };
+    return checkFacts(files, proposal.notes, "person", 0) ?? approved;
   };
 
   /** Reject: the proposal goes, its notes archived as rejected; a withdrawal's note stays where it was; a hub proposal's rejection is remembered. */
@@ -3123,22 +3237,36 @@ export const createMemory = ({
    * rests on is archived at once: nothing curated changes.
    */
   /** The note the person withdraws, refused when it is no note, gone already, or waiting in a proposal. */
-  const withdrawable = async (projectId: string, id: string): Promise<Note> => {
+  const withdrawable = async (projectId: string, id: string) => {
     if (!NOTE_ID.test(id)) {
-      refuse(400, `${id} is not a note id (n-YYYYMMDD-HHMMSS-xxxxxx).`);
+      return refusal(
+        400,
+        "memory-note-id-unfit",
+        `${id} is not a note id (n-YYYYMMDD-HHMMSS-xxxxxx).`
+      );
     }
-    const gone =
-      (await noteNamed(projectId, id)) ??
-      refuse(404, `${id} is no note of this project.`);
+    const gone = await noteNamed(projectId, id);
+    if (!gone) {
+      return refusal(
+        404,
+        "memory-note-unknown",
+        `${id} is no note of this project.`
+      );
+    }
     if (gone.outcome === "withdrawn") {
-      refuse(409, `${id} is withdrawn already.`);
+      return refusal(
+        409,
+        "memory-note-withdrawn",
+        `${id} is withdrawn already.`
+      );
     }
     const pending = (await proposalsOf(projectId)).find(
       (each) => each.notes.includes(id) || each.withdraws === id
     );
     if (pending) {
-      refuse(
+      return refusal(
         409,
+        "memory-note-pending",
         `${pending.id} ${pending.withdraws === id ? "withdraws" : "cites"} ${id} and waits for your answer; answer it first.`
       );
     }
@@ -3147,7 +3275,13 @@ export const createMemory = ({
 
   const withdraw = async (projectId: string, id: string) => {
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const gone = await withdrawable(projectId, id);
+    if (gone instanceof ElysiaStatus) {
+      return gone;
+    }
     const { files, retired, trimmed } = await withoutNote(projectId, id);
     if (files.length === 0) {
       const done = await changeFolderFiles(
@@ -3195,7 +3329,10 @@ export const createMemory = ({
    * and is said so in the log; one withdrawn already stays as it is.
    */
   const purged = async (projectId: string, instanceId: string) => {
-    projectOf(projectId);
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const notes = [
       ...(await notesIn(projectId, INBOX_DIR)),
       ...(await notesIn(projectId, ARCHIVE_DIR)),
@@ -3204,16 +3341,13 @@ export const createMemory = ({
     );
     const done: string[] = [];
     for (const each of notes) {
-      try {
-        await withdraw(projectId, each.id);
-        done.push(each.id);
-      } catch (error) {
-        if (!(error instanceof MemoryRefusal)) {
-          throw error;
-        }
+      const withdrawn = await withdraw(projectId, each.id);
+      if (withdrawn instanceof ElysiaStatus) {
         console.warn(
-          `[memory] ${projectId}: ${each.id} of purged session ${instanceId} is not withdrawn yet: ${error.message}`
+          `[memory] ${projectId}: ${each.id} of purged session ${instanceId} is not withdrawn yet: ${withdrawn.response.detail}`
         );
+      } else {
+        done.push(each.id);
       }
     }
     console.log(
@@ -3228,15 +3362,23 @@ export const createMemory = ({
     actor: InstanceRow,
     sorted: { id: string; kind: (typeof NOT_LASTING)[number] }[]
   ) => {
-    const projectId =
-      actor.projectId ?? refuse(409, "This session is in no project.");
+    const { projectId } = actor;
+    if (!projectId) {
+      return noProject("This session is in no project.");
+    }
     const waiting = await candidates(projectId);
-    const settled = sorted.map(({ id, kind }) => {
-      const each =
-        waiting.find((one) => one.id === id) ??
-        refuse(404, `${id} is not a note waiting in the inbox.`);
-      return { note: each, outcome: kind, verdict: kind, by: "curator" };
-    });
+    const settled: Settled[] = [];
+    for (const { id, kind } of sorted) {
+      const each = waiting.find((one) => one.id === id);
+      if (!each) {
+        return refusal(
+          404,
+          "memory-note-not-in-inbox",
+          `${id} is not a note waiting in the inbox.`
+        );
+      }
+      settled.push({ note: each, outcome: kind, verdict: kind, by: "curator" });
+    }
     const sha = await archive(
       projectId,
       settled,
@@ -3247,8 +3389,10 @@ export const createMemory = ({
   };
 
   const read = async (actor: InstanceRow, raw: string | undefined) => {
-    const projectId =
-      actor.projectId ?? refuse(409, "This session is in no project.");
+    const { projectId } = actor;
+    if (!projectId) {
+      return noProject("This session is in no project.");
+    }
     if (!raw) {
       return {
         inbox: (await candidates(projectId)).map((each) => ({
@@ -3279,7 +3423,11 @@ export const createMemory = ({
       rel.startsWith(`${KNOWLEDGE_DIR}/`) ||
       rel.startsWith(`${INBOX_DIR}/`)
     )) {
-      refuse(400, "Read AGENTS.md, a knowledge/ file or a memory/inbox/ note.");
+      return refusal(
+        400,
+        "memory-read-path-unfit",
+        "Read AGENTS.md, a knowledge/ file or a memory/inbox/ note."
+      );
     }
     return await readFolderFile(projectId, rel);
   };
@@ -3288,14 +3436,18 @@ export const createMemory = ({
 
   /** "Make a note": the person's words straight into AGENTS.md, as their commit. */
   const makeNote = async (projectId: string, raw: string) => {
-    projectOf(projectId);
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const words = raw.trim();
     if (!words) {
-      refuse(400, "Say what to note.");
+      return refusal(400, "memory-note-empty", "Say what to note.");
     }
     if (words.length > NOTE_LIMIT) {
-      refuse(
+      return refusal(
         400,
+        "memory-note-too-long",
         `The note is ${words.length} characters long; a note stops at ${NOTE_LIMIT}.`
       );
     }
@@ -3588,6 +3740,27 @@ export const createMemory = ({
   };
 
   /**
+   * The person's approval of `proposal`, as they left it, applied: its
+   * commit, or the refusal of their edits. One that no longer applies
+   * closes, and its words are thrown.
+   */
+  const approve = async (proposal: Proposal, result: PermissionResult) => {
+    const asked = asApproved(proposal, result);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
+    const merged = await mergedNow(asked);
+    if ("stale" in merged) {
+      const told = await closeStale(proposal, merged.stale);
+      const closed = askWords.proposalClosedOnAnswer(merged.stale);
+      throw new Error(
+        told ? `${closed} ${askWords.proposerTold(proposal.by)}` : closed
+      );
+    }
+    return await apply(asked, YOU, true);
+  };
+
+  /**
    * The person's answer to the open proposal `requestId`, carried out
    * (`answer`): approved, applied as they left it, or closed when it no
    * longer applies; rejected, its notes archived. The project's
@@ -3597,22 +3770,17 @@ export const createMemory = ({
     projectId: string,
     requestId: string,
     result: PermissionResult
-  ): Promise<void> => {
+  ) => {
     const proposal = await proposalFile(projectId, requestId);
     if (proposal) {
       const approved = result.behavior === "allow";
       let sha = "";
       if (approved) {
-        const asked = asApproved(proposal, result);
-        const merged = await mergedNow(asked);
-        if ("stale" in merged) {
-          const told = await closeStale(proposal, merged.stale);
-          const closed = askWords.proposalClosedOnAnswer(merged.stale);
-          throw new Error(
-            told ? `${closed} ${askWords.proposerTold(proposal.by)}` : closed
-          );
+        const applied = await approve(proposal, result);
+        if (applied instanceof ElysiaStatus) {
+          return applied;
         }
-        sha = await apply(asked, YOU, true);
+        sha = applied;
       } else {
         await reject(proposal, result.message.trim());
       }
@@ -3696,14 +3864,14 @@ export const createMemory = ({
      * have at the change ({@link closeStale}), and the answer is refused
      * saying so.
      */
-    async answer(requestId: string, result: PermissionResult): Promise<void> {
+    async answer(requestId: string, result: PermissionResult) {
       const projectId = open.get(requestId);
       if (!projectId || answering.has(requestId)) {
         throw new Error("That proposal is no longer waiting.");
       }
       answering.add(requestId);
       try {
-        await answerOpen(projectId, requestId, result);
+        return await answerOpen(projectId, requestId, result);
       } finally {
         answering.delete(requestId);
       }
@@ -3789,9 +3957,6 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
   "memory_read",
 ]);
 
-/** A refusal as the route's answer. */
-const memoryAnswer = refusalAnswer(MemoryRefusal, "memory-refused", refused);
-
 /**
  * The person's own memory acts outside a conversation: "Make a note" straight
  * into AGENTS.md, and withdrawing a note, which proposes retiring the facts
@@ -3805,22 +3970,12 @@ export const memoryRoutes = (memory: Memory) =>
         body: t.Object({ text: t.String({ maxLength: NOTE_LIMIT }) }),
         detail: { hide: true },
       },
-      async ({ params, body }) => {
-        try {
-          return await memory.makeNote(params.id, body.text);
-        } catch (error) {
-          return memoryAnswer(error);
-        }
-      }
+      ({ params, body }) =>
+        folderAttempt(() => memory.makeNote(params.id, body.text))
     )
     .post(
       "/api/projects/:id/memory/notes/:note/withdraw",
       { detail: { hide: true } },
-      async ({ params }) => {
-        try {
-          return await memory.withdraw(params.id, params.note);
-        } catch (error) {
-          return memoryAnswer(error);
-        }
-      }
+      ({ params }) =>
+        folderAttempt(() => memory.withdraw(params.id, params.note))
     );
