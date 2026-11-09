@@ -80,11 +80,12 @@
  *     the segment's panel (it holds the cards, so it takes no Tab stop).
  */
 import type { Page } from "playwright-core";
+import { dataOf } from "../../../../packages/agent/src/hub-client";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { filesWords } from "../../../../packages/core/src/words/files";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { tokenColour } from "../../geom";
-import { type HubAsk, requestOf } from "../../hub";
+import { answerText, type HubAsk, pageHub } from "../../hub";
 import { scan } from "../../journeys/scan";
 import {
   COMPOSER,
@@ -534,18 +535,14 @@ const drawThumbnail = ({
 };
 
 /** `request` sent from the dashboard's page, as the person's browser sends it: its status and text. */
-const pageAsk = async (page: Page, request: HubAsk) =>
-  page.evaluate(
-    async (asked) => {
-      const response = await fetch(asked.path, asked);
-      return {
-        ok: response.ok,
-        status: response.status,
-        text: await response.text(),
-      };
-    },
-    await requestOf(request)
-  );
+const pageAsk = async (page: Page, request: HubAsk) => {
+  const answer = await request(pageHub(page));
+  return {
+    ok: answer.error === null,
+    status: answer.status,
+    text: answerText(answer),
+  };
+};
 
 /** Seeds the decision pages, unpictured, as a session's agent makes them (OpenUI programs). */
 const seedDecisions = async (page: Page, id: string) => {
@@ -1183,33 +1180,28 @@ const reviewLegs = async (
   await page.keyboard.press("Enter");
   await page.locator("[data-files-card]").first().waitFor();
   await atRest(page);
-  const order = await page.evaluate(
-    async (request) => {
-      const listed = (await (await fetch(request.path, request)).json()) as {
-        id: string;
-      }[];
-      const cards = [
-        ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
-      ];
-      const lanes = cards.map((item) => getComputedStyle(item).gridColumnStart);
-      const columns = Number(
-        getComputedStyle(
-          document.querySelector("[data-files-cards]") as Element
-        ).gridTemplateColumns.split(" ").length
-      );
-      return {
-        same:
-          cards.map((item) => item.dataset.artifact).join() ===
-          listed.map((one) => one.id).join(),
-        oneGrid: new Set(cards.map((item) => item.parentElement)).size === 1,
-        topRow: new Set(lanes.slice(0, columns)).size === columns,
-        columns,
-      };
-    },
-    await requestOf((hub) =>
-      hub.api.instances({ id: ids.many }).artifacts.files.get()
-    )
+  const filesListed = dataOf(
+    await pageHub(page).api.instances({ id: ids.many }).artifacts.files.get()
   );
+  const order = await page.evaluate((listed) => {
+    const cards = [
+      ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
+    ];
+    const lanes = cards.map((item) => getComputedStyle(item).gridColumnStart);
+    const columns = Number(
+      getComputedStyle(
+        document.querySelector("[data-files-cards]") as Element
+      ).gridTemplateColumns.split(" ").length
+    );
+    return {
+      same:
+        cards.map((item) => item.dataset.artifact).join() ===
+        listed.map((one) => one.id).join(),
+      oneGrid: new Set(cards.map((item) => item.parentElement)).size === 1,
+      topRow: new Set(lanes.slice(0, columns)).size === columns,
+      columns,
+    };
+  }, filesListed);
   kit.check(
     "15: the cards are drawn once, in one grid, in the hub's order (newest first), the first row across every column",
     order.same && order.oneGrid && order.topRow,
@@ -2090,40 +2082,19 @@ const roundThree = async (
     (thumbs) => thumbs.every((one) => one === "picture"),
     60_000
   ).catch(() => null);
-  const listed = JSON.parse(
-    (
-      await pageAsk(drawn, (hub) =>
-        hub.api.instances({ id: ids.many }).artifacts.get()
-      )
-    ).text
-  ) as { id: string; name: string; thumbnail: unknown }[];
-  const kept = await drawn.evaluate(
-    async ({ names, rows }) =>
-      Promise.all(
-        rows
-          .filter(({ one }) => names.includes(one.name))
-          .map(async ({ one, found: asked }) => {
-            const found = (await (await fetch(asked.path, asked)).json()) as {
-              shown: boolean;
-            };
-            return {
-              name: one.name,
-              thumbnail: one.thumbnail !== null,
-              shown: found.shown,
-            };
-          })
-      ),
-    {
-      names: UNPICTURED,
-      rows: await Promise.all(
-        listed.map(async (one) => ({
-          one,
-          found: await requestOf((hub) =>
-            hub.api.artifacts({ artifact: one.id }).get()
-          ),
-        }))
-      ),
-    }
+  const listed = dataOf(
+    await pageHub(drawn).api.instances({ id: ids.many }).artifacts.get()
+  );
+  const drawnHub = pageHub(drawn);
+  const kept = await Promise.all(
+    listed
+      .filter((one) => UNPICTURED.includes(one.name))
+      .map(async (one) => ({
+        name: one.name,
+        thumbnail: one.thumbnail !== null,
+        shown: dataOf(await drawnHub.api.artifacts({ artifact: one.id }).get())
+          .shown,
+      }))
   );
   kit.check(
     "32: a page no pane had a picture of is drawn unseen by Files and kept by the hub, its card taking the picture, and it is never shown in the session's panel for it",
@@ -2727,10 +2698,7 @@ const keysLeg = async (
     undefined,
     engine
   );
-  await page.evaluate(
-    (request) => fetch(request.path, request),
-    await requestOf((hub) => hub.api.instances({ id }).preview.delete())
-  );
+  await pageHub(page).api.instances({ id }).preview.delete();
   await page
     .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {
       timeout: 15_000,
@@ -3134,10 +3102,7 @@ const pickLeg = async (
     undefined,
     engine
   );
-  await page.evaluate(
-    (request) => fetch(request.path, request),
-    await requestOf((hub) => hub.api.instances({ id }).preview.delete())
-  );
+  await pageHub(page).api.instances({ id }).preview.delete();
   await page
     .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {
       timeout: 15_000,
