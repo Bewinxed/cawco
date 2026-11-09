@@ -3,7 +3,7 @@
  * harness CLIs, and why, read off its report (HarnessReport `refused`,
  * `authReason`) and the machine's cell for the harness's tool: the one rule the machine's surfaces (dashboard
  * harness-block.svelte.ts) and the hub's refusal of a start there (hub
- * server.ts `placeSpawn`) say it by, so the two say the same sentence. Not
+ * spawns.ts `placeSpawn`) say it by, so the two say the same sentence. Not
  * installed when the report says so; else the machine's own sentence
  * (Claude Code's version unsaid or too old, an OpenCode or pi at a version
  * CawCo doesn't run), else ours.
