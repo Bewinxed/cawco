@@ -241,7 +241,7 @@ export interface HarnessSession {
   interrupt: () => Promise<void>;
   /**
    * The supervisor stopped this session for failing the same way again and
-   * again ({@link import("@cawco/core/harness").REPEATED_FAILURE}), in `words`: kept
+   * again ({@link import("@cawco/core/session-messages").REPEATED_FAILURE}), in `words`: kept
    * in the session's own history, so a transcript read back says so as the
    * live one did. A runtime that starts no turn of its own between sends
    * cannot loop that way, and has none.
