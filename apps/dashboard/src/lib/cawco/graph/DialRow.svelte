@@ -12,12 +12,12 @@
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords } from "@cawco/core/words/graph";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconReset } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import ColourPicker from "./ColourPicker.svelte";
   import DialChoice, { optionSaid, paint } from "./DialChoice.svelte";
   import DialColour from "./DialColour.svelte";

@@ -13,8 +13,8 @@
    * at the task or to-do, the session's plan at the step, the machines.
    */
   import { Portal } from "bits-ui";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { chipPeek } from "./chip-peek.svelte";
-  import { numberOf } from "./motion/curves.svelte";
   import ReferenceFace, { referenceChipClass } from "./ReferenceFace.svelte";
   import { REFERENCE_LOOKS } from "./reference-looks";
   import { openThing } from "./reference-open.svelte";

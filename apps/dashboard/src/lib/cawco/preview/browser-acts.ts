@@ -6,7 +6,7 @@
  */
 import type { BrowserKey } from "@cawco/core/browser";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import { failureWords, hubFetch, hubRefusal } from "../hub-read";
+import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 
 const post = async (request: HubRequest): Promise<string | null> => {
   try {

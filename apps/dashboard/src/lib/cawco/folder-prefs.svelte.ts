@@ -5,8 +5,8 @@
  */
 
 import { z } from "zod";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { identityHue } from "./identity";
-import { readJson, writeJson } from "./storage";
 
 interface FolderPref {
   /** A hue chosen by hand; without one, the cwd's hash chooses. */

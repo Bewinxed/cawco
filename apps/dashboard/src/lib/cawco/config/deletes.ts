@@ -7,6 +7,7 @@ import type {
 import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
 import type { RuleRow } from "@cawco/core/rules";
 import { configureWords } from "@cawco/core/words/configure";
+import { failureClause } from "#lib/platform/hub-read.js";
 import { type DelegateType, removeDelegateType } from "../delegate-types";
 import {
   type FleetMemoryDocRow,
@@ -20,7 +21,6 @@ import {
   removeSkill,
 } from "../fleet";
 import { type FleetHook, removeHook } from "../hooks";
-import { failureClause } from "../hub-read";
 import { removeRule } from "../rules";
 import { MAIN } from "./memory";
 import { type ConfigStore, upsert } from "./store.svelte";

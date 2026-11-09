@@ -22,8 +22,8 @@ import type {
   SessionQuestion,
   SessionQuestionsRead,
 } from "@cawco/core/session-questions";
+import { failureClause, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { cawco } from "../client.svelte";
-import { failureClause, hubFetch, hubRefusal } from "../hub-read";
 import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
 import { refusals } from "../refusals.svelte";
 import { isAsk, type WaitingAsk, type WaitingRow, waitingRows } from "./rows";

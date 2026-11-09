@@ -23,7 +23,6 @@
   import { artifactShown } from "#lib/cawco/artifact-api.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { artifactReached } from "#lib/cawco/files/reached.js";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
   import { FrameLinks } from "#lib/cawco/preview/frame-links.svelte.js";
   import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
@@ -32,11 +31,12 @@
   import { previewError, previewErrorOf } from "#lib/cawco/preview/wire.js";
   import { heardInput } from "#lib/cawco/reload.svelte.js";
   import { sessionHere } from "#lib/cawco/session-here.js";
-  import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconDocument } from "#lib/icons.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import { theme } from "#lib/theme.svelte.js";
 
   let {

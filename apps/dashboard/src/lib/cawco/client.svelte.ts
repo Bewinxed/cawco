@@ -198,15 +198,6 @@ import {
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 import { page as servedPage } from "$app/state";
-import { activityOf, runningSubagents, sessionActivity } from "./activity";
-import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";
-import { currentClientId } from "./client-id";
-import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
-import { type FleetFault, fleetFaults } from "./convergence";
-import { type DelegateRecord, delegateRecord } from "./delegate-record";
-import { devDebug } from "./dev-debug";
-import { heardFrame, heardSince, readLeaves } from "./heard";
-import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   deadlineIn,
   type HubFailure,
@@ -216,8 +207,18 @@ import {
   machineAway,
   failureWords as messageOf,
   refusalClause,
-} from "./hub-read";
-import { newId } from "./id";
+} from "../platform/hub-read";
+import { newId } from "../platform/id";
+import { unlessSame } from "../platform/unless-same";
+import { activityOf, runningSubagents, sessionActivity } from "./activity";
+import { Keyed, Pulse, type PulseReading } from "./board.svelte";
+import { currentClientId } from "./client-id";
+import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
+import { type FleetFault, fleetFaults } from "./convergence";
+import { type DelegateRecord, delegateRecord } from "./delegate-record";
+import { devDebug } from "./dev-debug";
+import { heardFrame, heardSince, readLeaves } from "./heard";
+import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import { isLive } from "./landing";
 import {
   type BoardRow,
