@@ -119,6 +119,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { pressedAway } from "#lib/components/ui/floating-presence.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
@@ -190,7 +191,7 @@
   // is the viewport less the screen's margin each side (DESIGN.md,
   // Breakpoints: "popovers widen to the viewport less 24px"), so it stands
   // that margin in. The tokens are read in the browser, where it opens.
-  const phone = new MediaQuery("width < 640px");
+  const phone = new MediaQuery(PHONE_QUERY);
   const inset = $derived(
     collisionPadding ??
       (browser
