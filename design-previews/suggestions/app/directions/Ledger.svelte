@@ -23,8 +23,8 @@
     dur,
     ease,
     motionOk,
-  } from "../../../../apps/dashboard/src/lib/cawco/motion/curves.svelte.js";
-  import { morph } from "../../../../apps/dashboard/src/lib/cawco/motion/morph.svelte.js";
+  } from "../../../../apps/dashboard/src/lib/platform/motion/curves.svelte.js";
+  import { morph } from "../../../../apps/dashboard/src/lib/platform/motion/morph.svelte.js";
   import { Skeleton } from "../../../../apps/dashboard/src/lib/components/ui/skeleton/index.js";
   import {
     IconPen,

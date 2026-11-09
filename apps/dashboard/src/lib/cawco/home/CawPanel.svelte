@@ -24,14 +24,14 @@
    */
   import { commonWords } from "@cawco/core/words/common";
   import { damagedHubRecordWords } from "@cawco/core/words/damaged";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconNotices } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
   import InstallNotice from "../connect/InstallNotice.svelte";
   import { connect } from "../connect/installs.svelte";
-  import { echoBeat } from "../motion/echo.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import type { Notice } from "../updates/model";
   import ArtifactNoticeRow from "./ArtifactNoticeRow.svelte";
   import CawFace from "./CawFace.svelte";

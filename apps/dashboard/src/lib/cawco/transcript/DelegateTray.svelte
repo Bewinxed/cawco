@@ -37,8 +37,6 @@
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -55,6 +53,18 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import {
+    CURVE,
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import { popOut } from "#lib/platform/motion/pop.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   import { stopWords } from "../accounts/switch.svelte";
   import {
     cawco,
@@ -66,11 +76,6 @@
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
   import { markHue, sessionSprite } from "../mark";
-  import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
-  import { morph } from "../motion/morph.svelte";
-  import { popOut } from "../motion/pop.svelte";
-  import { reflow } from "../motion/rows.svelte";
-  import { land } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
   import RowFault from "../RowFault.svelte";
   import { sessionPlace } from "../session-names.svelte";

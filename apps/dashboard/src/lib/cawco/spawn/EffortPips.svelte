@@ -7,9 +7,9 @@
   import type { EffortLevel } from "@cawco/core/harness/kinds";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { staggered } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     efforts,

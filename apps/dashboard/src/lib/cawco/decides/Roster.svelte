@@ -13,7 +13,11 @@
   import { crossfade } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPen } from "#lib/icons.js";
-  import { dur, easeOut, motionOk } from "../motion/curves.svelte";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import AddCard from "./AddCard.svelte";
   import type { Facts, Fault, WhoDecides } from "./decides.svelte";
   import HandOver, { handOverWidth } from "./HandOver.svelte";

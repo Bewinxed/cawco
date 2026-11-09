@@ -79,8 +79,8 @@
    * (PlanPane) and the board's peek draw a plan with it.
    */
   import { IconTick } from "#lib/icons.js";
-  import { branch, nestFrom } from "../motion/branch.svelte";
-  import { reflow } from "../motion/rows.svelte";
+  import { branch, nestFrom } from "#lib/platform/motion/branch.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
 
   let { nodes }: { nodes: PlanNode[] } = $props();
 </script>
