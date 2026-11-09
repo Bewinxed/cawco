@@ -28,7 +28,7 @@ import {
   actOnRelay,
   relayTry,
   reportRelayProof,
-} from "#lib/cawco/client.svelte.js";
+} from "#lib/cawco/stores/relay.svelte.js";
 
 /** A TURN URL's scheme and its query, as the STUN URL through its host drops them. */
 const TURN_SCHEME = /^turns?:/u;

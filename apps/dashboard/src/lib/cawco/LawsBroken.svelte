@@ -12,10 +12,10 @@
     AlertTitle,
   } from "#lib/components/ui/alert/index.js";
   import { IconError } from "#lib/icons.js";
-  import { cawco } from "./client.svelte";
+  import { needsStore } from "./stores/needs.svelte";
 
   let shelf = $state<HTMLDivElement | null>(null);
-  const broken = $derived(cawco.lawsBroken);
+  const broken = $derived(needsStore.lawsBroken);
 
   // In the top layer while any law is broken: over every pane and dialog,
   // with no stacking order of its own to keep.
