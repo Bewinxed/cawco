@@ -1,21 +1,21 @@
 import { readdir, stat } from "node:fs/promises";
 import { STATUS_CODES } from "node:http";
 import { dirname, join } from "node:path";
-import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
-import { z } from "zod";
-import { refuseSchemeLowering } from "../bundle-css-guard";
-import { bundled } from "../bundled";
-import { dataUrlBytes, deskCaptures } from "../captures";
-import { embeddedFile, standalone } from "../runtime";
-import { DOWN_WORDS } from "../words/preview-down";
-import { HOP_BY_HOP_HEADERS } from "./hop-headers";
+import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
+import { bundled } from "@cawco/core/bundled";
+import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
+import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import {
   PREVIEW_DOWN_META,
   PREVIEW_DOWNS,
   PREVIEW_WHY_META,
   type PreviewDown,
-} from "./protocol";
-import { OVERLAY_PATH } from "./routes";
+} from "@cawco/core/preview/protocol";
+import { OVERLAY_PATH } from "@cawco/core/preview/routes";
+import { embeddedFile, standalone } from "@cawco/core/runtime";
+import { DOWN_WORDS } from "@cawco/core/words/preview-down";
+import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import { z } from "zod";
 
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/iu;
 const HTML_OPEN = /<html(\s[^>]*)?\s*>/iu;
@@ -27,7 +27,7 @@ let overlay: Promise<string> | undefined;
  * The script injected into every previewed page, by a daemon for a session's
  * dev server or folder and by the hub for a project's decision page. The
  * standalone binary carries it prebuilt (`build-binary.ts`); a source
- * checkout bundles the agent's overlay on first request.
+ * checkout bundles the overlay on first request.
  */
 function buildOverlay(): Promise<string> {
   if (standalone) {
@@ -37,19 +37,14 @@ function buildOverlay(): Promise<string> {
 }
 
 /**
- * The overlay's doc worker (agent preview-overlay doc-worker.ts), the one
+ * The overlay's doc worker (overlay/doc-worker.ts), the one
  * place the overlay's Yjs runs: a minified IIFE, carried in the overlay as
  * text and started from it as a blob, so the page's realm never evaluates
  * a Yjs of CawCo's.
  */
 async function bundleDocWorker(): Promise<string> {
   const result = await bundled("The overlay's doc worker", {
-    entrypoints: [
-      new URL(
-        "../../../agent/src/preview-overlay/doc-worker.ts",
-        import.meta.url
-      ).pathname,
-    ],
+    entrypoints: [new URL("./overlay/doc-worker.ts", import.meta.url).pathname],
     target: "browser",
     minify: true,
     format: "iife",
@@ -58,17 +53,14 @@ async function bundleDocWorker(): Promise<string> {
 }
 
 /**
- * The overlay's one build: the agent's overlay.ts as a minified browser IIFE,
+ * The overlay's one build: overlay/overlay.ts as a minified browser IIFE,
  * its doc worker's text in it ({@link bundleDocWorker}), refused if it
  * lowers `light-dark()`. A source checkout serves it in memory
  * ({@link buildOverlay}); `build-binary.ts` writes it out to embed.
  */
 export async function bundleOverlay(): Promise<string> {
   const result = await bundled("The preview overlay", {
-    entrypoints: [
-      new URL("../../../agent/src/preview-overlay/overlay.ts", import.meta.url)
-        .pathname,
-    ],
+    entrypoints: [new URL("./overlay/overlay.ts", import.meta.url).pathname],
     target: "browser",
     minify: true,
     format: "iife",
@@ -451,7 +443,7 @@ const ATTRIBUTE_ESCAPES: Record<string, string> = {
 
 /**
  * Where the overlay's tag goes: before every script of the page's, so its
- * hold (preview-overlay hold.ts) wraps each frame and timer the page asks
+ * hold (preview overlay/hold.ts) wraps each frame and timer the page asks
  * for, and before Vite's deferred `/@vite/client` module. First in <head>;
  * with no <head>, after <html> or the doctype, where the parser opens the
  * head for it; with neither, first of all. A script standing before that
