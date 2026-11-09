@@ -5,7 +5,7 @@
    * asks waiting, from a session with a long title, so its head carries the
    * place keycap ("2 of 3") beside an asker that must give way.
    */
-  import type { PendingPermission } from "#lib/cawco/client.svelte.js";
+  import type { PendingPermission } from "#lib/cawco/stores/sessions.svelte.js";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
 
   const request: PendingPermission = {
