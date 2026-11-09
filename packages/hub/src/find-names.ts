@@ -99,7 +99,7 @@ export interface ItemChanges {
   files: string[];
 }
 
-/** A report's commits and diffstat, read back (work-items.ts `reportedChanges`). */
+/** A report's commits and diffstat, read back (landing-run.ts `reportedChanges`). */
 const COMMITS_BLOCK = /Commits:\n```\n([\s\S]*?)\n```/u;
 const DIFFSTAT_BLOCK = /Diffstat:\n```\n([\s\S]*?)\n```/u;
 const COMMIT_LINE = /^([0-9a-f]{7,40}) (.+)$/u;
