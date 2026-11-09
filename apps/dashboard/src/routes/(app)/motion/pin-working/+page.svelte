@@ -18,6 +18,7 @@
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
   import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
 
   const AT = "2026-10-23T09:00:00.000Z";
@@ -95,7 +96,7 @@
   Object.assign(globalThis, { __pinWorking: bench });
 
   const draft = new ComposerDraft();
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   const coarse = new MediaQuery("(pointer: coarse)");
   let roomW = $state(0);
   let roomH = $state(0);
