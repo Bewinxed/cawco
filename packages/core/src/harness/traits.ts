@@ -38,8 +38,6 @@ export interface HarnessTraits {
    * that can't is refused, never started half clean.
    */
   readonly cleanStartRefused: string | null;
-  /** Whether the hub runs the compaction after an at-limit move (`compactBy`), rather than the harness's own CLI. */
-  readonly compactedByHub: boolean;
   /**
    * Where a model's context window comes from. `hub`: the hub learns it from
    * the harness's results (Claude Code's `modelUsage`). `catalog`: the
@@ -127,15 +125,14 @@ const CLAUDE_TRAITS = {
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: true,
   cleanStartRefused: null,
-  compactedByHub: false,
   contextWindow: "hub",
   costMeaning: "estimated",
   custody: "keeper",
+  homeLogin: "dir",
   listsAllConversations: true,
   liveSkillReload: true,
   modelCatalog: "account",
   ownProviderIds: false,
-  homeLogin: "dir",
   permissionModes: true,
   promptCacheMaxMs: HOUR_MS,
   providerLimit: "account",
@@ -153,15 +150,14 @@ const OPENCODE_TRAITS = {
   boundaryBeforeCompactionFailure: true,
   catalogProvesGone: false,
   cleanStartRefused: harnessWords.openCodeNotClean,
-  compactedByHub: true,
   contextWindow: "catalog",
   costMeaning: "real",
   custody: "server",
+  homeLogin: "credentials",
   listsAllConversations: false,
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: true,
-  homeLogin: "credentials",
   permissionModes: true,
   promptCacheMaxMs: null,
   providerLimit: "go",
@@ -179,15 +175,14 @@ const PI_TRAITS = {
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
   cleanStartRefused: null,
-  compactedByHub: true,
   contextWindow: "catalog",
   costMeaning: "real",
   custody: "keeper",
+  homeLogin: "credentials",
   listsAllConversations: true,
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: false,
-  homeLogin: "credentials",
   permissionModes: false,
   promptCacheMaxMs: null,
   providerLimit: "none",
@@ -214,29 +209,30 @@ const HARNESS_TRAITS = {
  * and a `!==` reads as true of it, as it always did.
  */
 const UNKNOWN_TRAITS: HarnessTraits = {
+  // Nothing claimed of it.
   accountDir: false,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
   cleanStartRefused: null,
-  compactedByHub: false,
-  contextWindow: "catalog",
-  costMeaning: "real",
-  custody: "keeper",
-  listsAllConversations: true,
   liveSkillReload: false,
-  modelCatalog: "machine",
   ownProviderIds: false,
-  homeLogin: "credentials",
-  permissionModes: true,
   promptCacheMaxMs: null,
-  providerLimit: "none",
   queuesSends: false,
   readsStoredContext: false,
   requiredOnEveryMachine: false,
   resolvesModelNames: false,
-  rewindAnchor: "assistant-before",
   soleProvider: null,
   startsWithoutConversation: false,
+  // What a compare with a name it isn't answered.
+  contextWindow: "catalog",
+  costMeaning: "real",
+  custody: "keeper",
+  homeLogin: "credentials",
+  listsAllConversations: true,
+  modelCatalog: "machine",
+  permissionModes: true,
+  providerLimit: "none",
+  rewindAnchor: "assistant-before",
 };
 
 /** The traits of `harness`, a kind or whatever a row or a frame says one is. */
