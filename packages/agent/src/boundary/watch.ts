@@ -1,11 +1,6 @@
-/**
- * The watchers on a workspace's clone, its parent and its srt host, which stop
- * or restart a boundary when what it holds goes.
- */
-
 import { type FSWatcher, lstatSync, watch } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { isGitDirSync } from "../git-dir";
@@ -15,15 +10,25 @@ import type { SessiondClient } from "../sessiond-client";
 import { keepStandInsListed } from "../stand-ins";
 import { decided, readDecisions, recordDecision } from "./decisions";
 import { attachedIn, commandsNow } from "./holding";
+import { ensureBoundary } from "./lifecycle";
 import { executors } from "./processes";
-import { HOST_FILES } from "./protocol";
-import { generationDir, type Held, keepers } from "./state";
+import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
+import {
+  closing,
+  generationDir,
+  type Held,
+  keepers,
+  READY,
+  readHeld,
+  starting,
+} from "./state";
+import { settleGonePlace, stopBoundary } from "./stop";
 
-/** Each boundary's srt host or Seatbelt runner followed (lifecycle.ts `watchHost`), by its proc id, with the connection it is followed on. */
-export const watchedHosts = new Map<string, SessiondClient>();
+/** Each boundary's srt host or Seatbelt runner followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
+const watchedHosts = new Map<string, SessiondClient>();
 
 /** Each boundary's watch of its clone's `info/exclude` ({@link keepListed}), by its proc id: what ends it. */
-export const standInWatches = new Map<string, () => void>();
+const standInWatches = new Map<string, () => void>();
 
 /**
  * Keeps CawCo's stand-ins listed in the `info/exclude` of a workspace's own
@@ -31,10 +36,7 @@ export const standInWatches = new Map<string, () => void>();
  * `keepStandInsListed`), whatever else writes that file; a place, or a
  * folder a Linux view overlays, has none listed.
  */
-export const keepListed = (
-  id: string,
-  held: Pick<Held, "gen" | "path">
-): void => {
+const keepListed = (id: string, held: Pick<Held, "gen" | "path">): void => {
   const procId = boundaryProcId(id, held.gen);
   if (
     standInWatches.has(procId) ||
@@ -60,8 +62,8 @@ export const keepListed = (
     });
 };
 
-/** Each macOS boundary's watch of the folder it holds (lifecycle.ts `watchCloneOf`), by its proc id: what ends it. */
-export const cloneWatches = new Map<string, (() => void)[]>();
+/** Each macOS boundary's watch of the folder it holds ({@link watchCloneOf}), by its proc id: what ends it. */
+const cloneWatches = new Map<string, (() => void)[]>();
 
 /**
  * One watch of each folder that holds a watched folder (lifecycle.ts `watchCloneOf`),
@@ -78,7 +80,7 @@ const parentWatches = new Map<
 const PARENT_SETTLE_MS = 500;
 
 /** `look` run on every change in `dir` ({@link parentWatches}); what stops it. */
-export const watchParent = (dir: string, look: () => void): (() => void) => {
+const watchParent = (dir: string, look: () => void): (() => void) => {
   let entry = parentWatches.get(dir);
   if (!entry) {
     const looks = new Set<() => void>();
@@ -112,12 +114,11 @@ export const watchParent = (dir: string, look: () => void): (() => void) => {
   };
 };
 
-/** The proc ids of macOS boundaries stopped because their folder went: their exit is no unasked one (lifecycle.ts `restartUnasked`). */
-export const goneStops = new Set<string>();
+/** The proc ids of macOS boundaries stopped because their folder went: their exit is no unasked one ({@link restartUnasked}). */
+const goneStops = new Set<string>();
 
 /** Whether workspace `id` holds a plain folder, not a repository's copy: a place, or a copy of a folder that is no repository (layer.ts), as the host's `plainFolder` (boundary-host.ts). */
-export const plainFolder = (id: string): boolean =>
-  isPlace(id) || folderSync(id);
+const plainFolder = (id: string): boolean => isPlace(id) || folderSync(id);
 
 /**
  * Why workspace `id`'s folder at `path` is no longer there to hold, when it
@@ -125,7 +126,7 @@ export const plainFolder = (id: string): boolean =>
  * delegate's copy of a repository whose `.git` is no repository, or a plain
  * folder ({@link plainFolder}) that is no folder.
  */
-export const folderGone = (id: string, path: string): string | undefined => {
+const folderGone = (id: string, path: string): string | undefined => {
   if (plainFolder(id)) {
     let folder = false;
     try {
@@ -140,8 +141,8 @@ export const folderGone = (id: string, path: string): string | undefined => {
     : `${path} is not a git clone any more`;
 };
 
-/** Ends boundary `procId`'s folder watch (lifecycle.ts `watchCloneOf`). */
-export const unwatchCloneOf = (procId: string): void => {
+/** Ends boundary `procId`'s folder watch ({@link watchCloneOf}). */
+const unwatchCloneOf = (procId: string): void => {
   for (const end of cloneWatches.get(procId) ?? []) {
     end();
   }
@@ -163,7 +164,7 @@ let everywhere: ReturnType<typeof setTimeout> | undefined;
  * clones' own watchers only the first two's spoke. Folders deleted together
  * are found together this way, whichever one a watcher reported.
  */
-export const lookAgainEverywhere = (): void => {
+const lookAgainEverywhere = (): void => {
   clearTimeout(everywhere);
   everywhere = setTimeout(() => {
     for (const look of [...cloneLooks.values()]) {
@@ -178,7 +179,7 @@ export const lookAgainEverywhere = (): void => {
  * (protocol.ts `HOST_FILES.restarts`) that workspace `id`'s decisions do not hold
  * yet, as a `host-restarted` decision ({@link BoundaryDecision}).
  */
-export const recordHostRestarts = async (
+const recordHostRestarts = async (
   id: string,
   held: Pick<Held, "form" | "gen" | "pid">
 ): Promise<void> => {
@@ -251,11 +252,11 @@ export const heldBy = async (
     : undefined;
 };
 
-/** How soon after one unasked start a second is not made (lifecycle.ts `restartUnasked`). Ours: a minute is longer than any start, and short enough that a later crash is started again. */
-export const UNASKED_RESTART_MS = 60_000;
+/** How soon after one unasked start a second is not made ({@link restartUnasked}). Ours: a minute is longer than any start, and short enough that a later crash is started again. */
+const UNASKED_RESTART_MS = 60_000;
 
-/** When each workspace's boundary was last started again unasked (lifecycle.ts `restartUnasked`). */
-export const unaskedAt = new Map<string, number>();
+/** When each workspace's boundary was last started again unasked ({@link restartUnasked}). */
+const unaskedAt = new Map<string, number>();
 
 /**
  * The workspaces with a live work item on this machine, as the hub said on
@@ -269,4 +270,214 @@ export const liveWorkItems = (ids: unknown): void => {
   if (Array.isArray(ids)) {
     hubLive = new Set(ids.filter((id): id is string => typeof id === "string"));
   }
+};
+
+/**
+ * Follows workspace `id`'s boundary `held`, its srt host on Linux and its
+ * Seatbelt runner on macOS, on whichever keeper holds it. Says in the
+ * agent's log each line it says after it is ready: on Linux above all a
+ * sandbox the host starts again because a guarded path changed on the host,
+ * which ends everything in the workspace (`boundary-host.ts`). Its stderr
+ * the keeper drains unread, so these lines are the one record of it.
+ * From `afterSeq` (its ready line, so nothing is missed between the start and
+ * this), or from now for a boundary an earlier agent started. A watch lives
+ * on its keeper connection, so a new connection watches again. A host that
+ * exits unasked has its boundary started again ({@link restartUnasked}).
+ */
+export const watchHost = async (
+  id: string,
+  held: Pick<Held, "gen" | "path" | "pid">,
+  afterSeq?: number
+): Promise<void> => {
+  const procId = boundaryProcId(id, held.gen);
+  const proc = await keepers.holding(procId);
+  if (!proc || watchedHosts.get(procId) === proc.client) {
+    return;
+  }
+  const { client } = proc;
+  watchedHosts.set(procId, client);
+  watchCloneOf(id, held);
+  keepListed(id, held);
+  let stop = (): void => undefined;
+  stop = client.subscribe(
+    procId,
+    {
+      line: (event) => {
+        const text = event.data.trim();
+        if (text && text !== READY) {
+          console.info(
+            `[workspace] ${id}: its boundary ${held.pid} says: ${text}`
+          );
+          // Each restart the host says it records first (its `restarts`
+          // file); the agent's record of it follows, from that record.
+          recordHostRestarts(id, held).catch((error: unknown) => {
+            console.warn(
+              `[workspace] ${id}: its boundary ${held.pid}'s restarts could not be recorded: ${error instanceof Error ? error.message : String(error)}`
+            );
+          });
+        }
+      },
+      exit: (exitCode, signal, pid) => {
+        // Whatever ended it, the agent's own close or the host's own exit
+        // (its sandbox ended, an OOM kill): the one record of the latter.
+        console.info(
+          `[workspace] ${id}: its boundary ${held.pid} (${procId}) exited, ${signal ? `killed by ${signal}` : `status ${exitCode ?? "unknown"}`}`
+        );
+        if (watchedHosts.get(procId) === client) {
+          watchedHosts.delete(procId);
+        }
+        stop();
+        unwatchCloneOf(procId);
+        standInWatches.get(procId)?.();
+        standInWatches.delete(procId);
+        client.release(procId, pid);
+        // A macOS boundary the agent stopped as its folder went exits as the
+        // host's gone exit does ({@link watchCloneOf}).
+        const stoppedAsGone = goneStops.delete(procId);
+        if (exitCode === HOST_GONE_STATUS || stoppedAsGone) {
+          // Its folder is gone: no start would hold it (lifecycle.ts `placeReady`).
+          settleGonePlace({ id, path: held.path }).catch((error: unknown) => {
+            console.warn(
+              `[workspace] ${id}: its boundary ${held.pid} closed as its folder ${held.path} went, and the place could not be settled: ${error instanceof Error ? error.message : String(error)}`
+            );
+          });
+          return;
+        }
+        restartUnasked(id, held).catch((error: unknown) => {
+          console.warn(
+            `[workspace] ${id}: its boundary ${held.pid} ended unasked and could not be started again: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+      },
+    },
+    afterSeq
+  );
+};
+
+/**
+ * A FOLDER DELETED UNDER A RUNNING BOUNDARY CLOSES IT, ON MACOS TOO. On
+ * Linux the srt host watches its clone and exits as it goes
+ * (boundary-host.ts `watchClone`); a macOS boundary is a Seatbelt runner,
+ * which watches nothing, so the agent watches its folder, the folder's
+ * parent and its `.git` for it and stops it ({@link stopBoundary}) the moment {@link folderGone} says
+ * so: its exit is then the host's gone exit's, never started again, and
+ * nothing is made at the folder's path. Looked at once as the watch starts,
+ * so a folder that went while no agent ran closes its boundary at the next
+ * agent's start (lifecycle.ts `readWorkspaces` watches every running one then);
+ * again for every folder once one is found gone ({@link lookAgainEverywhere});
+ * and on each quiet sweep ({@link watchQuietBoundaries}), as macOS's
+ * watchers miss some deletions altogether.
+ */
+export const watchCloneOf = (
+  id: string,
+  held: Pick<Held, "gen" | "path" | "pid">
+): void => {
+  const procId = boundaryProcId(id, held.gen);
+  if (process.platform !== "darwin" || cloneWatches.has(procId)) {
+    return;
+  }
+  const ends: (() => void)[] = [];
+  cloneWatches.set(procId, ends);
+  const look = (): void => {
+    const gone = folderGone(id, held.path);
+    if (!gone || goneStops.has(procId)) {
+      return;
+    }
+    goneStops.add(procId);
+    unwatchCloneOf(procId);
+    lookAgainEverywhere();
+    console.info(
+      `[workspace] ${id}: ${gone}, so its boundary ${held.pid} closes`
+    );
+    stopBoundary(id, held).catch((error: unknown) => {
+      console.warn(
+        `[workspace] ${id}: its boundary ${held.pid} could not be closed as its folder went: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  };
+  // Every change in the folder, its parent or its `.git` is looked at: a look
+  // is a stat or two, and the folder going is among them. Its parent above
+  // all: macOS's watcher of a folder says nothing as that folder is deleted
+  // (an `rm -r` of a clone: no event on the clone or its `.git`), and the
+  // folder's going is an entry leaving its parent, which it says.
+  const watched = (dir: string, begin: () => () => void): void => {
+    try {
+      ends.push(begin());
+    } catch (error) {
+      console.warn(
+        `[workspace] ${id}: ${dir} could not be watched for its boundary ${held.pid}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+  cloneLooks.set(procId, look);
+  watched(dirname(held.path), () => watchParent(dirname(held.path), look));
+  for (const dir of plainFolder(id)
+    ? [held.path]
+    : [held.path, join(held.path, ".git")]) {
+    watched(dir, () => {
+      const watcher = watch(dir, look).on("error", look);
+      return () => watcher.close();
+    });
+  }
+  look();
+};
+
+/**
+ * A BOUNDARY THAT ENDS UNASKED IS STARTED AGAIN WHILE ITS RECORD STANDS, on
+ * Linux and macOS alike. Its srt host or Seatbelt runner exited, and nothing
+ * of the agent's ended it: no close or start of
+ * the workspace's is under way ({@link closing}, {@link starting}), and its
+ * record (`boundary.json`) still names this generation, which every close
+ * takes away and every replacement names anew. Its sessions' commands would
+ * otherwise each be refused until the workspace's next session
+ * (exec.ts `stoppedLine`): a sandbox that ended (its runner gone, an OOM
+ * kill), its host or runner signalled, its host's own close. The start
+ * stops what the generation before left (on macOS, what answers to its
+ * name, which outlives its runner there: lifecycle.ts `stopUnvouched`). The
+ * executor waits for the new one ({@link execScript}). A clone gone is refused at the start, as
+ * any start refuses it. One that ends unasked again within {@link
+ * UNASKED_RESTART_MS} of its last such start is left down, said: a sandbox
+ * that cannot stay up is not started in a loop, and the workspace's next
+ * session starts it.
+ */
+const restartUnasked = async (
+  id: string,
+  held: Pick<Held, "gen" | "path" | "pid">
+): Promise<void> => {
+  if (closing.has(id) || starting.has(id)) {
+    return;
+  }
+  const now = await readHeld(id).catch(() => undefined);
+  if (now?.gen !== held.gen) {
+    return;
+  }
+  const last = unaskedAt.get(id);
+  if (last !== undefined && Date.now() - last < UNASKED_RESTART_MS) {
+    console.warn(
+      `[workspace] ${id}: its boundary ${held.pid} ended unasked again within ${UNASKED_RESTART_MS / 1000}s of being started again, so it is left down; the workspace's next session starts it`
+    );
+    await recordDecision(id, {
+      ...decided({ form: now?.form, gen: held.gen, pid: held.pid }),
+      decision: "left-down",
+    });
+    return;
+  }
+  unaskedAt.set(id, Date.now());
+  console.info(
+    `[workspace] ${id}: its boundary ${held.pid} ended unasked while its record stands, so it starts again`
+  );
+  const fresh = await ensureBoundary({ id, path: held.path });
+  console.info(
+    `[workspace] ${id}: its boundary ${held.pid} is started again as ${fresh.pid}`
+  );
+  const record = await readHeld(id).catch(() => undefined);
+  await recordDecision(id, {
+    ...decided({ form: now?.form, gen: held.gen, pid: held.pid }),
+    decision: "restarted-unasked",
+    to: decided({
+      form: record?.form,
+      gen: record?.gen ?? "",
+      pid: fresh.pid,
+    }),
+  });
 };
