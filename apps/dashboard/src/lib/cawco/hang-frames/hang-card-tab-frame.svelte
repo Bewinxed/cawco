@@ -19,8 +19,8 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import HangCard from "./hang-card.svelte";
-  import { provideHangLayer } from "./hang-layer";
+  import HangCard from "#lib/components/ui/hang-card/hang-card.svelte";
+  import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
 
   let {
     width,
@@ -65,10 +65,11 @@
 
 <div
   bind:this={shell}
-  class="@container/shell contain-layout relative w-(--frame-w) h-(--frame-h) bg-surface-recess [--shell-h:var(--frame-h)]"
+  class="@container/shell contain-layout relative w-(--frame-w) h-(--frame-h) bg-surface-recess"
   data-hang-layer={layer.id}
   style:--frame-h={`${height}px`}
   style:--frame-w={`${width}px`}
+  style:--shell-h="var(--frame-h)"
 >
   <Tabs
     data-session-tabs
