@@ -100,7 +100,7 @@ let mintedHere: string | null = null;
 
 /**
  * This tab's presence id. A send carries it beside the page's own client id
- * (client.svelte.ts `submitCommand` provenance), so the hub's log ties each
+ * (stores/commands.svelte.ts `submitCommand` provenance), so the hub's log ties each
  * send to the presence that said what the tab had in front; a desk alert
  * names the tab it is for by it.
  */
