@@ -129,7 +129,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
      * never read fails for `why`.
      */
     keep: "none" | "all" = "none",
-    /** What its failed sends offer back, beside `why` (a wake's refusal, {@link wakeOf}). */
+    /** What its failed sends offer back, beside `why` (a wake's refusal, `wakeOf`). */
     refusal?: StoredSendRefusal
   ): void => {
     // A process gone mid-turn ends that turn: what it read of a grant
@@ -179,7 +179,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     ctx.awaitingFirstTurn.delete(instanceId);
     // Nor is anything it was sent and never read going to run — unless its
     // harness wrote it down as it went. A process that outlived its agent
-    // may hold it still: custody decides that ({@link decideCustody}).
+    // may hold it still: custody decides that (`decideCustody`).
     if (!outlived) {
       ctx.inCustody.delete(instanceId);
       // What is kept for the session at rest ({@link startsTurnIn}) never
@@ -271,10 +271,10 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
   /**
    * The sessions on `accountId` on `machines`, its sign-in just refused
    * there ({@link settleRefusal}), other than `refused` (whose own turn's
-   * end moves it, {@link takeCredentialTurn}): each whose process is gone
+   * end moves it, `takeCredentialTurn`): each whose process is gone
    * owes a move to the account placement carries it to now
    * ({@link oweMoveOff}), so its next wake launches there and what it
-   * is sent goes to it ({@link wakeOf} reads the owed account). One with a
+   * is sent goes to it (`wakeOf` reads the owed account). One with a
    * process moves when its next turn meets the same refusal. One no account
    * can take stays, and a send to it is refused with the way back
    * (`account-signed-out`).
