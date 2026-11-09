@@ -334,6 +334,13 @@ import {
 import { actionRoutes, createActions } from "./actions";
 import { adminTools } from "./admin-tools";
 import { createAdmission } from "./admission";
+import {
+  type FrameAnswer,
+  type FrameRun,
+  type FrameStage,
+  onSessionFrame,
+  runFrameStages,
+} from "./agent-socket/frame-run";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { AreaRefusal, createAreas } from "./areas";
 import { createArtifactEvents } from "./artifact-events";
@@ -492,7 +499,7 @@ import { hubId } from "./hub-id";
 import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
-import { MachineAway } from "./hub-shapes";
+import { type AuthSocket, MachineAway } from "./hub-shapes";
 import { createHubTools, installBuild } from "./hub-tools";
 import { createIngress, type Ingress, ingressRoutes } from "./ingress";
 import { createInstalls } from "./installs";
@@ -1378,13 +1385,6 @@ export interface ServerOptions {
    */
   serves?: boolean;
 }
-/** A socket the hub may close, and the address it came from. */
-type AuthSocket = HubSocket & {
-  close: (code?: number, reason?: string) => void;
-  /** Its upgrade's headers: the SSH door's mark among them (ssh-door.ts). */
-  readonly headers?: Record<string, string | undefined>;
-  readonly remoteAddress?: string;
-};
 
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
@@ -11459,6 +11459,1866 @@ export const createServer = (
       "ask push marks"
     )
   );
+  // What a machine says on its socket, read in this order (agent-socket/frame-run.ts).
+  const commandQueue = (run: FrameRun): FrameAnswer => {
+    const { agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (kind === "command_queue") {
+      const { runId, queue } = body;
+      commandQueues.get(runId)?.(queue);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const stageChanged = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A workspace's stage changed: each of its sheets keeps the state.
+    if (kind === "stage") {
+      const frame = body;
+      artifacts.staged(message.machineId, frame);
+      stageHeard(frame);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const stageCloneFiled = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A place's stage clone is cut and in step: filed as a workspace.
+    if (kind === "stage-clone") {
+      const frame = body;
+      const by = db
+        .listInstances()
+        .find(
+          (one) =>
+            one.machineId === message.machineId &&
+            stagePlaceRef(one).id === frame.place &&
+            !workItems.workspaceOf(one)
+        );
+      if (!by) {
+        console.warn(
+          `[workspaces] ${message.machineId}: a stage clone of place ${frame.place} that no session there names was not filed`
+        );
+        return "stop";
+      }
+      detach(
+        workItems.fileStageClone(message.machineId, frame, by.id),
+        `file the stage clone ${frame.id}`
+      );
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const browsersHeard = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A machine's browsers, whole: kept by the hub's browser registry
+    // (browsers.ts, Projects spec §5.11), which tells every
+    // dashboard the fleet's browsers whole (`browser_list`).
+    if (kind === "browsers") {
+      browsers.heard(message.machineId, body);
+      browserStream.heard(message.machineId, body);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const fleetReported = (run: FrameRun): FrameAnswer => {
+    const { message, ws, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // The machine's fleet report, sent unasked as a converge ends or
+    // a reading moved with no fleet change: kept, and the fleet MCP
+    // changes its last delta carried go to the sessions there.
+    if (kind === "fleet_report") {
+      const { report, generation, convergedGeneration } = body;
+      welcomeConverge.reported(message.machineId, convergedGeneration);
+      if (isFleetReport(report)) {
+        keepFleetReport(
+          message.machineId,
+          ws,
+          report,
+          ridingReported(message.machineId, generation ?? null)
+        );
+      }
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const fleetConverging = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // Its items as they converge (fleet-sync.ts): kept on its row.
+    if (kind === "fleet_converge") {
+      const { items, generation } = body;
+      if (Array.isArray(items)) {
+        fleetSyncs.converged(message.machineId, items);
+        welcomeConverge.converging(message.machineId, generation, items);
+      }
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const browserHandedBack = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A take-over its machine ended itself: the ask's call answers.
+    if (kind === "browser_handback") {
+      browsers.heardHandback({
+        ...body,
+        machineId: message.machineId,
+      });
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const streamRelayHeard = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // The stream relay on its machine: the relay's record follows it.
+    if (kind === "stream_relay") {
+      streamRelay.heard({
+        ...body,
+        machineId: message.machineId,
+      });
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const moveProgressed = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (kind === "move_progress") {
+      moves.progress(message.machineId, body);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const accountBorrowed = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (kind === "account_borrow") {
+      answerBorrow(message.machineId, body).catch(console.error);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const controlResultNamed = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind } = agentFrame;
+    if (kind === "control_result" && !message.requestId) {
+      message.requestId = agentFrame.requestId;
+    }
+    run.hubReply =
+      kind === "control_result" &&
+      message.requestId !== undefined &&
+      (pendingInstalls.has(message.requestId) ||
+        fleetSyncs.has(message.requestId));
+    return "continue";
+  };
+
+  const scratchWorktreeFiled = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (kind === "scratch_worktree" && message.instanceId) {
+      const row = db.ownedInstance(message.instanceId, message.machineId);
+      const frame = body;
+      const dir =
+        row &&
+        frame.processGeneration === processGeneration(row) &&
+        reportedMachinePath(message.machineId, frame.worktree.dir);
+      if (row && dir) {
+        db.recordScratchWorktree(
+          row.id,
+          received(
+            ScratchWorktreeSchema,
+            frame.worktree,
+            "a machine's scratch worktree frame"
+          ),
+          dir
+        );
+      }
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const sessionAddressed = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame, ws } = run;
+    const { kind } = agentFrame;
+    if (kind === "session_address" && message.instanceId) {
+      recordSessionAddress(ws, message.machineId, {
+        instanceId: message.instanceId,
+        sessionId: agentFrame.sessionId ?? "",
+        processGeneration: agentFrame.processGeneration,
+      });
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const sessionOwned = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind } = agentFrame;
+    run.ownedSession = message.instanceId
+      ? db.ownedInstance(message.instanceId, message.machineId)
+      : undefined;
+    if (message.instanceId && !run.ownedSession && kind !== "control_result") {
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const containersSaid = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // What its machine said of its containers (agent
+    // session-containers.ts): they stopped as it ended, its parent,
+    // else it, is told; or what it starts at a runtime with no door
+    // will not, and it is told. Read
+    // before an ended session's frames are dropped: the agent says
+    // it once their stop timeouts have run, after its stop was
+    // confirmed (r180: the agent's line was there, the hub's never).
+    if (kind === "frame" && message.instanceId) {
+      const said = body.message;
+      if (
+        said.type === "system" &&
+        (said.subtype === CONTAINERS_ENDED ||
+          said.subtype === CONTAINERS_UNTRACKED)
+      ) {
+        tellContainers(
+          message.machineId,
+          message.instanceId,
+          said as { uuid?: unknown; content?: unknown },
+          said.subtype === CONTAINERS_ENDED ? "ended" : "untracked"
+        );
+        return "stop";
+      }
+    }
+    return "continue";
+  };
+
+  const endedSessionDropped = (run: FrameRun): FrameAnswer => {
+    const { agentFrame } = run;
+    const { kind } = agentFrame;
+    if (
+      run.ownedSession?.endConfirmedAt &&
+      (kind === "frame" ||
+        kind === "pulse" ||
+        kind === "permission_request" ||
+        kind === "rejected")
+    ) {
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const stopFailed = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // Reconciliation keeps failed end delivery pending; it is not a session failure.
+    if (
+      kind === "error" &&
+      agentFrame.errorVerb === "stop" &&
+      message.instanceId
+    ) {
+      lifecycle.deliveryFailed(message.instanceId);
+    }
+    if (
+      kind === "error" &&
+      agentFrame.errorVerb === "stop" &&
+      run.ownedSession?.endIntent &&
+      agentFrame.processGeneration === processGeneration(run.ownedSession)
+    ) {
+      const reason = agentFrame.endReason;
+      if (reason) {
+        db.noteEndReason(run.ownedSession.id, reason);
+      }
+    }
+    if (
+      kind === "error" &&
+      agentFrame.errorVerb === "stop" &&
+      run.ownedSession?.endIntent
+    ) {
+      // A forget waiting on it says why; the stop stays owed, and a
+      // later confirmation still reports it stopped.
+      projectStops.failed(run.ownedSession.id, body.message);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const internalNoted = (run: FrameRun): FrameAnswer => {
+    const { message } = run;
+    // A continuation's summariser: an internal worker only its
+    // continuation talks to (see `summarisers`).
+    run.internal =
+      message.instanceId !== undefined && summarisers.has(message.instanceId);
+    return "continue";
+  };
+
+  const rejectedSend = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // One send did not go: its record says so, and nothing else does.
+    if (kind === "rejected" && message.instanceId) {
+      const { uuid, error } = body;
+      takeSendSignal(message.instanceId, {
+        kind: "rejected",
+        uuid,
+        error,
+      });
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const heldSend = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A send no process took, handed back whole by its machine: owed
+    // again for the session's next process ({@link takeBack}).
+    if (kind === "held_send" && message.instanceId) {
+      const { send } = body;
+      takeBack(message.machineId, message.instanceId, send);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const takenSend = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A send handed over again that the session took already: read,
+    // and no turn follows ({@link takeTaken}).
+    if (kind === "taken_send" && message.instanceId) {
+      const { uuid } = body;
+      takeTaken(message.instanceId, uuid);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const stopped = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (kind === "stopped" && message.instanceId) {
+      if (!lifecycle.confirm(message.machineId, message.instanceId, body)) {
+        return "stop";
+      }
+      launchSettled(message.instanceId, "it was stopped");
+      for (const [key, sent] of stopDispatches) {
+        if (
+          sent.instanceId === message.instanceId &&
+          sent.machineId === message.machineId
+        ) {
+          finishStopDispatch(key, "runner-gone");
+        }
+      }
+      turnWaiters
+        .get(message.instanceId)
+        ?.reject(
+          new Error("the summariser session stopped before it answered")
+        );
+      releaseHeld(message.instanceId);
+      endPreviews(message.instanceId);
+      // Its live work took its final state as the end was confirmed
+      // (lifecycle `confirmed`, tree-stops.ts), naming who stopped it
+      // when the hub heard.
+      // What it was sent and had not read did not go, unless it wrote
+      // some of it down as it stopped.
+      forgetPending(message.instanceId, UNREAD.stopped);
+      escalateRoutedAsks(message.instanceId);
+      publishInstances(message.machineId);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const asleep = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (kind === "asleep" && message.instanceId) {
+      const [process] = db.getInstancesByIds([message.instanceId]);
+      if (
+        process &&
+        agentFrame.processGeneration === processGeneration(process)
+      ) {
+        const { died } = body;
+        // Its process is gone: the credential it ran on grants
+        // nothing from here, wherever that credential was printed
+        // (a shell's env, a transcript). Its wake, a resume or a
+        // restart after a signal, is a launch, which mints its
+        // own (grantLaunch); a continuation is a session of its
+        // own, with its own.
+        db.revokeSessionIdentity(message.instanceId);
+        launchSettled(
+          message.instanceId,
+          died ? "its process died" : "it went to sleep",
+          processGeneration(process)
+        );
+        if (died) {
+          diedOnSignal(message.machineId, message.instanceId, died);
+        } else {
+          sessionAsleep(message.machineId, message.instanceId);
+        }
+      }
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const recoveryUnavailable = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind } = agentFrame;
+    if (kind === "recovery_unavailable" && message.instanceId) {
+      const [process] = db.getInstancesByIds([message.instanceId]);
+      if (
+        !process ||
+        agentFrame.processGeneration !== processGeneration(process)
+      ) {
+        return "stop";
+      }
+      lifecycle.unavailable(message.instanceId);
+      db.settleUnavailableRecovery(message.instanceId);
+      // A stored conversation stays resumable: what it was sent and
+      // never read goes to the process that next runs it.
+      losePending(message.instanceId, relaunchOf(process).kind !== "refused");
+      // Its held process is no longer this session's: what waited
+      // for one goes to its next start.
+      processEvent(message.instanceId);
+      publishInstances(message.machineId);
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const custodyHeld = onSessionFrame(({ message }, frame, instanceId) => {
+    if (
+      frame.message.type === "system" &&
+      frame.message.subtype === CUSTODY_HELD
+    ) {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (
+        !row ||
+        row.machineId !== message.machineId ||
+        (row.status !== "sleeping" && row.status !== "error") ||
+        row.updatedAt.getTime() >= Date.now() - RESTORE_HORIZON_MS
+      ) {
+        return "stop";
+      }
+      const hours = ((Date.now() - row.updatedAt.getTime()) / HOUR_MS).toFixed(
+        1
+      );
+      const note = custodyReason(hours);
+      heldSessions.set(row.id, {
+        machineId: row.machineId,
+        since: row.updatedAt.getTime(),
+        reason: note,
+      });
+      publishInstances(message.machineId);
+      message.payload = {
+        ...frame,
+        message: custodyLine(row, note),
+      };
+      transcripts.ingest(row.id, message.payload as TranscriptPayload);
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const leakFound = onSessionFrame(({ message }, frame, instanceId) => {
+    // Something the session started leaks (agent leak-watch.ts):
+    // the session is told, once per leak, in the hub's own word.
+    // Nothing is stopped.
+    if (
+      frame.message.type === "system" &&
+      frame.message.subtype === LEAK_FOUND
+    ) {
+      tellLeak(
+        message.machineId,
+        instanceId,
+        frame.message as {
+          uuid?: unknown;
+          content?: unknown;
+          leak?: LeakFound;
+        }
+      );
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const leakEnded = onSessionFrame(({ message }, frame, instanceId) => {
+    // A leak told before has ended: its notice says so.
+    if (
+      frame.message.type === "system" &&
+      frame.message.subtype === LEAK_ENDED
+    ) {
+      endLeak(
+        message.machineId,
+        instanceId,
+        frame.message as { uuid?: unknown }
+      );
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const machineLineSaid = onSessionFrame(({ message }, frame, instanceId) => {
+    // A line its machine said about the session (a limit its
+    // keeper held it to, its process on an old Claude Code): kept
+    // on its row and said in its transcript, before the ingest
+    // ledger, which it has no ring line in.
+    const machineSaid =
+      frame.message.type === "system"
+        ? machineLineKind(frame.message.subtype)
+        : undefined;
+    if (machineSaid) {
+      noteMachineLine(
+        message.machineId,
+        instanceId,
+        frame.harness,
+        machineSaid,
+        frame.message
+      );
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const streamSoFar = onSessionFrame(({ message }, frame, instanceId) => {
+    // The reply being written, re-sent whole by an agent that just
+    // registered (STREAM_SO_FAR): it only repaints the running
+    // reply. Not a line of the session's output, so the ingest
+    // ledger never sees it (no provenance would retire the mark a
+    // later reattach replays from), and nothing that makes a turn
+    // into work, attention or activity reads it.
+    if (
+      frame.message.type === "system" &&
+      frame.message.subtype === STREAM_SO_FAR
+    ) {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (row?.machineId === message.machineId) {
+        transcripts.ingest(row.id, frame as TranscriptPayload);
+      }
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const framesLost = onSessionFrame(({ message }, frame, instanceId) => {
+    // Frames the agent could not keep while its link was down
+    // (FRAMES_LOST): the transcript is read from its machine
+    // again, so what was stored of them is drawn.
+    if (
+      frame.message.type === "system" &&
+      frame.message.subtype === FRAMES_LOST
+    ) {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (row?.machineId === message.machineId) {
+        console.warn(
+          `[hub] ${row.id}: ${frame.message.content ?? "frames were lost while its machine's link was down"}; its transcript is read again`
+        );
+        transcripts.reread(row.id);
+      }
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const ingestLedger = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind } = agentFrame;
+    // THE INGEST LEDGER (design §7): a line becomes a hub frame AT MOST
+    // ONCE per (instanceId, epoch, srcSeq). A returning agent replays
+    // the gap this hub named on its register ack, and an overshoot —
+    // a cursor the hub had already passed, a re-sent line after a
+    // socket drop — stops dead here rather than being sequenced twice.
+    // Before every side effect below on purpose: a duplicate that got
+    // this far would re-name the session, re-fire the rules and
+    // re-deliver a delegate's report.
+    if (
+      kind === "frame" &&
+      message.instanceId &&
+      !streams.admitFrame(
+        message.instanceId,
+        readProvenance(message),
+        readSent(message)
+      )
+    ) {
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const admittedFrameRead = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // What a memory note written now is tainted by (memory.ts): every
+    // admitted frame, before any path below leaves early, so a
+    // keep-alive's result ends its turn too.
+    if (kind === "frame" && message.instanceId) {
+      const admitted = body;
+      memoryWatch.frame(message.instanceId, admitted.message, admitted.harness);
+      // A routine run's session's words, for a failure that gives
+      // no reason (routines.ts `said`): a project conversation's
+      // from before its wake's read receipt too. None of a stream's
+      // deltas carry them.
+      if (admitted.message.type !== "stream_event") {
+        const [framed] = db.getInstancesByIds([message.instanceId]);
+        routines.said(
+          message.instanceId,
+          admitted.message,
+          !!framed && isProjectConversation(framed, db.project)
+        );
+      }
+    }
+    return "continue";
+  };
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
+  const keepAliveFrame = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // Pings share admission and send receipts, then leave before every
+    // consumer that makes a turn into work, attention or activity.
+    if (message.instanceId && (kind === "frame" || kind === "pulse")) {
+      const [row] = db.getInstancesByIds([message.instanceId]);
+      const frame = kind === "frame" ? body : undefined;
+      const signal = frame ? peekSendSignal(frame) : undefined;
+      const quiet = !!row?.keepAliveTurn || frame?.keepAlive === true;
+      if (quiet && row) {
+        if (signal) {
+          takeSendSignal(row.id, signal);
+          if (
+            signal.kind !== "read" ||
+            db.getInstancesByIds([row.id])[0]?.keepAliveTurn
+          ) {
+            return "stop";
+          }
+        } else if (frame) {
+          frame.keepAlive = true;
+          frame.message.keepAlive = true;
+          const neutral = frame.message;
+          if (neutral.type === "result") {
+            if (!(
+              neutral.uuid &&
+              db.claimCompletedTurn(
+                row.id,
+                neutral.uuid,
+                neutral.timestamp,
+                neutral.recovered === true
+              )
+            )) {
+              return "stop";
+            }
+            recordTurnUsage(row, neutral, true);
+            // A ping is one request: its usage is the context.
+            db.updateKeepAlive(
+              row.id,
+              keepAliveResult(
+                row,
+                neutral,
+                true,
+                neutral.cache ? keepAliveUsage(neutral).input : undefined
+              )
+            );
+            const usage = keepAliveUsage(neutral);
+            console.info(
+              `[keepalive] ${row.id}: result ${neutral.uuid} input=${usage.input} read=${usage.read} write=${usage.write} at ${new Date().toISOString()}`
+            );
+            // A refreshed request establishes the next original deadline.
+            detach(keepAliveScheduler.wake(), "keepalive wake");
+            publishInstances(row.machineId);
+          }
+          streams.sequence(row.id, { ...frame, keepAlive: true });
+          return "stop";
+        } else {
+          return "stop";
+        }
+      }
+    }
+    return "continue";
+  };
+
+  const sessionNamed = onSessionFrame(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
+    ({ message, agentFrame }, frame, instanceId) => {
+      // The conversation the session is writing, whenever it names one —
+      // read before anything below can consume the frame, since a
+      // `held` naming it is also a send signal.
+      const neutral = frame.message;
+      if (neutral.type === "result") {
+        if (!neutral.uuid) {
+          console.error(
+            `[hub] completion ${instanceId} has no harness result identity`
+          );
+          turnInFlight.over(instanceId);
+          return "stop";
+        }
+        if (
+          !db.claimCompletedTurn(
+            instanceId,
+            neutral.uuid,
+            neutral.timestamp,
+            neutral.recovered === true
+          )
+        ) {
+          turnInFlight.over(instanceId);
+          return "stop";
+        }
+        const [claimed] = db.getInstancesByIds([instanceId]);
+        if (claimed) {
+          recordTurnUsage(claimed, neutral, false);
+        }
+        if (neutral.serverStopped === true) {
+          // Cut, not ended: the server it ran in stopped. Handed
+          // back once this result is taken in like any other.
+          const cutId = instanceId;
+          const stoppedAt = new Date();
+          const cutWords = cutCommandsWords(neutral.cut);
+          lifetime.after(0, () => resumeCutTurn(cutId, stoppedAt, cutWords));
+        } else {
+          turnOver(instanceId);
+        }
+      }
+      const named = agentFrame.sessionKey();
+      if (named) {
+        db.noteInstanceSession(
+          instanceId,
+          named.sessionId,
+          named.cwd
+            ? reportedMachinePath(message.machineId, named.cwd)
+            : undefined,
+          named.tooling,
+          named.commands
+        );
+        if (named.init) {
+          // The session naming its own conversation is the daemon's word
+          // that a process exists — first-hand, and the earliest such word
+          // there is. Promoting on it means a fresh spawn reads `running`
+          // in a second rather than waiting up to a beat for the heartbeat
+          // to say the same thing. The row is left alone if it is already
+          // there; `markInstanceLive` only touches the states a live
+          // process can be wrongly filed under.
+          db.markInstanceLive(instanceId);
+          const [live] = db.getInstancesByIds([instanceId]);
+          if (live) {
+            workItems.started(live);
+          }
+          releaseHeld(instanceId);
+          // A launch's own word: what it has open is written anew,
+          // and a turn a restart cut goes back to it now it is up.
+          turnsWritten.delete(instanceId);
+          interruptedTurns.delete(instanceId);
+          resumeCutTurn(instanceId);
+        }
+        publishInstances(message.machineId);
+      }
+      return "continue";
+    }
+  );
+
+  const settingsFiled = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind } = agentFrame;
+    // Applied settings are filed before a control reply is consumed
+    // by REST or turned into a dashboard acknowledgement.
+    if (
+      (kind === "frame" || kind === "control_result") &&
+      message.instanceId &&
+      noteSessionSettings(message.instanceId, message.payload)
+    ) {
+      publishInstances(message.machineId);
+    }
+    return "continue";
+  };
+
+  const sendSignalHeard = onSessionFrame((_run, frame, instanceId) => {
+    // The harness's word on its sends becomes their records, and goes
+    // no further: every screen hears it as the records' `send` frames.
+    // Everything else the session says is read for what its turn
+    // makes of the sends it read (rule b).
+    const signal = peekSendSignal(frame);
+    if (signal) {
+      // Its harness taking up a send is its turn starting, but
+      // for CawCo's quiet notes alone, which it stores at rest
+      // and reads with its next turn ({@link notesOnly}).
+      if (signal.kind === "read" && !notesOnly(signal.read)) {
+        turnUnderWay(instanceId);
+      }
+      takeSendSignal(instanceId, signal);
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const sessionDirRead = onSessionFrame(({ agentFrame }, frame, instanceId) => {
+    // A launch's word that its session's data is in place: the
+    // row names that dir's account from now on. Only the row's
+    // own launch says it; a process since replaced does not.
+    if (
+      frame.message.type === "system" &&
+      frame.message.subtype === SESSION_DIR_READ
+    ) {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (row && agentFrame.processGeneration === processGeneration(row)) {
+        landSessionDir(row, frame.message.account_id ?? null);
+      }
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const relaunchAsked = onSessionFrame(({ message }, frame, instanceId) => {
+    // A session whose boundary hook fails open, whose Claude Code
+    // process ran a manual /compact, or whose process names
+    // another MCP gateway port, at a turn boundary: relaunched on
+    // its conversation when idle.
+    const relaunchFor =
+      frame.message.type === "system"
+        ? RELAUNCH_SUBTYPES.get(frame.message.subtype)
+        : undefined;
+    if (relaunchFor) {
+      const { machineId } = message;
+      const why = relaunchFor;
+      relaunchAtRest(machineId, instanceId, why).catch((error: unknown) =>
+        console.error(
+          `[hub] ${why}: relaunching ${instanceId} failed: ${String(error)}`
+        )
+      );
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const effortRead = onSessionFrame(({ message }, frame, instanceId) => {
+    // The session's effort as its agent read it back: what its
+    // chip shows, and no screen's line. Never the effort its
+    // launches ask for: a launch that ran at its CLI's default
+    // or a clamp would otherwise hand that level to every later
+    // launch (`chosenEffort`, {@link bounded}).
+    if (
+      frame.message.type === "system" &&
+      frame.message.subtype === EFFORT_READ
+    ) {
+      const { effort } = frame.message;
+      const level = isEffortLevel(effort) ? effort : EFFORT_NONE;
+      if (db.noteInstanceEffort(instanceId, level)) {
+        publishInstances(message.machineId);
+      }
+      // Launched with no effort of its own: this is what its
+      // model runs at by default on its account.
+      if (effortUnasked.delete(instanceId)) {
+        const [row] = db.getInstancesByIds([instanceId]);
+        const accountId = row?.accountId;
+        if (accountId && row?.model) {
+          db.accounts.putDefaultEffort(accountId, row.model, level);
+        }
+      }
+      return "stop";
+    }
+    return "continue";
+  });
+
+  const accountRead = onSessionFrame(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
+    ({ message, agentFrame }, frame, instanceId) => {
+      // What the session's Claude Code reported about its account:
+      // its limits, from each `rate_limit_event`, and its plan, once
+      // per start. The account's reading, and no screen's line. A
+      // session's readings are its row's account's while that
+      // account is signed in on the machine, where the session runs
+      // in its dir. One that is not (a process launched in the
+      // machine's own `~/.claude` before accounts were CawCo's
+      // alone) reads nobody CawCo knows, and is kept by nobody.
+      if (
+        frame.message.type === "system" &&
+        (frame.message.subtype === RATE_LIMIT_READ ||
+          frame.message.subtype === ACCOUNT_READ)
+      ) {
+        const [row] = db.getInstancesByIds([instanceId]);
+        // A reading from a process its row has since replaced
+        // (a move relaunched it on another account) is of no
+        // account the row names: dropped, never let it say who is
+        // signed in. The row names the account of the launch it
+        // has now, as a move waits for it ({@link owedMoves}).
+        if (!row || agentFrame.processGeneration !== processGeneration(row)) {
+          return "stop";
+        }
+        const accountId =
+          row.accountId &&
+          db.accounts
+            .signins()
+            .some(
+              (one) =>
+                one.accountId === row.accountId &&
+                one.machineId === message.machineId &&
+                one.state === "signed-in"
+            )
+            ? row.accountId
+            : undefined;
+        if (!accountId) {
+          return "stop";
+        }
+        const read = frame.message.account;
+        const stored = db.accounts.get(accountId);
+        const account =
+          stored && read?.identity
+            ? withOrgIdFrom(db, stored, read.identity)
+            : stored;
+        if (read?.identity && !read.identity.orgId) {
+          // Its dir's login named no org id the agent could
+          // carry over: whose process it is is not known, and its
+          // reading is no account's.
+          uncompared(read.identity, `${instanceId}'s Claude Code`);
+          return "stop";
+        }
+        if (
+          read?.identity &&
+          account?.identity &&
+          !sameIdentity(account.identity, read.identity)
+        ) {
+          // A process signed in as someone else: its reading and
+          // catalog are not this account's. Whether the account
+          // is signed in there is its dir's reading to say
+          // (`reconcileAccounts`, read again every minute), not one
+          // process's: a process launched before a move answers
+          // for the dir it started in, and marking the account
+          // from it held it "mismatch" with its own login intact,
+          // since an unchanged reading is never squared again.
+          console.warn(
+            `[hub] ${instanceId} runs on ${accountNameAmong(account, db.accounts.list())} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
+          );
+          return "stop";
+        }
+        const info = frame.message.rate_limit_info;
+        if (info) {
+          noteRateLimit(db, accountId, info, row.model);
+          if (info.status === "rejected" && !info.isUsingOverage) {
+            limitRefused.add(instanceId);
+          }
+        }
+        if (read) {
+          keepReading(db, accountId, read);
+        }
+        // A session starting on the account reads its catalog
+        // again once it is stale, through a probe that names no
+        // model: the session's own initialize lists models around
+        // its own (a session started on "pi" listed a "pi" row).
+        if (
+          frame.message.subtype === ACCOUNT_READ &&
+          account?.provider === CLAUDE_PROVIDER
+        ) {
+          const { machineId: probedOn } = message;
+          detach(
+            refreshCatalog(db, probedOn, account, probeAccount, "stale").then(
+              (went) => {
+                if (went === "read") {
+                  publishUsage(probedOn);
+                }
+              }
+            ),
+            "account catalog refresh"
+          );
+        }
+        publishUsage(message.machineId);
+        return "stop";
+      }
+      return "continue";
+    }
+  );
+
+  const turnFrames = onSessionFrame(
+    ({ message, agentFrame }, frame, instanceId) => {
+      // A turn's first frame opens it before anything reads it:
+      // a refusal below reads this turn's state, not the last's.
+      if (
+        frame.message.type === "assistant" ||
+        frame.message.type === "user" ||
+        frame.message.type === "stream_event"
+      ) {
+        turnUnderWay(instanceId);
+      }
+      // Claude Code's error in the model's place: what it says of
+      // the account's credential settles its sign-in there, and
+      // decides who answers the turn's end.
+      if (
+        frame.message.type === "assistant" &&
+        !frame.message.parent_tool_use_id &&
+        frame.message.error
+      ) {
+        const word = settleRefusal(
+          message.machineId,
+          instanceId,
+          agentFrame.processGeneration,
+          frame.message.error,
+          frame.message.message.content
+            .flatMap((block) => (block.type === "text" ? [block.text] : []))
+            .join("\n")
+        );
+        if (word) {
+          takeCredentialTurn(instanceId);
+        }
+      }
+      observeTurn(instanceId, frame);
+      afterPausingCall(instanceId, frame.message);
+      return "continue";
+    }
+  );
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
+  const permissionAsked = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (message.requestId && kind === "permission_request") {
+      const [owner] = db.getInstancesByIds([message.instanceId ?? ""]);
+      // An ask from a process this hub holds no live row for, or from
+      // an earlier launch of the row, is cancelled at admission
+      // through the same settlement path. A process sessiond kept
+      // alive across an agent restart is `starting` until its attach
+      // lands (`settleInstances`, `restore`), so its replayed asks
+      // are admitted. A refusal is said, and the asking process is
+      // told at once: nothing may wait on an ask nobody can see.
+      const refusal = askRefusal(owner, message);
+      if (refusal) {
+        console.warn(
+          `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${agentFrame.toolName ?? "unknown"}: ${refusal}`
+        );
+        // A prompt kept as a permit stays the person's: only the
+        // late process is told.
+        const kept = pending.get(message.requestId);
+        if (!(kept && outlivesSession(kept))) {
+          pending.remember(message.requestId, message);
+          pending.resolve(message.requestId, "cancelled", {
+            why: refusal,
+          });
+        }
+        // Admission does not wait on the machine.
+        detach(withdrawUnshown(message, refusal), "ask withdrawal");
+        return "stop";
+      }
+      // The call a permit of its session granted runs once without
+      // asking: its last process asked it, the person approved it
+      // after that process went (asks.ts `granted`).
+      if (
+        owner &&
+        !pending.get(message.requestId) &&
+        hubAsks.granted(owner, message)
+      ) {
+        detach(allowGranted(message), "granted call");
+        return "stop";
+      }
+      // A replayed ask (the daemon re-announces unresolved asks after
+      // every register) refreshes the parked copy without a second
+      // push or a second routing decision: it keeps the routing its
+      // first copy has now.
+      const parkedBefore = pending.get(message.requestId);
+      const alreadyParked = parkedBefore !== undefined;
+      const { requestId } = message;
+      // A delegate's ask routes to its parent; the user is only the
+      // fallback. The parent must be live, or asleep with a
+      // conversation to wake from: a parent waiting on its
+      // delegates is put to sleep after half an hour at rest, and
+      // the ask wakes it as its delegate's report does
+      // (`deliverSend`). Otherwise the ask is the user's exactly as
+      // it was before this feature.
+      const sender =
+        !alreadyParked && message.instanceId
+          ? db.listedInstancesByIds([message.instanceId])[0]
+          : undefined;
+      const parent = sender ? delegateAskParent(sender) : undefined;
+      const routed = alreadyParked
+        ? peek(parkedBefore.payload, "routedTo") === "parent"
+        : parent !== undefined;
+      // Routed before it is kept, so the copy kept across a hub
+      // restart, and the permit kept when its process goes (asks.ts
+      // `keep`), stay the parent's.
+      if (routed) {
+        (body as { routedTo?: string }).routedTo = "parent";
+      }
+      // Its publish is the fan-out below, which every frame no
+      // transcript folds goes out by, after its routing here.
+      if (
+        !askInOrder(
+          requestId,
+          () => pending.remember(requestId, message, true),
+          () => undefined
+        )
+      ) {
+        return "stop";
+      }
+      if (alreadyParked) {
+        return "stop";
+      }
+      if (sender && parent) {
+        delegateWaits.asked(message);
+      } else if (!run.internal) {
+        push.onAsk(message);
+      }
+    }
+    return "continue";
+  };
+
+  const permissionSettled = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // The daemon's live reading of one session. Kept in memory only, so
+    // a dashboard that connects mid-turn is handed the rail's now-state
+    // in its first frame instead of a blank row. Relayed unchanged below
+    // — this is a copy, not an interception.
+    // The harness settled an ask itself (answered in its own UI, or
+    // withdrawn by an interrupt). Settling it here is what tells every
+    // screen, through `pending.onSettled`; the daemon's frame itself
+    // goes no further.
+    if (kind === "permission_settled") {
+      // Most of these echo an answer the hub relayed and has already
+      // settled; only one still parked is news here.
+      const parked = message.requestId
+        ? pending.get(message.requestId)
+        : undefined;
+      if (
+        message.requestId &&
+        parked?.instanceId === message.instanceId &&
+        parked?.machineId === message.machineId &&
+        peek((parked as Envelope).payload, "processGeneration") ===
+          agentFrame.processGeneration &&
+        // A prompt its ended process took with it stays for the
+        // session's next process ({@link keepPrompt}).
+        !(body.processEnded === true && keepPrompt(parked as Envelope))
+      ) {
+        // Answered with no answer of the hub's in flight: by Full
+        // Send as its session entered it, when the harness says
+        // so (its frame's `answer`), else taken in the harness's
+        // own interface, which says not how. One in flight is that
+        // answer's, and says itself (`answeringPermissions`).
+        const { answer } = body;
+        pending.resolve(
+          message.requestId,
+          agentFrame.outcome === "cancelled" ? "cancelled" : "answered",
+          {
+            answer:
+              answer?.via === FULL_SEND_ANSWER.via
+                ? FULL_SEND_ANSWER
+                : { via: "harness" },
+          }
+        );
+      }
+      return "stop";
+    }
+    return "continue";
+  };
+
+  const pulseHeard = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    if (kind === "pulse" && message.instanceId) {
+      const { pulse } = body;
+      if (pulse) {
+        pulses.set(message.instanceId, pulse);
+        artifactSessions.refresh(message.instanceId);
+        workItems.turnState(message.instanceId, pulse.busy);
+        caw.pulse(message.instanceId, pulse.busy);
+        // A summariser is the hub's own worker: nothing watches it.
+        if (!run.internal) {
+          watch?.pulse(message.instanceId, pulse.busy);
+        }
+        // A pulse is only ever emitted by a session doing something,
+        // so it is the fleet's cheapest honest signal for the column
+        // the rails age rows from.
+        noteActivity(message.instanceId);
+      }
+    }
+    return "continue";
+  };
+
+  const namedFromTurn = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A session named by what it was first asked, whether the ask came
+    // through this hub or the harness echoed one it was spawned with.
+    if (kind === "frame" && message.instanceId) {
+      nameFromLiveTurn(message.machineId, message.instanceId, body.message);
+    }
+    return "continue";
+  };
+
+  const summariserAnswered = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A continuation's summariser: its turn's end settles the
+    // continuation's wait, and what it answered is read from its
+    // transcript. Nothing else answers or hears an internal session.
+    if (kind === "frame" && message.instanceId && run.internal) {
+      const neutral = body.message;
+      const waiter = turnWaiters.get(message.instanceId);
+      if (neutral.type === "result" && waiter) {
+        const { errors } = neutral as { errors?: string[] };
+        if (neutral.is_error) {
+          waiter.reject(
+            new Error(
+              errors?.length
+                ? errors.join("\n")
+                : (neutral.result ?? `Harness error (${neutral.subtype}).`)
+            )
+          );
+        } else {
+          waiter.resolve();
+        }
+      }
+    }
+    return "continue";
+  };
+
+  const providerRetrying = onSessionFrame((_run, frame, instanceId) => {
+    // A provider refused a session's turn and waits to try again.
+    const neutral = frame.message;
+    // A summariser whose provider refuses it at its usage limit
+    // is refused: its harness would retry until the limit resets
+    // (OpenCode answers Go's monthly limit with a `retry` status,
+    // never an error). Its wait ends on the provider's words and
+    // the run stops its scratch session, so the continuation's
+    // caller decides what is next.
+    if (
+      neutral.type === "system" &&
+      neutral.subtype === PROVIDER_RETRY &&
+      neutral.retry?.atLimit
+    ) {
+      turnWaiters.get(instanceId)?.reject(new Error(neutral.retry.message));
+    }
+    // A work item's session waits on its provider no longer than
+    // its deadline for that; anything its model says, or its
+    // turn's end, is the wait over (provider-retries.ts). One at
+    // its account's limit on an account of CawCo's is the
+    // at-limit controller's: its harness ends the turn on it.
+    if (
+      neutral.type === "system" &&
+      neutral.subtype === PROVIDER_RETRY &&
+      neutral.retry &&
+      !(
+        neutral.retry.atLimit &&
+        db.getInstancesByIds([instanceId])[0]?.accountId
+      )
+    ) {
+      providerRetries.retry(instanceId, neutral.retry);
+    } else if (neutral.type === "assistant" || neutral.type === "result") {
+      providerRetries.progress(instanceId);
+    }
+    return "continue";
+  });
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
+  const turnEnded = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A turn's end, in this order: the standing instructions answer
+    // it first, then the delegate hand-back delivers the turn's final
+    // message to the parent as a queued peer report — once, on the
+    // turn that ends the work (aborted turns carry no answer and are
+    // skipped).
+    if (kind === "frame" && message.instanceId && !run.internal) {
+      const neutral = body.message;
+      // A pi or OpenCode turn its account's limit refused, as its
+      // harness typed the refusal it ended on.
+      if (
+        neutral.type === "result" &&
+        neutral.is_error &&
+        neutral.atLimit === true
+      ) {
+        const [limited] = db.getInstancesByIds([message.instanceId]);
+        const provider = limited?.accountId
+          ? db.accounts.get(limited.accountId)?.provider
+          : undefined;
+        // Only a provider whose limits CawCo reads: its reset is
+        // known, so the session waits for it or moves.
+        if (
+          provider &&
+          provider !== CLAUDE_PROVIDER &&
+          LIMITED_PROVIDERS.includes(provider)
+        ) {
+          limitRefused.add(message.instanceId);
+        }
+      }
+      // Every tool call the session's model makes, at the top of
+      // its turn or inside one (a Code Mode program's, a
+      // subagent's): work of its own ends a declared wait at rest.
+      if (neutral.type === "assistant") {
+        const called = neutral.message.content.flatMap((block) =>
+          block.type === "tool_use" ? [block.name] : []
+        );
+        if (called.length > 0) {
+          workItems.worked(message.instanceId, called);
+        }
+      }
+      if (neutral.type === "result") {
+        noteLimitStop(message.instanceId, neutral);
+      }
+      if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
+        // An answer of its own, after any compaction: its next
+        // turn's end may file again (OpenCode writes its summary
+        // in the assistant's role, which is the compaction's).
+        if (!neutral.compactSummary) {
+          answeredSinceCompaction(message.instanceId);
+        }
+        // Claude Code ending the turn on its account's limit.
+        if ((neutral as { error?: string }).error === "rate_limit") {
+          limitRefused.add(message.instanceId);
+        } else {
+          // The context this request sent: the session's own, as
+          // the turn's result (a sum over its requests) can't say.
+          const { usage } = neutral.message as {
+            usage?: {
+              cache_creation_input_tokens?: number;
+              cache_read_input_tokens?: number;
+              input_tokens?: number;
+            };
+          };
+          if (typeof usage?.input_tokens === "number") {
+            lastRequestContext.set(
+              message.instanceId,
+              usage.input_tokens +
+                (usage.cache_read_input_tokens ?? 0) +
+                (usage.cache_creation_input_tokens ?? 0)
+            );
+          }
+        }
+        turnInFlight.frame(message.instanceId, neutral.message.content);
+      } else if (
+        neutral.type === "result" &&
+        credentialTurns.has(message.instanceId)
+      ) {
+        // A turn its credential ended that the hub answers:
+        // nothing ended, as at a limit. The session moves and
+        // carries on.
+        const ended = message.instanceId;
+        credentialTurns.delete(ended);
+        limitRefused.delete(ended);
+        turnInFlight.over(ended);
+        atLimit.signedOut(ended).catch((error: unknown) => {
+          limitAnswerFailed(ended, "its refused sign-in", error);
+        });
+      } else if (
+        neutral.type === "result" &&
+        limitRefused.delete(message.instanceId) &&
+        atLimit.manages(message.instanceId)
+      ) {
+        // A turn its account's limit refused: nothing ended. The
+        // session is held, moved or continued; no report goes up,
+        // no rule answers it, and what a refused request says of
+        // the context is not the session's context.
+        turnInFlight.over(message.instanceId);
+        const refused = message.instanceId;
+        // A move it owes to an account with room is its turn's
+        // end, as any turn's end is.
+        if (!moveOwedAtRefusal(refused)) {
+          atLimit.turnRefused(refused).catch((error: unknown) => {
+            limitAnswerFailed(refused, "its account's limit", error);
+          });
+        }
+      } else if (neutral.type === "result") {
+        const [cacheRow] = db.getInstancesByIds([message.instanceId]);
+        if (traitsOf(cacheRow?.harness).promptCacheMaxMs !== null) {
+          db.updateKeepAlive(
+            cacheRow.id,
+            keepAliveResult(
+              cacheRow,
+              neutral,
+              false,
+              lastRequestContext.get(cacheRow.id)
+            )
+          );
+          lastRequestContext.delete(cacheRow.id);
+          // Real turns re-arm from their own request clock.
+          detach(keepAliveScheduler.wake(), "keepalive wake");
+          if (cacheRow.keepAliveEnabled) {
+            publishInstances(cacheRow.machineId);
+          }
+          atLimit.turnEnded(cacheRow.id);
+          // A compaction after a move: its next step, or its end.
+          compactionTurnEnded(cacheRow.id);
+        } else if (cacheRow) {
+          // The context of a session whose results report no
+          // prompt cache, as its harness reported its last request.
+          if (neutral.contextTokens !== undefined) {
+            db.updateKeepAlive(cacheRow.id, {
+              contextTokens: neutral.contextTokens,
+              contextReadAt: new Date(),
+            });
+          }
+          if (cacheRow.accountId) {
+            atLimit.turnEnded(cacheRow.id);
+          }
+          compactionTurnEnded(cacheRow.id);
+        }
+        // Its account changed during the turn (its model crossed a
+        // provider, or a person moved it): it moves now, at the
+        // turn's end.
+        // Its launch takes the move ({@link takeOwedMove}).
+        if (cacheRow && owedMoves.has(cacheRow.id)) {
+          relaunchOnAccount(cacheRow.id);
+        }
+        // Claude reports each model's window only here; kept so a
+        // picker can say whether a model fits (claude's catalog
+        // carries no window of its own).
+        if (traitsOf(agentFrame.harness).contextWindow === "hub") {
+          const { modelUsage } = neutral as {
+            modelUsage?: Record<string, { contextWindow?: number }>;
+          };
+          for (const [model, usage] of Object.entries(modelUsage ?? {})) {
+            if (usage.contextWindow) {
+              db.noteClaudeContextWindow(model, usage.contextWindow);
+            }
+          }
+        }
+        // Its context as this turn left it, against its window:
+        // at its policy's threshold, it files its open items.
+        if (cacheRow) {
+          detach(
+            fileAtThreshold(cacheRow.id, neutral.compactsAt),
+            "context threshold"
+          );
+        }
+        const { text, onNoReply } = turnInFlight.ended(message.instanceId);
+        // It ended on no_reply_needed and said nothing after: no
+        // news, no push. A failed turn is news whatever it called.
+        const silent = onNoReply && !text && neutral.is_error !== true;
+        // Every turn's end: its own row, by its key.
+        const [row] = db.listedInstancesByIds([message.instanceId]);
+        const parentId = row?.parentInstanceId;
+        // A turn an interrupt cut ({@link interruptedTurns}), on
+        // any harness, or one its server's stop cut (OpenCode's
+        // `serverStopped`, which the session is handed back,
+        // `resumeCutTurn`): nothing is handed back for it, no rule
+        // answers it, no push says it ended, and it fails no item.
+        const cut =
+          interruptedTurns.delete(message.instanceId) ||
+          neutral.subtype === "aborted" ||
+          neutral.serverStopped === true;
+        if (row && neutral.subtype === "aborted") {
+          // OpenCode's own word: its wait is over; whether it is
+          // held was the interrupt's to say ({@link noteInterrupt}).
+          workItems.interrupted(row.id, false);
+        }
+        const turnId = message.instanceId;
+        const endedAt = new Date();
+        // The end on the hub's clock, on the row every screen reads:
+        // against `seenAt`, also the hub's, it says "ended since the
+        // owner last looked" without any device's clock; a silent
+        // end leaves nothing unseen.
+        // What this turn left waiting on the person, and what the
+        // one before it asked that it moved on from (Needs you's rule 2).
+        let artifactLeft: ArtifactNeed | undefined;
+        if (row) {
+          const before = row.turnEndedAt ? new Date(row.turnEndedAt) : null;
+          db.noteTurnEnded(turnId, endedAt, silent);
+          // Its closing words answer what it read, and the person's
+          // stop settles it; a server's stop is handed back to go on.
+          if (
+            (text && neutral.is_error !== true) ||
+            (cut && neutral.serverStopped !== true)
+          ) {
+            db.noteAnswered(turnId, endedAt);
+          }
+          // An approval this turn read and didn't use lapses.
+          hubAsks.turnEnded(turnId);
+          publishInstances(row.machineId);
+          artifacts.turnEnded(turnId, before, endedAt);
+          artifactLeft = unparked(artifactLane.now().needs)
+            .filter(
+              (need) =>
+                artifacts.askedIn(need.artifactId, turnId, before) && !cut
+            )
+            .at(-1);
+        }
+        // Every turn of a work item's session counts against its
+        // budget, whatever answers it; one at the limit stops it.
+        if (row?.workItemId) {
+          workItems.countTurn(row);
+          // The turn that called finish_item is over: what waited
+          // out its end goes now, as the next turn.
+          workItems.turnOver(row.id);
+        }
+        // Fleet watch counts the turn (and ends a triage run's).
+        watch?.endTurn(turnId, neutral);
+        /** Whether a rule answered the turn with a reply. */
+        const answered = (): Promise<boolean> =>
+          ruleEngine.endTurn(turnId, neutral);
+        // Delegated work hands its turn back; a session another
+        // session started (`start_session`) has a parent and no
+        // item, and its turns are its own.
+        const delegate =
+          row?.workItemId && parentId && parentId !== turnId && !cut
+            ? row
+            : undefined;
+        // A failed turn's report carries the harness's own error
+        // words — "(no text)" once stood in for a 403 that was
+        // sitting right in the result frame.
+        const { errors } = neutral as { errors?: string[] };
+        const harnessError =
+          errors
+            ?.map((each) => each.trim())
+            .filter(Boolean)
+            .join("\n") || undefined;
+        const failed = !!neutral.is_error;
+        // A turn its account's refused credential ended that the
+        // hub does not carry on: its failure names the account.
+        const refused = refusedFailures.get(turnId);
+        refusedFailures.delete(turnId);
+        // A failed turn's words, blank ones skipped: a result frame
+        // can carry `result: ""`, and that is no reason.
+        const turn = {
+          wakes: neutral.wakes,
+          text:
+            text || harnessError || "(the delegate produced no text this turn)",
+          ...(failed
+            ? {
+                error: `${
+                  harnessError ||
+                  neutral.result?.trim() ||
+                  `The harness ended the turn as failed (${neutral.subtype}) and gave no words for it.`
+                }${refused ? `\n${refused.words}` : ""}`,
+              }
+            : {}),
+        };
+        // What the parent hears of the turn, if anything: an item
+        // with checks reports only through finish_item, or when its
+        // turn failed (work-items.ts turnEnded).
+        const handBack = (from: InstanceRow): void => {
+          const handed = workItems.turnEnded(from, turn, endedAt);
+          if (handed) {
+            reportToParent(from, handed.body, handed.failed, {
+              completion: {
+                resultId: neutral.uuid as string,
+                ...(neutral.timestamp
+                  ? { completedAt: neutral.timestamp }
+                  : {}),
+              },
+            });
+          }
+          // Its item is over and its parent has the report: the
+          // turn that just ended was its last word.
+          sleepFinished(from.id);
+        };
+        if (delegate?.workItemId && !failed) {
+          // A work item's turn is answered before it is handed
+          // back: a rule's reply keeps the item running and wakes
+          // its session into the next turn, and the parent hears
+          // nothing of this one. Only a turn no standing
+          // instruction answers goes back, and may end the item.
+          // Meaning rules answer once Jev does; the hand-back
+          // waits for them.
+          answered()
+            .then((replied) => {
+              if (!replied) {
+                handBack(delegate);
+              }
+            })
+            .catch((error) => {
+              console.error(
+                `[hand-back] ${turnId}: ${error instanceof Error ? error.message : error}`
+              );
+            });
+        } else {
+          // A failed turn goes back at once and ends its item, so
+          // nothing answers it; a session that is not delegated
+          // work has its turn answered as it always has.
+          if (delegate) {
+            handBack(delegate);
+          }
+          if (refused) {
+            oweMoveOff(turnId, refused.accountId, "refused");
+          }
+          // Nothing waits on whether a rule answered a turn that is
+          // not held, but the owner's push does: a turn a rule
+          // answered goes on, and waits on no one. A turn an
+          // interrupt cut is answered by nothing.
+          const owners = row && !parentId;
+          if (!cut) {
+            detach(
+              answered().then((replied) => {
+                if (owners && !replied) {
+                  push.turnEnded(
+                    turnId,
+                    text || harnessError,
+                    endedAt,
+                    neutral.wakes,
+                    silent,
+                    artifactLeft
+                  );
+                }
+              }),
+              "rule answer"
+            );
+          }
+        }
+        // A plain session past one conversation is offered a project, once.
+        if (row && !failed) {
+          projectOffers.turnEnded(row.id);
+        }
+      }
+    }
+    return "continue";
+  };
+
+  const observers = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // Standing instructions read the frames inside a turn as the
+    // dashboards do; a turn's end is answered above.
+    if (kind === "frame" && message.instanceId && !run.internal) {
+      ruleEngine.observe(message.instanceId, body.message);
+      keepTasks(message.instanceId, body.message);
+      observeCompaction(message.instanceId, body.message);
+      usageCounter.observe(message.instanceId, body.message);
+      watch?.observe(message.instanceId, body.message);
+      briefingsObserve(db, message.instanceId, body.message);
+    }
+    return "continue";
+  };
+
+  const spawnFailed = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind } = agentFrame;
+    // An agent only frames an error about a session that failed to start
+    // or died on its own, so the row records it for whoever looks later.
+    if (
+      kind === "error" &&
+      message.instanceId &&
+      agentFrame.errorVerb === "spawn"
+    ) {
+      const [process] = db.getInstancesByIds([message.instanceId]);
+      if (
+        !process ||
+        agentFrame.processGeneration !== processGeneration(process)
+      ) {
+        return "stop";
+      }
+      launchSettled(
+        message.instanceId,
+        "it failed",
+        processGeneration(process)
+      );
+      processFailed(
+        message.machineId,
+        message.instanceId,
+        agentFrame.errorMessage?.trim() ||
+          `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`,
+        asLastErrorKind(agentFrame.lastErrorKind)
+      );
+    }
+    return "continue";
+  };
+
+  const installAnswered = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind } = agentFrame;
+    // An install answering, whoever asked for it: the cell is the hub's
+    // to keep, and the reply still goes wherever it was going.
+    const install = message.requestId
+      ? pendingInstalls.get(message.requestId)
+      : undefined;
+    if (install && kind === "control_result" && message.requestId) {
+      pendingInstalls.delete(message.requestId);
+      // The release it was sent to reach is settled for this
+      // machine, landed or not: a copy left older says why on its
+      // row, and is sent no other until a newer release.
+      if (install.newest) {
+        toolReleases.answered(
+          message.machineId,
+          install.toolId,
+          install.newest
+        );
+      }
+      const status = peekToolStatus(message.payload);
+      if (status) {
+        db.setAgentToolCell(message.machineId, status);
+        publishInstances(message.machineId);
+      }
+    }
+    return "continue";
+  };
+
+  const syncAnswered = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A transcript delete answering: once the machine says it is gone,
+    // every row that named it goes with it, through the one
+    // per-session delete, and every dashboard sees it leave.
+    // A sync answering, whoever asked for it: the machine's own account
+    // of what it now has is the hub's to keep, and the reply still goes
+    // wherever it was going.
+    // A refusal is kept too, in the machine's words, on its row.
+    if (
+      message.requestId &&
+      kind === "control_result" &&
+      fleetSyncs.has(message.requestId)
+    ) {
+      fleetSyncs.answered(message.requestId, body);
+      welcomeConverge.answered(message.machineId, body);
+    }
+    return "continue";
+  };
+
+  const controlAnswered = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // A control a route is waiting on: the reply is that request's
+    // answer and nobody else's news.
+    if (kind === "control_result" && message.requestId) {
+      lifecycle.answered(message.requestId, body.ok);
+      const answering = waiting.get(message.requestId);
+      if (answering) {
+        waiting.delete(message.requestId);
+        answering(body);
+        return "stop";
+      }
+      // One whose caller was told no answer came is nobody's: said
+      // once and dropped as it came. Read on for dashboards, a late
+      // transcript's pictures were stored one by one on the hub's
+      // thread, and three such answers held it past its updater's
+      // 3 s (nightly 5575, obelisk, 2026-10-24 22:53:59).
+      if (lateAnswer(message)) {
+        return "stop";
+      }
+    }
+    return "continue";
+  };
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stage of the agent socket: its branches are this frame kind's handling in its fixed sequence.
+  const fanOut = (run: FrameRun): FrameAnswer => {
+    const { message, agentFrame } = run;
+    const { kind, body } = agentFrame;
+    // From here on the message is bound for dashboards, which get
+    // images as references to fetch when shown, not as bytes.
+    externalizeImages(message.payload);
+    // A control's reply that settles a Ledger command turns into that
+    // command's `applied`/`failed` ack. Read BEFORE the routing below
+    // but allowed to preempt nothing: if a dashboard is also waiting on
+    // this request id the old way, it still gets its reply.
+    const settled =
+      kind === "control_result" &&
+      message.requestId !== undefined &&
+      streams.settleCommand(message.requestId, body);
+    // A rewind that never started: its transcript was never cut.
+    const rewound =
+      kind === "control_result" && message.requestId
+        ? rewinds.get(message.requestId)
+        : undefined;
+    if (rewound && message.requestId) {
+      rewinds.delete(message.requestId);
+      if (kind === "control_result" && !body.ok) {
+        transcripts.reread(rewound);
+      }
+    }
+    // A control's reply belongs to the dashboard that asked; the rest is fan-out.
+    const requester =
+      message.requestId && kind === "control_result"
+        ? registry.takeRequester(message.requestId)
+        : undefined;
+    if (requester) {
+      sendFrame(requester, message);
+    }
+    // An acknowledged command's reply is that command's news and nobody
+    // else's — the same rule as the line above, in the newer dialect.
+    // Without it the reply would fall through to the fleet-wide
+    // broadcast that an unrouted `control_result` gets today, and every
+    // dashboard would draw an error for a command it never sent.
+    else if (settled) {
+      return "stop";
+    } else if (kind === "control_result") {
+      // A reply without a live requester is not fleet news. This
+      // includes late answers after a socket closed or a read timed out.
+      if (!run.hubReply) {
+        logUnroutedReply(message);
+      }
+      return "stop";
+    } else if (kind === "frame" && message.instanceId) {
+      // Folded into the session's transcript here, for every frame and
+      // whether or not anyone follows it: what it changed is sequenced
+      // onto the session's stream, so the ring can answer a resume from
+      // a socket that connects a minute from now. Everything else —
+      // permission_request, instances, delegate_event, usage, pulse,
+      // error, and any kind a future build adds — broadcasts, so an
+      // unknown kind is never silently dropped.
+      transcripts.ingest(
+        message.instanceId,
+        message.payload as TranscriptPayload
+      );
+    } else {
+      // A parked ask goes out with its secrets hidden; the ledger
+      // keeps the call as it was asked.
+      registry.broadcast(clientCopy(message));
+    }
+    return "continue";
+  };
+
+  const frameStages: FrameStage[] = [
+    commandQueue,
+    stageChanged,
+    stageCloneFiled,
+    browsersHeard,
+    fleetReported,
+    fleetConverging,
+    browserHandedBack,
+    streamRelayHeard,
+    moveProgressed,
+    accountBorrowed,
+    controlResultNamed,
+    scratchWorktreeFiled,
+    sessionAddressed,
+    sessionOwned,
+    containersSaid,
+    endedSessionDropped,
+    stopFailed,
+    internalNoted,
+    rejectedSend,
+    heldSend,
+    takenSend,
+    stopped,
+    asleep,
+    recoveryUnavailable,
+    custodyHeld,
+    leakFound,
+    leakEnded,
+    machineLineSaid,
+    streamSoFar,
+    framesLost,
+    ingestLedger,
+    admittedFrameRead,
+    keepAliveFrame,
+    sessionNamed,
+    settingsFiled,
+    sendSignalHeard,
+    sessionDirRead,
+    relaunchAsked,
+    effortRead,
+    accountRead,
+    turnFrames,
+    permissionAsked,
+    permissionSettled,
+    pulseHeard,
+    namedFromTurn,
+    summariserAnswered,
+    providerRetrying,
+    turnEnded,
+    observers,
+    spawnFailed,
+    installAnswered,
+    syncAnswered,
+    controlAnswered,
+    fanOut,
+  ];
+
   // Everything is made: a hub that serves starts its work off the boot path.
   // One built only to be read starts none of it. Before it listens, each
   // known machine's fleet items are hashed (fleet-sync.ts `warmHashes`), so
@@ -12720,1599 +14580,14 @@ export const createServer = (
               break;
             }
             case "frames": {
-              const { kind, body } = agentFrame;
-              if (kind === "command_queue") {
-                const { runId, queue } = body;
-                commandQueues.get(runId)?.(queue);
-                break;
-              }
-              // A workspace's stage changed: each of its sheets keeps the state.
-              if (kind === "stage") {
-                const frame = body;
-                artifacts.staged(message.machineId, frame);
-                stageHeard(frame);
-                break;
-              }
-              // A place's stage clone is cut and in step: filed as a workspace.
-              if (kind === "stage-clone") {
-                const frame = body;
-                const by = db
-                  .listInstances()
-                  .find(
-                    (one) =>
-                      one.machineId === message.machineId &&
-                      stagePlaceRef(one).id === frame.place &&
-                      !workItems.workspaceOf(one)
-                  );
-                if (!by) {
-                  console.warn(
-                    `[workspaces] ${message.machineId}: a stage clone of place ${frame.place} that no session there names was not filed`
-                  );
-                  break;
-                }
-                detach(
-                  workItems.fileStageClone(message.machineId, frame, by.id),
-                  `file the stage clone ${frame.id}`
-                );
-                break;
-              }
-              // A machine's browsers, whole: kept by the hub's browser registry
-              // (browsers.ts, Projects spec §5.11), which tells every
-              // dashboard the fleet's browsers whole (`browser_list`).
-              if (kind === "browsers") {
-                browsers.heard(message.machineId, body);
-                browserStream.heard(message.machineId, body);
-                break;
-              }
-              // The machine's fleet report, sent unasked as a converge ends or
-              // a reading moved with no fleet change: kept, and the fleet MCP
-              // changes its last delta carried go to the sessions there.
-              if (kind === "fleet_report") {
-                const { report, generation, convergedGeneration } = body;
-                welcomeConverge.reported(
-                  message.machineId,
-                  convergedGeneration
-                );
-                if (isFleetReport(report)) {
-                  keepFleetReport(
-                    message.machineId,
-                    ws,
-                    report,
-                    ridingReported(message.machineId, generation ?? null)
-                  );
-                }
-                break;
-              }
-              // Its items as they converge (fleet-sync.ts): kept on its row.
-              if (kind === "fleet_converge") {
-                const { items, generation } = body;
-                if (Array.isArray(items)) {
-                  fleetSyncs.converged(message.machineId, items);
-                  welcomeConverge.converging(
-                    message.machineId,
-                    generation,
-                    items
-                  );
-                }
-                break;
-              }
-              // A take-over its machine ended itself: the ask's call answers.
-              if (kind === "browser_handback") {
-                browsers.heardHandback({
-                  ...body,
-                  machineId: message.machineId,
-                });
-                break;
-              }
-              // The stream relay on its machine: the relay's record follows it.
-              if (kind === "stream_relay") {
-                streamRelay.heard({
-                  ...body,
-                  machineId: message.machineId,
-                });
-                break;
-              }
-              if (kind === "move_progress") {
-                moves.progress(message.machineId, body);
-                break;
-              }
-              if (kind === "account_borrow") {
-                answerBorrow(message.machineId, body).catch(console.error);
-                break;
-              }
-              if (kind === "control_result" && !message.requestId) {
-                message.requestId = agentFrame.requestId;
-              }
-              const hubReply =
-                kind === "control_result" &&
-                message.requestId !== undefined &&
-                (pendingInstalls.has(message.requestId) ||
-                  fleetSyncs.has(message.requestId));
-              if (kind === "scratch_worktree" && message.instanceId) {
-                const row = db.ownedInstance(
-                  message.instanceId,
-                  message.machineId
-                );
-                const frame = body;
-                const dir =
-                  row &&
-                  frame.processGeneration === processGeneration(row) &&
-                  reportedMachinePath(message.machineId, frame.worktree.dir);
-                if (row && dir) {
-                  db.recordScratchWorktree(
-                    row.id,
-                    received(
-                      ScratchWorktreeSchema,
-                      frame.worktree,
-                      "a machine's scratch worktree frame"
-                    ),
-                    dir
-                  );
-                }
-                break;
-              }
-              if (kind === "session_address" && message.instanceId) {
-                recordSessionAddress(ws, message.machineId, {
-                  instanceId: message.instanceId,
-                  sessionId: agentFrame.sessionId ?? "",
-                  processGeneration: agentFrame.processGeneration,
-                });
-                break;
-              }
-              const ownedSession = message.instanceId
-                ? db.ownedInstance(message.instanceId, message.machineId)
-                : undefined;
-              if (
-                message.instanceId &&
-                !ownedSession &&
-                kind !== "control_result"
-              ) {
-                break;
-              }
-              // What its machine said of its containers (agent
-              // session-containers.ts): they stopped as it ended, its parent,
-              // else it, is told; or what it starts at a runtime with no door
-              // will not, and it is told. Read
-              // before an ended session's frames are dropped: the agent says
-              // it once their stop timeouts have run, after its stop was
-              // confirmed (r180: the agent's line was there, the hub's never).
-              if (kind === "frame" && message.instanceId) {
-                const said = body.message;
-                if (
-                  said.type === "system" &&
-                  (said.subtype === CONTAINERS_ENDED ||
-                    said.subtype === CONTAINERS_UNTRACKED)
-                ) {
-                  tellContainers(
-                    message.machineId,
-                    message.instanceId,
-                    said as { uuid?: unknown; content?: unknown },
-                    said.subtype === CONTAINERS_ENDED ? "ended" : "untracked"
-                  );
-                  break;
-                }
-              }
-              if (
-                ownedSession?.endConfirmedAt &&
-                (kind === "frame" ||
-                  kind === "pulse" ||
-                  kind === "permission_request" ||
-                  kind === "rejected")
-              ) {
-                break;
-              }
-              // Reconciliation keeps failed end delivery pending; it is not a session failure.
-              if (
-                kind === "error" &&
-                agentFrame.errorVerb === "stop" &&
-                message.instanceId
-              ) {
-                lifecycle.deliveryFailed(message.instanceId);
-              }
-              if (
-                kind === "error" &&
-                agentFrame.errorVerb === "stop" &&
-                ownedSession?.endIntent &&
-                agentFrame.processGeneration === processGeneration(ownedSession)
-              ) {
-                const reason = agentFrame.endReason;
-                if (reason) {
-                  db.noteEndReason(ownedSession.id, reason);
-                }
-              }
-              if (
-                kind === "error" &&
-                agentFrame.errorVerb === "stop" &&
-                ownedSession?.endIntent
-              ) {
-                // A forget waiting on it says why; the stop stays owed, and a
-                // later confirmation still reports it stopped.
-                projectStops.failed(ownedSession.id, body.message);
-                break;
-              }
-              // A continuation's summariser: an internal worker only its
-              // continuation talks to (see `summarisers`).
-              const internal =
-                message.instanceId !== undefined &&
-                summarisers.has(message.instanceId);
-              // One send did not go: its record says so, and nothing else does.
-              if (kind === "rejected" && message.instanceId) {
-                const { uuid, error } = body;
-                takeSendSignal(message.instanceId, {
-                  kind: "rejected",
-                  uuid,
-                  error,
-                });
-                break;
-              }
-              // A send no process took, handed back whole by its machine: owed
-              // again for the session's next process ({@link takeBack}).
-              if (kind === "held_send" && message.instanceId) {
-                const { send } = body;
-                takeBack(message.machineId, message.instanceId, send);
-                break;
-              }
-              // A send handed over again that the session took already: read,
-              // and no turn follows ({@link takeTaken}).
-              if (kind === "taken_send" && message.instanceId) {
-                const { uuid } = body;
-                takeTaken(message.instanceId, uuid);
-                break;
-              }
-              if (kind === "stopped" && message.instanceId) {
-                if (
-                  !lifecycle.confirm(
-                    message.machineId,
-                    message.instanceId,
-                    body
-                  )
-                ) {
-                  break;
-                }
-                launchSettled(message.instanceId, "it was stopped");
-                for (const [key, sent] of stopDispatches) {
-                  if (
-                    sent.instanceId === message.instanceId &&
-                    sent.machineId === message.machineId
-                  ) {
-                    finishStopDispatch(key, "runner-gone");
-                  }
-                }
-                turnWaiters
-                  .get(message.instanceId)
-                  ?.reject(
-                    new Error(
-                      "the summariser session stopped before it answered"
-                    )
-                  );
-                releaseHeld(message.instanceId);
-                endPreviews(message.instanceId);
-                // Its live work took its final state as the end was confirmed
-                // (lifecycle `confirmed`, tree-stops.ts), naming who stopped it
-                // when the hub heard.
-                // What it was sent and had not read did not go, unless it wrote
-                // some of it down as it stopped.
-                forgetPending(message.instanceId, UNREAD.stopped);
-                escalateRoutedAsks(message.instanceId);
-                publishInstances(message.machineId);
-                break;
-              }
-              if (kind === "asleep" && message.instanceId) {
-                const [process] = db.getInstancesByIds([message.instanceId]);
-                if (
-                  process &&
-                  agentFrame.processGeneration === processGeneration(process)
-                ) {
-                  const { died } = body;
-                  // Its process is gone: the credential it ran on grants
-                  // nothing from here, wherever that credential was printed
-                  // (a shell's env, a transcript). Its wake, a resume or a
-                  // restart after a signal, is a launch, which mints its
-                  // own (grantLaunch); a continuation is a session of its
-                  // own, with its own.
-                  db.revokeSessionIdentity(message.instanceId);
-                  launchSettled(
-                    message.instanceId,
-                    died ? "its process died" : "it went to sleep",
-                    processGeneration(process)
-                  );
-                  if (died) {
-                    diedOnSignal(message.machineId, message.instanceId, died);
-                  } else {
-                    sessionAsleep(message.machineId, message.instanceId);
-                  }
-                }
-                break;
-              }
-              if (kind === "recovery_unavailable" && message.instanceId) {
-                const [process] = db.getInstancesByIds([message.instanceId]);
-                if (
-                  !process ||
-                  agentFrame.processGeneration !== processGeneration(process)
-                ) {
-                  break;
-                }
-                lifecycle.unavailable(message.instanceId);
-                db.settleUnavailableRecovery(message.instanceId);
-                // A stored conversation stays resumable: what it was sent and
-                // never read goes to the process that next runs it.
-                losePending(
-                  message.instanceId,
-                  relaunchOf(process).kind !== "refused"
-                );
-                // Its held process is no longer this session's: what waited
-                // for one goes to its next start.
-                processEvent(message.instanceId);
-                publishInstances(message.machineId);
-                break;
-              }
-              if (kind === "frame" && message.instanceId) {
-                const frame = body;
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === CUSTODY_HELD
-                ) {
-                  const [row] = db.getInstancesByIds([message.instanceId]);
-                  if (
-                    !row ||
-                    row.machineId !== message.machineId ||
-                    (row.status !== "sleeping" && row.status !== "error") ||
-                    row.updatedAt.getTime() >= Date.now() - RESTORE_HORIZON_MS
-                  ) {
-                    break;
-                  }
-                  const hours = (
-                    (Date.now() - row.updatedAt.getTime()) /
-                    HOUR_MS
-                  ).toFixed(1);
-                  const note = custodyReason(hours);
-                  heldSessions.set(row.id, {
-                    machineId: row.machineId,
-                    since: row.updatedAt.getTime(),
-                    reason: note,
-                  });
-                  publishInstances(message.machineId);
-                  message.payload = {
-                    ...frame,
-                    message: custodyLine(row, note),
-                  };
-                  transcripts.ingest(
-                    row.id,
-                    message.payload as TranscriptPayload
-                  );
-                  break;
-                }
-                // Something the session started leaks (agent leak-watch.ts):
-                // the session is told, once per leak, in the hub's own word.
-                // Nothing is stopped.
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === LEAK_FOUND
-                ) {
-                  tellLeak(
-                    message.machineId,
-                    message.instanceId,
-                    frame.message as {
-                      uuid?: unknown;
-                      content?: unknown;
-                      leak?: LeakFound;
-                    }
-                  );
-                  break;
-                }
-                // A leak told before has ended: its notice says so.
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === LEAK_ENDED
-                ) {
-                  endLeak(
-                    message.machineId,
-                    message.instanceId,
-                    frame.message as { uuid?: unknown }
-                  );
-                  break;
-                }
-                // A line its machine said about the session (a limit its
-                // keeper held it to, its process on an old Claude Code): kept
-                // on its row and said in its transcript, before the ingest
-                // ledger, which it has no ring line in.
-                const machineSaid =
-                  frame.message.type === "system"
-                    ? machineLineKind(frame.message.subtype)
-                    : undefined;
-                if (machineSaid) {
-                  noteMachineLine(
-                    message.machineId,
-                    message.instanceId,
-                    frame.harness,
-                    machineSaid,
-                    frame.message
-                  );
-                  break;
-                }
-                // The reply being written, re-sent whole by an agent that just
-                // registered (STREAM_SO_FAR): it only repaints the running
-                // reply. Not a line of the session's output, so the ingest
-                // ledger never sees it (no provenance would retire the mark a
-                // later reattach replays from), and nothing that makes a turn
-                // into work, attention or activity reads it.
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === STREAM_SO_FAR
-                ) {
-                  const [row] = db.getInstancesByIds([message.instanceId]);
-                  if (row?.machineId === message.machineId) {
-                    transcripts.ingest(row.id, frame as TranscriptPayload);
-                  }
-                  break;
-                }
-                // Frames the agent could not keep while its link was down
-                // (FRAMES_LOST): the transcript is read from its machine
-                // again, so what was stored of them is drawn.
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === FRAMES_LOST
-                ) {
-                  const [row] = db.getInstancesByIds([message.instanceId]);
-                  if (row?.machineId === message.machineId) {
-                    console.warn(
-                      `[hub] ${row.id}: ${frame.message.content ?? "frames were lost while its machine's link was down"}; its transcript is read again`
-                    );
-                    transcripts.reread(row.id);
-                  }
-                  break;
-                }
-              }
-              // THE INGEST LEDGER (design §7): a line becomes a hub frame AT MOST
-              // ONCE per (instanceId, epoch, srcSeq). A returning agent replays
-              // the gap this hub named on its register ack, and an overshoot —
-              // a cursor the hub had already passed, a re-sent line after a
-              // socket drop — stops dead here rather than being sequenced twice.
-              // Before every side effect below on purpose: a duplicate that got
-              // this far would re-name the session, re-fire the rules and
-              // re-deliver a delegate's report.
-              if (
-                kind === "frame" &&
-                message.instanceId &&
-                !streams.admitFrame(
-                  message.instanceId,
-                  readProvenance(message),
-                  readSent(message)
-                )
-              ) {
-                break;
-              }
-              // What a memory note written now is tainted by (memory.ts): every
-              // admitted frame, before any path below leaves early, so a
-              // keep-alive's result ends its turn too.
-              if (kind === "frame" && message.instanceId) {
-                const admitted = body;
-                memoryWatch.frame(
-                  message.instanceId,
-                  admitted.message,
-                  admitted.harness
-                );
-                // A routine run's session's words, for a failure that gives
-                // no reason (routines.ts `said`): a project conversation's
-                // from before its wake's read receipt too. None of a stream's
-                // deltas carry them.
-                if (admitted.message.type !== "stream_event") {
-                  const [framed] = db.getInstancesByIds([message.instanceId]);
-                  routines.said(
-                    message.instanceId,
-                    admitted.message,
-                    !!framed && isProjectConversation(framed, db.project)
-                  );
-                }
-              }
-              // Pings share admission and send receipts, then leave before every
-              // consumer that makes a turn into work, attention or activity.
-              if (
-                message.instanceId &&
-                (kind === "frame" || kind === "pulse")
-              ) {
-                const [row] = db.getInstancesByIds([message.instanceId]);
-                const frame = kind === "frame" ? body : undefined;
-                const signal = frame ? peekSendSignal(frame) : undefined;
-                const quiet = !!row?.keepAliveTurn || frame?.keepAlive === true;
-                if (quiet && row) {
-                  if (signal) {
-                    takeSendSignal(row.id, signal);
-                    if (
-                      signal.kind !== "read" ||
-                      db.getInstancesByIds([row.id])[0]?.keepAliveTurn
-                    ) {
-                      break;
-                    }
-                  } else if (frame) {
-                    frame.keepAlive = true;
-                    frame.message.keepAlive = true;
-                    const neutral = frame.message;
-                    if (neutral.type === "result") {
-                      if (!(
-                        neutral.uuid &&
-                        db.claimCompletedTurn(
-                          row.id,
-                          neutral.uuid,
-                          neutral.timestamp,
-                          neutral.recovered === true
-                        )
-                      )) {
-                        break;
-                      }
-                      recordTurnUsage(row, neutral, true);
-                      // A ping is one request: its usage is the context.
-                      db.updateKeepAlive(
-                        row.id,
-                        keepAliveResult(
-                          row,
-                          neutral,
-                          true,
-                          neutral.cache
-                            ? keepAliveUsage(neutral).input
-                            : undefined
-                        )
-                      );
-                      const usage = keepAliveUsage(neutral);
-                      console.info(
-                        `[keepalive] ${row.id}: result ${neutral.uuid} input=${usage.input} read=${usage.read} write=${usage.write} at ${new Date().toISOString()}`
-                      );
-                      // A refreshed request establishes the next original deadline.
-                      detach(keepAliveScheduler.wake(), "keepalive wake");
-                      publishInstances(row.machineId);
-                    }
-                    streams.sequence(row.id, { ...frame, keepAlive: true });
-                    break;
-                  } else {
-                    break;
-                  }
-                }
-              }
-              // The conversation the session is writing, whenever it names one —
-              // read before anything below can consume the frame, since a
-              // `held` naming it is also a send signal.
-              if (kind === "frame" && message.instanceId) {
-                const neutral = body.message;
-                if (neutral.type === "result") {
-                  if (!neutral.uuid) {
-                    console.error(
-                      `[hub] completion ${message.instanceId} has no harness result identity`
-                    );
-                    turnInFlight.over(message.instanceId);
-                    break;
-                  }
-                  if (
-                    !db.claimCompletedTurn(
-                      message.instanceId,
-                      neutral.uuid,
-                      neutral.timestamp,
-                      neutral.recovered === true
-                    )
-                  ) {
-                    turnInFlight.over(message.instanceId);
-                    break;
-                  }
-                  const [claimed] = db.getInstancesByIds([message.instanceId]);
-                  if (claimed) {
-                    recordTurnUsage(claimed, neutral, false);
-                  }
-                  if (neutral.serverStopped === true) {
-                    // Cut, not ended: the server it ran in stopped. Handed
-                    // back once this result is taken in like any other.
-                    const cutId = message.instanceId;
-                    const stoppedAt = new Date();
-                    const cutWords = cutCommandsWords(neutral.cut);
-                    lifetime.after(0, () =>
-                      resumeCutTurn(cutId, stoppedAt, cutWords)
-                    );
-                  } else {
-                    turnOver(message.instanceId);
-                  }
-                }
-                const named = agentFrame.sessionKey();
-                if (named) {
-                  db.noteInstanceSession(
-                    message.instanceId,
-                    named.sessionId,
-                    named.cwd
-                      ? reportedMachinePath(message.machineId, named.cwd)
-                      : undefined,
-                    named.tooling,
-                    named.commands
-                  );
-                  if (named.init) {
-                    // The session naming its own conversation is the daemon's word
-                    // that a process exists — first-hand, and the earliest such word
-                    // there is. Promoting on it means a fresh spawn reads `running`
-                    // in a second rather than waiting up to a beat for the heartbeat
-                    // to say the same thing. The row is left alone if it is already
-                    // there; `markInstanceLive` only touches the states a live
-                    // process can be wrongly filed under.
-                    db.markInstanceLive(message.instanceId);
-                    const [live] = db.getInstancesByIds([message.instanceId]);
-                    if (live) {
-                      workItems.started(live);
-                    }
-                    releaseHeld(message.instanceId);
-                    // A launch's own word: what it has open is written anew,
-                    // and a turn a restart cut goes back to it now it is up.
-                    turnsWritten.delete(message.instanceId);
-                    interruptedTurns.delete(message.instanceId);
-                    resumeCutTurn(message.instanceId);
-                  }
-                  publishInstances(message.machineId);
-                }
-              }
-              // Applied settings are filed before a control reply is consumed
-              // by REST or turned into a dashboard acknowledgement.
-              if (
-                (kind === "frame" || kind === "control_result") &&
-                message.instanceId &&
-                noteSessionSettings(message.instanceId, message.payload)
-              ) {
-                publishInstances(message.machineId);
-              }
-              // The harness's word on its sends becomes their records, and goes
-              // no further: every screen hears it as the records' `send` frames.
-              // Everything else the session says is read for what its turn
-              // makes of the sends it read (rule b).
-              if (kind === "frame" && message.instanceId) {
-                const frame = body;
-                const signal = peekSendSignal(frame);
-                if (signal) {
-                  // Its harness taking up a send is its turn starting, but
-                  // for CawCo's quiet notes alone, which it stores at rest
-                  // and reads with its next turn ({@link notesOnly}).
-                  if (signal.kind === "read" && !notesOnly(signal.read)) {
-                    turnUnderWay(message.instanceId);
-                  }
-                  takeSendSignal(message.instanceId, signal);
-                  break;
-                }
-                // A launch's word that its session's data is in place: the
-                // row names that dir's account from now on. Only the row's
-                // own launch says it; a process since replaced does not.
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === SESSION_DIR_READ
-                ) {
-                  const [row] = db.getInstancesByIds([message.instanceId]);
-                  if (
-                    row &&
-                    agentFrame.processGeneration === processGeneration(row)
-                  ) {
-                    landSessionDir(row, frame.message.account_id ?? null);
-                  }
-                  break;
-                }
-                // A session whose boundary hook fails open, whose Claude Code
-                // process ran a manual /compact, or whose process names
-                // another MCP gateway port, at a turn boundary: relaunched on
-                // its conversation when idle.
-                const relaunchFor =
-                  frame.message.type === "system"
-                    ? RELAUNCH_SUBTYPES.get(frame.message.subtype)
-                    : undefined;
-                if (relaunchFor) {
-                  const { machineId, instanceId } = message;
-                  const why = relaunchFor;
-                  relaunchAtRest(machineId, instanceId, why).catch(
-                    (error: unknown) =>
-                      console.error(
-                        `[hub] ${why}: relaunching ${instanceId} failed: ${String(error)}`
-                      )
-                  );
-                  break;
-                }
-                // The session's effort as its agent read it back: what its
-                // chip shows, and no screen's line. Never the effort its
-                // launches ask for: a launch that ran at its CLI's default
-                // or a clamp would otherwise hand that level to every later
-                // launch (`chosenEffort`, {@link bounded}).
-                if (
-                  frame.message.type === "system" &&
-                  frame.message.subtype === EFFORT_READ
-                ) {
-                  const { effort } = frame.message;
-                  const level = isEffortLevel(effort) ? effort : EFFORT_NONE;
-                  if (db.noteInstanceEffort(message.instanceId, level)) {
-                    publishInstances(message.machineId);
-                  }
-                  // Launched with no effort of its own: this is what its
-                  // model runs at by default on its account.
-                  if (effortUnasked.delete(message.instanceId)) {
-                    const [row] = db.getInstancesByIds([message.instanceId]);
-                    const accountId = row?.accountId;
-                    if (accountId && row?.model) {
-                      db.accounts.putDefaultEffort(accountId, row.model, level);
-                    }
-                  }
-                  break;
-                }
-                // What the session's Claude Code reported about its account:
-                // its limits, from each `rate_limit_event`, and its plan, once
-                // per start. The account's reading, and no screen's line. A
-                // session's readings are its row's account's while that
-                // account is signed in on the machine, where the session runs
-                // in its dir. One that is not (a process launched in the
-                // machine's own `~/.claude` before accounts were CawCo's
-                // alone) reads nobody CawCo knows, and is kept by nobody.
-                if (
-                  frame.message.type === "system" &&
-                  (frame.message.subtype === RATE_LIMIT_READ ||
-                    frame.message.subtype === ACCOUNT_READ)
-                ) {
-                  const [row] = db.getInstancesByIds([message.instanceId]);
-                  // A reading from a process its row has since replaced
-                  // (a move relaunched it on another account) is of no
-                  // account the row names: dropped, never let it say who is
-                  // signed in. The row names the account of the launch it
-                  // has now, as a move waits for it ({@link owedMoves}).
-                  if (
-                    !row ||
-                    agentFrame.processGeneration !== processGeneration(row)
-                  ) {
-                    break;
-                  }
-                  const accountId =
-                    row.accountId &&
-                    db.accounts
-                      .signins()
-                      .some(
-                        (one) =>
-                          one.accountId === row.accountId &&
-                          one.machineId === message.machineId &&
-                          one.state === "signed-in"
-                      )
-                      ? row.accountId
-                      : undefined;
-                  if (!accountId) {
-                    break;
-                  }
-                  const read = frame.message.account;
-                  const stored = db.accounts.get(accountId);
-                  const account =
-                    stored && read?.identity
-                      ? withOrgIdFrom(db, stored, read.identity)
-                      : stored;
-                  if (read?.identity && !read.identity.orgId) {
-                    // Its dir's login named no org id the agent could
-                    // carry over: whose process it is is not known, and its
-                    // reading is no account's.
-                    uncompared(
-                      read.identity,
-                      `${message.instanceId}'s Claude Code`
-                    );
-                    break;
-                  }
-                  if (
-                    read?.identity &&
-                    account?.identity &&
-                    !sameIdentity(account.identity, read.identity)
-                  ) {
-                    // A process signed in as someone else: its reading and
-                    // catalog are not this account's. Whether the account
-                    // is signed in there is its dir's reading to say
-                    // (`reconcileAccounts`, read again every minute), not one
-                    // process's: a process launched before a move answers
-                    // for the dir it started in, and marking the account
-                    // from it held it "mismatch" with its own login intact,
-                    // since an unchanged reading is never squared again.
-                    console.warn(
-                      `[hub] ${message.instanceId} runs on ${accountNameAmong(account, db.accounts.list())} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
-                    );
-                    break;
-                  }
-                  const info = frame.message.rate_limit_info;
-                  if (info) {
-                    noteRateLimit(db, accountId, info, row.model);
-                    if (info.status === "rejected" && !info.isUsingOverage) {
-                      limitRefused.add(message.instanceId);
-                    }
-                  }
-                  if (read) {
-                    keepReading(db, accountId, read);
-                  }
-                  // A session starting on the account reads its catalog
-                  // again once it is stale, through a probe that names no
-                  // model: the session's own initialize lists models around
-                  // its own (a session started on "pi" listed a "pi" row).
-                  if (
-                    frame.message.subtype === ACCOUNT_READ &&
-                    account?.provider === CLAUDE_PROVIDER
-                  ) {
-                    const { machineId: probedOn } = message;
-                    detach(
-                      refreshCatalog(
-                        db,
-                        probedOn,
-                        account,
-                        probeAccount,
-                        "stale"
-                      ).then((went) => {
-                        if (went === "read") {
-                          publishUsage(probedOn);
-                        }
-                      }),
-                      "account catalog refresh"
-                    );
-                  }
-                  publishUsage(message.machineId);
-                  break;
-                }
-                // A turn's first frame opens it before anything reads it:
-                // a refusal below reads this turn's state, not the last's.
-                if (
-                  frame.message.type === "assistant" ||
-                  frame.message.type === "user" ||
-                  frame.message.type === "stream_event"
-                ) {
-                  turnUnderWay(message.instanceId);
-                }
-                // Claude Code's error in the model's place: what it says of
-                // the account's credential settles its sign-in there, and
-                // decides who answers the turn's end.
-                if (
-                  frame.message.type === "assistant" &&
-                  !frame.message.parent_tool_use_id &&
-                  frame.message.error
-                ) {
-                  const word = settleRefusal(
-                    message.machineId,
-                    message.instanceId,
-                    agentFrame.processGeneration,
-                    frame.message.error,
-                    frame.message.message.content
-                      .flatMap((block) =>
-                        block.type === "text" ? [block.text] : []
-                      )
-                      .join("\n")
-                  );
-                  if (word) {
-                    takeCredentialTurn(message.instanceId);
-                  }
-                }
-                observeTurn(message.instanceId, frame);
-                afterPausingCall(message.instanceId, frame.message);
-              }
-              if (message.requestId && kind === "permission_request") {
-                const [owner] = db.getInstancesByIds([
-                  message.instanceId ?? "",
-                ]);
-                // An ask from a process this hub holds no live row for, or from
-                // an earlier launch of the row, is cancelled at admission
-                // through the same settlement path. A process sessiond kept
-                // alive across an agent restart is `starting` until its attach
-                // lands (`settleInstances`, `restore`), so its replayed asks
-                // are admitted. A refusal is said, and the asking process is
-                // told at once: nothing may wait on an ask nobody can see.
-                const refusal = askRefusal(owner, message);
-                if (refusal) {
-                  console.warn(
-                    `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${agentFrame.toolName ?? "unknown"}: ${refusal}`
-                  );
-                  // A prompt kept as a permit stays the person's: only the
-                  // late process is told.
-                  const kept = pending.get(message.requestId);
-                  if (!(kept && outlivesSession(kept))) {
-                    pending.remember(message.requestId, message);
-                    pending.resolve(message.requestId, "cancelled", {
-                      why: refusal,
-                    });
-                  }
-                  // Admission does not wait on the machine.
-                  detach(withdrawUnshown(message, refusal), "ask withdrawal");
-                  break;
-                }
-                // The call a permit of its session granted runs once without
-                // asking: its last process asked it, the person approved it
-                // after that process went (asks.ts `granted`).
-                if (
-                  owner &&
-                  !pending.get(message.requestId) &&
-                  hubAsks.granted(owner, message)
-                ) {
-                  detach(allowGranted(message), "granted call");
-                  break;
-                }
-                // A replayed ask (the daemon re-announces unresolved asks after
-                // every register) refreshes the parked copy without a second
-                // push or a second routing decision: it keeps the routing its
-                // first copy has now.
-                const parkedBefore = pending.get(message.requestId);
-                const alreadyParked = parkedBefore !== undefined;
-                const { requestId } = message;
-                // A delegate's ask routes to its parent; the user is only the
-                // fallback. The parent must be live, or asleep with a
-                // conversation to wake from: a parent waiting on its
-                // delegates is put to sleep after half an hour at rest, and
-                // the ask wakes it as its delegate's report does
-                // (`deliverSend`). Otherwise the ask is the user's exactly as
-                // it was before this feature.
-                const sender =
-                  !alreadyParked && message.instanceId
-                    ? db.listedInstancesByIds([message.instanceId])[0]
-                    : undefined;
-                const parent = sender ? delegateAskParent(sender) : undefined;
-                const routed = alreadyParked
-                  ? peek(parkedBefore.payload, "routedTo") === "parent"
-                  : parent !== undefined;
-                // Routed before it is kept, so the copy kept across a hub
-                // restart, and the permit kept when its process goes (asks.ts
-                // `keep`), stay the parent's.
-                if (routed) {
-                  (body as { routedTo?: string }).routedTo = "parent";
-                }
-                // Its publish is the fan-out below, which every frame no
-                // transcript folds goes out by, after its routing here.
-                if (
-                  !askInOrder(
-                    requestId,
-                    () => pending.remember(requestId, message, true),
-                    () => undefined
-                  )
-                ) {
-                  break;
-                }
-                if (alreadyParked) {
-                  break;
-                }
-                if (sender && parent) {
-                  delegateWaits.asked(message);
-                } else if (!internal) {
-                  push.onAsk(message);
-                }
-              }
-              // The daemon's live reading of one session. Kept in memory only, so
-              // a dashboard that connects mid-turn is handed the rail's now-state
-              // in its first frame instead of a blank row. Relayed unchanged below
-              // — this is a copy, not an interception.
-              // The harness settled an ask itself (answered in its own UI, or
-              // withdrawn by an interrupt). Settling it here is what tells every
-              // screen, through `pending.onSettled`; the daemon's frame itself
-              // goes no further.
-              if (kind === "permission_settled") {
-                // Most of these echo an answer the hub relayed and has already
-                // settled; only one still parked is news here.
-                const parked = message.requestId
-                  ? pending.get(message.requestId)
-                  : undefined;
-                if (
-                  message.requestId &&
-                  parked?.instanceId === message.instanceId &&
-                  parked?.machineId === message.machineId &&
-                  peek(parked.payload, "processGeneration") ===
-                    agentFrame.processGeneration &&
-                  // A prompt its ended process took with it stays for the
-                  // session's next process ({@link keepPrompt}).
-                  !(body.processEnded === true && keepPrompt(parked))
-                ) {
-                  // Answered with no answer of the hub's in flight: by Full
-                  // Send as its session entered it, when the harness says
-                  // so (its frame's `answer`), else taken in the harness's
-                  // own interface, which says not how. One in flight is that
-                  // answer's, and says itself (`answeringPermissions`).
-                  const { answer } = body;
-                  pending.resolve(
-                    message.requestId,
-                    agentFrame.outcome === "cancelled"
-                      ? "cancelled"
-                      : "answered",
-                    {
-                      answer:
-                        answer?.via === FULL_SEND_ANSWER.via
-                          ? FULL_SEND_ANSWER
-                          : { via: "harness" },
-                    }
-                  );
-                }
-                break;
-              }
-              if (kind === "pulse" && message.instanceId) {
-                const { pulse } = body;
-                if (pulse) {
-                  pulses.set(message.instanceId, pulse);
-                  artifactSessions.refresh(message.instanceId);
-                  workItems.turnState(message.instanceId, pulse.busy);
-                  caw.pulse(message.instanceId, pulse.busy);
-                  // A summariser is the hub's own worker: nothing watches it.
-                  if (!internal) {
-                    watch?.pulse(message.instanceId, pulse.busy);
-                  }
-                  // A pulse is only ever emitted by a session doing something,
-                  // so it is the fleet's cheapest honest signal for the column
-                  // the rails age rows from.
-                  noteActivity(message.instanceId);
-                }
-              }
-              // A session named by what it was first asked, whether the ask came
-              // through this hub or the harness echoed one it was spawned with.
-              if (kind === "frame" && message.instanceId) {
-                nameFromLiveTurn(
-                  message.machineId,
-                  message.instanceId,
-                  body.message
-                );
-              }
-              // A continuation's summariser: its turn's end settles the
-              // continuation's wait, and what it answered is read from its
-              // transcript. Nothing else answers or hears an internal session.
-              if (kind === "frame" && message.instanceId && internal) {
-                const neutral = body.message;
-                const waiter = turnWaiters.get(message.instanceId);
-                if (neutral.type === "result" && waiter) {
-                  const { errors } = neutral as { errors?: string[] };
-                  if (neutral.is_error) {
-                    waiter.reject(
-                      new Error(
-                        errors?.length
-                          ? errors.join("\n")
-                          : (neutral.result ??
-                              `Harness error (${neutral.subtype}).`)
-                      )
-                    );
-                  } else {
-                    waiter.resolve();
-                  }
-                }
-              }
-              // A provider refused a session's turn and waits to try again.
-              if (kind === "frame" && message.instanceId) {
-                const neutral = body.message;
-                // A summariser whose provider refuses it at its usage limit
-                // is refused: its harness would retry until the limit resets
-                // (OpenCode answers Go's monthly limit with a `retry` status,
-                // never an error). Its wait ends on the provider's words and
-                // the run stops its scratch session, so the continuation's
-                // caller decides what is next.
-                if (
-                  neutral.type === "system" &&
-                  neutral.subtype === PROVIDER_RETRY &&
-                  neutral.retry?.atLimit
-                ) {
-                  turnWaiters
-                    .get(message.instanceId)
-                    ?.reject(new Error(neutral.retry.message));
-                }
-                // A work item's session waits on its provider no longer than
-                // its deadline for that; anything its model says, or its
-                // turn's end, is the wait over (provider-retries.ts). One at
-                // its account's limit on an account of CawCo's is the
-                // at-limit controller's: its harness ends the turn on it.
-                if (
-                  neutral.type === "system" &&
-                  neutral.subtype === PROVIDER_RETRY &&
-                  neutral.retry &&
-                  !(
-                    neutral.retry.atLimit &&
-                    db.getInstancesByIds([message.instanceId])[0]?.accountId
-                  )
-                ) {
-                  providerRetries.retry(message.instanceId, neutral.retry);
-                } else if (
-                  neutral.type === "assistant" ||
-                  neutral.type === "result"
-                ) {
-                  providerRetries.progress(message.instanceId);
-                }
-              }
-              // A turn's end, in this order: the standing instructions answer
-              // it first, then the delegate hand-back delivers the turn's final
-              // message to the parent as a queued peer report — once, on the
-              // turn that ends the work (aborted turns carry no answer and are
-              // skipped).
-              if (kind === "frame" && message.instanceId && !internal) {
-                const neutral = body.message;
-                // A pi or OpenCode turn its account's limit refused, as its
-                // harness typed the refusal it ended on.
-                if (
-                  neutral.type === "result" &&
-                  neutral.is_error &&
-                  neutral.atLimit === true
-                ) {
-                  const [limited] = db.getInstancesByIds([message.instanceId]);
-                  const provider = limited?.accountId
-                    ? db.accounts.get(limited.accountId)?.provider
-                    : undefined;
-                  // Only a provider whose limits CawCo reads: its reset is
-                  // known, so the session waits for it or moves.
-                  if (
-                    provider &&
-                    provider !== CLAUDE_PROVIDER &&
-                    LIMITED_PROVIDERS.includes(provider)
-                  ) {
-                    limitRefused.add(message.instanceId);
-                  }
-                }
-                // Every tool call the session's model makes, at the top of
-                // its turn or inside one (a Code Mode program's, a
-                // subagent's): work of its own ends a declared wait at rest.
-                if (neutral.type === "assistant") {
-                  const called = neutral.message.content.flatMap((block) =>
-                    block.type === "tool_use" ? [block.name] : []
-                  );
-                  if (called.length > 0) {
-                    workItems.worked(message.instanceId, called);
-                  }
-                }
-                if (neutral.type === "result") {
-                  noteLimitStop(message.instanceId, neutral);
-                }
-                if (
-                  neutral.type === "assistant" &&
-                  !neutral.parent_tool_use_id
-                ) {
-                  // An answer of its own, after any compaction: its next
-                  // turn's end may file again (OpenCode writes its summary
-                  // in the assistant's role, which is the compaction's).
-                  if (!neutral.compactSummary) {
-                    answeredSinceCompaction(message.instanceId);
-                  }
-                  // Claude Code ending the turn on its account's limit.
-                  if ((neutral as { error?: string }).error === "rate_limit") {
-                    limitRefused.add(message.instanceId);
-                  } else {
-                    // The context this request sent: the session's own, as
-                    // the turn's result (a sum over its requests) can't say.
-                    const { usage } = neutral.message as {
-                      usage?: {
-                        cache_creation_input_tokens?: number;
-                        cache_read_input_tokens?: number;
-                        input_tokens?: number;
-                      };
-                    };
-                    if (typeof usage?.input_tokens === "number") {
-                      lastRequestContext.set(
-                        message.instanceId,
-                        usage.input_tokens +
-                          (usage.cache_read_input_tokens ?? 0) +
-                          (usage.cache_creation_input_tokens ?? 0)
-                      );
-                    }
-                  }
-                  turnInFlight.frame(
-                    message.instanceId,
-                    neutral.message.content
-                  );
-                } else if (
-                  neutral.type === "result" &&
-                  credentialTurns.has(message.instanceId)
-                ) {
-                  // A turn its credential ended that the hub answers:
-                  // nothing ended, as at a limit. The session moves and
-                  // carries on.
-                  const ended = message.instanceId;
-                  credentialTurns.delete(ended);
-                  limitRefused.delete(ended);
-                  turnInFlight.over(ended);
-                  atLimit.signedOut(ended).catch((error: unknown) => {
-                    limitAnswerFailed(ended, "its refused sign-in", error);
-                  });
-                } else if (
-                  neutral.type === "result" &&
-                  limitRefused.delete(message.instanceId) &&
-                  atLimit.manages(message.instanceId)
-                ) {
-                  // A turn its account's limit refused: nothing ended. The
-                  // session is held, moved or continued; no report goes up,
-                  // no rule answers it, and what a refused request says of
-                  // the context is not the session's context.
-                  turnInFlight.over(message.instanceId);
-                  const refused = message.instanceId;
-                  // A move it owes to an account with room is its turn's
-                  // end, as any turn's end is.
-                  if (!moveOwedAtRefusal(refused)) {
-                    atLimit.turnRefused(refused).catch((error: unknown) => {
-                      limitAnswerFailed(refused, "its account's limit", error);
-                    });
-                  }
-                } else if (neutral.type === "result") {
-                  const [cacheRow] = db.getInstancesByIds([message.instanceId]);
-                  if (traitsOf(cacheRow?.harness).promptCacheMaxMs !== null) {
-                    db.updateKeepAlive(
-                      cacheRow.id,
-                      keepAliveResult(
-                        cacheRow,
-                        neutral,
-                        false,
-                        lastRequestContext.get(cacheRow.id)
-                      )
-                    );
-                    lastRequestContext.delete(cacheRow.id);
-                    // Real turns re-arm from their own request clock.
-                    detach(keepAliveScheduler.wake(), "keepalive wake");
-                    if (cacheRow.keepAliveEnabled) {
-                      publishInstances(cacheRow.machineId);
-                    }
-                    atLimit.turnEnded(cacheRow.id);
-                    // A compaction after a move: its next step, or its end.
-                    compactionTurnEnded(cacheRow.id);
-                  } else if (cacheRow) {
-                    // The context of a session whose results report no
-                    // prompt cache, as its harness reported its last request.
-                    if (neutral.contextTokens !== undefined) {
-                      db.updateKeepAlive(cacheRow.id, {
-                        contextTokens: neutral.contextTokens,
-                        contextReadAt: new Date(),
-                      });
-                    }
-                    if (cacheRow.accountId) {
-                      atLimit.turnEnded(cacheRow.id);
-                    }
-                    compactionTurnEnded(cacheRow.id);
-                  }
-                  // Its account changed during the turn (its model crossed a
-                  // provider, or a person moved it): it moves now, at the
-                  // turn's end.
-                  // Its launch takes the move ({@link takeOwedMove}).
-                  if (cacheRow && owedMoves.has(cacheRow.id)) {
-                    relaunchOnAccount(cacheRow.id);
-                  }
-                  // Claude reports each model's window only here; kept so a
-                  // picker can say whether a model fits (claude's catalog
-                  // carries no window of its own).
-                  if (traitsOf(agentFrame.harness).contextWindow === "hub") {
-                    const { modelUsage } = neutral as {
-                      modelUsage?: Record<string, { contextWindow?: number }>;
-                    };
-                    for (const [model, usage] of Object.entries(
-                      modelUsage ?? {}
-                    )) {
-                      if (usage.contextWindow) {
-                        db.noteClaudeContextWindow(model, usage.contextWindow);
-                      }
-                    }
-                  }
-                  // Its context as this turn left it, against its window:
-                  // at its policy's threshold, it files its open items.
-                  if (cacheRow) {
-                    detach(
-                      fileAtThreshold(cacheRow.id, neutral.compactsAt),
-                      "context threshold"
-                    );
-                  }
-                  const { text, onNoReply } = turnInFlight.ended(
-                    message.instanceId
-                  );
-                  // It ended on no_reply_needed and said nothing after: no
-                  // news, no push. A failed turn is news whatever it called.
-                  const silent =
-                    onNoReply && !text && neutral.is_error !== true;
-                  // Every turn's end: its own row, by its key.
-                  const [row] = db.listedInstancesByIds([message.instanceId]);
-                  const parentId = row?.parentInstanceId;
-                  // A turn an interrupt cut ({@link interruptedTurns}), on
-                  // any harness, or one its server's stop cut (OpenCode's
-                  // `serverStopped`, which the session is handed back,
-                  // `resumeCutTurn`): nothing is handed back for it, no rule
-                  // answers it, no push says it ended, and it fails no item.
-                  const cut =
-                    interruptedTurns.delete(message.instanceId) ||
-                    neutral.subtype === "aborted" ||
-                    neutral.serverStopped === true;
-                  if (row && neutral.subtype === "aborted") {
-                    // OpenCode's own word: its wait is over; whether it is
-                    // held was the interrupt's to say ({@link noteInterrupt}).
-                    workItems.interrupted(row.id, false);
-                  }
-                  const turnId = message.instanceId;
-                  const endedAt = new Date();
-                  // The end on the hub's clock, on the row every screen reads:
-                  // against `seenAt`, also the hub's, it says "ended since the
-                  // owner last looked" without any device's clock; a silent
-                  // end leaves nothing unseen.
-                  // What this turn left waiting on the person, and what the
-                  // one before it asked that it moved on from (Needs you's rule 2).
-                  let artifactLeft: ArtifactNeed | undefined;
-                  if (row) {
-                    const before = row.turnEndedAt
-                      ? new Date(row.turnEndedAt)
-                      : null;
-                    db.noteTurnEnded(turnId, endedAt, silent);
-                    // Its closing words answer what it read, and the person's
-                    // stop settles it; a server's stop is handed back to go on.
-                    if (
-                      (text && neutral.is_error !== true) ||
-                      (cut && neutral.serverStopped !== true)
-                    ) {
-                      db.noteAnswered(turnId, endedAt);
-                    }
-                    // An approval this turn read and didn't use lapses.
-                    hubAsks.turnEnded(turnId);
-                    publishInstances(row.machineId);
-                    artifacts.turnEnded(turnId, before, endedAt);
-                    artifactLeft = unparked(artifactLane.now().needs)
-                      .filter(
-                        (need) =>
-                          artifacts.askedIn(need.artifactId, turnId, before) &&
-                          !cut
-                      )
-                      .at(-1);
-                  }
-                  // Every turn of a work item's session counts against its
-                  // budget, whatever answers it; one at the limit stops it.
-                  if (row?.workItemId) {
-                    workItems.countTurn(row);
-                    // The turn that called finish_item is over: what waited
-                    // out its end goes now, as the next turn.
-                    workItems.turnOver(row.id);
-                  }
-                  // Fleet watch counts the turn (and ends a triage run's).
-                  watch?.endTurn(turnId, neutral);
-                  /** Whether a rule answered the turn with a reply. */
-                  const answered = (): Promise<boolean> =>
-                    ruleEngine.endTurn(turnId, neutral);
-                  // Delegated work hands its turn back; a session another
-                  // session started (`start_session`) has a parent and no
-                  // item, and its turns are its own.
-                  const delegate =
-                    row?.workItemId && parentId && parentId !== turnId && !cut
-                      ? row
-                      : undefined;
-                  // A failed turn's report carries the harness's own error
-                  // words — "(no text)" once stood in for a 403 that was
-                  // sitting right in the result frame.
-                  const { errors } = neutral as { errors?: string[] };
-                  const harnessError =
-                    errors
-                      ?.map((each) => each.trim())
-                      .filter(Boolean)
-                      .join("\n") || undefined;
-                  const failed = !!neutral.is_error;
-                  // A turn its account's refused credential ended that the
-                  // hub does not carry on: its failure names the account.
-                  const refused = refusedFailures.get(turnId);
-                  refusedFailures.delete(turnId);
-                  // A failed turn's words, blank ones skipped: a result frame
-                  // can carry `result: ""`, and that is no reason.
-                  const turn = {
-                    wakes: neutral.wakes,
-                    text:
-                      text ||
-                      harnessError ||
-                      "(the delegate produced no text this turn)",
-                    ...(failed
-                      ? {
-                          error: `${
-                            harnessError ||
-                            neutral.result?.trim() ||
-                            `The harness ended the turn as failed (${neutral.subtype}) and gave no words for it.`
-                          }${refused ? `\n${refused.words}` : ""}`,
-                        }
-                      : {}),
-                  };
-                  // What the parent hears of the turn, if anything: an item
-                  // with checks reports only through finish_item, or when its
-                  // turn failed (work-items.ts turnEnded).
-                  const handBack = (from: InstanceRow): void => {
-                    const handed = workItems.turnEnded(from, turn, endedAt);
-                    if (handed) {
-                      reportToParent(from, handed.body, handed.failed, {
-                        completion: {
-                          resultId: neutral.uuid as string,
-                          ...(neutral.timestamp
-                            ? { completedAt: neutral.timestamp }
-                            : {}),
-                        },
-                      });
-                    }
-                    // Its item is over and its parent has the report: the
-                    // turn that just ended was its last word.
-                    sleepFinished(from.id);
-                  };
-                  if (delegate?.workItemId && !failed) {
-                    // A work item's turn is answered before it is handed
-                    // back: a rule's reply keeps the item running and wakes
-                    // its session into the next turn, and the parent hears
-                    // nothing of this one. Only a turn no standing
-                    // instruction answers goes back, and may end the item.
-                    // Meaning rules answer once Jev does; the hand-back
-                    // waits for them.
-                    answered()
-                      .then((replied) => {
-                        if (!replied) {
-                          handBack(delegate);
-                        }
-                      })
-                      .catch((error) => {
-                        console.error(
-                          `[hand-back] ${turnId}: ${error instanceof Error ? error.message : error}`
-                        );
-                      });
-                  } else {
-                    // A failed turn goes back at once and ends its item, so
-                    // nothing answers it; a session that is not delegated
-                    // work has its turn answered as it always has.
-                    if (delegate) {
-                      handBack(delegate);
-                    }
-                    if (refused) {
-                      oweMoveOff(turnId, refused.accountId, "refused");
-                    }
-                    // Nothing waits on whether a rule answered a turn that is
-                    // not held, but the owner's push does: a turn a rule
-                    // answered goes on, and waits on no one. A turn an
-                    // interrupt cut is answered by nothing.
-                    const owners = row && !parentId;
-                    if (!cut) {
-                      detach(
-                        answered().then((replied) => {
-                          if (owners && !replied) {
-                            push.turnEnded(
-                              turnId,
-                              text || harnessError,
-                              endedAt,
-                              neutral.wakes,
-                              silent,
-                              artifactLeft
-                            );
-                          }
-                        }),
-                        "rule answer"
-                      );
-                    }
-                  }
-                  // A plain session past one conversation is offered a project, once.
-                  if (row && !failed) {
-                    projectOffers.turnEnded(row.id);
-                  }
-                }
-              }
-              // Standing instructions read the frames inside a turn as the
-              // dashboards do; a turn's end is answered above.
-              if (kind === "frame" && message.instanceId && !internal) {
-                ruleEngine.observe(message.instanceId, body.message);
-                keepTasks(message.instanceId, body.message);
-                observeCompaction(message.instanceId, body.message);
-                usageCounter.observe(message.instanceId, body.message);
-                watch?.observe(message.instanceId, body.message);
-                briefingsObserve(db, message.instanceId, body.message);
-              }
-              // An agent only frames an error about a session that failed to start
-              // or died on its own, so the row records it for whoever looks later.
-              if (
-                kind === "error" &&
-                message.instanceId &&
-                agentFrame.errorVerb === "spawn"
-              ) {
-                const [process] = db.getInstancesByIds([message.instanceId]);
-                if (
-                  !process ||
-                  agentFrame.processGeneration !== processGeneration(process)
-                ) {
-                  break;
-                }
-                launchSettled(
-                  message.instanceId,
-                  "it failed",
-                  processGeneration(process)
-                );
-                processFailed(
-                  message.machineId,
-                  message.instanceId,
-                  agentFrame.errorMessage?.trim() ||
-                    `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`,
-                  asLastErrorKind(agentFrame.lastErrorKind)
-                );
-              }
-              // An install answering, whoever asked for it: the cell is the hub's
-              // to keep, and the reply still goes wherever it was going.
-              const install = message.requestId
-                ? pendingInstalls.get(message.requestId)
-                : undefined;
-              if (install && kind === "control_result" && message.requestId) {
-                pendingInstalls.delete(message.requestId);
-                // The release it was sent to reach is settled for this
-                // machine, landed or not: a copy left older says why on its
-                // row, and is sent no other until a newer release.
-                if (install.newest) {
-                  toolReleases.answered(
-                    message.machineId,
-                    install.toolId,
-                    install.newest
-                  );
-                }
-                const status = peekToolStatus(message.payload);
-                if (status) {
-                  db.setAgentToolCell(message.machineId, status);
-                  publishInstances(message.machineId);
-                }
-              }
-              // A transcript delete answering: once the machine says it is gone,
-              // every row that named it goes with it, through the one
-              // per-session delete, and every dashboard sees it leave.
-              // A sync answering, whoever asked for it: the machine's own account
-              // of what it now has is the hub's to keep, and the reply still goes
-              // wherever it was going.
-              // A refusal is kept too, in the machine's words, on its row.
-              if (
-                message.requestId &&
-                kind === "control_result" &&
-                fleetSyncs.has(message.requestId)
-              ) {
-                fleetSyncs.answered(message.requestId, body);
-                welcomeConverge.answered(message.machineId, body);
-              }
-              // A control a route is waiting on: the reply is that request's
-              // answer and nobody else's news.
-              if (kind === "control_result" && message.requestId) {
-                lifecycle.answered(message.requestId, body.ok);
-                const answering = waiting.get(message.requestId);
-                if (answering) {
-                  waiting.delete(message.requestId);
-                  answering(body);
-                  break;
-                }
-                // One whose caller was told no answer came is nobody's: said
-                // once and dropped as it came. Read on for dashboards, a late
-                // transcript's pictures were stored one by one on the hub's
-                // thread, and three such answers held it past its updater's
-                // 3 s (nightly 5575, obelisk, 2026-10-24 22:53:59).
-                if (lateAnswer(message)) {
-                  break;
-                }
-              }
-              // From here on the message is bound for dashboards, which get
-              // images as references to fetch when shown, not as bytes.
-              externalizeImages(message.payload);
-              // A control's reply that settles a Ledger command turns into that
-              // command's `applied`/`failed` ack. Read BEFORE the routing below
-              // but allowed to preempt nothing: if a dashboard is also waiting on
-              // this request id the old way, it still gets its reply.
-              const settled =
-                kind === "control_result" &&
-                message.requestId !== undefined &&
-                streams.settleCommand(message.requestId, body);
-              // A rewind that never started: its transcript was never cut.
-              const rewound =
-                kind === "control_result" && message.requestId
-                  ? rewinds.get(message.requestId)
-                  : undefined;
-              if (rewound && message.requestId) {
-                rewinds.delete(message.requestId);
-                if (kind === "control_result" && !body.ok) {
-                  transcripts.reread(rewound);
-                }
-              }
-              // A control's reply belongs to the dashboard that asked; the rest is fan-out.
-              const requester =
-                message.requestId && kind === "control_result"
-                  ? registry.takeRequester(message.requestId)
-                  : undefined;
-              if (requester) {
-                sendFrame(requester, message);
-              }
-              // An acknowledged command's reply is that command's news and nobody
-              // else's — the same rule as the line above, in the newer dialect.
-              // Without it the reply would fall through to the fleet-wide
-              // broadcast that an unrouted `control_result` gets today, and every
-              // dashboard would draw an error for a command it never sent.
-              else if (settled) {
-                break;
-              } else if (kind === "control_result") {
-                // A reply without a live requester is not fleet news. This
-                // includes late answers after a socket closed or a read timed out.
-                if (!hubReply) {
-                  logUnroutedReply(message);
-                }
-                break;
-              } else if (kind === "frame" && message.instanceId) {
-                // Folded into the session's transcript here, for every frame and
-                // whether or not anyone follows it: what it changed is sequenced
-                // onto the session's stream, so the ring can answer a resume from
-                // a socket that connects a minute from now. Everything else —
-                // permission_request, instances, delegate_event, usage, pulse,
-                // error, and any kind a future build adds — broadcasts, so an
-                // unknown kind is never silently dropped.
-                transcripts.ingest(
-                  message.instanceId,
-                  message.payload as TranscriptPayload
-                );
-              } else {
-                // A parked ask goes out with its secrets hidden; the ledger
-                // keeps the call as it was asked.
-                registry.broadcast(clientCopy(message));
-              }
+              runFrameStages(frameStages, {
+                ws,
+                message,
+                agentFrame,
+                hubReply: false,
+                ownedSession: undefined,
+                internal: false,
+              });
               break;
             }
             // A dashboard's verbs on a machine's socket.
