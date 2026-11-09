@@ -39,7 +39,6 @@
 
 import type { Dirent } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { unlessGone } from "@cawco/core/absent";
 import type { KeptProcess } from "@cawco/core/binary-updates";
@@ -54,6 +53,17 @@ import {
 import { commandLine, processLineage } from "@cawco/core/process-identity";
 import { type Ran, runInC } from "@cawco/core/run-captured";
 import { listedPid, type Pid } from "@cawco/core/signal";
+import {
+  guiDomain,
+  KEEPER_LABEL,
+  KEEPER_PLIST,
+  KEEPER_UNIT,
+  label as labelOf,
+  launchAgentPath,
+  launchAgentsDir,
+  systemdDir,
+  unitName,
+} from "./names";
 
 const run = async (argv: string[]): Promise<Ran> => {
   // systemd's user manager gives every unit it runs XDG_RUNTIME_DIR, the bus
@@ -174,21 +184,6 @@ export async function foreignIn(
   return foreign.flat();
 }
 
-const systemdDir = (): string =>
-  join(
-    process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-    "systemd",
-    "user"
-  );
-
-const launchAgentsDir = (): string =>
-  join(homedir(), "Library", "LaunchAgents");
-
-/** A keeper's unit and its launchd label, and the service name each carries (core keepers.ts `keeperService`). */
-const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/u;
-const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/u;
-const KEEPER_LABEL = /^dev\.cawco\.(sessiond(?:-.+)?)$/u;
-
 /** One keeper's job, as the service manager runs it. */
 export interface KeeperJob {
   /** Enabled: it starts with the machine (systemd), or loads at login (its plist is there). */
@@ -230,7 +225,7 @@ export interface KeeperJob {
 }
 
 const systemdJob = (service: string): KeeperJob => {
-  const unit = `cawco-${service}.service`;
+  const unit = unitName(service);
   const file = join(systemdDir(), unit);
   const reload = () => must(["systemctl", "--user", "daemon-reload"]);
   const foreign = (children: readonly number[]) => foreignIn(unit, children);
@@ -325,10 +320,10 @@ const systemdJob = (service: string): KeeperJob => {
 };
 
 const launchdKeeperJob = (service: string): KeeperJob => {
-  const label = `dev.cawco.${service}`;
-  const domain = `gui/${process.getuid?.() ?? 0}`;
+  const label = labelOf(service);
+  const domain = guiDomain();
   const target = `${domain}/${label}`;
-  const plist = join(launchAgentsDir(), `${label}.plist`);
+  const plist = launchAgentPath(service);
   const pid = async (): Promise<Pid | undefined> => {
     const shown = (await launchdJob(label))?.pid;
     return shown === undefined ? undefined : listedPid(shown);
