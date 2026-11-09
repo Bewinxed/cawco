@@ -40,7 +40,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { holdAwake } from "@cawco/agent/awake-hold";
-import { forgetPins, runBinaryPins } from "@cawco/agent/pin-record";
+import { forgetPins, pinsBackFor } from "@cawco/agent/pin-record";
 import { stopService } from "@cawco/agent/service-manager/install";
 import {
   type KeeperJob,
@@ -1276,27 +1276,18 @@ function rollbackWords(
 
 /**
  * The harnesses that went on for `version` before the swap (binary-update.ts
- * `putOnPins`) put back for `runs`, the build that runs instead, which
- * refuses them: by `runs`'s own `binary-pins back` (pin-record.ts), never by
- * `version`, which may not start at all. Never throws: what calls it is on
- * its way out already. What did not go back is said in the log, and answered
- * for the state's error.
+ * `putOnPins`) put back for `runs` (pin-record.ts `pinsBackFor`). What did
+ * not go back is said in the log, and answered for the state's error.
  */
-async function putBackPins(
+function putBackPins(
   version: string,
   runs: string
 ): Promise<string | undefined> {
-  try {
-    const said = await runBinaryPins(runs, version);
-    if (said) {
-      await say(`${version} does not run: ${said} went back on for ${runs}`);
-    }
-    return undefined;
-  } catch (error) {
-    const said = `what went on for ${version} did not go back: ${message(error)}`;
-    await say(said);
-    return said;
-  }
+  return pinsBackFor(version, runs, {
+    back: (what) =>
+      say(`${version} does not run: ${what} went back on for ${runs}`),
+    failed: say,
+  });
 }
 
 /** One stop of the hub's unit, said; one that failed or did not answer is said and waited past by the lock. */
