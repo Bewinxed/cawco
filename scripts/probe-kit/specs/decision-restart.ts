@@ -41,7 +41,6 @@
  *   bun scripts/probe-kit/run.ts decision-restart
  */
 import type { Frame, Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type Kit, open, type Spec } from "../kit";
@@ -85,12 +84,6 @@ const respond = (request: Seen): Reply => {
   return calls.reply(request) ?? text("ok");
 };
 
-/** His view of the page (hub routes.ts `/view`): his picks and their send, read as no session's read. */
-interface Read {
-  choices: Record<string, { options?: string[] }>;
-  sentAt: string | null;
-}
-
 /** The page's frame in the panel: the one on a preview name. */
 const pageFrame = (tab: Page) =>
   until(
@@ -127,9 +120,7 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
-  const range = await fleet.api<{ ports: string }>(
-    hubRequest("GET /api/preview-settings")
-  );
+  const range = await fleet.api((hub) => hub.api["preview-settings"].get());
   const first = Number(range.ports.split("–")[0]);
   const tunnel = await passTunnel(kit.out, first, base);
   await storeHostMode(fleet, passPattern("{port}", tunnel.front));
@@ -150,10 +141,8 @@ const run = async (kit: Kit) => {
     return;
   }
   const read = () =>
-    fleet.api<Read>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
-        path: { id: session, artifact: id },
-      })
+    fleet.api((hub) =>
+      hub.api.instances({ id: session }).artifacts({ artifact: id }).view.get()
     );
   const pickOf = async () =>
     (await read()).choices["rail-close"]?.options?.join() ?? "";

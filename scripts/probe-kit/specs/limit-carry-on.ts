@@ -41,7 +41,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { DAY_MS, HOUR_MS } from "../../../packages/core/src/time";
 import type { LimitRow } from "../../../packages/hub/src/at-limit";
 import {
@@ -51,6 +50,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The account the cut session moves to, beside the fleet's own (R). */
@@ -176,14 +176,7 @@ const sleepOf = async (fleet: KitFleet, id: string): Promise<string> => {
 };
 
 const moveTo = (fleet: KitFleet, id: string, accountId: string) =>
-  fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/instances/:id/account", {
-      path: { id },
-      body: { accountId },
-    })
-  );
+  hubAt(fleet.base).api.instances({ id }).account.post({ accountId });
 
 /** (a) and (b): the person's move of a cut session at rest, and of a resting one. */
 const onTheFleet = async (kit: Kit): Promise<void> => {
@@ -202,22 +195,17 @@ const onTheFleet = async (kit: Kit): Promise<void> => {
   );
   // Moving at the limit off: a cut session is held where it is, until a
   // person moves it.
-  const routed = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PUT /api/accounts/routing/:provider", {
-      path: { provider: "anthropic" },
-      body: {
-        yours: { strategy: "fill-first" },
-        delegates: { strategy: "fill-first" },
-        atLimit: { move: false, waitMinutes: 15, moveWholeUnderK: 200 },
-      },
-    })
-  );
+  const routed = await hubAt(fleet.base)
+    .api.accounts.routing({ provider: "anthropic" })
+    .put({
+      yours: { strategy: "fill-first" },
+      delegates: { strategy: "fill-first" },
+      atLimit: { move: false, waitMinutes: 15, moveWholeUnderK: 200 },
+    });
   kit.check(
     "setup: routing fills R first and holds a session at its limit",
-    routed.ok,
-    `${routed.status} ${await routed.text()}`
+    routed.error === null,
+    `${routed.status} ${answerText(routed)}`
   );
   await furnish(home, W, W_TOKEN);
   fleet.launch("agent");
@@ -298,12 +286,12 @@ const onTheFleet = async (kit: Kit): Promise<void> => {
   // (b): the resting session moved to W.
   const restMovedAt = Date.now();
   const restMove = await moveTo(fleet, resting, W);
-  const restMoveSaid = await restMove.text();
+  const restMoveSaid = answerText(restMove);
 
   // (a): the person moves the cut session to W, and writes nothing.
   const movedAt = Date.now();
   const cutMove = await moveTo(fleet, cut, W);
-  const cutMoveSaid = await cutMove.text();
+  const cutMoveSaid = answerText(cutMove);
   const carried = await until(
     "the cut session's carry-on reaches the model on W",
     () =>
@@ -315,7 +303,7 @@ const onTheFleet = async (kit: Kit): Promise<void> => {
   ).catch(() => 0);
   kit.check(
     "(a) a turn cut at R's limit, the session asleep and moved to W, carries on there by itself: its carry-on reaches the model on W with its refused prompt, and the person wrote once",
-    cutMove.ok &&
+    cutMove.error === null &&
       accountOfRow(fleet, cut) === W &&
       holdOf(fleet, cut) === undefined &&
       carried > 0 &&
@@ -335,7 +323,7 @@ const onTheFleet = async (kit: Kit): Promise<void> => {
   ).length;
   kit.check(
     "(b) a session at rest whose last turn ended as any turn does, moved to W, starts no turn there and stays asleep",
-    restMove.ok &&
+    restMove.error === null &&
       accountOfRow(fleet, resting) === W &&
       restTurns === 0 &&
       fleet.instance(resting)?.status === "sleeping",

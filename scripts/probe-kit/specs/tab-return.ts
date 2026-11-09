@@ -81,7 +81,6 @@ import { readFileSync } from "node:fs";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CDPSession, Frame, Locator, Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Heap, heapOf } from "../heap";
@@ -2634,34 +2633,28 @@ const run = async (kit: Kit) => {
   const busy = await fleet.spawn("claude", "Busy");
   await fleet.send(busy, `${scene.mark("busy")}: go.`);
   const previewed = await fleet.spawn("claude", "Heavy preview", fleet.repo);
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: previewed },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try this page and say whether it works",
-        name: "heavy",
-        dir: folder,
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: previewed }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try this page and say whether it works",
+      name: "heavy",
+      dir: folder,
     })
   );
   // The bound's other places: a page each, loaded once its tab is shown.
   const lights: string[] = [];
   for (const name of ["light-a", "light-b"]) {
     const light = await fleet.spawn("claude", `Light ${name}`, fleet.repo);
-    await fleet.api(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: light },
-        body: {
-          kind: "page",
-          does: "judge",
-          title: "Probe judge artifact",
-          ask: "Judge this page: pin anything that reads wrong",
-          name,
-          html: `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body><p>${name}</p></body></html>`,
-        },
+    await fleet.api((hub) =>
+      hub.api.instances({ id: light }).artifacts.post({
+        kind: "page",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge this page: pin anything that reads wrong",
+        name,
+        html: `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body><p>${name}</p></body></html>`,
       })
     );
     lights.push(light);
