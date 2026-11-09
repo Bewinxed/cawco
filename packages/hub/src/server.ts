@@ -1092,6 +1092,7 @@ import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
+import { sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { applySetupPicks, isSetupPage } from "./setup";
@@ -10071,25 +10072,13 @@ export const createServer = (
       .listedInstancesByIds(db.plansWithAwayNotes())
       .filter(holdsNews);
     for (const row of told) {
-      deliverSend({
-        verb: "send",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: BACK_MESSAGE },
-            parent_tool_use_id: null,
-            origin: {
-              kind: "system",
-              name: BACK_ORIGIN,
-              line: noticeWords.back,
-            },
-          },
-        },
-      } satisfies Envelope<SendPayload>);
+      deliverSend(
+        sessionWord(row, BACK_MESSAGE, {
+          kind: "system",
+          name: BACK_ORIGIN,
+          line: noticeWords.back,
+        })
+      );
     }
     console.log(
       `[presence] the person is back: ${told.length} session(s) holding news from while they were away told so, each to recap it${told.length > 0 ? `: ${told.map((row) => sessionName(row)).join(", ")}` : ""}`
