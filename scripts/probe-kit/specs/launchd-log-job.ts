@@ -12,7 +12,7 @@
  *
  * - `capLaunchdLogs` copies the log to `.1` and cuts it, and the job writes
  *   on at the new end (launchd opened it `O_APPEND`);
- * - the keeper's own removal path (agent keeper-jobs.ts `keeperJob(…).remove`)
+ * - the keeper's own removal path (agent service-manager/keeper-job.ts `keeperJob(…).remove`)
  *   boots it out, and its log and `.1` are gone.
  *
  * Cleanup boots out the probe's label by name, whatever happened.
@@ -22,7 +22,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { keeperJob } from "../../../packages/agent/src/keeper-jobs";
+import { keeperJob } from "../../../packages/agent/src/service-manager/keeper-job";
 import { keeperService } from "../../../packages/core/src/keepers";
 import {
   capLaunchdLogs,
