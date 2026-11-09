@@ -32,16 +32,15 @@
 import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "../../../packages/core/src/session/controls";
 import type { SessionMessage } from "../../../packages/core/src/session-messages";
 import type {
-  TranscriptPage,
   TranscriptWindow,
   WindowAsk,
 } from "../../../packages/core/src/transcript-types";
 import { delay, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const BIG_MB = 406;
@@ -114,9 +113,9 @@ const watched = async <T>(
   const sampling = (async () => {
     while (!sampler.signal.aborted) {
       const asked = performance.now();
-      await fetchHub(fetch, fleet.base, hubRequest("GET /health")).catch(
-        () => undefined
-      );
+      await hubAt(fleet.base)
+        .health.get()
+        .catch(() => undefined);
       health = Math.max(health, performance.now() - asked);
       agentPeak = Math.max(agentPeak, await rssOf(agent));
       hubPeak = Math.max(hubPeak, await rssOf(hub));
@@ -310,9 +309,8 @@ export default {
       `the agent's first usage scan and search sync of the stored ${Math.round((await stat(file)).size / 1024 / 1024)} MB ended ${Math.round(performance.now() - started)} ms after it was up`
     );
     const pageOf = (cursor?: string) =>
-      fleet.api<TranscriptPage>(
-        hubRequest("GET /api/instances/:id/transcript", {
-          path: { id: key },
+      fleet.api((client) =>
+        client.api.instances({ id: key }).transcript.get({
           query: { limit: "60", ...(cursor ? { before: cursor } : {}) },
         })
       );

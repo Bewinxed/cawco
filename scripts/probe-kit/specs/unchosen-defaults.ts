@@ -51,10 +51,10 @@
 import { join } from "node:path";
 import { $ } from "bun";
 import type { Page } from "playwright-core";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { ARTIFACT_SESSION_PATH } from "../../../packages/core/src/artifact-session";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { machineLabel } from "../../../packages/core/src/machine-names";
 import { ARTIFACT_GONE } from "../../../packages/core/src/words/artifact-session";
 import { placePickWords } from "../../../packages/core/src/words/place";
@@ -68,6 +68,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
+import { hubAt } from "../hub";
 import {
   type Kit,
   type KitFleet,
@@ -114,11 +115,9 @@ const HTTP = /^http/u;
 
 /** The hub's online word on the fleet's machine. */
 const machineOnline = async (fleet: KitFleet): Promise<boolean> =>
-  (
-    await fleet.api<{ machineId: string; status: string }[]>(
-      hubRequest("GET /api/agents")
-    )
-  ).find((row) => row.machineId === MACHINE)?.status === "online";
+  (await fleet.api((hub) => hub.api.agents.get())).find(
+    (row) => row.machineId === MACHINE
+  )?.status === "online";
 
 /** A port nothing listens on yet. */
 const freePort = (): number => {
@@ -283,9 +282,7 @@ const dialogWith = async (
 
 /** Checks 3 and 4: the New Session dialog. */
 const form = async (kit: Kit, fleet: KitFleet, base: string) => {
-  const agents = await fleet.api<{ hostname: string; machineId: string }[]>(
-    hubRequest("GET /api/agents")
-  );
+  const agents = await fleet.api((hub) => hub.api.agents.get());
   const hostname = agents.find((row) => row.machineId === MACHINE)?.hostname;
   const label = hostname ? machineLabel(hostname) : MACHINE;
   const page = await kit.page("desk");
@@ -294,19 +291,7 @@ const form = async (kit: Kit, fleet: KitFleet, base: string) => {
   const report = await until(
     "the machine's OpenCode report",
     async () =>
-      (
-        await fleet.api<
-          {
-            harnesses?: {
-              harness: string;
-              installed: boolean;
-              models?: unknown[];
-              modelsUnread?: string;
-            }[];
-            machineId: string;
-          }[]
-        >(hubRequest("GET /api/agents"))
-      )
+      (await fleet.api((hub) => hub.api.agents.get()))
         .find((row) => row.machineId === MACHINE)
         ?.harnesses?.find((one) => one.harness === "opencode"),
     (one) =>
@@ -450,14 +435,12 @@ const fromProject = async (kit: Kit, fleet: KitFleet, base: string) => {
   const dir = `${fleet.sandbox}/chosen`;
   await $`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
   const name = "Chosen";
-  const { id } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name,
-        machineId: MACHINE,
-        cwd: dir,
-        caw: false,
-      },
+  const { id } = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name,
+      machineId: MACHINE,
+      cwd: dir,
+      caw: false,
     })
   );
   const page = await kit.page("desk");
@@ -731,11 +714,9 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   }
 
   // 10. Its session's panel closed while the artifact lives: the tab stays on it.
-  const closed = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("DELETE /api/instances/:id/preview", { path: { id: session } })
-  );
+  const closed = await hubAt(fleet.base)
+    .api.instances({ id: session })
+    .preview.delete();
   const tabFrame = placeTab.page.locator('iframe[title="Preview"]');
   // A frame the hub's closed panel would take away goes within a frame or two of its word; a second is many of them.
   await placeTab.page.waitForTimeout(1000);
@@ -743,7 +724,7 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   const src = stays > 0 ? await tabFrame.first().getAttribute("src") : null;
   kit.check(
     "10: its session's panel closed, the artifact's own tab still shows its page",
-    closed.ok && stays === 1 && !!src?.includes("/__cawco/page/"),
+    closed.error === null && stays === 1 && !!src?.includes("/__cawco/page/"),
     `close ${closed.status}; frames ${stays}; src ${src}`
   );
 
@@ -780,17 +761,14 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
     return;
   }
   const deletedTab = await tabOn(doomed);
-  const removed = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
-      path: { id: session, artifact: doomed },
-    })
-  );
+  const removed = await hubAt(fleet.base)
+    .api.instances({ id: session })
+    .artifacts({ artifact: doomed })
+    .delete();
   const gone = await refusedWith(deletedTab, ARTIFACT_GONE);
   kit.check(
     "5: a tab whose artifact is deleted says the hub's reason and opens no socket again",
-    removed.ok && gone.shown > 0 && gone.again === 0,
+    removed.error === null && gone.shown > 0 && gone.again === 0,
     `delete ${removed.status}; reason shown ${gone.shown}; sockets opened after ${gone.again}`
   );
 
@@ -801,19 +779,17 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
     return;
   }
   const trustedTab = await tabOn(kept);
-  const turned = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PUT /api/auth/pairing", {
-      body: { required: true, kind: "app", name: "Probe app" },
-    })
-  );
-  const app = (await turned.json().catch(() => ({}))) as { token?: string };
-  fleet.authorize(app.token ?? null);
+  const turned = await hubAt(fleet.base).api.auth.pairing.put({
+    required: true,
+    kind: "app",
+    name: "Probe app",
+  });
+  const app = dataOf(turned);
+  fleet.authorize(("token" in app ? app.token : undefined) ?? null);
   const unpaired = await refusedWith(trustedTab, PAIRING_REQUIRED);
   kit.check(
     "6: with pairing turned on elsewhere, an unpaired browser's tab says it must pair and opens no socket again",
-    turned.ok && unpaired.shown > 0 && unpaired.again === 0,
+    turned.error === null && unpaired.shown > 0 && unpaired.again === 0,
     `pairing on ${turned.status}; reason shown ${unpaired.shown}; sockets opened after ${unpaired.again}; opened in all ${trustedTab.opened.length}`
   );
 };

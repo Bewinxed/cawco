@@ -49,17 +49,15 @@ import { join } from "node:path";
 import { $ } from "bun";
 import type { Page } from "playwright-core";
 import { publicOrigin } from "../../../apps/dashboard/public-origin.js";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { crossSiteRefusal } from "../../../packages/core/src/browser-gate";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import {
-  type PreviewTicket,
-  previewEnterUrl,
-} from "../../../packages/core/src/preview/routes";
+import { previewEnterUrl } from "../../../packages/core/src/preview/routes";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { RELAY_HEADER } from "../../../packages/preview/src/proxy";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
+import { hubAt } from "../hub";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { PASS_DOMAIN, PASS_HOSTS, storeHostMode } from "../pass-legs";
 import { passedFetch, passInto, previewPass } from "../preview-pass";
@@ -312,15 +310,11 @@ const probe = async (kit: Kit) => {
   // The preview's own origin (hub artifact-pages.ts `frameAddress`).
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
   const address = async () =>
-    (await (
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/artifacts/:artifact/preview-address", {
-          path: { artifact: id },
-        })
-      )
-    ).json()) as { origin?: string; port?: number };
+    dataOf(
+      await hubAt(fleet.base)
+        .api.artifacts({ artifact: id })
+        ["preview-address"].post()
+    );
   const sessionPort = (await address()).port ?? 0;
   const portOrigin = `http://127.0.0.1:${sessionPort}`;
   const portFront = cloudflareTo(`127.0.0.1:${sessionPort}`);
@@ -408,9 +402,7 @@ const probe = async (kit: Kit) => {
 
   // 6. Host mode behind Cloudflare over https, entered with a ticket. Its
   // names stand under localtest.me, which the browser is told is 127.0.0.1.
-  const range = (await (
-    await fetchHub(fetch, fleet.base, hubRequest("GET /api/preview-settings"))
-  ).json()) as { ports: string };
+  const range = dataOf(await hubAt(fleet.base).api["preview-settings"].get());
   const first = Number(range.ports.split("–")[0]);
   const hostFront = cloudflareTo(
     `127.0.0.1:${first}`,
@@ -420,13 +412,11 @@ const probe = async (kit: Kit) => {
     mode: "host",
     pattern: `https://p-{port}.${PASS_DOMAIN}:${hostFront.port}`,
   });
-  const stored = await fleet.api<{ mode: string }>(
-    hubRequest("GET /api/preview-settings")
-  );
+  const stored = await fleet.api((hub) => hub.api["preview-settings"].get());
   const origin = (await address()).origin ?? "none";
-  const { ticket } = (await (
-    await fetchHub(fetch, fleet.base, hubRequest("POST /api/preview-ticket"))
-  ).json()) as PreviewTicket;
+  const { ticket } = dataOf(
+    await hubAt(fleet.base).api["preview-ticket"].post()
+  );
   const named = await kit.page("desk", {
     ignoreHTTPSErrors: true,
     hostRules: PASS_HOSTS,
@@ -450,11 +440,7 @@ const probe = async (kit: Kit) => {
   // 7. A real Vite dev server: before (straight), then through the preview,
   // in port mode again: host mode's listener took the range's first port,
   // so the preview's own port is read once it is made.
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PUT /api/preview-settings", { body: { mode: "port" } })
-  );
+  await hubAt(fleet.base).api["preview-settings"].put({ mode: "port" });
   const free = Bun.serve({ port: 0, fetch: () => new Response() });
   const vitePort = free.port as number;
   free.stop(true);
@@ -520,10 +506,10 @@ const probe = async (kit: Kit) => {
     180_000
   );
   // The Vite preview's own origin (hub artifact-pages.ts `frameAddress`).
-  const viteAddress = await fleet.api<{ port?: number }>(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact: viteMade.match(ANSWERED_ID)?.[1] ?? "" },
-    })
+  const viteAddress = await fleet.api((hub) =>
+    hub.api
+      .artifacts({ artifact: viteMade.match(ANSWERED_ID)?.[1] ?? "" })
+      ["preview-address"].post()
   );
   const viteOrigin = `http://127.0.0.1:${viteAddress.port ?? 0}`;
   // The agent's listener for it: the one 0.0.0.0 port the start opened.

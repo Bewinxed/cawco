@@ -30,10 +30,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  type HubRequest,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-door-machine";
@@ -129,12 +126,11 @@ export default {
 
       const said = (error: unknown) =>
         error instanceof Error ? error.message : String(error);
-      const of = (request: HubRequest) =>
-        arrived.find((one) => one.path === request.path);
+      const of = (path: string) => arrived.find((one) => one.path === path);
 
       // 1. The update loop's settings read.
       const settings = await readUpdateSettings(base).catch(said);
-      const read = of(hubRequest("GET /api/binary-updates/settings"));
+      const read = of(hubPath.api["binary-updates"].settings["~path"]);
       check(
         "1. the update loop's settings read arrives as this machine and is answered the policy",
         typeof settings === "object" &&
@@ -149,7 +145,7 @@ export default {
         (listed) => `${JSON.stringify(listed).length} bytes`,
         said
       );
-      const listing = of(hubRequest("GET /api/delegation/tools"));
+      const listing = of(hubPath.api.delegation.tools["~path"]);
       check(
         "2. the tool listing, through the agent's gateway, arrives with the machine's proof",
         listing?.proof === true && listing.status !== 401,

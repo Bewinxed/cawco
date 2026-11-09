@@ -34,7 +34,6 @@
  *   bun scripts/probe-kit/run.ts own-place
  */
 
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -90,12 +89,10 @@ const spec: Spec = {
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Own office",
-          caw: false,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Own office",
+        caw: false,
       })
     );
     const places = fleet.query<{ kind: string }>(
@@ -116,8 +113,8 @@ const spec: Spec = {
       "folder_write",
       { path: "stages.md", content: STAGES_MD }
     );
-    const stages = await fleet.api<{ source: string }>(
-      hubRequest("GET /api/projects/:id/stages", { path: { id: project.id } })
+    const stages = await fleet.api((hub) =>
+      hub.api.projects({ id: project.id }).stages.get()
     );
     check(
       "o0: the own project is set up: its session's stages.md is its stages",
@@ -126,17 +123,15 @@ const spec: Spec = {
     );
 
     // o1. A routine's delegate run: the test run its making fires.
-    const routine = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/routines", {
-        body: {
-          projectId: project.id,
-          name: "Weekly listings scan",
-          cron: "0 9 * * 1",
-          timeZone: "UTC",
-          target: "delegate",
-          prompt: "Say ok.",
-          lands: "none",
-        },
+    const routine = await fleet.api((hub) =>
+      hub.api.routines.post({
+        projectId: project.id,
+        name: "Weekly listings scan",
+        cron: "0 9 * * 1",
+        timeZone: "UTC",
+        target: "delegate",
+        prompt: "Say ok.",
+        lands: "none",
       })
     );
     const run = await until(
@@ -168,18 +163,17 @@ const spec: Spec = {
 
     // o2. A task's attempt, started by the project's session; filed in its
     // first stage, `found`.
-    const task = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects/:id/tasks", {
-        path: { id: project.id },
-        body: { title: "Shortlist three offices near the station" },
-      })
+    const task = await fleet.api((hub) =>
+      hub.api
+        .projects({ id: project.id })
+        .tasks.post({ title: "Shortlist three offices near the station" })
     );
     const started = await fleet
-      .api<{ workItemId: string | null; workspaceId: string | null }>(
-        hubRequest("POST /api/projects/:id/tasks/:taskId/attempts", {
-          path: { id: project.id, taskId: task.id },
-          body: { parentInstanceId: parent },
-        })
+      .api((hub) =>
+        hub.api
+          .projects({ id: project.id })
+          .tasks({ taskId: task.id })
+          .attempts.post({ parentInstanceId: parent })
       )
       .catch((error: unknown) =>
         error instanceof Error ? error.message : String(error)
