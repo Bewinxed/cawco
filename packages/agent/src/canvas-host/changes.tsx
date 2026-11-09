@@ -28,6 +28,7 @@
 
 import { seeChanges, seenOf } from "@cawco/core/comments/model";
 import type { ArtifactChanges, ChangedItem } from "@cawco/core/doc-meta";
+import { getMeta } from "@cawco/core/doc-meta";
 import { commentWords } from "@cawco/core/words/comments";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
@@ -50,8 +51,7 @@ interface Read {
 }
 
 const readOf = (doc: Doc): Read => {
-  const changes =
-    (doc.getMap("meta").get("changes") as ArtifactChanges | undefined) ?? null;
+  const changes = getMeta(doc, "changes") ?? null;
   return {
     changes,
     seen: new Set(

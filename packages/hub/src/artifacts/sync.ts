@@ -50,6 +50,14 @@ import {
 } from "@cawco/core/comments/validate";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
+import {
+  type ClientMetaKey,
+  docMeta,
+  getMeta,
+  type MetaMap,
+  metaWriter,
+  setMeta,
+} from "@cawco/core/doc-meta";
 import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
 import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
@@ -150,9 +158,6 @@ const sameMap = (a: YMap<unknown>, b: YMap<unknown>): boolean =>
   a.size === b.size &&
   [...a.entries()].every(([key, value]) => same(value, b.get(key)));
 
-/** The keys of a canvas's `meta` its screen keeps: Excalidraw's pen mode, once a pen touched it. */
-const PEN_KEYS = new Set(["penMode", "penDetected"]);
-
 /** A request's keys a screen writes: its claim (`claim-<its page's number>`, canvas-host scene.ts `PAGE_CLAIM`) and the result. */
 const SCREEN_REQUEST_KEY = /^(claim-\d+|result)$/u;
 
@@ -182,38 +187,52 @@ const requestsProblem = (
 };
 
 /**
- * The key of `meta` a person writes on any artifact: Send all's note beside
- * the comments they held (core comments.ts `sendHeld`, `HeldNote`), which
- * the delivery that carries them takes away.
+ * Why a client's value for a key of `meta` it writes (core
+ * `META_WRITERS`) may not be kept: Send all's note beside the comments the
+ * person held (core comments.ts `sendHeld`, `HeldNote`), which the
+ * delivery that carries them takes away; on a canvas, Excalidraw's pen
+ * mode, once a pen touched it.
  */
-const HELD_NOTE_KEY = "heldNote";
+const CLIENT_META: { [K in ClientMetaKey]: (value: unknown) => string | null } =
+  {
+    heldNote: heldNoteProblem,
+    penDetected: (value) => penProblem("penDetected", value),
+    penMode: (value) => penProblem("penMode", value),
+  };
+
+/** Why a canvas screen's pen key `key` may not hold `value`, or null. */
+const penProblem = (key: string, value: unknown): string | null =>
+  value === undefined || typeof value === "boolean"
+    ? null
+    : `${key} is true or false.`;
 
 /**
  * Why a person's change to `meta` may not be kept: on any artifact they
- * write Send all's note ({@link HELD_NOTE_KEY}), on a canvas its pen mode
- * too ({@link PEN_KEYS}), and nothing else.
+ * write the keys core `META_WRITERS` gives the person, on a canvas the
+ * keys it gives the canvas's screen too ({@link CLIENT_META}), and nothing
+ * else.
  */
 const metaProblem = (
-  before: YMap<unknown>,
-  after: YMap<unknown>,
+  before: MetaMap,
+  after: MetaMap,
   canvas: boolean
 ): string | null => {
-  for (const key of new Set([...after.keys(), ...before.keys()])) {
-    const value = after.get(key);
-    if (same(value, before.get(key))) {
+  const was = new Map(before.entries());
+  const now = new Map(after.entries());
+  for (const key of new Set([...now.keys(), ...was.keys()])) {
+    const value = now.get(key);
+    if (same(value, was.get(key))) {
       continue;
     }
-    if (key === HELD_NOTE_KEY) {
-      const problem = heldNoteProblem(value);
-      if (problem) {
-        return problem;
-      }
-    } else if (!(canvas && PEN_KEYS.has(key))) {
+    const writer = metaWriter(key);
+    if (!(writer === "person" || (canvas && writer === "canvas"))) {
       return canvas
         ? "A screen keeps only penMode, penDetected and heldNote in a canvas's meta."
         : "A page changes its artifact's meta only by its held note.";
-    } else if (!(value === undefined || typeof value === "boolean")) {
-      return `${key} is true or false.`;
+    }
+    const problem = CLIENT_META[key as ClientMetaKey](value);
+    if (problem) {
+      return problem;
     }
   }
   return null;
@@ -321,7 +340,7 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
     return `A canvas keeps at most ${CANVAS_LIMITS.elements} elements.`;
   }
   return (
-    metaProblem(doc.getMap("meta"), trial.getMap("meta"), true) ??
+    metaProblem(docMeta(doc), docMeta(trial), true) ??
     elements
       .toArray()
       .map(entryProblem)
@@ -338,10 +357,10 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
 
 /** Why `trial`'s state, `doc`'s after a person's update, may not be kept; null when it may. */
 const stateProblem = (doc: Doc, trial: Doc): string | null => {
-  if (doc.getMap("meta").get("kind") === "canvas") {
+  if (getMeta(doc, "kind") === "canvas") {
     return canvasProblem(doc, trial);
   }
-  const component = doc.getMap("meta").get("kind") === "component";
+  const component = getMeta(doc, "kind") === "component";
   for (const name of MAPS) {
     if (!(
       name === "state" ||
@@ -354,7 +373,7 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
     }
   }
   const ink =
-    metaProblem(doc.getMap("meta"), trial.getMap("meta"), false) ??
+    metaProblem(docMeta(doc), docMeta(trial), false) ??
     inkMapsProblem(doc, trial) ??
     (component ? tunedProblem([...trial.getMap(TUNED_MAP).entries()]) : null);
   if (ink) {
@@ -438,7 +457,7 @@ export const artifactPicture =
         headers: { allow: "POST" },
       });
     }
-    if (docs.doc(artifactId).getMap("meta").get("kind") !== "canvas") {
+    if (getMeta(docs.doc(artifactId), "kind") !== "canvas") {
       return new Response("Only a canvas keeps a picture.", { status: 409 });
     }
     const body = new Uint8Array(await request.arrayBuffer());
@@ -458,9 +477,11 @@ export const artifactPicture =
       await writeStateFile(path, body);
     }
     docs.transact(artifactId, "hub", (doc) =>
-      doc
-        .getMap("meta")
-        .set("pictureAt", body.length === 0 ? null : new Date().toISOString())
+      setMeta(
+        doc,
+        "pictureAt",
+        body.length === 0 ? null : new Date().toISOString()
+      )
     );
     return new Response(null, { status: 204 });
   };
@@ -741,7 +762,7 @@ const takeUpdate = (
     return problem;
   }
   applyUpdate(doc, update, origin);
-  if (doc.getMap("meta").get("kind") === "canvas") {
+  if (getMeta(doc, "kind") === "canvas") {
     if (origin?.client.screen) {
       noteClaims(docs, artifactId, origin.client);
     }
