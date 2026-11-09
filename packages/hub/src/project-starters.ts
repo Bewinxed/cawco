@@ -516,7 +516,7 @@ export const starterRoutes = (starters: ProjectStarters) =>
     {
       params: t.Object({ id: t.String() }),
       body: t.Object({
-        place: t.Union(STARTER_PLACES.map((place) => t.Literal(place))),
+        place: t.UnionEnum(STARTER_PLACES),
         text: t.String({ minLength: 1, maxLength: 200 }),
         outcome: t.Union([t.Literal("picked"), t.Literal("edited")]),
       }),
