@@ -354,6 +354,13 @@ suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/core/src/tool-presentation.ts	3
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/core/src/transcript-rules.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/admin-tools.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/agent-socket/account-readings.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/agent-socket/control-replies.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/agent-socket/ingest-ledger.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/agent-socket/machine-return-steps.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/agent-socket/session-signals.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/agent-socket/turn-ended-steps.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/agent-socket/turn-flow.ts	2
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/db/instances.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/fleet-sources.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/installs.ts	2
@@ -361,7 +368,7 @@ suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/routes/instance-edits.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/routes/instance-titles.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/rules.ts	1
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/server.ts	13
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/server.ts	5
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/skills.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/spawns.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/stages.ts	1
