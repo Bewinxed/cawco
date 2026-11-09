@@ -195,7 +195,7 @@
     const { id } = project;
     const newest = reads.next();
     try {
-      const next = await readRoutinesPage(id, hub.read);
+      const next = await readRoutinesPage(id, hub.client);
       if (id === project.id && newest()) {
         page = next;
         problem = null;

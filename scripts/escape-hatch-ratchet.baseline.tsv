@@ -100,7 +100,6 @@ as-unknown-as	Readiness & { document: { body: { textContent: string | null } | n
 as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
 as-unknown-as	Record<string, string>	apps/dashboard/src/lib/cawco/accounts/figure.ts	1
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/fleet.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
@@ -175,7 +174,6 @@ catch-drops-reason	CallExpression	packages/preview/src/overlay/radial.ts	2
 catch-drops-reason	CallExpression	scripts/binary/sign-agent-bundle.ts	1
 catch-drops-reason	CallExpression	scripts/dashboard-build-cache.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/decides/WhoDecides.svelte	1
-catch-drops-reason	empty	apps/dashboard/src/lib/cawco/fleet-mcp.svelte.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/home/Caw.svelte	3
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/home/home-state.svelte.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/NeedsCaw.svelte	2
