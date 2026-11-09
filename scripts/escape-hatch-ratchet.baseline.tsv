@@ -594,7 +594,8 @@ empty-catch		apps/dashboard/src/lib/cawco/error-report.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/home/NeedsCard.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/hub-auth.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/preview/browser-stream.ts	2
-empty-catch		apps/dashboard/src/lib/cawco/project/ProjectPage.svelte	3
+empty-catch		apps/dashboard/src/lib/cawco/project/project-board.svelte.ts	2
+empty-catch		apps/dashboard/src/lib/cawco/project/ProjectPage.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/spawn/EffortPips.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/usage/forecast.svelte.ts	1
