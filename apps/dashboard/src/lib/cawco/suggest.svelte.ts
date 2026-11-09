@@ -7,9 +7,8 @@
 import { hubRequest } from "@cawco/core/hub-request";
 import type { SuggestCandidate } from "@cawco/core/suggest";
 import {
-  hubFetch,
   hubJson,
-  hubRefusal,
+  hubSend,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import type { HubSeam } from "./hub-seam";
@@ -65,12 +64,7 @@ export function loadSuggestSetting(hub: HubSeam): void {
 
 /** Turns suggestions on or off for every composer. */
 export async function saveSuggestSetting(enabled: boolean): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("PUT /api/jev/suggest", { body: { enabled } })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
+  await hubSend(hubRequest("PUT /api/jev/suggest", { body: { enabled } }));
   suggestions.enabled = enabled;
 }
 
