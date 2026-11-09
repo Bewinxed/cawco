@@ -32,6 +32,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconReset,
     IconTextEmojiLinear,
@@ -169,7 +170,7 @@
     );
   });
   /** Under the phone line a colour's picker unfolds under its row, across the face. */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The controls in their headings' order: those under none first, then each heading's. */
   const sections = $derived.by(() => {
     const heads: (string | null)[] = [];
