@@ -4,8 +4,8 @@
  * - a file's module-level state is its own: nothing exports a `let`, a `Map`
  *   or a `Set`, and what another file needs goes through a function the
  *   owning file exports;
- * - its files' imports run one way: the calls that must go up go through
- *   `boundary/unasked.ts`.
+ * - its files' imports run one way: the calls that must go up are passed
+ *   down as a value (`UnaskedCalls`, `boundary/state.ts`).
  *
  * Run by `bun run check`.
  */
