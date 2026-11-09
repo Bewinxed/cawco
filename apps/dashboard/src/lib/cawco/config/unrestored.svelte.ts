@@ -1,6 +1,6 @@
 import type { Deleted } from "@cawco/core/fleet";
 import { hubRequest } from "@cawco/core/hub-request";
-import { failureClause, hubFetch, hubRefusal } from "../hub-read";
+import { failureClause, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { refusals } from "../refusals.svelte";
 
 /**

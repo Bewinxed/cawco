@@ -12,8 +12,8 @@
    * on the scroller's own, so nothing shows under it.
    */
   import type { Snippet } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { aboveKeyboard } from "#lib/platform/visible-viewport.svelte.js";
 
   let {
     children,

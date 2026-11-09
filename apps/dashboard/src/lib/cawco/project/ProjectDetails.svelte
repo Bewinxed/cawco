@@ -83,8 +83,6 @@
     removeProjectPlace,
   } from "#lib/cawco/client.svelte.js";
   import DecidesRow from "#lib/cawco/decides/DecidesRow.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import {
     folderFileHref,
@@ -106,6 +104,8 @@
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { IconChevronDown, IconPlus } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import CawLeadSwitch from "./CawLeadSwitch.svelte";
   import type { CawLead } from "./caw-lead.svelte";
