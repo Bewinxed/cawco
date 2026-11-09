@@ -33,11 +33,9 @@ import type { ArtifactRow } from "../../db/artifacts";
 import {
   type BuiltProgram,
   keptImagePaths,
-  type mergeProgram,
-  ProgramRefusal,
   readKept,
+  type StatementChange,
 } from "../../decision-program";
-import type { ArtifactServiceDeps } from "../deps";
 import { metaOf, stateOf } from "../facts";
 import { testedKeys } from "../overwrite";
 import {
@@ -59,10 +57,6 @@ import type {
   Revised,
 } from "../shapes";
 import type { KindContext } from "./context";
-
-/** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
-export const refusedProgram = (error: ProgramRefusal): ArtifactRefusal =>
-  new ArtifactRefusal(error.status, error.message, { cause: error });
 
 /** How the person answered one choice a page asks ({@link DecisionAnswer}), from its entry in the doc's state. */
 const answerOf = (
@@ -547,7 +541,7 @@ export const createPageKind = (ctx: PageKindContext) => {
     return { ...page, broken };
   };
   /**
-   * `deps.page`'s build, its refusal (and a program's) thrown as the
+   * `deps.page`'s build, its refusal (a program's among them) thrown as the
    * artifact's; kept in the project's folder unless it is a held next
    * version's (`keep` false), which ../versions.ts `promote` keeps there.
    */
@@ -557,14 +551,9 @@ export const createPageKind = (ctx: PageKindContext) => {
     from: PageFrom,
     keep = true
   ): Promise<{ html: string; program?: BuiltProgram }> => {
-    let page: Awaited<ReturnType<ArtifactServiceDeps["page"]>>;
-    try {
-      page = await deps.page(instance, name, from, keep, (asked) =>
-        whole(instance, asked)
-      );
-    } catch (error) {
-      throw error instanceof ProgramRefusal ? refusedProgram(error) : error;
-    }
+    const page = await deps.page(instance, name, from, keep, (asked) =>
+      whole(instance, asked)
+    );
     if ("refused" in page) {
       throw new ArtifactRefusal(page.status, page.refused);
     }
@@ -683,7 +672,7 @@ export const createPageKind = (ctx: PageKindContext) => {
     instance: InstanceRow,
     row: ArtifactRow,
     existing: string,
-    merged: ReturnType<typeof mergeProgram>
+    merged: { change: StatementChange; merged: string }
   ): Promise<Revised> => {
     // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
     const broken = await ctx.brokenBy(row, readKept(merged.merged).cards);
