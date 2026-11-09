@@ -206,14 +206,10 @@ import {
   latestBinaryUpdate,
   reportBinaryUpdate,
 } from "./binary-update";
-import {
-  accountsChangedHere,
-  checkBoundaryHost,
-  liveWorkItems,
-  rearmHooks,
-  settleGonePlaces,
-  watchQuietBoundaries,
-} from "./boundary";
+import { rearmHooks, settleGonePlaces } from "./boundary/control";
+import { checkBoundaryHost } from "./boundary/decisions";
+import { accountsChangedHere, watchQuietBoundaries } from "./boundary/looks";
+import { liveWorkItems } from "./boundary/watch";
 import {
   browserFrame,
   removeBrowser,
@@ -3320,7 +3316,7 @@ const startDaemon = (rediscover = false) =>
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each
     // session waits for its own workspace's hook alone before it is adopted
-    // or launched (boundary.ts `hookArmed`).
+    // or launched (boundary/lifecycle.ts `hookArmed`).
     rearmHooks().catch((error: unknown) =>
       console.warn(
         `[workspace] boundary hooks could not be written again: ${error instanceof Error ? error.message : String(error)}`
@@ -3431,7 +3427,7 @@ const startDaemon = (rediscover = false) =>
 
     // A workspace's boundary runs only while something holds it: a carried
     // session bounded there, a preview of a port in it (and, read by
-    // boundary.ts itself, an attached CLI, a command in flight, a live work
+    // boundary/ itself, an attached CLI, a command in flight, a live work
     // item the hub names on each beat). One quiet for a while closes, and its
     // next command starts it again. A place's sheet holds its stage clone's.
     watchQuietBoundaries({
@@ -3443,7 +3439,7 @@ const startDaemon = (rediscover = false) =>
     // (awake.ts).
     keepAwakeWhileWorking(() => supervisor.turnsRunning());
     // A sign-in moves what a workspace's policy denies: every boundary is
-    // checked for a narrowed access at once (boundary.ts `recheckNarrowed`).
+    // checked for a narrowed access at once (boundary/looks.ts `recheckNarrowed`).
     onSigninsChanged(accountsChangedHere);
 
     // The usage scanner outlives connections too: its store (usage.db) is the

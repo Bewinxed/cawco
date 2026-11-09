@@ -68,7 +68,7 @@ const FINISH = "mcp__cawco__finish_item";
 const BLOCKED = "The item failed as blocked";
 /** The agent's line for a broken law (core invariant.ts). */
 const LAW = "[law] Law broken:";
-/** The agent's beat, on which the law is checked (boundary.ts `QUIET_SWEEP_MS`). */
+/** The agent's beat, on which the law is checked (boundary/processes.ts `QUIET_SWEEP_MS`). */
 const BEAT_MS = 60_000;
 /** A held workspace's settle: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;

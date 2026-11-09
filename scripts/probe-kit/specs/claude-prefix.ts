@@ -1,7 +1,7 @@
 /**
  * A workspace's Claude Code runs every shell command through the
  * workspace's shell prefix, after its own permission rules have judged the
- * command as the model wrote it (agent boundary.ts `claudePrefixScript`,
+ * command as the model wrote it (agent boundary/hook-judge.ts `claudePrefixScript`,
  * `execScript`'s `--claude`), and reaches the fleet's servers with a command
  * through the workspace's MCP gate (mcp-gate.ts, mcp-host.ts `fetchGate`).
  *
@@ -222,8 +222,10 @@ const run = async (kit: Kit) => {
   process.env.CAWCO_MCP_PORT = String(gatewayLease.port);
   await gatewayLease.stop(true);
 
-  const boundaryModule = await import("../../../packages/agent/src/boundary");
-  const { claudeBoundaryOptions, executorUnsandboxed } = boundaryModule;
+  const { claudeBoundaryOptions } =
+    await import("../../../packages/agent/src/boundary/launched-hook");
+  const { executorUnsandboxed } =
+    await import("../../../packages/agent/src/boundary/runner");
   const paths = await import("../../../packages/core/src/paths/workspace");
   const { workspacePolicy } =
     await import("../../../packages/core/src/workspace-policy");
@@ -811,7 +813,7 @@ const run = async (kit: Kit) => {
       {
         legacy: true,
         // The update: this build's agent points the hook at its own judge
-        // (boundary.ts armHook) while the turn runs.
+        // (boundary/ armHook) while the turn runs.
         before: new Map([
           [1, async () => writeFile(parts.hookAt, await parts.hook(socket))],
         ]),

@@ -11,12 +11,12 @@
  * - bun: this repository at the commit under test (its tracked tree, one
  *   commit), installed with `bun install --frozen-lockfile`; its
  *   `node_modules/.bun` entries are links into the cache's bun global store
- *   (`<cache>/bun/links/`, agent boundary.ts `writeBunConfig`);
+ *   (`<cache>/bun/links/`, agent boundary/package-managers.ts `writeBunConfig`);
  * - pnpm: a project of {@link PNPM_PACKAGE}'s packages, its lockfile made on
  *   the host as the leg starts, installed with pnpm {@link PNPM}'s
  *   `install --frozen-lockfile`; each of its `node_modules` packages resolves
  *   into pnpm's global virtual store in the cache (`<cache>/pnpm/store/`,
- *   agent boundary.ts `writePnpmConfig`), and no store is made in the clone.
+ *   agent boundary/package-managers.ts `writePnpmConfig`), and no store is made in the clone.
  *
  * In each leg:
  *

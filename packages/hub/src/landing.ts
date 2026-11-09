@@ -41,7 +41,7 @@
  * own rebase is the last, and the steps the turn asks for (`check(true)`)
  * pass on that tree or on the inputs each reads there. The gate is asked on
  * every landing, rebased or not: a clean rebase can still break lint or
- * typecheck (23da40303 sorted boundary.ts's imports, and ded95f4d2 formatted
+ * typecheck (23da40303 sorted boundary/'s imports, and ded95f4d2 formatted
  * SessionHover's, after rebases had landed them unlinted on main), and a wire
  * change can break the iOS app (312b43065). One command runs at most once on
  * one set of inputs: the caller skips a command that already passed on the
@@ -297,7 +297,7 @@ const NETWORK_MS = 300_000;
 const LOCAL_MS = 60_000;
 /**
  * A command the workspace's boundary cut off: its sandbox stopped while it
- * ran (agent boundary.ts, the executor's "cut off" line). A push cut off
+ * ran (agent boundary/, the executor's "cut off" line). A push cut off
  * there is not tried again: the branch is read once ({@link holds}), and the
  * landing is landed when it holds the commit and refused, saying so, when it
  * does not.

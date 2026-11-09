@@ -18,10 +18,10 @@ export type ProcId =
 
 const JUDGE_PREFIX = "judge-";
 
-/** How many hex digits of its hash a judge's form is (boundary.ts `judgeFor`). */
+/** How many hex digits of its hash a judge's form is (boundary/lifecycle.ts `judgeFor`). */
 export const JUDGE_FORM_LENGTH = 16;
 
-/** A workspace's judge of one form (boundary.ts `judgeFor`): one runs per form. */
+/** A workspace's judge of one form (boundary/lifecycle.ts `judgeFor`): one runs per form. */
 export const judgeProcId = (workspace: string, form: string): string =>
   `${JUDGE_PREFIX}${workspace}-${form}`;
 
@@ -30,7 +30,7 @@ export const isJudgeOf = (procId: string, workspace: string): boolean =>
   procId.startsWith(`${JUDGE_PREFIX}${workspace}-`);
 
 /**
- * A workspace's boundary of one generation (boundary.ts `start`): an older
+ * A workspace's boundary of one generation (boundary/lifecycle.ts `start`): an older
  * one runs on beside the current one until nothing runs in it.
  */
 export const boundaryProcId = (workspace: string, generation: string) =>

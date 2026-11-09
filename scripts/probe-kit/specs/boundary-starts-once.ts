@@ -17,7 +17,7 @@
  * state dir goes, r295):
  *
  * - its command ran in the workspace's boundary;
- * - the agent decided nothing of that boundary (agent boundary.ts
+ * - the agent decided nothing of that boundary (agent boundary/
  *   `BoundaryDecision`): no handover, no replacement, no older generation
  *   closed: one boundary, started as the clone was cut;
  * - the spill folder its session saves in is one the boundary started with:

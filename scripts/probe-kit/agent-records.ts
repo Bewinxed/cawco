@@ -6,7 +6,7 @@
  * - {@link agentStateOf}: what the agent holds now (agent agent-state.ts):
  *   its start-up pass, the hub's session limits, its hub loopback.
  * - {@link decisionsOf}: what it decided of a workspace's boundaries, its
- *   latest decisions in order (agent boundary.ts `BoundaryDecision`).
+ *   latest decisions in order (agent boundary/decisions.ts `BoundaryDecision`).
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,7 +17,7 @@ import {
 import {
   type BoundaryDecision,
   DECISIONS_FILE,
-} from "../../packages/agent/src/boundary";
+} from "../../packages/agent/src/boundary/decisions";
 import { until } from "../scratch-fleet";
 
 /** Each subject an agent records, with the agent's pid and when it took it (ms since the epoch). */
