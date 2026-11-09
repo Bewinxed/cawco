@@ -32,6 +32,7 @@ import {
   refusal,
   scratchOf,
   stateDir,
+  type UnaskedCalls,
   writeWhole,
 } from "./state";
 import { cleanGeneration, stopBoundary } from "./stop";
@@ -45,7 +46,8 @@ import { watchHost } from "./watch";
  */
 export const start = async (
   client: SessiondClient,
-  ref: WorkspaceRef
+  ref: WorkspaceRef,
+  unasked: UnaskedCalls
 ): Promise<Held> => {
   const gen = randomBytes(4).toString("hex");
   await makeDirs(ref.id);
@@ -74,7 +76,7 @@ export const start = async (
     );
   }
   try {
-    return await launch(client, ref, gen);
+    return await launch(client, ref, gen, unasked);
   } catch (error) {
     await stopBoundary(ref.id, { gen });
     await cleanGeneration(ref.id, { gen });
@@ -86,7 +88,8 @@ export const start = async (
 const launch = async (
   client: SessiondClient,
   ref: WorkspaceRef,
-  gen: string
+  gen: string,
+  unasked: UnaskedCalls
 ): Promise<Held> => {
   const linux = process.platform === "linux";
   // A place is a person's own folder, and so is the folder a Linux view
@@ -164,10 +167,10 @@ const launch = async (
   if (linux && own && (await hasLeftDirs(ref.path))) {
     // Its host left a mount point where a dir stands in: an older boundary
     // beside it held one there (staleness.ts `stubbed`).
-    restartWhenIdle(ref);
+    restartWhenIdle(ref, unasked);
   }
   // Followed from its ready line on, before armHook would follow it from now.
-  await watchHost(ref.id, held, readyAt);
+  await watchHost(ref.id, held, unasked, readyAt);
   // armHook writes the executor.
-  return armHook(ref.id, held);
+  return armHook(ref.id, held, unasked);
 };
