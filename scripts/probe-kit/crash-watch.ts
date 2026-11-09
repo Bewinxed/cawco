@@ -135,7 +135,7 @@ function readFrames(): void {
   nextFrame(tick);
 }
 
-/** Readies a context for {@link watchPage}: the binding and the frame reader. */
+/** Readies a context for watching its pages: the binding and the frame reader. */
 export async function watchContext(context: BrowserContext): Promise<void> {
   await context.exposeBinding("__kitFrame", ({ page }, seen: string) => {
     const frames = framesOf.get(page) ?? [];
