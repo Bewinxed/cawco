@@ -186,12 +186,14 @@ export function reportErrorsTo(to: ErrorSink, version: string): void {
   if (listening || to === "preview") {
     return;
   }
-  addEventListener("error", (event) => {
+  window.addEventListener("error", (event) => {
     reportError(event.error ?? event.message, {
       stackHint: event.filename
         ? `at ${event.filename}:${event.lineno}:${event.colno}`
         : "",
     });
   });
-  addEventListener("unhandledrejection", (event) => reportError(event.reason));
+  window.addEventListener("unhandledrejection", (event) =>
+    reportError(event.reason)
+  );
 }
