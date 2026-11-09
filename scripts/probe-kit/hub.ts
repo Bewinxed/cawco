@@ -6,6 +6,7 @@
 import {
   type HubAnswer,
   type HubClient,
+  type HubConfig,
   hubClient,
   refusalText,
 } from "../../packages/agent/src/hub-client";
@@ -37,15 +38,15 @@ export const answerText = (answer: HubAnswer): string => {
 /** A request of the hub as a spec's helper takes it. */
 export type HubAsk = (hub: HubClient) => Promise<HubAnswer>;
 
-/** A hub this process runs (`hub.handle`), asked through Eden, every request carrying `headers`. */
+/** A hub this process runs (`hub.handle`), asked through Eden with `config`'s headers on every request. */
 export const handled = (
   handle: (request: Request) => Response | Promise<Response>,
-  headers: Record<string, string> = {}
+  config: HubConfig = {}
 ): HubClient =>
-  hubClient("http://127.0.0.1", async (url, init) =>
-    handle(
-      new Request(url, { ...init, headers: { ...init.headers, ...headers } })
-    )
+  hubClient(
+    "http://127.0.0.1",
+    async (url, init) => handle(new Request(url, init)),
+    config
   );
 
 /** What an answer said, however the hub said it. */
@@ -101,16 +102,3 @@ export const payloadOf = (held: {
   typeof held.payload === "object" && held.payload !== null
     ? Object.fromEntries(Object.entries(held.payload))
     : {};
-
-/** The `Request` `ask` sends, for a hub this process runs (`hub.handle`) that a spec reads as a `Response`. */
-export const hubRequested = async (
-  ask: HubAsk,
-  headers: Record<string, string> = {}
-): Promise<Request> => {
-  const { path, method, headers: sent, body } = await requestOf(ask);
-  return new Request(`http://127.0.0.1${path}`, {
-    method,
-    headers: { ...sent, ...headers },
-    ...(body === undefined ? {} : { body }),
-  });
-};
