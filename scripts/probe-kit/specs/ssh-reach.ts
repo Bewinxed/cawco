@@ -418,7 +418,7 @@ async function furnish(fleet: KitFleet, offered: string): Promise<Box> {
   // await-joined.ts `awaitJoined`, which binary-install.ts runs), bounded
   // for the spec, loaded inside its try so any failure, its import's too,
   // is said in the CLI's words; and what the machine asks the hub with its key (core
-  // machine-key.ts `machineFetch`): a file's bytes.
+  // agent machine-fetch.ts `machineFetch`): a file's bytes.
   const wait = join(dir, "wait.ts");
   writeFileSync(
     wait,
@@ -433,7 +433,7 @@ async function furnish(fleet: KitFleet, offered: string): Promise<Box> {
   );
   writeFileSync(
     join(dir, "ask-file.ts"),
-    `import { createHash } from "node:crypto";\nimport { machineFetch } from ${JSON.stringify(join(root, "packages/core/src/machine-key.ts"))};\nconst answer = await machineFetch(process.env.ASK ?? "");\nconst bytes = new Uint8Array(await answer.arrayBuffer());\nconsole.log(answer.status, createHash("sha256").update(bytes).digest("hex"));\n`
+    `import { createHash } from "node:crypto";\nimport { machineFetch } from ${JSON.stringify(join(root, "packages/agent/src/machine-fetch.ts"))};\nconst answer = await machineFetch(process.env.ASK ?? "");\nconst bytes = new Uint8Array(await answer.arrayBuffer());\nconsole.log(answer.status, createHash("sha256").update(bytes).digest("hex"));\n`
   );
   // A machine knocking by itself, through the forward, with no key: its
   // register names `argv[3]` and proves nothing; each admission word it
