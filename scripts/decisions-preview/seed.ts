@@ -28,6 +28,7 @@ import {
   changedEntry,
 } from "../../packages/core/src/choices";
 import type { BuiltInKind } from "../../packages/core/src/decides";
+import { getMeta } from "../../packages/core/src/doc-meta";
 import {
   fetchHub,
   type HubRequest,
@@ -666,7 +667,7 @@ const pickAsThePerson = async (
     };
   };
   const person = await join();
-  const pageHash = person.doc.getMap("meta").get("pageHash");
+  const pageHash = getMeta(person.doc, "pageHash");
   if (typeof pageHash !== "string") {
     person.leave();
     throw new Error(`${artifact}: its doc holds no pageHash`);
