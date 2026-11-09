@@ -33,7 +33,8 @@ import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { TreeStopRow } from "./db/tree-stops";
 import { handle } from "./presenters/words";
-import { isHubParent, isLive, type WorkItems } from "./work-items";
+import { isHubParent, isLive } from "./work-item-state";
+import type { WorkItems } from "./work-items";
 
 /** A session the walk reached, and the one above it (null for the root). */
 interface Reached {
