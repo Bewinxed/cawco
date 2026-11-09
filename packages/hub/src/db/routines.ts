@@ -1,6 +1,7 @@
+import type { RoutineRunState } from "@cawco/core/routine-kinds";
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { type RoutineRunState, routineRuns, routines } from "./schema";
+import { routineRuns, routines } from "./schema";
 import type { Tx } from "./tx";
 
 export type RoutineRow = typeof routines.$inferSelect;
