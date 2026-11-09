@@ -153,21 +153,74 @@ export async function hubSaid(response: Response): Promise<string> {
 }
 
 /**
- * A Configure read or write: the hub's JSON answer; refused, "Couldn't
- * `attempt`. The hub's words." thrown, or the {@link MachineAwayError} when
- * the hub says the machine it asked is away ({@link awayOf}).
+ * THE ONE READER of a hub request's JSON answer, everywhere the dashboard
+ * asks the hub for one. Refused, `failure`'s error is thrown: the hub's
+ * refusal in its own words ({@link hubRefusal}) unless the caller words it
+ * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`). An
+ * answer that does not say it is JSON is the hub not answering, thrown as
+ * {@link noAnswer}: a proxy's or a restarting hub's text answer is never
+ * read as data.
  */
-export async function hubCall<T>(
+export async function hubJson<T>(
   request: HubRequest,
-  attempt: string,
-  init?: RequestInit
+  {
+    failure = (response) => hubRefusal(response),
+    init,
+  }: {
+    failure?: (response: Response) => Promise<Error>;
+    init?: RequestInit;
+  } = {}
 ): Promise<T> {
   const response = await hubFetch(request, init);
   if (!response.ok) {
-    throw (await awayOf(response)) ?? (await couldNot(attempt, response));
+    throw await failure(response);
+  }
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error(`${noAnswer(response.status)}.`);
   }
   return (await response.json()) as T;
 }
+
+/**
+ * A hub write whose answer is not read: refused, `failure`'s error is
+ * thrown, worded as {@link hubJson}'s.
+ */
+export async function hubSend(
+  request: HubRequest,
+  {
+    failure = (response) => hubRefusal(response),
+    init,
+  }: {
+    failure?: (response: Response) => Promise<Error>;
+    init?: RequestInit;
+  } = {}
+): Promise<void> {
+  const response = await hubFetch(request, init);
+  if (!response.ok) {
+    throw await failure(response);
+  }
+}
+
+/**
+ * A Configure read's or write's refusal: "Couldn't `attempt`. The hub's
+ * words." ({@link couldNot}), or the {@link MachineAwayError} when the hub
+ * says the machine it asked is away ({@link awayOf}).
+ */
+export const couldNotOrAway =
+  (attempt: string) =>
+  async (response: Response): Promise<Error> =>
+    (await awayOf(response)) ?? (await couldNot(attempt, response));
+
+/**
+ * A refusal where a hub away or restarting throws its one wording: a
+ * request the dashboard's proxy never got to the hub is the
+ * {@link HubUnreachable} it is; any other, the hub's sentence, thrown as it
+ * is (it already says what to do).
+ */
+export const refusedOrUnreached = async (response: Response): Promise<Error> =>
+  unreachedAnswer(response)
+    ? new HubUnreachable(HUB_UNREACHABLE)
+    : await hubRefusal(response);
 
 /**
  * A refused Configure write as the error it throws: "Couldn't `attempt`."
@@ -221,7 +274,7 @@ export const failureSentence = (failure: HubFailure): string =>
 const PARSE_PROBLEM = "parse";
 
 /** That the hub didn't answer, naming the status that came instead, without a closing stop. */
-export const { noAnswer } = hubFailureWords;
+const { noAnswer } = hubFailureWords;
 
 /** Elysia's refusal as a JSON string (`"No such rule"`) read as its words; any other text as it is. */
 function unquoted(text: string): string {
