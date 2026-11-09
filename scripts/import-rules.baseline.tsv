@@ -13,9 +13,7 @@ cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/draft-store.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/WholeCard.svelte	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/project-end.svelte.ts	1
-cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/send-store.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/stop-work.svelte.ts	1
-cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/stores/commands.svelte.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/Delegate.svelte	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/InlineTranscript.svelte	1
