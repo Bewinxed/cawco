@@ -16,7 +16,7 @@
    *   (EmptyOnAxis `panel`), in the project page's pane inset.
    */
   import { onboardingWords } from "@cawco/core/words/onboarding";
-  import EmptyOnAxis from "#lib/components/ui/empty/EmptyOnAxis.svelte";
+  import EmptyOnAxis from "#lib/cawco/EmptyOnAxis.svelte";
   import MachinesEmpty from "./MachinesEmpty.svelte";
   import ConversationHero from "./project/ConversationHero.svelte";
   import NewProject from "./project/NewProject.svelte";
