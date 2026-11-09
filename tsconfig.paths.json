@@ -18,10 +18,21 @@
   // It also holds the checks every project makes: an unused local, import
   // or parameter fails the type check, .svelte files included (Golar's
   // codegen). A parameter a callback's position requires takes a leading
-  // underscore.
+  // underscore. And, each holding on every project as it stood on
+  // 2026-11-09: a switch case ends before the next, a member that overrides
+  // says `override`, no label goes unused, a side-effect import names a
+  // module that is there, an import of a type alone says `type`
+  // (verbatimModuleSyntax), and nothing needs more than its types erased to
+  // run (erasableSyntaxOnly: no enum, namespace or parameter property).
   "compilerOptions": {
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "allowUnusedLabels": false,
+    "noUncheckedSideEffectImports": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "paths": {
       // Node's builtins, named bare by @types/node, bun-types and others.
       "buffer": ["./node_modules/buffer"],
