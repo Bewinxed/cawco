@@ -115,7 +115,7 @@ import {
 import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import type { WorkItemRow } from "./db/project-work";
 import type { Tracker } from "./db/schema";
 import type { WorkBudget } from "./db/stored-types";
@@ -126,8 +126,7 @@ import {
   type Exclusive,
   FOLDER_RAW_LIMIT,
   type FolderAuthor,
-  FolderRefusal,
-  FolderTaken,
+  type FolderListing,
   type FolderWriteOptions,
   fileExtension,
   folderFileNames,
@@ -144,13 +143,18 @@ import {
   projectRoot,
   readFolderFile,
   readFolderFileAt,
-  refused,
   servedFile,
   turnTaker,
   writeFolderFile,
   writeFolderFiles,
   YOU,
 } from "./project-folder";
+import {
+  ProjectRefusal,
+  projectRefusalOf,
+  projectRefused,
+} from "./project-refusal";
+import { refusal } from "./refusal";
 import { type MachineFacts, runsOnValue } from "./runs-on";
 import {
   firstStage,
@@ -709,14 +713,14 @@ export const STAGES_FILE = "stages.md";
 export const stagesFileOf = async (
   projectId: string
 ): Promise<string | undefined> => {
-  try {
-    return (await readFolderFile(projectId, STAGES_FILE)).content;
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
+  const file = await readFolderFile(projectId, STAGES_FILE);
+  if (file instanceof ElysiaStatus) {
+    if (file.status === 404) {
       return;
     }
-    throw error;
+    throw projectRefusalOf(file);
   }
+  return file.content;
 };
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
 
@@ -730,9 +734,16 @@ const DEFAULT_TEMPLATE: StagesTemplate = "code";
 export const isSetUp = (
   projectId: string,
   project: { template: string | null } | undefined
-): boolean =>
-  Boolean(project?.template) ||
-  existsSync(join(projectRoot(projectId), STAGES_FILE));
+): boolean => {
+  if (project?.template) {
+    return true;
+  }
+  const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    throw projectRefusalOf(root);
+  }
+  return existsSync(join(root, STAGES_FILE));
+};
 
 /** A project not set up yet reads as stages.md with no stages ({@link stagesOf}). */
 const NOT_SET_UP: StagesReading = {
@@ -749,26 +760,50 @@ const NOT_SET_UP: StagesReading = {
 const missingTypes = async (
   projectId: string,
   types: readonly string[]
-): Promise<{ content: string; path: string }[]> =>
-  types.length === 0
-    ? []
-    : typeFiles(types, new Set(await folderFileNames(projectId, "delegates")));
+): Promise<{ content: string; path: string }[]> => {
+  if (types.length === 0) {
+    return [];
+  }
+  const names = await folderFileNames(projectId, "delegates");
+  if (names instanceof ElysiaStatus) {
+    throw projectRefusalOf(names);
+  }
+  return typeFiles(types, new Set(names));
+};
 
 const removeStages = async (
   projectId: string,
   options: FolderWriteOptions
 ): Promise<void> => {
-  try {
-    await deleteFolderFile(projectId, STAGES_FILE, options);
-  } catch (error) {
-    if (!(error instanceof FolderRefusal && error.status === 404)) {
-      throw error;
-    }
+  const deleted = await deleteFolderFile(projectId, STAGES_FILE, options);
+  if (deleted instanceof ElysiaStatus && deleted.status !== 404) {
+    throw projectRefusalOf(deleted);
   }
 };
 
 const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
-  throw new FolderRefusal(code, message);
+  throw new ProjectRefusal(code, message);
+};
+
+/** tasks/ as the folder lists it, empty while there is none; the folder's refusal thrown on. */
+const taskListing = async (projectId: string): Promise<FolderListing> => {
+  const listed = await listFolder(projectId, "tasks");
+  if (!(listed instanceof ElysiaStatus)) {
+    return listed;
+  }
+  if (listed.status !== 404) {
+    throw projectRefusalOf(listed);
+  }
+  return { entries: [], truncated: false, path: "tasks" };
+};
+
+/** A folder file's text as the tasks read it, the folder's refusal thrown on. */
+const taskText = async (projectId: string, path: string): Promise<string> => {
+  const file = await readFolderFile(projectId, path);
+  if (file instanceof ElysiaStatus) {
+    throw projectRefusalOf(file);
+  }
+  return file.content;
 };
 
 const hashOf = (content: string): string =>
@@ -799,18 +834,22 @@ const artifactProblem = async (
     return;
   }
   const path = folderPath(artifact.path);
+  if (path instanceof ElysiaStatus) {
+    throw projectRefusalOf(path);
+  }
   if (artifact.kind === "post" && !path.endsWith(".post.json")) {
     refuse(422, `${path} is no post: a post is a <task>.post.json file.`);
   }
   if (outputs.includes(path)) {
     return;
   }
-  await folderFileRaw(projectId, path).catch(() =>
+  const there = await folderFileRaw(projectId, path).catch(() => undefined);
+  if (there === undefined || there instanceof ElysiaStatus) {
     refuse(
       422,
       `${path} is neither one of the task's outputs nor a file in the project folder. Name it as the task's outputs do, from the folder's root.`
-    )
-  );
+    );
+  }
 };
 
 // --- what a caller may write ------------------------------------------------------
@@ -1842,6 +1881,9 @@ export const createTasks = (store: TaskStore) => {
     stages: Stages | undefined
   ): Promise<{ gone: ReadonlySet<string>; times: Map<string, TaskTimes> }> => {
     const folder = await folderFileTimes(projectId, "tasks");
+    if (folder instanceof ElysiaStatus) {
+      throw projectRefusalOf(folder);
+    }
     const { head, times } = folder;
     const seen = (path: string, observed: number) => {
       const said = uncommittedSeen.get(`${projectId}\0${path}`);
@@ -1855,6 +1897,9 @@ export const createTasks = (store: TaskStore) => {
     });
     if (later.some((row) => !seen(row.path, row.updatedAt.getTime()))) {
       const uncommitted = await folderUncommitted(projectId, "tasks");
+      if (uncommitted instanceof ElysiaStatus) {
+        throw projectRefusalOf(uncommitted);
+      }
       for (const row of later) {
         uncommittedSeen.set(`${projectId}\0${row.path}`, {
           head,
@@ -2013,8 +2058,11 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     path: string
   ): Promise<TaskDoc | undefined> => {
-    const { times } = await folderFileTimes(projectId, "tasks");
-    const entry = times.get(path);
+    const folder = await folderFileTimes(projectId, "tasks");
+    if (folder instanceof ElysiaStatus) {
+      throw projectRefusalOf(folder);
+    }
+    const entry = folder.times.get(path);
     const made = entry
       ? historyOf(entry).findLast(
           (event) => event.actor.mover !== null && event.kind !== "deleted"
@@ -2023,6 +2071,9 @@ export const createTasks = (store: TaskStore) => {
     const record = made
       ? await readFolderFileAt(projectId, made.commit, made.path)
       : undefined;
+    if (record instanceof ElysiaStatus) {
+      throw projectRefusalOf(record);
+    }
     return record === undefined ? undefined : new TaskDoc(path, record);
   };
 
@@ -2145,10 +2196,15 @@ export const createTasks = (store: TaskStore) => {
     why: string;
   }> => {
     const doc = new TaskDoc(path, content);
+    const history =
+      fix.start?.who === undefined
+        ? await folderHistory(projectId, path, 1).catch(() => undefined)
+        : undefined;
     const who =
       fix.start?.who ??
-      ((await folderHistory(projectId, path, 1).catch(() => undefined))
-        ?.commits[0]?.author ||
+      // A history the folder does not read names no one, as one it fails to.
+      ((history instanceof ElysiaStatus ? undefined : history)?.commits[0]
+        ?.author ||
         "someone");
     const at = new Date().toISOString().slice(0, 16).replace("T", " ");
     const said: string[] = [];
@@ -2211,13 +2267,16 @@ export const createTasks = (store: TaskStore) => {
     );
     stands(projectId);
     const actor = hubActor(why);
-    await writeFolderFile(projectId, path, restored, {
+    const written = await writeFolderFile(projectId, path, restored, {
       author: actor.author,
       message: commitMessage(actor, `task ${id}`, said, {
         ...(moved ? { stage: moved } : {}),
         ...(fix.start ? { change: CHANGES.adopt } : {}),
       }),
     });
+    if (written instanceof ElysiaStatus) {
+      throw projectRefusalOf(written);
+    }
     store.put([indexRow(projectId, path, number, restored, hashOf(restored))]);
     console.info(`[tasks] ${projectId} ${id}: ${said}`);
     emit({ kind: "changed", projectId, id });
@@ -2239,8 +2298,12 @@ export const createTasks = (store: TaskStore) => {
     if (!stages) {
       return;
     }
+    const folder = await folderFileTimes(projectId, "tasks").catch(
+      () => undefined
+    );
+    // Times the folder does not read are none, as times it fails to read.
     const changes = (
-      await folderFileTimes(projectId, "tasks").catch(() => undefined)
+      folder instanceof ElysiaStatus ? undefined : folder
     )?.times.get(path)?.changes;
     if (
       !changes?.length ||
@@ -2279,7 +2342,11 @@ export const createTasks = (store: TaskStore) => {
     detach(
       inTurn(projectId, async () => {
         try {
-          const { content } = await readFolderFile(projectId, path);
+          const file = await readFolderFile(projectId, path);
+          if (file instanceof ElysiaStatus) {
+            throw projectRefusalOf(file);
+          }
+          const { content } = file;
           const row = store.index(projectId).find((each) => each.path === path);
           const fix = await unsettledOf(projectId, path, content, row, () =>
             currentStages(projectId)
@@ -2309,14 +2376,7 @@ export const createTasks = (store: TaskStore) => {
     projectId: string
   ): Promise<{ problems: string[]; rows: TaskIndexRow[] }> => {
     const problems: string[] = [];
-    const listing = await listFolder(projectId, "tasks").catch(
-      (error: unknown) => {
-        if (error instanceof FolderRefusal && error.status === 404) {
-          return { entries: [], truncated: false, path: "tasks" };
-        }
-        throw error;
-      }
-    );
+    const listing = await taskListing(projectId);
     if (listing.truncated) {
       problems.push(
         "tasks/ holds more files than one listing reads; the ones past the cap are not listed."
@@ -2348,7 +2408,12 @@ export const createTasks = (store: TaskStore) => {
     const read = await Promise.all(
       files.map(async ({ path, number }) => {
         try {
-          const { content } = await readFolderFile(projectId, path);
+          const file = await readFolderFile(projectId, path);
+          if (file instanceof ElysiaStatus) {
+            problems.push(file.response.detail);
+            return;
+          }
+          const { content } = file;
           const hash = hashOf(content);
           const row = indexed.get(path);
           if (row?.hash === hash) {
@@ -2360,7 +2425,7 @@ export const createTasks = (store: TaskStore) => {
           }
           return indexRow(projectId, path, number, content, hash);
         } catch (error) {
-          if (error instanceof FolderRefusal) {
+          if (error instanceof ProjectRefusal) {
             problems.push(error.message);
             return;
           }
@@ -2390,10 +2455,13 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /** The archived files in tasks/archive/, by name; none while there is no archive. */
-  const archivedNames = async (projectId: string): Promise<string[]> =>
-    (await folderFileNames(projectId, ARCHIVE_DIR)).filter(
-      (name) => fileTaskNumber(name) !== undefined
-    );
+  const archivedNames = async (projectId: string): Promise<string[]> => {
+    const names = await folderFileNames(projectId, ARCHIVE_DIR);
+    if (names instanceof ElysiaStatus) {
+      throw projectRefusalOf(names);
+    }
+    return names.filter((name) => fileTaskNumber(name) !== undefined);
+  };
 
   /** The archived file of task `number`, as the disk holds it; undefined when it is not archived. */
   const archivedFile = async (
@@ -2460,7 +2528,11 @@ export const createTasks = (store: TaskStore) => {
     const read = await Promise.all(
       (await archivedNames(projectId)).map(async (name) => {
         const path = `${ARCHIVE_DIR}/${name}`;
-        const { content } = await readFolderFile(projectId, path);
+        const file = await readFolderFile(projectId, path);
+        if (file instanceof ElysiaStatus) {
+          throw projectRefusalOf(file);
+        }
+        const { content } = file;
         return indexRow(
           projectId,
           path,
@@ -2488,9 +2560,14 @@ export const createTasks = (store: TaskStore) => {
         ) {
           return true;
         }
-        const { content } = await readFolderFile(projectId, task.path).catch(
-          () => ({ content: "" })
+        const file = await readFolderFile(projectId, task.path).catch(
+          () => undefined
         );
+        // A file not read says nothing, as one that failed to read.
+        const content =
+          file === undefined || file instanceof ElysiaStatus
+            ? ""
+            : file.content;
         return new TaskDoc(task.path, content)
           .read()
           .description.toLowerCase()
@@ -2702,11 +2779,18 @@ export const createTasks = (store: TaskStore) => {
    * moment of making a task, inside the project's turn.
    */
   const nextNumber = async (projectId: string, above = 0): Promise<number> => {
-    const [{ ever }, names, archived] = await Promise.all([
+    const [folder, names, archived] = await Promise.all([
       folderFileTimes(projectId, "tasks"),
       folderFileNames(projectId, "tasks"),
       archivedNames(projectId),
     ]);
+    if (folder instanceof ElysiaStatus) {
+      throw projectRefusalOf(folder);
+    }
+    if (names instanceof ElysiaStatus) {
+      throw projectRefusalOf(names);
+    }
+    const { ever } = folder;
     let highest = Math.max(above, issued.get(projectId) ?? 0);
     for (const name of [...ever, ...names, ...archived]) {
       highest = Math.max(highest, fileTaskNumber(name) ?? 0);
@@ -2745,22 +2829,22 @@ export const createTasks = (store: TaskStore) => {
   const templateOfTaskFiles = async (
     projectId: string
   ): Promise<StagesTemplate | null> => {
-    const names = (await folderFileNames(projectId, "tasks")).filter(
+    const all = await folderFileNames(projectId, "tasks");
+    if (all instanceof ElysiaStatus) {
+      throw projectRefusalOf(all);
+    }
+    const names = all.filter(
       (name) => name.endsWith(".md") && fileTaskNumber(name) !== undefined
     );
     const stages = await Promise.all(
       names.map(async (name) => {
         const path = `tasks/${name}`;
-        const content = await readFolderFile(projectId, path).then(
-          (file) => file.content,
-          (error: unknown) => {
-            // One gone since the listing stands on no board.
-            if (error instanceof FolderRefusal && error.status === 404) {
-              return;
-            }
-            throw error;
-          }
-        );
+        const file = await readFolderFile(projectId, path);
+        // One gone since the listing stands on no board.
+        if (file instanceof ElysiaStatus && file.status !== 404) {
+          throw projectRefusalOf(file);
+        }
+        const content = file instanceof ElysiaStatus ? undefined : file.content;
         return content === undefined
           ? undefined
           : (new TaskDoc(path, content).read().fields.stage ?? "");
@@ -2787,17 +2871,16 @@ export const createTasks = (store: TaskStore) => {
     reading: StagesReading;
     source: StagesSource;
   }> => {
-    try {
-      const { content } = await readFolderFile(projectId, STAGES_FILE);
+    const file = await readFolderFile(projectId, STAGES_FILE);
+    if (!(file instanceof ElysiaStatus)) {
       return {
         source: "file",
-        content,
-        reading: ruled(projectId, readStages(content)),
+        content: file.content,
+        reading: ruled(projectId, readStages(file.content)),
       };
-    } catch (error) {
-      if (!(error instanceof FolderRefusal && error.status === 404)) {
-        throw error;
-      }
+    }
+    if (file.status !== 404) {
+      throw projectRefusalOf(file);
     }
     const project = store.project(projectId);
     const template =
@@ -2834,11 +2917,14 @@ export const createTasks = (store: TaskStore) => {
     if (next === null) {
       return;
     }
-    await writeFolderFile(projectId, STAGES_FILE, next, {
+    const written = await writeFolderFile(projectId, STAGES_FILE, next, {
       author: { name: AUTHOR.hub },
       message:
         "stages: the project's conversation moves as a session, so its moves are a session's",
     });
+    if (written instanceof ElysiaStatus) {
+      throw projectRefusalOf(written);
+    }
     console.info(
       `[tasks] project ${projectId}'s stages.md named the project's conversation as a mover of its own; a session makes those moves now.`
     );
@@ -2863,10 +2949,13 @@ export const createTasks = (store: TaskStore) => {
     if (template === null) {
       store.setTemplate(projectId, DEFAULT_TEMPLATE);
     }
-    await deleteFolderFile(projectId, STAGES_FILE, {
+    const deleted = await deleteFolderFile(projectId, STAGES_FILE, {
       message:
         "stages: the code template, as the hub has it; Review before done is the project's own setting",
     });
+    if (deleted instanceof ElysiaStatus) {
+      throw projectRefusalOf(deleted);
+    }
     console.info(
       `[tasks] project ${projectId}'s stages.md was the code template word for word; it reads the hub's code template now.`
     );
@@ -2897,10 +2986,13 @@ export const createTasks = (store: TaskStore) => {
       return;
     }
     const names = writes.map((write) => write.path).join(", ");
-    await writeFolderFiles(projectId, writes, {
+    const written = await writeFolderFiles(projectId, writes, {
       author: { name: AUTHOR.hub },
       message: `delegates: ${names}, which its stages run or its template's skills file tasks with, and nothing defined (by hub)`,
     });
+    if (written instanceof ElysiaStatus) {
+      throw projectRefusalOf(written);
+    }
     console.info(
       `[tasks] project ${projectId}: wrote ${names}, which its stages run or its template's skills file tasks with, and nothing defined.`
     );
@@ -3011,27 +3103,30 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * Writes a task file through the folder (one commit) and re-indexes it.
-   * `fresh`: a new task, written only while no file claims its number
-   * (FolderTaken otherwise).
+   * Writes a task file through the folder (one commit) and re-indexes it;
+   * the folder's refusal answered. `fresh`: a new task, written only while
+   * no file claims its number (`folder-place-taken` otherwise).
    */
-  const save = async (
+  const placeTask = async (
     projectId: string,
     path: string,
     number: number,
     content: string,
     actor: TaskActor,
     message: string,
-    fresh = false
-  ): Promise<TaskView> => {
+    fresh: boolean
+  ) => {
     // A project deleted since the change began takes no task: before its
     // folder is written, and again in the step that indexes the task.
     stands(projectId);
-    await writeFolderFile(projectId, path, content, {
+    const written = await writeFolderFile(projectId, path, content, {
       author: actor.author,
       message,
       ...(fresh ? { exclusive: sameNumber } : {}),
     });
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
     stands(projectId);
     store.put([indexRow(projectId, path, number, content, hashOf(content))]);
     return view(
@@ -3043,19 +3138,44 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
+  /** {@link placeTask}, the folder's refusal thrown on. */
+  const save = async (
+    projectId: string,
+    path: string,
+    number: number,
+    content: string,
+    actor: TaskActor,
+    message: string
+  ): Promise<TaskView> => {
+    const saved = await placeTask(
+      projectId,
+      path,
+      number,
+      content,
+      actor,
+      message,
+      false
+    );
+    if (saved instanceof ElysiaStatus) {
+      throw projectRefusalOf(saved);
+    }
+    return saved;
+  };
+
   /**
    * One try at taking in another project's task files (`adopt`): each under
    * the next free number, edges and promoted to-dos renamed to match, all
    * written in one commit only where no file holds their places
-   * (FolderTaken otherwise, with none of them left written). Inside the
-   * project's turn. Answers each old id → its new id.
+   * (`folder-place-taken` otherwise, with none of them left written). Inside
+   * the project's turn. Answers each old id → its new id, or the folder's
+   * refusal.
    */
   const adoptOnce = async (
     projectId: string,
     numbered: { file: { content: string; path: string }; was: number }[],
     actor: TaskActor,
     from: string
-  ): Promise<Map<string, string>> => {
+  ) => {
     const renames = new Map<string, string>();
     const numbers: number[] = [];
     for (const { was } of numbered) {
@@ -3107,7 +3227,7 @@ export const createTasks = (store: TaskStore) => {
     });
     // All of them in one commit, or none: a merge never half-lands.
     stands(projectId);
-    await writeFolderFiles(
+    const merged = await writeFolderFiles(
       projectId,
       written.map(({ path, content }) => ({ path, content })),
       {
@@ -3120,6 +3240,9 @@ export const createTasks = (store: TaskStore) => {
         exclusive: sameNumber,
       }
     );
+    if (merged instanceof ElysiaStatus) {
+      return merged;
+    }
     stands(projectId);
     // The index is the board's: archived files stay out of it.
     store.put(
@@ -3146,25 +3269,28 @@ export const createTasks = (store: TaskStore) => {
     let number = await nextNumber(projectId);
     for (let tries = 1; ; tries += 1) {
       const { path, content, message } = make(number);
-      try {
-        return await save(
-          projectId,
-          path,
-          number,
-          content,
-          actor,
-          message,
-          true
-        );
-      } catch (error) {
-        if (!(error instanceof FolderTaken) || tries >= CLAIM_TRIES) {
-          throw error;
-        }
-        console.info(
-          `[tasks] ${projectId} ${taskId(number)} was claimed by a file in tasks/ as it was made; taking the next number`
-        );
-        number = await nextNumber(projectId, number);
+      const saved = await placeTask(
+        projectId,
+        path,
+        number,
+        content,
+        actor,
+        message,
+        true
+      );
+      if (!(saved instanceof ElysiaStatus)) {
+        return saved;
       }
+      if (
+        saved.response.code !== "folder-place-taken" ||
+        tries >= CLAIM_TRIES
+      ) {
+        throw projectRefusalOf(saved);
+      }
+      console.info(
+        `[tasks] ${projectId} ${taskId(number)} was claimed by a file in tasks/ as it was made; taking the next number`
+      );
+      number = await nextNumber(projectId, number);
     }
   };
 
@@ -3191,7 +3317,7 @@ export const createTasks = (store: TaskStore) => {
     known(projectId);
     const { path, number } = await locate(projectId, ref, true);
     const id = taskId(number);
-    const read = (await readFolderFile(projectId, path)).content;
+    const read = await taskText(projectId, path);
     // A stage or comments written into the file are put back before any
     // change reads it, so no commit of the hub's carries them on.
     const fix = await fixFor(projectId, path, read);
@@ -3409,19 +3535,22 @@ export const createTasks = (store: TaskStore) => {
         `An attempt at ${id} is live; stop it before archiving the task.`
       );
     }
-    const read = (await readFolderFile(projectId, path)).content;
+    const read = await taskText(projectId, path);
     const fix = await fixFor(projectId, path, read);
     if (fix) {
       await settle(projectId, path, number, read, fix);
     }
     const to = archivePath(path);
     stands(projectId);
-    await moveFolderFile(projectId, path, to, {
+    const moved = await moveFolderFile(projectId, path, to, {
       author: actor.author,
       message: commitMessage(actor, `task ${id}`, "archive"),
     });
+    if (moved instanceof ElysiaStatus) {
+      throw projectRefusalOf(moved);
+    }
     store.drop(projectId, [path]);
-    const { content } = await readFolderFile(projectId, to);
+    const content = await taskText(projectId, to);
     return view(projectId, to, number, content, await currentStages(projectId));
   };
 
@@ -3449,13 +3578,13 @@ export const createTasks = (store: TaskStore) => {
       return refuse(404, "It is not archived.");
     }
     const to = `tasks/${from.slice(ARCHIVE_DIR.length + 1)}`;
-    const read = (await readFolderFile(projectId, from)).content;
+    const read = await taskText(projectId, from);
     const fix = await archivedFix(projectId, from, read);
     const settled = fix
       ? await settledDoc(projectId, from, read, fix)
       : undefined;
     stands(projectId);
-    await moveFolderFile(projectId, from, to, {
+    const moved = await moveFolderFile(projectId, from, to, {
       author: actor.author,
       message: commitMessage(
         actor,
@@ -3465,7 +3594,10 @@ export const createTasks = (store: TaskStore) => {
       ),
       ...(settled ? { content: settled.restored } : {}),
     });
-    const { content } = await readFolderFile(projectId, to);
+    if (moved instanceof ElysiaStatus) {
+      throw projectRefusalOf(moved);
+    }
+    const content = await taskText(projectId, to);
     stands(projectId);
     store.put([indexRow(projectId, to, number, content, hashOf(content))]);
     return view(projectId, to, number, content, await currentStages(projectId));
@@ -3492,7 +3624,7 @@ export const createTasks = (store: TaskStore) => {
     // edges name read as their files are now.
     const { rows } = await sync(projectId);
     const { path, number } = await locate(projectId, ref);
-    const { content } = await readFolderFile(projectId, path);
+    const content = await taskText(projectId, path);
     const fix = await fixFor(projectId, path, content, rows);
     if (fix) {
       // Shown as it will be settled; the file gets it back in its turn.
@@ -3816,8 +3948,12 @@ export const createTasks = (store: TaskStore) => {
   const settledFiles = async (
     projectId: string
   ): Promise<{ content: string; number: number; path: string }[]> => {
+    const names = await folderFileNames(projectId, "tasks");
+    if (names instanceof ElysiaStatus) {
+      throw projectRefusalOf(names);
+    }
     const paths = [
-      ...(await folderFileNames(projectId, "tasks"))
+      ...names
         .filter((name) => fileTaskNumber(name) !== undefined)
         .map((name) => `tasks/${name}`),
       ...(await archivedNames(projectId)).map(
@@ -3827,7 +3963,7 @@ export const createTasks = (store: TaskStore) => {
     return await Promise.all(
       paths.map(async (path) => {
         const number = fileTaskNumber(path) as number;
-        const { content } = await readFolderFile(projectId, path);
+        const content = await taskText(projectId, path);
         const fix = await fixFor(projectId, path, content);
         return {
           path,
@@ -3848,7 +3984,7 @@ export const createTasks = (store: TaskStore) => {
     what: string
   ): Promise<void> => {
     stands(projectId);
-    await writeFolderFiles(
+    const written = await writeFolderFiles(
       projectId,
       writes.map(({ path, content }) => ({ path, content })),
       {
@@ -3860,6 +3996,9 @@ export const createTasks = (store: TaskStore) => {
         ),
       }
     );
+    if (written instanceof ElysiaStatus) {
+      throw projectRefusalOf(written);
+    }
     stands(projectId);
     store.put(
       writes
@@ -4116,7 +4255,11 @@ export const createTasks = (store: TaskStore) => {
    * said in the log; the index stands as it was.
    */
   const catchUp = async (projectId: string): Promise<void> => {
-    if (!(await hasProjectFolder(projectId))) {
+    const has = await hasProjectFolder(projectId);
+    if (has instanceof ElysiaStatus) {
+      throw projectRefusalOf(has);
+    }
+    if (!has) {
       return;
     }
     try {
@@ -4231,16 +4374,19 @@ export const createTasks = (store: TaskStore) => {
         // write (an agent writing tasks/ straight) takes none of them: the
         // whole merge is numbered afresh and written again.
         for (let tries = 1; ; tries += 1) {
-          try {
-            return await adoptOnce(projectId, numbered, actor, from);
-          } catch (error) {
-            if (!(error instanceof FolderTaken) || tries >= CLAIM_TRIES) {
-              throw error;
-            }
-            console.info(
-              `[tasks] ${projectId}: ${error.message} ${from}'s tasks are numbered again.`
-            );
+          const renames = await adoptOnce(projectId, numbered, actor, from);
+          if (!(renames instanceof ElysiaStatus)) {
+            return renames;
           }
+          if (
+            renames.response.code !== "folder-place-taken" ||
+            tries >= CLAIM_TRIES
+          ) {
+            throw projectRefusalOf(renames);
+          }
+          console.info(
+            `[tasks] ${projectId}: ${renames.response.detail} ${from}'s tasks are numbered again.`
+          );
         }
       }).then((renames) => told({ kind: "changed", projectId }, renames));
     },
@@ -4408,10 +4554,11 @@ export const createTasks = (store: TaskStore) => {
       known(projectId);
       const id = taskRef("task", ref);
       const number = taskNumber(id) as number;
-      const filed = taskFileIn(
-        await folderFileTimes(projectId, "tasks"),
-        number
-      );
+      const times = await folderFileTimes(projectId, "tasks");
+      if (times instanceof ElysiaStatus) {
+        throw projectRefusalOf(times);
+      }
+      const filed = taskFileIn(times, number);
       if (filed) {
         return {
           id,
@@ -4492,7 +4639,7 @@ export const createTasks = (store: TaskStore) => {
     ): Promise<AttemptResult> {
       known(projectId);
       const { path, number } = await locate(projectId, ref);
-      const { content } = await readFolderFile(projectId, path);
+      const content = await taskText(projectId, path);
       const { outputs } = new TaskDoc(path, content).read().fields;
       const summary = written.summary.trim();
       if (!summary) {
@@ -4511,14 +4658,22 @@ export const createTasks = (store: TaskStore) => {
           "Mark one artifact `primary` at most: the one the reviewer sees first."
         );
       }
+      const handed: AttemptResult["artifacts"] = [];
+      for (const artifact of artifacts) {
+        if (artifact.kind === "link" || artifact.kind === "artifact") {
+          handed.push(artifact);
+          continue;
+        }
+        const rel = folderPath(artifact.path);
+        if (rel instanceof ElysiaStatus) {
+          throw projectRefusalOf(rel);
+        }
+        handed.push({ ...artifact, path: rel });
+      }
       const result: AttemptResult = {
         summary,
         check: (written.check ?? []).map((line) => line.trim()).filter(Boolean),
-        artifacts: artifacts.map((artifact) =>
-          artifact.kind === "link" || artifact.kind === "artifact"
-            ? artifact
-            : { ...artifact, path: folderPath(artifact.path) }
-        ),
+        artifacts: handed,
         at: Date.now(),
       };
       store.saveResult(workItemId, result);
@@ -4578,9 +4733,9 @@ export const createTasks = (store: TaskStore) => {
             `This task cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`
           );
         }
-        const { content } = await readFolderFile(projectId, path);
+        const content = await taskText(projectId, path);
         stands(projectId);
-        await deleteFolderFile(projectId, path, {
+        const deleted = await deleteFolderFile(projectId, path, {
           author: actor.author,
           message: commitMessage(
             actor,
@@ -4588,6 +4743,9 @@ export const createTasks = (store: TaskStore) => {
             `delete “${new TaskDoc(path, content).title()}”`
           ),
         });
+        if (deleted instanceof ElysiaStatus) {
+          throw projectRefusalOf(deleted);
+        }
         store.drop(projectId, [path]);
         return { id, path };
       }).then((gone) =>
@@ -4638,10 +4796,13 @@ export const createTasks = (store: TaskStore) => {
         if (!reading.ok) {
           refuse(422, `stages.md was not saved. ${reading.problems.join(" ")}`);
         }
-        await writeFolderFile(projectId, STAGES_FILE, content, {
+        const written = await writeFolderFile(projectId, STAGES_FILE, content, {
           author: actor.author,
           message: message?.trim() || `stages: update ${byWhom(actor)}`,
         });
+        if (written instanceof ElysiaStatus) {
+          throw projectRefusalOf(written);
+        }
         await fillTypes(projectId);
         return stagesView(
           "file",
@@ -4681,10 +4842,13 @@ export const createTasks = (store: TaskStore) => {
           ...types,
         ];
         if (writes.length > 0) {
-          await writeFolderFiles(projectId, writes, {
+          const written = await writeFolderFiles(projectId, writes, {
             author: actor.author,
             message,
           });
+          if (written instanceof ElysiaStatus) {
+            throw projectRefusalOf(written);
+          }
         }
         store.setTemplate(projectId, template);
         const stages = templateStages(template);
@@ -4949,7 +5113,7 @@ export const taskRoutes = (tasks: Tasks) =>
             fields: fieldParams(new URL(request.url).searchParams),
           });
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -4986,7 +5150,7 @@ export const taskRoutes = (tasks: Tasks) =>
         try {
           return await tasks.create(params.id, body, YOU_WRITING);
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -4994,7 +5158,7 @@ export const taskRoutes = (tasks: Tasks) =>
       try {
         return await tasks.get(params.id, params.taskId);
       } catch (error) {
-        return refused(error);
+        return projectRefused(error);
       }
     })
     // One output an attempt handed in, by the name the task gives it
@@ -5009,8 +5173,9 @@ export const taskRoutes = (tasks: Tasks) =>
         try {
           const task = await tasks.get(params.id, params.taskId);
           if (!task.outputs.includes(query.name)) {
-            throw new FolderRefusal(
+            return refusal(
               404,
+              "task-output-unknown",
               `This task hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
             );
           }
@@ -5021,12 +5186,15 @@ export const taskRoutes = (tasks: Tasks) =>
             `${outputsFolder({ id: "", taskId: task.id })}/${query.name}`,
             media ? FOLDER_RAW_LIMIT : OUTPUT_FILE_LIMIT
           );
+          if (file instanceof ElysiaStatus) {
+            return file;
+          }
           return servedFile(
             Bun.file(file.real),
             IMAGE_TYPES[extension] ?? media ?? "text/plain; charset=utf-8"
           );
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5057,7 +5225,7 @@ export const taskRoutes = (tasks: Tasks) =>
         try {
           return await tasks.update(params.id, params.taskId, body, YOU_ACTOR);
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5065,7 +5233,7 @@ export const taskRoutes = (tasks: Tasks) =>
       try {
         return await tasks.remove(params.id, params.taskId, YOU_ACTOR);
       } catch (error) {
-        return refused(error);
+        return projectRefused(error);
       }
     })
     .post(
@@ -5087,7 +5255,7 @@ export const taskRoutes = (tasks: Tasks) =>
             body.id
           );
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5110,7 +5278,7 @@ export const taskRoutes = (tasks: Tasks) =>
             body?.archived ?? true
           );
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5118,7 +5286,7 @@ export const taskRoutes = (tasks: Tasks) =>
       try {
         return await tasks.history(params.id, params.taskId);
       } catch (error) {
-        return refused(error);
+        return projectRefused(error);
       }
     })
     .post(
@@ -5142,7 +5310,7 @@ export const taskRoutes = (tasks: Tasks) =>
           );
           return task as TaskView;
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5170,7 +5338,7 @@ export const taskRoutes = (tasks: Tasks) =>
           );
           return task as TaskView;
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5186,7 +5354,7 @@ export const taskRoutes = (tasks: Tasks) =>
             YOU_WRITING
           );
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5216,7 +5384,7 @@ export const taskRoutes = (tasks: Tasks) =>
             YOU_ACTOR
           );
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5224,7 +5392,7 @@ export const taskRoutes = (tasks: Tasks) =>
       try {
         return await tasks.stages(params.id);
       } catch (error) {
-        return refused(error);
+        return projectRefused(error);
       }
     })
     .put(
@@ -5244,7 +5412,7 @@ export const taskRoutes = (tasks: Tasks) =>
             body.message
           );
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
@@ -5255,7 +5423,7 @@ export const taskRoutes = (tasks: Tasks) =>
         try {
           return await tasks.applyTemplate(params.id, body.template, YOU_ACTOR);
         } catch (error) {
-          return refused(error);
+          return projectRefused(error);
         }
       }
     )
