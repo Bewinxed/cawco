@@ -1,4 +1,14 @@
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { graphWords } from "@cawco/core/words/graph";
+  import { MediaQuery } from "svelte/reactivity";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   /**
    * The agent's controls (its canvas spec's `dials`): the values it lets the
    * person tune on the drawing, read down one inspector grid as a tool's
@@ -25,16 +35,7 @@
    * Narrower than `--container-timeline` (the phone's drawer, a room at its
    * least) the name's column shares the row with its control, two to three.
    */
-  import { bringIntoView } from "@cawco/core/bring-into-view";
-  import { graphWords } from "@cawco/core/words/graph";
-  import { MediaQuery } from "svelte/reactivity";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import * as Select from "#lib/components/ui/select/index.js";
-  import { Switch } from "#lib/components/ui/switch/index.js";
-  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconReset } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import ColourPicker from "./ColourPicker.svelte";
@@ -115,7 +116,7 @@
     (dial.kind === "select" &&
       (dial.options ?? []).some((one) => splitUnit(one).unit !== ""));
   /** Under the phone line a colour's picker unfolds under its row, across the face. */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The controls in their headings' order: those under none first, then each heading's. */
   const sections = $derived.by(() => {
     const heads: (string | null)[] = [];
