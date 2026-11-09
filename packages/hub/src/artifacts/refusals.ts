@@ -1,14 +1,9 @@
-export class ArtifactRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
-  constructor(
-    status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = status;
-  }
-}
+import { StatusRefusal } from "../refusal";
+
+/** A refusal of an artifact tool or route: its status, and the sentence the agent or the person reads. */
+export class ArtifactRefusal extends StatusRefusal<
+  400 | 403 | 404 | 409 | 413 | 422 | 503 | 504
+> {}
 
 /**
  * A Send that carries nothing new: every pick has gone to the session (by
