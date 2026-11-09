@@ -1,8 +1,8 @@
 /**
  * How many requests a CawCo process's `fetch` has under way at once. Every
  * CawCo Bun process starts with it at Bun's ceiling, however it is started:
- * each service unit (cli service.ts `environment`), each update helper's job
- * (agent helper-jobs.ts, the wrapper's resume, binary-wrapper.ts), each
+ * each service unit (agent service-manager/units.ts `environment`), each update helper's job
+ * (agent service-manager/transient-job.ts, the wrapper's resume, binary-wrapper.ts), each
  * process a rig starts (scripts/binary/smoke-stack.ts).
  * The hub and the agent say at start when they find it lower
  * ({@link sayFetchCap}): one started by hand, without it.
