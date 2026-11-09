@@ -16,10 +16,10 @@
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { setupWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
-  import { submitCommand } from "#lib/cawco/client.svelte.js";
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
   import { QUESTION_KEYS } from "#lib/cawco/question.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { submitCommand } from "#lib/cawco/stores/commands.svelte.js";
   import type { BlockedRequest } from "#lib/cawco/stores/sessions.svelte.js";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
