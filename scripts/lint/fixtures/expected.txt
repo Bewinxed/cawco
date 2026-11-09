@@ -102,6 +102,3 @@ scripts/lint/fixtures/design/planted-tooltip-mount.ts:10:50 house/tooltip-provid
 scripts/lint/fixtures/design/planted-not-hover.svelte:6:13 house/no-not-hover
 scripts/lint/fixtures/design/planted-style-spaces.svelte:7:22 house/no-style-underscore-spaces
 scripts/lint/fixtures/design/planted-style-spaces.svelte:8:26 house/no-style-underscore-spaces
-scripts/lint/fixtures/harness-compare.ts:5:37 house/no-harness-compare
-scripts/lint/fixtures/harness-compare.ts:6:40 house/no-harness-compare
-scripts/lint/fixtures/harness-compare.ts:10:10 house/no-harness-compare
