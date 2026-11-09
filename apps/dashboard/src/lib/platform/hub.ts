@@ -14,37 +14,7 @@
  */
 import type { HubApp } from "@cawco/hub/app";
 import { treaty } from "@elysia/eden";
-import { JSON_TYPE } from "./hub-read";
-
-/**
- * `response` as Eden may read it. Eden parses a body that says it is JSON
- * before it looks at the status, and one that doesn't parse rejects the
- * whole call with the parser's `SyntaxError`: the status is lost, and a
- * refused write would read as no refusal. Such a body comes on as the text
- * it is, its status kept, so it is read as every body that is no JSON is:
- * the hub not answering, at its own status (hub-read.ts `bodyOf`,
- * `hubFailure`).
- */
-async function readable(response: Response): Promise<Response> {
-  if (!JSON_TYPE.test(response.headers.get("content-type") ?? "")) {
-    return response;
-  }
-  const text = await response.clone().text();
-  try {
-    JSON.parse(text);
-    return response;
-  } catch {
-    const headers = new Headers(response.headers);
-    headers.set("content-type", "text/plain;charset=utf-8");
-    // Eden reads chunked text with no length as a stream.
-    headers.delete("transfer-encoding");
-    return new Response(text, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  }
-}
+import { readable } from "./hub-read";
 
 export const hubThrough = (through?: typeof fetch) =>
   treaty<HubApp>("", {
