@@ -327,7 +327,7 @@ import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
-import { portOf } from "./boot";
+import { portOf, runBootSteps } from "./boot";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import {
@@ -2221,7 +2221,6 @@ export const createServer = (
    * pollers, first looks, repairs), each where what it needs is made, all
    * started once at the end and only by a hub that `serves` (ServerOptions).
    */
-  const offBoot: (() => void)[] = [];
 
   /**
    * `raw` as a path on `machineId` (db `machinePathOn`, core `machinePath`):
@@ -3097,9 +3096,6 @@ export const createServer = (
     lifetime,
     door: createSshDoor(lifetime),
   });
-  offBoot.push(() => {
-    sshTunnels.start();
-  });
 
   /** Whether an agent's contract range holds this hub's (core runtime.ts `protocolRange`). */
   const speaksContract = (
@@ -3536,10 +3532,6 @@ export const createServer = (
     (!payload.model || payload.model === "default") &&
     !payload.resume &&
     Boolean(payload.cwd);
-  offBoot.push(() => {
-    checkDueRefusals();
-    lifetime.every(REFUSAL_LOOK_MS, checkDueRefusals);
-  });
   /** Every screen's limits and spend, said again after a reading or a sign-in moved. */
   /**
    * What rebalancing makes of the accounts as they stand now (at-limit's
@@ -3686,11 +3678,6 @@ export const createServer = (
       adopted: (id) => db.sshMachines.update(id, { pendingKey: null }),
     },
   });
-  // `cawco pairing off` while this hub runs: its request, taken and answered
-  // here, so the hub stays its database's one writer (pairing-requests.ts).
-  offBoot.push(() =>
-    watchPairingRequests(DB_PATH, () => hubAuth.pairingOff(true), lifetime)
-  );
   /**
    * Whether each machine's welcome has converged (welcome-converge.ts): what
    * an add's sync step waits on.
@@ -4129,9 +4116,6 @@ export const createServer = (
     cloudflareToken: () => relayJourney.token(),
     renewed: (expiresAt) =>
       db.streamRelay.journeyUpdate({ certificateEndsAt: expiresAt }),
-  });
-  offBoot.push(() => {
-    streamRelay.watch();
   });
   /**
    * The stream relay's guided journey (relay-journey.ts): every step
@@ -5043,8 +5027,6 @@ export const createServer = (
     }
   };
   restoreShownPreviews();
-  // Marks the person wrote just before the hub went down still go.
-  offBoot.push(() => artifacts.resumeMarks());
 
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
@@ -7078,11 +7060,6 @@ export const createServer = (
       }
     },
   });
-  offBoot.push(() => toolReleases.start());
-
-  offBoot.push(() => {
-    relayJourney.watch();
-  });
 
   /** Every known machine's fleet items hashed, before the hub listens (fleet-sync.ts `warmHashes`). */
   const warmFleetHashes = (): void => {
@@ -7097,17 +7074,6 @@ export const createServer = (
       `[hub] versions read off the stored files: ${versioned.skills.versioned} of ${versioned.skills.of} skill(s), ${versioned.plugins.versioned} of ${versioned.plugins.of} plugin(s)`
     );
   }
-  // Named first, so a plugin re-resolved below is looked up under its row's
-  // current name. An update check follows when one is due, then one every
-  // six hours.
-  offBoot.push(() =>
-    detach(
-      nameMarketplacesByManifest()
-        .then(reresolveFailed)
-        .then(() => (checkDue() ? checkSources() : undefined)),
-      "fleet marketplace names, source re-resolve and update check"
-    )
-  );
   lifetime.every(UPDATE_CHECK_MS, () => {
     detach(checkSources(), "update check");
   });
@@ -7411,18 +7377,6 @@ export const createServer = (
   });
   /** The fleet's URL servers settled by a serving hub's startup discovery: what the fleet's reads wait on. */
   let mcpReady: Promise<unknown> = Promise.resolve();
-  // Startup discovery settles the fleet's URL servers; what it moved goes to
-  // the machines then, as any change does. A hub built only to be read
-  // dials none of them.
-  offBoot.push(() => {
-    mcpReady = Promise.all(
-      db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
-    );
-    detach(
-      mcpReady.then(() => fleetChanged("the hub's MCP discovery finished")),
-      "fleet MCP discovery"
-    );
-  });
   onPermissionAnswer(pending, answerPendingPermission);
 
   /**
@@ -7931,11 +7885,6 @@ export const createServer = (
       );
     },
   });
-  offBoot.push(() => {
-    // Moves go on from their records: an approval is asked again, every
-    // other step waits for its machine's register.
-    moves.resume();
-  });
   // A project's tasks: files in its hub folder, indexed here (tasks.ts).
   // One repository is one project: duplicates fold into the oldest
   // (project-merge.ts), at start and when a project learns its remote.
@@ -8110,7 +8059,6 @@ export const createServer = (
       fleetChanged();
     }
   };
-  offBoot.push(() => detach(recordTemplates(), "project templates"));
   // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
   // dispatcher itself for a project that dispatches (dispatch.ts).
   // A project's views: drafts Caw writes, kept when you approve, and the
@@ -8185,10 +8133,6 @@ export const createServer = (
   // Open proposals are the person's asks again as the hub starts.
   // Read by the boot's sweep of the asks push took (below), which waits on it.
   let memoryParked: Promise<void> = Promise.resolve();
-  offBoot.push(() => {
-    memoryParked = projectMemory.start();
-    detach(memoryParked, "memory proposals");
-  });
   /**
    * The control interrupt_delegate sends: the turn stops, the session keeps
    * its state. `hold`: as {@link noteInterrupt} says.
@@ -8772,12 +8716,6 @@ export const createServer = (
     },
   });
   tasks.listen((event) => decisions.tasksChanged(event.projectId));
-  // Pages sent before a Send decided them are decided once, from their sent picks.
-  offBoot.push(() => {
-    for (const project of db.listProjects()) {
-      detach(decisions.decideSent(project.id), "sent pages decided");
-    }
-  });
   // "Make this a project": offered once to a plain session that outgrew
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({
@@ -9491,22 +9429,6 @@ export const createServer = (
     },
   });
   leadRunsPort.fill(routines);
-  offBoot.push(() => {
-    // The dispatcher's safety net: a slow look at every dispatching project.
-    dispatcher.watch();
-    // Stage holds (`until:`, `after:`) over: their tasks move on (waits.ts).
-    waits.start();
-    // Runs a stopped hub left live settle, then the catch-up: each routine's
-    // newest missed slot, once.
-    routines.start();
-    // Off the boot path: projects that share a repository are folded into
-    // its oldest (project-merge.ts), then a folder edited while the hub was
-    // down is re-read once.
-    detach(
-      mergeSameRemote(merging).then(() => tasks.syncAll()),
-      "project merge and task catch-up"
-    );
-  });
   // Connections (connections.ts): outside services the hub signs in to and
   // calls for the sessions its delegate types and projects grant them to.
   const connections = createConnections({
@@ -9857,7 +9779,6 @@ export const createServer = (
       "drafts of the kept views a commit changed"
     );
   });
-  offBoot.push(() => designSystem.start());
   // Design work in a project with a design system is judged by a verifier
   // session before it reaches review (design-verify.ts).
   const designVerify = createDesignVerify({
@@ -9887,7 +9808,6 @@ export const createServer = (
     tasks,
     workItems,
   });
-  offBoot.push(() => designVerify.start());
   // `find`: the dashboard's Finder as every session's tool (find-tool.ts).
   const findTool = createFindTool({
     find,
@@ -10382,17 +10302,6 @@ export const createServer = (
     },
   });
   toolsMayHaveChangedPort.fill(delegationMcp.toolsMayHaveChanged);
-  offBoot.push(() => {
-    // Each connection looked at once, off the boot path: its tools for sessions' lists.
-    connections.start();
-    // The pollers pick up from the cursors a stopped hub kept.
-    ingress.start();
-    // The receiver listens and the relays' wanted state is applied.
-    relays.start();
-    // A call a stopped hub left under way becomes unknown, never re-run;
-    // then due approved actions run.
-    actions.start();
-  });
 
   /**
    * What the hub holds in memory for sessions whose rows were just deleted —
@@ -11306,42 +11215,6 @@ export const createServer = (
       callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
   });
 
-  // Last off the boot path, once every ask the hub parks again as it starts
-  // is parked (design proposals at once, memory proposals once read): the
-  // waits the person was told of whose asks are parked no more ended with
-  // the hub that held them (a browser or connect ask's call, refused as it
-  // went) and never settled. Their marks go here (db `askPushes`), and a
-  // parent told one waits hears it ended, once (delegate-waits.ts).
-  offBoot.push(() =>
-    detach(
-      memoryParked.then(() => {
-        const left = db.askPushes.keepOnly(
-          pending
-            .list()
-            .flatMap((one) => (one.requestId ? [one.requestId] : []))
-        );
-        if (left.length > 0) {
-          console.log(
-            `[push] ${left.length} ask(s) told before this start and parked no more: their marks dropped`
-          );
-        }
-        for (const requestId of left) {
-          const told = db.sendRecord(waitNoticeUuid(requestId, "waits"));
-          const about =
-            told && parseDelegateWaitNotice(userTurnText(told.body) ?? "");
-          if (about?.delegate) {
-            delegateWaits.endedWithHub(
-              about.delegate,
-              requestId,
-              about.what ?? requestId
-            );
-          }
-        }
-      }),
-      "ask push marks"
-    )
-  );
-
   // A machine's socket in its order: agent-socket/frame-stages.ts, machine-return-steps.ts.
   const frameStages = frameStagesOf(ctx);
   const machineReturnSteps = machineReturnStepsOf(ctx);
@@ -11351,10 +11224,179 @@ export const createServer = (
   // known machine's fleet items are hashed (fleet-sync.ts `warmHashes`), so
   // no machine's register is the one that hashes the fleet's files.
   if (serves) {
-    warmFleetHashes();
-    for (const start of offBoot) {
-      start();
-    }
+    runBootSteps([
+      { name: "fleet hashes warmed", run: warmFleetHashes },
+      {
+        name: "ssh tunnels",
+        run: () => {
+          sshTunnels.start();
+        },
+      },
+      {
+        name: "due refusals",
+        run: () => {
+          checkDueRefusals();
+          lifetime.every(REFUSAL_LOOK_MS, checkDueRefusals);
+        },
+      },
+      // `cawco pairing off` while this hub runs: its request, taken and answered
+      // here, so the hub stays its database's one writer (pairing-requests.ts).
+      {
+        name: "pairing requests watch",
+        run: () =>
+          watchPairingRequests(
+            DB_PATH,
+            () => hubAuth.pairingOff(true),
+            lifetime
+          ),
+      },
+      {
+        name: "stream relay watch",
+        run: () => {
+          streamRelay.watch();
+        },
+      },
+      // Marks the person wrote just before the hub went down still go.
+      { name: "artifact marks", run: () => artifacts.resumeMarks() },
+      { name: "tool releases", run: () => toolReleases.start() },
+      {
+        name: "relay journey watch",
+        run: () => {
+          relayJourney.watch();
+        },
+      },
+      // Named first, so a plugin re-resolved below is looked up under its row's
+      // current name. An update check follows when one is due, then one every
+      // six hours.
+      {
+        name: "marketplace names",
+        run: () =>
+          detach(
+            nameMarketplacesByManifest()
+              .then(reresolveFailed)
+              .then(() => (checkDue() ? checkSources() : undefined)),
+            "fleet marketplace names, source re-resolve and update check"
+          ),
+      },
+      // Startup discovery settles the fleet's URL servers; what it moved goes to
+      // the machines then, as any change does. A hub built only to be read
+      // dials none of them.
+      {
+        name: "fleet MCP probes",
+        run: () => {
+          mcpReady = Promise.all(
+            db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
+          );
+          detach(
+            mcpReady.then(() =>
+              fleetChanged("the hub's MCP discovery finished")
+            ),
+            "fleet MCP discovery"
+          );
+        },
+      },
+      {
+        name: "project moves and watches",
+        run: () => {
+          // Moves go on from their records: an approval is asked again, every
+          // other step waits for its machine's register.
+          moves.resume();
+        },
+      },
+      {
+        name: "project templates",
+        run: () => detach(recordTemplates(), "project templates"),
+      },
+      {
+        name: "memory proposals",
+        run: () => {
+          memoryParked = projectMemory.start();
+          detach(memoryParked, "memory proposals");
+        },
+      },
+      // Pages sent before a Send decided them are decided once, from their sent picks.
+      {
+        name: "decisions sent",
+        run: () => {
+          for (const project of db.listProjects()) {
+            detach(decisions.decideSent(project.id), "sent pages decided");
+          }
+        },
+      },
+      {
+        name: "dispatcher and work watches",
+        run: () => {
+          // The dispatcher's safety net: a slow look at every dispatching project.
+          dispatcher.watch();
+          // Stage holds (`until:`, `after:`) over: their tasks move on (waits.ts).
+          waits.start();
+          // Runs a stopped hub left live settle, then the catch-up: each routine's
+          // newest missed slot, once.
+          routines.start();
+          // Off the boot path: projects that share a repository are folded into
+          // its oldest (project-merge.ts), then a folder edited while the hub was
+          // down is re-read once.
+          detach(
+            mergeSameRemote(merging).then(() => tasks.syncAll()),
+            "project merge and task catch-up"
+          );
+        },
+      },
+      { name: "design system", run: () => designSystem.start() },
+      { name: "design verify", run: () => designVerify.start() },
+      {
+        name: "connections and pollers",
+        run: () => {
+          // Each connection looked at once, off the boot path: its tools for sessions' lists.
+          connections.start();
+          // The pollers pick up from the cursors a stopped hub kept.
+          ingress.start();
+          // The receiver listens and the relays' wanted state is applied.
+          relays.start();
+          // A call a stopped hub left under way becomes unknown, never re-run;
+          // then due approved actions run.
+          actions.start();
+        },
+      },
+      // Last off the boot path, once every ask the hub parks again as it starts
+      // is parked (design proposals at once, memory proposals once read): the
+      // waits the person was told of whose asks are parked no more ended with
+      // the hub that held them (a browser or connect ask's call, refused as it
+      // went) and never settled. Their marks go here (db `askPushes`), and a
+      // parent told one waits hears it ended, once (delegate-waits.ts).
+      {
+        name: "parked ask pushes",
+        run: () =>
+          detach(
+            memoryParked.then(() => {
+              const left = db.askPushes.keepOnly(
+                pending
+                  .list()
+                  .flatMap((one) => (one.requestId ? [one.requestId] : []))
+              );
+              if (left.length > 0) {
+                console.log(
+                  `[push] ${left.length} ask(s) told before this start and parked no more: their marks dropped`
+                );
+              }
+              for (const requestId of left) {
+                const told = db.sendRecord(waitNoticeUuid(requestId, "waits"));
+                const about =
+                  told &&
+                  parseDelegateWaitNotice(userTurnText(told.body) ?? "");
+                if (about?.delegate) {
+                  delegateWaits.endedWithHub(
+                    about.delegate,
+                    requestId,
+                    about.what ?? requestId
+                  );
+                }
+              }
+            }),
+            "ask push marks"
+          ),
+      },
+    ]);
   }
   // The hub's HTTP routes after the plugins above, in the order the generated
   // OpenAPI document lists its paths (`hub.routes`' order is the contract: a
