@@ -22,7 +22,6 @@ import type { ArtifactReason, ArtifactStop } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { PairingRequest, WaitingMachine } from "@cawco/core/hub-auth";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { Install } from "@cawco/core/install";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
@@ -39,10 +38,11 @@ import { presenceWords } from "@cawco/core/words/presence";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { tailnetWords } from "@cawco/core/words/tailnet";
 import { untrack } from "svelte";
+import { hub } from "#lib/platform/hub.js";
 import {
   HUB_UNREACHABLE,
   HubUnreachable,
-  hubFetch,
+  hubData,
   hubRefusal,
   unreachable,
   unreachedAnswer,
@@ -182,20 +182,16 @@ async function postSeen(
   ids: string[],
   kind: "archive" | "look" | "unarchive"
 ): Promise<number | null> {
-  const response = await hubFetch(
-    hubRequest("POST /api/seen", { body: { ids, kind } })
-  );
-  if (unreachedAnswer(response)) {
-    throw new HubUnreachable(HUB_UNREACHABLE);
-  }
-  if (!response.ok) {
-    let { message } = await hubRefusal(response);
+  const { at } = await hubData(hub.api.seen.post({ ids, kind }), (refused) => {
+    if (unreachedAnswer(refused.response)) {
+      return new HubUnreachable(HUB_UNREACHABLE);
+    }
+    let { message } = hubRefusal(refused);
     for (const id of ids) {
       message = message.replaceAll(`${id}: `, "");
     }
-    throw new Error(message);
-  }
-  const { at } = (await response.json()) as { at: number | null };
+    return new Error(message);
+  });
   return at;
 }
 

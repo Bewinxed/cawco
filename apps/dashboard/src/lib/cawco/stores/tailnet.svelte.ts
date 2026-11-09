@@ -3,8 +3,9 @@
  * each `tailnet.https` frame; its row ticks a moment once its step is taken.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
+import { hub } from "#lib/platform/hub.js";
+import { hubData } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
 import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
@@ -41,7 +42,7 @@ const TAILNET_TICK_MS = 12_000;
 /** HTTPS on the hub machine's tailnet name, as the hub has it now. */
 export async function readTailnetHttps(): Promise<void> {
   const mark = readLeaves();
-  const read = await load<TailnetHttps>(hubRequest("GET /api/tailnet-https"));
+  const read = await load(hubData(hub.api["tailnet-https"].get()));
   if (read && !heardSince("tailnet.https", mark)) {
     tailnetState.tailnetHttps = read;
   }
