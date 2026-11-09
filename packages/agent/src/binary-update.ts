@@ -87,6 +87,7 @@ import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
 import { leaveRetiringKeepers } from "./boundary/control";
 import {
+  dataOf,
   type HubAnswer,
   type HubClient,
   hubClient,
@@ -182,7 +183,7 @@ async function readReadiness(
           `The hub did not say what its restart would cut: ${answer.status}`
         );
       }
-      return answer.data;
+      return dataOf(answer);
     }
   );
   const holds = mergeHolds(local.holds, theirs.holds);
@@ -214,7 +215,7 @@ async function readHubProtocol(hub: string): Promise<{
       if (answer.error) {
         throw new Error(`its /health answered ${answer.status}`);
       }
-      return answer.data;
+      return dataOf(answer);
     }
   ).catch((error: unknown) => {
     if (error instanceof HubUnreachable) {
@@ -435,7 +436,7 @@ export const readUpdateSettings = (
     hub,
     (client) => client.api["binary-updates"].settings.get(),
     (answer) =>
-      answer.error ? { status: answer.status } : { policy: answer.data }
+      answer.error ? { status: answer.status } : { policy: dataOf(answer) }
   );
 
 /**
@@ -1333,7 +1334,7 @@ export class BinaryUpdater {
             `The hub has no build to offer (latest: ${answer.status})`
           );
         }
-        return answer.data;
+        return dataOf(answer);
       }
     );
     // The hub carries the manifest as the JSON of its signed text, read here

@@ -16,6 +16,7 @@
  */
 
 import { problemWords } from "@cawco/core/hub-refusal";
+import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import type { HubApp } from "@cawco/hub/app";
 import { type Treaty, treaty } from "@elysia/eden";
 
@@ -90,6 +91,33 @@ export const reached = <A extends HubAnswer>(answer: A): A => {
   return answer;
 };
 
+/** A 2xx whose body is no JSON at all: a proxy's page, or an empty answer. */
+export class HubNotAnswering extends Error {}
+
+/**
+ * A successful answer's body, or {@link HubNotAnswering}: Eden hands a body
+ * that is no JSON back as text in `data`, which is the hub not having
+ * answered, by the rule the dashboard's `answerOf` (hub-read.ts) reads a body
+ * by. A 204 has no body to read.
+ */
+const successBody = (answer: HubAnswer): unknown => {
+  const { data, response, status } = answer;
+  if (
+    typeof data === "string" &&
+    status !== 204 &&
+    !response.headers.get("content-type")?.includes("json")
+  ) {
+    try {
+      JSON.parse(data);
+    } catch (error) {
+      throw new HubNotAnswering(`${hubFailureWords.noAnswer(status)}.`, {
+        cause: error,
+      });
+    }
+  }
+  return data;
+};
+
 /**
  * What the hub answered, or the refusal thrown in the caller's words
  * (`refused`). A request that got no answer (the connection refused, a
@@ -105,15 +133,15 @@ export function unwrap(
   refused: (refusal: HubRefusal) => Error
 ): unknown {
   if (reached(answer).error === null) {
-    return answer.data;
+    return successBody(answer);
   }
   throw refused({ status: answer.status, value: answer.error?.value });
 }
 
-/** `answer`'s data: for one already known to have no error (`reached` first, then `answer.error` checked). */
+/** `answer`'s data, read by the rule {@link unwrap} reads it: for one already known to have no error (`reached` first, then `answer.error` checked). */
 export function dataOf<A extends HubAnswer>(answer: A): HubData<A>;
 export function dataOf(answer: HubAnswer): unknown {
-  return answer.data;
+  return answer.error === null ? successBody(answer) : answer.data;
 }
 
 /**
