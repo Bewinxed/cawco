@@ -37,6 +37,7 @@ import type {
 } from "@cawco/core/install";
 import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
+import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 import {
   failureWords,
   hubFetch,
@@ -52,7 +53,7 @@ export const INSTALL_PARAM = "install";
 const DRAFT_KEY = "new";
 
 /** Under the phone's line the window is the drawer (DESIGN.md, Breakpoints: 640px). */
-export const phone = new MediaQuery("(width < 640px)");
+export const phone = new MediaQuery(PHONE_QUERY);
 
 /** Which of the window's steps stands: the draft's details, an install running, its outcome. */
 type ConnectStep = "reach" | "running" | "outcome";
