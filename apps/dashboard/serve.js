@@ -191,7 +191,7 @@ const CLIENT_DIR = standalone
 const IMMUTABLE_PREFIX = "/_app/immutable/";
 
 /**
- * The Content-Type of what {@link serveFresh} answers: build/client's files
+ * The Content-Type of what {@link serveFile} answers: build/client's files
  * outside `_app/immutable/`, which today is `_app/version.json` and whatever a
  * `static/` directory would add. Anything else goes out as bytes.
  */
