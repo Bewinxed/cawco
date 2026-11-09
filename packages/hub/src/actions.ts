@@ -938,7 +938,7 @@ export const ACTION_TOOLS: ReadonlySet<string> = new Set([
   "action_cancel",
 ]);
 
-const attempt = refusalAttempt(ActionRefusal);
+const attempt = refusalAttempt(ActionRefusal, "action-refused");
 
 const STATE = t.Union([
   t.Literal("proposed"),
