@@ -25,7 +25,7 @@ import { listeners, type RunningSandbox } from "./sandboxes";
 import {
   grantedPolicy,
   type Held,
-  keepers,
+  keeperOf,
   noticeOf,
   type Place,
   type Retiring,
@@ -416,7 +416,7 @@ export const keeperTakingOver = async (
   owed: boolean
 ): Promise<SessiondClient> =>
   owed
-    ? ((await keepers.of({ kind: "build", version: runtimeVersion })) ?? client)
+    ? ((await keeperOf({ kind: "build", version: runtimeVersion })) ?? client)
     : client;
 
 /**
@@ -431,7 +431,7 @@ export const NARROW_LOOK_MS = process.env.CAWCO_NARROW_LOOK_MS
   : 5000;
 
 /** Each {@link NarrowCause} in the log's words. */
-export const NARROW_CAUSE_WORDS: Record<NarrowCause, string> = {
+export const NARROW_CAUSE_WORDS: Readonly<Record<NarrowCause, string>> = {
   accounts: "this machine's accounts changed",
   "folder-moved": "a project's folder moved",
   look: "a look at the boundaries in use",
