@@ -17,7 +17,7 @@
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import type { Starter } from "#lib/cawco/project-tasks.js";
-  import EmptyState from "./empty-state.svelte";
+  import EmptyState from "#lib/components/ui/empty/empty-state.svelte";
 
   let {
     look,

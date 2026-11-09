@@ -6,10 +6,6 @@
 </script>
 
 <script lang="ts">
-  /**
-   * Right-click on a machine's heading — what you can do to the box, not to
-   * a session. What it asks stands under the row (`AskHere`).
-   */
   import { machineLabel } from "@cawco/core/machine-names";
   import { machineWords } from "@cawco/core/words/machine";
   import type { Snippet } from "svelte";
@@ -24,6 +20,11 @@
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import AskHere from "./AskHere.svelte";
+  /**
+   * Right-click on a machine's heading — what you can do to the box, not to
+   * a session. What it asks stands under the row (`AskHere`).
+   */
+  import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
   import {
     cawco,
     type Machine,
@@ -186,12 +187,12 @@
 
     <ContextMenu.Separator />
 
-    <ContextMenu.CopyItem text={machine.machineId} what="Machine id">
+    <ContextMenuCopyItem text={machine.machineId} what="Machine id">
       {machineWords.copyMachineId}
-    </ContextMenu.CopyItem>
-    <ContextMenu.CopyItem text={machine.hostname} what="Hostname">
+    </ContextMenuCopyItem>
+    <ContextMenuCopyItem text={machine.hostname} what="Hostname">
       Copy hostname
-    </ContextMenu.CopyItem>
+    </ContextMenuCopyItem>
     {#if machine.status !== "online"}
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={askRemove} variant="destructive">
