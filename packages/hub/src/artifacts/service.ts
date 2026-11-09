@@ -1528,6 +1528,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const links = page.projectId
       ? await deps.afterLinks(page.projectId, page.name, cards)
       : { unlinked: [], dependents: {} };
+    if ("refused" in links) {
+      throw new ArtifactRefusal(links.status, links.refused);
+    }
     const after = Object.fromEntries(
       Object.entries(links.dependents).filter(([id]) => !has(id))
     );
