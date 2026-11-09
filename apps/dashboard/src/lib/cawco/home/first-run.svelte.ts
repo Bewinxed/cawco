@@ -15,9 +15,9 @@
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { goto } from "$app/navigation";
-import { cawco } from "../client.svelte";
 import { connect } from "../connect/installs.svelte";
 import { boardStore } from "../stores/board.svelte";
+import { projectsStore } from "../stores/projects.svelte";
 import { actOnRelay, relayStore } from "../stores/relay.svelte";
 import type { FirstRunState } from "./FirstRun.svelte";
 import { home } from "./home-state.svelte";
@@ -66,10 +66,10 @@ function relayOf(): FirstRunState["relay"] {
 
 /** The row's steps while it stands; null once there is a project, or before the hub is read. */
 export function firstRunSteps(): FirstRunState | null {
-  if (!(home.ready && home.live && cawco.projectsRead)) {
+  if (!(home.ready && home.live && projectsStore.projectsRead)) {
     return null;
   }
-  if (cawco.projects.length > 0) {
+  if (projectsStore.projects.length > 0) {
     return null;
   }
   return {

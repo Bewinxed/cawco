@@ -2,7 +2,7 @@
   import { traitsOf } from "@cawco/core/harness/traits";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { failureWords } from "#lib/platform/hub-read.js";
-  import type { PendingPermission } from "../client.svelte";
+  import type { PendingPermission } from "../stores/sessions.svelte";
 
   /**
    * What a composer stands over the transcript's foot, in px: `stack`, the
@@ -1818,7 +1818,7 @@
     }
   }
   const recalled = $derived(
-    fleet && recallOf ? fleet.cawco.session(recallOf) : null
+    fleet && recallOf ? fleet.sessionsStore.session(recallOf) : null
   );
 
   /**
@@ -2687,7 +2687,7 @@
     if (!(fleet && lift)) {
       return;
     }
-    const message = fleet.cawco
+    const message = fleet.sessionsStore
       .session(lift.instanceId)
       ?.messages.find((m) => m.id === lift.id);
     if (!(message && fleet.userTurnActions(message).edit === "queued")) {
