@@ -61,7 +61,6 @@
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { hubPath } from "../../../packages/agent/src/hub-client";
 import { setupPageAt } from "../../../packages/core/src/artifact-needs";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import type {
@@ -635,11 +634,16 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
   // The shape before 5646cadda, `{ card }`: refused with a 422 naming the
   // field (hub unknown-fields.ts), never answered as a show of the page's
   // top, as r487 was.
+  // A variable, not a literal: TypeScript refuses an extra property only on
+  // a fresh object literal, so this goes through Eden as the old caller sent
+  // it. `at: undefined` is what JSON leaves out.
+  const oldBody = { card: "routines", at: undefined };
   const oldShape = await fleet
-    .postGiven(
-      hubPath.api.instances({ id: office.session }).artifacts({ artifact: id })
-        .show["~path"],
-      { card: "routines" }
+    .api((hub) =>
+      hub.api
+        .instances({ id: office.session })
+        .artifacts({ artifact: id })
+        .show.post(oldBody)
     )
     .then(
       (answer) => `answered ${JSON.stringify(answer)}`,
