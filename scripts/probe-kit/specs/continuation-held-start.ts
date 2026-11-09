@@ -1,8 +1,8 @@
 /**
  * A continuation whose machine is connected but holds its starts (paused by
  * its owner, installing an update, or on a build older than its hub's:
- * server.ts `startHold`) waits for that hold to end, and the hub answers
- * everything meanwhile (server.ts `advanceContinuation`, `StartsHeld`).
+ * start-holds.ts `startHold`) waits for that hold to end, and the hub answers
+ * everything meanwhile (continuations.ts `advanceContinuation`, `StartsHeld`).
  *
  * 2026-11-04 23:16:55, obelisk's hub: "Check RadarBot services for failures"
  * went on from a summary as its move, its source on niftybot.art, which had
@@ -57,9 +57,9 @@ const WAITS = "waits until it ends; it goes on by itself then";
 
 /** The hub's line for a compaction a fold ended (server.ts `forgetCompaction`). */
 const FOLDED = "ends unfinished, as it goes on as";
-/** The hub's line for a compaction ended as a stop, ahead of its move (server.ts `endCompaction`). */
+/** The hub's line for a compaction ended as a stop, ahead of its move (compaction.ts `endCompaction`). */
 const MOVES_NOW = "It moves to";
-/** The hub's line for a move after compaction that threw (server.ts `endCompaction`'s detach). */
+/** The hub's line for a move after compaction that threw (compaction.ts `endCompaction`'s detach). */
 const MOVE_FAILED = "[move after compaction] failed";
 
 /** A session on the fleet's machine that has taken one turn. */
