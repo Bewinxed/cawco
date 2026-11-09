@@ -3790,7 +3790,7 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /** A refusal as the route's answer. */
-const memoryAnswer = refusalAnswer(MemoryRefusal, refused);
+const memoryAnswer = refusalAnswer(MemoryRefusal, "memory-refused", refused);
 
 /**
  * The person's own memory acts outside a conversation: "Make a note" straight
