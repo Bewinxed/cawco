@@ -37,11 +37,12 @@
     motionOk,
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
-  import { cawco } from "../client.svelte";
+
   import { entrance } from "../hover-entrance";
   import MessageBody from "../MessageBody.svelte";
   import { sessionAnswer, sessionFacts } from "../session-names.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import type { Message } from "../types";
 
   let {
@@ -167,7 +168,7 @@
     return null;
   }
 
-  const branch = $derived(cawco.session(instanceId));
+  const branch = $derived(sessionsStore.session(instanceId));
   /**
    * A session the board does not hold (it moved more than a day ago) whose
    * transcript has nothing here yet (unread, on its way, or its read
