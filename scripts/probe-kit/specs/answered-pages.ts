@@ -784,12 +784,19 @@ const run = async ({ check }: Kit) => {
     "card-close-gone",
     undefined
   );
-  await decisions.send("project-1", "card-close-gone", "the x, smaller");
+  const noted = await decisions.send(
+    "project-1",
+    "card-close-gone",
+    "the x, smaller"
+  );
   const projectRead = await decisions.read("project-1", "card-close-gone");
   const [press] = pageSends;
   check(
     "j: his done picking on an ended delegate's project page goes to the session that delegated it, never to Caw; a note with it tells that session the page is its own now; the page names that session as the one that has it",
-    pressed.to === "session" &&
+    "to" in pressed &&
+      pressed.to === "session" &&
+      "to" in noted &&
+      "title" in projectRead &&
       pageSends.length === 1 &&
       press !== undefined &&
       "session" in press.to &&
@@ -807,7 +814,8 @@ const run = async ({ check }: Kit) => {
         "session" in one.to ? one.to.session.id : "caw"
       ),
       pageTells,
-      writer: projectRead.writer,
+      writer:
+        "title" in projectRead ? projectRead.writer : projectRead.response,
     })
   );
 
