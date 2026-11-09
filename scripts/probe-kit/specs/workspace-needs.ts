@@ -2,7 +2,7 @@
  * A machine that lacks what a delegate's workspace needs refuses every
  * delegate before anything starts, in words naming each missing tool, why
  * it is needed and the command that installs them, and its row in the
- * dashboard says the same before a delegate is sent (agent
+ * dashboard says the same before a delegate is sent (core
  * workspace-needs.ts, the `workspace` capability; core
  * words/workspace-needs.ts). Stage 2's `bare` rig proves it on a machine
  * with none of them; this proves it on stand-ins.

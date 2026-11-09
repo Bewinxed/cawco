@@ -5,7 +5,7 @@
 // inside a `group/name` element whose x is off, so with no such ancestor it
 // never matches. `not-group-x/name:` (`:not(:is(.group/name x *))`) holds
 // there too. The same for `peer-not-` against a preceding `peer/name`.
-// Moved from ESLint (apps/dashboard/eslint-plugin-house.mjs) to Golar, on
+// Moved from the dashboard's ESLint plugin to Golar, on
 // Svelte's own AST: a snippet's elements stand where it is rendered.
 import { isTag, readerFor, sitesOf, tagSites } from "./classes.mjs";
 import { eachNode, parentOf } from "./model.mjs";

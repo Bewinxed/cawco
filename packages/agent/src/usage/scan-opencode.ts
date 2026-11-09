@@ -26,7 +26,7 @@ import type { ScannedRecord } from "./types";
  * catalog's rates, "the local estimate shown in the TUI, not what the
  * provider actually bills" (https://github.com/anomalyco/opencode/issues/44224),
  * and 2.0 builds its context tiers from the legacy 200k price alone
- * (packages/core/src/plugin/models-dev.ts `cost()`), so it misses every tier
+ * (anomalyco/opencode/packages/core/src/plugin/models-dev.ts `cost()`), so it misses every tier
  * at another threshold.
  */
 

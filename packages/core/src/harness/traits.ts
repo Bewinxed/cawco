@@ -65,7 +65,7 @@ export interface HarnessTraits {
    * the hub. `machine`: the machine's own report.
    */
   readonly modelCatalog: "account" | "machine";
-  /** Whether it names providers by ids of its own ({@link accountProviderIds}, core accounts.ts). */
+  /** Whether it names providers by ids of its own (core accounts.ts `providersOpenedBy`). */
   readonly ownProviderIds: boolean;
   /** Whether it takes a permission mode at all. */
   readonly permissionModes: boolean;

@@ -110,7 +110,7 @@ export const personsInput = (event: Event): boolean =>
  */
 export const PAGE_TOUCHED_MESSAGE = "cawco:touched";
 
-/** Where every previewed page loads the overlay from, on its own origin (core preview-proxy.ts `injectOverlay`). */
+/** Where every previewed page loads the overlay from, on its own origin (core preview/proxy.ts `injectOverlay`). */
 export const OVERLAY_PATH = "/__cawco/overlay.js";
 
 /**
