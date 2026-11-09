@@ -105,7 +105,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   /**
    * The sessions that run from a moving credential whose process still runs:
    * the ones a move waits on to be at rest, as account dirs never share the
-   * credential (core paths.ts: per account, "never linked or carried").
+   * credential (core paths/claude.ts: per account, "never linked or carried").
    */
   const liveFrom = (move: LoginMove): string[] =>
     ctx.db
