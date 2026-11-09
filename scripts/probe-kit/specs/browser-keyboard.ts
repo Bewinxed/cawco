@@ -55,9 +55,9 @@ import type { Page } from "playwright-core";
 import type { CdpLink } from "../../../packages/agent/src/browser/cdp-takeover";
 import { readWithin } from "../../../packages/core/src/bounded";
 import type { BrowserKey } from "../../../packages/core/src/browser";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { browserWords } from "../../../packages/core/src/words/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import { type Kit, kitsOwnMessage, open, type Spec, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
 
@@ -459,14 +459,12 @@ export async function typeIntoTakeover(
   await fleet.agentUp();
   await fleet.accountSignedIn();
 
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Keyboard",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Keyboard",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
     })
   );
   const key: BrowserKey = `project:${project.id}`;
@@ -480,16 +478,10 @@ export async function typeIntoTakeover(
   // Started as the panel starts it; answered once it is live, which on a
   // container host's first start waits on its image's build.
   const start = await readWithin(LIVE_WITHIN_MS, async (signal) => {
-    const response = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/browsers/:key/start", {
-        path: { key },
-        body: { machineId: MACHINE },
-      }),
-      { signal }
-    );
-    return `${response.status} ${await response.text()}`;
+    const response = await hubAt(fleet.base, { signal })
+      .api.browsers({ key })
+      .start.post({ machineId: MACHINE });
+    return `${response.status} ${answerText(response)}`;
   });
   const answered =
     start.kind === "answered" ? start.value : `no answer (${start.reason})`;
@@ -554,13 +546,10 @@ export async function typeIntoTakeover(
   );
 
   // 1. Take over from the session's panel: the panel opens on the browser.
-  await fleet.api(
-    hubRequest("POST /api/browsers/:key/takeover", {
-      path: { key },
-      body: {
-        instanceId: session,
-        machineId: MACHINE,
-      },
+  await fleet.api((hub) =>
+    hub.api.browsers({ key }).takeover.post({
+      instanceId: session,
+      machineId: MACHINE,
     })
   );
   const taken = await until(
@@ -771,17 +760,11 @@ export async function typeIntoTakeover(
   checks.report();
   await desk.close();
 
-  await fleet.api(
-    hubRequest("POST /api/browsers/:key/handback", {
-      path: { key },
-      body: { machineId: MACHINE },
-    })
+  await fleet.api((hub) =>
+    hub.api.browsers({ key }).handback.post({ machineId: MACHINE })
   );
-  await fleet.api(
-    hubRequest("POST /api/browsers/:key/remove", {
-      path: { key },
-      body: { machineId: MACHINE },
-    })
+  await fleet.api((hub) =>
+    hub.api.browsers({ key }).remove.post({ machineId: MACHINE })
   );
   await page.close();
 }

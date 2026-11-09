@@ -135,7 +135,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { REPLAY_ID } from "../../../packages/agent/src/stage-host/canvas/replays";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   STAGE_COMPARE,
   STAGE_DIFFERENCES,
@@ -1221,6 +1220,12 @@ interface ValuesRead {
   tuned?: unknown[];
 }
 
+/** The person's values, read off an artifact's route answer, which does not type them. */
+const valuesOf = (read: object): ValuesRead => ({
+  dials: Reflect.get(read, "dials"),
+  tuned: Reflect.get(read, "tuned"),
+});
+
 /** The Animation face's row named `row`, as a locator. */
 const rowNamed = (page: Page, row: string) =>
   page.locator(`${GRAPH} [data-slot="clip"]`).filter({ hasText: row }).first();
@@ -1957,12 +1962,14 @@ const run = async (kit: Kit) => {
   );
   if (moveId) {
     const readMove = () =>
-      fleet.sessionApi<ValuesRead>(
-        routines,
-        hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-          path: { id: routines, artifact: moveId },
-        })
-      );
+      fleet
+        .sessionApi(routines, (hub) =>
+          hub.api
+            .instances({ id: routines })
+            .artifacts({ artifact: moveId })
+            .get()
+        )
+        .then(valuesOf);
     await moveDesk(kit, base, moveId, readMove, checks);
     await movePhone(kit, base, moveId, checks);
   }
@@ -1989,12 +1996,14 @@ const run = async (kit: Kit) => {
       base,
       dialsId,
       () =>
-        fleet.sessionApi<ValuesRead>(
-          session,
-          hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-            path: { id: session, artifact: dialsId },
-          })
-        ),
+        fleet
+          .sessionApi(session, (hub) =>
+            hub.api
+              .instances({ id: session })
+              .artifacts({ artifact: dialsId })
+              .get()
+          )
+          .then(valuesOf),
       () =>
         call("dials-update", "mcp__cawco__artifact_update", {
           id: dialsId,
@@ -2006,12 +2015,11 @@ const run = async (kit: Kit) => {
   checks.report();
 
   // 6. A picture of a state, through the daemon's render on the stage.
-  const picture = await fleet.sessionApi<{ png?: string | null }>(
-    session,
-    hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-      path: { id: session, artifact: id },
-      query: { png: "true", state: JSON.stringify({ story: "Two" }) },
-    })
+  const picture = await fleet.sessionApi(session, (hub) =>
+    hub.api
+      .instances({ id: session })
+      .artifacts({ artifact: id })
+      .get({ query: { png: "true", state: JSON.stringify({ story: "Two" }) } })
   );
   const size = picture.png ? pngSize(Buffer.from(picture.png, "base64")) : null;
   kit.check(

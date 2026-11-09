@@ -22,11 +22,7 @@
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-} from "../../../packages/core/src/hub-request";
+import type { Sending, ToolArgs } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
@@ -44,6 +40,7 @@ import {
 } from "../../scratch-fleet";
 import { ToolAnswer } from "../../tool-calls";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 /** The second machine, where the leaf runs. */
 const FAR = "machine-sends-far";
@@ -131,12 +128,6 @@ const refusedHandoff = async <const A>(
   const first = await toolWords(session, "handoff", args);
   return expected(first) ? first : await toolWords(session, "handoff", args);
 };
-
-interface Started {
-  instanceId: string;
-  workItemId: string;
-}
-
 const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "handoff-sends",
@@ -174,13 +165,11 @@ const spec: Spec = {
       (signin) => signin === "signed-in",
       120_000
     );
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Handoff sends",
-          machineId: MACHINE,
-          cwd: fleet.sandbox,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Handoff sends",
+        machineId: MACHINE,
+        cwd: fleet.sandbox,
       })
     );
     plan.parent = await fleet.spawn("claude", "Parent", fleet.sandbox, {
@@ -195,9 +184,9 @@ const spec: Spec = {
       await writeFile(join(plan.shoal, `${at}.txt`), `${TOKEN}-${at}`);
     }
 
-    const started = await fleet.api<Started>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const started = delegateStarted(
+      await fleet.api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: plan.parent,
           title: "Send the ledger up",
           prompt: `${LEAF}: hand the ledger to your parent, then finish.`,
@@ -205,8 +194,8 @@ const spec: Spec = {
           model: MODEL.claude,
           host: true,
           machineId: FAR,
-        },
-      })
+        })
+      )
     );
     const state = await until(
       "the leaf's item ended",

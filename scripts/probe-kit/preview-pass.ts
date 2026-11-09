@@ -10,11 +10,9 @@
  * enters once more.
  */
 import type { BrowserContext } from "playwright-core";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
-import {
-  type PreviewTicket,
-  previewEnterUrl,
-} from "../../packages/core/src/preview/routes";
+import { dataOf } from "../../packages/agent/src/hub-client";
+import { previewEnterUrl } from "../../packages/core/src/preview/routes";
+import { answerText, hubAt } from "./hub";
 
 /** The fleet as a pass needs it: the hub's base, where tickets are asked. */
 interface Hub {
@@ -26,17 +24,13 @@ const held = new Map<string, string>();
 
 /** A new pass for `origin`: `name=value`, or the entry's answer said as an error. */
 const enterOrigin = async (hub: Hub, origin: string): Promise<string> => {
-  const asked = await fetchHub(
-    fetch,
-    hub.base,
-    hubRequest("POST /api/preview-ticket")
-  );
-  if (!asked.ok) {
+  const asked = await hubAt(hub.base).api["preview-ticket"].post();
+  if (asked.error !== null) {
     throw new Error(
-      `the hub gave no preview ticket: ${asked.status} ${await asked.text()}`
+      `the hub gave no preview ticket: ${asked.status} ${answerText(asked)}`
     );
   }
-  const { ticket } = (await asked.json()) as PreviewTicket;
+  const { ticket } = dataOf(asked);
   const entry = await fetch(previewEnterUrl(origin, ticket), {
     redirect: "manual",
   });

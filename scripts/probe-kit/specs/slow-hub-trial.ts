@@ -33,9 +33,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import type { TrialMarker } from "../../../packages/core/src/binary-installation";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
@@ -60,14 +60,6 @@ const CONFIRM_AFTER_SILENCE_MS = 50_000;
 
 /** What the SSH door answers when the hub does not answer behind it (hub ssh-door.ts `unreachable`). */
 const DOOR_UNREACHABLE = 502;
-
-interface AgentRow {
-  build?: { startedAt?: number; version?: string };
-  custody?: { state?: string };
-  machineId: string;
-  status: string;
-}
-
 const spec: Spec = {
   group: "Release checks",
   name: "slow-hub-trial",
@@ -79,9 +71,9 @@ const spec: Spec = {
     await fleet.hubUp();
     fleet.launch("agent");
     await fleet.agentUp();
-    const row = (
-      await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))
-    ).find((one) => one.machineId === MACHINE);
+    const row = (await fleet.api((hub) => hub.api.agents.get())).find(
+      (one) => one.machineId === MACHINE
+    );
     const version = row?.build?.version;
     const startedAt = row?.build?.startedAt;
     if (!(
@@ -100,9 +92,7 @@ const spec: Spec = {
 
     // The slow hub: the row held, everything else passed straight on. In
     // (c) the row is answered at once, but goes silent for a stretch.
-    const rowPath = hubRequest("GET /api/agents/:machineId", {
-      path: { machineId: MACHINE },
-    }).path;
+    const rowPath = hubPath.api.agents({ machineId: MACHINE })["~path"];
     const rowReads: number[] = [];
     let rowDelayMs = ROW_DELAY_MS;
     let silence: { from: number; to: number } | "armed" | undefined;

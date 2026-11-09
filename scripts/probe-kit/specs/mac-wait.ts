@@ -29,12 +29,13 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
+import { hubAt } from "../hub";
 import { callCount, callsInOrder, listedAs, say } from "../journeys/mock";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 import { atRest } from "../phone";
 
 const TAG = "PROBE-MAC-WAIT";
@@ -129,13 +130,11 @@ const run = async (kit: Kit) => {
     .cwd(repo)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Mac wait",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Mac wait",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   await declareGate(fleet.base, project.id, APPLE_GATE);
@@ -143,17 +142,17 @@ const run = async (kit: Kit) => {
     projectId: project.id,
   });
 
-  const started = await fleet.api<{ workItemId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Ship the widget",
         prompt: `${TAG}: commit the widget, then finish.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: repo,
-      },
-    })
+      })
+    )
   );
   const itemOf = () =>
     fleet.query<ItemRow>(
@@ -219,14 +218,9 @@ const run = async (kit: Kit) => {
     "UPDATE agents SET os = 'darwin-arm64' WHERE machine_id = ?",
     MAC
   );
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/projects/:id/places", {
-      path: { id: project.id },
-      body: { machineId: MAC, path: repo },
-    })
-  );
+  await hubAt(fleet.base)
+    .api.projects({ id: project.id })
+    .places.post({ machineId: MAC, path: repo });
   const woken = await until(
     "the hub wakes the delegate once a Mac is online",
     () => delegateSaw(MAC_ONLINE).length > 0,
