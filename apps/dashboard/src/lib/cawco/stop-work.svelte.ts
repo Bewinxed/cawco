@@ -30,19 +30,13 @@ import type {
   ProjectConversationView,
 } from "@cawco/core/project-conversation";
 import { cawOffWords } from "@cawco/core/words/caw-off";
-import { projectWords } from "@cawco/core/words/project";
 import { type EndWords, projectEndWords } from "@cawco/core/words/project-ends";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
-import {
-  failureWords,
-  hubAsk,
-  hubData,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { failureWords, hubAsk, hubRefusal } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { route } from "#lib/platform/motion/route.svelte.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -56,6 +50,7 @@ import {
   deleteProjectForGood,
   forgetProject,
   onProjectStop,
+  projectRunning,
   type RunningSession,
   readProjects,
   stopProjectSessions,
@@ -647,7 +642,7 @@ class StopWork {
     }
     let again: RunningSession[];
     try {
-      again = await runningSessions(job);
+      again = await projectRunning(job.projectId);
     } catch (error) {
       job.refusal = failureWords(error);
       this.keep();
@@ -813,7 +808,7 @@ class StopWork {
   private async listStarted(job: StopJob): Promise<void> {
     let running: RunningSession[];
     try {
-      running = await runningSessions(job);
+      running = await projectRunning(job.projectId);
     } catch {
       return;
     }
@@ -982,15 +977,6 @@ class StopWork {
     delete this.jobs[key];
     this.keep();
   }
-}
-
-/** What of the project still runs, as the hub lists it. */
-async function runningSessions(job: StopJob): Promise<RunningSession[]> {
-  const { sessions } = await hubData(
-    hub.api.projects({ id: job.projectId }).running.get(),
-    (refused) => hubRefusal(refused, projectWords.sessionsNotListedThen)
-  );
-  return sessions;
 }
 
 function jobKey(job: StopJob): string {
