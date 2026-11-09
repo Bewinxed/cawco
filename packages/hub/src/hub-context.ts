@@ -73,12 +73,23 @@ import type { MachinePause } from "./machine-pause";
 import type { createMoves } from "./moves";
 import type { createNotifications } from "./notifications";
 import type { PendingShape } from "./pending";
+import type { createPreviewListeners } from "./preview";
+import type { createCaps } from "./project-caps";
 import type { ProjectDelegateTypes } from "./project-delegate-types";
+import type { projectDelete } from "./project-delete";
+import type { createProjectEdits } from "./project-edit";
+import type { ProjectAsk, ProjectMade } from "./project-making";
+import type { createProjectOut, placeAddedOf } from "./project-out";
+import type { createProjectStops } from "./project-stops";
+import type { ProjectTrash } from "./project-trash";
 import type { RegistryShape } from "./registry";
+import type { createRuleRows } from "./rule-rows";
+import type { RuleEngine } from "./rules";
 import type { createSessionIdentities } from "./session-identity";
 import type { SshTunnels } from "./ssh-tunnels";
 import type { StreamHubShape } from "./stream";
 import type { createTailnetHttps } from "./tailnet-https";
+import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
 import type { createTreeStops } from "./tree-stops";
 import type { HubSocket } from "./wire-socket";
@@ -86,6 +97,11 @@ import type { createWorkItems, Unlanded, WorkItemRequest } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
 
 export interface HubContext {
+  addProjectPlace: (
+    projectId: string,
+    machineId: string,
+    asked: string
+  ) => Promise<ReturnType<typeof placeAddedOf>>;
   agentMoved: (
     name: string,
     expectedHash: string | undefined
@@ -97,6 +113,11 @@ export interface HubContext {
   announceSkill: (name: string, source: string) => void;
   archiveView: () => ArchiveView;
   artifactLane: ReturnType<typeof createArtifactLane>;
+  askedProjectName: (body: {
+    name?: string;
+    prompt?: string;
+  }) => string | undefined;
+  askerOf: (request: Request) => string;
   autoInstall: (machineId: string, agent: HubSocket) => void;
   /** Sends a hub frame to every dashboard. */
   awayAnswer: <Answer>(
@@ -121,6 +142,7 @@ export interface HubContext {
     harness?: HarnessKind,
     instanceId?: string
   ) => Promise<Bounded<ControlResult>>;
+  caps: ReturnType<typeof createCaps>;
   caw: ReturnType<typeof createCaw>;
   checkSources: () => Promise<void>;
   coldReading: (
@@ -136,6 +158,7 @@ export interface HubContext {
   ) => Promise<Unlanded | { error: string } | null>;
   connections: ReturnType<typeof createConnections>;
   contact: ReturnType<typeof createMachineContact>;
+  createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade>;
   db: DbShape;
   delegatedAttempt: ({
     task,
@@ -163,6 +186,7 @@ export interface HubContext {
   }) => Promise<{ type?: string }>;
   delegateTypes: DelegateTypesShape;
   delegationMcp: ReturnType<typeof createDelegationMcp>;
+  deletedProjects: ReturnType<typeof projectDelete>;
   deliverSend: (
     asked: Envelope<SendPayload>,
     ahead?: boolean
@@ -197,6 +221,7 @@ export interface HubContext {
     activityBound: boolean;
   };
   forgetInstances: (ids: readonly string[]) => void;
+  forgottenProjects: ProjectTrash;
   handoffs: Map<string, { from: string; at: number }>;
   harnessConfigDelete: (
     kind: HarnessConfigKind,
@@ -309,6 +334,16 @@ export interface HubContext {
   pending: PendingShape;
   pendingToolSignins: Map<string, ToolSigninChallenge>;
   pluginRow: (row: FleetPlugin) => FleetPlugin;
+  presenceSaid: (request: Request) => string | null;
+  previewListeners: ReturnType<typeof createPreviewListeners>;
+  projectEdits: ReturnType<typeof createProjectEdits>;
+  projectMoved: (
+    projectId: string,
+    machines: Iterable<string>,
+    folderMoved: boolean
+  ) => void;
+  projectOut: ReturnType<typeof createProjectOut>;
+  projectStops: ReturnType<typeof createProjectStops>;
   projectTypes: ProjectDelegateTypes;
   publishInstances: (machineId: string) => void;
   publishUsage: (machineId?: string) => void;
@@ -351,6 +386,8 @@ export interface HubContext {
   registry: RegistryShape;
   retryFromTray: (item: WorkItemRow) => Promise<string | undefined>;
   returned: (kind: TrashKind, key: string) => Promise<unknown>;
+  ruleEngine: RuleEngine;
+  ruleRowsOf: ReturnType<typeof createRuleRows>;
   say: (payload: FramePayload) => void;
   sessionName: (row: {
     derivedTitle?: string | null;
@@ -373,10 +410,12 @@ export interface HubContext {
   skillRow: (row: FleetSkillMeta) => FleetSkillMeta;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
+  stopProjectBrowsers: (projectId: string) => Promise<string | undefined>;
   streams: StreamHubShape;
   TOOL_SIGNIN_BEGIN_MS: 90000;
   TOOL_SIGNIN_COMPLETE_MS: 180000;
   tailnetHttps: ReturnType<typeof createTailnetHttps>;
+  tasks: ReturnType<typeof createTasks>;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
   treeStops: ReturnType<typeof createTreeStops>;
   unansweredStatus: (
