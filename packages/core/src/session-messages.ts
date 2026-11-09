@@ -234,7 +234,7 @@ export type RanFrom =
   "transcript" | "project-settings" | "user-settings" | "default";
 
 /** One value of a {@link StoredRun}, with where it was read. */
-export interface RanValue {
+interface RanValue {
   from: RanFrom;
   value: string;
 }
@@ -1077,7 +1077,7 @@ export interface NeutralSystemMessage {
 }
 
 /** A frame that has no neutral meaning yet, forwarded whole for a future renderer. */
-export interface NeutralRawMessage {
+interface NeutralRawMessage {
   harness: HarnessKind;
   message: unknown;
   parent_tool_use_id?: string | null;
