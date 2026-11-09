@@ -65,9 +65,9 @@ import {
   type RecordCard,
 } from "@cawco/core/decisions";
 import { AFTER_REF } from "@cawco/core/decisions-library";
-import { pageHash } from "@cawco/core/preview/proxy";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
+import { pageHash } from "@cawco/preview/proxy";
 import { Elysia, status, t } from "elysia";
 import type { PageHearer } from "./artifacts/service";
 import type { ArtifactTaker } from "./artifacts/taker";

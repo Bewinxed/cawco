@@ -11,6 +11,10 @@
  */
 import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
 import { kitTokensCss } from "@cawco/design-tokens/kit-tokens" with { type: "macro" };
+import {
+  heardFromHost,
+  toHost as postToHost,
+} from "@cawco/preview/overlay/host-origin";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
@@ -29,10 +33,6 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import type { Map as YMap } from "yjs";
-import {
-  heardFromHost,
-  toHost as postToHost,
-} from "../preview-overlay/host-origin";
 import { Changes } from "./changes";
 import { Icon } from "./icons";
 import { guardImages } from "./images";
@@ -146,7 +146,7 @@ const toHost = (what: "dock" | "done" | "pictured") =>
   postToHost({ type: `cawco:${what}` });
 
 // What of the canvas's edges the host's chrome takes (`inset`) the overlay
-// takes for the page (preview-overlay page.ts `takeInset`): it hears the
+// takes for the page (preview overlay/page.ts `takeInset`): it hears the
 // host's hello, which can come before this module runs.
 
 /**

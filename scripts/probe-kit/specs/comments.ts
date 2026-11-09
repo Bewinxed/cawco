@@ -259,7 +259,7 @@
  *   opened at its first line; nothing spilling sideways, the sweep's total
  *   zero.
  * And the overlay's own Yjs kept out of the page (its doc in a worker of
- * its own, preview-overlay doc-worker.ts):
+ * its own, preview overlay/doc-worker.ts):
  * y1. The page artifact, which imports no Yjs, runs none: Yjs's word in its
  *    realm (`globalThis['__ $YJS$ __']`, which its module sets as it loads)
  *    is unset, and it loaded no Yjs module.
@@ -622,7 +622,7 @@ const openThread = async (on: On, frame: Frame, number: number) => {
     .first();
   // The pin in view first, as a person scrolls to it, and only when it is
   // not: a pin whose element the page has scrolled away stands hidden
-  // (preview-overlay pins.ts `placeAll`), and a pill the frame's view leaves
+  // (preview overlay/pins.ts `placeAll`), and a pill the frame's view leaves
   // out is pressed nowhere (kit pressAt says so). One in view stays put, so
   // nothing scrolls under a press that needs none.
   const inView = await face
@@ -2694,7 +2694,7 @@ keep = Option("keep", "Keep it", "It says its state in words.", true, [], "One m
 redo = Option("redo", "Redraw it", "A new look.", false, [], "Another round.")
 live = Preview("${canvas}", "The toggle, off and on")`;
 
-/** A pin's crop round its element, px each side (agent preview-overlay pins.ts `CROP_PAD`). */
+/** A pin's crop round its element, px each side (preview overlay/pins.ts `CROP_PAD`). */
 const PIN_CROP_PAD = 24;
 /** The channels of a computed `rgb()` or `rgba()` colour. */
 const RGB_PARTS = /\d+(?:\.\d+)?/gu;
@@ -12603,7 +12603,7 @@ const clearOfSheet = (read: FootRead | null) =>
  * viewport; (ii) the comment written, the page scrolled back and its pill
  * tapped, its thread rises as the foot sheet and the pill stands above it
  * the same way. On a page exactly the frame's height, which no scroll of its
- * own can lift (preview-overlay pins.ts `bringOut`), the overlay makes room
+ * own can lift (preview overlay/pins.ts `bringOut`), the overlay makes room
  * under the page's foot (ink.ts `insetFoot`) and lifts the pill the same
  * way: the page scrolls past its own height, the pill wholly above the
  * sheet's top. On an app's shell whose page does not scroll and whose
@@ -12876,7 +12876,7 @@ const footCompose = async (rig: FootRig, engine: string) => {
   }
   return number;
 };
-/** The comment being written: its hollow pill (preview-overlay pins.ts `drawDraft`). */
+/** The comment being written: its hollow pill (preview overlay/pins.ts `drawDraft`). */
 const DRAFT_FACE = '[data-pin="new"] [data-face]';
 
 /** (ii) The page back where the line stands in the bottom third, pin `number`'s pill tapped: its thread, the foot sheet. */
