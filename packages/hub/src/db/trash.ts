@@ -140,7 +140,7 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
     // new one.
     part("fleet_mcp_sessions", eq(fleetMcpSessions.server, key), false),
   ],
-  // delegate-types.ts owns this table outside Drizzle's schema.
+  // db/delegate-types.ts owns this table outside Drizzle's schema.
   delegateType: (key) => [
     part("delegate_types", sql`${sql.identifier("name")} = ${key}`),
   ],
