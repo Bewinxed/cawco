@@ -14,6 +14,7 @@ import { failureWords } from "#lib/platform/hub-read.js";
 import { cawco, machineConnected, moveInstanceAccount } from "../client.svelte";
 import type { BoardRow } from "../links";
 import { faultOn, pendingOn } from "../session-acts.svelte";
+import { accountsStore } from "../stores/accounts.svelte";
 import { accountsOf, nameOf, signinState } from "./model.svelte";
 
 /** Session id → the account it is moving to. */
@@ -24,7 +25,7 @@ const moving = new SvelteMap<string, string>();
  * with no account on record bills none the hub knows, so it is offered no move.
  */
 const providerOfSession = (instance: BoardRow): AccountProvider | undefined =>
-  cawco.accounts?.accounts.find((one) => one.id === instance.accountId)
+  accountsStore.accounts?.accounts.find((one) => one.id === instance.accountId)
     ?.provider;
 
 /**
@@ -36,7 +37,7 @@ export function signedInHere(instance: BoardRow): Account[] {
   if (!provider) {
     return [];
   }
-  const signins = cawco.accounts?.signins ?? [];
+  const signins = accountsStore.accounts?.signins ?? [];
   return accountsOf(provider).filter(
     (one) => signinState(signins, one.id, instance.machineId) === "signed-in"
   );
@@ -80,7 +81,9 @@ export function movingWords(instance: BoardRow): string | undefined {
   if (target === undefined) {
     return;
   }
-  const account = cawco.accounts?.accounts.find((one) => one.id === target);
+  const account = accountsStore.accounts?.accounts.find(
+    (one) => one.id === target
+  );
   const name = account ? nameOf(account) : "another account";
   if (!machineConnected(instance.machineId)) {
     const host =
