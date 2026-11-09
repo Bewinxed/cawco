@@ -1,3 +1,4 @@
+import { SKILL_PLUGIN_VERSIONS } from "./migration-names";
 import { singleton } from "./singleton";
 /** The fleet's catalog: skills, plugins, marketplaces, agents, hooks, harness config and memory, and each one's history. */
 
@@ -1117,7 +1118,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
     },
     versionStoredOnce: () =>
       db.transaction((tx) => {
-        const name = "skill_plugin_versions";
+        const name = SKILL_PLUGIN_VERSIONS;
         if (
           tx
             .select()
