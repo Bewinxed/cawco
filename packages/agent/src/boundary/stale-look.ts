@@ -49,9 +49,9 @@ import {
   running,
   sessiond,
   startEnded,
+  type UnaskedCalls,
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
-import { ensureAgain } from "./unasked";
 
 /**
  * Closes every older boundary of workspace `id` that nothing runs in any
@@ -115,13 +115,13 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
  * boundary is handed over, current, or no longer running, and the second
  * once no older boundary of it is left.
  */
-export const lookAtStale = async (): Promise<void> => {
-  await handOverStale();
+export const lookAtStale = async (unasked: UnaskedCalls): Promise<void> => {
+  await handOverStale(unasked);
   if (retiringNow().length > 0) {
     await closeRetiring();
   }
   if (stubbedNow().length > 0) {
-    await restartStubbed();
+    await restartStubbed(unasked);
   }
 };
 
@@ -142,7 +142,7 @@ export const lookAtStale = async (): Promise<void> => {
  * machine's endpoint ({@link ownKeeperOwed}): the new one starts on the
  * keeper that stays.
  */
-const restartStubbed = async (): Promise<void> => {
+const restartStubbed = async (unasked: UnaskedCalls): Promise<void> => {
   if (await ownKeeperOwed()) {
     return;
   }
@@ -183,7 +183,7 @@ const restartStubbed = async (): Promise<void> => {
         if (isStarting(ref.id) || now?.gen !== held.gen) {
           return;
         }
-        const restart = restartIfIdle(ref, now);
+        const restart = restartIfIdle(ref, now, unasked);
         // An ensure meanwhile gets the boundary that runs once it settles.
         const runs = restart.then((settled) =>
           "fresh" in settled ? settled.fresh : now
@@ -213,7 +213,8 @@ const restartStubbed = async (): Promise<void> => {
  */
 const restartIfIdle = (
   ref: WorkspaceRef,
-  held: Held
+  held: Held,
+  unasked: UnaskedCalls
 ): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
   behindGate(ref.id, async () => {
     const work = await workLeft(ref.id, held);
@@ -224,7 +225,7 @@ const restartIfIdle = (
     if (stuck) {
       throw new Error(stuck);
     }
-    const fresh = await start(await sessiond(), ref);
+    const fresh = await start(await sessiond(), ref, unasked);
     forgetStubbed(ref.id);
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
@@ -243,7 +244,7 @@ const restartIfIdle = (
  * build's keeper is owed the machine's endpoint ({@link ownKeeperOwed}): each
  * waits for it, so its one handover lands on the keeper that stays.
  */
-const handOverStale = async (): Promise<void> => {
+const handOverStale = async (unasked: UnaskedCalls): Promise<void> => {
   if (staleNow().length === 0 || (await ownKeeperOwed())) {
     return;
   }
@@ -262,7 +263,7 @@ const handOverStale = async (): Promise<void> => {
       // A narrowing meanwhile is the narrowing look's ({@link recheckNarrowed}).
       const kept = keptRunningOf(ref.id);
       if (!kept) {
-        await ensureAgain(ref);
+        await unasked.ensureAgain(ref);
         continue;
       }
       const work = await workLeft(ref.id, held);
@@ -284,7 +285,7 @@ const handOverStale = async (): Promise<void> => {
           markKeptRunning(ref.id, { ...kept, commands: past });
           return;
         }
-        await ensureAgain(ref);
+        await unasked.ensureAgain(ref);
       });
     } catch (error) {
       console.warn(
