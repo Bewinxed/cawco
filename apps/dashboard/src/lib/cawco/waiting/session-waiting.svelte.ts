@@ -23,9 +23,9 @@ import type {
   SessionQuestionsRead,
 } from "@cawco/core/session-questions";
 import { failureClause, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
-import { cawco } from "../client.svelte";
 import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
 import { refusals } from "../refusals.svelte";
+import { needsStore } from "../stores/needs.svelte";
 import { isAsk, type WaitingAsk, type WaitingRow, waitingRows } from "./rows";
 
 export interface SessionWaitingInput {
@@ -59,7 +59,7 @@ export class SessionWaiting {
       if (!input.onScreen()) {
         return;
       }
-      cawco.questionsMoved();
+      needsStore.questionsMoved();
       this.#read(input.instanceId());
       return () => this.#reading?.abort();
     });
