@@ -1,7 +1,7 @@
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
-import { readRetiring, starting } from "./state";
+import { isStarting, readRetiring } from "./state";
 import { lookAtOlder } from "./unasked";
 
 /** How often the boundaries of an older form are looked at. */
@@ -44,7 +44,7 @@ export const sayWhyLeft = async (ids: readonly string[]): Promise<void> => {
         commandsIn(seen, id, old.gen),
         workProcesses(seen, id, old),
       ]);
-      const why = starting.has(id)
+      const why = isStarting(id)
         ? "a start of its boundary is under way"
         : `commands ${commands.join(", ") || "none"}, processes ${work.join(", ") || "none"} run in it`;
       console.info(
