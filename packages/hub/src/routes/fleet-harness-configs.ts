@@ -28,11 +28,11 @@ export const fleetHarnessConfigRoutes = ({
     .put(
       "/api/fleet/claude-settings/:name",
       { ...hidden, body: HARNESS_CONFIG_BODY },
-      ({ params, body, status }) =>
-        harnessConfigPut("claudeSettings", params.name, body, status)
+      ({ params, body }) =>
+        harnessConfigPut("claudeSettings", params.name, body)
     )
-    .delete("/api/fleet/claude-settings/:name", hidden, ({ params, status }) =>
-      harnessConfigDelete("claudeSettings", params.name, status)
+    .delete("/api/fleet/claude-settings/:name", hidden, ({ params }) =>
+      harnessConfigDelete("claudeSettings", params.name)
     )
     .get("/api/fleet/opencode-plugins", hidden, () =>
       harnessConfigList("opencodePlugins")
@@ -40,11 +40,11 @@ export const fleetHarnessConfigRoutes = ({
     .put(
       "/api/fleet/opencode-plugins/:name",
       { ...hidden, body: HARNESS_CONFIG_BODY },
-      ({ params, body, status }) =>
-        harnessConfigPut("opencodePlugins", params.name, body, status)
+      ({ params, body }) =>
+        harnessConfigPut("opencodePlugins", params.name, body)
     )
-    .delete("/api/fleet/opencode-plugins/:name", hidden, ({ params, status }) =>
-      harnessConfigDelete("opencodePlugins", params.name, status)
+    .delete("/api/fleet/opencode-plugins/:name", hidden, ({ params }) =>
+      harnessConfigDelete("opencodePlugins", params.name)
     )
     .get("/api/fleet/pi-extensions", hidden, () =>
       harnessConfigList("piExtensions")
@@ -52,9 +52,8 @@ export const fleetHarnessConfigRoutes = ({
     .put(
       "/api/fleet/pi-extensions/:name",
       { ...hidden, body: HARNESS_CONFIG_BODY },
-      ({ params, body, status }) =>
-        harnessConfigPut("piExtensions", params.name, body, status)
+      ({ params, body }) => harnessConfigPut("piExtensions", params.name, body)
     )
-    .delete("/api/fleet/pi-extensions/:name", hidden, ({ params, status }) =>
-      harnessConfigDelete("piExtensions", params.name, status)
+    .delete("/api/fleet/pi-extensions/:name", hidden, ({ params }) =>
+      harnessConfigDelete("piExtensions", params.name)
     );
