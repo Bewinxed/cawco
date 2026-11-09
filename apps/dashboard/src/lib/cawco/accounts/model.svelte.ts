@@ -25,8 +25,8 @@ import type { AccountHue, PlacementStrategy } from "@cawco/core/accounts/kinds";
 import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords as words } from "@cawco/core/words/accounts";
-import { cawco } from "../client.svelte";
 import { accountsStore } from "../stores/accounts.svelte";
+import { boardStore } from "../stores/board.svelte";
 
 /** The colour token an account is drawn in. */
 export const hueVar = (hue: AccountHue): string => `var(--account-${hue})`;
@@ -109,7 +109,7 @@ export const harnessWords = (provider: AccountProvider): string =>
 /** The machines that run any of a provider's harnesses: those an account of it signs in on. */
 export function machinesFor(provider: AccountProvider) {
   const harnesses = providerHarnesses(provider);
-  return cawco.machines.filter((machine) =>
+  return boardStore.machines.filter((machine) =>
     machine.harnesses?.some((entry) =>
       harnesses.includes(entry.harness as HarnessKind)
     )
@@ -262,7 +262,7 @@ export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
   return view.signins
     .flatMap((signin) => {
       const account = view.accounts.find((one) => one.id === signin.accountId);
-      const from = cawco.machines.find(
+      const from = boardStore.machines.find(
         (one) => one.machineId === signin.machineId
       );
       if (!(account && signin.movedAt !== null && signin.movedFrom && from)) {
