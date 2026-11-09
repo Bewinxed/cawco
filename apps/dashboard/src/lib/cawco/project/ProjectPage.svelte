@@ -128,7 +128,6 @@
   import ViewMade from "#lib/cawco/views/ViewMade.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
-  import { discardView, keepView } from "#lib/cawco/views-api.js";
   import {
     projectHref,
     projectTab,
@@ -261,12 +260,7 @@
     project: () => projectId,
     seed: untrack(() => seed),
     find,
-    lift,
   });
-  const list = $derived(board.list);
-  const listProblem = $derived(board.listProblem);
-  const stages = $derived(board.stages);
-  const stagesProblem = $derived(board.stagesProblem);
   // A tab opened in the browser had no server read: it reads itself now.
   onMount(() => {
     if (!seed) {
@@ -280,17 +274,17 @@
    * he writes: setup-draft.svelte.ts); with no setup under way, the scene
    * that offers one (SetupScene).
    */
-  const notSetUp = $derived(stages?.source === "none");
+  const notSetUp = $derived(board.stages?.source === "none");
   /** The project's starters, live: a new set the hub writes replaces the one its stages carried. */
   const starters = $derived(
-    cawco.startersOf(projectId, "board", stages?.starters)
+    cawco.startersOf(projectId, "board", board.stages?.starters)
   );
   /** The empty Routines page's starters and the empty Decisions tab's, live as the board's. */
   const routineStarters = $derived(
-    cawco.startersOf(projectId, "routines", stages?.routineStarters)
+    cawco.startersOf(projectId, "routines", board.stages?.routineStarters)
   );
   const decisionStarters = $derived(
-    cawco.startersOf(projectId, "decisions", stages?.decisionStarters)
+    cawco.startersOf(projectId, "decisions", board.stages?.decisionStarters)
   );
   /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
   const openTask = $derived(here.searchParams.get("task"));
@@ -301,12 +295,13 @@
   /** Caw stands as the empty Routines page's mark (ViewRoutines `standing`). */
   let routinesStand = $state(false);
 
-  const stageList = $derived(stages?.stages ?? []);
-  const tasks = $derived(board.tasks);
-  const kindById = $derived(new Map(tasks.map((task) => [task.id, task.kind])));
+  const stageList = $derived(board.stages?.stages ?? []);
+  const kindById = $derived(
+    new Map(board.tasks.map((task) => [task.id, task.kind]))
+  );
   /** What waits on you: the hub's reasons, a session's ask, an action (needs.svelte.ts). */
   const needsYou = $derived(
-    tasks.filter((task) => waitsOnYou(projectId, task))
+    board.tasks.filter((task) => waitsOnYou(projectId, task))
   );
   /** The filter holds only while something needs you. */
   const filtering = $derived(needsOnly && needsYou.length > 0);
@@ -314,7 +309,7 @@
   let filter = $state<TaskFilter>(untrack(() => filterOf(here.searchParams)));
   const narrowed = $derived(activeCount(filter));
   const shownTasks = $derived(
-    applyFilter(filtering ? needsYou : tasks, filter, find.ids)
+    applyFilter(filtering ? needsYou : board.tasks, filter, find.ids)
   );
   /** Needs you on, the columns those tasks stand in. */
   const shownStages = $derived(
@@ -325,12 +320,10 @@
       : stageList
   );
   const newIn = $derived(firstTodoStage(stageList)?.name);
-  const empty = $derived(list !== null && list.tasks.length === 0);
-
-  const archived = $derived(board.archived);
+  const empty = $derived(board.list !== null && board.list.tasks.length === 0);
 
   const allowedFrom = (stage: string): Set<string> =>
-    stages ? movesFrom(stages, stage) : new Set();
+    board.stages ? movesFrom(board.stages, stage) : new Set();
 
   // --- Caw, the views and the data they bind to ------------------------------
 
@@ -340,9 +333,10 @@
    * skeleton and Caw reads it (design §2, Loading); a quick one shows
    * nothing of its own.
    */
-  const leavingFor = $derived(list === null && listProblem === null);
-  const readingLong = graceWhile(() => leavingFor);
-  const reading = $derived(readingLong.current);
+  const leavingFor = $derived(
+    board.list === null && board.listProblem === null
+  );
+  const reading = graceWhile(() => leavingFor);
 
   const lead = new CawLead({
     id: () => projectId,
@@ -350,8 +344,8 @@
     machinesOnline: () =>
       seed?.machinesOnline ??
       cawco.machines.some((row) => row.status === "online"),
-    tasks: () => tasks,
-    reading: () => reading,
+    tasks: () => board.tasks,
+    reading: () => reading.current,
   });
   /** You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it. */
   const canTalk = $derived(lead.canTalk);
@@ -363,7 +357,7 @@
    * it, his panel stays put away.
    */
   $effect(() => {
-    if (list !== null && lead.project !== null) {
+    if (board.list !== null && lead.project !== null) {
       const blank = empty;
       untrack(() => lead.arrive(blank, sheetCovers()));
     }
@@ -376,7 +370,7 @@
    */
   $effect(() => {
     const words = here.searchParams.get("ask");
-    if (!words || list === null || lead.project === null) {
+    if (!words || board.list === null || lead.project === null) {
       return;
     }
     untrack(() => {
@@ -390,11 +384,6 @@
   /** His panel stands docked beside the page, which yields it its room (CawFloat). */
   const docked = $derived(front && lead.open && lead.anchor !== null);
 
-  const views = $derived(board.views);
-  const viewsRead = $derived(board.viewsRead);
-  const viewsProblem = $derived(board.viewsProblem);
-  const dated = $derived(board.dated);
-
   /**
    * Pages are blocks (blocks/): each page's arrangement, as the hub keeps
    * it, and the kept views placed on a page as blocks there.
@@ -402,21 +391,21 @@
   const blocks = new ProjectBlocks(
     () => projectId,
     () =>
-      viewsRead
-        ? views.filter((view) => !view.draft).map((view) => view.name)
+      board.viewsRead
+        ? board.views.filter((view) => !view.draft).map((view) => view.name)
         : null
   );
 
   /** The date field the calendar places tasks by; null: no Calendar tab. */
   const dateField = $derived(
     calendarField(
-      dated ?? [],
-      stages?.views.find((each) => each.name === "calendar")?.by ?? null
+      board.dated ?? [],
+      board.stages?.views.find((each) => each.name === "calendar")?.by ?? null
     )
   );
   const dateById = $derived(
     new Map(
-      (dated ?? []).flatMap((task) => {
+      (board.dated ?? []).flatMap((task) => {
         const at = dateField ? task.dates[dateField] : undefined;
         return at === undefined ? [] : [[task.id, at] as const];
       })
@@ -469,18 +458,18 @@
     // The project's decision pages, always: an empty one starts Caw on one.
     { value: "decisions", label: "Decisions", draft: false },
     // The task graph, while the tasks draw one (an edge between two).
-    ...(taskEdges(tasks).length > 0
+    ...(taskEdges(board.tasks).length > 0
       ? [{ value: "canvas", label: "Canvas", draft: false }]
       : []),
     ...(dateField
       ? [{ value: "calendar", label: "Calendar", draft: false }]
       : []),
     // What the project's tasks made, while one has made something.
-    ...(tasks.some((task) => task.outputs.length > 0)
+    ...(board.tasks.some((task) => task.outputs.length > 0)
       ? [{ value: "made", label: madeWords.tab, draft: false }]
       : []),
     // A view placed on a page stands there as a block, and is no tab.
-    ...views
+    ...board.views
       .filter((view) => view.draft || blocks.pageOfView(view.name) === null)
       .map((view) => ({
         value: `view:${view.name}`,
@@ -514,7 +503,7 @@
   });
   /** A view the URL names is still being read: its place holds a skeleton. */
   const awaiting = $derived(
-    tab.startsWith("view:") && !viewsRead && current !== tab
+    tab.startsWith("view:") && !board.viewsRead && current !== tab
   );
 
   // --- the Decisions tab ---------------------------------------------------------
@@ -666,7 +655,7 @@
   });
 
   const taskOf = (id: string) => {
-    const task = tasks.find((each) => each.id === id);
+    const task = board.tasks.find((each) => each.id === id);
     return task ? { kind: task.kind, title: task.title } : undefined;
   };
 
@@ -772,18 +761,6 @@
     ).toLowerCase()
   );
 
-  // --- the hub's writes ---------------------------------------------------------
-
-  /** The card for `id` takes off from where it is drawn, to land in its new column. */
-  function lift(id: string, source?: HTMLElement) {
-    const card =
-      source ??
-      document.querySelector<HTMLElement>(`[data-share="task:${id}"]`);
-    if (card) {
-      depart(card);
-    }
-  }
-
   // --- the filter and a bulk change ------------------------------------------
 
   function setFilter(next: TaskFilter) {
@@ -798,14 +775,13 @@
   const picked = $derived(shownTasks.filter((task) => isPicked(task.id)));
   /** A card's or a row's tick; held still while a bulk change runs. */
   function pick(id: string, on: boolean, range?: string[]) {
-    if (!bulkRun) {
+    if (!board.bulkRun) {
       pickTask(id, on, range);
     }
   }
   const dropTo = $derived(
     stageList.find((stage) => stage.kind === "dropped")?.name ?? null
   );
-  const bulkRun = $derived(board.bulkRun);
   const pickedIds = () => picked.map((task) => task.id);
   const bulkMove = (stage: string) => board.bulkMove(pickedIds(), stage);
   const bulkDrop = (reason: string) => {
@@ -822,7 +798,7 @@
   let pickedFor = "";
   $effect(() => {
     const at = `${projectId}:${current}`;
-    if (pickedFor && pickedFor !== at && !bulkRun) {
+    if (pickedFor && pickedFor !== at && !board.bulkRun) {
       untrack(() => board.endBulk());
     }
     pickedFor = at;
@@ -903,8 +879,7 @@
     keeping = name;
     refusals.delete(viewKey(name));
     try {
-      const kept = await keepView(projectId, name);
-      board.views = views.map((view) => (view.name === name ? kept : view));
+      await board.keepView(name);
     } catch (error) {
       refusals.set(viewKey(name), {
         reason: `The ${viewLabel(name)} view was not kept: ${failureClause(error)}. It stays a draft.`,
@@ -920,9 +895,7 @@
     discarding = name;
     refusals.delete(viewKey(name));
     try {
-      await discardView(projectId, name);
-      choose("board");
-      board.views = views.filter((view) => view.name !== name);
+      await board.discardView(name, () => choose("board"));
     } catch (error) {
       refusals.set(viewKey(name), {
         reason: `The ${viewLabel(name)} view was not discarded: ${failureClause(error)}. It stays a draft.`,
@@ -946,7 +919,7 @@
       blocks.placesOf(on).flatMap((place): [string, BlockItem][] => {
         const name = viewOfBlock(place.block);
         const view = name
-          ? views.find((each) => each.name === name && !each.draft)
+          ? board.views.find((each) => each.name === name && !each.draft)
           : undefined;
         return view
           ? [
@@ -1084,7 +1057,7 @@
       board.readDated();
       board.readArchived();
       decisions.read();
-      if (list) {
+      if (board.list) {
         board.refresh();
       }
     });
@@ -1125,7 +1098,7 @@
   let changesSeen = -1;
   $effect(() => {
     const changes = cawco.tasksChangedOf(projectId);
-    if (changesSeen !== -1 && changes !== changesSeen && list) {
+    if (changesSeen !== -1 && changes !== changesSeen && board.list) {
       untrack(() => board.refresh());
     }
     changesSeen = changes;
@@ -1185,7 +1158,7 @@
   let kindsSeen: Map<string, StageKind | null> | null = null;
   $effect(() => {
     const now = new Map(
-      (list?.tasks ?? []).map((task) => [task.id, task.kind])
+      (board.list?.tasks ?? []).map((task) => [task.id, task.kind])
     );
     if (kindsSeen) {
       for (const [id, kind] of now) {
@@ -1209,11 +1182,16 @@
    */
   const unread = $derived.by((): string | null => {
     const parts = [
-      listProblem === null ? null : "tasks",
-      stagesProblem === null ? null : "stages",
-      viewsProblem === null ? null : "views",
+      board.listProblem === null ? null : "tasks",
+      board.stagesProblem === null ? null : "stages",
+      board.viewsProblem === null ? null : "views",
     ].filter((part) => part !== null);
-    const reason = (listProblem ?? stagesProblem ?? viewsProblem ?? "").trim();
+    const reason = (
+      board.listProblem ??
+      board.stagesProblem ??
+      board.viewsProblem ??
+      ""
+    ).trim();
     if (parts.length === 0 || reason === "") {
       return null;
     }
@@ -1238,13 +1216,13 @@
   }
   /** The pane says it in the board's place: its tasks are what's missing. */
   const paneSaysUnread = $derived(
-    list === null &&
+    board.list === null &&
       !shown.startsWith("view:") &&
       shown !== "routines" &&
       shown !== "decisions"
   );
   const unreadStages = $derived(
-    `stages.md in the project folder does not read: ${(stages?.problems ?? []).join(" ")} Tasks keep their stages meanwhile; fix the file and the board takes its columns from it.`
+    `stages.md in the project folder does not read: ${(board.stages?.problems ?? []).join(" ")} Tasks keep their stages meanwhile; fix the file and the board takes its columns from it.`
   );
   /** The empty board with Caw: what Caw does, in this project's own stages, named as the board names them. */
   const cawLine = $derived.by(() => {
@@ -1269,11 +1247,11 @@
   // set up has none, and its board no column to hold the form, so New task
   // is offered only where one stands.
   const strippedNewTask = $derived(
-    list !== null && newIn !== undefined && (!empty || canTalk)
+    board.list !== null && newIn !== undefined && (!empty || canTalk)
   );
   /** The view on screen is one of the tasks, which the filter narrows. */
   const filterHere = $derived(
-    list !== null &&
+    board.list !== null &&
       !empty &&
       ["board", "table", "canvas", "calendar"].includes(current)
   );
@@ -1424,7 +1402,7 @@
   );
   /** The head's ⋯: finish the setup, or change how a set-up project runs, through the same page. */
   const setupAct = $derived.by(() => {
-    if (!(canTalk && stages)) {
+    if (!(canTalk && board.stages)) {
       return null;
     }
     if (notSetUp) {
@@ -1501,7 +1479,7 @@
    * frame stood 0px tall.
    */
   const paneFoot = $derived([
-    PANE_FOOT[reading ? "board" : paneView] ?? "pb-space-6",
+    PANE_FOOT[reading.current ? "board" : paneView] ?? "pb-space-6",
     docked && "max-phone:pb-c-sheet-max-h",
   ]);
   /**
@@ -1512,7 +1490,11 @@
    * canvas, a decision page) or the next project is read.
    */
   const fadeOn = $derived.by((): "page" | "pane" | null => {
-    if (reading || current === "canvas" || paneView === "decisions-page") {
+    if (
+      reading.current ||
+      current === "canvas" ||
+      paneView === "decisions-page"
+    ) {
       return null;
     }
     if (pageScrollsQuery.current) {
@@ -1577,7 +1559,7 @@
           {filter}
           {find}
           onchange={setFilter}
-          tasks={[...tasks, ...archived]}
+          tasks={[...board.tasks, ...board.archived]}
         />
       {/if}
       {#if needsYou.length > 0}
@@ -1630,11 +1612,11 @@
 
 <!-- What acts on the picked tasks, the board's cards or the table's rows. -->
 {#snippet bulkBar()}
-  {#if picked.length > 0 || bulkRun}
+  {#if picked.length > 0 || board.bulkRun}
     <BulkBar
       {allowedFrom}
       {dropTo}
-      labels={[...new Set(tasks.flatMap((task) => task.labels))].sort()}
+      labels={[...new Set(board.tasks.flatMap((task) => task.labels))].sort()}
       onarchive={bulkArchive}
       onclear={() => board.endBulk()}
       ondrop={bulkDrop}
@@ -1642,7 +1624,7 @@
       onmove={bulkMove}
       onretry={() => board.bulkAgain?.()}
       {picked}
-      run={bulkRun}
+      run={board.bulkRun}
       stages={stageList}
     />
   {/if}
@@ -1652,7 +1634,7 @@
 {#snippet boardBody(_block: string)}
   <TaskBoard
     {allowedFrom}
-    archived={applyFilter(archived, filter, find.ids)}
+    archived={applyFilter(board.archived, filter, find.ids)}
     {dateOf}
     hrefOf={(id) => hrefOf(id)}
     moving={(id) => id in board.moving}
@@ -1685,7 +1667,7 @@
       onopen={openOne}
       onpick={pick}
       onpickall={(ids, on) => {
-        if (!bulkRun) {
+        if (!board.bulkRun) {
           pickAll(ids, on);
         }
       }}
@@ -1703,7 +1685,7 @@
 {/snippet}
 <!-- A kept view placed on a page, drawn as its tab draws it. -->
 {#snippet viewBody(block: string)}
-  {@const view = views.find((each) => `view:${each.name}` === block)}
+  {@const view = board.views.find((each) => `view:${each.name}` === block)}
   {#if view}
     <ViewOpenUi
       hrefOf={(id) => hrefOf(id)}
@@ -1716,7 +1698,7 @@
 
 {#snippet pane(value: string)}
   {#if value.startsWith("view:")}
-    {@const view = views.find((each) => `view:${each.name}` === value)}
+    {@const view = board.views.find((each) => `view:${each.name}` === value)}
     {#if view}
       <div class="flex flex-col gap-space-3" in:reveal>
         {#if view.draft}
@@ -1867,7 +1849,7 @@
     <!-- The tab's first read, inside its grace: it shows nothing of its
          own, never the refusal it has not had (a quick read drew "Tasks are
          not available" for a beat on every open from the rail). -->
-  {:else if !list}
+  {:else if !board.list}
     <div class="max-w-c-measure">
       <EmptyState
         icon={IconToolTodo}
@@ -2013,10 +1995,10 @@
       onopen={openOne}
       tasks={shownTasks}
     />
-  {:else if value === "calendar" && dateField && dated}
+  {:else if value === "calendar" && dateField && board.dated}
     <!-- What the skeleton below stood for until its dates were read. -->
     <div in:reveal>
-      <ViewCalendar field={dateField} onopen={openOne} tasks={dated} />
+      <ViewCalendar field={dateField} onopen={openOne} tasks={board.dated} />
     </div>
   {:else if value === "made"}
     <ViewMade
@@ -2057,7 +2039,7 @@
             />
           {/key}
         </div>
-      {:else if phone && openTask && stages}
+      {:else if phone && openTask && board.stages}
         <!-- A phone: the task is its own page, with Back to the view. -->
         <div
           data-slot="project-page"
@@ -2072,9 +2054,9 @@
             page={{ backTo: project.name }}
             {pageOf}
             {projectId}
-            {stages}
+            stages={board.stages}
             taskId={openTask}
-            {tasks}
+            tasks={board.tasks}
           />
         </div>
       {:else}
@@ -2127,7 +2109,7 @@
                 <AlertDescription>{lead.problem}</AlertDescription>
               </Alert>
             {/if}
-            {#if stages && stages.problems.length > 0}
+            {#if board.stages && board.stages.problems.length > 0}
               <Alert
                 data-id-page-notice
                 class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
@@ -2136,13 +2118,15 @@
                 <AlertDescription>{unreadStages}</AlertDescription>
               </Alert>
             {/if}
-            {#if list && list.problems.length > 0}
+            {#if board.list && board.list.problems.length > 0}
               <Alert
                 data-id-page-notice
                 class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
                 variant="warning"
               >
-                <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+                <AlertDescription
+                  >{board.list.problems.join(" ")}</AlertDescription
+                >
               </Alert>
             {/if}
             {#if unread && !paneSaysUnread}
@@ -2185,7 +2169,7 @@
                   expanded: `cawco.task.expanded.${projectId}`,
                 }}
                 main={viewPane}
-                open={!!openFile || (!!openTask && !!stages)}
+                open={!!openFile || (!!openTask && !!board.stages)}
                 side={sideCard}
               />
             {/if}
@@ -2212,7 +2196,7 @@
                     look="in-bar"
                     {find}
                     onchange={setFilter}
-                    tasks={[...tasks, ...archived]}
+                    tasks={[...board.tasks, ...board.archived]}
                   />
                 {/if}
               {/snippet}
@@ -2257,7 +2241,7 @@
     {#key sideHeld.file}
       <FolderFile onclose={closeFile} path={sideHeld.file} {projectId} />
     {/key}
-  {:else if sideHeld && stages}
+  {:else if sideHeld && board.stages}
     <TaskPane
       {allowedFrom}
       onchanged={(task) => board.changed(task)}
@@ -2266,9 +2250,9 @@
       onopen={openOne}
       {pageOf}
       {projectId}
-      {stages}
+      stages={board.stages}
       taskId={sideHeld.task}
-      {tasks}
+      tasks={board.tasks}
     />
   {/if}
 {/snippet}
@@ -2276,14 +2260,14 @@
 {#snippet viewPane()}
   <div
     data-slot="pane"
-    aria-busy={cawco.hub === "unreachable" || awaiting || reading}
+    aria-busy={cawco.hub === "unreachable" || awaiting || reading.current}
     class={[
       "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       PANE_INSET,
       fadeOn === "pane" && "kit-edge-fade-block",
       paneFoot,
     ]}
-    data-view={reading ? "board" : paneView}
+    data-view={reading.current ? "board" : paneView}
     style:--draft-bleed-end={sheetQuery.current
       ? "var(--spacing-space-5)"
       : "var(--spacing-space-6)"}
@@ -2294,7 +2278,7 @@
       ? "calc(50cqb + var(--spacing-c-sheet-max-h))"
       : "50cqb"}
   >
-    {#if reading}
+    {#if reading.current}
       <!-- The board at its real layout, its columns standing empty: the
              next project's read takes its place in the skeleton's reveal. -->
       <div
@@ -2396,7 +2380,7 @@
       {filter}
       {find}
       onchange={setFilter}
-      tasks={[...tasks, ...archived]}
+      tasks={[...board.tasks, ...board.archived]}
       bind:open={filterOpen}
     />
   {/if}
