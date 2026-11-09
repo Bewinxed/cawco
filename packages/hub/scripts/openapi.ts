@@ -39,6 +39,7 @@ import {
 } from "./agent-calls";
 import { hubInProcess } from "./hub-in-process";
 import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
+import { inOneOrder, unionsOrderDecides } from "./openapi-order";
 import { type Baseline, publishedNightlies, shippedBaselines } from "./shipped";
 import {
   APP_SCHEMA,
@@ -54,7 +55,6 @@ import {
   wireProtocolAt,
   withoutBridge,
 } from "./wire-compat";
-import { writtenOrder } from "./written-order";
 
 const check = process.argv.includes("--check");
 // Before the hub and the program are built: a check whose inputs are the
@@ -217,13 +217,8 @@ if (routeErrors.length) {
   throw new Error(`~Routes lookups failed:\n${routeErrors.join("\n")}`);
 }
 
-// The generator writes properties and unions in the order the code writes
-// them, not the checker's (written-order.ts).
-const order = writtenOrder(ts, program.getTypeChecker());
 const generator = TJS.buildGenerator(
-  Object.assign(Object.create(program) as typeof program, {
-    getTypeChecker: () => order.checker,
-  }),
+  program,
   {
     ref: true,
     aliasRef: false,
@@ -236,7 +231,6 @@ const generator = TJS.buildGenerator(
 if (!generator) {
   throw new Error("typescript-json-schema could not read the program");
 }
-order.readThrough(generator);
 // The generator reads a frame by its name, taking the first type the program
 // declares under it outside node_modules: that must be the one core marks.
 for (const [name, file] of socket.declaredIn) {
@@ -259,11 +253,17 @@ console.warn = () => undefined;
  * component, described as Elysia describes it.
  */
 const VALIDATION_BODY = "ValidationErrorResponse";
-const { definitions = {} } = generator.getSchemaForSymbols([
+const generated = generator.getSchemaForSymbols([
   ...ids,
   ...socket.frames,
   VALIDATION_BODY,
 ]) as { definitions?: Record<string, Schema> };
+// In one order before anything below reads it (openapi-order.ts): which enum
+// names a value list and which schema meets a type first follow from it.
+const definitions = inOneOrder(
+  generated.definitions ?? {},
+  "definitions"
+) as Record<string, Schema>;
 console.warn = warn;
 const validationBody = generator
   .getSymbols(VALIDATION_BODY)
@@ -1273,7 +1273,8 @@ const generatorConfig = [
   "",
 ].join("\n");
 
-const document = {
+// In one order (openapi-order.ts), whatever order the checker met its types in.
+const document = inOneOrder({
   openapi: "3.1.0",
   info: {
     title: "CawCo hub",
@@ -1293,7 +1294,17 @@ const document = {
   ],
   paths,
   components: { schemas: components },
-};
+}) as { components: { schemas: Record<string, unknown> } };
+// No union's order may decide what the app decodes (openapi-order.ts).
+const decidedByOrder = unionsOrderDecides(
+  document,
+  document.components.schemas
+);
+if (decidedByOrder.length) {
+  throw new Error(
+    `A union whose member order decides what the app decodes:\n${decidedByOrder.join("\n")}\nGive it a discriminator on a property every member requires as its own literal, or write it as an anyOf.`
+  );
+}
 
 // The Swift generator would drop each of these, so none may be written.
 const leftNulls: string[] = [];
@@ -1562,40 +1573,8 @@ console.log(
   `Wire checked against ${bases.map((base) => base.label).join(", ")}; agent routes against ${agents.map((agent) => agent.label).join(", ")}`
 );
 
-/**
- * Components by name and a discriminator's mapping by kind: maps the Swift
- * generator reads by key, written in one order so where the checker met a
- * type does not move them. A union's members and an object's properties
- * stay in the order the code gives them (written-order.ts); the generator
- * names an undiscriminated union's members by position.
- */
-const byKey = (map: object): Record<string, unknown> =>
-  Object.fromEntries(
-    Object.entries(map).toSorted(([a], [b]) => (a < b ? -1 : Number(a > b)))
-  );
-const inOneOrder = (value: unknown, key?: string): unknown => {
-  if (Array.isArray(value)) {
-    return value.map((item) => inOneOrder(item));
-  }
-  if (typeof value !== "object" || value === null) {
-    return value;
-  }
-  const keyed =
-    key !== "properties" && "mapping" in value && "propertyName" in value
-      ? { ...value, mapping: byKey(value.mapping as object) }
-      : value;
-  return Object.fromEntries(
-    Object.entries(keyed).map(([field, item]) => [
-      field,
-      inOneOrder(item, field),
-    ])
-  );
-};
 const outputs: [string, string][] = [
-  [
-    OUT,
-    `${JSON.stringify(inOneOrder({ ...document, components: { schemas: byKey(components) } }), null, 2)}\n`,
-  ],
+  [OUT, `${JSON.stringify(document, null, 2)}\n`],
   [join(dirname(OUT), "OpenEnums.swift"), swiftEnums],
   [join(dirname(OUT), "openapi-generator-config.yaml"), generatorConfig],
 ];
