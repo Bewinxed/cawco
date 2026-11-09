@@ -33,7 +33,7 @@ import {
 } from "@cawco/core/areas";
 import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
-import { Elysia, status, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { AreaDeleted, AreaSettingsChange } from "./db/areas";
 import type { ProjectRow } from "./db/projects";
@@ -42,18 +42,15 @@ import {
   deleteFolderFile,
   deleteProjectFolder,
   FOLDER_WRITE,
+  folderAttempt,
   folderContent,
   listFolder,
   MESSAGE_LIMIT,
   readFolderFile,
-  refused,
   writeFolderFile,
   YOU,
 } from "./project-folder";
-import { StatusRefusal } from "./refusal";
-
-/** A refusal, in a sentence the person or the session reads. */
-export class AreaRefusal extends StatusRefusal<400 | 404> {}
+import { refusal, schemaRefusal } from "./refusal";
 
 /** An area as the API answers it: its row and the projects in it, oldest first. */
 export interface AreaView extends Area {
@@ -103,26 +100,16 @@ export interface AreasDeps {
   readonly folderSources: (project: ProjectRow) => Promise<FolderSources>;
 }
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: a name is one line of text, so control characters are what it refuses
-const CONTROL = /[\u0000-\u001f\u007f]/u;
-
-/** A name as the hub keeps it: trimmed, one line, 1 to {@link AREA_NAME_LIMIT} characters. */
-const areaName = (raw: string): string => {
-  const name = raw.trim();
-  if (!name) {
-    throw new AreaRefusal(400, areaWords.nameNeeded);
-  }
-  if (CONTROL.test(name)) {
-    throw new AreaRefusal(400, areaWords.nameOneLine);
-  }
-  if (name.length > AREA_NAME_LIMIT) {
-    throw new AreaRefusal(
-      400,
-      areaWords.nameTooLong(AREA_NAME_LIMIT, name.length)
-    );
-  }
-  return name;
-};
+/**
+ * An area's name as a body carries it: one line with something on it, at
+ * most {@link AREA_NAME_LIMIT} characters; kept trimmed.
+ */
+const AREA_NAME = t.String({
+  maxLength: AREA_NAME_LIMIT,
+  pattern:
+    "^[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f][^\\u0000-\\u001f\\u007f]*$",
+  error: schemaRefusal(areaWords.name(AREA_NAME_LIMIT)),
+});
 
 /** The row settings by the name a note gives each. */
 const ROW_SETTINGS = [
@@ -155,18 +142,21 @@ export const createAreas = ({
   db,
   folderSources,
 }: AreasDeps) => {
-  const known = (id: string) => {
-    const area = db.areas.get(id);
-    if (!area) {
-      throw new AreaRefusal(404, areaWords.noArea(id));
-    }
-    return area;
+  const known = (id: string) =>
+    db.areas.get(id) ?? refusal(404, "no-area", areaWords.noArea(id));
+
+  const view = (id: string) => {
+    const area = known(id);
+    return area instanceof ElysiaStatus
+      ? area
+      : { ...area, projects: db.areas.projectsIn(id) };
   };
 
-  const view = (id: string): AreaView => ({
-    ...known(id),
-    projects: db.areas.projectsIn(id),
-  });
+  /** Every area, each as {@link view} answers it. */
+  const views = (): AreaView[] =>
+    db.areas
+      .list()
+      .map((area) => ({ ...area, projects: db.areas.projectsIn(area.id) }));
 
   /** Where each setting of a project comes from now. */
   const sourcesOf = async (project: ProjectRow): Promise<Sources> => {
@@ -180,23 +170,18 @@ export const createAreas = ({
     return sources;
   };
 
-  /** The budget a write asks, as its two columns; refused unless above 0. */
+  /** The budget a write asks, as its two columns. */
   const capColumns = (
     cap: AreaSettingsAsk["cap"]
-  ): Pick<AreaSettingsChange, "capPeriod" | "capUsd"> => {
-    if (cap === undefined) {
-      return {};
-    }
-    if (cap !== null && !(Number.isFinite(cap.usd) && cap.usd > 0)) {
-      throw new AreaRefusal(400, areaWords.capAmount);
-    }
-    return { capUsd: cap?.usd ?? null, capPeriod: cap?.period ?? null };
-  };
+  ): Pick<AreaSettingsChange, "capPeriod" | "capUsd"> =>
+    cap === undefined
+      ? {}
+      : { capUsd: cap?.usd ?? null, capPeriod: cap?.period ?? null };
 
   /** An area's settings write, checked; what the row takes. A field left out stays as it is. */
-  const settingsChange = (ask: AreaSettingsAsk): AreaSettingsChange => {
+  const settingsChange = (ask: AreaSettingsAsk) => {
     if (ask.account && !db.accounts.get(ask.account)) {
-      throw new AreaRefusal(400, areaWords.noAccount(ask.account));
+      return refusal(400, "no-account", areaWords.noAccount(ask.account));
     }
     const asked: AreaSettingsChange = {
       account: ask.account,
@@ -215,13 +200,16 @@ export const createAreas = ({
    * running conversation onto the account it starts on now, where that
    * moved, as an account edit moves it: what became of each, in sentences.
    */
-  const configure = async (
-    id: string,
-    ask: AreaSettingsAsk
-  ): Promise<string[]> => {
-    known(id);
-    const name = ask.name === undefined ? undefined : areaName(ask.name);
+  const configure = async (id: string, ask: AreaSettingsAsk) => {
+    const area = known(id);
+    if (area instanceof ElysiaStatus) {
+      return area;
+    }
+    const name = ask.name?.trim();
     const change = settingsChange(ask);
+    if (change instanceof ElysiaStatus) {
+      return change;
+    }
     const before = new Map(
       db.areas
         .projectsIn(id)
@@ -254,15 +242,15 @@ export const createAreas = ({
    * area now and what falls back to the fleet's, in sentences, with what
    * became of its conversation when the account it starts on moved.
    */
-  const place = async (
-    projectId: string,
-    areaId: string | null
-  ): Promise<{ project: ProjectRow; said: string[] }> => {
+  const place = async (projectId: string, areaId: string | null) => {
     const before = db.project(projectId);
     if (!before) {
-      throw new AreaRefusal(404, areaWords.noProject(projectId));
+      return refusal(404, "no-project", areaWords.noProject(projectId));
     }
     const area = areaId === null ? null : known(areaId);
+    if (area instanceof ElysiaStatus) {
+      return area;
+    }
     if (before.areaId === areaId) {
       return { project: before, said: [areaWords.already(area?.name ?? null)] };
     }
@@ -291,11 +279,8 @@ export const createAreas = ({
     };
   };
 
-  /** Deletes an area: its projects ungrouped, and what each falls back to, counted per setting. */
-  const remove = async (
-    id: string
-  ): Promise<{ name: string; projects: string[]; said: string[] }> => {
-    const area = known(id);
+  /** How many of an area's projects take each setting from it: what falls back once it goes. */
+  const fallingBack = async (id: string) => {
     const inIt = db.areas
       .projectsIn(id)
       .flatMap((projectId) => db.project(projectId) ?? []);
@@ -309,6 +294,16 @@ export const createAreas = ({
         }
       }
     }
+    return counts;
+  };
+
+  /** Deletes an area: its projects ungrouped, and what each falls back to, counted per setting. */
+  const remove = async (id: string) => {
+    const area = known(id);
+    if (area instanceof ElysiaStatus) {
+      return area;
+    }
+    const counts = await fallingBack(id);
     // A document it alone narrowed would read as every project's once its
     // link went: it goes to the trash (its Undo) before the area does.
     const docs = db
@@ -324,7 +319,7 @@ export const createAreas = ({
     }
     const deleted = db.areas.delete(id);
     if (!deleted) {
-      throw new AreaRefusal(404, areaWords.noArea(id));
+      return refusal(404, "no-area", areaWords.noArea(id));
     }
     await deleteProjectFolder(areaFolder(id));
     changed();
@@ -354,18 +349,6 @@ export const createAreas = ({
     );
   };
 
-  /** A route's work, its refusal answered as its status and sentence. */
-  const answered = async <T>(work: () => T | Promise<T>) => {
-    try {
-      return await work();
-    } catch (error) {
-      if (error instanceof AreaRefusal) {
-        return status(error.status, error.message);
-      }
-      return refused(error);
-    }
-  };
-
   const MODE = t.UnionEnum(PERMISSION_MODES);
   const ON_CAP = t.Union([
     t.Literal("pause"),
@@ -375,48 +358,41 @@ export const createAreas = ({
 
   const routes = () =>
     new Elysia()
-      .get("/api/areas", () => ({
-        areas: db.areas.list().map((area) => view(area.id)),
-      }))
+      .get("/api/areas", () => ({ areas: views() }))
       .post(
         "/api/areas",
-        { body: t.Object({ name: t.String({ maxLength: 2000 }) }) },
-        ({ body }) =>
-          answered(() => {
-            const made = db.areas.create(
-              crypto.randomUUID(),
-              areaName(body.name)
-            );
-            changed();
-            return view(made.id);
-          })
+        { body: t.Object({ name: AREA_NAME }) },
+        ({ body }) => {
+          const made = db.areas.create(crypto.randomUUID(), body.name.trim());
+          changed();
+          return view(made.id);
+        }
       )
       .put(
         "/api/areas/order",
         { body: t.Object({ ids: t.Array(t.String()) }) },
-        ({ body }) =>
-          answered(() => {
-            const all = db.areas.list().map((area) => area.id);
-            const asked = new Set(body.ids);
-            if (
-              asked.size !== body.ids.length ||
-              asked.size !== all.length ||
-              !all.every((id) => asked.has(id))
-            ) {
-              throw new AreaRefusal(400, areaWords.order);
-            }
-            db.areas.order(body.ids);
-            changed();
-            return { areas: db.areas.list().map((area) => view(area.id)) };
-          })
+        ({ body }) => {
+          const all = db.areas.list().map((area) => area.id);
+          const asked = new Set(body.ids);
+          if (
+            asked.size !== body.ids.length ||
+            asked.size !== all.length ||
+            !all.every((id) => asked.has(id))
+          ) {
+            return refusal(400, "area-order", areaWords.order);
+          }
+          db.areas.order(body.ids);
+          changed();
+          return { areas: views() };
+        }
       )
-      .get("/api/areas/:id", ({ params }) => answered(() => view(params.id)))
+      .get("/api/areas/:id", ({ params }) => view(params.id))
       // Its name and its settings: a field left out stays, null clears one.
       .patch(
         "/api/areas/:id",
         {
           body: t.Object({
-            name: t.Optional(t.String({ maxLength: 2000 })),
+            name: t.Optional(AREA_NAME),
             account: t.Optional(t.Nullable(t.String({ maxLength: 320 }))),
             accountAtLimit: t.Optional(
               t.Union([t.Literal("wait"), t.Literal("move")])
@@ -425,7 +401,10 @@ export const createAreas = ({
             cap: t.Optional(
               t.Nullable(
                 t.Object({
-                  usd: t.Number(),
+                  usd: t.Number({
+                    exclusiveMinimum: 0,
+                    error: schemaRefusal(areaWords.capAmount),
+                  }),
                   period: t.Union([t.Literal("day"), t.Literal("month")]),
                 })
               )
@@ -433,60 +412,73 @@ export const createAreas = ({
             onCap: t.Optional(t.Nullable(ON_CAP)),
           }),
         },
-        ({ params, body }) =>
-          answered(async () => {
-            const said = await configure(params.id, body);
-            return { ...view(params.id), said };
-          })
+        async ({ params, body }) => {
+          const said = await configure(params.id, body);
+          if (said instanceof ElysiaStatus) {
+            return said;
+          }
+          const area = view(params.id);
+          return area instanceof ElysiaStatus ? area : { ...area, said };
+        }
       )
-      .delete("/api/areas/:id", ({ params }) =>
-        answered(() => remove(params.id))
-      )
+      .delete("/api/areas/:id", ({ params }) => remove(params.id))
       // A project put in an area, or in none (null).
       .put(
         "/api/projects/:id/area",
         { body: t.Object({ areaId: t.Nullable(t.String()) }) },
-        ({ params, body }) =>
-          answered(async () => {
-            const { project, said } = await place(params.id, body.areaId);
-            return { areaId: project.areaId, inEffect: project.inEffect, said };
-          })
+        async ({ params, body }) => {
+          const placed = await place(params.id, body.areaId);
+          if (placed instanceof ElysiaStatus) {
+            return placed;
+          }
+          const { project, said } = placed;
+          return { areaId: project.areaId, inEffect: project.inEffect, said };
+        }
       )
       // The area's folder: its decides.md and delegates/, kept as
       // a project's folder is, every write a commit through the same guards.
       .get(
         "/api/areas/:id/folder",
         { query: t.Object({ path: t.Optional(t.String()) }) },
-        ({ params, query }) =>
-          answered(() => {
-            known(params.id);
-            return listFolder(areaFolder(params.id), query.path ?? "", true);
-          })
+        ({ params, query }) => {
+          const area = known(params.id);
+          return area instanceof ElysiaStatus
+            ? area
+            : folderAttempt(() =>
+                listFolder(areaFolder(params.id), query.path ?? "", true)
+              );
+        }
       )
       .get(
         "/api/areas/:id/folder/file",
         { query: t.Object({ path: t.String() }) },
-        ({ params, query }) =>
-          answered(() => {
-            known(params.id);
-            return readFolderFile(areaFolder(params.id), query.path);
-          })
+        ({ params, query }) => {
+          const area = known(params.id);
+          return area instanceof ElysiaStatus
+            ? area
+            : folderAttempt(() =>
+                readFolderFile(areaFolder(params.id), query.path)
+              );
+        }
       )
       .put(
         "/api/areas/:id/folder/file",
         { body: FOLDER_WRITE },
-        ({ params, body }) =>
-          answered(async () => {
-            known(params.id);
-            const written = await writeFolderFile(
-              areaFolder(params.id),
-              body.path,
-              folderContent(body.content, body.encoding),
-              { author: YOU, message: body.message }
-            );
-            changed();
-            return written;
-          })
+        ({ params, body }) => {
+          const area = known(params.id);
+          return area instanceof ElysiaStatus
+            ? area
+            : folderAttempt(async () => {
+                const written = await writeFolderFile(
+                  areaFolder(params.id),
+                  body.path,
+                  folderContent(body.content, body.encoding),
+                  { author: YOU, message: body.message }
+                );
+                changed();
+                return written;
+              });
+        }
       )
       .delete(
         "/api/areas/:id/folder/file",
@@ -496,17 +488,20 @@ export const createAreas = ({
             message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
           }),
         },
-        ({ params, query }) =>
-          answered(async () => {
-            known(params.id);
-            const deleted = await deleteFolderFile(
-              areaFolder(params.id),
-              query.path,
-              { author: YOU, message: query.message }
-            );
-            changed();
-            return deleted;
-          })
+        ({ params, query }) => {
+          const area = known(params.id);
+          return area instanceof ElysiaStatus
+            ? area
+            : folderAttempt(async () => {
+                const deleted = await deleteFolderFile(
+                  areaFolder(params.id),
+                  query.path,
+                  { author: YOU, message: query.message }
+                );
+                changed();
+                return deleted;
+              });
+        }
       );
 
   return { named, place, remove, routes, view };

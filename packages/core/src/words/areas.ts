@@ -33,10 +33,9 @@ export const areaWords = {
   },
 
   // ── The API's refusals ──
-  nameNeeded: "An area needs a name.",
-  nameOneLine: "An area's name is one line of text.",
-  nameTooLong: (limit: number, length: number) =>
-    `An area's name is at most ${limit} characters; this one is ${length}.`,
+  /** A name the route's schema refuses: blank, more than one line, or too long. */
+  name: (limit: number) =>
+    `An area needs a name: one line of text, at most ${limit} characters.`,
   noArea: (id: string) => `The hub keeps no area ${id}.`,
   noProject: (id: string) => `The hub keeps no project ${id}.`,
   order: "Name every area once, in the order they go.",
