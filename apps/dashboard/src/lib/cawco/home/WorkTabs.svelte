@@ -79,8 +79,8 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { type BoardRow, cawco, isFailed } from "../client.svelte";
-  import { conversationHref } from "../links";
+  import { cawco, isFailed } from "../client.svelte";
+  import { type BoardRow, conversationHref } from "../links";
   import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
   import { failedWords } from "../older";
