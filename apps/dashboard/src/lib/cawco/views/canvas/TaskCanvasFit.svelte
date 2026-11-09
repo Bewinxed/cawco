@@ -20,7 +20,7 @@
     easeInOut,
     motionOk,
     numberOf,
-  } from "../../motion/curves.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     nodeCount,

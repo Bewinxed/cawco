@@ -24,12 +24,16 @@
    */
   import { connectWords } from "@cawco/core/words/connect";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
   import HarnessBlock from "../HarnessBlock.svelte";
   import { machineBlocksOf } from "../harness-block.svelte";
-  import { failureWords } from "../hub-read";
-  import { dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { connect } from "./installs.svelte";
   import MonoWell from "./MonoWell.svelte";
   import PasswordField from "./PasswordField.svelte";

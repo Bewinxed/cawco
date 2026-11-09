@@ -17,10 +17,10 @@
     easeDrawer,
     easeOut,
     motionOk,
-  } from "../motion/curves.svelte.js";
-  import { dragToDismiss } from "../motion/drag.svelte.js";
-  import { morph } from "../motion/morph.svelte.js";
-  import { reflow } from "../motion/rows.svelte.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { dragToDismiss } from "#lib/platform/motion/drag.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import FindRow from "./FindRow.svelte";
   import type { FindResult } from "./find-client";
   import { rowOf } from "./find-rows";

@@ -2,7 +2,7 @@ language js
 
 // What came of a refused hub request is a sentence the product shows, so it
 // lives in packages/core/src/words/** (CLAUDE.md): `hubRefusal(response,
-// then)` (apps/dashboard/src/lib/cawco/hub-read.ts) takes its `then` from a
+// then)` (apps/dashboard/src/lib/platform/hub-read.ts) takes its `then` from a
 // words entry, never a string or template written at the call.
 `hubRefusal($_, $then)` as $hit where {
   $then <: or { JsStringLiteralExpression(), JsTemplateExpression() },
