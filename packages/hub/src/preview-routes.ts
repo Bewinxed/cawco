@@ -12,7 +12,7 @@ import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROL_NAMES } from "@cawco/core/comments/model";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { ServerWebSocket } from "bun";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import { projectOrigin } from "./db/previews";
@@ -53,7 +53,7 @@ export const previewRoutes = (deps: {
   const panes = new Map<string, ServerWebSocket<ArtifactSocket>>();
   const refused = (error: unknown) => {
     if (error instanceof PreviewRefusal) {
-      return status(error.status, error.message);
+      return refusal(error.status, "preview-refused", error.message);
     }
     throw error;
   };
