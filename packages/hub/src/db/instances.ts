@@ -36,11 +36,11 @@ import {
   sql,
 } from "drizzle-orm";
 import type { DbCore } from "./core";
+import { foldMovedColumns } from "./owned-rows";
 import { projectHoldingOf } from "./projects";
 /** Session rows: opening, listing, ending, settling and what keeps one on the board. */
 import {
   accounts,
-  artifacts,
   delegateEvents,
   instanceAliases,
   instanceConversations,
@@ -356,7 +356,7 @@ export interface InstancesDb {
    * them is in (the group reports once, to one parent); its queued delegates
    * and queued task starts; the asks of the moved delegates still
    * waiting on an answer; and its artifacts, as the session that holds them
-   * and as their maker (the columns a fold moves, `FOLD_MOVED`), so every
+   * and as their maker (the columns a fold moves, owned-rows.ts `foldMovedColumns`), so every
    * comment, pick and wake on one reaches `to`. What `from` delegated and is
    * over stays its own.
    */
@@ -1967,20 +1967,14 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             .where(pendingAsks)
             .run();
         }
-        const held = tx
-          .update(artifacts)
-          .set({ instanceId: to })
-          .where(eq(artifacts.instanceId, from))
-          .returning({ id: artifacts.id })
-          .all();
-        const made = tx
-          .update(artifacts)
-          .set({ madeBy: to })
-          .where(eq(artifacts.madeBy, from))
-          .returning({ id: artifacts.id })
-          .all();
         const carriedArtifacts = new Set(
-          [...held, ...made].map((row) => row.id)
+          foldMovedColumns("artifacts").flatMap((column) =>
+            tx
+              .all<{ id: string }>(
+                sql`UPDATE artifacts SET ${sql.identifier(column)} = ${to} WHERE ${sql.identifier(column)} = ${from} RETURNING id`
+              )
+              .map((row) => row.id)
+          )
         ).size;
         if (carriedArtifacts > 0) {
           artifactsWritten();
