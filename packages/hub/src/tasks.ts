@@ -106,12 +106,7 @@ import {
   type StagesTemplate,
   type TaskMover,
 } from "@cawco/core/views";
-import {
-  taskTarget,
-  type WaitTarget,
-  waitHandle,
-  waitTarget,
-} from "@cawco/core/wait-targets";
+import { taskTarget, waitHandle, waitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
@@ -212,7 +207,6 @@ import {
   settledHandle,
   unsettledFirst,
   type WaitReader,
-  WaitRefusal,
   type WaitWorld,
 } from "./task-waits";
 import { runsOf, skillTypes, templateTypes, typeFiles } from "./template-types";
@@ -2646,14 +2640,9 @@ export const createTasks = (store: TaskStore) => {
     return [
       ...new Set(
         items("waits_on", written).map((one) => {
-          let target: WaitTarget;
-          try {
-            target = readWait(one, reader);
-          } catch (error) {
-            if (error instanceof WaitRefusal) {
-              return refuse(400, `waits_on: ${error.message}`);
-            }
-            throw error;
+          const target = readWait(one, reader);
+          if (target instanceof ElysiaStatus) {
+            return refuse(400, `waits_on: ${target.response.detail}`);
           }
           if (
             target.kind === "task" &&
@@ -3927,16 +3916,9 @@ export const createTasks = (store: TaskStore) => {
     written: string,
     reader: WaitReader
   ): string | undefined => {
-    let read: string | undefined;
-    try {
-      read = waitHandle(readWait(written, reader));
-    } catch (error) {
-      if (!(error instanceof WaitRefusal)) {
-        throw error;
-      }
-      const raw = waitTarget(written);
-      read = raw ? waitHandle(raw) : undefined;
-    }
+    const asked = readWait(written, reader);
+    const raw = asked instanceof ElysiaStatus ? waitTarget(written) : asked;
+    const read = raw ? waitHandle(raw) : undefined;
     return kept.find(
       (target) =>
         target === read ||
@@ -4915,20 +4897,16 @@ export const createTasks = (store: TaskStore) => {
         const [kept] = await waitsFor(projectId, actor, [written]);
         return kept ?? refuse(400, `“${written}” names nothing to wait on.`);
       }
-      try {
-        const target = readWait(written, store.waitReader("", actor));
-        return target.kind === "task"
-          ? refuse(
-              400,
-              "This session is in no project, so it has no tasks to wait on."
-            )
-          : waitHandle(target);
-      } catch (error) {
-        if (error instanceof WaitRefusal) {
-          return refuse(400, error.message);
-        }
-        throw error;
+      const target = readWait(written, store.waitReader("", actor));
+      if (target instanceof ElysiaStatus) {
+        return refuse(400, target.response.detail);
       }
+      return target.kind === "task"
+        ? refuse(
+            400,
+            "This session is in no project, so it has no tasks to wait on."
+          )
+        : waitHandle(target);
     },
 
     /**
