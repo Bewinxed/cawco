@@ -49,7 +49,7 @@ const APP = join(ROOT, "apps/dashboard");
 /** The scratch stories' folder, under `src/` (SvelteKit serves only that); gone when the spec ends. */
 const SCRATCH = "src/lib/cawco/probe-sheet-weight";
 /** The empty states' own states file, its buttons read in 4b. */
-const EMPTY_STARTS = "src/lib/components/ui/empty/EmptyStarts.stories.ts";
+const EMPTY_STARTS = "src/lib/cawco/EmptyStarts.stories.ts";
 /** Its two-word button labels the review read, and their siblings. */
 const SPACED = [
   connectWords.addMachine,
