@@ -225,8 +225,8 @@ export const createBlocks = ({
 
 export type Blocks = ReturnType<typeof createBlocks>;
 
-const PAGE = t.Union(BLOCK_PAGES.map((page) => t.Literal(page)));
-const WIDTH = t.Union(BLOCK_WIDTHS.map((width) => t.Literal(width)));
+const PAGE = t.UnionEnum(BLOCK_PAGES);
+const WIDTH = t.UnionEnum(BLOCK_WIDTHS);
 
 /** The routes for a project's arrangement of blocks. */
 export const blockRoutes = (blocks: Blocks) =>
