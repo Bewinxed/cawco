@@ -522,6 +522,7 @@ const gated: Gated[] = [
     "packages/",
     "scripts/",
     "site/",
+    "biome.jsonc",
   ]),
   // A comment names files and symbols that are there. It reads every code
   // file's identifiers and the platform's types, which bun.lock pins.
