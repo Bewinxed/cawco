@@ -82,6 +82,15 @@ export interface McpTool {
   refusal: (args: unknown) => string | undefined;
 }
 
+/**
+ * A tool's definition, whose call is handed what it acts through (`on`) as
+ * it is called: its name, words and schema need nothing of it, so listing
+ * it builds no session's actions ({@link toolOn}, {@link bindTool}).
+ */
+export interface McpToolOn<C> extends Omit<McpTool, "call"> {
+  call: (args: unknown, on: C) => Promise<CallToolResult>;
+}
+
 export interface ToolOptions<R, A> {
   annotations?: ToolAnnotations;
   /** The detailed form, when it is more than the answer as JSON (a picture beside it). */
@@ -125,70 +134,110 @@ export function tool<T extends z.ZodRawShape, R, N extends string = string>(
   present: Presenter<R, z.infer<z.ZodObject<T>>>,
   options: ToolOptions<R, z.infer<z.ZodObject<T>>> = {}
 ): McpTool & { name: N } {
-  const formats = (present as unknown) !== sentence;
-  const shape = formats
-    ? { ...input, response_format: responseFormat() }
-    : input;
-  // Every tool refuses a key it does not take: a misspelt setting is said,
-  // never dropped. The stamped key alone is admitted, and taken off here.
-  const schema = z.strictObject(
-    { ...shape, [STAMPED_KEY]: z.unknown().optional() },
-    options.inputError ? { error: options.inputError } : undefined
-  );
-  const names = Object.keys(shape);
-  const takes =
-    names.length > 0
-      ? `${name} takes: ${names.join(", ")}.`
-      : `${name} takes no arguments.`;
-  // A tool's own input error is its whole answer; any other, what was
-  // wrong, what it takes when a key was not one, then the shape.
-  const refusalOf = (error: z.ZodError): string => {
-    const unknown = error.issues.some(
-      (issue) => issue.code === "unrecognized_keys"
-    );
-    return (
-      options.inputError ??
-      [
-        z.prettifyError(error),
-        ...(unknown ? [takes] : []),
-        ...(options.inputHelp ? [options.inputHelp] : []),
-      ].join("\n")
-    );
-  };
-  return {
+  const defined = toolOn<undefined>()(
     name,
     description,
-    inputSchema: z.toJSONSchema(z.object(shape), {
-      target: "draft-07",
-      io: "input",
-    }) as Record<string, unknown>,
-    ...(options.annotations ? { annotations: options.annotations } : {}),
-    refusal: (args) => {
-      const parsed = schema.safeParse(args);
-      return parsed.success ? undefined : refusalOf(parsed.error);
-    },
-    call: async (args) => {
-      const parsed = schema.safeParse(args);
-      if (!parsed.success) {
-        throw new Error(refusalOf(parsed.error));
-      }
-      const {
-        response_format: format,
-        [STAMPED_KEY]: _stamp,
-        ...rest
-      } = parsed.data as {
-        [STAMPED_KEY]?: unknown;
-        response_format?: ResponseFormat;
-      } & z.infer<z.ZodObject<T>>;
-      const asked = rest as z.infer<z.ZodObject<T>>;
-      const answer = await run(asked, format ?? "concise");
-      const detailed = options.detailed ?? asJson;
-      const result = resultOf(
-        format === "detailed" ? detailed(answer, asked) : present(answer, asked)
-      );
-      return options.endsTurn
-        ? { ...result, _meta: { [END_TURN_META]: true } }
-        : result;
-    },
-  };
+    input,
+    (args, format) => run(args, format),
+    present,
+    options
+  );
+  return { ...defined, call: (args) => defined.call(args, undefined) };
 }
+
+/** A tool definition bound to what it acts through: a tool whose call takes its arguments alone. */
+export const bindTool = <C, N extends string>(
+  defined: McpToolOn<C> & { name: N },
+  on: C
+): McpTool & { name: N } => ({
+  ...defined,
+  call: (args) => defined.call(args, on),
+});
+
+/**
+ * {@link tool}, its run handed what it acts through (`on`) at call time
+ * ({@link McpToolOn}): `toolOn<C>()(name, words, input, (args, format, on) => …)`.
+ */
+export const toolOn =
+  <C>() =>
+  <T extends z.ZodRawShape, R, N extends string = string>(
+    name: N,
+    description: string,
+    input: T,
+    run: (
+      args: z.infer<z.ZodObject<T>>,
+      format: ResponseFormat,
+      on: C
+    ) => Promise<R>,
+    present: Presenter<R, z.infer<z.ZodObject<T>>>,
+    options: ToolOptions<R, z.infer<z.ZodObject<T>>> = {}
+  ): McpToolOn<C> & { name: N } => {
+    const formats = (present as unknown) !== sentence;
+    const shape = formats
+      ? { ...input, response_format: responseFormat() }
+      : input;
+    // Every tool refuses a key it does not take: a misspelt setting is said,
+    // never dropped. The stamped key alone is admitted, and taken off here.
+    const schema = z.strictObject(
+      { ...shape, [STAMPED_KEY]: z.unknown().optional() },
+      options.inputError ? { error: options.inputError } : undefined
+    );
+    const names = Object.keys(shape);
+    const takes =
+      names.length > 0
+        ? `${name} takes: ${names.join(", ")}.`
+        : `${name} takes no arguments.`;
+    // A tool's own input error is its whole answer; any other, what was
+    // wrong, what it takes when a key was not one, then the shape.
+    const refusalOf = (error: z.ZodError): string => {
+      const unknown = error.issues.some(
+        (issue) => issue.code === "unrecognized_keys"
+      );
+      return (
+        options.inputError ??
+        [
+          z.prettifyError(error),
+          ...(unknown ? [takes] : []),
+          ...(options.inputHelp ? [options.inputHelp] : []),
+        ].join("\n")
+      );
+    };
+    return {
+      name,
+      description,
+      inputSchema: z.toJSONSchema(z.object(shape), {
+        target: "draft-07",
+        io: "input",
+      }) as Record<string, unknown>,
+      ...(options.annotations ? { annotations: options.annotations } : {}),
+      refusal: (args) => {
+        const parsed = schema.safeParse(args);
+        return parsed.success ? undefined : refusalOf(parsed.error);
+      },
+      call: async (args, on) => {
+        const parsed = schema.safeParse(args);
+        if (!parsed.success) {
+          throw new Error(refusalOf(parsed.error));
+        }
+        const {
+          response_format: format,
+          [STAMPED_KEY]: _stamp,
+          ...rest
+        } = parsed.data as {
+          [STAMPED_KEY]?: unknown;
+          response_format?: ResponseFormat;
+        } & z.infer<z.ZodObject<T>>;
+        const asked = rest as z.infer<z.ZodObject<T>>;
+        const answer = await run(asked, format ?? "concise", on);
+        const detailed = options.detailed ?? asJson;
+        const result = resultOf(
+          format === "detailed"
+            ? detailed(answer, asked)
+            : present(answer, asked)
+        );
+        return options.endsTurn
+          ? { ...result, _meta: { [END_TURN_META]: true } }
+          : result;
+      },
+    };
+  };

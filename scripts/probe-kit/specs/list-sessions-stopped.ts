@@ -52,6 +52,9 @@ const run = async (kit: Kit): Promise<void> => {
     const { db } = await hubInProcess(dbPath, join(scratch, "home"));
     const { handoffTools } =
       await import("../../../packages/hub/src/delegation-tools");
+    const { handoffActions } =
+      await import("../../../packages/hub/src/delegation-actions");
+    const { bindTool } = await import("../../../packages/hub/src/mcp-tool");
     const { sessionReads } =
       await import("../../../packages/hub/src/session-list");
     const now = Date.now();
@@ -198,7 +201,7 @@ const run = async (kit: Kit): Promise<void> => {
       [r1, "R1"],
     ]);
     const reads = sessionReads(db, (rows) => rows);
-    const tools = handoffTools({
+    const deps = {
       instanceId: caller,
       instanceById: (id: string) => db.getInstancesByIds([id])[0],
       formerIds: () => ({}),
@@ -220,12 +223,18 @@ const run = async (kit: Kit): Promise<void> => {
       spawn: () => Promise.reject(new Error("lists only")),
       personOwed: () => false,
       sendToUser: () => undefined,
-    } as never);
-    const tool = tools.find((one) => one.name === "list_sessions");
-    if (!tool) {
+    } as never as Parameters<typeof handoffActions>[0];
+    const definition = handoffTools({ harness: "claude" }).find(
+      (one) => one.name === "list_sessions"
+    );
+    if (!definition) {
       kit.check("handoffTools lists list_sessions", false);
       return;
     }
+    const tool = bindTool(definition, {
+      actions: handoffActions(deps),
+      personOwed: deps.personOwed,
+    });
     const call = async (args: Record<string, unknown>) => {
       const answer = await tool.call({ ...args, response_format: "detailed" });
       const { text } = answer.content[0] as { text: string };
