@@ -18,7 +18,7 @@
  */
 
 /** A place a project has: a folder on one machine. */
-export interface MemberPlace {
+interface MemberPlace {
   id: string;
   machineId: string;
   path: string;

@@ -352,8 +352,6 @@ export default {
     "packages/core": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
-      // A wire type a frame or a schema names beside it stays exported: `tsc -b` refuses an unexported type an exported one names (TS4023), and they are named schemas in openapi.json.
-      ignoreExportsUsedInFile: { interface: true, type: true },
     },
     "packages/cli": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.

@@ -54,7 +54,7 @@ export type HookEvent =
   | "ElicitationResult";
 
 /** How the picker files an event, so thirty-one of them stay findable. */
-export type HookGroup =
+type HookGroup =
   "Session" | "Prompt" | "Tool" | "Subagent" | "Task" | "Files" | "Compaction";
 
 /**
@@ -809,7 +809,7 @@ export interface HookVersion {
 export type HookDraft = Omit<FleetHook, "id" | "hash">;
 
 /** A handler as a form holds it before it is checked: its kind, and each of that kind's fields perhaps not given yet. */
-export type HookHandlerDraft = {
+type HookHandlerDraft = {
   [K in HookHandler["type"]]: Partial<Extract<HookHandler, { type: K }>> & {
     type: K;
   };
