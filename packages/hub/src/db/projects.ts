@@ -1,4 +1,5 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { singleton, singletonColumn } from "./singleton";
 /** Projects: their rows, places, links, offers, spend and notes, and folding one into another. */
 
 import {
@@ -58,6 +59,8 @@ import {
   relays,
   routines,
   rules,
+  SESSION_LIMITS_ID,
+  SPEND_SETTINGS_ID,
   sessionLimits,
   sessionSubagents,
   sessionTaints,
@@ -505,11 +508,12 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
 
   /** What reaching a cap does across the fleet (`spend_settings`): `both` until it is set. */
   const fleetOnCap = (): OnCap =>
-    db
-      .select({ onCap: spendSettings.onCap })
-      .from(spendSettings)
-      .where(eq(spendSettings.id, "spend"))
-      .get()?.onCap ?? "both";
+    singletonColumn(
+      db,
+      spendSettings,
+      SPEND_SETTINGS_ID,
+      spendSettings.onCap
+    ) ?? "both";
 
   /**
    * What stands above the projects read: their areas (`areaIds`, else every
@@ -717,7 +721,7 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
     },
     setSpendOnCap: (onCap) => {
       db.insert(spendSettings)
-        .values({ id: "spend", onCap })
+        .values({ id: SPEND_SETTINGS_ID, onCap })
         .onConflictDoUpdate({ target: spendSettings.id, set: { onCap } })
         .run();
     },
@@ -727,16 +731,12 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         cpuPercent: limits.cpuPercent ?? null,
       };
       db.insert(sessionLimits)
-        .values({ id: "session", ...values })
+        .values({ id: SESSION_LIMITS_ID, ...values })
         .onConflictDoUpdate({ target: sessionLimits.id, set: values })
         .run();
     },
     sessionLimits: () => {
-      const row = db
-        .select()
-        .from(sessionLimits)
-        .where(eq(sessionLimits.id, "session"))
-        .get();
+      const row = singleton(db, sessionLimits, SESSION_LIMITS_ID);
       const memoryPercent = row?.memoryPercent ?? undefined;
       const cpuPercent = row?.cpuPercent ?? undefined;
       return {
