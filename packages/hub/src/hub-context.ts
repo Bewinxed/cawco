@@ -51,6 +51,7 @@ import type {
   AgentRow,
   BuildInfo,
   Envelope,
+  FsPayload,
   InstanceRow,
   NamedSpawn,
   SendPayload,
@@ -69,7 +70,9 @@ import type { NeutralOrigin, SentMessage } from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { createAdmission } from "./admission";
+import type { createArtifactSessions } from "./artifact-session";
 import type { createArtifactLane } from "./artifacts/lane";
+import type { Artifacts } from "./artifacts/service";
 import type { createAtLimit, Kept, TakenUpBy } from "./at-limit";
 import type { createCaw } from "./caw";
 import type { createConnections } from "./connections";
@@ -132,6 +135,7 @@ import type { PlacementInput } from "./placement";
 import type { PlanChanges } from "./plan-changes";
 import type { createPlans } from "./plans";
 import type { createPreviewListeners } from "./preview";
+import type { createPreviewService } from "./preview-service";
 import type { createCaps } from "./project-caps";
 import type { ProjectDelegateTypes } from "./project-delegate-types";
 import type { projectDelete } from "./project-delete";
@@ -182,6 +186,8 @@ export interface HubContext {
   announceSkill: (name: string, source: string) => void;
   archiveView: () => ArchiveView;
   artifactLane: ReturnType<typeof createArtifactLane>;
+  artifactSessions: ReturnType<typeof createArtifactSessions>;
+  artifacts: Artifacts;
   askedProjectName: (body: {
     name?: string;
     prompt?: string;
@@ -221,6 +227,11 @@ export interface HubContext {
     timeoutMs: number,
     harness?: HarnessKind,
     instanceId?: string
+  ) => Promise<Bounded<ControlResult>>;
+  callFs: (
+    machineId: string,
+    agent: HubSocket,
+    op: Omit<FsPayload, "requestId">
   ) => Promise<Bounded<ControlResult>>;
   caps: ReturnType<typeof createCaps>;
   carryOn: (
@@ -275,6 +286,7 @@ export interface HubContext {
   credentialTurns: Set<string>;
   cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   db: DbShape;
+  decisionsChanged: (projectId: string) => void;
   delegatedAttempt: ({
     task,
     clean,
@@ -595,6 +607,7 @@ export interface HubContext {
   ) => Promise<PreparedContinuation>;
   presenceSaid: (request: Request) => string | null;
   previewListeners: ReturnType<typeof createPreviewListeners>;
+  previewService: ReturnType<typeof createPreviewService>;
   processAt: Map<string, number>;
   processMayRun: (row: { id: string; status: string }) => boolean;
   projectEdits: ReturnType<typeof createProjectEdits>;
