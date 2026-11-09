@@ -20,6 +20,7 @@ import type {
   MachineHookScript,
   MarketplaceLink,
   MarketplaceRead,
+  SkillFile,
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
@@ -97,6 +98,13 @@ export interface HubContext {
   archiveView: () => ArchiveView;
   artifactLane: ReturnType<typeof createArtifactLane>;
   autoInstall: (machineId: string, agent: HubSocket) => void;
+  /** Sends a hub frame to every dashboard. */
+  awayAnswer: <Answer>(
+    set: RouteSet,
+    machineId: string,
+    answer: Unanswered,
+    status: (code: 503 | 504, said: string) => Answer
+  ) => Answer;
   awayWords: (machineId: string, answer: Unanswered) => string;
   boundProblem: ({
     projectId,
@@ -204,6 +212,14 @@ export interface HubContext {
     body: HarnessConfigBody,
     status: (code: 400, text: string) => unknown
   ) => unknown;
+  hookCopyOff: <Refused>(
+    body: { id: string; machineId: string },
+    set: RouteSet,
+    status: (code: 404 | 500 | 503 | 504, said: string) => Refused
+  ) => Promise<
+    | { current: FleetHook; copy: MachineHookScript | null }
+    | { refused: Refused }
+  >;
   hookDraftOf: (
     current: FleetHook | undefined,
     patch: Record<string, unknown> & {
@@ -297,6 +313,10 @@ export interface HubContext {
   publishInstances: (machineId: string) => void;
   publishUsage: (machineId?: string) => void;
   pushAgents: (machineId: string) => Promise<void>;
+  pushTarget: <Refused>(
+    machineId: string,
+    status: (code: 404, said: string) => Refused
+  ) => { config: ReturnType<DbShape["fleetConfig"]> } | { refused: Refused };
   readAgent: (
     machineId: string,
     method: string,
@@ -331,7 +351,6 @@ export interface HubContext {
   registry: RegistryShape;
   retryFromTray: (item: WorkItemRow) => Promise<string | undefined>;
   returned: (kind: TrashKind, key: string) => Promise<unknown>;
-  /** Sends a hub frame to every dashboard. */
   say: (payload: FramePayload) => void;
   sessionName: (row: {
     derivedTitle?: string | null;
@@ -345,6 +364,12 @@ export interface HubContext {
     shared: boolean
   ) => string | undefined;
   skillChoices: Map<string, string[]>;
+  skillFilesOff: <Refused>(
+    machineId: string,
+    args: unknown[],
+    set: RouteSet,
+    status: (code: 400 | 503 | 504, said: string) => Refused
+  ) => Promise<{ files: SkillFile[] } | { refused: Refused }>;
   skillRow: (row: FleetSkillMeta) => FleetSkillMeta;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
