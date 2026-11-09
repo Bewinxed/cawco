@@ -89,9 +89,10 @@ import {
 import { z } from "zod";
 import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
 import { addAccount, addSpill } from "./boundary/decisions";
-import { closeBoundary, ensureBoundary } from "./boundary/lifecycle";
+import { ensureBoundary } from "./boundary/lifecycle";
 import { setProject } from "./boundary/looks";
 import { ownInodes } from "./boundary/package-managers";
+import { closeBoundary } from "./boundary/stop";
 import { heldBy } from "./boundary/watch";
 import {
   carryFolder,
