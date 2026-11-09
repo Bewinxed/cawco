@@ -1,6 +1,6 @@
 // First, before any module that could make a ResizeObserver: reading
 // frame-observer makes the window's own the shared observer's
-// (`ForeignResizeObserver`; house/resize-delivery-first holds this place).
+// (`ForeignResizeObserver`), and an observer made earlier would escape it.
 import "#lib/platform/frame-observer.js";
 import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
 import { reportError, reportErrorsTo } from "#lib/cawco/error-report.js";
