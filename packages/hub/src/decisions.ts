@@ -69,18 +69,14 @@ import { AFTER_REF } from "@cawco/core/decisions-library";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import type { PageHearer } from "./artifacts/shapes";
 import type { ArtifactTaker } from "./artifacts/taker";
 import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
-import { refusal, StatusRefusal } from "./refusal";
-
-export class DecisionRefusal extends StatusRefusal<
-  400 | 404 | 409 | 422 | 503
-> {}
+import { refusal } from "./refusal";
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
@@ -372,9 +368,14 @@ export interface DecisionsDeps {
   /**
    * The person's I'm done picking on a page's artifact: its Send
    * (artifacts/service.ts `sendPage`), through `route`, heard by `to`.
-   * Answers the session that heard it.
+   * Answers the session that heard it, or the artifact's refusal: its
+   * status and sentence.
    */
-  send: (artifactId: string, route: string, to: PageHearer) => Promise<string>;
+  send: (
+    artifactId: string,
+    route: string,
+    to: PageHearer
+  ) => Promise<string | { refused: string; status: 404 | 409 | 503 }>;
   /**
    * Whether the send `uuid` (a Make tasks ask) is in flight: its session
    * has not read it yet, or the turn that read it has not ended.
@@ -591,11 +592,15 @@ const keptIn = async (
   (await folderText(projectId, builtPath(name)));
 
 export const createDecisions = (deps: DecisionsDeps) => {
-  const known = (projectId: string) => {
-    if (!deps.projectExists(projectId)) {
-      throw new DecisionRefusal(404, `The hub keeps no project ${projectId}.`);
-    }
-  };
+  /** The refusal of a project the hub does not keep; none for one it does. */
+  const unknownProject = (projectId: string) =>
+    deps.projectExists(projectId)
+      ? undefined
+      : refusal(
+          404,
+          "decision-project-unknown",
+          `The hub keeps no project ${projectId}.`
+        );
 
   /** Each page name with its newest artifact, and the folder's built pages beside them. */
   const pageNames = async (
@@ -788,9 +793,16 @@ export const createDecisions = (deps: DecisionsDeps) => {
   });
 
   const find = async (projectId: string, name: string) => {
-    known(projectId);
+    const unknown = unknownProject(projectId);
+    if (unknown) {
+      return unknown;
+    }
     if (!NAME.test(name)) {
-      throw new DecisionRefusal(400, `${JSON.stringify(name)} names no page.`);
+      return refusal(
+        400,
+        "decision-page-name-unfit",
+        `${JSON.stringify(name)} names no page.`
+      );
     }
     const found = (await pageNames(projectId)).find(
       (page) => page.name === name
@@ -804,8 +816,9 @@ export const createDecisions = (deps: DecisionsDeps) => {
         )
       : undefined;
     if (!(one && decisionPage(one.read, one.page))) {
-      throw new DecisionRefusal(
+      return refusal(
         404,
+        "decision-page-missing",
         `This project has no decision page ${name}.`
       );
     }
@@ -1024,10 +1037,88 @@ export const createDecisions = (deps: DecisionsDeps) => {
       deps.changed(projectId);
     });
 
+  /** What page `name` drawn with `cards` does to the links of the project's pages ({@link Decisions.linksOf}). */
+  const afterLinksOf = async (
+    projectId: string,
+    name: string,
+    cards: DecisionCard[]
+  ): Promise<AfterLinks> => {
+    const pages: { cards: DecisionCard[]; name: string }[] = [{ name, cards }];
+    for (const each of await pageNames(projectId)) {
+      if (each.name !== name) {
+        const page = await pageOf(projectId, each.name);
+        pages.push({ name: each.name, cards: page.cards });
+      }
+    }
+    const ids = new Set(
+      pages.flatMap((page) =>
+        page.cards.map((card) => cardRef(page.name, card.id))
+      )
+    );
+    const unlinked = cards.flatMap((card) =>
+      card.after.flatMap((ref) => {
+        const from = afterId(name, ref);
+        return ids.has(from)
+          ? []
+          : [`${card.id} after ${unlinkedWhy(pages, from, ref)}`];
+      })
+    );
+    const dependents: Record<string, string[]> = {};
+    for (const page of pages.slice(1)) {
+      for (const card of page.cards) {
+        for (const ref of card.after) {
+          const from = afterId(page.name, ref);
+          if (from.startsWith(`${name}#`)) {
+            const id = from.slice(name.length + 1);
+            dependents[id] = [
+              ...(dependents[id] ?? []),
+              cardRef(page.name, card.id),
+            ];
+          }
+        }
+      }
+    }
+    return { unlinked, dependents };
+  };
+
+  /** The person's note on page `name`: said to the session that hears it, as their own words, or to Caw. */
+  const noted = async (
+    projectId: string,
+    name: string,
+    read: DecisionPageRead,
+    to: ReturnType<typeof heardBy>,
+    words: string
+  ): Promise<DecisionSent> => {
+    const page = `They wrote it on the decision page “${read.title}” (decisions/${name}/).`;
+    if ("instance" in to) {
+      deps.tell(
+        to.instance,
+        {
+          by: "you",
+          words,
+          note: [page, to.handed].filter(Boolean).join(" "),
+        },
+        crypto.randomUUID()
+      );
+      deps.changed(projectId);
+      return { to: "session" };
+    }
+    const { instanceId } = await deps.tellConversation(projectId, {
+      by: "you",
+      words,
+      note: `${page} ${handedToCaw(read)}`,
+    });
+    deps.changed(projectId);
+    return { to: "caw", instanceId };
+  };
+
   return {
     /** The project's pages, newest first, each with the pages it links to and its questions. */
-    async list(projectId: string): Promise<DecisionsList> {
-      known(projectId);
+    async list(projectId: string) {
+      const unknown = unknownProject(projectId);
+      if (unknown) {
+        return unknown;
+      }
       const [names, tasks] = await Promise.all([
         pageNames(projectId),
         deps.tasks(projectId),
@@ -1064,12 +1155,14 @@ export const createDecisions = (deps: DecisionsDeps) => {
         };
       });
       pages.sort((a, b) => b.updatedAt - a.updatedAt);
-      return { pages, graph: false, problems };
+      const listed: DecisionsList = { pages, graph: false, problems };
+      return listed;
     },
 
     /** One page: its summary, its record (each card's tasks as filed now) and its last send. */
-    async read(projectId: string, name: string): Promise<DecisionPageRead> {
-      return (await find(projectId, name)).read;
+    async read(projectId: string, name: string) {
+      const found = await find(projectId, name);
+      return found instanceof ElysiaStatus ? found : found.read;
     },
 
     /**
@@ -1084,11 +1177,16 @@ export const createDecisions = (deps: DecisionsDeps) => {
       name: string,
       text: string | undefined,
       writes?: string
-    ): Promise<DecisionSent> {
-      const { read } = await find(projectId, name);
+    ) {
+      const found = await find(projectId, name);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
+      const { read } = found;
       if (!read.artifactId) {
-        throw new DecisionRefusal(
+        return refusal(
           409,
+          "decision-page-no-artifact",
           `${read.title} has no artifact on this hub to send on; its session can publish it again.`
         );
       }
@@ -1097,33 +1195,13 @@ export const createDecisions = (deps: DecisionsDeps) => {
       if (writes) {
         const refused = deps.takeWrites(read.artifactId, writes);
         if (refused) {
-          throw new DecisionRefusal(422, refused);
+          return refusal(422, "decision-writes-refused", refused);
         }
       }
       const words = text?.trim() || undefined;
       const to = heardBy(read);
-      const page = `They wrote it on the decision page “${read.title}” (decisions/${name}/).`;
       if (words) {
-        if ("instance" in to) {
-          deps.tell(
-            to.instance,
-            {
-              by: "you",
-              words,
-              note: [page, to.handed].filter(Boolean).join(" "),
-            },
-            crypto.randomUUID()
-          );
-          deps.changed(projectId);
-          return { to: "session" };
-        }
-        const { instanceId } = await deps.tellConversation(projectId, {
-          by: "you",
-          words,
-          note: `${page} ${handedToCaw(read)}`,
-        });
-        deps.changed(projectId);
-        return { to: "caw", instanceId };
+        return await noted(projectId, name, read, to, words);
       }
       // His Send, one path whoever hears it: its session while it stands,
       // else Caw, told the page is his now.
@@ -1141,10 +1219,13 @@ export const createDecisions = (deps: DecisionsDeps) => {
               },
             }
       );
+      if (typeof heard !== "string") {
+        return refusal(heard.status, "decision-send-refused", heard.refused);
+      }
       deps.changed(projectId);
-      return "instance" in to
-        ? { to: "session" }
-        : { to: "caw", instanceId: heard };
+      const sent: DecisionSent =
+        "instance" in to ? { to: "session" } : { to: "caw", instanceId: heard };
+      return sent;
     },
 
     /**
@@ -1152,26 +1233,33 @@ export const createDecisions = (deps: DecisionsDeps) => {
      * picks with the session it asks (a page sent before a Send decided it
      * is decided here), then that session (or Caw) asked to run to-tasks
      * over it. Refused once its tasks are filed or while they are made. A
-     * refused ask puts the record back as it was and is thrown on.
+     * refused ask puts the record back as it was and is refused.
      */
-    async makeTasks(
-      projectId: string,
-      name: string
-    ): Promise<DecisionPageRead> {
-      const { read } = await find(projectId, name);
+    async makeTasks(projectId: string, name: string) {
+      const found = await find(projectId, name);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
+      const { read } = found;
       if (read.tasks > 0) {
-        throw new DecisionRefusal(409, `${read.title} has its tasks already.`);
+        return refusal(
+          409,
+          "decision-tasks-filed",
+          `${read.title} has its tasks already.`
+        );
       }
       if (read.state === "making") {
-        throw new DecisionRefusal(
+        return refusal(
           409,
+          "decision-tasks-making",
           `${read.title}'s tasks are being made now.`
         );
       }
       const { artifactId } = read;
       if (!artifactId) {
-        throw new DecisionRefusal(
+        return refusal(
           409,
+          "decision-page-no-artifact",
           `${read.title} has no artifact on this hub, so its picks can't be read.`
         );
       }
@@ -1190,14 +1278,15 @@ export const createDecisions = (deps: DecisionsDeps) => {
         "instance" in to
           ? { askedOf: to.instance.id, askedSend: crypto.randomUUID() }
           : { askedOf: null };
-      await serially(async () => {
+      const unasked = await serially(async () => {
         const tasks = await deps.tasks(projectId);
         const titles = titlesOf(tasks);
         const prior = await readRecord(projectId, name);
         const now = await recordNow(projectId, name, artifactId, prior, tasks);
         if (!now) {
-          throw new DecisionRefusal(
+          return refusal(
             404,
+            "decision-page-missing",
             `This project has no decision page ${name}.`
           );
         }
@@ -1217,15 +1306,19 @@ export const createDecisions = (deps: DecisionsDeps) => {
               : { writes: [], deletes: [recordPath(name), logPath(name)] },
             `decisions: ${name}'s tasks were not asked for`
           );
-          throw new DecisionRefusal(
+          return refusal(
             503,
-            `Couldn't make tasks: ${refused.why}`,
-            { cause: refused.error }
+            "decision-tasks-unasked",
+            `Couldn't make tasks: ${refused.why}`
           );
         }
       });
+      if (unasked) {
+        return unasked;
+      }
       deps.changed(projectId);
-      return (await find(projectId, name)).read;
+      const made = await find(projectId, name);
+      return made instanceof ElysiaStatus ? made : made.read;
     },
 
     /**
@@ -1234,50 +1327,11 @@ export const createDecisions = (deps: DecisionsDeps) => {
      * and each of its decisions another page comes after. The other pages
      * as the folder keeps them.
      */
-    async linksOf(
-      projectId: string,
-      name: string,
-      cards: DecisionCard[]
-    ): Promise<AfterLinks> {
-      known(projectId);
-      const pages: { cards: DecisionCard[]; name: string }[] = [
-        { name, cards },
-      ];
-      for (const each of await pageNames(projectId)) {
-        if (each.name !== name) {
-          const page = await pageOf(projectId, each.name);
-          pages.push({ name: each.name, cards: page.cards });
-        }
-      }
-      const ids = new Set(
-        pages.flatMap((page) =>
-          page.cards.map((card) => cardRef(page.name, card.id))
-        )
+    async linksOf(projectId: string, name: string, cards: DecisionCard[]) {
+      return (
+        unknownProject(projectId) ??
+        (await afterLinksOf(projectId, name, cards))
       );
-      const unlinked = cards.flatMap((card) =>
-        card.after.flatMap((ref) => {
-          const from = afterId(name, ref);
-          return ids.has(from)
-            ? []
-            : [`${card.id} after ${unlinkedWhy(pages, from, ref)}`];
-        })
-      );
-      const dependents: Record<string, string[]> = {};
-      for (const page of pages.slice(1)) {
-        for (const card of page.cards) {
-          for (const ref of card.after) {
-            const from = afterId(page.name, ref);
-            if (from.startsWith(`${name}#`)) {
-              const id = from.slice(name.length + 1);
-              dependents[id] = [
-                ...(dependents[id] ?? []),
-                cardRef(page.name, card.id),
-              ];
-            }
-          }
-        }
-      }
-      return { unlinked, dependents };
     },
 
     decide,
@@ -1288,7 +1342,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
      * boot.
      */
     async decideSent(projectId: string): Promise<void> {
-      known(projectId);
       const tasks = await deps.tasks(projectId);
       for (const { name, artifact } of await pageNames(projectId)) {
         if (!artifact) {
@@ -1340,30 +1393,15 @@ export const decidedTasks = (
 
 export type Decisions = ReturnType<typeof createDecisions>;
 
-const refused = (error: unknown) => {
-  if (error instanceof DecisionRefusal) {
-    return refusal(error.status, "decision-refused", error.message);
-  }
-  throw error;
-};
-
 /** The Decisions tab's routes, under `/api/projects/:id/decisions`. */
 export const decisionRoutes = (decisions: Decisions) =>
   new Elysia()
-    .get("/api/projects/:id/decisions", async ({ params }) => {
-      try {
-        return await decisions.list(params.id);
-      } catch (error) {
-        return refused(error);
-      }
-    })
-    .get("/api/projects/:id/decisions/:name", async ({ params }) => {
-      try {
-        return await decisions.read(params.id, params.name);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .get("/api/projects/:id/decisions", ({ params }) =>
+      decisions.list(params.id)
+    )
+    .get("/api/projects/:id/decisions/:name", ({ params }) =>
+      decisions.read(params.id, params.name)
+    )
     .post(
       "/api/projects/:id/decisions/:name/send",
       {
@@ -1378,23 +1416,9 @@ export const decisionRoutes = (decisions: Decisions) =>
           ),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await decisions.send(
-            params.id,
-            params.name,
-            body.text,
-            body.writes
-          );
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) =>
+        decisions.send(params.id, params.name, body.text, body.writes)
     )
-    .post("/api/projects/:id/decisions/:name/tasks", async ({ params }) => {
-      try {
-        return await decisions.makeTasks(params.id, params.name);
-      } catch (error) {
-        return refused(error);
-      }
-    });
+    .post("/api/projects/:id/decisions/:name/tasks", ({ params }) =>
+      decisions.makeTasks(params.id, params.name)
+    );
