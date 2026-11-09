@@ -19,9 +19,9 @@ import { accountsWords } from "@cawco/core/words/accounts";
 import { decidesWords } from "@cawco/core/words/decides";
 import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
 import type { ProjectRow } from "#lib/cawco/client.svelte.js";
-import { failureWords } from "#lib/cawco/hub-read.js";
 import { modelLabel } from "#lib/cawco/models.svelte.js";
 import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 import {
   type AgentBody,
   addKind,

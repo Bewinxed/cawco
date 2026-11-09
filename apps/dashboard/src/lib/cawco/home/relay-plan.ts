@@ -7,7 +7,7 @@
  * machine new to the list brings its header first. The timings are
  * motion/list-swap's.
  */
-import { ListSwap } from "../motion/list-swap.svelte";
+import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
 
 export interface RelayGroup<T> {
   machineId: string;

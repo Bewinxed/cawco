@@ -32,14 +32,14 @@
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import CopyBox from "#lib/cawco/CopyBox.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import { IconError, IconMonitor, IconSuccess } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     view = "journey",

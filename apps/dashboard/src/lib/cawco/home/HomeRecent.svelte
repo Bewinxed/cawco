@@ -26,16 +26,16 @@
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconChevronRight, IconSearch } from "#lib/icons.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
+  import { holdWhileInside } from "#lib/platform/motion/held-order.svelte.js";
+  import { store, stored } from "#lib/platform/storage.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
   import { type BoardRow, cawco, loadCatalog } from "../client.svelte";
   import { conversationHref } from "../links";
-  import { echoBeat } from "../motion/echo.svelte";
-  import { holdWhileInside } from "../motion/held-order.svelte";
   import { runningWords } from "../older";
   import RowFault from "../RowFault.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
-  import { store, stored } from "../storage";
   import { workspace } from "../workspace/workspace.svelte";
   import {
     clock,

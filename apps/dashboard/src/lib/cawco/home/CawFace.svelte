@@ -1,5 +1,8 @@
 <script lang="ts" module>
-  import { type FrameObserver, frameObserver } from "../frame-observer";
+  import {
+    type FrameObserver,
+    frameObserver,
+  } from "#lib/platform/frame-observer.js";
 
   /** Each face's canvas waiting for the frame that first lays it out, and what paints it. */
   const waiting = new Map<Element, () => void>();

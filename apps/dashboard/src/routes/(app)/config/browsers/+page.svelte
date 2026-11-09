@@ -16,13 +16,13 @@
   import { cawco, readRelayJourney } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
   import {
     actOnRelayCard,
     proveOnStart,
     stepsHere,
   } from "#lib/cawco/relay/relay.svelte.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   const section = sectionOf("browsers");
   /** A hub sentence that already tells the person to try again. */

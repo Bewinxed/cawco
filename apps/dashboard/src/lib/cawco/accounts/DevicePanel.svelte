@@ -14,10 +14,14 @@
    */
   import { accountsWords } from "@cawco/core/words/accounts";
   import type { TransitionConfig } from "svelte/transition";
-  import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import Check from "./Check.svelte";
   import type { DeviceFlow } from "./device.svelte";
 
