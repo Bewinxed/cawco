@@ -115,7 +115,7 @@
     session.harness = "claude";
     session.messages = history(id, id === MAIN ? SAID : OTHER);
     session.initialized = true;
-    debug.state.sessions[id] = session;
+    debug.sessionsState.sessions[id] = session;
     debug.frame({
       kind: "pulse",
       instanceId: id,
@@ -198,7 +198,7 @@
     find.leave();
     find.whose = "all";
     if (findState === "live") {
-      const session = debug.state.sessions[MAIN];
+      const session = debug.sessionsState.sessions[MAIN];
       session.busy = true;
       session.streaming =
         "The push probe passes on Wi-Fi. On the switch to cellular its socket closed with ECONNRESET as the phone left Wi-Fi, and the relay retried";
