@@ -7,9 +7,8 @@
  * as neutral messages, with the harness's `raw` event riding along.
  */
 
-import { mkdir, rm, stat } from "node:fs/promises";
-import { homedir, hostname } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { hostname } from "node:os";
 import { ARTIFACT_PICTURE } from "@cawco/core/artifact-picture";
 import { RESOLVE_PERMISSION, WITHDRAW_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
@@ -100,13 +99,11 @@ import {
 } from "@cawco/core/protocol";
 import { lastErrorKindOf } from "@cawco/core/relaunch";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
-import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type {
   CarrySessionOutcome,
   CarrySessionRequest,
   GitChanges,
   MoveEnded,
-  SpinOffHeld,
   WorkInFlight,
 } from "@cawco/core/session/controls";
 import {
@@ -173,7 +170,6 @@ import {
 import { processLimitSentence } from "@cawco/core/words/sessiond";
 import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
-import { holdingWords } from "@cawco/core/words/workspace-holding";
 import {
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
@@ -184,7 +180,6 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
-  WORKSPACE_GIT_TIMEOUT_MS,
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { Effect } from "effect";
@@ -206,15 +201,13 @@ import {
   closeCanvasScreens,
   openCanvasScreen,
 } from "./canvas-screen";
-import { carryWorktree, worktreeHeld } from "./carry";
 import { onCatalogMoved } from "./catalog-index";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { reportDamaged } from "./damaged-records";
 import { forgetFirstSession } from "./first-session";
-import { hashText } from "./fleet";
 import { FleetConverger } from "./fleet-converger";
-import { expandHome, runFs } from "./fs";
-import { fetchDefaultBranch, hostGit } from "./git/run";
+import { runFs } from "./fs";
+import { hostGit } from "./git/run";
 import type {
   Harness,
   HarnessContext,
@@ -235,7 +228,7 @@ import { harnesses, harness as harnessOf } from "./harnesses";
 import { hostScratchReady } from "./host-scratch";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
-import { readJson, writeJson } from "./json-file";
+import { isDirectory } from "./is-directory";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
 import { createLeftRunning } from "./left-running";
@@ -255,7 +248,6 @@ import {
 import { parseProcId, sessionOfProc } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { removeTree } from "./remove-tree";
-import { repoTop } from "./repo-top";
 import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
 import {
@@ -274,6 +266,7 @@ import {
   keeperLimits,
   procEpoch,
 } from "./sessiond-client";
+import { SpinOffs } from "./spin-offs";
 import { carryStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
@@ -524,37 +517,6 @@ class NotRunning extends Error {
     super(`no session ${instanceId}`);
     this.name = "NotRunning";
   }
-}
-
-const isDirectory = async (path: string): Promise<boolean> => {
-  const info = await stat(path).catch(() => null);
-  return info?.isDirectory() ?? false;
-};
-
-/** The checkout a spin-off ran in, kept until the spin-off is discarded. */
-interface Worktree {
-  /**
-   * The requested cwd and the default branch it was cut from (none for a
-   * repository with no remote), until the opening message says whose
-   * worktree this is.
-   */
-  announce?: { cwd: string; base: string | undefined };
-  /** Where the session runs: `path`, or the same subdirectory of it. */
-  dir: string;
-  path: string;
-  root: string;
-}
-
-/**
- * A spin-off's transcript, kept out of the catalogs the rails read. The tag
- * is the whole test there, so the harness that owns the session applies it.
- */
-interface SpinOff {
-  dir: string;
-  harness: HarnessKind;
-  sessionId?: string;
-  /** Whether the tag question is closed: applied, or moved by whoever kept it. */
-  tagged?: boolean;
 }
 
 /** A control reached by name through `control`. */
@@ -820,8 +782,8 @@ export class SessionSupervisor {
       ingested: this.#ingested,
       openAsks: this.#openAsks,
       unheardSettles: this.#unheardSettles,
-      worktrees: this.#worktrees,
-      spinOffs: this.#spinOffs,
+      worktrees: this.#spinOffs.worktrees,
+      spinOffs: this.#spinOffs.running,
       titles: this.#titles,
       failures: this.#failures,
       generations: this.#generations,
@@ -1058,10 +1020,12 @@ export class SessionSupervisor {
    * until it is, as unknown is ({@link busyNow}).
    */
   readonly #turnPending = new Set<string>();
-  /** Outlives its session: a discard can arrive after the query already ended. */
-  readonly #worktrees = new Map<string, Worktree>();
-  /** Spin-offs running here, by instance — for the same reason, same lifetime. */
-  readonly #spinOffs = new Map<string, SpinOff>();
+  /** The spin-offs running here, their worktrees and their transcripts (spin-offs.ts). */
+  readonly #spinOffs = new SpinOffs({
+    generationOf: (instanceId) => this.#generations.get(instanceId),
+    sink: (frame) => this.sink(frame),
+    transcriptDeleted: (sessionId) => this.#transcriptDeleted(sessionId),
+  });
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
 
@@ -3097,7 +3061,7 @@ export class SessionSupervisor {
     }
     try {
       if (payload.scratchWorktree) {
-        this.#worktrees.set(instanceId, payload.scratchWorktree);
+        this.#spinOffs.worktrees.set(instanceId, payload.scratchWorktree);
       }
       let workdir = await workdirFor(payload);
       if (workdir === undefined) {
@@ -3141,23 +3105,26 @@ export class SessionSupervisor {
         }
       }
       // A relaunch stays in the checkout the spin-off has been working in.
-      const cut = this.#worktrees.get(instanceId);
+      const cut = this.#spinOffs.worktrees.get(instanceId);
       if (cut) {
         workdir = cut.dir;
       } else if (scratch?.worktree) {
-        workdir = await this.#addWorktree(instanceId, scratch.baseCwd ?? cwd);
+        workdir = await this.#spinOffs.addWorktree(
+          instanceId,
+          scratch.baseCwd ?? cwd
+        );
       }
 
       // Each spawn says for itself whether this is a spin-off, so a relaunch
       // of one that has since been kept stops being tagged as scratch.
       if (scratch) {
-        this.#spinOffs.set(instanceId, {
-          ...this.#spinOffs.get(instanceId),
+        this.#spinOffs.running.set(instanceId, {
+          ...this.#spinOffs.running.get(instanceId),
           dir: workdir,
           harness: adapter.kind,
         });
       } else {
-        this.#spinOffs.delete(instanceId);
+        this.#spinOffs.running.delete(instanceId);
       }
 
       // A spawn for an instance already running is a relaunch: replace the
@@ -3638,7 +3605,7 @@ export class SessionSupervisor {
         const src = this.#line.get(instanceId);
         this.#line.delete(instanceId);
         if (message.type === "result" && !keepAlive) {
-          this.#tagQuest(instanceId, adapter);
+          this.#spinOffs.tagQuest(instanceId, adapter);
         }
         // Folded before the forward decision: the pulse is local state being
         // rebuilt from a replay, and a line the hub already has still tells
@@ -3714,7 +3681,7 @@ export class SessionSupervisor {
         this.#emitPulse(instanceId, true);
       },
       session: (sessionId) =>
-        this.#noteQuestSession(instanceId, sessionId, adapter.kind),
+        this.#spinOffs.noteQuestSession(instanceId, sessionId, adapter.kind),
       failed: (error) => {
         // A process this daemon ended (a sleep, a stop, a relaunch, a move)
         // ends as that stop says, whatever its harness made of it.
@@ -4241,54 +4208,6 @@ export class SessionSupervisor {
       this.#holdChild(adoption, spec, proc, readIngested(ackPayload));
     }
     return "held";
-  }
-
-  /** The harness session a spin-off turned out to be writing, from its init frame. */
-  #noteQuestSession(
-    instanceId: string,
-    sessionId: string,
-    harness: HarnessKind
-  ): void {
-    const spinOff = this.#spinOffs.get(instanceId);
-    if (!spinOff || spinOff.sessionId === sessionId) {
-      return;
-    }
-    spinOff.sessionId = sessionId;
-    spinOff.harness = harness;
-    spinOff.tagged = false;
-  }
-
-  /**
-   * Keeps a spin-off out of the catalogs the rails read. Applied at the end of
-   * the first turn rather than at init, because until the session has said
-   * something there may be no transcript for a tag to live on. Fire-and-forget,
-   * tried again next turn if it does not land.
-   */
-  #tagQuest(instanceId: string, adapter: Harness): void {
-    const spinOff = this.#spinOffs.get(instanceId);
-    if (!spinOff?.sessionId || spinOff.tagged) {
-      return;
-    }
-    const { sessionId, dir } = spinOff;
-    spinOff.tagged = true;
-    detach(
-      adapter
-        .tagSession(sessionId, CAWCO_SCRATCH_TAG, dir)
-        .catch((error: unknown) => {
-          spinOff.tagged = false;
-          warn(`could not tag spin-off ${sessionId}: ${error}`);
-        }),
-      "adapter"
-    );
-  }
-
-  /** A session whose tag someone has just set by hand is no longer ours to set. */
-  #closeTagging(sessionId: unknown): void {
-    for (const spinOff of this.#spinOffs.values()) {
-      if (spinOff.sessionId === sessionId) {
-        spinOff.tagged = true;
-      }
-    }
   }
 
   /**
@@ -4953,7 +4872,7 @@ export class SessionSupervisor {
     );
     const attachments = carried.texts;
     let { message } = carried;
-    const worktree = this.#worktrees.get(instanceId);
+    const worktree = this.#spinOffs.worktrees.get(instanceId);
     const { content } = message.message;
     if (!keepAlive && worktree?.announce && typeof content === "string") {
       message = {
@@ -5182,18 +5101,18 @@ export class SessionSupervisor {
       forgetTaken(instanceId);
       if (discard && !sharedConversation) {
         if (scratchWorktree) {
-          this.#worktrees.set(instanceId, scratchWorktree);
+          this.#spinOffs.worktrees.set(instanceId, scratchWorktree);
         }
-        await this.#removeWorktree(instanceId);
-        if (!this.#spinOffs.has(instanceId) && sessionId && cwd) {
-          this.#spinOffs.set(instanceId, {
+        await this.#spinOffs.removeWorktree(instanceId);
+        if (!this.#spinOffs.running.has(instanceId) && sessionId && cwd) {
+          this.#spinOffs.running.set(instanceId, {
             dir: cwd,
             sessionId,
             harness,
           });
         }
         if (!(sessionId && claimedSessionIds.includes(sessionId))) {
-          await this.#removeQuestSession(instanceId);
+          await this.#spinOffs.removeQuestSession(instanceId);
         }
       }
       // The hub forgets the session once this stop is confirmed: nothing
@@ -5236,172 +5155,6 @@ export class SessionSupervisor {
         this.sink({ kind: "error", instanceId, verb: "stop", message });
       }
     }
-  }
-
-  /**
-   * A detached checkout of `baseCwd`'s repo at `~/.worktrees/<repo>-<id8>`,
-   * outside the repo so its own `git status` never sees it. A directory with
-   * no commit to check out runs as it is: one in no repository, by the one
-   * reading of that (repo-top.ts `repoTop`), or in a checkout with no commit
-   * yet. A folder in a repository git does not read as a checkout (its
-   * config says bare, its `.git` unreadable) is refused as a workspace's is,
-   * never run in as it is: the spin-off would work in the live folder.
-   */
-  async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
-    const recorded = await readJson<Worktree>(worktreeRecord(instanceId));
-    if (recorded) {
-      this.#worktrees.set(instanceId, recorded);
-      this.#recordWorktree(instanceId, recorded);
-      return recorded.dir;
-    }
-    const root = await repoTop(baseCwd, Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
-    if (root === undefined) {
-      return baseCwd;
-    }
-    // In a checkout git reads, this fails for one reason: HEAD names no commit yet.
-    const at = await hostGit(baseCwd, ["rev-parse", "--show-prefix", "HEAD"]);
-    if (at.exitCode !== 0) {
-      return baseCwd;
-    }
-    const [prefix = ""] = at.text().split("\n");
-    const path = expandHome(
-      `~/.worktrees/${basename(root)}-${instanceId.slice(0, 8)}`
-    );
-    // A relaunch after a daemon restart finds its worktree already there.
-    const listed = (
-      await hostGit(root, ["worktree", "list", "--porcelain"])
-    ).text();
-    const reused = listed.split("\n").includes(`worktree ${path}`);
-    if (reused) {
-      throw new Error(
-        `Refusing to claim an unrecorded existing worktree: ${path}`
-      );
-    }
-    let base: string | undefined;
-    if (!reused) {
-      // The remote's default branch as the remote has it now, not the local
-      // checkout (a shared clone's HEAD is whatever nobody updated) and not a
-      // remote-tracking ref nobody fetched. A repository with no remote has
-      // nothing to land on, and starts from its own HEAD.
-      const hasOrigin =
-        (await hostGit(root, ["remote", "get-url", "origin"])).exitCode === 0;
-      base = hasOrigin ? await fetchDefaultBranch(root) : undefined;
-      const commit = base ? `origin/${base}` : "HEAD";
-      const added = await hostGit(root, [
-        "worktree",
-        "add",
-        "--detach",
-        path,
-        commit,
-      ]);
-      if (added.exitCode !== 0) {
-        throw new Error(
-          `git worktree add failed: ${added.stderr.toString().trim()}`
-        );
-      }
-    }
-
-    const dir = join(path, prefix);
-    const worktree = {
-      path,
-      root,
-      dir,
-      ...(reused ? {} : { announce: { cwd: baseCwd, base } }),
-    };
-    await mkdir(dirname(worktreeRecord(instanceId)), { recursive: true });
-    await writeJson(worktreeRecord(instanceId), worktree);
-    this.#worktrees.set(instanceId, worktree);
-    this.#recordWorktree(instanceId, worktree);
-    return dir;
-  }
-
-  /**
-   * The hub's record of a spin-off's worktree: where it is, never what this
-   * agent keeps of it until its opening message (`announce`), which the hub
-   * does not store (core `ScratchWorktree`).
-   */
-  #recordWorktree(instanceId: string, { dir, path, root }: Worktree): void {
-    const processGeneration = this.#generations.get(instanceId);
-    if (processGeneration) {
-      this.sink({
-        kind: "scratch_worktree",
-        instanceId,
-        processGeneration,
-        worktree: { dir, path, root },
-      });
-    }
-  }
-
-  /** A spin-off's worktree, as this agent holds it or its record names it. */
-  async #worktreeOf(instanceId: string): Promise<Worktree | undefined> {
-    return (
-      this.#worktrees.get(instanceId) ??
-      (await readJson<Worktree>(worktreeRecord(instanceId))) ??
-      undefined
-    );
-  }
-
-  /** {@link CONTROL_SPIN_OFF_HELD}: what discarding the spin-off would take with its worktree. */
-  async #spinOffHeld(instanceId: string): Promise<SpinOffHeld | null> {
-    const worktree = await this.#worktreeOf(instanceId);
-    if (!(worktree && (await isDirectory(worktree.path)))) {
-      return null;
-    }
-    const held = await worktreeHeld(worktree.path);
-    return {
-      ahead: held.ahead,
-      dirty: held.dirty,
-      holds: holdingWords({ ...held, bytes: 0 }),
-      path: worktree.path,
-    };
-  }
-
-  /**
-   * A discarded spin-off's worktree removed, after what it holds that is
-   * nowhere else (commits past every branch and remote, uncommitted and
-   * untracked files) is saved to a carry (carry.ts). A carry that cannot be
-   * written refuses the removal, and the worktree stays.
-   */
-  async #removeWorktree(instanceId: string): Promise<void> {
-    const worktree = await this.#worktreeOf(instanceId);
-    if (!worktree) {
-      return;
-    }
-    if (!(await isDirectory(worktree.path))) {
-      this.#worktrees.delete(instanceId);
-      await rm(worktreeRecord(instanceId), { force: true });
-      return;
-    }
-
-    await carryWorktree(instanceId, worktree.path);
-    const removed = await hostGit(worktree.root, [
-      "worktree",
-      "remove",
-      "--force",
-      worktree.path,
-    ]);
-    if (removed.exitCode !== 0) {
-      throw new Error(
-        `git worktree remove failed: ${removed.stderr.toString().trim()}`
-      );
-    }
-    await hostGit(worktree.root, ["worktree", "prune"]);
-    this.#worktrees.delete(instanceId);
-    await rm(worktreeRecord(instanceId), { force: true });
-  }
-
-  /** Discarding a spin-off throws its transcript away too. */
-  async #removeQuestSession(instanceId: string): Promise<void> {
-    const spinOff = this.#spinOffs.get(instanceId);
-    if (!spinOff?.sessionId) {
-      return;
-    }
-    const adapter = harnessOf(spinOff.harness);
-    if (await adapter?.getSessionInfo(spinOff.sessionId, spinOff.dir)) {
-      await adapter?.deleteSession(spinOff.sessionId, spinOff.dir);
-      await this.#transcriptDeleted(spinOff.sessionId);
-    }
-    this.#spinOffs.delete(instanceId);
   }
 
   async #fs(payload: FsPayload): Promise<void> {
@@ -5549,7 +5302,7 @@ export class SessionSupervisor {
         return await this.carrySessions(args[0] as CarrySessionRequest[]);
       }
       if (method === CONTROL_SPIN_OFF_HELD) {
-        return await this.#spinOffHeld(String(args[0]));
+        return await this.#spinOffs.spinOffHeld(String(args[0]));
       }
       if (method === CONTROL_GIT_CHANGES) {
         return await gitChanges(args[0] as string, args[1] as string);
@@ -5678,7 +5431,7 @@ export class SessionSupervisor {
               typeof args[1] === "string" ? args[1] : null,
               dirOf(args[2])
             );
-            this.#closeTagging(args[0]);
+            this.#spinOffs.closeTagging(args[0]);
             return undefined;
           case "deleteSession":
             await adapter.deleteSession(args[0] as string, dirOf(args[1]));
@@ -5994,15 +5747,6 @@ function adapterFor(kind: HarnessKind): Harness {
     throw new Error(`no harness adapter for ${kind}`);
   }
   return adapter;
-}
-
-function worktreeRecord(instanceId: string): string {
-  return join(
-    homedir(),
-    ".cawco",
-    "scratch-worktrees",
-    `${hashText(instanceId)}.json`
-  );
 }
 
 /**
