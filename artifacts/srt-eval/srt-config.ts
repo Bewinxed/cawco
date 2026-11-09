@@ -1,6 +1,6 @@
 /**
  * Prototype: the srt settings one CawCo workspace runs under, derived from what
- * boundary.ts grants today (packages/agent/src/boundary.ts), with the review's
+ * boundary/ grants today (packages/agent/src/boundary.ts), with the review's
  * escapes closed in the config itself.
  *
  *   bun srt-config.ts <clone> <state> <out.json>
@@ -35,7 +35,7 @@ const real = (p: string): string => {
   }
 };
 
-// The repository the clone reads its objects from (boundary.ts linuxSpec "alternates"):
+// The repository the clone reads its objects from (boundary/ linuxSpec "alternates"):
 // readable, never writable.
 const alternates = (() => {
   try {
@@ -51,7 +51,7 @@ const alternates = (() => {
 })();
 
 // Build output folders Apple tools write that the host's Xcode also reads.
-// Kept shared as boundary.ts cachesOf() does today; see REPORT.md (macOS gaps).
+// Kept shared as boundary/ cachesOf() does today; see REPORT.md (macOS gaps).
 const appleWrites = mac
   ? [
       join(home, "Library", "Caches"),

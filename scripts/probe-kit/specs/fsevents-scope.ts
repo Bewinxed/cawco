@@ -307,7 +307,8 @@ const transcriptUnder = (home: string): string | undefined => {
  */
 const daemonLeg = async (kit: Kit, dylib: string, root: string) => {
   const { scratchFleet, until: waitFor } = await import("../../scratch-fleet");
-  const { launchedHook } = await import("../../../packages/agent/src/boundary");
+  const { launchedHook } =
+    await import("../../../packages/agent/src/boundary/launched-hook");
   const fleet = await scratchFleet({
     name: "fsevents-scope",
     respond: () => ({ words: ["ok"], everyMs: 0 }),
