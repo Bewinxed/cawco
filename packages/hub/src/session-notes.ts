@@ -60,7 +60,7 @@ export type SessionNotesContext = Pick<
 >;
 
 export const createSessionNotes = (ctx: SessionNotesContext) => {
-  /** The leaks and container endings each session was told of, by `<session> <id>` ({@link LEAKS_KEPT}). */
+  /** The leaks and container endings each session was told of, by `<session> <id>` (`LEAKS_KEPT`). */
   const leaksTold = new Set<string>();
   /**
    * A leak its machine found in what a session started (core `LEAK_FOUND`):

@@ -34,7 +34,7 @@ const findCaller = (request: Request): string => {
  * the places (find-places.ts): one phrase read of the index, a sync first
  * when it is stale (agent search/index.ts `SYNC_WAIT_MS`). Past it, the
  * places in the turns loaded stand, the machine named. Our call, as
- * {@link FIND_TURNS_MS}.
+ * `FIND_TURNS_MS`.
  */
 const FIND_PLACES_MS = 5000;
 

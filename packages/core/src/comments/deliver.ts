@@ -18,7 +18,7 @@ import {
  * whose comment is held is held whole (a reply written at once on it waits
  * with it): its thread holds none of their unsent words, so it is not ready
  * to go ({@link pinReady}); a pin the session has heard keeps its thread but
- * the held entries, which stay owed ({@link pinHeard} stamps only what went).
+ * the held entries, which stay owed (`pinHeard` stamps only what went).
  */
 export const withoutHeld = (pin: Pin): Pin => {
   if (!pinHeld(pin)) {
