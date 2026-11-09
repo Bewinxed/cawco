@@ -37,12 +37,12 @@
   // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
   // The Solar Duotone Rule).
   import { IconChevronRight as IconChevron, IconError } from "#lib/icons.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import Caw from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { dur } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
-  import { morph } from "../motion/morph.svelte";
   import { compactionFailure } from "./compaction-failure";
   import { COMPACTING_MARK, COMPACTION_MARK } from "./compaction-mark";
   import { disclosureAt } from "./disclosure.svelte";

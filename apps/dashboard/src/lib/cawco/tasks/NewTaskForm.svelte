@@ -7,12 +7,12 @@
    * hub's refusal is said under the field, in its own words.
    */
   import { tick } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { type Stage, stageLabel } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   let {
     open = $bindable(false),

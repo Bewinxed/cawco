@@ -41,7 +41,7 @@
  * shell's box (its SVG overflows), so nothing else moves. The wheel never
  * widens, so `inset` reads the pill's width.
  */
-import { easeDrawer, motionOk } from "../motion/curves.svelte";
+import { easeDrawer, motionOk } from "#lib/platform/motion/curves.svelte.js";
 
 /** How far the shoulders curve in for each row of height, as a share of the width. */
 const TAPER = 0.022;

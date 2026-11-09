@@ -33,8 +33,9 @@ import type {
 import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
 import { type DeskState, presenceWords } from "@cawco/core/words/presence";
 import { MediaQuery } from "svelte/reactivity";
+import { failureWords, hubFetch } from "#lib/platform/hub-read.js";
+import { store, stored } from "#lib/platform/storage.js";
 import { goto } from "$app/navigation";
-import { failureWords, hubFetch } from "./hub-read";
 import { conversationHref, type InstanceIndex } from "./links";
 import {
   allowDesk,
@@ -49,7 +50,6 @@ import {
   setDeskThreshold,
 } from "./presence";
 import { send as askHub } from "./project-tasks";
-import { store, stored } from "./storage";
 
 /** Per browser: the onboarding row put away with Skip (core presence-onboarding.ts). */
 const SKIPPED = PRESENCE_ONBOARDING_SKIPPED;

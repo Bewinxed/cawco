@@ -14,7 +14,7 @@
 import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { hubRequest } from "@cawco/core/hub-request";
-import { hubFetch } from "#lib/cawco/hub-read.js";
+import { hubFetch } from "#lib/platform/hub-read.js";
 import { cawco, followAccounts } from "../client.svelte";
 import { devDebug } from "../dev-debug";
 import { speakingReading } from "../usage";
