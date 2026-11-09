@@ -12,9 +12,9 @@ import { AGENT_BUNDLE_ID } from "@cawco/core/agent-bundle";
 import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { withFetchCap } from "@cawco/core/fetch-cap";
-import { launchdLog, launchdProgram } from "@cawco/core/launchd";
+import { launchdLog, launchdProgram, xml } from "@cawco/core/launchd";
 import { standalone } from "@cawco/core/runtime";
-import { label, socketName, unitName, xml } from "./names";
+import { label, socketName, unitName } from "./names";
 
 export const isServiceId = (value: string): value is ServiceId =>
   SERVICE_IDS.some((id) => id === value);
@@ -430,3 +430,25 @@ ReusePort=true
 [Install]
 WantedBy=sockets.target
 `;
+
+/**
+ * A one-shot launchd job's plist: label `job`, running `argv` behind its
+ * start record (core launchd.ts `launchdProgram`), with `forwarded` as its
+ * environment, started as it loads.
+ */
+export const transientPlist = (
+  job: string,
+  argv: readonly string[],
+  forwarded: readonly (readonly [string, string])[]
+): string => {
+  const text = (value: string) => `<string>${xml(value)}</string>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key>${text(job)}
+<key>ProgramArguments</key><array>${launchdProgram(job, argv).map(text).join("")}</array>
+<key>EnvironmentVariables</key><dict>${forwarded.map(([key, value]) => `<key>${key}</key>${text(value)}`).join("")}</dict>
+<key>RunAtLoad</key><true/>
+</dict></plist>
+`;
+};
