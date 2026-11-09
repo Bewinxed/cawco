@@ -79,7 +79,7 @@ export const createSessionNotes = (ctx: SessionNotesContext) => {
    *
    * Only a climb in memory is told so ({@link leakWords.leaking}): what an
    * ended item's session left running CawCo ends itself as its workspace
-   * settles, or keeps for an artifact that shows it (work-items.ts
+   * settles, or keeps for an artifact that shows it (workspaces.ts
    * `settle`), so a leftover notice ({@link leakWords.leftBehind}) for one
    * is logged and told to no one. On 2026-10-24 a parent was told to end
    * three pids a done delegate left, which had exited by the time it looked.
