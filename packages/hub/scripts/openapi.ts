@@ -54,6 +54,7 @@ import {
   wireProtocolAt,
   withoutBridge,
 } from "./wire-compat";
+import { writtenOrder } from "./written-order";
 
 const check = process.argv.includes("--check");
 // Before the hub and the program are built: a check whose inputs are the
@@ -217,8 +218,13 @@ if (routeErrors.length) {
   throw new Error(`~Routes lookups failed:\n${routeErrors.join("\n")}`);
 }
 
+// The generator writes properties and unions in the order the code writes
+// them, not the checker's (written-order.ts).
+const order = writtenOrder(ts, program.getTypeChecker());
 const generator = TJS.buildGenerator(
-  program,
+  Object.assign(Object.create(program) as typeof program, {
+    getTypeChecker: () => order.checker,
+  }),
   {
     ref: true,
     aliasRef: false,
@@ -231,6 +237,7 @@ const generator = TJS.buildGenerator(
 if (!generator) {
   throw new Error("typescript-json-schema could not read the program");
 }
+order.readThrough(generator);
 // The generator reports every property initializer it reads; none is news.
 const { warn } = console;
 console.warn = () => undefined;
@@ -239,46 +246,6 @@ const { definitions = {} } = generator.getSchemaForSymbols([
   ...Object.values(FRAMES).flat(),
 ]) as { definitions?: Record<string, Schema> };
 console.warn = warn;
-
-/**
- * A schema made by a mapped type (`Omit`, `Pick`) lists its properties in the
- * order TypeScript gave their names ids, which moves with how the hub's
- * program is read rather than with anything the type says. Each one that has
- * moved is held to the order the published document has, listed whole so a
- * new property fails here instead of being dropped.
- */
-const WRITTEN_ORDER: Record<string, readonly string[]> = {
-  PinnedElement: [
-    "id",
-    "text",
-    "page",
-    "source",
-    "url",
-    "selector",
-    "rect",
-    "tag",
-    "classes",
-    "styles",
-  ],
-};
-for (const [name, order] of Object.entries(WRITTEN_ORDER)) {
-  const properties = definitions[name]?.properties as
-    Record<string, unknown> | undefined;
-  const asked = new Set(order);
-  const made = Object.keys(properties ?? {});
-  if (
-    !properties ||
-    made.length !== asked.size ||
-    made.some((key) => !asked.has(key))
-  ) {
-    throw new Error(
-      `WRITTEN_ORDER's ${name} no longer matches its schema (${made.join(", ")}): write out its properties again, in the order the document should keep`
-    );
-  }
-  definitions[name].properties = Object.fromEntries(
-    order.map((key) => [key, properties[key]])
-  );
-}
 
 // Frame kinds are mutually exclusive already: required literal `kind` values.
 // Emit the existing discriminant with named references, so Swift names cases
@@ -323,56 +290,29 @@ const RESPONSE = `${DEFINITION}Response`;
 /** What OpenAPI allows a component to be called. */
 const NAME = /^[A-Za-z0-9._-]+$/u;
 
-/** `properties` by name: one order, whatever order the checker met them in. */
-const byName = (properties: unknown): unknown =>
-  typeof properties === "object" && properties !== null
-    ? Object.fromEntries(
-        Object.entries(properties).toSorted(([a], [b]) =>
-          a < b ? -1 : Number(a > b)
-        )
-      )
-    : properties;
-
 /**
  * Into the document's terms. A named type becomes a component ref. A type the
  * generator could only name by its text (`Record<string,number>`, a row's
  * `{ id: string; … }`) is no name at all, so it is written out where it is
  * used. And `default` goes: the generator reads it off the literal a handler
  * happened to return, which is not a default of anything.
- *
- * `inferred`: the value is a route's response or written out inside one, a
- * type the checker inferred from what a handler returns (`{ ...row, status }`).
- * Its fields come in the order the checker met their symbols, which a change
- * to any module the program reads can move, and the Swift client's fields
- * with it; so they are written by name. A named type keeps the order it is
- * declared in, and so does every request body (Elysia's own schemas).
  */
 const toDocument = (
   value: unknown,
   key?: string,
-  inlining: string[] = [],
-  inferred = false
+  inlining: string[] = []
 ): unknown => {
   if (Array.isArray(value)) {
-    return value.map((item) => toDocument(item, undefined, inlining, inferred));
+    return value.map((item) => toDocument(item, undefined, inlining));
   }
   if (typeof value !== "object" || value === null) {
     return value;
   }
   const { $ref, ...rest } = value as Schema;
-  // An inferred object's own fields, by name; a `properties` map is no object
-  // of its own, and each of its fields is ordered where it is one.
-  const own =
-    inferred && key !== "properties" && rest.properties !== undefined
-      ? { ...rest, properties: byName(rest.properties) }
-      : rest;
   let fields: Schema = Object.fromEntries(
-    Object.entries(own)
+    Object.entries(rest)
       .filter(([field]) => key === "properties" || field !== "default")
-      .map(([field, item]) => [
-        field,
-        toDocument(item, field, inlining, inferred),
-      ])
+      .map(([field, item]) => [field, toDocument(item, field, inlining)])
   );
   // A tuple as the generator's draft-07 writes it (`items: [...]`) is
   // `prefixItems` in the 2020-12 dialect OpenAPI 3.1 speaks.
@@ -395,12 +335,10 @@ const toDocument = (
     throw new Error(`${name} contains itself and has no name to refer to`);
   }
   return {
-    ...(toDocument(
-      definitions[name],
-      undefined,
-      [...inlining, name],
-      inferred
-    ) as Schema),
+    ...(toDocument(definitions[name], undefined, [
+      ...inlining,
+      name,
+    ]) as Schema),
     ...fields,
   };
 };
@@ -488,7 +426,7 @@ for (const { op, method, path } of operations) {
       continue;
     }
     const bare = withoutResponse(returned);
-    const schema = bare && (toDocument(bare, undefined, [], true) as Schema);
+    const schema = bare && (toDocument(bare) as Schema);
     if (!schema) {
       // Only a `Response`: the handler answers with bytes of its own.
       op.responses[status] = { description, content: binary };
@@ -1590,57 +1528,39 @@ console.log(
 );
 
 /**
- * The document in one order, whatever order the checker met its types in: a
- * union's members by their text (a union with a member naming `null` stays as it is:
- * the generator reads the first member of such a union), and the components
- * by name. Moving a function between files changes the checker's order and
- * nothing the document says.
+ * Components by name and a discriminator's mapping by kind: maps the Swift
+ * generator reads by key, written in one order so where the checker met a
+ * type does not move them. A union's members and an object's properties
+ * stay in the order the code gives them (written-order.ts); the generator
+ * names an undiscriminated union's members by position.
  */
-const namesNull = (member: unknown): boolean => {
-  const type = (member as Schema | null)?.type;
-  return type === "null" || (Array.isArray(type) && type.includes("null"));
-};
-const unionInOrder = (members: unknown[]): unknown[] =>
-  members.some(namesNull)
-    ? members
-    : members.toSorted((a, b) => {
-        const [x, y] = [JSON.stringify(a), JSON.stringify(b)];
-        return x < y ? -1 : Number(x > y);
-      });
-const inOneOrder = (value: unknown): unknown => {
+const byKey = (map: object): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(map).toSorted(([a], [b]) => (a < b ? -1 : Number(a > b)))
+  );
+const inOneOrder = (value: unknown, key?: string): unknown => {
   if (Array.isArray(value)) {
-    return value.map(inOneOrder);
+    return value.map((item) => inOneOrder(item));
   }
   if (typeof value !== "object" || value === null) {
     return value;
   }
+  const keyed =
+    key !== "properties" && "mapping" in value && "propertyName" in value
+      ? { ...value, mapping: byKey(value.mapping as object) }
+      : value;
   return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => {
-      if (
-        (key === "schemas" || key === "mapping") &&
-        typeof item === "object" &&
-        item !== null
-      ) {
-        return [
-          key,
-          inOneOrder(
-            Object.fromEntries(
-              Object.entries(item).toSorted(([a], [b]) =>
-                a < b ? -1 : Number(a > b)
-              )
-            )
-          ),
-        ];
-      }
-      if ((key === "anyOf" || key === "oneOf") && Array.isArray(item)) {
-        return [key, unionInOrder(item.map(inOneOrder))];
-      }
-      return [key, inOneOrder(item)];
-    })
+    Object.entries(keyed).map(([field, item]) => [
+      field,
+      inOneOrder(item, field),
+    ])
   );
 };
 const outputs: [string, string][] = [
-  [OUT, `${JSON.stringify(inOneOrder(document), null, 2)}\n`],
+  [
+    OUT,
+    `${JSON.stringify(inOneOrder({ ...document, components: { schemas: byKey(components) } }), null, 2)}\n`,
+  ],
   [join(dirname(OUT), "OpenEnums.swift"), swiftEnums],
   [join(dirname(OUT), "openapi-generator-config.yaml"), generatorConfig],
 ];
