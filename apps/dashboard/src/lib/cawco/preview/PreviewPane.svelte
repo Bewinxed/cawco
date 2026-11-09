@@ -17,7 +17,6 @@
   import { pinProblem } from "@cawco/core/comments/validate";
   import { detach } from "@cawco/core/detach";
   import type { ChangedItem } from "@cawco/core/doc-meta";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { machineLabel } from "@cawco/core/machine-names";
   import { pinName } from "@cawco/core/pin-name";
   import {
@@ -113,10 +112,11 @@
   } from "#lib/icons.js";
   import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
   import { graceWhile } from "#lib/platform/grace-while.svelte.js";
+  import { hub, hubPath } from "#lib/platform/hub.js";
   import {
     failureClause,
     failureWords,
-    hubFetch,
+    hubData,
   } from "#lib/platform/hub-read.js";
   import {
     appear,
@@ -563,10 +563,7 @@
     // hub (`artifactShown`).
     const failed = unreachedOf(
       await probePreview(origin, (asked) =>
-        askHubReach(
-          hubRequest("GET /api/preview-reach", { query: { origin: asked } })
-            .path
-        )
+        askHubReach(hubPath(hub.api["preview-reach"], { origin: asked }))
       )
     );
     if (failed) {
@@ -640,11 +637,7 @@
     if (byHost) {
       return previewsNeedWords({ byHost: true, host: new URL(origin).host });
     }
-    portsRead ??= hubFetch(hubRequest("GET /api/preview-settings"))
-      .then((answer) =>
-        answer.ok ? (answer.json() as Promise<PreviewSettings>) : null
-      )
-      .catch(() => null);
+    portsRead ??= hubData(hub.api["preview-settings"].get()).catch(() => null);
     const settings = await portsRead;
     return previewsNeedWords({
       byHost: false,
@@ -854,10 +847,7 @@
       () => {
         downTries += 1;
         probePreview(origin, (asked) =>
-          askHubReach(
-            hubRequest("GET /api/preview-reach", { query: { origin: asked } })
-              .path
-          )
+          askHubReach(hubPath(hub.api["preview-reach"], { origin: asked }))
         ).then((failed) => {
           if (!live) {
             return;

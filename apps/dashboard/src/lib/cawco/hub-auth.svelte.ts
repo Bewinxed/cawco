@@ -22,15 +22,9 @@ import type {
   PairingStart,
   WaitingMachine,
 } from "@cawco/core/hub-auth";
-import { hubRequest } from "@cawco/core/hub-request";
 import { KeptPairingSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
-import {
-  failureWords,
-  hubData,
-  hubFetch,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { failureWords, hubData, hubDone } from "#lib/platform/hub-read.js";
 import { readJson, unstore, writeJson } from "#lib/platform/storage.js";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { leaveThePage } from "./leaving";
@@ -100,9 +94,9 @@ export function readAuth(): Promise<void> {
   reading ??= (async () => {
     try {
       const mark = readLeaves();
-      const response = await hubFetch(hubRequest("GET /api/auth"));
-      if (response.ok) {
-        takeAuth((await response.json()) as HubAuthState, mark);
+      const answer = await hub.api.auth.get();
+      if (!answer.error) {
+        takeAuth(await hubData(answer), mark);
       }
     } catch {
       // The hub out of reach: the connection band says so, and the next close reads again.
@@ -199,10 +193,7 @@ function pollFor(deviceCode: string, every: number): void {
   const poll = async () => {
     let answer: PairingPoll;
     try {
-      const response = await hubFetch(
-        hubRequest("POST /api/pair/poll", { body: { deviceCode } })
-      );
-      answer = (await response.json()) as PairingPoll;
+      answer = await hubData(hub.api.pair.poll.post({ deviceCode }));
     } catch {
       // A poll that did not reach the hub: the next one asks again.
       polling = setTimeout(poll, interval);
@@ -235,37 +226,20 @@ function pollFor(deviceCode: string, every: number): void {
 }
 
 /** The hub's answer to a call, or its words when it refused. */
-async function said(response: Promise<Response>): Promise<void> {
-  const answer = await response;
-  if (!answer.ok) {
-    throw await hubRefusal(answer);
-  }
-}
-
 /** The person's answer to another device's pairing, by the code it shows. */
 export const answerPairing = (userCode: string, approve: boolean) =>
-  said(
-    hubFetch(
-      hubRequest(
-        approve
-          ? "POST /api/pair/requests/:userCode/approve"
-          : "POST /api/pair/requests/:userCode/deny",
-        { path: { userCode } }
-      )
-    )
+  hubDone(
+    approve
+      ? hub.api.pair.requests({ userCode }).approve.post()
+      : hub.api.pair.requests({ userCode }).deny.post()
   );
 
 /** The person's answer to a machine waiting to be admitted. */
 export const answerMachine = (machineId: string, admit: boolean) =>
-  said(
-    hubFetch(
-      hubRequest(
-        admit
-          ? "POST /api/machines/waiting/:machineId/admit"
-          : "POST /api/machines/waiting/:machineId/refuse",
-        { path: { machineId } }
-      )
-    )
+  hubDone(
+    admit
+      ? hub.api.machines.waiting({ machineId }).admit.post()
+      : hub.api.machines.waiting({ machineId }).refuse.post()
   );
 
 /**
@@ -274,12 +248,6 @@ export const answerMachine = (machineId: string, admit: boolean) =>
  * trusts, this tab's among them, which opens again as this device.
  */
 export async function setPairingRequired(required: boolean): Promise<void> {
-  await said(
-    hubFetch(
-      hubRequest("PUT /api/auth/pairing", {
-        body: { required, kind: "browser" },
-      })
-    )
-  );
+  await hubDone(hub.api.auth.pairing.put({ required, kind: "browser" }));
   await readAuth();
 }

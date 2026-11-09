@@ -7,7 +7,6 @@
 import type { ProjectAtLimit } from "@cawco/core/accounts";
 import type { OnCap, ProjectCap } from "@cawco/core/areas";
 import { PRESENCE_HEADER } from "@cawco/core/browser-gate";
-import type { ConnectionView } from "@cawco/core/connections";
 import type {
   ForgottenProject,
   ProjectRestored,
@@ -19,7 +18,6 @@ import type { LandsMode } from "@cawco/core/injected";
 import type { PlaceProject } from "@cawco/core/place-nesting";
 import {
   type CawInitiated,
-  type CawStart,
   capHolds,
   type ProjectConversationView,
   type ProjectSpend,
@@ -27,10 +25,14 @@ import {
 import type { StagesTemplate } from "@cawco/core/views";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
+import { hub, hubPath } from "#lib/platform/hub.js";
 import {
+  hubData,
+  hubDone,
   hubFetch,
   hubJson,
   hubRefusal,
+  refusedOf,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
@@ -202,14 +204,10 @@ export async function removeProjectPlace(
   projectId: string,
   placeId: string
 ): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("DELETE /api/projects/:id/places/:placeId", {
-      path: { id: projectId, placeId },
-    })
+  await hubDone(
+    hub.api.projects({ id: projectId }).places({ placeId }).delete(),
+    (refused) => hubRefusal(refused, projectWords.placeNotRemovedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.placeNotRemovedThen);
-  }
   await readProjects();
 }
 
@@ -268,11 +266,8 @@ export async function projectAtFolder(project: {
 // --- a project's conversation and views -------------------------------------
 
 /** A project's conversation: on or off, its harness, its session, why it cannot start, its spend. */
-export const cawOf = (projectId: string): Promise<ProjectConversationView> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/caw", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
-  );
+export const cawOf = (projectId: string) =>
+  hubData(hub.api.projects({ id: projectId }).caw.get(), refusedOrUnreached);
 
 /** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
 export const configureCaw = async (
@@ -285,12 +280,9 @@ export const configureCaw = async (
     on?: boolean;
   }
 ): Promise<ProjectConversationView> => {
-  const view = await hubJson<ProjectConversationView>(
-    hubRequest("PATCH /api/projects/:id/caw", {
-      path: { id: projectId },
-      body: change,
-    }),
-    { failure: refusedOrUnreached }
+  const view = await hubData(
+    hub.api.projects({ id: projectId }).caw.patch(change),
+    refusedOrUnreached
   );
   // The hub's answer is where he stands: the project's row says so now,
   // before the `projects.changed` it sent brings the row read again.
@@ -317,24 +309,19 @@ export const configureCaw = async (
  * harness and model, in which mode; refused, in words, while no machine is
  * online.
  */
-export const conversationStart = (projectId: string): Promise<CawStart> =>
-  hubJson<CawStart>(
-    hubRequest("POST /api/projects/:id/caw/place", {
-      path: { id: projectId },
-    }),
-    { failure: refusedOrUnreached }
+export const conversationStart = (projectId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).caw.place.post(),
+    refusedOrUnreached
   );
 
 export const nameConversation = async (
   projectId: string,
   instanceId: string
 ): Promise<ProjectConversationView> => {
-  const view = await hubJson<ProjectConversationView>(
-    hubRequest("POST /api/projects/:id/caw/conversation", {
-      path: { id: projectId },
-      body: { instanceId },
-    }),
-    { failure: refusedOrUnreached }
+  const view = await hubData(
+    hub.api.projects({ id: projectId }).caw.conversation.post({ instanceId }),
+    refusedOrUnreached
   );
   const row = projectsState.projects.find(
     (project) => project.id === projectId
@@ -358,52 +345,33 @@ export interface RoutineState {
 }
 
 /** A routine as it stands now. */
-export const readRoutine = (routineId: string): Promise<RoutineState> =>
-  hubJson(hubRequest("GET /api/routines/:id", { path: { id: routineId } }), {
-    failure: refusedOrUnreached,
-  });
+export const readRoutine = (routineId: string) =>
+  hubData(hub.api.routines({ id: routineId }).get(), refusedOrUnreached);
 
 /** The fleet's connections, never their keys (`GET /api/connections`). */
-export const readConnections = async (): Promise<ConnectionView[]> =>
-  (
-    await hubJson<{ connections: ConnectionView[] }>(
-      hubRequest("GET /api/connections"),
-      { failure: refusedOrUnreached }
-    )
-  ).connections;
+export const readConnections = async () =>
+  (await hubData(hub.api.connections.get(), refusedOrUnreached)).connections;
 
 /** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
 export const changeRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
-): Promise<RoutineState> =>
-  hubJson(
-    hubRequest("PATCH /api/routines/:id", {
-      path: { id: routineId },
-      body: change,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.routines({ id: routineId }).patch(change),
+    refusedOrUnreached
   );
 
 /** "Ask Caw for a view": your words to the project's conversation, which drafts it; the session they went to. */
-export const requestView = (
-  projectId: string,
-  text: string
-): Promise<{ instanceId: string }> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/view-requests", {
-      path: { id: projectId },
-      body: { text },
-    }),
-    { failure: refusedOrUnreached }
+export const requestView = (projectId: string, text: string) =>
+  hubData(
+    hub.api.projects({ id: projectId })["view-requests"].post({ text }),
+    refusedOrUnreached
   );
 
 /** What a project has spent: today, this month, its conversations' share, each attempt. */
-export const projectSpend = (projectId: string): Promise<ProjectSpend> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/spend", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
-  );
+export const projectSpend = (projectId: string) =>
+  hubData(hub.api.projects({ id: projectId }).spend.get(), refusedOrUnreached);
 
 /** Sets what an attempt at the project's tasks may spend; null clears it. */
 /**
@@ -417,36 +385,26 @@ export const setProjectCap = (
     period: "day" | "month" | null;
     usd: number | null;
   }
-): Promise<{ cap: ProjectCap | null }> =>
-  hubJson(
-    hubRequest("PUT /api/projects/:id/cap", {
-      path: { id: projectId },
-      body: change,
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.projects({ id: projectId }).cap.put(change),
+    refusedOrUnreached
   );
 
 /** What reaching a project's cap does where the project sets nothing. */
-export const spendSettings = (): Promise<{ onCap: OnCap }> =>
-  hubJson(hubRequest("GET /api/spend-settings"), {
-    failure: refusedOrUnreached,
-  });
+export const spendSettings = () =>
+  hubData(hub.api["spend-settings"].get(), refusedOrUnreached);
 
-export const setSpendSettings = (onCap: OnCap): Promise<{ onCap: OnCap }> =>
-  hubJson(hubRequest("PUT /api/spend-settings", { body: { onCap } }), {
-    failure: refusedOrUnreached,
-  });
+export const setSpendSettings = (onCap: OnCap) =>
+  hubData(hub.api["spend-settings"].put({ onCap }), refusedOrUnreached);
 
 export const setProjectBudget = (
   projectId: string,
   budget: ProjectSpend["budget"]
-): Promise<unknown> =>
-  hubJson(
-    hubRequest("PATCH /api/projects/:id/dispatch", {
-      path: { id: projectId },
-      body: { budget },
-    }),
-    { failure: refusedOrUnreached }
+) =>
+  hubData(
+    hub.api.projects({ id: projectId }).dispatch.patch({ budget }),
+    refusedOrUnreached
   );
 
 /**
@@ -459,34 +417,36 @@ export const setProjectBudget = (
  */
 export async function forgetProject(id: string): Promise<void> {
   // Its tab's presence, which the hub's journal names the forget by.
-  const response = await hubFetch(
-    hubRequest("DELETE /api/projects/:id", { path: { id } }),
-    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+  await hubDone(
+    hub.api.projects({ id }).delete(undefined, {
+      headers: { [PRESENCE_HEADER]: presenceClientId() },
+    }),
+    (refused) => hubRefusal(refused, projectWords.notForgottenThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notForgottenThen);
-  }
 }
 
 /**
  * Deletes a project for good, live or forgotten (hub project-delete.ts);
  * `fromDisk`: its checkouts on every machine and its sessions' transcripts
  * too. A refusal (a session running, a machine away, a place shared) is
- * thrown in the hub's words.
+ * thrown in the hub's words. Sent by `fetch` at its route's path: its
+ * last segment, `delete`, is the key Eden's types give `DELETE
+ * /api/projects/:id`, which hides this route from them.
  */
 export async function deleteProjectForGood(
   id: string,
   fromDisk: boolean
 ): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/delete", {
-      path: { id },
-      body: { fromDisk },
-    }),
-    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
-  );
+  const response = await fetch(hubPath(hub.api.projects({ id }).delete), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      [PRESENCE_HEADER]: presenceClientId(),
+    },
+    body: JSON.stringify({ fromDisk }),
+  });
   if (!response.ok) {
-    throw await hubRefusal(response, projectEndWords.notDeletedThen);
+    throw hubRefusal(await refusedOf(response), projectEndWords.notDeletedThen);
   }
 }
 
@@ -495,11 +455,9 @@ export class StandingRefusal extends Error {}
 
 /** Every forgotten project the hub can bring back, newest first. */
 export async function readForgottenProjects(): Promise<ForgottenProject[]> {
-  const response = await hubFetch(hubRequest("GET /api/projects/forgotten"));
-  if (!response.ok) {
-    throw await hubRefusal(response, projectEndWords.unreadThen);
-  }
-  return (await response.json()) as ForgottenProject[];
+  return await hubData(hub.api.projects.forgotten.get(), (refused) =>
+    hubRefusal(refused, projectEndWords.unreadThen)
+  );
 }
 
 /**
@@ -511,22 +469,19 @@ export async function restoreProject(
   id: string,
   asked: { forgottenAt?: number; name?: string }
 ): Promise<ProjectRestored> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/restore", { path: { id }, body: asked }),
-    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
+  const restored = await hubData(
+    hub.api.projects({ id }).restore.post(asked, {
+      headers: { [PRESENCE_HEADER]: presenceClientId() },
+    }),
+    (answer) => {
+      const refused = hubRefusal(answer, projectEndWords.notBroughtBackThen);
+      // A conflict or a gone entry stands until something else changes:
+      // asking again the same way can't bring it back.
+      return answer.response.status === 409 || answer.response.status === 404
+        ? new StandingRefusal(refused.message)
+        : refused;
+    }
   );
-  if (!response.ok) {
-    const refused = await hubRefusal(
-      response,
-      projectEndWords.notBroughtBackThen
-    );
-    // A conflict or a gone entry stands until something else changes: asking
-    // again the same way can't bring it back.
-    throw response.status === 409 || response.status === 404
-      ? new StandingRefusal(refused.message)
-      : refused;
-  }
-  const restored = (await response.json()) as ProjectRestored;
   await readProjects();
   return restored;
 }
@@ -534,7 +489,9 @@ export async function restoreProject(
 /** Reads the projects again, as the hub has them now. */
 export async function readProjects(): Promise<void> {
   const asked = projectsLeave();
-  const projects = await load<ProjectRow[]>(hubRequest("GET /api/projects"));
+  const projects = await load(
+    hubJson<ProjectRow[]>(hubRequest("GET /api/projects"))
+  );
   if (projects) {
     keepProjects(projects, asked);
   }
@@ -626,13 +583,11 @@ export interface RunningSession {
 
 /** A project's running sessions as the hub lists them: what a forget stops first. */
 export async function projectRunning(id: string): Promise<RunningSession[]> {
-  const response = await hubFetch(
-    hubRequest("GET /api/projects/:id/running", { path: { id } })
+  const { sessions } = await hubData(
+    hub.api.projects({ id }).running.get(),
+    (refused) => hubRefusal(refused, projectWords.sessionsNotListedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.sessionsNotListedThen);
-  }
-  return ((await response.json()) as { sessions: RunningSession[] }).sessions;
+  return sessions;
 }
 
 const projectStopListeners = new Set<(frame: ProjectStopFrame) => void>();
@@ -656,15 +611,10 @@ export async function stopProjectSessions(
   id: string,
   instanceIds: string[]
 ): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/stop", {
-      path: { id },
-      body: { instanceIds },
-    })
+  await hubDone(
+    hub.api.projects({ id }).stop.post({ instanceIds }),
+    (refused) => hubRefusal(refused, projectWords.sessionsNotStoppedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.sessionsNotStoppedThen);
-  }
 }
 
 /** The projects the hub knows, and which of them a spend cap holds back now. */
