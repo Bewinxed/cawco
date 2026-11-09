@@ -71,6 +71,7 @@ import type {
   Envelope,
   FsPayload,
   InstanceRow,
+  KeepAlive,
   NamedSpawn,
   SendPayload,
   SessionCustody,
@@ -97,6 +98,7 @@ import type {
 } from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type {
+  TranscriptPage,
   TranscriptWhere,
   TranscriptWindow,
   WindowAsk,
@@ -163,7 +165,7 @@ import type {
   SessionLocation,
   SettledSpawn,
 } from "./hub-shapes";
-import type { KeepAliveRow } from "./keep-alive";
+import type { createKeepAliveScheduler, KeepAliveRow } from "./keep-alive";
 import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape } from "./lifetime";
@@ -216,7 +218,11 @@ import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
 import type { ToolReleases } from "./tool-releases";
-import type { createTranscripts, HistoryRead } from "./transcripts";
+import type {
+  createTranscripts,
+  HistoryFault,
+  HistoryRead,
+} from "./transcripts";
 import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
 import type { UsageCounter } from "./usage-count";
@@ -288,6 +294,10 @@ export interface HubContext {
     string,
     { answer: AskAnswer; outcome?: "answered" | "cancelled" | undefined }
   >;
+  applyPermissionMode: (
+    row: InstanceRow,
+    mode: string
+  ) => Promise<{ code: 400 | 500 | 503 | 504; error: string } | undefined>;
   archiveView: () => ArchiveView;
   artifactLane: ReturnType<typeof createArtifactLane>;
   artifactSessions: ReturnType<typeof createArtifactSessions>;
@@ -439,6 +449,7 @@ export interface HubContext {
     model: string | undefined
   ) => Promise<number | undefined>;
   continuationJob: (row: ContinuationSlip) => ContinuationJob;
+  continuationNow: (instanceId: string) => string;
   continuationRefusal: (
     prepared: PreparedContinuation,
     request: ContinueRequest,
@@ -514,6 +525,9 @@ export interface HubContext {
     requestId?: string
   ) => void;
   escalateRoutedAsks: (recipientId: string) => void;
+  everyPage: (
+    instanceId: string
+  ) => Promise<HistoryFault | { gone: string } | { pages: TranscriptPage[] }>;
   fanOutAgents: () => void;
   fanOutFetched: (what: string) => void;
   fetchPlugins: (ids: readonly string[]) => Promise<boolean>;
@@ -594,6 +608,7 @@ export interface HubContext {
     string,
     { machineId: string; since: number; reason: string }
   >;
+  historyAway: (fault: HistoryFault) => Response;
   homeCredentialOf: (
     machineId: string,
     store: HomeStore,
@@ -679,6 +694,7 @@ export interface HubContext {
     machineId: string,
     identity: AccountIdentity
   ) => Promise<AccountJoined | { error: string }>;
+  keepAliveScheduler: ReturnType<typeof createKeepAliveScheduler>;
   keepHookVersion: (hook: FleetHook) => void;
   keepPending: (
     accountId: string,
@@ -1416,6 +1432,23 @@ export interface HubContext {
     row: SentMessageRow,
     machineId: string
   ) => Promise<"withdrawn" | "started">;
+  withKeepAlive: <
+    Row extends
+      KeepAliveRow | ReturnType<DbShape["listBoardInstances"]>[number],
+  >(
+    rows: Row[]
+  ) => (Omit<
+    Row,
+    | "keepAliveEnabled"
+    | "keepAliveSent"
+    | "keepAliveStopped"
+    | "cacheTtl"
+    | "contextTokens"
+    | "contextReadAt"
+    | "cacheCold"
+    | "lastPingUsage"
+    | "keepAliveTurn"
+  > & { keepAlive: KeepAlive })[];
   withPresence: (rows: AgentRow[]) => AgentRow[];
   workItems: ReturnType<typeof createWorkItems>;
   workspaceArchived: (workspace: WorkspaceRow) => void;
