@@ -121,6 +121,7 @@ import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { LimitCompaction } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
+import type { DelegateTypesShape } from "./db/delegate-types";
 import type {
   BoardInstanceRow,
   InstanceKind,
@@ -139,7 +140,6 @@ import type {
   StoredSendRefusal,
 } from "./db/stored-types";
 import type { createDecisions } from "./decisions";
-import type { DelegateTypesShape } from "./delegate-types";
 import type { createDelegateWaits } from "./delegate-waits";
 import type { DelegateResult } from "./delegation-actions";
 import type { createDelegationMcp } from "./delegation-mcp";

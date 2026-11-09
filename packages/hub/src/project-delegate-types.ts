@@ -54,7 +54,7 @@ import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia } from "elysia";
-import type { DelegateTypesShape } from "./delegate-types";
+import type { DelegateTypesShape } from "./db/delegate-types";
 import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
 import { startingSetOfLines } from "./project-starting-set";
 import { listOf, scalarOf } from "./task-file";
