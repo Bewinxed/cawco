@@ -23,7 +23,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import type { DelegateTypesShape } from "../delegate-types";
+import type { DelegateTypesShape } from "./delegate-types";
 import {
   artifacts,
   cardSettlings,
