@@ -15,10 +15,10 @@
  * stylesheet) and fonts.
  */
 import { dirname, join, normalize } from "node:path";
-import { agentReact } from "@cawco/core/agent-react";
 import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
+import { agentReact } from "./agent-react";
 import { HOST_PLUGINS } from "./canvas-host-plugins";
 import { hostFiles, writeHostFiles } from "./host-build";
 import { compileSheets, pageFiles } from "./page-css";
