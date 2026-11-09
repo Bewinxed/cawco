@@ -161,16 +161,24 @@
       localStorage — which the server cannot read. It is mirrored into a cookie
       so SSR usually gets it right, but a browser that has a width and no cookie
       (the migration case, and every fresh profile that has resized once) painted
-      the default and snapped on hydration. Six lines here, before the body, and
+      the default and snapped on hydration. A few lines here, before the body, and
       the first paint is already the stored width: `--rail-w` is what the rail's
       `--sidebar-width` resolves to, with the server's cookie value as the
-      fallback. Shell.svelte owns the property from hydration onward.
+      fallback. Shell.svelte owns the property from hydration onward. Its key
+      and bounds are platform/prefs.ts's RAIL_PREF, RAIL_MIN and RAIL_MAX,
+      written in by hooks.server.ts (RAIL_PREPAINT), each inside its quotes.
     -->
     <script>
       "use strict";
       try {
-        const w = Number.parseInt(localStorage.getItem("cawco-rail-width"), 10);
-        if (w >= 216 && w <= 520) {
+        const w = Number.parseInt(
+          localStorage.getItem("%cawco.rail-pref%"),
+          10
+        );
+        if (
+          w >= Number("%cawco.rail-min%") &&
+          w <= Number("%cawco.rail-max%")
+        ) {
           document.documentElement.style.setProperty("--rail-w", `${w}px`);
         }
       } catch {
