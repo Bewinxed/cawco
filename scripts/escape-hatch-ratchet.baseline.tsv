@@ -53,6 +53,7 @@ as-unknown-as	ArtifactSummary	apps/dashboard/src/lib/cawco/transcript/block-fixt
 as-unknown-as	AskRecord	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
 as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
 as-unknown-as	Buffer	packages/agent/src/browser/relay.ts	1
+as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
 as-unknown-as	CanvasOnPage	packages/agent/src/stage-render.ts	1
 as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/decides/preview/SetupFixture.svelte	1
 as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/project/caw-lead.fixture.ts	1
