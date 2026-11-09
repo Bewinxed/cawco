@@ -1,6 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
-  import { hubRequest } from "@cawco/core/hub-request";
+  import type { Treaty } from "@elysia/eden";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
@@ -9,12 +9,8 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconPhone } from "#lib/icons.js";
-  import {
-    failureClause,
-    hubFetch,
-    hubJson,
-    hubRefusal,
-  } from "#lib/platform/hub-read.js";
+  import { hub } from "#lib/platform/hub.js";
+  import { failureClause, hubRefusal } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
 
@@ -24,21 +20,10 @@
    */
   const section = sectionOf("phone");
 
-  interface Device {
-    id: string;
-    lastError: string | null;
-    lastSentAt: number | null;
-    name: string;
-    platform: string;
-    quiet: boolean;
-    registeredAt: number;
-  }
-  interface Outcome {
-    name: string;
-    pruned: boolean;
-    reason: string | null;
-    status: number;
-  }
+  /** A device as the hub lists it (`GET /api/push`). */
+  type Device = Treaty.Data<typeof hub.api.push.get>["devices"][number];
+  /** One device a test reached (`POST /api/push/test`). */
+  type Outcome = Treaty.Data<typeof hub.api.push.test.post>["outcomes"][number];
 
   let devices = $state<Device[]>([]);
   let loaded = $state(false);
@@ -50,9 +35,11 @@
 
   async function read() {
     try {
-      ({ devices } = await hubJson<{ devices: Device[] }>(
-        hubRequest("GET /api/push")
-      ));
+      const answer = await hub.api.push.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      ({ devices } = answer.data);
       loaded = true;
     } catch (error) {
       readError = `Could not read the push settings — ${failureClause(error)}.`;
@@ -63,40 +50,33 @@
     testing = true;
     deviceError = null;
     outcomes = [];
-    const response = await hubFetch(hubRequest("POST /api/push/test"));
-    if (response.ok) {
-      ({ outcomes } = (await response.json()) as { outcomes: Outcome[] });
-      await read();
+    const answer = await hub.api.push.test.post();
+    if (answer.error) {
+      deviceError = hubRefusal(answer).message;
     } else {
-      deviceError = (await hubRefusal(response)).message;
+      ({ outcomes } = answer.data);
+      await read();
     }
     testing = false;
   }
 
   async function setQuiet(device: Device, quiet: boolean) {
     deviceError = null;
-    const response = await hubFetch(
-      hubRequest("PUT /api/push/devices/:id", {
-        path: { id: device.id },
-        body: { quiet },
-      })
-    );
-    if (response.ok) {
-      device.quiet = quiet;
+    const answer = await hub.api.push.devices({ id: device.id }).put({ quiet });
+    if (answer.error) {
+      deviceError = hubRefusal(answer).message;
     } else {
-      deviceError = (await hubRefusal(response)).message;
+      device.quiet = quiet;
     }
   }
 
   async function forget(device: Device) {
     deviceError = null;
-    const response = await hubFetch(
-      hubRequest("DELETE /api/push/devices/:id", { path: { id: device.id } })
-    );
-    if (response.ok) {
-      devices = devices.filter((each) => each.id !== device.id);
+    const answer = await hub.api.push.devices({ id: device.id }).delete();
+    if (answer.error) {
+      deviceError = hubRefusal(answer).message;
     } else {
-      deviceError = (await hubRefusal(response)).message;
+      devices = devices.filter((each) => each.id !== device.id);
     }
   }
 

@@ -10,9 +10,7 @@
  * own origin there was a 502 in every embed's console.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import { browser } from "$app/env";
-import type { FleetSnapshot } from "./fleet";
 import type { HubSeam } from "./hub-seam";
 import type { ConfiguredServer } from "./mcp";
 
@@ -33,14 +31,15 @@ export function fleetMcpServers(hub: HubSeam): ConfiguredServer[] | null {
     const held = $state<Read>({ servers: null });
     read = held;
     reads.set(hub, held);
-    hub.read<FleetSnapshot>(hubRequest("GET /api/fleet")).then(
-      (snapshot) => {
-        held.servers = snapshot.config.mcp;
+    // A hub without a fleet, or a stand-in that keeps none, leaves rows on
+    // their glyphs.
+    hub.client.api.fleet.get().then(
+      (answer) => {
+        if (!answer.error) {
+          held.servers = answer.data.config.mcp;
+        }
       },
-      () => {
-        // A hub without a fleet, or a stand-in that keeps none, leaves
-        // rows on their glyphs.
-      }
+      () => undefined
     );
   }
   return read.servers;
