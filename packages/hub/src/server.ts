@@ -805,7 +805,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { SourceNote } from "./db/fleet-catalog";
-import { hashHookMaterial, MEMORY_ID } from "./db/fleet-catalog";
+import { hashHookMaterial } from "./db/fleet-catalog";
 import type {
   BoardInstanceRow,
   InstanceKind,
@@ -819,6 +819,7 @@ import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { PriorConversation, TrashKind } from "./db/schema";
+import { MEMORY_ID } from "./db/schema";
 import type { SentMessageRow } from "./db/sends";
 import { TURN_UNRECORDED } from "./db/sends";
 import type { MachineLine } from "./db/session-lines";
