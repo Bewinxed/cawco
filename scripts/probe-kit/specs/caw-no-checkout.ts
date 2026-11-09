@@ -35,7 +35,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CAW_NO_MACHINE } from "../../../packages/core/src/project-conversation";
 import type { ProjectStarter } from "../../../packages/core/src/starters";
 import {
@@ -181,10 +180,9 @@ const probe = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
-  const project = await fleet.api<{
-    id: string;
-    primaryPlaceId: string | null;
-  }>(hubRequest("POST /api/projects", { body: { name: "Private office" } }));
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({ name: "Private office" })
+  );
   kit.check(
     "Private office is made with a name alone: no checkout on any machine",
     !!project.id && project.primaryPlaceId === null,
@@ -200,11 +198,10 @@ const probe = async (kit: Kit) => {
     Date.now()
   );
   // Caw on Claude Code and the fleet's Claude model: the project's choice.
-  await fleet.api(
-    hubRequest("PATCH /api/projects/:id/caw", {
-      path: { id: project.id },
-      body: { harness: "claude", model: MODEL.claude },
-    })
+  await fleet.api((hub) =>
+    hub.api
+      .projects({ id: project.id })
+      .caw.patch({ harness: "claude", model: MODEL.claude })
   );
 
   const page = await kit.page("phoneSafari", {
@@ -288,13 +285,8 @@ const probe = async (kit: Kit) => {
   const named = await until(
     "the project's conversation named",
     async () =>
-      (
-        await fleet.api<{ instanceId: string | null }>(
-          hubRequest("GET /api/projects/:id/caw", {
-            path: { id: project.id },
-          })
-        )
-      ).instanceId,
+      (await fleet.api((hub) => hub.api.projects({ id: project.id }).caw.get()))
+        .instanceId,
     Boolean,
     90_000
   ).catch(() => null);
@@ -304,11 +296,7 @@ const probe = async (kit: Kit) => {
     .locator(`${SHEET} [data-slot="send-error"]`)
     .allTextContents();
   const where = await fleet
-    .api<{ cwd: string; machineId: string }>(
-      hubRequest("POST /api/projects/:id/caw/place", {
-        path: { id: project.id },
-      })
-    )
+    .api((hub) => hub.api.projects({ id: project.id }).caw.place.post())
     .catch(() => null);
   const session = named
     ? fleet.query<{

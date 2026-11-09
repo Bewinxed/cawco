@@ -100,7 +100,6 @@ import { existsSync } from "node:fs";
 import { appendFile, cp, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Browser, Frame, Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { traceMain } from "../frames";
@@ -555,33 +554,27 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const heavyOne = await fleet.spawn("claude", "Heavy preview", fleet.repo);
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: heavyOne },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try this page and say whether it works",
-        name: "heavy",
-        dir: folder,
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: heavyOne }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try this page and say whether it works",
+      name: "heavy",
+      dir: folder,
     })
   );
   /** Sessions showing a one-line page each: the light page (3) and the bound's places (4b, 11). */
   const lightOf = async (name: string) => {
     const id = await fleet.spawn("claude", `Light ${name}`, fleet.repo);
-    await fleet.api(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id },
-        body: {
-          kind: "page",
-          does: "judge",
-          title: "Probe judge artifact",
-          ask: "Judge this page: pin anything that reads wrong",
-          name,
-          html: pageOf(name),
-        },
+    await fleet.api((hub) =>
+      hub.api.instances({ id }).artifacts.post({
+        kind: "page",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge this page: pin anything that reads wrong",
+        name,
+        html: pageOf(name),
       })
     );
     return id;
@@ -593,33 +586,27 @@ const run = async (kit: Kit) => {
   ];
   // A page artifact the size of a real one, its choices and fields kept (12).
   const fullOne = await fleet.spawn("claude", "Full page", fleet.repo);
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: fullOne },
-      body: {
-        kind: "page",
-        does: "judge",
-        title: "Probe judge artifact",
-        ask: "Judge this page: pin anything that reads wrong",
-        name: "full",
-        html: fullPage(),
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: fullOne }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      title: "Probe judge artifact",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "full",
+      html: fullPage(),
     })
   );
   // Page artifacts that count an interval's ticks (15): one with no <head>, one with it.
   const tickOf = async (name: string, html: string) => {
     const id = await fleet.spawn("claude", `Ticks ${name}`, fleet.repo);
-    await fleet.api(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id },
-        body: {
-          kind: "page",
-          does: "judge",
-          title: "Probe judge artifact",
-          ask: "Judge this page: pin anything that reads wrong",
-          name,
-          html,
-        },
+    await fleet.api((hub) =>
+      hub.api.instances({ id }).artifacts.post({
+        kind: "page",
+        does: "judge",
+        title: "Probe judge artifact",
+        ask: "Judge this page: pin anything that reads wrong",
+        name,
+        html,
       })
     );
     return id;

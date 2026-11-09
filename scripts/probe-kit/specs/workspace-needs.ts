@@ -33,7 +33,6 @@ import { chmod, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { MachineCapability } from "../../../packages/core/src/capabilities";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import {
   workspaceNeedsDetails,
@@ -48,7 +47,14 @@ import {
   workspaceNeeds,
 } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  delegateStarted,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -195,14 +201,7 @@ const withoutGit = async (path: string, under: string): Promise<string> => {
 const reported = async (
   fleet: KitFleet
 ): Promise<MachineCapability | undefined> =>
-  (
-    await fleet.api<
-      {
-        machineCapabilities?: { items: MachineCapability[] };
-        machineId: string;
-      }[]
-    >(hubRequest("GET /api/agents"))
-  )
+  (await fleet.api((hub) => hub.api.agents.get()))
     .find((row) => row.machineId === MACHINE)
     ?.machineCapabilities?.items.find((item) => item.id === "workspace");
 
@@ -214,21 +213,19 @@ const delegate = (
   title: string
 ): Promise<string> =>
   fleet
-    .api<{ workspaceId: string }>(
-      hubRequest("POST /api/work-items", {
-        body: {
-          parentInstanceId: parent,
-          title,
-          prompt: `${title}: say ok.`,
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd,
-          lands: "none",
-        },
+    .api((hub) =>
+      hub.api["work-items"].post({
+        parentInstanceId: parent,
+        title,
+        prompt: `${title}: say ok.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd,
+        lands: "none",
       })
     )
     .then(
-      (started) => `started, workspace ${started.workspaceId}`,
+      (answer) => `started, workspace ${delegateStarted(answer).workspaceId}`,
       (error: Error) => error.message
     );
 
@@ -253,13 +250,11 @@ const legsBC = async (
       workspaceCount(fleet) === 0,
     `${refused.slice(0, 600)}; workspaces filed: ${workspaceCount(fleet)}`
   );
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Bare",
-        machineId: MACHINE,
-        cwd: home,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Bare",
+      machineId: MACHINE,
+      cwd: home,
     })
   );
   const inProject = await fleet.spawn("claude", "Bare project", home, {

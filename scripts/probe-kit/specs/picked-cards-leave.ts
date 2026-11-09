@@ -49,15 +49,11 @@ import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import type { DecisionCard } from "../../../packages/core/src/decisions";
-import {
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { machinePath } from "../../../packages/core/src/machine-path";
 import { decidesWords } from "../../../packages/core/src/words/decides";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { CardSettlingRow } from "../../../packages/hub/src/db/decides";
+import { type HubAsk, handled, said } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-picked-machine";
@@ -145,28 +141,15 @@ const run = async (kit: Kit): Promise<void> => {
     );
     const { writeFolderFile } =
       await import("../../../packages/hub/src/project-folder");
-    const call = async (request: HubRequest): Promise<Answer> => {
-      const response = await hub.handle(
-        new Request(
-          `http://127.0.0.1${request.path}`,
-          hubInit(request, { headers: { [PRESENCE_HEADER]: PRESENCE } })
-        )
+    const call = async (request: HubAsk): Promise<Answer> => {
+      const answer = await request(
+        handled((r) => hub.handle(r), { [PRESENCE_HEADER]: PRESENCE })
       );
-      const text = await response.text();
-      let json: unknown;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = undefined;
-      }
-      return { json, status: response.status, text };
+      return said(answer);
     };
     const recordOf = async (member: string): Promise<Record> => {
-      const { json, text } = await call(
-        hubRequest("GET /api/decides/members/:id/record", {
-          path: { id: member },
-          query: {},
-        })
+      const { json, text } = await call((client) =>
+        client.api.decides.members({ id: member }).record.get({ query: {} })
       );
       if (!json) {
         throw new Error(`record of ${member}: ${text}`);
@@ -177,17 +160,14 @@ const run = async (kit: Kit): Promise<void> => {
       `waiting ${record.waiting}, decided ${record.decided}, taken back ${record.takenBack}`;
 
     const { writer, advisor } = await seed(db, writeFolderFile);
-    const made = await call(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: writer },
-        body: {
-          kind: "page",
-          does: "pick",
-          name: PAGE,
-          title: "Plan the office's board",
-          ask: "Pick how the board looks and runs",
-          program: PROGRAM,
-        },
+    const made = await call((client) =>
+      client.api.instances({ id: writer }).artifacts.post({
+        kind: "page",
+        does: "pick",
+        name: PAGE,
+        title: "Plan the office's board",
+        ask: "Pick how the board looks and runs",
+        program: PROGRAM,
       })
     );
     const pageId = (made.json as { id?: string } | undefined)?.id;
@@ -220,14 +200,14 @@ const run = async (kit: Kit): Promise<void> => {
       sent("order", "advisor", advisor),
     ]);
     const send = async (entries: { [card: string]: ChoiceEntry }) => {
-      const answer = await call(
-        hubRequest("POST /api/projects/:id/decisions/:name/send", {
-          path: { id: PROJECT, name: PAGE },
-          body: {
+      const answer = await call((client) =>
+        client.api
+          .projects({ id: PROJECT })
+          .decisions({ name: PAGE })
+          .send.post({
             text: "Picked a few.",
             writes: writesOf(db.artifacts.updates(pageId), entries),
-          },
-        })
+          })
       );
       if (answer.status >= 400) {
         throw new Error(`his send (${answer.status}): ${answer.text}`);
@@ -275,16 +255,16 @@ const run = async (kit: Kit): Promise<void> => {
     );
 
     // (d) The Advisor's own session settles order.
-    const settled = await call(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/settle", {
-        path: { id: advisor, artifact: pageId },
-        body: {
+    const settled = await call((client) =>
+      client.api
+        .instances({ id: advisor })
+        .artifacts({ artifact: pageId })
+        .settle.post({
           card: "order",
           option: "a",
           why: "Everything lands in one place first.",
           sources: [],
-        },
-      })
+        })
     );
     const advisorSettled = await recordOf("advisor");
     check(
@@ -310,10 +290,8 @@ const run = async (kit: Kit): Promise<void> => {
     // (f) The page's ledger.
     const ledger = (
       (
-        await call(
-          hubRequest("GET /api/decides/pages/:artifactId", {
-            path: { artifactId: pageId },
-          })
+        await call((client) =>
+          client.api.decides.pages({ artifactId: pageId }).get()
         )
       ).json as {
         cards: {
@@ -353,7 +331,7 @@ const run = async (kit: Kit): Promise<void> => {
 const deletedPage = async (
   { check }: Kit,
   on: {
-    call: (request: HubRequest) => Promise<Answer>;
+    call: (request: HubAsk) => Promise<Answer>;
     db: HubDb;
     recordOf: (member: string) => Promise<Record>;
     sent: (card: string, route: string, instanceId: string) => CardSettlingRow;
@@ -362,17 +340,14 @@ const deletedPage = async (
   }
 ): Promise<void> => {
   const { call, db, recordOf, sent, shown, writer } = on;
-  const made = await call(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: writer },
-      body: {
-        kind: "page",
-        does: "pick",
-        name: "later",
-        title: "Plan the office's later board",
-        ask: "Pick how the later board looks",
-        program: PROGRAM,
-      },
+  const made = await call((client) =>
+    client.api.instances({ id: writer }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      name: "later",
+      title: "Plan the office's later board",
+      ask: "Pick how the later board looks",
+      program: PROGRAM,
     })
   );
   const laterId = (made.json as { id?: string } | undefined)?.id;
@@ -389,11 +364,11 @@ const deletedPage = async (
     },
   ]);
   const seeded = await recordOf("caw");
-  const removed = await call(
-    hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
-      path: { id: writer, artifact: laterId },
-      query: { by: "agent" },
-    })
+  const removed = await call((client) =>
+    client.api
+      .instances({ id: writer })
+      .artifacts({ artifact: laterId })
+      .delete(undefined, { query: { by: "agent" } })
   );
   const after = await recordOf("caw");
   check(

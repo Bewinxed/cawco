@@ -50,15 +50,14 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import {
   type PresenceSaid,
   presenceLine,
 } from "../../../packages/core/src/injected";
 import { NO_REPLY_OWED } from "../../../packages/core/src/no-reply";
-import type { PersonView } from "../../../packages/core/src/notifications";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import { atRest } from "../phone";
 
@@ -213,7 +212,7 @@ const run = async (kit: Kit): Promise<void> => {
     toolWords(door, "handoff", { target, message }, { via: "mcp" });
 
   /** The hub as it reads the person now. */
-  const person = () => fleet.api<PersonView>(hubRequest("GET /api/person"));
+  const person = () => fleet.api((hub) => hub.api.person.get());
   const chatsOf = () =>
     fleet.query<{ showing: string; active: number; session_id: string | null }>(
       "SELECT showing, active, session_id FROM presence_clients WHERE kind = 'web'"
@@ -298,13 +297,11 @@ const run = async (kit: Kit): Promise<void> => {
 
   // 15. Before any input anywhere: the person is away, and a load changes
   // nothing. Only the pointer inside the decision page's frame brings them back.
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Docked",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Docked",
+      machineId: MACHINE,
+      cwd: fleet.repo,
     })
   );
   const conversation = await fleet.spawn(
@@ -316,28 +313,22 @@ const run = async (kit: Kit): Promise<void> => {
   // His panel's start names it the project's conversation (client
   // `nameConversation`): the one the project's row names is the one his
   // panel shows (CawLead `conversation`).
-  await fleet.api(
-    hubRequest("POST /api/projects/:id/caw/conversation", {
-      path: { id: project.id },
-      body: {
-        instanceId: conversation,
-      },
+  await fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).caw.conversation.post({
+      instanceId: conversation,
     })
   );
   // Spawned with no words and none sent before leg 7: a project's
   // conversation that holds nothing is drawn as itself, never as his start
   // (CawLead `starting` holds only while a start is under way).
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: conversation },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: "Pick the colour",
-        name: DECISION_PAGE,
-        program: DECISION_PROGRAM,
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: conversation }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: "Pick the colour",
+      name: DECISION_PAGE,
+      program: DECISION_PROGRAM,
     })
   );
   const decisions = await kit.page("desk");
@@ -393,17 +384,14 @@ const run = async (kit: Kit): Promise<void> => {
   reads("1: a tab in the chat reads on", await background(chat), ON);
 
   // 2. A page in the panel beside it, the press inside its frame.
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: chat },
-      body: {
-        kind: "page",
-        does: "judge",
-        title: "Probe judge artifact",
-        ask: "Judge the page",
-        name: "beside",
-        html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Beside</title></head><body><h1>Beside</h1><input aria-label="Field"></body></html>',
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: chat }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      title: "Probe judge artifact",
+      ask: "Judge the page",
+      name: "beside",
+      html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Beside</title></head><body><h1>Beside</h1><input aria-label="Field"></body></html>',
     })
   );
   await tab.locator(PANE).first().waitFor({ timeout: 60_000 });
@@ -450,30 +438,24 @@ const run = async (kit: Kit): Promise<void> => {
     join(folder, "index.html"),
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${EMBED_WORD}</title></head><body style="min-height:100vh"><h1>${EMBED_WORD}</h1></body></html>`
   );
-  const folderPreview = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: conversation },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try the folder",
-        name: "embedded-folder",
-        dir: folder,
-      },
+  const folderPreview = await fleet.api((hub) =>
+    hub.api.instances({ id: conversation }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try the folder",
+      name: "embedded-folder",
+      dir: folder,
     })
   );
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: conversation },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: "Pick the word",
-        name: EMBED_PAGE,
-        program: EMBED_PROGRAM(folderPreview.id),
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: conversation }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: "Pick the word",
+      name: EMBED_PAGE,
+      program: EMBED_PROGRAM(folderPreview.id),
     })
   );
   const embedTab = await kit.page("desk");
@@ -571,16 +553,13 @@ const run = async (kit: Kit): Promise<void> => {
   await embedTab.close();
 
   // 18. Inside a canvas on the panel's stage, on a tab of its own.
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: other },
-      body: {
-        kind: "canvas",
-        does: "draw",
-        title: "Probe draw artifact",
-        ask: "Draw on this canvas",
-        name: "touched-canvas",
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: other }).artifacts.post({
+      kind: "canvas",
+      does: "draw",
+      title: "Probe draw artifact",
+      ask: "Draw on this canvas",
+      name: "touched-canvas",
     })
   );
   const canvasTab = await tabOn(kit, base, other);
@@ -606,11 +585,7 @@ const run = async (kit: Kit): Promise<void> => {
     true
   );
   await canvasTab.close();
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("DELETE /api/instances/:id/preview", { path: { id: other } })
-  );
+  await hubAt(fleet.base).api.instances({ id: other }).preview.delete();
 
   // 3. The window unfocused, still on screen.
   await blurWindow(tab);
@@ -767,19 +742,13 @@ const run = async (kit: Kit): Promise<void> => {
 
   // 10. The iPhone in a chat.
   const phoneBeat = (saidAt: number) =>
-    fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/presence", {
-        body: {
-          clientId: "probe-phone",
-          client: "ios",
-          sessionId: other,
-          active: true,
-          saidAt,
-        },
-      })
-    );
+    hubAt(fleet.base).api.presence.post({
+      clientId: "probe-phone",
+      client: "ios",
+      sessionId: other,
+      active: true,
+      saidAt,
+    });
   const phoneInput = () =>
     fleet.query<{ at: number }>(
       "SELECT input_at AS at FROM presence_clients WHERE client_id = 'probe-phone'"
@@ -806,19 +775,13 @@ const run = async (kit: Kit): Promise<void> => {
     await background(chat),
     ELSEWHERE
   );
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/presence", {
-      body: {
-        clientId: "probe-phone",
-        client: "ios",
-        sessionId: null,
-        active: false,
-        saidAt: Date.now(),
-      },
-    })
-  );
+  await hubAt(fleet.base).api.presence.post({
+    clientId: "probe-phone",
+    client: "ios",
+    sessionId: null,
+    active: false,
+    saidAt: Date.now(),
+  });
   await touch(tab);
 
   // 11. A message of theirs the turn left with no reply.
@@ -895,14 +858,14 @@ const run = async (kit: Kit): Promise<void> => {
 
   // 11, away.
   await say(other, `${SILENT}-away`);
-  await fleet.api(hubRequest("POST /api/person/away", { body: { on: true } }));
+  await fleet.api((hub) => hub.api.person.away.post({ on: true }));
   const owedAway = await background(other);
   check(
     "11: away, the send reads away, and owed",
     owedAway.includes(AWAY_HEAD) && owedAway.includes(OWED),
     owedAway.slice(-400)
   );
-  await fleet.api(hubRequest("POST /api/person/away", { body: { on: false } }));
+  await fleet.api((hub) => hub.api.person.away.post({ on: false }));
 };
 
 const spec: Spec = {

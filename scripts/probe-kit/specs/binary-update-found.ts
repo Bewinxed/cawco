@@ -34,7 +34,6 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE } from "../../scratch-fleet";
 import {
   checkoutSchema,
@@ -44,13 +43,6 @@ import {
   until,
 } from "../binary-install";
 import type { Spec } from "../kit";
-
-interface UpdateReport {
-  installed: boolean;
-  pulled: string;
-  skipped?: string;
-  to?: string;
-}
 
 const spec: Spec = {
   group: "Release checks",
@@ -110,18 +102,12 @@ const spec: Spec = {
       await fleet.agentUp();
 
       const machineState = async () =>
-        (
-          await fleet.api<{
-            machines: Record<
-              string,
-              { availableVersion?: string; channel: string; phase: string }
-            >;
-          }>(hubRequest("GET /api/binary-updates/machines"))
-        ).machines[MACHINE];
+        (await fleet.api((hub) => hub.api["binary-updates"].machines.get()))
+          .machines[MACHINE];
 
       // 1. N published: found, polled, nothing newer.
-      const foundN = await fleet.api<{ version: string }>(
-        hubRequest("POST /api/binary-updates/check")
+      const foundN = await fleet.api((hub) =>
+        hub.api["binary-updates"].check.post()
       );
       check(
         "N published: the check finds N",
@@ -151,8 +137,8 @@ const spec: Spec = {
 
       // 2. N+1 published: the check finds it.
       mirror.publish(next);
-      const foundNext = await fleet.api<{ version: string }>(
-        hubRequest("POST /api/binary-updates/check")
+      const foundNext = await fleet.api((hub) =>
+        hub.api["binary-updates"].check.post()
       );
       check(
         "N+1 published: the check finds N+1",
@@ -162,10 +148,10 @@ const spec: Spec = {
 
       // 3. One install on the machine, as update_machines sends it.
       const before = asked.length;
-      const report = await fleet.api<UpdateReport>(
-        hubRequest("POST /api/agents/:machineId/update", {
-          path: { machineId: MACHINE },
-          body: { version: foundNext.version, commandId: crypto.randomUUID() },
+      const report = await fleet.api((hub) =>
+        hub.api.agents({ machineId: MACHINE }).update.post({
+          version: foundNext.version,
+          commandId: crypto.randomUUID(),
         })
       );
       const archive = next.manifest.artifacts.find(

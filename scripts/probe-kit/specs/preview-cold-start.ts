@@ -46,7 +46,6 @@
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { MACHINE, type Reply } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
@@ -156,19 +155,16 @@ const previewOf = (
   path: string,
   name: string
 ) =>
-  fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: `Probe ${name}`,
-        ask: "Try this page and say whether it works",
-        name,
-        port,
-        path,
-        machine: MACHINE,
-      },
+  fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: `Probe ${name}`,
+      ask: "Try this page and say whether it works",
+      name,
+      port,
+      path,
+      machine: MACHINE,
     })
   );
 
@@ -272,21 +268,18 @@ const openHeld = async (
 ) => {
   const at = await fleet.spawn("claude", `Pick ${one.name}`, fleet.repo);
   const art = await previewOf(fleet, at, port, one.path, one.name);
-  await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: at },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: `Probe ${one.name} page`,
-        ask: "Pick one option on each card",
-        name: `pick-${one.name}`,
-        program: `root = Decisions("Pick the page", [which])
+  await fleet.api((hub) =>
+    hub.api.instances({ id: at }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: `Probe ${one.name} page`,
+      ask: "Pick one option on each card",
+      name: `pick-${one.name}`,
+      program: `root = Decisions("Pick the page", [which])
 which = Decision("which", "Which page ships?", [e, k], "Both are in the app.", [], [], false, null, "behaviour")
 e = Option("e", "${one.caption}", "Its server holds what it asks.", true, [a], "Nothing new.")
 k = Option("k", "Keep", "As it is.", false, [], "Nothing new.")
 a = Preview("${art.id}", "${one.caption}")`,
-      },
     })
   );
   const page = await kit.page("desk", { oneProcess: true });
@@ -337,22 +330,19 @@ const spec: Spec = {
     const session = await fleet.spawn("claude", "Pick a start", fleet.repo);
     const cold = await previewOf(fleet, session, port, COLD, "cold");
     const late = await previewOf(fleet, session, port, LATE, "late");
-    await fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: session },
-        body: {
-          kind: "page",
-          does: "pick",
-          title: "Probe cold starts",
-          ask: "Pick one option on each card",
-          name: "pick-start",
-          program: `root = Decisions("Pick the search", [which])
+    await fleet.api((hub) =>
+      hub.api.instances({ id: session }).artifacts.post({
+        kind: "page",
+        does: "pick",
+        title: "Probe cold starts",
+        ask: "Pick one option on each card",
+        name: "pick-start",
+        program: `root = Decisions("Pick the search", [which])
 which = Decision("which", "Which search ships?", [c, l], "Both are served by the app.", [], [], false, null, "look")
 c = Option("c", "Compiled cold", "Its modules compile as they are asked for.", true, [a], "Nothing new.")
 l = Option("l", "Started late", "Its server listens late.", false, [b], "Nothing new.")
 a = Preview("${cold.id}", "Compiled cold")
 b = Preview("${late.id}", "Started late")`,
-        },
       })
     );
     const page = await kit.page("desk", { oneProcess: true });
@@ -451,21 +441,18 @@ b = Preview("${late.id}", "Started late")`,
     // (3) A page that stays empty while it polls still says so.
     const emptySession = await fleet.spawn("claude", "Pick empty", fleet.repo);
     const empty = await previewOf(fleet, emptySession, port, EMPTY, "empty");
-    await fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: emptySession },
-        body: {
-          kind: "page",
-          does: "pick",
-          title: "Probe empty page",
-          ask: "Pick one option on each card",
-          name: "pick-empty",
-          program: `root = Decisions("Pick the page", [which])
+    await fleet.api((hub) =>
+      hub.api.instances({ id: emptySession }).artifacts.post({
+        kind: "page",
+        does: "pick",
+        title: "Probe empty page",
+        ask: "Pick one option on each card",
+        name: "pick-empty",
+        program: `root = Decisions("Pick the page", [which])
 which = Decision("which", "Which page ships?", [e, k], "Both are in the app.", [], [], false, null, "behaviour")
 e = Option("e", "Empty", "It polls and shows nothing.", true, [a], "Nothing new.")
 k = Option("k", "Keep", "As it is.", false, [], "Nothing new.")
 a = Preview("${empty.id}", "Empty page")`,
-        },
       })
     );
     const blankPage = await kit.page("desk", { oneProcess: true });

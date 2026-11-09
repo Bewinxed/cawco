@@ -25,7 +25,6 @@
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   isAlive,
   listedPid,
@@ -41,6 +40,7 @@ import {
 } from "../../scratch-fleet";
 import { declareGate } from "../gate";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-STOP-([AB])/u;
@@ -211,13 +211,11 @@ const standUp = async (kit: Kit): Promise<Omit<Legs, "sleepers">> => {
   const env = { ...process.env, HOME: home };
   const repo = join(fleet.sandbox, "code");
   await projectRepo(repo, env);
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Landing stop",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Landing stop",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", repo, {
@@ -231,17 +229,17 @@ const standUp = async (kit: Kit): Promise<Omit<Legs, "sleepers">> => {
     )[0];
   const delegate = async (tag: Tag): Promise<Delegated> => {
     await declareGate(fleet.base, project.id, GATES[tag]);
-    const item = await fleet.api<{ workItemId: string }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const item = delegateStarted(
+      await fleet.api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: parent,
           title: `Commit and land ${tag}`,
           prompt: `PROBE-STOP-${tag}: commit, then finish.`,
           harness: "claude",
           model: "claude-haiku-4-5",
           cwd: repo,
-        },
-      })
+        })
+      )
     );
     const workspace = await until(
       `${tag}'s workspace`,

@@ -2,10 +2,10 @@ import { Database } from "bun:sqlite";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { hubClient } from "../../packages/agent/src/hub-client";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
 import { renderCanvas } from "../../packages/agent/src/stage-render";
 import { readWithin } from "../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import {
   type ReleaseManifest,
   signManifest,
@@ -86,9 +86,9 @@ if (verb === "proof-stack") {
   }
   try {
     const live = await readWithin(1000, (signal) =>
-      fetchHub(fetch, "http://192.168.3.100:3456", hubRequest("GET /health"), {
-        signal,
-      })
+      hubClient("http://192.168.3.100:3456", (url, init) =>
+        fetch(url, { ...init, signal })
+      ).health.get()
     );
     switch (live.kind) {
       case "answered":

@@ -22,6 +22,13 @@ import { join as joinPath } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
+import {
+  type HubAnswer,
+  type HubClient,
+  hubClient,
+  refusalText,
+  unwrap,
+} from "../../packages/agent/src/hub-client";
 import { readWithin } from "../../packages/core/src/bounded";
 import {
   type ChoiceEntry,
@@ -29,11 +36,6 @@ import {
 } from "../../packages/core/src/choices";
 import type { BuiltInKind } from "../../packages/core/src/decides";
 import { getMeta } from "../../packages/core/src/doc-meta";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../../packages/core/src/hub-request";
 import { unhandled } from "../../packages/core/src/unhandled";
 import { type Fleet, until } from "../scratch-fleet";
 
@@ -595,22 +597,24 @@ const pageProgram = (page: SeedPage, pictures: string): string => {
 };
 
 /** A JSON request to the fleet's hub; its answer, or its refusal thrown. */
-const hub = async <T>(fleet: Fleet, request: HubRequest): Promise<T> => {
-  const { method, path } = request;
-  const read = await readWithin(60_000, async (signal) => {
-    const response = await fetchHub(fetch, fleet.base, request, { signal });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`${method} ${path}: ${response.status} ${text}`);
-    }
-    return (text ? JSON.parse(text) : null) as T;
-  });
+const hubRead = async <A extends HubAnswer>(
+  fleet: Fleet,
+  request: (hub: HubClient) => Promise<A>
+) => {
+  const read = await readWithin(60_000, (signal) =>
+    request(
+      hubClient(fleet.base, (url, init) => fetch(url, { ...init, signal }))
+    )
+  );
   switch (read.kind) {
     case "answered":
-      return read.value;
+      return unwrap(
+        read.value,
+        (refusal) => new Error(`${refusal.status} ${refusalText(refusal)}`)
+      );
     case "unanswered":
       throw new Error(
-        `${method} ${path}: the hub did not answer within ${read.after} ms (${read.reason})`
+        `the hub did not answer within ${read.after} ms (${read.reason})`
       );
     default:
       unhandled("read", read);
@@ -720,18 +724,14 @@ const publish = async (
   picks: SeedPicks,
   pictures: string
 ): Promise<string> => {
-  const made = await hub<{ id: string }>(
-    fleet,
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: writer },
-      body: {
-        kind: "page",
-        name: page.name,
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: page.ask,
-        program: pageProgram(page, pictures),
-      },
+  const made = await hubRead(fleet, (hub) =>
+    hub.api.instances({ id: writer }).artifacts.post({
+      kind: "page",
+      name: page.name,
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: page.ask,
+      program: pageProgram(page, pictures),
     })
   );
   await pickAsThePerson(fleet, writer, made.id, picks);
@@ -755,14 +755,12 @@ export async function seedDecisions(
   fleet: Fleet,
   project: { cwd: string; machineId: string; name: string }
 ): Promise<Seeded> {
-  const { id: projectId } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: project.name,
-        machineId: project.machineId,
-        cwd: project.cwd,
-        caw: false,
-      },
+  const { id: projectId } = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: project.name,
+      machineId: project.machineId,
+      cwd: project.cwd,
+      caw: false,
     })
   );
   const writers: Record<string, string> = {};
@@ -797,35 +795,29 @@ export async function seedDecisions(
     ),
   };
   // The pricing page: I'm done picking, then Make tasks, then its tasks filed.
-  await hub(
-    fleet,
-    hubRequest("POST /api/projects/:id/decisions/:name/send", {
-      path: { id: projectId, name: "pricing" },
-      body: {},
-    })
+  await hubRead(fleet, (hub) =>
+    hub.api
+      .projects({ id: projectId })
+      .decisions({ name: "pricing" })
+      .send.post({})
   );
-  await hub(
-    fleet,
-    hubRequest("POST /api/projects/:id/decisions/:name/tasks", {
-      path: { id: projectId, name: "pricing" },
-    })
+  await hubRead(fleet, (hub) =>
+    hub.api
+      .projects({ id: projectId })
+      .decisions({ name: "pricing" })
+      .tasks.post()
   );
-  const stages = await hub<{ stages: { kind: string | null; name: string }[] }>(
-    fleet,
-    hubRequest("GET /api/projects/:id/stages", { path: { id: projectId } })
+  const stages = await hubRead(fleet, (hub) =>
+    hub.api.projects({ id: projectId }).stages.get()
   );
   const done = stages.stages.find((stage) => stage.kind === "done")?.name;
   const tasks: Record<string, string> = {};
   for (const [index, task] of PRICING_TASKS.entries()) {
-    const filed = await hub<{ id: string }>(
-      fleet,
-      hubRequest("POST /api/projects/:id/tasks", {
-        path: { id: projectId },
-        body: {
-          title: task.title,
-          fields: { decided: `pricing#${task.card}` },
-          ...(index === 0 && done ? { stage: done } : {}),
-        },
+    const filed = await hubRead(fleet, (hub) =>
+      hub.api.projects({ id: projectId }).tasks.post({
+        title: task.title,
+        fields: { decided: `pricing#${task.card}` },
+        ...(index === 0 && done ? { stage: done } : {}),
       })
     );
     tasks[task.card] = filed.id;

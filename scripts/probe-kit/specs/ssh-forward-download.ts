@@ -51,7 +51,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { AuthContext } from "ssh2";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
@@ -158,9 +158,7 @@ async function run(kit: Kit): Promise<void> {
     });
     await fleet.hubUp();
     const offer = await fleet
-      .api<{ manifest?: Manifest }>(
-        hubRequest("GET /api/binary-updates/latest")
-      )
+      .api((hub) => hub.api["binary-updates"].latest.get())
       .catch((error: Error) => ({ manifest: undefined, error: error.message }));
     const target = `${process.platform}-${process.arch}`;
     const { manifest } = offer;
@@ -176,22 +174,18 @@ async function run(kit: Kit): Promise<void> {
 
     // The add, held on the machine once its key is written: the forward stands.
     writeFileSync(hold, "");
-    added = await fleet.api<SshJoinJob>(
-      hubRequest("POST /api/machines/ssh", {
-        body: {
-          target: `${USER}@127.0.0.1`,
-          port,
-        },
+    added = await fleet.api((hub) =>
+      hub.api.machines.ssh.post({
+        target: `${USER}@127.0.0.1`,
+        port,
       })
     );
     const keyFile = join(home, ".config", "cawco", "machine-key");
     const job = await until(
       "the add carrying the hub and the machine's key written",
       () =>
-        fleet.api<SshJoinJob>(
-          hubRequest("GET /api/machines/ssh/:id", {
-            path: { id: String(added?.id) },
-          })
+        fleet.api((hub) =>
+          hub.api.machines.ssh({ id: String(added?.id) }).get()
         ),
       (read) =>
         read.state !== "running" ||
@@ -260,9 +254,9 @@ console.log(JSON.stringify({ settings: settings.status, status, fetching, sha256
       past: string
     ) => {
       const url = `${hubUrl}${
-        hubRequest("GET /api/binary-updates/artifacts/:version/:archive", {
-          path: { version: manifest.version, archive: wanted.archive },
-        }).path
+        hubPath.api["binary-updates"].artifacts({ version: manifest.version })({
+          archive: wanted.archive,
+        })["~path"]
       }`;
       const partial = join(dir, `${wanted.archive}.partial`);
       rmSync(partial, { force: true });
@@ -341,12 +335,9 @@ console.log(JSON.stringify({ settings: settings.status, status, fetching, sha256
   } finally {
     rmSync(hold, { force: true });
     if (added) {
+      const { id } = added;
       await fleet
-        .api(
-          hubRequest("POST /api/machines/ssh/:id/stop", {
-            path: { id: added.id },
-          })
-        )
+        .api((hub) => hub.api.machines.ssh({ id }).stop.post())
         .catch(() => undefined);
     }
     proxy.stop();
