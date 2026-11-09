@@ -1,6 +1,6 @@
 /**
  * Holds the `font` shorthand utilities' place in Tailwind's utility order. A
- * `type-<role>` utility is the `font` shorthand (packages/hub/src/
+ * `type-<role>` utility is the `font` shorthand (packages/design-tokens/src/
  * design-tokens.ts), as are design.css's `font-inherit` and `font-mono-meta`,
  * so every utility that writes a font longhand on the same element (`num`,
  * `font-medium`, `leading-*`, `tracking-*`, `text-size-*` …) must come after

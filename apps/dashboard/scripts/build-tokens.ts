@@ -4,9 +4,9 @@
  * resolver over cawco.tokens.json (the base set) and one file per context
  * (cawco.dark, cawco.coarse, cawco.compact). Every visual value the
  * dashboard uses is defined there; app.css only imports the result. Beside
- * it, tokens.ts types the token names (design-tokens.ts `tokenTypes`).
+ * it, tokens.ts types the token names (packages/design-tokens/src/design-tokens.ts `tokenTypes`).
  *
- * The stylesheet comes from the hub's generator (packages/hub/src/
+ * The stylesheet comes from the shared generator (packages/design-tokens/src/
  * design-tokens.ts), the one every project's design/tokens.css is made
  * with. It settles the files first: a token whose CSS is a recipe
  * (`$extensions["dev.cawco"].css`) has its static `$value` computed, here
@@ -404,8 +404,11 @@ const CONTAINERS = {
   "suggestion-rows-narrow": "340px",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
-/** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */
-const SKILL_OUT = KIT_TOKENS_PATH;
+/** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens, this build's copy of KIT_TOKENS_PATH. */
+const SKILL_OUT = new URL(
+  "../../../packages/hub/skills/decision-page/kit/tokens.css",
+  import.meta.url
+).pathname;
 
 const built = await buildTokens(
   RESOLVER,
@@ -555,6 +558,7 @@ await Promise.all([
   emit(OUT, built.css),
   emit(TYPES_OUT, built.types),
   emit(SKILL_OUT, built.css),
+  emit(KIT_TOKENS_PATH, built.css),
   emit(THEME_OUT, theme.css),
   emit(SELECTION_OUT, selectionCss),
 ]);
