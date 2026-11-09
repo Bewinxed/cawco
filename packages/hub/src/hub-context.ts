@@ -46,6 +46,7 @@ import type {
 } from "@cawco/core/harness-config";
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import type { MachineFault } from "@cawco/core/machine-names";
+import type { MachinePath } from "@cawco/core/machine-path";
 import type {
   AgentRow,
   BuildInfo,
@@ -469,6 +470,7 @@ export interface HubContext {
   linkMarketplace: (source: string) => MarketplaceLink;
   locateSession: (id: string) => Promise<Located>;
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
+  MOVE_TICK_MS: number;
   machineCredentials: ReturnType<typeof createMachineCredentials>;
   machineFault: (
     machineId: string,
@@ -493,6 +495,7 @@ export interface HubContext {
   marketplaceLinks: Map<string, MarketplaceLink>;
   /** A fleet server as a read says it: every secret as set. */
   maskedMcp: (name: string) => FleetMcpServerView | undefined;
+  mayRun: (status: string) => boolean;
   mcpReady: Promise<unknown>;
   memoryWatch: ReturnType<typeof createTurnWatch>;
   movedFrom: () => Map<string, string>;
@@ -553,6 +556,7 @@ export interface HubContext {
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
   openItems: ReturnType<typeof createOpenItems>;
+  owedCarries: Map<string, Promise<void>>;
   owedMoves: {
     get: (instanceId: string) => OwedMove | undefined;
     has: (instanceId: string) => boolean;
@@ -635,6 +639,10 @@ export interface HubContext {
   registry: RegistryShape;
   releaseOne: (send: SentMessageRow) => void;
   releaseOwed: (of: { instanceId: string } | { machineId: string }) => void;
+  reportedMachinePath: (
+    machineId: string,
+    raw: string
+  ) => MachinePath | undefined;
   reportToParent: (
     delegate: InstanceRow,
     body: string,
@@ -673,6 +681,7 @@ export interface HubContext {
     | "started"
     | "summarising"
   >;
+  SLEEP_TIMEOUT_MS: number;
   saidCompactionFolded: (
     row: { id: string },
     plan: ReturnType<DbShape["atLimit"]["compaction"]>,
@@ -822,6 +831,10 @@ export interface HubContext {
     row: { parentInstanceId?: string | null | undefined } | undefined,
     origin: NeutralOrigin
   ) => TakenUpBy | undefined;
+  takeUpOwedMove: (
+    instanceId: string,
+    carry?: "limit" | "signin"
+  ) => Promise<void> | undefined;
   taskAccounts: (
     projectId: string | null | undefined,
     taskId: string | null | undefined
