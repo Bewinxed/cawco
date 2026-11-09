@@ -7,13 +7,8 @@
 
 import type { CawPoseId, FleetDecides, Hear } from "@cawco/core/decides";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import { hub } from "#lib/platform/hub.js";
-import {
-  hubData,
-  hubJson,
-  refusedOrUnreached,
-} from "#lib/platform/hub-read.js";
+import { hubData, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** A harness on an online machine, with its models (hub `HarnessOffer`). */
 interface HarnessOffer {
@@ -132,10 +127,9 @@ export const readRecord = (
   id: string,
   projectId: string | null = null
 ): Promise<MemberRecord> =>
-  hubJson(
-    hubRequest("GET /api/decides/members/:id/record", {
-      path: { id },
-      ...(projectId === null ? {} : { query: { project: projectId } }),
+  hubData(
+    hub.api.decides.members({ id }).record.get({
+      query: projectId === null ? {} : { project: projectId },
     }),
-    { failure: refusedOrUnreached }
+    refusedOrUnreached
   );

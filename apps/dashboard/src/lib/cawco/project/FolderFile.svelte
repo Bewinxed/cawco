@@ -17,17 +17,13 @@
    * hub's words; only the hub reads the folder.
    */
   import { deliverableKind } from "@cawco/core/deliverables";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { filesWords } from "@cawco/core/words/files";
   import Markdown from "#lib/cawco/Markdown.svelte";
   import { fileName } from "#lib/components/features/diff-language.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import {
-    failureWords,
-    hubFetch,
-    hubRefusal,
-  } from "#lib/platform/hub-read.js";
+  import { hub } from "#lib/platform/hub.js";
+  import { failureWords, hubData, hubRefusal } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { folderRawHref } from "../project-tasks";
   import PageSurface from "../side/PageSurface.svelte";
@@ -64,18 +60,11 @@
     if (media) {
       return;
     }
-    hubFetch(
-      hubRequest("GET /api/projects/:id/folder/file", {
-        path: { id: pid },
-        query: { path: at },
-      })
+    hubData(
+      hub.api.projects({ id: pid }).folder.file.get({ query: { path: at } }),
+      (refused) => hubRefusal(refused, filesWords.notReadThen(at))
     )
-      .then(async (response) => {
-        if (!response.ok) {
-          throw await hubRefusal(response, filesWords.notReadThen(at));
-        }
-        return ((await response.json()) as { content: string }).content;
-      })
+      .then((read) => read.content)
       .then(
         (text) => {
           if (at === path) {
