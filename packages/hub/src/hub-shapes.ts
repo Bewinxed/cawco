@@ -42,3 +42,16 @@ export type Located =
   | { kind: "away"; machineId: string }
   | { kind: "nowhere" }
   | { kind: "unanswered"; machines: string[] };
+
+/**
+ * What a delegate's report carries beside its body: the turn it closes, that
+ * it is a hub notice rather than a turn's end, and the delegate's
+ * one-or-two-sentence `headline` from `finish_item`.
+ */
+export interface ReportTold {
+  completion?: { resultId: string; completedAt?: string };
+  headline?: string;
+  notice?: boolean;
+  /** The folder paths its finish copied its outputs to. */
+  outputs?: string[];
+}
