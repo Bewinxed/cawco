@@ -854,7 +854,7 @@ suppression	biome-ignore lint/style/useFilenamingConvention	apps/dashboard/src/l
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/agent/src/redaction.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/hooks.ts	2
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/rules.ts	1
-suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/client.svelte.ts	6
+suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/client.svelte.ts	1
 suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/dev-debug.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/cawco/mark.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/platform/id.ts	2
