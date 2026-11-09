@@ -9,7 +9,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
  * record of its conversation, `instances.launch_dir`) may hold a folder its
  * CLI wandered into in `cwd`, so it is named by its title, else its harness
  * (`harness#id8`), and never by that folder. A routine or a design check
- * runs on no harness (work-items.ts `Parent`): it is a `session`.
+ * runs on no harness (work-item-state.ts `Parent`): it is a `session`.
  */
 export interface LabelledRow {
   cwd: string;
