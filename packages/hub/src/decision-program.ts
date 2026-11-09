@@ -69,6 +69,7 @@ import {
   split,
   tokenize,
 } from "@openuidev/lang-core";
+import { StatusRefusal } from "./refusal";
 
 process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
@@ -107,8 +108,10 @@ interface CheckedProgram {
 }
 
 /** A program that could not be kept, every reason in a sentence. */
-export class ProgramRefusal extends Error {
-  readonly status = 422 as const;
+export class ProgramRefusal extends StatusRefusal<422> {
+  constructor(message: string) {
+    super(422, message);
+  }
 }
 
 const refuse = (problems: string[]): never => {
