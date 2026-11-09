@@ -20,19 +20,6 @@ import {
 import { declared } from "@cawco/core/stored-types";
 import { z } from "zod";
 
-const MediaMeasurementShape = declared(
-  z.object({
-    at: z.number(),
-    endpoint: z.string(),
-    media: MediaPathShape,
-    socket: z.string(),
-  }),
-  "MediaMeasurement",
-  "packages/agent/src/browser/media-forwarding.ts"
-);
-export const MediaMeasurementSchema = MediaMeasurementShape;
-export type MediaMeasurementOutput = z.output<typeof MediaMeasurementShape>;
-
 const BrowserRecordShape = declared(
   z.object({
     container: z
@@ -137,3 +124,16 @@ export const FleetPlaceSetShape = declared(
   "packages/agent/src/fleet-place-set.ts"
 );
 export type FleetPlaceSetOutput = z.output<typeof FleetPlaceSetShape>;
+
+const MediaMeasurementShape = declared(
+  z.object({
+    at: z.number(),
+    endpoint: z.string(),
+    media: MediaPathShape,
+    socket: z.string(),
+  }),
+  "MediaMeasurement",
+  "packages/agent/src/browser/media-forwarding.ts"
+);
+export const MediaMeasurementSchema = MediaMeasurementShape;
+export type MediaMeasurementOutput = z.output<typeof MediaMeasurementShape>;
