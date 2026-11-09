@@ -75,16 +75,13 @@
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import { planAsked } from "./reference-things.svelte";
+  import type { SendExtras } from "./send-store";
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { asksStore } from "./stores/asks.svelte";
   import { boardStore, machineConnected } from "./stores/board.svelte";
-  import {
-    commandFault,
-    type SendExtras,
-    submitCommand,
-  } from "./stores/commands.svelte";
+  import { commandFault, submitCommand } from "./stores/commands.svelte";
   import { sendFailureNotice } from "./stores/ledger.svelte";
   import { offersStore } from "./stores/offers.svelte";
   import { plansStore } from "./stores/plans.svelte";

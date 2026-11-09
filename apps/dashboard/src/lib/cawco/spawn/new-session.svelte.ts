@@ -19,7 +19,7 @@ import type { Bounded } from "@cawco/core/bounded";
 import { KeptFormSchema } from "#lib/cawco/stored-shapes.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { page } from "$app/state";
-import type { SendExtras } from "../stores/commands.svelte";
+import type { SendExtras } from "../send-store";
 import { type ForkSource, forkSession } from "../stores/session-start.svelte";
 import { projectOfTab, tabOfPath } from "../workspace/tabs";
 
