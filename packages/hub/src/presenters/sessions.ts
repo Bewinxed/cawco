@@ -18,7 +18,8 @@ import { delegatePeekWords as peek } from "@cawco/core/words/delegates";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
-import type { DelegateResult, HandoffResult } from "../delegation-actions";
+import type { DelegateResult } from "../delegate-result";
+import type { HandoffResult } from "../delegation-actions";
 import {
   type DelegateList,
   type DelegateNode,
