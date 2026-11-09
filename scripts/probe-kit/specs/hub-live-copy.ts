@@ -17,7 +17,7 @@
  * 8 s at each at-limit look: the look asked Needs you's lane once per
  * session, and the lane read every waiting artifact again for each
  * (artifacts/lane.ts), and each of its changes scanned every owed send of
- * every machine for the limit's (server.ts `releaseLimitHeld`).
+ * every machine for the limit's (sends.ts `releaseLimitHeld`).
  *
  * The scratch fleet seeded to row counts (hub-restart-load) holds no such
  * shape, so this spec takes a real database: PROBE_HUB_DB names a copy

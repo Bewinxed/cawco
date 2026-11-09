@@ -1,7 +1,7 @@
 /**
  * An artifact's responses reach its session as one event the session reads
  * with its tools, never as the person's words (artifacts/service.ts `send`,
- * server.ts `signalResponses`). The owner's case: one question on a decision
+ * artifact-events.ts `signalResponses`). The owner's case: one question on a decision
  * page, its note edited, Send — and the busy session was queued three
  * "I changed my picks" / "I sent my picks" bubbles, the note's last Return a
  * literal `\n` in each.
