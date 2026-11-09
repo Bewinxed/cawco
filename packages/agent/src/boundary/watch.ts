@@ -155,8 +155,15 @@ const unwatchCloneOf = (procId: string): void => {
   cloneLooks.delete(procId);
 };
 
-/** Each watched macOS boundary's look (lifecycle.ts `watchCloneOf`), by its proc id. */
-export const cloneLooks = new Map<string, () => void>();
+/** Each watched macOS boundary's look ({@link watchCloneOf}), by its proc id. */
+const cloneLooks = new Map<string, () => void>();
+
+/** Every watched macOS boundary's look run now ({@link watchCloneOf}). */
+export const lookAtEveryFolder = (): void => {
+  for (const look of [...cloneLooks.values()]) {
+    look();
+  }
+};
 
 /** The look of every watched folder pending after one was found gone ({@link lookAgainEverywhere}). */
 let everywhere: ReturnType<typeof setTimeout> | undefined;
@@ -172,9 +179,7 @@ let everywhere: ReturnType<typeof setTimeout> | undefined;
 const lookAgainEverywhere = (): void => {
   clearTimeout(everywhere);
   everywhere = setTimeout(() => {
-    for (const look of [...cloneLooks.values()]) {
-      look();
-    }
+    lookAtEveryFolder();
   }, PARENT_SETTLE_MS);
   everywhere.unref();
 };
@@ -268,7 +273,10 @@ const unaskedAt = new Map<string, number>();
  * its last answer to a beat (`HeartbeatAckPayload.liveWorkspaces`); none yet
  * until it has said, and nothing closes until then.
  */
-export let hubLive: ReadonlySet<string> | undefined;
+let hubLive: ReadonlySet<string> | undefined;
+
+/** What {@link hubLive} holds now. */
+export const hubLiveNow = (): ReadonlySet<string> | undefined => hubLive;
 
 /** Takes the hub's list of workspaces with a live work item ({@link hubLive}); anything but a list is ignored. */
 export const liveWorkItems = (ids: unknown): void => {
