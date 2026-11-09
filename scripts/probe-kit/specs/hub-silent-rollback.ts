@@ -9,7 +9,7 @@
  * Each leg drives the real module in process; no fleet, so it runs inside
  * a workspace.
  *
- * (a) The trial's probe (core binary-health.ts `probeHealth`), against a
+ * (a) The trial's probe (cli binary-health.ts `probeHealth`), against a
  *     hub of the spec's own that takes the request and never answers: on a
  *     machine other than the hub's, the problem is the hub's silence
  *     (`hubSilent`), said once the trial's deadline (`byMs`) is reached, not
@@ -33,7 +33,7 @@
  *
  *   bun scripts/probe-kit/run.ts hub-silent-rollback
  */
-import { probeHealth } from "../../../packages/core/src/binary-health";
+import { probeHealth } from "../../../packages/cli/src/binary-health";
 import {
   type BinaryUpdateState,
   failedForGood,

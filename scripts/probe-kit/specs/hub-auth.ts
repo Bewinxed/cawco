@@ -701,9 +701,9 @@ const spec: Spec = {
         own.status === "online",
       `list ${fleetList.status}, own ${ownRow.status} ${ownRow.text.slice(0, 120)}, other ${otherRow.status}`
     );
-    // The CLI's own health check (core binary-health.ts), run as that machine.
+    // The CLI's own health check (cli binary-health.ts), run as that machine.
     const healthScript = `
-      import { probeHealth } from ${JSON.stringify(join(ROOT, "packages/core/src/binary-health.ts"))};
+      import { probeHealth } from ${JSON.stringify(join(ROOT, "packages/cli/src/binary-health.ts"))};
       console.log(JSON.stringify({ wrong: await probeHealth({
         installation: { hubUrl: ${JSON.stringify(fleet.base)}, role: "agent" },
         machineId: "probe-new",

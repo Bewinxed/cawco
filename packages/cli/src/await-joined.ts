@@ -8,6 +8,7 @@
  */
 import { hostname } from "node:os";
 import { hubClient, reached } from "@cawco/agent/hub-client";
+import { machineFetch } from "@cawco/agent/machine-fetch";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   INSTALL_CODE_ENV,
@@ -17,7 +18,6 @@ import {
 import { INSTALL_STEP_PREFIX, JOIN_WAIT_STEP } from "@cawco/core/join";
 import { machineId } from "@cawco/core/machine-id";
 import {
-  machineFetch,
   machineKeyPath,
   readMachineKey,
   refusalSince,
