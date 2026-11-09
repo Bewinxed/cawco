@@ -11,7 +11,7 @@ export interface Binding {
 /**
  * Told what the page bound (scene.ts `bindScene`), once it is bound: nothing listens in the
  * product. A scratch fleet's hub bundles the probe kit's listener in this
- * module's place (scripts/probe-kit/canvas-bound.ts), which shows the probe
+ * module's place (scripts/stand-ins/canvas-bound.ts), which shows the probe
  * the binding.
  */
 export const bindingMade = (_binding: Binding): void => undefined;

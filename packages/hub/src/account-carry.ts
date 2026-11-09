@@ -86,7 +86,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
 
   /**
    * Puts `rows`, all on `machineId`, on `accountId` (null: on none). A Claude
-   * session's own data lives in its account's dir (core paths.ts
+   * session's own data lives in its account's dir (core paths/claude.ts
    * `sessionConfigDir`), so each one's machine carries it there first
    * ({@link CONTROL_CARRY_SESSIONS}) and its row says the new account only
    * once the machine answers that it all is: a reader with the row reads
