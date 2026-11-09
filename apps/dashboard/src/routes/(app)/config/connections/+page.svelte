@@ -5,6 +5,7 @@
     type ConnectionService,
     type ConnectionWay,
   } from "@cawco/core/words/connections";
+  import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
   /** One way the hub signs in to a service (core `ConnectionWay`). */
   export type Way = ConnectionWay;
@@ -107,7 +108,6 @@
   } from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { offerUndo } from "#lib/cawco/config/undo.js";
-  import { send } from "#lib/cawco/project-tasks.js";
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -155,8 +155,9 @@
 
   async function read() {
     try {
-      ({ connections: rows } = await send<{ connections: ConnectionView[] }>(
-        hubRequest("GET /api/connections")
+      ({ connections: rows } = await hubJson<{ connections: ConnectionView[] }>(
+        hubRequest("GET /api/connections"),
+        { failure: refusedOrUnreached }
       ));
       loaded = true;
       readError = null;
@@ -323,14 +324,15 @@
     signing[name] = true;
     delete problems[name];
     try {
-      const { authorizationUrl } = await send<{ authorizationUrl: string }>(
+      const { authorizationUrl } = await hubJson<{ authorizationUrl: string }>(
         hubRequest("POST /api/connections/:name/sign-in", {
           path: { name },
           body: {
             origin: window.location.origin,
             ...(organization ? { organization } : {}),
           },
-        })
+        }),
+        { failure: refusedOrUnreached }
       );
       tab?.location.assign(authorizationUrl);
     } catch (error) {
@@ -380,11 +382,12 @@
     keyPending = true;
     delete problems[row.name];
     try {
-      await send<ConnectionView>(
+      await hubJson<ConnectionView>(
         hubRequest("PUT /api/connections/:name/key", {
           path: { name: row.name },
           body: { key },
-        })
+        }),
+        { failure: refusedOrUnreached }
       );
       key = "";
       keying = null;
@@ -426,11 +429,12 @@
     appPending = true;
     delete problems[row.name];
     try {
-      await send<ConnectionView>(
+      await hubJson<ConnectionView>(
         hubRequest("PUT /api/connections/:name/app", {
           path: { name: row.name },
           body: rowApp,
-        })
+        }),
+        { failure: refusedOrUnreached }
       );
       rowApp = emptyApp();
       appFor = null;
@@ -540,8 +544,9 @@
     ghProblem = null;
     const offered = typed.way;
     try {
-      gh = await send<{ signIns: GhRow[]; unread: string[] }>(
-        hubRequest("GET /api/github-sign-in/gh")
+      gh = await hubJson<{ signIns: GhRow[]; unread: string[] }>(
+        hubRequest("GET /api/github-sign-in/gh"),
+        { failure: refusedOrUnreached }
       );
     } catch (error) {
       ghProblem = words.ghUnread(failureClause(error));
@@ -564,14 +569,15 @@
     ghPending = ghKey(one);
     ghProblem = null;
     try {
-      await send<ConnectionView>(
+      await hubJson<ConnectionView>(
         hubRequest("POST /api/github-sign-in/gh", {
           body: {
             machineId: one.machineId,
             host: one.host,
             login: one.login,
           },
-        })
+        }),
+        { failure: refusedOrUnreached }
       );
       stopAdding();
     } catch (error) {
@@ -609,7 +615,7 @@
       return true;
     }
     try {
-      await send<ConnectionView>(
+      await hubJson<ConnectionView>(
         way.auth === "app"
           ? hubRequest("PUT /api/connections/:name/app", {
               path: { name },
@@ -618,7 +624,8 @@
           : hubRequest("PUT /api/connections/:name/key", {
               path: { name },
               body: { key: typedKey },
-            })
+            }),
+        { failure: refusedOrUnreached }
       );
       return true;
     } catch (error) {
@@ -650,7 +657,7 @@
     addPending = true;
     typed.problem = null;
     try {
-      await send<ConnectionView>(
+      await hubJson<ConnectionView>(
         hubRequest("POST /api/connections", {
           body: {
             name,
@@ -660,7 +667,8 @@
             url,
             auth: way.auth,
           },
-        })
+        }),
+        { failure: refusedOrUnreached }
       );
     } catch (error) {
       tab?.close();
@@ -693,10 +701,11 @@
     removing = row.name;
     delete problems[row.name];
     try {
-      const deleted = await send<Deleted>(
+      const deleted = await hubJson<Deleted>(
         hubRequest("DELETE /api/connections/:name", {
           path: { name: row.name },
-        })
+        }),
+        { failure: refusedOrUnreached }
       );
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
@@ -737,11 +746,12 @@
       : row.projects.filter((each) => each !== project);
     delete problems[row.name];
     try {
-      const next = await send<ConnectionView>(
+      const next = await hubJson<ConnectionView>(
         hubRequest("PATCH /api/connections/:name", {
           path: { name: row.name },
           body: { projects },
-        })
+        }),
+        { failure: refusedOrUnreached }
       );
       rows = rows.map((each) => (each.name === next.name ? next : each));
       choosing = next;
