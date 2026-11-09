@@ -20,7 +20,6 @@
   import { ArtifactRefused, showArtifact } from "#lib/cawco/artifact-api.js";
   import { pinNamed } from "#lib/cawco/artifact-names.svelte.js";
   import CommentChip from "#lib/cawco/CommentChip.svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
@@ -34,6 +33,7 @@
     previewsStore,
     revealPreview,
   } from "#lib/cawco/stores/previews.svelte.js";
+  import { sessionsStore } from "#lib/cawco/stores/sessions.svelte.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,
@@ -372,8 +372,10 @@
       asString(meta.toolResult),
       (meta.toolStatus ?? "pending") as ToolCallStatus,
       (server) =>
-        mcpServerHost(cawco.session(m.instanceId)?.mcp ?? null, server) ??
-        mcpServerHost(fleetMcpServers(hub), server),
+        mcpServerHost(
+          sessionsStore.session(m.instanceId)?.mcp ?? null,
+          server
+        ) ?? mcpServerHost(fleetMcpServers(hub), server),
       meta.toolDiff
     );
   }
