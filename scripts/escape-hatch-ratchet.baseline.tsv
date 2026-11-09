@@ -87,7 +87,7 @@ as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Pictures	packages/agent/src/frame-picture.ts	5
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PinPeekFrame.stories.ts	4
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	2
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
 as-unknown-as	ProjectDecisions	apps/dashboard/src/lib/cawco/decisions/DecisionsView.stories.ts	1
 as-unknown-as	ProjectRow	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
@@ -128,6 +128,7 @@ as-unknown-as	string[]	packages/agent/src/stage-host/canvas/measure.ts	1
 as-unknown-as	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	2
 as-unknown-as	typeof RTCPeerConnection	apps/dashboard/src/routes/dev/browser-panel/+page.svelte	1
 as-unknown-as	typeof WebSocket	packages/preview/src/overlay/doc-worker.ts	1
+as-unknown-as	VirtualizerHandle	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
 as-unknown-as	W[]	packages/core/src/usage/windows.ts	1
 as-unknown-as	WebSocketHandler<ListenerSocket>	packages/hub/src/preview.ts	1
 catch-drops-reason	ArrayLiteralExpression	apps/dashboard/precompress-adapter.ts	1
@@ -282,9 +283,10 @@ catch-drops-reason	Identifier	apps/dashboard/precompress-adapter.ts	3
 catch-drops-reason	Identifier	apps/dashboard/scripts/publish-build.ts	1
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/client.svelte.ts	7
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/connect/ConnectWindow.svelte	2
+catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/connect/InstallNotice.svelte	1
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/connect/installs.svelte.ts	1
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/connect/OutputSheet.svelte	1
-catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/connect/ReachStep.svelte	1
+catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/connect/ReachStep.svelte	3
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/decisions/host/Decision.svelte	2
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/decisions/host/Preview.svelte	1
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/error-report.ts	1
@@ -301,7 +303,7 @@ catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/preview/browser-strea
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/preview/PinCard.svelte	1
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/project/ProjectConversation.svelte	2
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/project/ProjectPage.svelte	1
-catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/SessionPane.svelte	2
+catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/SessionPane.svelte	3
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/side/SideSheet.svelte	1
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/spawn/parked.svelte.ts	2
 catch-drops-reason	Identifier	apps/dashboard/src/lib/cawco/transcript/canvas-room.svelte.ts	2
@@ -704,6 +706,7 @@ suppression	biome-ignore lint/complexity/noVoid	apps/dashboard/src/lib/cawco/She
 suppression	biome-ignore lint/complexity/noVoid	apps/dashboard/src/routes/dev/artifact-panel/+page.svelte	1
 suppression	biome-ignore lint/correctness/noUndeclaredVariables	apps/dashboard/serve.js	1
 suppression	biome-ignore lint/correctness/noUnusedInstantiation	packages/core/src/hooks.ts	1
+suppression	biome-ignore lint/performance/noDelete	apps/dashboard/src/lib/cawco/config/editors/DelegateTypeEditor.svelte	1
 suppression	biome-ignore lint/performance/noDelete	packages/hub/src/pending.ts	1
 suppression	biome-ignore lint/performance/noNamespaceImport	packages/hub/drizzle.config.ts	1
 suppression	biome-ignore lint/plugin/no-raw-css-values	apps/dashboard/src/design.css	5
