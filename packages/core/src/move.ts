@@ -257,17 +257,6 @@ export interface MoveRemoteAuth {
   remoteBasic?: string;
 }
 
-/**
- * The controls that are one job's steps, each naming its job as
- * `args[0].jobId`: a machine queues them per job, never behind another job's.
- */
-export const MOVE_STEPS: ReadonlySet<string> = new Set([
-  CONTROL_MOVE_PREPARE,
-  CONTROL_MOVE_SNAPSHOT,
-  CONTROL_MOVE_CLONE,
-  CONTROL_MOVE_LFS,
-]);
-
 /** A folder as a move reads it, on the source or the target. */
 export interface MoveInspection {
   /** Uncommitted files of at least {@link LARGE_FILE_BYTES} that LFS does not track yet. */
