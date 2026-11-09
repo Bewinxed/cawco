@@ -9,12 +9,12 @@
 
 import { type AvailableCommand, classifyCommand } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import type {
   SlashCommand,
   SupportedCommands,
 } from "@cawco/core/session-messages";
-import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { couldNotOrAway } from "#lib/platform/hub-read.js";
 
 /**
  * What one session answers behind `/` (NEW.md §11), from its two sources: every
@@ -144,17 +144,19 @@ export const folderCommands = async (ask: {
   machineId: string;
   model: string;
 }): Promise<AvailableCommand[]> => {
-  const answer = await hubJson<SupportedCommands>(
-    hubRequest("GET /api/agents/:machineId/commands", {
-      path: { machineId: ask.machineId },
+  const commandsAnswer = await hub.api
+    .agents({ machineId: ask.machineId })
+    .commands.get({
       query: {
         harness: ask.harness,
         cwd: ask.cwd,
         ...(ask.account ? { account: ask.account } : {}),
         ...(ask.model ? { model: ask.model } : {}),
       },
-    }),
-    { failure: couldNotOrAway(`list the commands of ${ask.cwd}`) }
-  );
+    });
+  if (commandsAnswer.error) {
+    throw couldNotOrAway(`list the commands of ${ask.cwd}`)(commandsAnswer);
+  }
+  const answer = commandsAnswer.data;
   return availableCommands({ at: 0, skills: [], ...answeredCommands(answer) });
 };
