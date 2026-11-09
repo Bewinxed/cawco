@@ -1,7 +1,7 @@
 /**
  * A harness's `/` menu as the composer draws it, from the one answer every
  * harness gives for it (core `SupportedCommands`): a started session's
- * (`supportedCommands`, client.svelte.ts `refreshCommands`) and a folder's
+ * (`supportedCommands`, stores/session-detail.svelte.ts `refreshCommands`) and a folder's
  * before any session runs there (`folderCommands`, the New Session form). The
  * two are one reading of the same harness in the same folder, so both menus
  * are built here and list the same commands.
