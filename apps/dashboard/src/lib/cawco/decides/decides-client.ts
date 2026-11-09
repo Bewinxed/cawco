@@ -5,17 +5,10 @@
  * Every refusal throws the hub's sentence (hub-read.ts `refusedOrUnreached`).
  */
 
-import type {
-  CawPoseId,
-  DecidesTable,
-  FleetDecides,
-  Hear,
-  Kind,
-  Member,
-} from "@cawco/core/decides";
-import type { DelegateType } from "@cawco/core/delegate-types";
+import type { CawPoseId, FleetDecides, Hear } from "@cawco/core/decides";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import { hubRequest } from "@cawco/core/hub-request";
+import { hub } from "#lib/platform/hub.js";
 import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** A harness on an online machine, with its models (hub `HarnessOffer`). */
@@ -33,47 +26,54 @@ export interface FleetOffer extends FleetDecides {
   skills: { id: string; note: string }[];
 }
 
-/** A project's table as the hub reads it, and the file it reads it from. */
-export interface ProjectDecides {
-  decides: DecidesTable;
-  file: string;
-}
+export const readFleet = async () => {
+  const answer = await hub.api.decides.get();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
-export const readFleet = (): Promise<FleetOffer> =>
-  hubJson(hubRequest("GET /api/decides"), { failure: refusedOrUnreached });
-
-export const readProject = (id: string): Promise<ProjectDecides> =>
-  hubJson(hubRequest("GET /api/projects/:id/decides", { path: { id } }), {
-    failure: refusedOrUnreached,
-  });
+export const readProject = async (id: string) => {
+  const answer = await hub.api.projects({ id }).decides.get();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** The fleet's delegate types: what an agent member runs on. */
-export const readTypes = (): Promise<{ types: DelegateType[] }> =>
-  hubJson(hubRequest("GET /api/delegate-types"), {
-    failure: refusedOrUnreached,
-  });
+export const readTypes = async () => {
+  const answer = await hub.api["delegate-types"].get();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** The fleet's routes, whole; answers the fleet as the hub then holds it. */
-export const writeFleetRoutes = (
-  routes: Record<string, string>
-): Promise<FleetDecides> =>
-  hubJson(hubRequest("PUT /api/decides/routes", { body: { routes } }), {
-    failure: refusedOrUnreached,
-  });
+export const writeFleetRoutes = async (routes: Record<string, string>) => {
+  const answer = await hub.api.decides.routes.put({ routes });
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Sets `routes` over the project's own (null: back to the fleet's), as one commit saying `message`. */
-export const writeProjectRoutes = (
+export const writeProjectRoutes = async (
   id: string,
   routes: Record<string, string | null>,
   message: string
-): Promise<ProjectDecides> =>
-  hubJson(
-    hubRequest("PUT /api/projects/:id/decides", {
-      path: { id },
-      body: { routes, message },
-    }),
-    { failure: refusedOrUnreached }
-  );
+) => {
+  const answer = await hub.api
+    .projects({ id })
+    .decides.put({ routes, message });
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** An agent member's Runs on and Knows: its fleet delegate type. */
 export interface AgentBody {
@@ -86,86 +86,95 @@ export interface AgentBody {
 }
 
 /** Adds an agent member and its delegate type; answers the member as the hub holds it. */
-export const addMember = (body: {
+export const addMember = async (body: {
   agent: AgentBody;
   hear: Hear;
   hue: number;
   job: string;
   name: string;
-}): Promise<Member> =>
-  hubJson(hubRequest("POST /api/decides/members", { body }), {
-    failure: refusedOrUnreached,
-  });
+}) => {
+  const answer = await hub.api.decides.members.post(body);
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Saves an agent member's settings (the built-ins' too: their type and how he hears). */
-export const saveMember = (
+export const saveMember = async (
   id: string,
   body: { agent: AgentBody; hear: Hear; hue?: number; job?: string }
-): Promise<Member> =>
-  hubJson(hubRequest("PUT /api/decides/members/:id", { path: { id }, body }), {
-    failure: refusedOrUnreached,
-  });
+) => {
+  const answer = await hub.api.decides.members({ id }).put(body);
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** A flock member's pose, or an added member's identity hue. */
-export const setPicture = (
+export const setPicture = async (
   id: string,
   picture: { pose: CawPoseId } | { hue: number }
-): Promise<Member> =>
-  hubJson(
-    hubRequest("PUT /api/decides/members/:id/picture", {
-      path: { id },
-      body: picture,
-    }),
-    { failure: refusedOrUnreached }
-  );
+) => {
+  const answer = await hub.api.decides.members({ id }).picture.put(picture);
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Removes a member he added: its kinds come back to him, in the fleet and every project file naming it. */
-export const removeMember = (
-  id: string
-): Promise<{ kindsReturned: string[]; projectsRewritten: string[] }> =>
-  hubJson(hubRequest("DELETE /api/decides/members/:id", { path: { id } }), {
-    failure: refusedOrUnreached,
-  });
+export const removeMember = async (id: string) => {
+  const answer = await hub.api.decides.members({ id }).delete();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Adds a kind of choice, decided by `to` across the fleet; answers the kind as the hub holds it. */
-export const addKind = (body: {
+export const addKind = async (body: {
   example: string;
   name: string;
   to: string;
-}): Promise<Kind> =>
-  hubJson(hubRequest("POST /api/decides/kinds", { body }), {
-    failure: refusedOrUnreached,
-  });
+}) => {
+  const answer = await hub.api.decides.kinds.post(body);
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Renames a kind in place, a built-in's too. */
-export const renameKind = (
+export const renameKind = async (
   id: string,
   body: { example: string; name: string }
-): Promise<Kind> =>
-  hubJson(hubRequest("PUT /api/decides/kinds/:id", { path: { id }, body }), {
-    failure: refusedOrUnreached,
-  });
+) => {
+  const answer = await hub.api.decides.kinds({ id }).put(body);
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Removes a kind he added; its open cards, on every page, move to `moveTo`. */
-export const removeKind = (
-  id: string,
-  moveTo: string
-): Promise<{ moved: number; projects: string[] }> =>
-  hubJson(
-    hubRequest("DELETE /api/decides/kinds/:id", {
-      path: { id },
-      body: { moveTo },
-    }),
-    { failure: refusedOrUnreached }
-  );
+export const removeKind = async (id: string, moveTo: string) => {
+  const answer = await hub.api.decides.kinds({ id }).delete({ moveTo });
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** The open decision cards filed under a kind, and the projects they wait in, by id. */
-export const readWaiting = (
-  id: string
-): Promise<{ count: number; projects: string[] }> =>
-  hubJson(hubRequest("GET /api/decides/kinds/:id/waiting", { path: { id } }), {
-    failure: refusedOrUnreached,
-  });
+export const readWaiting = async (id: string) => {
+  const answer = await hub.api.decides.kinds({ id }).waiting.get();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** A member's record (hub `GET /api/decides/members/:id/record`): what it decided, and what waits on it now. */
 export interface MemberRecord {
