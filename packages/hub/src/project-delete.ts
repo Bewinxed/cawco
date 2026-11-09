@@ -58,6 +58,7 @@ import {
   recordedPlaces,
   trashedProject,
 } from "./project-trash";
+import { StatusRefusal } from "./refusal";
 
 /** What a delete removed on one machine, by kind. */
 export interface MachineRemoved {
@@ -85,17 +86,7 @@ export interface ProjectDeleted {
 }
 
 /** A delete the hub turns down: its status, and the words the caller reads. */
-export class DeleteRefusal extends Error {
-  readonly status: 404 | 409 | 502;
-  constructor(
-    status: 404 | 409 | 502,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = status;
-  }
-}
+export class DeleteRefusal extends StatusRefusal<404 | 409 | 502> {}
 
 /** A machine kept a workspace's clone: its agent predates deleting one (`held`), so it is updated first. */
 class AgentTooOld extends Error {
