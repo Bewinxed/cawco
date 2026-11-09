@@ -175,7 +175,7 @@ import { artifactWords } from "../../../packages/core/src/words/artifacts";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { CREATE_SHAPE } from "../../../packages/hub/src/artifacts/component";
-import type { PromotedFile } from "../../../packages/hub/src/artifacts/service";
+import type { PromotedFile } from "../../../packages/hub/src/artifacts/shapes";
 import type { ArtifactTool } from "../../../packages/hub/src/artifacts/tools";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
