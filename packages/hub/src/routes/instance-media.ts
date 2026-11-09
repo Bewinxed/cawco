@@ -64,9 +64,7 @@ export const instanceMediaRoutes = ({
               t.Literal("high"),
             ])
           ),
-          provider: t.Optional(
-            t.Union(IMAGE_PROVIDERS.map((id) => t.Literal(id)))
-          ),
+          provider: t.Optional(t.UnionEnum(IMAGE_PROVIDERS)),
           model: t.Optional(t.String()),
         }),
       },
