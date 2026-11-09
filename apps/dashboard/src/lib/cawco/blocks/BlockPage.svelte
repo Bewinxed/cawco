@@ -58,11 +58,11 @@
   import { blocksWords as words } from "@cawco/core/words/blocks";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconChevronDown, IconEye, IconLayers } from "#lib/icons.js";
+  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import type { ProjectBlocks } from "./arrangement.svelte";
   import Block from "./Block.svelte";
   import { BlockDragState, watchDrops } from "./block-dnd.svelte";

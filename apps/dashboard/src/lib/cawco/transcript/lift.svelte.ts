@@ -20,10 +20,10 @@
  */
 import { untrack } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+import { departBox } from "#lib/platform/motion/share.svelte.js";
 import { cawco, commandRecord } from "../client.svelte";
 import { readAs } from "../find/mention.svelte";
-import { CURVE, dur, motionOk } from "../motion/curves.svelte";
-import { departBox } from "../motion/share.svelte";
 import type { Message } from "../types";
 import type { ComposerDraft } from "./composer-draft.svelte";
 

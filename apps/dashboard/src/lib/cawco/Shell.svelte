@@ -18,17 +18,6 @@
   import { onMount, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
-  import {
-    crossOut,
-    dur,
-    ease,
-    easeOut,
-    motionOk,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
-  import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
@@ -38,6 +27,22 @@
   import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { navSheet } from "#lib/platform/motion/clock.svelte.js";
+  import {
+    crossOut,
+    dur,
+    ease,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { hangShadow } from "#lib/platform/motion/hung-shadow.js";
+  import { landKey } from "#lib/platform/motion/keyed.svelte.js";
+  import { pageIn, pageOut, route } from "#lib/platform/motion/route.svelte.js";
+  import { hold } from "#lib/platform/page-marks.js";
+  import { keepPrefs } from "#lib/platform/prefs.js";
+  import { store, stored } from "#lib/platform/storage.js";
+  import { floor } from "#lib/platform/visible-viewport.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { fieldKeeps } from "#lib/utils/typing.js";
   import { browser, dev } from "$app/env";
@@ -62,19 +67,14 @@
   import { peekBeside } from "./home/peek.svelte";
   import { guardDrops } from "./internal-drag";
   import MachinesButton from "./MachinesButton.svelte";
-  import { hangShadow } from "./motion/hung-shadow";
-  import { landKey } from "./motion/keyed.svelte";
   import NeedsCaw from "./NeedsCaw.svelte";
   import Overlays from "./Overlays.svelte";
-  import { hold } from "./page-marks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
   import NewSessionPopover from "./spawn/NewSessionPopover.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
-  import { store, stored } from "./storage";
-  import { floor } from "./visible-viewport.svelte";
   import { composerBindings } from "./workspace/composer-dock.svelte";
   import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
@@ -1183,7 +1183,7 @@
 <!-- The tooltip provider and the lightbox, shared with an artifact's own tab. -->
 <Overlays>
   <!-- As tall as the visible area reaches, so the composer and a page's
-       footer stand on a keyboard (cawco/visible-viewport `floor`). As wide
+       footer stand on a keyboard (platform/visible-viewport `floor`). As wide
        as the window, it is the `shell` container the bar's glass takes its
        form from (BarGlass `@max-desk/shell`): the bar beside a docked rail
        is narrower than the window, so it could not be. `data-first-paint`

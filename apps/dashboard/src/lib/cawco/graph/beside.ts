@@ -6,7 +6,7 @@
  * the graph for its own layout and by the artifact panel, which puts the
  * inspector in the room where the room stands beside (PreviewPane).
  */
-import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 
 /** The divider's width (the kit handle's `w-px`): paneforge shares what is left of the group beside it between the panes (as side/Split.svelte reads it). */
 export const DIVIDER = 1;

@@ -1,4 +1,8 @@
 <script lang="ts">
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
+  import { IconClose, IconPlus } from "#lib/icons.js";
   /**
    * A task's own fields: the front matter keys its project uses (priority,
    * due, whatever an agent or you wrote there), each a key and its value, as
@@ -7,11 +11,7 @@
    * "Add field" takes a key and a value. The keys are the project's, so
    * nothing here knows them. The hub takes a key out when it is set to "".
    */
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import RowFault from "#lib/cawco/RowFault.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { IconClose, IconPlus } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   let {
     fields,

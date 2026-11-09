@@ -9,8 +9,8 @@
    */
   import { decidesWords } from "@cawco/core/words/decides";
   import type { Snippet } from "svelte";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     id,

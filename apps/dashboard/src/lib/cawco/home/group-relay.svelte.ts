@@ -8,15 +8,15 @@
  * starts; the component binds `list` and draws `drawn`.
  */
 import { flushSync } from "svelte";
-import { dur, motionOk } from "../motion/curves.svelte";
-import { inMs, ListSwap } from "../motion/list-swap.svelte";
+import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+import { inMs, ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
 import {
   boxHeights,
   driveHeights,
   onScreen,
   waitForBoxes,
-} from "../motion/relay-boxes";
-import { reflowsFrom, reread } from "../motion/rows.svelte";
+} from "#lib/platform/motion/relay-boxes.js";
+import { reflowsFrom, reread } from "#lib/platform/motion/rows.svelte.js";
 import {
   type Arrival,
   type MoreLine,

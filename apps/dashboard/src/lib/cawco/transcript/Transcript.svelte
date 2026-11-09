@@ -61,13 +61,29 @@
   } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
-  import { track } from "#lib/cawco/track.js";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
+  import {
+    type FrameObserver,
+    frameObserver,
+    frameSize,
+  } from "#lib/platform/frame-observer.js";
+  import {
+    crossIn,
+    dur,
+    ease,
+    motionOk,
+    rise,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
+  import { BLEED } from "#lib/platform/motion/rows.svelte.js";
+  import { carry, waiting } from "#lib/platform/motion/share.svelte.js";
+  import { readJson, writeJson } from "#lib/platform/storage.js";
+  import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
   import { stopWords } from "../accounts/switch.svelte";
   import {
@@ -83,18 +99,8 @@
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import { findIn } from "../find/conversation-find.svelte";
   import { markFind, rangesOf } from "../find/find-marks";
-  import {
-    type FrameObserver,
-    frameObserver,
-    frameSize,
-  } from "../frame-observer";
-  import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
-  import { scrollMotion } from "../motion/keyed.svelte";
-  import { BLEED } from "../motion/rows.svelte";
-  import { carry, waiting } from "../motion/share.svelte";
   import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
-  import { readJson, writeJson } from "../storage";
   import type { Message } from "../types";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";

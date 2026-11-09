@@ -1,7 +1,6 @@
 <script lang="ts">
   import { externalItemWords } from "@cawco/core/words/external-items";
   import { projectWords } from "@cawco/core/words/project";
-  import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
   import { flagsOf, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import { isRetry } from "#lib/cawco/tasks/retry.js";
   /**
@@ -33,6 +32,7 @@
     IconNeedsYou,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { land, waiting } from "#lib/platform/motion/share.svelte.js";
   import { dragTask } from "./board-dnd.svelte.js";
   import { actionsOf, asksOf, taskProject } from "./needs.svelte";
   import TodoCount from "./TodoCount.svelte";

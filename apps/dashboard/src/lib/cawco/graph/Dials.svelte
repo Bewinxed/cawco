@@ -28,7 +28,6 @@
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords } from "@cawco/core/words/graph";
   import { MediaQuery } from "svelte/reactivity";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
@@ -37,6 +36,7 @@
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconReset } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import ColourPicker from "./ColourPicker.svelte";
   import DialColour from "./DialColour.svelte";
   import DialNumber from "./DialNumber.svelte";

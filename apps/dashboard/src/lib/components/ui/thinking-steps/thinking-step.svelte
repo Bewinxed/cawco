@@ -34,10 +34,10 @@
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
   import { untrack } from "svelte";
-  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { restOffscreen } from "#lib/cawco/motion/rest.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { IconCheck, IconGlobe, IconSearch } from "#lib/icons.js";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
+  import { restOffscreen } from "#lib/platform/motion/rest.js";
   import { getSizeContext } from "../thinking-indicator/size-context";
 
   let {

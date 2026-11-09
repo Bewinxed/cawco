@@ -49,8 +49,6 @@
   import { commentWords } from "@cawco/core/words/comments";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { pressOutside } from "#lib/cawco/press-outside.js";
   import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
   import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
@@ -90,6 +88,8 @@
     IconRefresh,
     IconRefreshLinear,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { page } from "$app/state";
   import { ARTIFACTS, HELD, LONG, PINS } from "./records";
 

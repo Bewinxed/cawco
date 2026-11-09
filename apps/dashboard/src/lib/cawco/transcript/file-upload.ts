@@ -13,7 +13,7 @@ import {
   HubUnreachable,
   hubRefusal,
   unreachedAnswer,
-} from "../hub-read";
+} from "#lib/platform/hub-read.js";
 
 export function uploadFile(
   blob: Blob,

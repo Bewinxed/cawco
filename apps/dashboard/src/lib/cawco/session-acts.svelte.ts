@@ -15,6 +15,7 @@
  */
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { SvelteMap } from "svelte/reactivity";
+import { failureWords as messageOf } from "#lib/platform/hub-read.js";
 import {
   answeredOr,
   cawco,
@@ -23,7 +24,6 @@ import {
   renameInstance,
   stopSession,
 } from "./client.svelte";
-import { failureWords as messageOf } from "./hub-read";
 import { instanceForSession } from "./links";
 
 export interface RowFaultState {

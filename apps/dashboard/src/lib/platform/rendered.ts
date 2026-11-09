@@ -1,4 +1,4 @@
-import { frameObserver } from "#lib/cawco/frame-observer.js";
+import { frameObserver } from "#lib/platform/frame-observer.js";
 
 /**
  * Whether an element is rendered at all, and the moment that changes.

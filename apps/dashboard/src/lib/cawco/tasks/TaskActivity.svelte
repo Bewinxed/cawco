@@ -19,10 +19,7 @@
   import type { ExternalComment } from "@cawco/core/external-items";
   import { externalItemWords } from "@cawco/core/words/external-items";
   import Choice from "#lib/cawco/config/Choice.svelte";
-  import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
-  import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import {
     stageLabel,
     type TaskComment,
@@ -33,6 +30,9 @@
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronRight, IconHistory } from "#lib/icons.js";
+  import { failureWords, unreachable } from "#lib/platform/hub-read.js";
+  import { idForWords, type SentWords } from "#lib/platform/id.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import RowFault from "../RowFault.svelte";
   import Composer from "../transcript/Composer.svelte";

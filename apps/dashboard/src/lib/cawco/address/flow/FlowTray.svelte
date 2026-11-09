@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { IconChevronLeft, IconClose } from "#lib/icons.js";
   /**
    * The word address's one tray (design e791c712, §4): Family's tray,
    * one thing per state, transformed in place. Caw stands on its centre
@@ -19,12 +22,9 @@
    * its grabber, Show details above the actions, the actions full width at
    * 44px with the primary last.
    */
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconChevronLeft, IconClose } from "#lib/icons.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import Confetti from "../Confetti.svelte";
   import { arrive, depart } from "../motion";
   import TrayMeta from "../TrayMeta.svelte";

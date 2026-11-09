@@ -101,7 +101,3 @@ cycle	cawco	scripts/probe-kit/kit.ts	3
 kit-reaches-up		apps/dashboard/src/lib/components/ui/context-menu/context-menu-copy-item.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyOnAxis.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyStarts.svelte	2
-kit-reaches-up		apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte	1
-kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card-tab-frame.svelte	1
-kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte	1
-kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-outline.ts	2

@@ -85,7 +85,7 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { Morph } from "./morph.js";
 
   let {

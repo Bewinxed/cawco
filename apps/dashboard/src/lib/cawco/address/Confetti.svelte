@@ -7,7 +7,7 @@
    * for less motion. The colours are the brand's and the marks', never a
    * status's, so nothing reads as a state.
    */
-  import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
 
   /** How many bits, and the inks they are cut from. */
   const COUNT = 28;

@@ -25,10 +25,17 @@
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import * as Resizable from "#lib/components/ui/resizable/index.js";
-  import { frameSize } from "../frame-observer";
-  import { dur, easeOut, motionOk } from "../motion/curves.svelte";
-  import { waiting as departing, land } from "../motion/share.svelte";
-  import { store, stored, unstore } from "../storage";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import {
+    waiting as departing,
+    land,
+  } from "#lib/platform/motion/share.svelte.js";
+  import { store, stored, unstore } from "#lib/platform/storage.js";
   import { setSideExpand } from "./expand";
   import { SIDE_FLOOR_PX } from "./floor";
 

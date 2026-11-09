@@ -28,9 +28,9 @@
    */
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconClose } from "#lib/icons.js";
-  import { dur, ease, motionOk } from "../motion/curves.svelte";
-  import { closeInto, land } from "../motion/share.svelte";
-  import { hold } from "../page-marks";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { closeInto, land } from "#lib/platform/motion/share.svelte.js";
+  import { hold } from "#lib/platform/page-marks.js";
   import { extensionOf } from "./extension";
   import {
     type LightboxShot,

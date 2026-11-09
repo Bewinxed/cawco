@@ -7,7 +7,7 @@
    * the button's box (motion.ts `openFrom`); the page keeps room under it.
    * The only way in on a network that can't carry the word.
    */
-  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import type { Source } from "../motion";
   import DevicesList from "../preview/DevicesList.svelte";
   import SettingsRow from "../preview/SettingsRow.svelte";

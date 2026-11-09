@@ -20,7 +20,6 @@
     saveMcpServer,
     syncFleet,
   } from "#lib/cawco/fleet.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
@@ -33,6 +32,7 @@
     IconRefresh,
     IconToolMcp,
   } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
 
   /**
    * The MCP servers every supported harness can reach. New sessions pick

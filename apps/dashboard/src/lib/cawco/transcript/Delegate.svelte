@@ -16,6 +16,9 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconChevronRight, IconExternal } from "#lib/icons.js";
+  import { tickingClock } from "#lib/platform/motion/clock.svelte.js";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatDuration } from "#lib/utils/time.js";
   import {
     cawco,
@@ -28,9 +31,6 @@
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
-  import { tickingClock } from "../motion/clock.svelte.js";
-  import { dur, easeOut } from "../motion/curves.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import {
     sessionAnswer,
     sessionPlace,

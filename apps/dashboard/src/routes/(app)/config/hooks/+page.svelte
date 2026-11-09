@@ -14,10 +14,10 @@
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
   import { draftOf, type FleetHook, saveHook } from "#lib/cawco/hooks.js";
-  import { newId } from "#lib/cawco/id.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";
+  import { newId } from "#lib/platform/id.js";
 
   /**
    * The hooks, each read as the sentence it is — a matcher's meaning is easy

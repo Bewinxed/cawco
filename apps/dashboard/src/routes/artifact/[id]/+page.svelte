@@ -9,8 +9,6 @@
   import { MediaQuery } from "svelte/reactivity";
   import { findArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -20,6 +18,8 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { IconAlert } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { page } from "$app/state";
 
   const id = $derived(page.params.id ?? "");

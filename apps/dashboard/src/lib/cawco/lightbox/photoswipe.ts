@@ -16,7 +16,7 @@ import {
   IconClose,
   IconZoomIn,
 } from "#lib/icons.js";
-import { dur, ease, motionOk } from "../motion/curves.svelte";
+import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
 
 /** A glyph component's markup, for PhotoSwipe's `…SVG` button options. */
 function markup(glyph: Component): string {

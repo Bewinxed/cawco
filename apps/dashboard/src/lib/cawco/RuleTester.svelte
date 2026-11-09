@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { RuleDraft } from "@cawco/core/rules";
   import { ruleHits } from "@cawco/core/rules";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
 
   /**
    * The part of the editor that tells the truth. A pattern is a guess until it

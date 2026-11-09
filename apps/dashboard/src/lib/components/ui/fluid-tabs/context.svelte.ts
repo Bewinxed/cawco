@@ -7,8 +7,8 @@
  */
 import { getContext, setContext } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
+import type { FoldPose } from "#lib/platform/motion/fold-path.js";
 import type { FoldMeasure } from "./fold-memory";
-import type { FoldPose } from "./fold-path";
 import type { TabRects } from "./rects.svelte";
 
 export type TabsSize = "default" | "compact";

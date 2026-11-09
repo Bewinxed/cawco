@@ -116,9 +116,10 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { msOf } from "#lib/cawco/motion/time.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { type FoldPose, restPose } from "#lib/platform/motion/fold-path.js";
+  import { msOf } from "#lib/platform/motion/time.js";
   import { cn } from "#lib/utils.js";
   import {
     provideList,
@@ -126,7 +127,6 @@
     TabsListState,
     useTabs,
   } from "./context.svelte";
-  import { type FoldPose, restPose } from "./fold-path";
   import { lastInput } from "./last-input";
   import { TabRects } from "./rects.svelte";
 

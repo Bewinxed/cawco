@@ -1,4 +1,4 @@
-import { dur } from "#lib/cawco/motion/curves.svelte.js";
+import { dur } from "#lib/platform/motion/curves.svelte.js";
 
 /** Use this hook to copy text to the clipboard and show a copied state. The
  * state holds for --dur-hold (app.css), then clears.

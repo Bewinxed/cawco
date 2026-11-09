@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconNeedsYou } from "#lib/icons.js";
   /**
    * Needs you, the project page's filter: a bare control, its mark in the
    * attention glyph's spark and its count in the attention ink, never a
@@ -11,8 +12,7 @@
    * the views' bar draws it beside its pill (ViewBar), at the bar's control
    * height. The page leaves it out while nothing needs you.
    */
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { IconNeedsYou } from "#lib/icons.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
   import { cn } from "#lib/utils.js";
 
   let {

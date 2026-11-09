@@ -63,21 +63,6 @@
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
-  import {
-    failureClause,
-    failureSentence,
-    type HubRead,
-    failureWords as message,
-    unreachable,
-  } from "#lib/cawco/hub-read.js";
-  import {
-    crossOut,
-    dur,
-    reveal,
-    revealOut,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
-  import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
@@ -118,7 +103,6 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
-  import { store, stored } from "#lib/cawco/storage.js";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
@@ -145,7 +129,6 @@
     pickTask,
     selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
-  import { track } from "#lib/cawco/track.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -191,6 +174,23 @@
     IconSparkles,
     IconToolTodo,
   } from "#lib/icons.js";
+  import {
+    failureClause,
+    failureSentence,
+    type HubRead,
+    failureWords as message,
+    unreachable,
+  } from "#lib/platform/hub-read.js";
+  import {
+    crossOut,
+    dur,
+    reveal,
+    revealOut,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
+  import { depart } from "#lib/platform/motion/share.svelte.js";
+  import { store, stored } from "#lib/platform/storage.js";
+  import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";

@@ -20,7 +20,12 @@ import type {
   WaitingAnswer,
 } from "@cawco/core/find";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import { hubFetch, hubSaid, unreachable, unreachedAnswer } from "../hub-read";
+import {
+  hubFetch,
+  hubSaid,
+  unreachable,
+  unreachedAnswer,
+} from "#lib/platform/hub-read.js";
 
 export type {
   FindAnswer,

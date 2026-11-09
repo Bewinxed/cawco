@@ -49,7 +49,6 @@
   import { commentWords as said } from "@cawco/core/words/comments";
   import { commonWords } from "@cawco/core/words/common";
   import { type Snippet, tick, untrack } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
     BarGlass,
     BarItem,
@@ -70,11 +69,12 @@
     IconSuccessLinear,
     IconTrashLinear,
   } from "#lib/icons.js";
+  import { copyRefused, copyToClipboard } from "#lib/platform/copy.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import type { SendExtras } from "../client.svelte";
-  import { copyRefused, copyToClipboard } from "../copy";
   import MessageBody from "../MessageBody.svelte";
   import { markdownFleetHere, plainReferenceOf } from "../markdown-fleet";
   import RowFault from "../RowFault.svelte";

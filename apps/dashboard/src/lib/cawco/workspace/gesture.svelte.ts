@@ -34,8 +34,12 @@
  */
 
 import { flushSync } from "svelte";
-import { frameObserver } from "#lib/cawco/frame-observer.js";
-import { integrate, spring as play, type Sample } from "../motion/spring";
+import { frameObserver } from "#lib/platform/frame-observer.js";
+import {
+  integrate,
+  spring as play,
+  type Sample,
+} from "#lib/platform/motion/spring.js";
 import { catchSettle, gatherParked, type Parked, settleAt } from "./parked";
 import { workspace } from "./workspace.svelte";
 

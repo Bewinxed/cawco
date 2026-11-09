@@ -112,7 +112,7 @@ import type { TransitionConfig } from "svelte/transition";
 import {
   type FrameObserver,
   frameObserver,
-} from "#lib/cawco/frame-observer.js";
+} from "#lib/platform/frame-observer.js";
 import {
   CURVE,
   dur,

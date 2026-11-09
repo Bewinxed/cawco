@@ -12,12 +12,12 @@
    * draws (`line`); the nesting, the fold and the older box are here.
    */
   import type { Snippet } from "svelte";
-  import type { BoardRow } from "../client.svelte";
   import {
     type BranchOptions,
     branch,
     nestFrom,
-  } from "../motion/branch.svelte";
+  } from "#lib/platform/motion/branch.svelte.js";
+  import type { BoardRow } from "../client.svelte";
   import OlderRows from "../OlderRows.svelte";
   import { openTrees } from "../open-trees.svelte";
   import Self from "./SessionTree.svelte";

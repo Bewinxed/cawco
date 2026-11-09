@@ -10,8 +10,6 @@
   import { spawnWords } from "@cawco/core/words/spawn";
   import { untrack } from "svelte";
   import { crossfade } from "svelte/transition";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { autowidth } from "#lib/cawco/motion/autosize.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { pressVariants } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -23,8 +21,8 @@
     IconCpuBolt as Cpu,
     IconSearch as Search,
   } from "#lib/icons.js";
-  import HarnessLogo from "../HarnessLogo.svelte";
-  import { models, rememberModel } from "../models.svelte";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { autowidth } from "#lib/platform/motion/autosize.svelte.js";
   import {
     crossIn,
     crossOut,
@@ -33,10 +31,12 @@
     lifting,
     motionOk,
     pinned,
-  } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
-  import { ListSwap } from "../motion/list-swap.svelte";
-  import Rail from "../motion/Rail.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
+  import Rail from "#lib/platform/motion/Rail.svelte";
+  import HarnessLogo from "../HarnessLogo.svelte";
+  import { models, rememberModel } from "../models.svelte";
   import { providerOf } from "../provider";
   import AccountChip, { type AccountTool } from "./AccountChip.svelte";
   import {

@@ -16,7 +16,7 @@
   import { commentWords } from "@cawco/core/words/comments";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { IconChevronLeft, IconChevronRight } from "#lib/icons.js";
-  import { rise } from "../motion/curves.svelte";
+  import { rise } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     total,
