@@ -2,7 +2,7 @@
  * What a delegate starts in its workspace and leaks, the delegate is told
  * while its item is live, and nothing is stopped (agent leak-watch.ts on a
  * workspace's boundary, boundary.ts `sandboxOf`); once its item has ended,
- * what it left running there ends (hub work-items.ts `endLeftWork`, agent
+ * what it left running there ends (hub workspaces.ts `endLeftWork`, agent
  * boundary.ts `endSessionWork`) and its parent is told of no leftover (hub
  * session-notes.ts `tellLeak`). leak-notice proves the watcher for a session's own
  * processes; this is the boundary's half. On a scratch fleet (real hub,
