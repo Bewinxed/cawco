@@ -328,7 +328,7 @@ const cutShortPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   );
   // git's local clone linked the source's object files (`--local`); the cut
   // gave each its own inode before its checkout (workspace.ts
-  // `createWorkspace`, boundary.ts `ownInodes`, on Linux and macOS alike), so
+  // `createWorkspace`, boundary/package-managers.ts `ownInodes`, on Linux and macOS alike), so
   // a cut cut short leaves no file the source's place would deny.
   const objects = join(workspace.path, ".git", "objects");
   const listed = (await Bun.$`find ${objects} -type f`.quiet().nothrow().text())

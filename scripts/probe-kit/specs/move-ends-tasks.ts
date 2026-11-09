@@ -9,11 +9,11 @@
  * leak watch told it that it had left the command behind. The carry ended
  * Claude Code's process, whose end cuts off the command it ran in its
  * workspace's boundary: the runner sends TERM to that command's process
- * group (boundary.ts, the runner's `cancel`). That command was a `timeout`,
+ * group (boundary/, the runner's `cancel`). That command was a `timeout`,
  * which runs in a group of its own (GNU timeout's `setpgid (0, 0)`, unless
  * `--foreground`), as a server started with `setsid` or a daemon's double
  * fork do, so the cut-off never reached it; only a stop of the session
- * ended that work (boundary.ts `endSessionWork`, by the session's name in
+ * ended that work (boundary/work.ts `endSessionWork`, by the session's name in
  * each process's environment).
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
@@ -77,7 +77,7 @@ const DESCRIPTION = "Sleep in the background";
 /** Anthropic's words for an organization whose subscription access is refused. */
 const ORG_REFUSED =
   "OAuth authentication is currently not allowed for this organization.";
-/** How soon after its move the delegate's background command is gone: the machine's SIGTERM, grace and SIGKILL (agent boundary.ts `WORK_GRACE_MS`), and room. */
+/** How soon after its move the delegate's background command is gone: the machine's SIGTERM, grace and SIGKILL (agent boundary/processes.ts `WORK_GRACE_MS`), and room. */
 const GONE_WAIT_MS = 30_000;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
