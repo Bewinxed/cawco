@@ -113,7 +113,7 @@ const SLEEP: Partial<Record<Tag, string[]>> = {
 /** How long a sandbox's processes get to be gone once it was ended. */
 const GONE_MS = 10_000;
 /**
- * The agent's decisions that end a boundary on purpose (boundary/
+ * The agent's decisions that end a boundary on purpose (boundary/decisions.ts
  * `BoundaryDecision`): closed quiet, an older one closed, or closed for good
  * as the workspace is archived or kept with its boundary closed.
  */
