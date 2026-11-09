@@ -27,7 +27,7 @@
  *   `callDelegationTool`).
  *
  * Kept with the relayed calls' keys (`tool_call_keys`, tool-call-keys.ts),
- * which prunes them {@link TOOL_CALL_KEY_KEPT_MS} after their answer and
+ * which prunes them `TOOL_CALL_KEY_KEPT_MS` after their answer and
  * marks those a stopped hub was running as interrupted.
  */
 import { createHash } from "node:crypto";

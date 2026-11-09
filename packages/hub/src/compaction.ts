@@ -152,8 +152,8 @@ export const createCompaction = (ctx: CompactionContext) => {
    * harness compacting it later on its own.
    *
    * Each goes `ahead` of everything the session is owed, alone: every
-   * other send waits at the hub until the compaction ends ({@link
-   * heldAtLimit}), so Claude Code never joins one into the `/compact`, and
+   * other send waits at the hub until the compaction ends
+   * (`heldAtLimit`), so Claude Code never joins one into the `/compact`, and
    * its keep-alive sends no ping meanwhile. A person's interrupt or stop of
    * either turn ends the compaction there, the conversation going on whole;
    * what waited goes then, the carry-on after what was held before it. The
@@ -622,7 +622,7 @@ export const createCompaction = (ctx: CompactionContext) => {
   };
 
   /**
-   * A compacting session folded into its continuation ({@link oneSession}):
+   * A compacting session folded into its continuation (`oneSession`):
    * its compaction (`plan`, read before) is dropped in the fold's own
    * transaction, its line with it, and nothing moves it. The continuation
    * is its move now, and its row goes with the fold; ended as a stop
