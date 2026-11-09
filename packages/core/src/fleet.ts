@@ -347,7 +347,7 @@ export interface FleetPluginPayload {
  * prompt — and its identity is the front matter's `name`, not the filename. So
  * cawco stores the file verbatim and re-models none of it.
  */
-export interface FleetAgentMeta {
+interface FleetAgentMeta {
   /** When the hub last stored it, ms epoch. */
   at: number;
   bytes: number;
