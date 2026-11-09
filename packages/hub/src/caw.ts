@@ -132,7 +132,7 @@ import type { WorkPlace } from "./work-place";
  * Where a view asked for from a page's end stands once drafted: that page,
  * at `position` in its order (null: its end).
  */
-interface ViewPlace {
+export interface ViewPlace {
   page: BlockPage;
   position: number | null;
 }
