@@ -21,6 +21,7 @@
  *   new area, what falls back to the fleet's. Its running conversation moves
  *   with an account it now starts on, as an account edit moves it.
  */
+
 import type { ProjectAtLimit } from "@cawco/core/accounts";
 import {
   AREA_NAME_LIMIT,
@@ -49,15 +50,10 @@ import {
   writeFolderFile,
   YOU,
 } from "./project-folder";
+import { StatusRefusal } from "./refusal";
 
 /** A refusal, in a sentence the person or the session reads. */
-export class AreaRefusal extends Error {
-  readonly status: 400 | 404;
-  constructor(code: 400 | 404, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+export class AreaRefusal extends StatusRefusal<400 | 404> {}
 
 /** An area as the API answers it: its row and the projects in it, oldest first. */
 export interface AreaView extends Area {

@@ -25,6 +25,7 @@
  * never taken for none: every kind is the person's until it reads, and the
  * hub says why with each card's route.
  */
+
 import {
   type DecidesReading,
   type DecidesTable,
@@ -32,16 +33,10 @@ import {
   readDecides,
 } from "@cawco/core/decides";
 import { areaFolder, FolderRefusal, readFolderFile } from "./project-folder";
+import { StatusRefusal } from "./refusal";
 
 /** A refusal of `settle`, in one sentence. */
-export class SettleRefusal extends Error {
-  readonly status: 403 | 409;
-
-  constructor(status: 403 | 409, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+export class SettleRefusal extends StatusRefusal<403 | 409> {}
 
 /** The file in the project's folder that declares its Who decides. */
 export const DECIDES_FILE = "decides.md";
