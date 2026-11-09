@@ -12,7 +12,7 @@
  *
  * On a scratch fleet (real hub, a second machine's agent and sessiond, no
  * session): the second machine's agent frozen (SIGSTOP), it is asked to
- * inspect its config (10 s deadline, server.ts `READ_TIMEOUT_MS`), and
+ * inspect its config (10 s deadline, machine-read-timeouts.ts `READ_TIMEOUT_MS`), and
  * thawed once the ask has failed, so it answers late.
  *
  * (a) The ask fails at its deadline, as a machine that did not answer.
@@ -38,7 +38,7 @@ import { delay } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const OTHER = "late-answer-other";
-/** The hub's read deadline (server.ts `READ_TIMEOUT_MS`). */
+/** The hub's read deadline (machine-read-timeouts.ts `READ_TIMEOUT_MS`). */
 const READ_DEADLINE_MS = 10_000;
 /** The hub's line for a reply nobody waits on (server.ts `logUnroutedReply`). */
 const UNROUTED = "[hub] unrouted reply";
