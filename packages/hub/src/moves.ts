@@ -68,6 +68,7 @@ import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
+import { StatusRefusal } from "./refusal";
 import { received } from "./stored-json";
 
 /** A machine a step needs is away: the job waits for its next register. */
@@ -146,17 +147,7 @@ export interface MovesDeps {
 }
 
 /** A refusal a route answers with its status. */
-export class MoveRefused extends Error {
-  readonly status: 400 | 404 | 409;
-  constructor(
-    status: 400 | 404 | 409,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = status;
-  }
-}
+export class MoveRefused extends StatusRefusal<400 | 404 | 409> {}
 
 /** Throws a {@link MoveRefused}: for a refusal where a value is wanted. */
 const refuseMove = (status: 400 | 404 | 409, message: string): never => {

@@ -16,6 +16,7 @@
  * Names are not unique: a project is known by its id, and the hub makes two
  * projects of one name as readily (`POST /api/projects`).
  */
+
 import {
   type Account,
   accountNameAmong,
@@ -26,6 +27,7 @@ import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
+import { StatusRefusal } from "./refusal";
 
 /** As long as a name `POST /api/projects` takes. */
 const PROJECT_NAME_LIMIT = 200;
@@ -54,13 +56,7 @@ export interface ProjectEdit {
 }
 
 /** A change the hub refuses, in a sentence the person reads under the field. */
-export class ProjectEditRefusal extends Error {
-  readonly status: 400 | 404;
-  constructor(status: 400 | 404, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+export class ProjectEditRefusal extends StatusRefusal<400 | 404> {}
 
 /** A name as the hub keeps it: trimmed, one line, not empty, at most 200 characters. */
 export const projectName = (raw: string): string => {
