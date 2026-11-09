@@ -216,7 +216,7 @@ const FORGE_TOKEN_ENV = [
 
 /**
  * An executor whose boundary ended unasked waits for the one the agent
- * starts again (watch.ts `restartUnasked`), which writes this executor anew (a
+ * starts again (ensure.ts `restartUnasked`), which writes this executor anew (a
  * new file, so a new inode at `$0`: `ls -di`, the same on Linux and macOS),
  * then runs through it.
  */
