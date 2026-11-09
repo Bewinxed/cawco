@@ -942,7 +942,7 @@ const accepts = (port: number): Promise<boolean> =>
 
 /**
  * Whether a preview's server is up: a socket listens on its port in its
- * boundary's network (the network's own TCP tables, boundary/
+ * boundary's network (the network's own TCP tables, boundary/sandboxes.ts
  * `listeners`), or, where boundaries share the host's network (macOS), the
  * port accepts a connection. No request reaches the app: asking it for `/`
  * had the dashboard's dev server render its home page at every look, and a
