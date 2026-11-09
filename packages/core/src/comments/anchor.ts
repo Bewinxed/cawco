@@ -28,14 +28,14 @@ export interface PageAnchor {
   /**
    * The frames it stands in, outermost first, each by its selector in its
    * parent's document; none at the top. A frame of another origin is read
-   * through its own overlay (agent preview-overlay embeds.ts), and the
+   * through its own overlay (@cawco/preview overlay embeds.ts), and the
    * selector, source, text, chain and sheet are read in the innermost frame's
    * document either way.
    */
   frames?: string[];
   /**
    * What a person calls the spot, read off the element as the page drew it
-   * (agent preview-overlay spot-name.ts: its label and what it is, "Search
+   * (@cawco/preview overlay spot-name.ts: its label and what it is, "Search
    * comments field"): the pin's name (core pin-name.ts), never a
    * component's name or its text run together.
    */
