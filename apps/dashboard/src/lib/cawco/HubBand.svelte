@@ -62,10 +62,10 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconRefresh } from "#lib/icons.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { browser } from "$app/env";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
-  import { dur } from "./motion/curves.svelte";
-  import { morph } from "./motion/morph.svelte";
   import { reloadedFor } from "./reload.svelte";
   import { newerBuild } from "./served-build.svelte";
 

@@ -55,11 +55,9 @@
   } from "#lib/cawco/fleet.js";
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import { clock } from "#lib/cawco/home/home-state.svelte.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import MachineAway from "#lib/cawco/MachineAway.svelte";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import { MachineWait } from "#lib/cawco/machine-wait.svelte.js";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import {
@@ -80,6 +78,8 @@
     IconShop,
     IconTrash,
   } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
 
   /**

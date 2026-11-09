@@ -1,6 +1,6 @@
 import { flushSync } from "svelte";
-import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
-import { store, stored } from "#lib/cawco/storage.js";
+import { motionOk } from "#lib/platform/motion/curves.svelte.js";
+import { store, stored } from "#lib/platform/storage.js";
 import { browser } from "$app/env";
 
 type Theme = "light" | "dark" | "system";

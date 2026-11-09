@@ -78,10 +78,10 @@
     IconStop as StopGlyph,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import { unfold } from "../platform/motion/fold.svelte";
+  import { glyphIn, glyphOut } from "../platform/motion/glyph";
   import { ACTIVITY_LABEL, STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { markHue, sessionSprite } from "./mark";
-  import { unfold } from "./motion/fold.svelte";
-  import { glyphIn, glyphOut } from "./motion/glyph";
   import RowFault from "./RowFault.svelte";
   import TreeLine from "./TreeLine.svelte";
   import TreeMark from "./TreeMark.svelte";

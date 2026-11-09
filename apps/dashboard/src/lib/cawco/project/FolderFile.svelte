@@ -19,12 +19,16 @@
   import { deliverableKind } from "@cawco/core/deliverables";
   import { hubRequest } from "@cawco/core/hub-request";
   import { filesWords } from "@cawco/core/words/files";
-  import { failureWords, hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { fileName } from "#lib/components/features/diff-language.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import {
+    failureWords,
+    hubFetch,
+    hubRefusal,
+  } from "#lib/platform/hub-read.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { folderRawHref } from "../project-tasks";
   import PageSurface from "../side/PageSurface.svelte";
   import SideSurface from "../side/SideSurface.svelte";

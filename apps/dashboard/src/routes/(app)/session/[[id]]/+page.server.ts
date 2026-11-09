@@ -1,11 +1,11 @@
 import { hubRequest } from "@cawco/core/hub-request";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import type { ServerTail } from "#lib/cawco/client.svelte.js";
-import { hubFailure, hubFetch, machineAway } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
 import { isSessionTab } from "#lib/cawco/workspace/tabs.js";
 import { focusedIn, type WorkspaceV1 } from "#lib/cawco/workspace/tree.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";
+import { hubFailure, hubFetch, machineAway } from "#lib/platform/hub-read.js";
 import type { PageServerLoad } from "./$types";
 
 /** Whether the hub holds an ask parked under `viewId` (`/api/pending`). */

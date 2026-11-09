@@ -11,8 +11,8 @@
  * go with the component.
  */
 import { machineLabel } from "@cawco/core/machine-names";
+import { MachineAwayError } from "#lib/platform/hub-read.js";
 import { cawco } from "./client.svelte";
-import { MachineAwayError } from "./hub-read";
 
 /**
  * How long an ask waits before it runs again when its machine is listed

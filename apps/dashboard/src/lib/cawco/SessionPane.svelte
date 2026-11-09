@@ -33,21 +33,23 @@
    * panel.
    */
   import { type Snippet, untrack } from "svelte";
+  import { presenceDocked } from "#lib/cawco/presence.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
+  import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import {
     crossIn,
     crossOut,
     crossOutWith,
     reveal,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { presenceDocked } from "#lib/cawco/presence.js";
-  import { track } from "#lib/cawco/track.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
-  import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { frameSize } from "../platform/frame-observer";
+  import { deadlineIn, failureWords } from "../platform/hub-read";
   import {
     cawco,
     clearReadFault,
@@ -81,10 +83,8 @@
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
   import { findIn } from "./find/conversation-find.svelte";
-  import { frameSize } from "./frame-observer";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
-  import { deadlineIn, failureWords } from "./hub-read";
   import { rowHref } from "./links";
   import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";

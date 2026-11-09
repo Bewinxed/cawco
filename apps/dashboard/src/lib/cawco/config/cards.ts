@@ -1,13 +1,13 @@
-import { frameObserver } from "#lib/cawco/frame-observer.js";
-import { keepPrefs, type Pref } from "../prefs";
-import { store, stored } from "../storage";
+import { frameObserver } from "#lib/platform/frame-observer.js";
+import { keepPrefs, type Pref } from "#lib/platform/prefs.js";
+import { store, stored } from "#lib/platform/storage.js";
 
 /**
  * The height each Configure page's card last settled at, by path. A cold
  * load of a Configure page shows its loading state until the fleet's
  * settings arrive; the card stands at this height meanwhile, the skeleton
  * fills it, and the rows arrive into a card that does not move. Kept in
- * localStorage, and as a pref (lib/cawco/prefs.ts), like the rail's width,
+ * localStorage, and as a pref (lib/platform/prefs.ts), like the rail's width,
  * so the server draws the first paint at that size too
  * (routes/config/+layout.server.ts).
  */

@@ -13,8 +13,8 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { frameObserver, frameSize } from "../frame-observer";
-  import { rise } from "../motion/curves.svelte";
+  import { frameObserver, frameSize } from "../../platform/frame-observer";
+  import { rise } from "../../platform/motion/curves.svelte";
 
   let {
     lift = 0,
