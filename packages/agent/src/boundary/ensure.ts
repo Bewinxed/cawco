@@ -19,7 +19,7 @@ import {
   reasonsOf,
   recordDecision,
 } from "./decisions";
-import { liveAt } from "./holding";
+import { sawHeld } from "./holding";
 import {
   keeperTakingOver,
   type Narrowed,
@@ -72,7 +72,7 @@ import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
  * is a use: the workspace's quiet time counts from it ({@link liveAt}).
  */
 export const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
-  liveAt.set(ref.id, Date.now());
+  sawHeld(ref.id, Date.now());
   const pending = startUnderWay(ref.id);
   if (pending) {
     return pending;
@@ -82,7 +82,7 @@ export const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
     return await ensure(ref);
   })().finally(() => {
     startEnded(ref.id);
-    liveAt.set(ref.id, Date.now());
+    sawHeld(ref.id, Date.now());
   });
   markStarting(ref.id, started);
   return started;

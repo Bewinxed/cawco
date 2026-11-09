@@ -30,7 +30,7 @@ import {
   attachedProcs,
   closedWhile,
   commandsNow,
-  liveAt,
+  forgetHeld,
 } from "./holding";
 import { executors, killAnswering } from "./processes";
 import { srtTmpOf } from "./runner";
@@ -281,7 +281,7 @@ export const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   if (users.left.length === 0) {
     await signalHeld((procId) => isJudgeOf(procId, ref.id));
   }
-  liveAt.delete(ref.id);
+  forgetHeld(ref.id);
   return inners;
 };
 
