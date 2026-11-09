@@ -108,7 +108,7 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
 
 /**
  * Each staleness.ts `STALE_LOOK_MS`: hands over every running boundary of an older
- * form ({@link ensureBoundary}), then closes every older boundary nothing
+ * form (arming.ts `ensureBoundary`), then closes every older boundary nothing
  * runs in any more ({@link closeIdle}), reading the processes once for all
  * of them, after the handovers. A workspace leaves the first set once its
  * boundary is handed over, current, or no longer running, and the second
@@ -238,7 +238,7 @@ const restartIfIdle = (
   });
 
 /**
- * Hands over each {@link stale} boundary that still runs. Not while this
+ * Hands over each staleness.ts `stale` boundary that still runs. Not while this
  * build's keeper is owed the machine's endpoint ({@link ownKeeperOwed}): each
  * waits for it, so its one handover lands on the keeper that stays.
  */
@@ -256,9 +256,9 @@ const handOverStale = async (unasked: UnaskedCalls): Promise<void> => {
         forgetStale(ref.id);
         continue;
       }
-      // One kept while its work runs (lifecycle.ts `replaceOlder`) is only looked
+      // One kept while its work runs (ensure.ts `replaceOlder`) is only looked
       // at, not ensured: an ensure is a use, and its quiet time must run.
-      // A narrowing meanwhile is the narrowing look's ({@link recheckNarrowed}).
+      // A narrowing meanwhile is the narrowing look's (looks.ts `recheckNarrowed`).
       const kept = keptRunningOf(ref.id);
       if (!kept) {
         await unasked.ensureAgain(ref);
@@ -275,7 +275,7 @@ const handOverStale = async (unasked: UnaskedCalls): Promise<void> => {
       // f4b526231, 2026-10-21: kept "while its work runs a command" for 60 s
       // after its listener stopped). So the gate goes up first: those past
       // it are let end, the next ones wait at it, and the ensure reads it
-      // and hands it over under the same gate (lifecycle.ts `handOverWhenIdle`).
+      // and hands it over under the same gate (ensure.ts `handOverWhenIdle`).
       // An ensure under way meanwhile, a tool call's, never waits on it.
       await behindGate(ref.id, async () => {
         const past = await commandsEnded(ref.id, held.gen);
