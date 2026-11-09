@@ -12,8 +12,10 @@
  */
 
 import {
+  dataOf,
   type HubAnswer,
   type HubClient,
+  type HubData,
   hubClient,
   hubPath,
   reached,
@@ -130,7 +132,7 @@ const askHub = <A extends HubAnswer>(
   hub: string,
   request: (client: HubClient) => Promise<A>,
   byMs: number | undefined
-): Promise<Asked<Extract<A, { error: null }>["data"]>> =>
+): Promise<Asked<HubData<A>>> =>
   askWithin(
     url,
     async (signal) => {
@@ -145,7 +147,7 @@ const askHub = <A extends HubAnswer>(
         return { status: answer.status };
       }
       return typeof answer.data === "object"
-        ? { status: answer.status, value: answer.data }
+        ? { status: answer.status, value: dataOf(answer) }
         : { status: answer.status, unread: true };
     },
     byMs

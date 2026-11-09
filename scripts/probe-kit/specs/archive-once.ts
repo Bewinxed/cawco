@@ -19,26 +19,16 @@
  *   bun scripts/probe-kit/run.ts archive-once
  */
 
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { delay } from "../../scratch-fleet";
 import { heldProxy } from "../held-proxy";
+import { type HubAsk, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 /** How long the release host's answer is held: every ask is in flight before any is answered. */
 const HOLD_MS = 5000;
 /** The asks at once: obelisk's and both VPSes'. */
 const ASKS = 3;
-
-interface Manifest {
-  artifacts: {
-    archive: string;
-    sha256: string;
-    size: number;
-    target: string;
-  }[];
-  version: string;
-}
-
 /** What one ask came back with. */
 interface Asked {
   sha256: string;
@@ -69,9 +59,7 @@ async function run(kit: Kit): Promise<void> {
     });
     await fleet.hubUp();
     const offer = await fleet
-      .api<{ manifest?: Manifest }>(
-        hubRequest("GET /api/binary-updates/latest")
-      )
+      .api((hub) => hub.api["binary-updates"].latest.get())
       .catch((error: Error) => ({ manifest: undefined, error: error.message }));
     const target = `${process.platform}-${process.arch}`;
     const artifact = offer.manifest?.artifacts.find(
@@ -85,22 +73,23 @@ async function run(kit: Kit): Promise<void> {
     if (!(artifact && offer.manifest)) {
       return;
     }
-    const archived = hubRequest(
-      "GET /api/binary-updates/artifacts/:version/:archive",
-      { path: { version: offer.manifest.version, archive: artifact.archive } }
-    );
+    const archived: HubAsk = (hub) =>
+      hub.api["binary-updates"]
+        .artifacts({ version: offer.manifest.version })({
+          archive: artifact.archive,
+        })
+        .get();
     const before = archiveBytes(proxy.carried());
     const connectsBefore = proxy.targets().length;
     proxy.hold(true);
     const asks = Array.from({ length: ASKS }, async (): Promise<Asked> => {
       // The hub answers at once: 503 while it fetches, as a machine hears it.
-      let response = await fetchHub(fetch, fleet.base, archived);
+      let response = await archived(hubAt(fleet.base));
       while (response.status === 503) {
-        await response.arrayBuffer();
         await delay(1000);
-        response = await fetchHub(fetch, fleet.base, archived);
+        response = await archived(hubAt(fleet.base));
       }
-      const bytes = new Uint8Array(await response.arrayBuffer());
+      const bytes = new Uint8Array(dataOf(response));
       return {
         status: response.status,
         size: bytes.length,

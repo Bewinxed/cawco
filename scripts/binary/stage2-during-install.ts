@@ -12,12 +12,13 @@
  * `done sent=<n> accepted=<n> sawInstalling=<bool> ...`. It ends by itself once the machine has left
  * `installing` (three answers in a row), or after 900 s.
  */
+
+import { dataOf, hubClient } from "../../packages/agent/src/hub-client";
 import {
   type Bounded,
   Gone,
   readWithin,
 } from "../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 import { unhandled } from "../../packages/core/src/unhandled";
 
 const [, , hub, machineId, prefix] = Bun.argv;
@@ -28,17 +29,15 @@ const DEADLINE = Date.now() + 900_000;
 /** The machine's update phase as the hub says it; a hub down mid-restart is unanswered "dead". */
 function phase(): Promise<Bounded<string | undefined>> {
   return readWithin(1000, async (signal) => {
-    const body = (await fetchHub(
-      fetch,
-      hub,
-      hubRequest("GET /api/binary-updates/machines"),
-      { signal }
+    const body = await hubClient(hub, (url, init) =>
+      fetch(url, { ...init, signal })
     )
-      .then((response) => response.json())
+      .api["binary-updates"].machines.get()
+      .then(dataOf)
       .catch((error: unknown) => {
         throw new Gone(`the hub: ${error}`);
-      })) as { machines?: Record<string, { phase?: string }> };
-    return body.machines?.[machineId]?.phase;
+      });
+    return body.machines[machineId]?.phase;
   });
 }
 

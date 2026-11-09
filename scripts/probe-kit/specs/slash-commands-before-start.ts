@@ -19,7 +19,6 @@
  *   bun scripts/probe-kit/run.ts slash-commands-before-start
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import { CONTROL_SUPPORTED_COMMANDS } from "../../../packages/core/src/session/controls";
 import type { SlashCommand } from "../../../packages/core/src/session-messages";
@@ -63,9 +62,8 @@ const spec: Spec = {
     await fleet.accountSignedIn();
     seedFolder(fleet.workdir);
 
-    const before = await fleet.api<SlashCommand[]>(
-      hubRequest("GET /api/agents/:machineId/commands", {
-        path: { machineId: MACHINE },
+    const before = await fleet.api((hub) =>
+      hub.api.agents({ machineId: MACHINE }).commands.get({
         query: {
           harness: "claude",
           cwd: fleet.workdir,

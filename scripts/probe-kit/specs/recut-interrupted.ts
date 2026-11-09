@@ -62,11 +62,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENT_RESTARTING } from "../../../packages/core/src/binary-updates";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { listedPid } from "../../../packages/core/src/signal";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = "PROBE-CUT-M";
@@ -639,13 +639,11 @@ const setUp = async (kit: Kit): Promise<Scene> => {
   const repoRoot = (
     await Bun.$`git rev-parse --show-toplevel`.cwd(src).quiet().text()
   ).trim();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Recut",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Recut",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {
@@ -653,21 +651,17 @@ const setUp = async (kit: Kit): Promise<Scene> => {
   });
   const credential = await fleet.sessionCredential(parent);
 
-  const started = await fleet.api<{
-    instanceId: string;
-    workItemId: string;
-    workspaceId: string;
-  }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Commit and end M",
         prompt: `${TAG}: commit a file.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: src,
-      },
-    })
+      })
+    )
   );
   const workspaceOf = () =>
     fleet.query<Workspace>(

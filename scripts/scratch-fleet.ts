@@ -36,6 +36,15 @@ import {
 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
+import {
+  dataOf,
+  type HubAnswer,
+  type HubClient,
+  type HubData,
+  hubClient,
+  reached,
+  refusalText,
+} from "../packages/agent/src/hub-client";
 import { sessionOfProc } from "../packages/agent/src/proc-id";
 import { HTTP_PROXY_VARS } from "../packages/agent/src/proxy-relay";
 import { removeTree, removeTreeSync } from "../packages/agent/src/remove-tree";
@@ -50,11 +59,6 @@ import {
   type HarnessKind,
 } from "../packages/core/src/harness/kinds";
 import { traitsOf } from "../packages/core/src/harness/traits";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../packages/core/src/hub-request";
 import { darwinUserDirs } from "../packages/core/src/paths/host-policy";
 import {
   socketPathProblem,
@@ -2516,30 +2520,40 @@ async function standUp(
       .slice(-20);
     return `Sockets on ${previewPorts} (ss -tanp, state all): ${sockets.length}\n${sockets.join("\n") || "(none)"}\nThe hub's kept preview ports: ${kept}\nThe hub's last [preview] lines: ${said.length}\n${said.join("\n") || "(none)"}`;
   };
-  /** `request` as `headers` say who sends it: the hub's JSON answer, or its refusal thrown. */
-  const answer = async <T>(
-    request: HubRequest,
+  /** What Eden's answer to `request` is, sent with `headers` within 30 s; what it says when it is not a 2xx, thrown. */
+  const answer = async <A extends HubAnswer>(
+    request: (hub: HubClient) => Promise<A>,
     headers: Record<string, string>
-  ): Promise<T> => {
-    const { path } = request;
-    const read = await readWithin(30_000, async (signal) => {
-      const response = await fetchHub(fetch, base, request, {
-        headers,
-        signal,
-      });
-      const text = await response.text();
-      if (!response.ok) {
-        const held =
-          response.status === 503 && text.includes("Every preview port")
-            ? `\n${await previewPortsHeld()}`
-            : "";
-        throw new Error(`${path}: ${response.status} ${text}${held}`);
-      }
-      return JSON.parse(text) as T;
-    });
+  ): Promise<HubData<A>> => {
+    let path = base;
+    const read = await readWithin(30_000, (signal) =>
+      request(
+        hubClient(base, (url, init) => {
+          path = url.startsWith(base) ? url.slice(base.length) : url;
+          return fetch(url, {
+            ...init,
+            headers: { ...init.headers, ...headers },
+            signal,
+          });
+        })
+      )
+    );
     switch (read.kind) {
-      case "answered":
-        return read.value;
+      case "answered": {
+        const asked = reached(read.value);
+        if (asked.error) {
+          const text = refusalText({
+            status: asked.status,
+            value: asked.error.value,
+          });
+          const held =
+            asked.status === 503 && text.includes("Every preview port")
+              ? `\n${await previewPortsHeld()}`
+              : "";
+          throw new Error(`${path}: ${asked.status} ${text}${held}`);
+        }
+        return dataOf(asked);
+      }
       case "unanswered":
         throw new Error(
           `${path}: the hub did not answer within ${read.after} ms (${read.reason})`
@@ -2548,26 +2562,43 @@ async function standUp(
         unhandled("read", read);
     }
   };
+  /**
+   * POST `path` as the person, its body sent as given, never held to the
+   * route: only for a spec that proves the hub refuses it (a 422 naming the
+   * field). What Eden cannot send: its call takes what the route types.
+   */
+  const postGiven = async (path: string, body: unknown): Promise<unknown> => {
+    const response = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { ...ownerHeaders(), "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`${path}: ${response.status} ${text}`);
+    }
+    return JSON.parse(text) as unknown;
+  };
   /** `request` as the person. */
-  const api = <T>(request: HubRequest): Promise<T> =>
-    answer<T>(request, ownerHeaders());
+  const api = <A extends HubAnswer>(request: (hub: HubClient) => Promise<A>) =>
+    answer(request, ownerHeaders());
   /**
    * `request` as session `instanceId`, with its own credential: what only a
    * session may ask, its read of an artifact included (hub hub-auth.ts
    * `sessionReadOf`), which counts as that session hearing the person's
    * answers on it.
    */
-  const sessionApi = async <T>(
+  const sessionApi = async <A extends HubAnswer>(
     instanceId: string,
-    request: HubRequest
-  ): Promise<T> => {
+    request: (hub: HubClient) => Promise<A>
+  ) => {
     const credential = await sessionCredential(instanceId);
     if (!credential) {
       throw new Error(
-        `${request.path}: session ${instanceId} has no credential to send it with`
+        `session ${instanceId} has no credential to send it with`
       );
     }
-    return answer<T>(request, { authorization: `Bearer ${credential}` });
+    return answer(request, { authorization: `Bearer ${credential}` });
   };
   let socket: WebSocket | undefined;
   const dashboard = async (): Promise<WebSocket> => {
@@ -2874,11 +2905,9 @@ async function standUp(
       "hub",
       "the hub answering",
       () =>
-        fetchHub(fetch, base, hubRequest("GET /health")).then(
-          async (r) =>
-            (r.ok ? await r.json() : undefined) as
-              { hubId?: unknown } | undefined
-        ),
+        hubClient(base, fetch)
+          .health.get()
+          .then((r) => (r.error === null ? r.data : undefined)),
       Boolean,
       90_000
     );
@@ -2986,7 +3015,7 @@ async function standUp(
         err,
         label,
         async () => {
-          last = (await api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
+          last = (await api((client) => client.api.agents.get())).find(
             (row) => row.machineId === machineId
           );
           return last !== undefined && online(last);
@@ -3128,7 +3157,7 @@ async function standUp(
   /** The Claude report the hub holds from the first machine's agent, as its failure words say it. */
   const claudeReportWords = async (): Promise<string> => {
     const report = (
-      await api<AgentRow[]>(hubRequest("GET /api/agents")).catch(() => [])
+      await api((client) => client.api.agents.get()).catch(() => [])
     )
       .find((row) => row.machineId === MACHINE)
       ?.harnesses?.find((one) => one.harness === "claude");
@@ -3385,6 +3414,7 @@ async function standUp(
     heldProcs,
     api,
     sessionApi,
+    postGiven,
     post,
     command,
     controlAnswer,

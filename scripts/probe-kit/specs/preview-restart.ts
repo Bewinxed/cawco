@@ -14,9 +14,9 @@
  *    again: a write on it reaches the hub's doc through the new socket.
  */
 import type { Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
+import { requestOf } from "../hub";
 import { COMPOSER, type Kit, open, type Spec } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -45,7 +45,7 @@ const passOn = (page: Page) => ({
     );
     return pass ? `${pass.name}=${pass.value}` : "";
   },
-  enter: (origin: string) =>
+  enter: async (origin: string) =>
     page.evaluate(
       async ({ at, ticketing }) => {
         const given = await fetch(ticketing.path, ticketing);
@@ -59,7 +59,10 @@ const passOn = (page: Page) => ({
           }
         );
       },
-      { at: origin, ticketing: hubRequest("POST /api/preview-ticket") }
+      {
+        at: origin,
+        ticketing: await requestOf((hub) => hub.api["preview-ticket"].post()),
+      }
     ),
 });
 

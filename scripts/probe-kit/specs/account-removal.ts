@@ -39,7 +39,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { DAY_MS } from "../../../packages/core/src/time";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { configureWords } from "../../../packages/core/src/words/configure";
@@ -51,6 +50,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const A = ACCOUNT;
@@ -157,16 +157,13 @@ const asleep = async (fleet: KitFleet, id: string) => {
 };
 
 const removeAccount = async (fleet: KitFleet, id: string, machine = "") => {
-  const response = await fetchHub(
-    fetch,
-    fleet.base,
-    machine
-      ? hubRequest("DELETE /api/accounts/:id/machines/:machineId", {
-          path: { id, machineId: machine },
-        })
-      : hubRequest("DELETE /api/accounts/:id", { path: { id } })
-  );
-  const text = await response.text();
+  const response = await (machine
+    ? hubAt(fleet.base)
+        .api.accounts({ id })
+        .machines({ machineId: machine })
+        .delete()
+    : hubAt(fleet.base).api.accounts({ id }).delete());
+  const text = answerText(response);
   return { status: response.status, text };
 };
 
@@ -193,22 +190,17 @@ const spec: Spec = {
       Date.now()
     );
     // New sessions fill A first: B is where they move.
-    const routed = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("PUT /api/accounts/routing/:provider", {
-        path: { provider: "anthropic" },
-        body: {
-          yours: { strategy: "fill-first" },
-          delegates: { strategy: "fill-first" },
-          atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
-        },
-      })
-    );
+    const routed = await hubAt(fleet.base)
+      .api.accounts.routing({ provider: "anthropic" })
+      .put({
+        yours: { strategy: "fill-first" },
+        delegates: { strategy: "fill-first" },
+        atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+      });
     kit.check(
       "setup: routing fills A first",
-      routed.ok,
-      `${routed.status} ${await routed.text()}`
+      routed.error === null,
+      `${routed.status} ${answerText(routed)}`
     );
     await furnish(home, B, B_TOKEN, "b");
     await furnish(home, C, C_TOKEN, "c");
@@ -263,8 +255,8 @@ const spec: Spec = {
     );
 
     // (a) The confirm's read.
-    const removal = await fleet.api<{ moving: number; staying: number }>(
-      hubRequest("GET /api/accounts/:id/removal", { path: { id: A } })
+    const removal = await fleet.api((hub) =>
+      hub.api.accounts({ id: A }).removal.get()
     );
     kit.check(
       "(a) the confirm reads 3 sessions moving to another account, none staying",
@@ -544,8 +536,8 @@ const spec: Spec = {
     await asleep(fleet, resting);
     await asleep(fleet, running);
     const bGone = await removeAccount(fleet, B);
-    const lastRead = await fleet.api<{ moving: number; staying: number }>(
-      hubRequest("GET /api/accounts/:id/removal", { path: { id: C } })
+    const lastRead = await fleet.api((hub) =>
+      hub.api.accounts({ id: C }).removal.get()
     );
     const last = await removeAccount(fleet, C);
     kit.check(
@@ -560,11 +552,9 @@ const spec: Spec = {
     const boardRow = await until(
       "the stranded session's line on the board",
       async () =>
-        (
-          await fleet.api<{ id: string; stalled?: { words: string } }[]>(
-            hubRequest("GET /api/instances")
-          )
-        ).find((one) => one.id === resting),
+        (await fleet.api((hub) => hub.api.instances.get())).find(
+          (one) => one.id === resting
+        ),
       (one) => one?.stalled !== undefined,
       30_000
     ).catch(() => undefined);

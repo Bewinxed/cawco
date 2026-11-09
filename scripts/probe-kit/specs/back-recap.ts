@@ -33,12 +33,13 @@
  *   bun scripts/probe-kit/run.ts back-recap
  */
 
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import {
   awayNotesHeading,
   BACK_MESSAGE,
 } from "../../../packages/core/src/injected";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The line of news the session kept while the person was away. */
@@ -69,36 +70,22 @@ const backSends = (fleet: KitFleet, id: string) =>
     .filter((one) => one.body.includes('"name":"back"')).length;
 
 const person = async (fleet: KitFleet): Promise<string> =>
-  (
-    await (
-      await fetchHub(fetch, fleet.base, hubRequest("GET /api/person"))
-    ).json()
-  ).state;
+  dataOf(await hubAt(fleet.base).api.person.get()).state;
 
 const appearAway = (fleet: KitFleet, on: boolean) =>
-  fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/person/away", { body: { on } })
-  );
+  hubAt(fleet.base).api.person.away.post({ on });
 
 /** A tab's beat with the person's input now. */
 const input = (fleet: KitFleet) =>
-  fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/presence", {
-      body: {
-        clientId: "probe-back-tab",
-        client: "web",
-        sessionId: null,
-        active: true,
-        showing: [],
-        saidAt: Date.now(),
-        idleMs: 0,
-      },
-    })
-  );
+  hubAt(fleet.base).api.presence.post({
+    clientId: "probe-back-tab",
+    client: "web",
+    sessionId: null,
+    active: true,
+    showing: [],
+    saidAt: Date.now(),
+    idleMs: 0,
+  });
 
 /** The person goes away and `id`'s plan keeps `line` as its news from then. */
 const awayWithNews = async (
