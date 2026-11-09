@@ -287,7 +287,7 @@ export type CarrySessionOutcome =
 
 /**
  * Machine control (arg: {@link CarrySessionRequest}[]): carries each Claude
- * session's own data into the dir of the account named (core paths.ts
+ * session's own data into the dir of the account named (core paths/claude.ts
  * `sessionConfigDir`), nothing left in any other. Answered by the machine's
  * supervisor, which knows which sessions run. Answers
  * `Record<instanceId, CarrySessionOutcome>`. The hub sends it before a row

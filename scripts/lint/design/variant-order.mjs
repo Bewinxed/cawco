@@ -19,7 +19,7 @@
 // inside `cn(…)`/`clsx(…)`/arrays/objects, `class:x` directives, and
 // `tv()`/`cva()` recipes (base with each variant value). A class passed to
 // a component is weighed against the classes on the component's own root.
-// Moved from ESLint (apps/dashboard/eslint-plugin-house.mjs) to Golar, on
+// Moved from the dashboard's ESLint plugin to Golar, on
 // Svelte's own AST.
 import path from "node:path";
 import {
