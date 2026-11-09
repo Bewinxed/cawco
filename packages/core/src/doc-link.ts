@@ -2,7 +2,7 @@
 /**
  * How a live doc's socket to the hub is kept, for the pane's link
  * (dashboard preview/artifact-doc.ts) and the page's overlay (agent
- * preview-overlay/artifact.ts) alike. Both are y-websocket 3.1.0
+ * preview overlay/artifact.ts) alike. Both are y-websocket 3.1.0
  * `WebsocketProvider`s, and the library does the keeping:
  *
  * - **Keepalive** is its `resyncInterval`: a sync step 1 every
@@ -122,7 +122,7 @@ export interface LinkProvider {
 /**
  * Whether the page is shown, as {@link watchSilence} reads it: the page's
  * own document, or what a worker holding the socket's doc is told of it
- * (agent preview-overlay doc-worker.ts). Core is typed without the DOM's.
+ * (preview overlay/doc-worker.ts). Core is typed without the DOM's.
  */
 export interface ShownDocument {
   addEventListener: (type: "visibilitychange", listener: () => void) => void;
