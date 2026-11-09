@@ -140,10 +140,9 @@ import type {
 import type { createDecisions } from "./decisions";
 import type { DelegateTypesShape } from "./delegate-types";
 import type { createDelegateWaits } from "./delegate-waits";
-import type { DelegateResult } from "./delegation-actions";
 import type { createDelegationMcp } from "./delegation-mcp";
 import type { createDesignSystem } from "./design-system";
-import type { AttemptAsk, createDispatcher } from "./dispatch";
+import type { createDispatcher } from "./dispatch";
 import type { createFind } from "./find";
 import type { FleetMcp } from "./fleet-mcp";
 import type { FleetMcpChanges } from "./fleet-mcp-changes";
@@ -226,7 +225,8 @@ import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
 import type { UsageCounter } from "./usage-count";
 import type { HubSocket } from "./wire-socket";
-import type { createWorkItems, WorkItemRequest } from "./work-items";
+import type { WorkItemCallsDeps } from "./work-item-calls";
+import type { createWorkItems } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
 import type { Unlanded } from "./workspaces";
 
@@ -426,9 +426,7 @@ export interface HubContext {
     jev?: { attach: boolean; noul: number } | { error: string };
     unlanded?: Unlanded | { error: string };
   }>;
-  coldWork: (
-    instanceId: string
-  ) => Promise<Unlanded | { error: string } | null>;
+  coldWork: WorkItemCallsDeps["coldWork"];
   commandQueues: Map<string, (queue: CommandQueue | null) => void>;
   completeOn: (
     account: Account,
@@ -464,30 +462,8 @@ export interface HubContext {
   db: DbShape;
   decisions: ReturnType<typeof createDecisions>;
   decisionsChanged: (projectId: string) => void;
-  delegatedAttempt: ({
-    task,
-    clean,
-    parentInstanceId,
-    cwd,
-    machineId,
-    workspace,
-    host,
-    ...asked
-  }: AttemptAsk &
-    Pick<
-      WorkItemRequest,
-      "clean" | "cwd" | "host" | "machineId" | "parentInstanceId" | "workspace"
-    > & { task: string }) => Promise<DelegateResult>;
-  delegateTypeFor: (request: {
-    fork?: boolean;
-    harness?: string;
-    model?: string;
-    parentInstanceId: string;
-    prompt: string;
-    title: string;
-    type?: string;
-    workspace?: string;
-  }) => Promise<{ type?: string }>;
+  delegatedAttempt: WorkItemCallsDeps["delegatedAttempt"];
+  delegateTypeFor: WorkItemCallsDeps["delegateTypeFor"];
   delegateTypes: DelegateTypesShape;
   delegateWaits: ReturnType<typeof createDelegateWaits>;
   delegationMcp: ReturnType<typeof createDelegationMcp>;
@@ -501,16 +477,8 @@ export interface HubContext {
     ahead: boolean
   ) => SentMessageRow;
   designSystem: ReturnType<typeof createDesignSystem>;
-  discardAsked: (
-    from: string,
-    id: string,
-    reason: string | undefined
-  ) => Promise<{ recorded: string } | { approved: boolean }>;
-  discarded: (
-    from: string,
-    id: string,
-    arg2?: { approved?: boolean }
-  ) => Promise<string>;
+  discardAsked: WorkItemCallsDeps["discardAsked"];
+  discarded: WorkItemCallsDeps["discarded"];
   dispatcher: ReturnType<typeof createDispatcher>;
   dropCompaction: (
     instanceId: string,
@@ -1142,11 +1110,7 @@ export interface HubContext {
   sentFrame: (arg0: SendPayload) => SentMessage;
   sessionAsleep: (machineId: string, instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
-  sessionName: (row: {
-    derivedTitle?: string | null;
-    id: string;
-    title?: string | null;
-  }) => string;
+  sessionName: WorkItemCallsDeps["sessionName"];
   sessionStartOf: (where: SessionLocation) => Promise<string>;
   sessionWorkspace: (row: InstanceRow) => WorkspaceRef | undefined;
   settledContinuation: (id: string) => Promise<ContinuationRow | undefined>;
