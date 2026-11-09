@@ -12,11 +12,9 @@ import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { unreachable } from "../unreachable";
 
-const accountHue = t.Union(ACCOUNT_HUES.map((hue) => t.Literal(hue)));
+const accountHue = t.UnionEnum(ACCOUNT_HUES);
 /** A step of an unfinished account setup (core `AccountSetupStep`). */
-const accountSetupStep = t.Union(
-  ACCOUNT_SETUP_STEPS.map((step) => t.Literal(step))
-);
+const accountSetupStep = t.UnionEnum(ACCOUNT_SETUP_STEPS);
 /** An account provider's id: Claude's `anthropic`, or a provider pi or OpenCode speaks. */
 export const accountProvider = t.String({
   minLength: 1,
