@@ -31,16 +31,17 @@
  * with the reason the model reads.
  *
  * It is a plain script on Bun, never a module of cawco: cawco's own start-up
- * took over 30s on a loaded machine. The agent writes this file and the judge
- * beside it into the workspace's state dir, which nothing inside the boundary
- * can write. A binary install runs it on cawco's own runtime
- * (`BUN_BE_BUN=1`), and a checkout runs it on bun. So it imports only Bun's
- * and node's built-ins, and the judge.
+ * took over 30s on a loaded machine. The agent writes this file, the judge
+ * and the protocol (boundary/protocol.ts) beside it into the workspace's
+ * state dir, which nothing inside the boundary can write. A binary install
+ * runs it on cawco's own runtime (`BUN_BE_BUN=1`), and a checkout runs it on
+ * bun. So it imports only Bun's and node's built-ins, the judge and the
+ * protocol.
  *
  * The wire: the hook sends the call's JSON on one line and its CLI's shell
  * prefix, in hex, on the next (`-` when it names none); the judge answers
  * `0` and what the hook prints on stdout, or `2` and why the call is
- * refused, then its end mark ({@link ANSWER_END}), and closes. Anything it
+ * refused, then its end mark (protocol.ts `JUDGE_ANSWER_END`), and closes. Anything it
  * cannot do answers `2`: a call never runs outside the boundary or the
  * policy. A reader takes the answer whole at its end mark, and never waits
  * for the connection's end: on macOS Bun's server at times never sent it
@@ -57,12 +58,24 @@ import { randomUUID } from "node:crypto";
 import { accessSync, constants, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import {
+  JUDGE_ANSWER_END,
+  JUDGE_BUILD_QUESTION,
+  JUDGE_READY,
+  judgeArgsOf,
+} from "./boundary/protocol";
 
 /** The judge's module; only its type is imported here, which Bun erases. */
 type Judge = typeof import("@cawco/core/workspace-judge");
 
 /** CAT and RM: the agent's, as its PATH finds them (core workspace-needs.ts), for a rewrite's shell, whose PATH is the session's. */
-const [
+const handed = judgeArgsOf(process.argv.slice(2));
+if (!handed) {
+  throw new Error(
+    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM BUILD"
+  );
+}
+const {
   socket,
   hook,
   graceS,
@@ -73,30 +86,14 @@ const [
   cat,
   rm,
   build,
-] = process.argv.slice(2);
-if (!(
-  socket &&
-  hook &&
-  graceS &&
-  exec &&
-  prefix &&
-  claudeTmp &&
-  policyFile &&
-  cat &&
-  rm &&
-  build
-)) {
-  throw new Error(
-    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM BUILD"
-  );
-}
+} = handed;
 
 /**
- * The line the agent asks which build this judge runs (boundary/
- * `JUDGE_BUILD_QUESTION`), answered `0` and BUILD: the agent's beat checks
- * that every live workspace's judge is its own build's.
+ * The line the agent asks which build this judge runs, answered `0` and
+ * BUILD: the agent's beat checks that every live workspace's judge is its
+ * own build's.
  */
-const BUILD_QUESTION = "cawco-judge-build";
+const BUILD_QUESTION = JUDGE_BUILD_QUESTION;
 
 /** The copy the agent wrote beside this script (`JUDGE_SCRIPT`). */
 const { judgeCall, readPolicy } = (await import(
@@ -108,11 +105,8 @@ const SHELL_TOOLS = new Set(["Bash", "Monitor"]);
 
 const refuse = (reason: string): string => `2\n${reason}`;
 
-/**
- * What ends every answer: a NUL, which no answer holds (JSON escapes one,
- * and no path or reason has one; any is taken out before it is sent).
- */
-const ANSWER_END = "\0";
+/** What ends every answer (protocol.ts `JUDGE_ANSWER_END`). */
+const ANSWER_END = JUDGE_ANSWER_END;
 
 /** What the model reads when its CLI's shell prefix is not the workspace's. */
 const UNPREFIXED =
@@ -254,7 +248,7 @@ const server = createServer((connection) => {
 
 rmSync(socket, { force: true });
 server.listen(socket, () => {
-  console.log("cawco-judge-ready");
+  console.log(JUDGE_READY);
 });
 
 /** How often the judge looks whether the hook still names it. */

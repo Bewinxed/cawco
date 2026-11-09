@@ -666,7 +666,7 @@ export const runsWorking = (): readonly string[] => working;
  * Starts the watch: every {@link LOOK_MS}, each keeper child `targetOf`
  * names sessions for is read, and each leak found is handed to `tell` with
  * its sessions, its id (one leak's, the same however often it is found) and
- * its words. `sandboxOf` answers a workspace boundary's sandbox (boundary/
+ * its words. `sandboxOf` answers a workspace boundary's sandbox (boundary/sandboxes.ts
  * `sandboxOf`). Once per agent.
  */
 export const watchLeaks = (options: LeakOptions): void => {
