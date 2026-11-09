@@ -18,7 +18,7 @@ import {
 } from "@cawco/core/preview/routes";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { previewWords } from "@cawco/core/words/preview";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubFetch, hubRefusal, refusedOf } from "#lib/platform/hub-read.js";
 import { enterPreviews } from "./pass";
 
 /** The origin that serves a page: its project's, or (a page outside any project) its session's. */
@@ -26,7 +26,7 @@ export type PageOrigin = { project: string } | { instance: string };
 
 /** The hub's sentence for a refused request, or the fallback words. */
 const said = async (answer: Response | null, otherwise: string) =>
-  answer ? (await hubRefusal(answer)).message : otherwise;
+  answer ? hubRefusal(await refusedOf(answer)).message : otherwise;
 
 /**
  * Where `origin`'s pages are served and the page at `wanted` there, with
