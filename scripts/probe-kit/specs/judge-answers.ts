@@ -1,7 +1,7 @@
 /**
  * A workspace's judge answers every call its hook hands it, one after
  * another as a delegate's turn makes them, each well inside the hook's own
- * limit (agent boundary.ts `hookScript`, boundary-judge.ts). On the Mac
+ * limit (agent boundary/hook-judge.ts `hookScript`, boundary-judge.ts). On the Mac
  * (2026-10-25, workspace-any-folder on 779056e68) seven of some 270 Bash
  * calls in a row waited the hook's whole 80 s and were refused, the calls
  * either side of each answered in a tenth of a second. This spec's first
@@ -11,7 +11,7 @@
  * which never came. The answer now ends at the judge's end mark
  * (boundary-judge.ts `ANSWER_END`), and no reader waits for the end.
  *
- * The real hook (perl, as boundary.ts writes it) and the real judge (its
+ * The real hook (perl, as boundary/ writes it) and the real judge (its
  * two scripts in the workspace's state dir, on bun, as armHook starts it),
  * under this run's own HOME, with no boundary around them. Each call is a
  * Bash call as Claude Code hands it: its JSON on the hook's stdin, the
@@ -198,7 +198,7 @@ const run = async (kit: Kit) => {
   delete process.env.CAWCO_WORKSPACE;
   await mkdir(join(home, "run"), { recursive: true, mode: 0o700 });
   const { executorUnsandboxed } =
-    await import("../../../packages/agent/src/boundary");
+    await import("../../../packages/agent/src/boundary/runner");
   const paths = await import("../../../packages/core/src/paths/workspace");
   const { workspacePolicy } =
     await import("../../../packages/core/src/workspace-policy");

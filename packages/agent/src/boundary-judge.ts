@@ -1,6 +1,6 @@
 /**
  * `boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY BUILD`: a
- * workspace's judge, which answers its hook (`boundary.ts` `hookScript`)
+ * workspace's judge, which answers its hook (`boundary/hook-judge.ts` `hookScript`)
  * for every shell or path-naming tool call of a work item's claude session
  * (`HOOKED_TOOLS`). sessiond holds it beside the boundary, so it outlives the
  * agent; the hook only hands it the call over SOCKET and says what it
@@ -9,7 +9,7 @@
  *
  * A shell call (`Bash`, `Monitor`) runs through the CLI's shell prefix, which
  * the CLI applies after its permission rules: the workspace's PREFIX
- * (`boundary.ts` `claudePrefixScript`) runs it inside the boundary. So the
+ * (`boundary/hook-judge.ts` `claudePrefixScript`) runs it inside the boundary. So the
  * judge answers it with no decision, and the CLI's own rules (deny, ask,
  * allow, from every settings source) judge the command as the model wrote
  * it; never `allow`, which would answer an `ask` rule for the person. When
@@ -92,7 +92,7 @@ if (!(
 }
 
 /**
- * The line the agent asks which build this judge runs (boundary.ts
+ * The line the agent asks which build this judge runs (boundary/
  * `JUDGE_BUILD_QUESTION`), answered `0` and BUILD: the agent's beat checks
  * that every live workspace's judge is its own build's.
  */

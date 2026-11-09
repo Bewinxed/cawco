@@ -167,7 +167,7 @@ export const excludedPaths = (
  * lines): its policy denies what is there ({@link workspaceDenies},
  * {@link ownerOnlyIn}, {@link linkedIn}), its judge refuses protected config
  * by name (`protectConfig`), and its guard checks each command
- * (boundary.ts `placeGuard`). Every place's id ends {@link PLACE_SUFFIX},
+ * (boundary/place-guard.ts `placeGuard`). Every place's id ends {@link PLACE_SUFFIX},
  * Caw's and a session's stage place alike. The suffix stays `-caw`, the one
  * it had when only Caw had a place, so the place records already on disk
  * still read as places.
@@ -480,7 +480,7 @@ const collapsed = (
  * project ignores ({@link ignoredDirs}) that holds such a file, whole (an
  * install that hardlinks from its cache, as bun's and uv's do, fills one with
  * them), and every other file with more than one link. A clone's are copied apart
- * but those linked to the workspaces' own bun cache (boundary.ts
+ * but those linked to the workspaces' own bun cache (boundary/
  * `ownInodes`); a person's own folder is never rewritten, so
  * these are only denied for writing: a write through one would change a file
  * the host runs.
@@ -984,7 +984,7 @@ const spillDirs = async (id: string): Promise<string[]> =>
  * The spill folders workspace `id`'s policy binds ({@link spillDirs}), as
  * they are listed: each one the record names that is a session's spill
  * folder ({@link isSpillDir}). The agent makes each of them before its
- * boundary starts (boundary.ts `keepSpills`).
+ * boundary starts (boundary/decisions.ts `keepSpills`).
  */
 export const workspaceSpills = async (id: string): Promise<string[]> => {
   const file = workspaceSpillsFile(id);

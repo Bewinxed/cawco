@@ -8,7 +8,7 @@
  * when you or Claude invoke the skill, including in a `-p` run in a folder you
  * haven't trusted"). The boundary judges the model's tool calls through its
  * own exec-form `PreToolUse` hook and wraps the shell tools in the workspace's
- * prefix (agent boundary.ts `claudeBoundaryOptions`, HOOKED_TOOLS), but the
+ * prefix (agent boundary/launched-hook.ts `claudeBoundaryOptions`, HOOKED_TOOLS), but the
  * clone-side deny list only names the clone's ROOT config
  * (`<clone>/.claude/{settings.json,hooks,commands,agents,skills}`, core
  * clone-denies.ts `cloneDenies`); a NESTED `sub/.claude/skills/<x>/` is
