@@ -7699,7 +7699,10 @@ export const createServer = (
     // Read through the plan panel's own read, so the link sees the list the
     // session keeps on any harness. Called only once the hub is up, after
     // `plans` below is made.
-    planSteps: async (instanceId) => (await plans.read(instanceId)).steps,
+    planSteps: async (instanceId) => {
+      const plan = await plans.read(instanceId);
+      return plan instanceof ElysiaStatus ? plan : plan.steps;
+    },
     pauses: (projectId) => caps.pauses(projectId),
     // A session already ended, or stopped with no process on its machine's
     // last custody reading, has nothing to confirm its stop: its stop is
@@ -8714,7 +8717,10 @@ export const createServer = (
     tasks,
     // The plan as its panel reads it, on any harness. Called only once the
     // hub is up, after `plans` below is made.
-    planSteps: async (instanceId) => (await plans.read(instanceId)).steps,
+    planSteps: async (instanceId) => {
+      const plan = await plans.read(instanceId);
+      return plan instanceof ElysiaStatus ? plan : plan.steps;
+    },
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
@@ -9368,7 +9374,11 @@ export const createServer = (
       };
     },
     plan: async (instanceId) => {
-      const { steps } = await plans.read(instanceId);
+      const plan = await plans.read(instanceId);
+      if (plan instanceof ElysiaStatus) {
+        return plan;
+      }
+      const { steps } = plan;
       return {
         done: steps.filter((step) => step.status === "completed").length,
         total: steps.length,
