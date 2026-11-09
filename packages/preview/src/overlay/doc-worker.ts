@@ -15,7 +15,7 @@
  * batches of plain values. A canvas's host page, which runs a Yjs of its
  * own, takes the doc's whole state and its changes as bytes.
  *
- * Built into the overlay's bundle as text (core preview-proxy.ts
+ * Built into the overlay's bundle as text (preview proxy.ts
  * `bundleOverlay`), and started from it as a blob (artifact.ts).
  */
 import { honourDeletions, lostWrites } from "@cawco/core/comments/model";
