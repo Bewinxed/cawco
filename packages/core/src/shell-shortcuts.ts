@@ -26,8 +26,8 @@ export type ShellShortcut = (typeof SHELL_SHORTCUTS)[number]["name"];
 
 /**
  * The preview pane's keys, which a page under preview hands the pane while
- * it has the keyboard (the overlay's page.ts, the dashboard's preview
- * wire.ts): V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K
+ * it has the keyboard (the overlay's page.ts, the dashboard's
+ * `preview/wire.ts`): V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K
  * a step, `/` the rail's search, Enter and Esc.
  */
 const PANE_KEYS = [
