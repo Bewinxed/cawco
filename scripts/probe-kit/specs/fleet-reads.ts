@@ -87,7 +87,7 @@ const PLACED_WAIT_S = 100;
  * What a command leaves in its clone once it has read and tried to write
  * every skill, and what it then waits for before it ends: the spec reads the
  * clone's placed copy between the two. An item's end retires its workspace,
- * clone and all (hub work-items.ts `settle`), and a mock answers in
+ * clone and all (hub workspaces.ts `settle`), and a mock answers in
  * milliseconds, so the clone is read while the command still holds the turn.
  */
 const DONE_MARK = ".probe-reads-done";

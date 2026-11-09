@@ -958,7 +958,7 @@ export interface HandoffActions {
   /**
    * This session's delegation tree: its delegates, theirs nested; the
    * delegates still queued; and the tree's held workspaces, whose items
-   * ended with work that is nowhere else (work-items.ts `settle`).
+   * ended with work that is nowhere else (workspaces.ts `settle`).
    */
   readonly delegateList: (
     query: DelegateListQuery
@@ -1297,14 +1297,14 @@ function repeatOfRefused(
 
 /**
  * What `stop_delegate` answers about the stopped item's workspace, from what
- * it holds on no remote as the stop is made (work-items.ts `unlandedOf`):
+ * it holds on no remote as the stop is made (workspaces.ts `unlandedOf`):
  * held, with what it holds and its two ways out (continue it, or discard it
- * to a carry), the hold being its stopper's to decide (work-items.ts
+ * to a carry), the hold being its stopper's to decide (workspaces.ts
  * `carriesOff`); or retiring, holding nothing that is nowhere else, with a
  * handoff cutting it again; or, holding nothing but serving an artifact
  * (`serving`, work-items.ts `serving`: the hold `previewedBy` reads), staying
  * while it serves that, each by its link. A read that failed says so, and
- * that a hold is told as it comes (work-items.ts `heldNotice`).
+ * that a hold is told as it comes (workspaces.ts `heldNotice`).
  */
 function stoppedHoldWords(
   workspaceId: string,
