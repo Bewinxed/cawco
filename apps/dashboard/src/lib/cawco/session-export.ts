@@ -20,6 +20,7 @@ import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
 import { boardStore, isFailed } from "./stores/board.svelte";
 import { catalogStore } from "./stores/catalog.svelte";
+import { sessionsStore } from "./stores/sessions.svelte";
 
 const HARNESS: Record<string, string> = accountsWords.harnesses;
 
@@ -114,7 +115,7 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
     running.map((row) => refreshContext(row.id, row.machineId))
   );
   const live = running.map((row, index) => {
-    const stats = cawco.statsOf(row.id);
+    const stats = sessionsStore.statsOf(row.id);
     const at = lastAt(row);
     const { harness } = row;
     if (row.sessionId) {

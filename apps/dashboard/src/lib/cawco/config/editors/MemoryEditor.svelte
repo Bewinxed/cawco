@@ -23,7 +23,7 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
-  import { cawco } from "../../client.svelte";
+
   import {
     adoptMemory,
     adoptMemoryDoc,
@@ -41,6 +41,7 @@
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import { boardStore, type Machine } from "../../stores/board.svelte";
+  import { projectsStore } from "../../stores/projects.svelte";
   import { deleteMemory } from "../deletes";
   import { drafts, keepDraft } from "../drafts.svelte";
   import EditorFrame from "../EditorFrame.svelte";
@@ -256,7 +257,7 @@
   ];
   const projectOptions = $derived([
     { value: "", label: words.none },
-    ...cawco.projects
+    ...projectsStore.projects
       .map((project) => ({ value: project.id, label: project.name }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   ]);
@@ -452,7 +453,9 @@
       <p
         class="relative flex flex-wrap gap-x-space-3 gap-y-space-1 type-meta text-ink-muted"
       >
-        <span>{words.loadedInto(loadedInto(scope, cawco.projects))}</span>
+        <span
+          >{words.loadedInto(loadedInto(scope, projectsStore.projects))}</span
+        >
       </p>
     {/if}
     <p
