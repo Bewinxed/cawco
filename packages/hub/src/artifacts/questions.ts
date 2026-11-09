@@ -4,7 +4,7 @@
  * reads every one, open or answered, in `open_items` (open-items.ts), and
  * takes or withdraws it with `question_close`. Derived from the artifact's
  * doc on every read, never stored, but for the agent's own marks
- * ({@link QUESTIONS_CLOSED}).
+ * (`meta.questionsClosed`).
  *
  * An artifact asks while it is put to the person (`asked`: a page to pick
  * on or a canvas to judge, its ask line set, not a draft, not handed up or
@@ -60,7 +60,7 @@ export type QuestionState = AskState | "taken";
 export interface Question {
   answer: QuestionAnswer | null;
   close: QuestionClose | null;
-  /** Its key in {@link QUESTIONS_CLOSED}: `card:<id>`, `judge`, `pin:<id>`. */
+  /** Its key in `meta.questionsClosed`: `card:<id>`, `judge`, `pin:<id>`. */
   key: string;
   kind: SessionQuestionKind;
   /** What names it to the person and to `question_close`: a card's, the artifact's or a pin's link. */
