@@ -14,11 +14,11 @@
    */
   import { accountsWords } from "@cawco/core/words/accounts";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
   import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
 
   const AT = "2026-10-23T09:00:00.000Z";
   const entry = (

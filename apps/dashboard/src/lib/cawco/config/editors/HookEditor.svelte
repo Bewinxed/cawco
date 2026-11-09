@@ -9,14 +9,6 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { hookSentence } from "@cawco/core/words/hooks";
   import { untrack } from "svelte";
-  import {
-    appear,
-    crossIn,
-    crossOut,
-    dur,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
@@ -27,6 +19,16 @@
     IconPlay,
     IconTuning,
   } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import { newId } from "#lib/platform/id.js";
+  import {
+    appear,
+    crossIn,
+    crossOut,
+    dur,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
   import { cawco, type Machine } from "../../client.svelte";
   import { adoptHook, peekHook, pushHook } from "../../fleet";
@@ -42,8 +44,6 @@
     restoreHookVersion,
     saveHook,
   } from "../../hooks";
-  import { failureWords as message } from "../../hub-read";
-  import { newId } from "../../id";
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import Choice from "../Choice.svelte";

@@ -48,7 +48,7 @@ export function rawDurationReads(model) {
         start: node.start,
         end: node.end,
         message:
-          "Read a duration token with dur() (lib/cawco/motion/curves.svelte.ts): the built stylesheet writes `1000ms` as `1s`, so its bare number isn't milliseconds.",
+          "Read a duration token with dur() (lib/platform/motion/curves.svelte.ts): the built stylesheet writes `1000ms` as `1s`, so its bare number isn't milliseconds.",
       });
     }
   });
@@ -63,7 +63,7 @@ export function dimensionBindings(model) {
         start: node.start,
         end: node.end,
         message:
-          "A dimension binding writes inside its ResizeObserver's delivery. Measure with frameObserver ($lib/cawco/frame-observer): `{@attach frameSize((node) => { … })}` reads the size as it mounts and a change in the next frame, as PaneTabs' details height and ModelSection's chosen row do.",
+          "A dimension binding writes inside its ResizeObserver's delivery. Measure with frameObserver ($lib/platform/frame-observer): `{@attach frameSize((node) => { … })}` reads the size as it mounts and a change in the next frame, as PaneTabs' details height and ModelSection's chosen row do.",
       });
     }
   });

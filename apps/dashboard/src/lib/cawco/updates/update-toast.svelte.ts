@@ -47,10 +47,10 @@ import { updatesWords } from "@cawco/core/words/updates";
 import { untrack } from "svelte";
 import { createSubscriber } from "svelte/reactivity";
 import { buttonVariants } from "#lib/components/ui/button/index.js";
+import { toast } from "#lib/platform/toasts.js";
 import { person } from "../person.svelte";
 import { leaveForBuild, reloadedFor, unsavedWords } from "../reload.svelte";
 import { newerBuild } from "../served-build.svelte";
-import { toast } from "../toasts";
 
 /** The toast's one id: a second build changes it in place. */
 const UPDATE_TOAST = "cawco-update-ready";

@@ -42,9 +42,9 @@
   // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
   // The Solar Duotone Rule).
   import { IconChevronRight as IconChevron, IconTransfer } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { hueVar } from "../accounts/model.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { unfold } from "../motion/fold.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import { moveOf, movesOf, type Row } from "./rows";
 

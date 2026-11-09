@@ -15,7 +15,7 @@
  * order is the report's: Start, Waiting (and Headscale's admin), Answers,
  * Phone, HTTPS (Tailscale, when certificates are off), Done.
  */
-import { store, stored } from "#lib/cawco/storage.js";
+import { store, stored } from "#lib/platform/storage.js";
 import { type Network, NetworkDevice } from "../tray.svelte";
 
 /** One state of the tray, in the order the flow runs. */

@@ -10,7 +10,7 @@
  */
 import type { Account, AccountProvider } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
-import { failureWords } from "#lib/cawco/hub-read.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 import {
   type BoardRow,
   cawco,

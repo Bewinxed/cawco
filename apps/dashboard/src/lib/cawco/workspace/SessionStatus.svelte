@@ -1,7 +1,7 @@
 <script lang="ts">
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { glyphIn, glyphOut } from "../motion/glyph";
+  import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
   import { sessionStatusOf } from "./session-status";
 
   let {
