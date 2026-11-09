@@ -12,7 +12,7 @@
    * and then immediately overridden. The scale lives on the token sheet, not in
    * the typography plugin, so the root is restated here.
    */
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import Markdown from "#lib/cawco/Markdown.svelte";
 
   let {
     source,
