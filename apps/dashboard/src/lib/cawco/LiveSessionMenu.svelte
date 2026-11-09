@@ -41,7 +41,6 @@
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import { discardSession, keepSession } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import {
     archive,
@@ -66,6 +65,7 @@
     workspaceHeld,
     workspaceWaiting,
   } from "./stores/machines";
+  import { discardSession, keepSession } from "./stores/row-acts.svelte";
   import { sessionsStore } from "./stores/sessions.svelte";
   import { TRY_AGAIN } from "./unanswered";
   import OpenItems from "./workspace/OpenItems.svelte";
