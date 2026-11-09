@@ -57,6 +57,7 @@
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { newSession, startFork } from "../spawn/new-session.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
@@ -190,7 +191,7 @@
     editError = "";
     try {
       const machineId =
-        cawco.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
+        boardStore.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
       answeredOr(
         machineId,
         await editAndResend(message.instanceId, message.id, editContent.trim()),
@@ -278,7 +279,7 @@
     editError = "";
     try {
       const machineId =
-        cawco.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
+        boardStore.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
       const branched = await startFork(
         await forkPointOf(message.instanceId, message.id),
         trigger
@@ -292,7 +293,7 @@
         branched,
         "whether the branch started is not known"
       );
-      await goto(conversationHref(forked, cawco.instanceIndex));
+      await goto(conversationHref(forked, boardStore.instanceIndex));
     } catch (error) {
       editError = failureWords(error);
     } finally {
@@ -395,7 +396,9 @@
   });
 
   /** The session this row was sent to. */
-  const target = $derived(cawco.instanceIndex.byId.get(message.instanceId));
+  const target = $derived(
+    boardStore.instanceIndex.byId.get(message.instanceId)
+  );
   /**
    * The way back from a send the hub refused, read against the fleet as it
    * is now (send-recovery.svelte.ts): its own words, and what recovers it.

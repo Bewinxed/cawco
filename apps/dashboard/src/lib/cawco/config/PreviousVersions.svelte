@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import { machineLabel } from "@cawco/core/machine-names";
-  import { cawco } from "../client.svelte";
+  import { boardStore } from "../stores/board.svelte";
 
   /** Where a kept version came from, in words: the fleet's own row, or the machine whose edited copy an overwrite took off it. */
   export function versionSource(source: string): string {
@@ -8,7 +8,9 @@
       return "the fleet";
     }
     const machineId = source.slice("machine:".length);
-    const machine = cawco.machines.find((row) => row.machineId === machineId);
+    const machine = boardStore.machines.find(
+      (row) => row.machineId === machineId
+    );
     return machine ? machineLabel(machine.hostname) : machineId;
   }
 

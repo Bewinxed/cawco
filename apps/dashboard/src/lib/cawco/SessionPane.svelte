@@ -59,7 +59,6 @@
     keepServedAway,
     keepServedPage,
     loadMcpServers,
-    machineConnected,
     openSession,
     type PendingPermission,
     type ReadCause,
@@ -104,6 +103,7 @@
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
+  import { boardStore, machineConnected } from "./stores/board.svelte";
   import { offersStore } from "./stores/offers.svelte";
   import { plansStore } from "./stores/plans.svelte";
   import { tickersStore } from "./stores/tickers.svelte";
@@ -333,7 +333,7 @@
    * wrong for every live session opened from the sidebar, which arrived with a
    * context and so was never opened at all.
    */
-  const isLive = $derived(cawco.rowOf(viewId) !== undefined);
+  const isLive = $derived(boardStore.rowOf(viewId) !== undefined);
 
   /** Asks the hub holds under this id with no session behind it (a project's memory proposal, hub memory.ts). */
   const rowless = $derived(
@@ -674,8 +674,8 @@
    */
   const continuedTo = $derived.by((): { id: string; title: string } | null => {
     // The rows while the board lists them; else its newest page's word.
-    const next = cawco.rowOf(viewId)?.continuedInto;
-    const to = next && cawco.rowOf(next);
+    const next = boardStore.rowOf(viewId)?.continuedInto;
+    const to = next && boardStore.rowOf(next);
     if (to) {
       return { id: to.id, title: instanceTitle(to) };
     }
@@ -839,7 +839,7 @@
   );
   const awayOnline = $derived(
     awayMachine !== null &&
-      cawco.machines.some(
+      boardStore.machines.some(
         (machine) =>
           machine.machineId === awayMachine && machine.status === "online"
       )
@@ -877,7 +877,7 @@
   // back (`machineConnected`): across a hub restart the page reconnects first.
   const liveForCommands = $derived(
     !!session &&
-      cawco.liveId(viewId) &&
+      boardStore.liveId(viewId) &&
       !!machineId &&
       machineConnected(machineId)
   );
@@ -1010,7 +1010,7 @@
    */
   const asksUnder = $derived(
     cawco.asksUnder(viewId).map((row) => {
-      const asker = cawco.instanceIndex.byId.get(row.instanceId);
+      const asker = boardStore.instanceIndex.byId.get(row.instanceId);
       return {
         ...row,
         asker: asker
