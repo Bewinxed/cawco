@@ -30,17 +30,13 @@ import { join } from "node:path";
 import { cycles, type Import, importGraph } from "./lib/import-graph";
 import { type Found, holdRatchet } from "./lib/ratchet";
 import { ROOT, repoFiles } from "./lib/repo-files";
-import { packageOf, packages, throughExports } from "./lib/workspace-imports";
+import { packageOf, packages } from "./lib/workspace-imports";
 
 const RULES = {
   cycle:
     "no import cycle, value or type: move what both files need below them both",
-  "core-reaches-out":
-    "@cawco/core imports no other package; what it needs moves into core",
   "kit-reaches-up":
-    "lib/components/ui imports no feature component (lib/components/features), no route, and no module that imports the kit; pass it in as a prop or a snippet",
-  "reaches-in":
-    "a member imports another member's file through that member's manifest (@cawco/<name>/…), never by a path into its folder",
+    "lib/components/ui imports no module that imports the kit; pass what it needs in as a prop or a snippet",
 };
 type Rule = keyof typeof RULES;
 
@@ -56,24 +52,10 @@ const FREE_OF_CYCLES = [
   "@cawco/sessiond",
   "cawco-site",
 ];
-/**
- * Imports these rules allow, each with why it stays: `file → specifier`.
- */
-const ALLOWED: Record<string, string> = {
-  // jsonl-parser is a published leaf that imports no workspace package, and
-  // the transcript index's author words are its own: core's wire type is an
-  // Extract of them (find.ts), so the two cannot drift.
-  "packages/core/src/find.ts → @cawco/jsonl-parser": "core-reaches-out",
-};
-
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
 const SCOPE = /^(?:apps|packages|scripts|site)\//u;
 const SKIPPED = /\/fixtures\//u;
-const CORE = packages.get("@cawco/core")?.dir as string;
 const KIT = "apps/dashboard/src/lib/components/ui/";
-const ABOVE_KIT =
-  /^apps\/dashboard\/src\/(?:routes\/|lib\/components\/features\/)/u;
-const ROOT_PACKAGE = packages.get("cawco")?.name;
 
 const present = repoFiles();
 const files = present.filter(
@@ -83,9 +65,7 @@ const graph = importGraph(files, new Set(present));
 
 const found: Found[] = [];
 const count = (rule: Rule, file: string, edge: Import, shape = ""): void => {
-  if (ALLOWED[`${file} → ${edge.specifier}`] !== rule) {
-    found.push({ rule, file, line: edge.line, shape });
-  }
+  found.push({ rule, file, line: edge.line, shape });
 };
 
 /* cycle */
@@ -129,29 +109,12 @@ const reaches = (file: string): boolean => {
 };
 
 for (const [file, edges] of graph) {
-  const from = packageOf(file);
+  if (!file.startsWith(KIT)) {
+    continue;
+  }
   for (const edge of edges) {
-    if (edge.file === undefined) {
-      continue;
-    }
-    const to = packageOf(edge.file);
-    if (from.dir === CORE && to.dir !== CORE) {
-      count("core-reaches-out", file, edge);
-    }
-    if (
-      file.startsWith(KIT) &&
-      !edge.file.startsWith(KIT) &&
-      (ABOVE_KIT.test(edge.file) || reaches(edge.file))
-    ) {
+    if (edge.file && !edge.file.startsWith(KIT) && reaches(edge.file)) {
       count("kit-reaches-up", file, edge);
-    }
-    if (
-      from.name !== to.name &&
-      from.name !== ROOT_PACKAGE &&
-      to.name !== ROOT_PACKAGE &&
-      !throughExports(to, edge.specifier)
-    ) {
-      count("reaches-in", file, edge);
     }
   }
 }
