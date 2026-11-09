@@ -177,7 +177,7 @@ interface Socket {
 
 /**
  * The overlay on a page this harness serves, as a preview origin serves it
- * (core preview-proxy.ts): its script at {@link OVERLAY_PATH}, its host's
+ * (core preview/proxy.ts): its script at {@link OVERLAY_PATH}, its host's
  * origins (`parents`) frozen before it, and its tag injected before every
  * script of each HTML page (`injectOverlay`). Null where the page is not on.
  */
