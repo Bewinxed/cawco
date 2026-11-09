@@ -1,6 +1,6 @@
 #!/bin/bash
 # Clone-side deny stand-ins, proved on a rig (boundary-host.ts `standIn`,
-# packages/agent/src/stand-ins.ts, boundary.ts `rearmHooks`, `ensure`,
+# packages/agent/src/stand-ins.ts, boundary/control.ts `rearmHooks`, `ensure`,
 # `restartStubbed`, `closeBoundary`):
 #
 #   bash artifacts/srt-eval/placeholder-rig.sh
