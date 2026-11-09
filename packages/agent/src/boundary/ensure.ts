@@ -126,7 +126,6 @@ import {
   closeUnderWay,
   type Held,
   keepers,
-  markStarting,
   type Retiring,
   readHeld,
   readRetiring,
@@ -134,9 +133,9 @@ import {
   retiringFileOf,
   running,
   sessiond,
-  startEnded,
   startUnderWay,
   type UnaskedCalls,
+  withStart,
   writeWhole,
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
@@ -159,12 +158,10 @@ export const ensureNow = (
   const started = (async () => {
     await closeUnderWay(ref.id);
     return await ensure(ref, unasked);
-  })().finally(() => {
-    startEnded(ref.id);
+  })();
+  return withStart(ref.id, started, started, () => {
     sawHeld(ref.id, Date.now());
   });
-  markStarting(ref.id, started);
-  return started;
 };
 
 /**
