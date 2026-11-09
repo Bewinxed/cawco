@@ -1,4 +1,5 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
+cycle	@cawco/agent	packages/agent/src/boundary/arm.ts	2
 cycle	@cawco/agent	packages/agent/src/boundary/judge-process.ts	1
 cycle	@cawco/agent	packages/agent/src/boundary/lifecycle.ts	4
 cycle	@cawco/agent	packages/agent/src/boundary/staleness.ts	1
