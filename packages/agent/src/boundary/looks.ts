@@ -34,7 +34,6 @@ import {
   ensureBoundary,
   ensureNow,
   replaceNarrowed,
-  unaskedCalls,
 } from "./ensure";
 import {
   type BoundaryHolders,
@@ -222,8 +221,7 @@ const recheckNow = async (
         held,
         narrowed,
         await ownKeeperOwed(),
-        cause,
-        unaskedCalls
+        cause
       ))();
     await withStart(
       id,
@@ -585,7 +583,7 @@ const repairJudge = async (
   }
   let started = "its judge was started again";
   try {
-    await ensureNow(ref, unaskedCalls);
+    await ensureNow(ref);
     await armingOf(ref.id);
   } catch (error) {
     started = `its boundary could not be started again (${error instanceof Error ? error.message : String(error)})`;
