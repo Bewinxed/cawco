@@ -668,25 +668,14 @@ export const createSends = (ctx: SendsContext) => {
     if (!(from && to)) {
       return;
     }
-    deliverSend({
-      verb: "send",
-      machineId: from.machineId,
-      instanceId: from.id,
-      payload: {
-        instanceId: from.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: {
-            role: "user",
-            content: undeliveredNotice(sessionLabel(to).tag, reason),
-          },
-          parent_tool_use_id: null,
-          origin: { kind: "system", name: UNDELIVERED_ORIGIN },
-          shouldQuery: false,
-        },
-      },
-    });
+    deliverSend(
+      sessionWord(
+        from,
+        undeliveredNotice(sessionLabel(to).tag, reason),
+        { kind: "system", name: UNDELIVERED_ORIGIN },
+        { shouldQuery: false }
+      )
+    );
   };
 
   /**
@@ -3233,45 +3222,45 @@ export const createSends = (ctx: SendsContext) => {
     );
 
   return {
-    anchors,
-    byIdNow,
-    changeSend,
-    commandAwayWords,
-    continuationNow,
-    decideCustody,
-    deliverSend,
-    deliverToSession,
-    failOwedAway,
-    failSend,
     handoffs,
-    inCustody,
-    interruptedTurns,
-    losePending,
-    noteInterrupt,
-    notesOnly,
-    observeTurn,
-    personsMessage,
-    presenced,
+    anchors,
+    unanswered,
     publishSend,
-    reclaimUnread,
-    releaseLimitHeld,
-    releaseOne,
-    releaseOwed,
+    changeSend,
     retryFromTray,
-    sendLines,
     sendsPending,
-    sentFrame,
-    sessionSend,
+    failSend,
+    interruptedTurns,
+    noteInterrupt,
+    turnsWritten,
+    turnUnderWay,
+    notesOnly,
+    turnOver,
     settleBackoff,
     settlePending,
+    losePending,
     takeBack,
+    inCustody,
+    decideCustody,
+    withdrawPending,
+    reclaimUnread,
     takeSendSignal,
     takeTaken,
+    observeTurn,
+    sendLines,
+    sentFrame,
+    byIdNow,
+    deliverSend,
+    continuationNow,
     tellBack,
-    turnOver,
-    turnUnderWay,
-    turnsWritten,
-    unanswered,
-    withdrawPending,
+    personsMessage,
+    presenced,
+    deliverToSession,
+    releaseLimitHeld,
+    commandAwayWords,
+    sessionSend,
+    releaseOwed,
+    releaseOne,
+    failOwedAway,
   };
 };
