@@ -17,7 +17,7 @@
     branch,
     nestFrom,
   } from "#lib/platform/motion/branch.svelte.js";
-  import type { BoardRow } from "../client.svelte";
+  import type { BoardRow } from "../links";
   import OlderRows from "../OlderRows.svelte";
   import { openTrees } from "../open-trees.svelte";
   import Self from "./SessionTree.svelte";
