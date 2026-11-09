@@ -54,7 +54,7 @@ export interface WorkspaceFirstSession {
  * (2026-10-17).
  *
  * `carry`, for a workspace whose commits went to a carry as it retired (an
- * item that lands none, hub work-items.ts `settle`): that carry's folder on
+ * item that lands none, hub workspaces.ts `settle`): that carry's folder on
  * its machine. `commit` is then where its HEAD built on `branch`, and the
  * carry's commits are fetched from its bundle on top: the clone is cut again
  * at the HEAD it had.
@@ -374,7 +374,7 @@ export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
  * (one that is down, or cannot start, stays down), so nothing writes the
  * folder while it is read, and no link in it is followed. The hub sends it as
  * a workspace closes, before the archive, and keeps the files in the
- * project's folder (hub work-items.ts `keepScratchOutputs`). Args
+ * project's folder (hub workspaces.ts `keepScratchOutputs`). Args
  * `[WorkspaceRef]`; answers {@link WorkspaceOutputs}. Only the hub sends it.
  */
 export const CONTROL_WORKSPACE_OUTPUTS = "workspaceOutputs";
@@ -382,7 +382,7 @@ export const CONTROL_WORKSPACE_OUTPUTS = "workspaceOutputs";
 /**
  * The folders directly under the machine's `~/.worktrees`, by absolute path:
  * the hub's settling sweep closes again each archived workspace whose clone
- * one of them still is (hub work-items.ts `closeLeftClones`), since an
+ * one of them still is (hub workspaces.ts `closeLeftClones`), since an
  * archived workspace has no clone. Args `[]`; answers `string[]`. Only the
  * hub sends it.
  */
@@ -395,7 +395,7 @@ export const CONTROL_WORKSPACE_CLONES = "workspaceClones";
  * (`SpawnPayload.hostScratch`). Read as they stand, no link followed and
  * nothing stopped: the folder is the delegate's alone, and its session is
  * the machine's own. The hub sends it as the item finishes and as its host
- * workspace settles (hub work-items.ts `scratchOutputFiles`,
+ * workspace settles (hub landing-run.ts `scratchOutputFiles`,
  * `keepScratchOutputs`). Args `[{ id, read }]`, the host workspace's id:
  * with `read`, answers {@link WorkspaceOutputs}, each regular file with its
  * bytes; without, `{ listed: HostOutputListed[] }`, each file and link with
@@ -414,7 +414,7 @@ export interface HostOutputListed {
 /**
  * A host-scope delegate's scratch dir removed, `outputs/` with it, once its
  * outputs are in the project's folder and no session of it is attached (hub
- * work-items.ts `settleHost`): a later spawn of its session makes it again.
+ * workspaces.ts `settleHost`): a later spawn of its session makes it again.
  * Args `[{ id }]`, the host workspace's id; answers nothing. Only the hub
  * sends it.
  */
@@ -431,7 +431,7 @@ export interface WorkspaceOutputs {
  * of a session do), in each session's lane: the boundary runs on, and each
  * session keeps its transcript, clone and files, so a handoff resumes it
  * there. The hub sends it as it settles a workspace whose items have all
- * ended and that nothing but an awake session holds (hub work-items.ts
+ * ended and that nothing but an awake session holds (hub workspaces.ts
  * `settle`). Args `[WorkspaceWorkEnd]`; answers nothing. Only the hub sends
  * it.
  */
@@ -470,7 +470,7 @@ export interface WorkspaceArchive {
    * Commits of the clone whose work is on `base` though no ref of its
    * `origin` holds them: each the commit a workspace was cut `from` this one
    * at, once that workspace landed them, rebased onto the branch with every
-   * patch there (hub work-items.ts `vouchLanded`). What they reach is no
+   * patch there (hub landing-run.ts `vouchLanded`). What they reach is no
    * work of this clone's own, and a HEAD they reach is cut again nowhere.
    */
   landed?: string[];
@@ -659,7 +659,7 @@ export const INPUTS_DIR = "inputs";
 /**
  * The folder in a workspace's scratch dir (its `$TMPDIR`) whose files the hub
  * copies into the item's project's folder, under its assets folder, when the
- * item finishes and again before the workspace closes (hub work-items.ts
+ * item finishes and again before the workspace closes (hub landing-run.ts
  * `scratchOutputs`): `$TMPDIR` goes with the workspace, and on 2026-10-25 a
  * delegate's report there went with it.
  */

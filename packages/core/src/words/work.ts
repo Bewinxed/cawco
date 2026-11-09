@@ -94,7 +94,7 @@ export const workWords = {
   gateHeading: "Merge checks, run by the hub:",
   /**
    * A start refused by its caller's may-start list (core `MayStart`; hub
-   * work-items.ts `startRefusal`), before anything spawns: a leaf that may
+   * work-items.ts `mayStartRefusal`), before anything spawns: a leaf that may
    * start nothing, or none of what it asked for.
    */
   leafRefusal:
