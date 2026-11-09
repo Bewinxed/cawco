@@ -109,6 +109,7 @@ import { placedMemoryIn } from "../placed-memory";
 import { holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { opencodeCompactsAt } from "./compaction-points";
+import { credentialControls } from "./credential-controls";
 import {
   at,
   errorTag,
@@ -134,7 +135,6 @@ import {
   toolNameOf,
   toolResultOf,
 } from "./opencode-transcript";
-import { credentialControls } from "./session-ledger";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 const RECOVERY_TIMEOUT_MS = 10_000;
@@ -3552,17 +3552,17 @@ export class OpencodeSession implements HarnessSession {
     return after;
   }
 
-  /**
-   * The credential the plugin stamps into each CawCo call, recorded by
-   * OpenCode session id and acknowledged with itself: a session this agent
-   * launched installs the one the hub minted for this spawn.
-   */
   /** The session credential's install and verify ({@link credentialControls}). */
   readonly #credentialControls = credentialControls(
     (credential) => this.#installCredential(credential),
     () => this.#verifyCredential()
   );
 
+  /**
+   * The credential the plugin stamps into each CawCo call, recorded by
+   * OpenCode session id and acknowledged with itself: a session this agent
+   * launched installs the one the hub minted for this spawn.
+   */
   async #installCredential(credential: string) {
     await storeOpencodeCredential(this.#opencodeSessionId(), {
       containerEnv: this.#ctx.containerEnv ?? {},
