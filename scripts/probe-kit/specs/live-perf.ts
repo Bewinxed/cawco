@@ -104,14 +104,11 @@ import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright-core";
-import {
-  type HubRequest,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { HUB_TAKE_MEASURE } from "../../../packages/core/src/stream";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
 import { type MainThread, OWN_PASS, traceMain } from "../frames";
+import { type RequestForPage, requestOf } from "../hub";
 import { type Kit, ROOT, type Spec } from "../kit";
 import {
   attributeOn,
@@ -1600,10 +1597,13 @@ function coldBudgets(kit: Kit, loads: Cold[]): void {
 /** Nav: cold loads, then the home's common presses. */
 async function navLeg(live: Live, session: string | undefined) {
   const { kit, page } = live;
-  const projects = await page.evaluate(async (request) => {
-    const answer = await fetch(request.path, request);
-    return answer.ok ? ((await answer.json()) as { id: string }[]) : [];
-  }, hubRequest("GET /api/projects"));
+  const projects = await page.evaluate(
+    async (request) => {
+      const answer = await fetch(request.path, request);
+      return answer.ok ? ((await answer.json()) as { id: string }[]) : [];
+    },
+    await requestOf((hub) => hub.api.projects.get())
+  );
   const paths = [
     "/session",
     ...(session ? [`/session/${session}`] : []),
@@ -1709,7 +1709,7 @@ const stillFrames = () =>
   });
 
 /** The board, as this browser is answered it: the rows, or the status refused. */
-const boardRead = async (request: HubRequest): Promise<unknown> => {
+const boardRead = async (request: RequestForPage): Promise<unknown> => {
   const answer = await fetch(request.path, request);
   return answer.ok ? ((await answer.json()) as unknown) : answer.status;
 };
@@ -1800,7 +1800,7 @@ async function measureLive(
   await page.goto(`${base}/session`, { waitUntil: "domcontentloaded" });
   const board = await page.evaluate(
     boardRead,
-    hubRequest("GET /api/instances")
+    await requestOf((hub) => hub.api.instances.get())
   );
   if (!Array.isArray(board)) {
     kit.check(

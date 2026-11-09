@@ -98,15 +98,11 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  type HubSent,
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  HubSent,
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { movedLine } from "../../../packages/core/src/injected";
 import { signal as signalPid } from "../../../packages/core/src/signal";
@@ -124,24 +120,22 @@ import {
   isView,
   stateDirOf,
 } from "../copy";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { answerText, type HubAsk, hubAt } from "../hub";
+import { delegateStarted, type Kit, ROOT, type Spec } from "../kit";
 
 /** One request given `ms` to answer: its status and text; one not answered in time throws saying so. */
 const requestWithin = async (
   ms: number,
   base: string,
-  request: HubRequest
+  request: HubAsk
 ): Promise<{ ok: boolean; status: number; text: string }> => {
-  const { method, path } = request;
-  const url = `${base}${path}`;
+  const url = base;
   const read = await readWithin(ms, async (signal) => {
-    const response = await fetchHub(fetch, base, request, { signal });
+    const answer = await request(hubAt(base, { signal }));
     return {
-      ok: response.ok,
-      status: response.status,
-      text: response.ok
-        ? await response.text()
-        : refusalWords(await response.text(), response.status),
+      ok: answer.error === null,
+      status: answer.status,
+      text: answerText(answer),
     };
   });
   switch (read.kind) {
@@ -149,7 +143,7 @@ const requestWithin = async (
       return read.value;
     case "unanswered":
       throw new Error(
-        `${method} ${url} did not answer within ${read.after} ms (${read.reason})`
+        `${url} did not answer within ${read.after} ms (${read.reason})`
       );
     default:
       unhandled("read", read);
@@ -442,14 +436,6 @@ interface Held {
   size: string;
   workspaceId: string;
 }
-
-interface Sweep {
-  failed: { workspaceId: string; reason: string }[];
-  held: Held[];
-  kept: { workspaceId: string; hold: string }[];
-  retired: { workspaceId: string }[];
-}
-
 /** A command's exit code and stderr, run with the free-space threshold out of reach. */
 const refused = async (
   command: string
@@ -633,8 +619,8 @@ const archivePhase = async (
       kept.text.includes("nothing was deleted"),
     `${kept.status} ${kept.text}`
   );
-  const held = await fleet.api<{ holds: string; size: string }>(
-    hubRequest("GET /api/workspaces/:id/held", { path: { id: k.id } })
+  const held = await fleet.api((client) =>
+    client.api.workspaces({ id: k.id }).held.get()
   );
   check(
     "(e) GET held names what K holds now, read again by the refused archive: 1 commit on no remote, 2 changed files, and its size",
@@ -909,21 +895,17 @@ const itemRow = (fleet: Fleet, id: string): ItemRow | undefined =>
 const stoppedLandingPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   const { check } = kit;
   const { fleet, workspaceOf, stateBecomes, callAsParent } = scene;
-  const started = await fleet.api<{
-    instanceId: string;
-    workItemId: string;
-    workspaceId: string;
-  }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((client) =>
+      client.api["work-items"].post({
         parentInstanceId: scene.parentId,
         title: "Commit and end Q",
         prompt: "PROBE-RETIRE-Q: commit a file.",
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: scene.src,
-      },
-    })
+      })
+    )
   );
   const wq = workspaceOf(started.workspaceId);
   const landing = await until(
@@ -1071,8 +1053,8 @@ const previewPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     (now) => now === "sleeping",
     SETTLE_MS
   ).catch(() => undefined);
-  const swept = await fleet.api<Sweep>(
-    hubRequest("POST /api/workspaces/retire")
+  const swept = await fleet.api((client) =>
+    client.api.workspaces.retire.post()
   );
   const hold = swept.kept.find((one) => one.workspaceId === wp.id)?.hold ?? "";
   check(
@@ -1128,16 +1110,12 @@ const unstartablePhase = async (kit: Kit, scene: Scene): Promise<void> => {
     (procs) => procs.length === 0,
     30_000
   ).catch(() => ["still running"]);
-  const followUp = await requestWithin(
-    120_000,
-    fleet.base,
-    hubRequest("POST /api/work-items", {
-      body: {
-        parentInstanceId: scene.parentId,
-        title: "Go on in B",
-        prompt: "PROBE-RETIRE-B: go on.",
-        workspace: wb.id,
-      },
+  const followUp = await requestWithin(120_000, fleet.base, (client) =>
+    client.api["work-items"].post({
+      parentInstanceId: scene.parentId,
+      title: "Go on in B",
+      prompt: "PROBE-RETIRE-B: go on.",
+      workspace: wb.id,
     })
   );
   const refusedText = followUp.text;
@@ -1287,9 +1265,7 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `DELETE ${statuses.join(", ")}; H ${h.state}; G ${g.state} ${existsSync(wg.path) ? "husk stands" : "gone"}; S ${s.state}`
   );
   const heldS = await fleet
-    .api<Held>(
-      hubRequest("GET /api/workspaces/:id/held", { path: { id: ws.id } })
-    )
+    .api((client) => client.api.workspaces({ id: ws.id }).held.get())
     .catch((error: unknown) => ({ holds: String(error) }) as Held);
   check(
     "(g) S, a husk with a user's file, is held with what it holds, the file standing",
@@ -1297,8 +1273,8 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       existsSync(join(ws.path, "notes.txt")),
     JSON.stringify(heldS)
   );
-  const again = await fleet.api<Sweep>(
-    hubRequest("POST /api/workspaces/retire")
+  const again = await fleet.api((client) =>
+    client.api.workspaces.retire.post()
   );
   const hub = (await fleet.logs("hub"))
     .split("\n")
@@ -1404,12 +1380,10 @@ const landedAndFailed = async (kit: Kit, scene: Scene): Promise<Workspace> => {
     `standing: ${standing(wk, "K").join(", ")}`
   );
   const words = await fleet
-    .api<Held>(
-      hubRequest("GET /api/workspaces/:id/held", { path: { id: wk.id } })
-    )
+    .api((client) => client.api.workspaces({ id: wk.id }).held.get())
     .catch((error: unknown) => ({ holds: String(error) }) as Held);
-  const { held: list } = await fleet.api<{ held: Held[] }>(
-    hubRequest("GET /api/workspaces/held")
+  const { held: list } = await fleet.api((client) =>
+    client.api.workspaces.held.get()
   );
   check(
     "(c) K's holding words: 1 commit on no remote, its size and machine, at GET held and in GET /api/workspaces/held (K alone)",
@@ -1471,13 +1445,11 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Retire",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((client) =>
+      client.api.projects.post({
+        name: "Retire",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {
@@ -1504,21 +1476,17 @@ const spec: Spec = {
         ).catch(() => workspaceOf(id)),
       delegate: async (tag, onStart) => {
         const asked = Date.now();
-        const started = await fleet.api<{
-          instanceId: string;
-          workItemId: string;
-          workspaceId: string;
-        }>(
-          hubRequest("POST /api/work-items", {
-            body: {
+        const started = delegateStarted(
+          await fleet.api((client) =>
+            client.api["work-items"].post({
               parentInstanceId: parent,
               title: `Commit and end ${tag}`,
               prompt: `PROBE-RETIRE-${tag}: commit a file.`,
               harness: "claude",
               model: "claude-haiku-4-5",
               cwd: src,
-            },
-          })
+            })
+          )
         );
         await onStart?.(workspaceOf(started.workspaceId));
         const item = await until(
@@ -1563,22 +1531,16 @@ const spec: Spec = {
       },
       closePreview: async (id) =>
         (
-          await requestWithin(
-            60_000,
-            fleet.base,
-            hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
-              path: { id: parent, artifact: id },
-            })
+          await requestWithin(60_000, fleet.base, (client) =>
+            client.api
+              .instances({ id: parent })
+              .artifacts({ artifact: id })
+              .delete()
           )
         ).status,
       archiveOver: async (id, body) => {
-        const archived = await requestWithin(
-          120_000,
-          fleet.base,
-          hubRequest("POST /api/workspaces/:id/archive", {
-            path: { id },
-            ...(body && { body }),
-          })
+        const archived = await requestWithin(120_000, fleet.base, (client) =>
+          client.api.workspaces({ id }).archive.post(body)
         );
         return { status: archived.status, text: archived.text };
       },

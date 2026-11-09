@@ -55,8 +55,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
-import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { toolWords } from "../../lib/tool-call";
@@ -67,7 +65,14 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { payloadOf } from "../hub";
+import {
+  delegateStarted,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+} from "../kit";
 
 const PATH = "delegates/scout.md";
 const TYPE = (line: string) =>
@@ -86,15 +91,8 @@ const ON_DISK = TYPE("Scouts the field at night.");
 const APPROVE = "[data-slot=hitl] [data-prompt-grant]";
 const DENY = "[data-slot=hitl] [data-prompt-refuse]";
 const PROPOSAL_TOOL = "mcp__cawco__delegate_type_proposal";
-
-interface Parked {
-  instanceId?: string;
-  payload?: { originInstanceId?: string; toolName?: string };
-  requestId?: string;
-}
-
 export const pendingNow = (fleet: KitFleet) =>
-  fleet.api<Parked[]>(hubRequest("GET /api/pending"));
+  fleet.api((hub) => hub.api.pending.get());
 
 /** Waits until `requestId` is off the ledger; answers whether it went. */
 export const leaves = (fleet: KitFleet, requestId: string) =>
@@ -155,7 +153,8 @@ const proposeOn = async (
     async () =>
       (await pendingNow(fleet)).find(
         (one) =>
-          one.payload?.toolName === PROPOSAL_TOOL && !before.has(one.requestId)
+          payloadOf(one).toolName === PROPOSAL_TOOL &&
+          !before.has(one.requestId)
       ),
     Boolean,
     60_000
@@ -198,30 +197,26 @@ const proposalLegs = async (
   fleet: KitFleet,
   base: string
 ): Promise<void> => {
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Scouting",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Scouting",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
     })
   );
   const write = (content: string) =>
-    fleet.api(
-      hubRequest("PUT /api/projects/:id/folder/file", {
-        path: { id: project.id },
-        body: { path: PATH, content },
-      })
+    fleet.api((hub) =>
+      hub.api
+        .projects({ id: project.id })
+        .folder.file.put({ path: PATH, content })
     );
   const read = async () =>
     (
-      await fleet.api<{ content: string }>(
-        hubRequest("GET /api/projects/:id/folder/file", {
-          path: { id: project.id },
-          query: { path: PATH },
-        })
+      await fleet.api((hub) =>
+        hub.api
+          .projects({ id: project.id })
+          .folder.file.get({ query: { path: PATH } })
       )
     ).content;
   await write(FIRST);
@@ -255,9 +250,8 @@ const proposalLegs = async (
   const needsRow = await needs
     .locator('button[data-deny][aria-label*="scout"]')
     .count();
-  const history = await fleet.api<{ commits: { message: string }[] }>(
-    hubRequest("GET /api/projects/:id/folder/history", {
-      path: { id: project.id },
+  const history = await fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).folder.history.get({
       query: { path: `memory/proposals/${first.requestId}.json` },
     })
   );
@@ -370,11 +364,8 @@ const designLeg = async (
   projectId: string
 ): Promise<void> => {
   const put = (path: string, content: string) =>
-    fleet.api(
-      hubRequest("PUT /api/projects/:id/folder/file", {
-        path: { id: projectId },
-        body: { path, content },
-      })
+    fleet.api((hub) =>
+      hub.api.projects({ id: projectId }).folder.file.put({ path, content })
     );
   await put(
     "design/manifest.json",
@@ -436,11 +427,10 @@ const designLeg = async (
     .then(() => true)
     .catch(() => false);
   const file = (
-    await fleet.api<{ content: string }>(
-      hubRequest("GET /api/projects/:id/folder/file", {
-        path: { id: projectId },
-        query: { path: DESIGN_PATH },
-      })
+    await fleet.api((hub) =>
+      hub.api
+        .projects({ id: projectId })
+        .folder.file.get({ query: { path: DESIGN_PATH } })
     )
   ).content;
   kit.check(
@@ -555,13 +545,11 @@ const foldLeg = async (
   const design = (await pendingNow(fleet)).find(
     (one) =>
       one.requestId?.startsWith("dp-") &&
-      one.payload?.originInstanceId === source
+      payloadOf(one).originInstanceId === source
   );
   const caller = await fleet.spawn("claude", "Continuing caller", fleet.repo);
   const known = new Set(
-    (
-      await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
-    ).map((one) => one.id)
+    (await fleet.api((hub) => hub.api.continuations.get())).map((one) => one.id)
   );
   const continued = await toolWords(
     {
@@ -581,9 +569,9 @@ const foldLeg = async (
   const job = await until(
     "the continuation started",
     async () =>
-      (
-        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
-      ).find((one) => !known.has(one.id)),
+      (await fleet.api((hub) => hub.api.continuations.get())).find(
+        (one) => !known.has(one.id)
+      ),
     (one) => one !== undefined && ["started", "failed"].includes(one.stage),
     240_000
   ).catch(() => undefined);
@@ -639,7 +627,8 @@ const foldLeg = async (
     const parked = await pendingNow(fleet);
     return ids.map(
       (id) =>
-        parked.find((one) => one.requestId === id)?.payload?.originInstanceId
+        payloadOf(parked.find((one) => one.requestId === id) ?? {})
+          .originInstanceId
     );
   };
   const target = job.targetInstanceId;
@@ -673,17 +662,17 @@ const foldLeg = async (
  */
 const delegateLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const steward = await fleet.spawn("claude", "Steward", fleet.repo);
-  const delegate = await fleet.api<{ instanceId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const delegate = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: steward,
         title: "Asking delegate",
         prompt: `${SLOW}: work on.`,
         harness: "claude",
         model: MODEL.claude,
         host: true,
-      },
-    })
+      })
+    )
   );
   await until(
     "the delegate running",
@@ -782,9 +771,9 @@ const hostLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const steward = await fleet.spawn("claude", "Host steward", fleet.repo, {
     projectId: scouting.id,
   });
-  const delegate = await fleet.api<{ instanceId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const delegate = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: steward,
         title: "Host designer",
         prompt: `${SLOW}: work on.`,
@@ -792,8 +781,8 @@ const hostLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
         model: MODEL.claude,
         host: true,
         cwd: repo,
-      },
-    })
+      })
+    )
   );
   await until(
     "the host designer running",

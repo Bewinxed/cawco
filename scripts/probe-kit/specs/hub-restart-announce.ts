@@ -13,7 +13,6 @@
  *   bun scripts/probe-kit/run.ts hub-restart-announce
  */
 
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
@@ -102,9 +101,7 @@ const spec: Spec = {
     await fleet.sessiondUp();
     fleet.launch("hub");
     await fleet.hubUp();
-    const { version } = await fleet.api<{ version: string }>(
-      hubRequest("GET /health")
-    );
+    const { version } = await fleet.api((hub) => hub.health.get());
     const other = `${version}-other-build`;
 
     // 1. The build it runs.

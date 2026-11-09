@@ -48,8 +48,10 @@
  *   bun scripts/probe-kit/run.ts hub-auth
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
+
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { hubClient, hubPath } from "../../../packages/agent/src/hub-client";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import {
   type AskRecord,
@@ -59,20 +61,18 @@ import {
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
 import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { httpProof } from "../../../packages/core/src/machine-key";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { askRecordedWords } from "../../../packages/core/src/words/ask-lines";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, ROOT, type Spec } from "../kit";
+import { answerText, type HubAsk, payloadOf, requestOf } from "../hub";
+import { delegateStarted, type Kit, open, ROOT, type Spec } from "../kit";
 
 const TAG = /PROBE-AUTH-([A-Z])/u;
 const FINISH = "mcp__cawco__finish_item";
@@ -149,19 +149,27 @@ const credentialOf = async (fleet: Fleet, instanceId: string) =>
 /** One request: its status, its text and its headers. */
 const ask = async (
   base: string,
-  request: HubRequest,
-  init: RequestInit = {}
+  request: HubAsk,
+  init: RequestInit | ((url: string) => RequestInit) = {}
 ): Promise<{ headers: Headers; status: number; text: string }> => {
-  const { method, path } = request;
-  const url = `${base}${path}`;
+  let url = base;
   const read = await readWithin(60_000, async (signal) => {
-    const response = await fetchHub(fetch, base, request, { ...init, signal });
+    const answer = await request(
+      hubClient(base, (target, sent) => {
+        url = target;
+        const extra = typeof init === "function" ? init(target) : init;
+        return fetch(target, {
+          ...sent,
+          ...extra,
+          signal,
+          headers: { ...sent.headers, ...extra.headers },
+        });
+      })
+    );
     return {
-      status: response.status,
-      text: response.ok
-        ? await response.text()
-        : refusalWords(await response.text(), response.status),
-      headers: response.headers,
+      status: answer.status,
+      text: answerText(answer),
+      headers: answer.response.headers,
     };
   });
   switch (read.kind) {
@@ -169,7 +177,7 @@ const ask = async (
       return read.value;
     case "unanswered":
       throw new Error(
-        `${method} ${url} did not answer within ${read.after} ms (${read.reason})`
+        `${url} did not answer within ${read.after} ms (${read.reason})`
       );
     default:
       unhandled("read", read);
@@ -237,11 +245,9 @@ const machineSocket = async (base: string) => {
 };
 
 /** Whether a parked ask is the hub's own ask to approve `update_machines` (hub pending.ts `askEnvelope`). */
-const isInstallAsk = (parked: {
-  payload?: { askId?: string; toolName?: string };
-}): boolean =>
-  parked.payload?.askId !== undefined &&
-  parked.payload.toolName === "mcp__cawco__update_machines";
+const isInstallAsk = (parked: { payload?: unknown }): boolean =>
+  payloadOf(parked).askId !== undefined &&
+  payloadOf(parked).toolName === "mcp__cawco__update_machines";
 
 /** The hub's ask `id` as its row holds it (hub db/asks.ts `recordOf`), or none. */
 const askOf = (fleet: Fleet, id: string): AskRecord | undefined => {
@@ -339,13 +345,11 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Auth",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Auth",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {
@@ -359,8 +363,8 @@ const spec: Spec = {
     const bearer = { authorization: `Bearer ${parentKey}` };
 
     // ── Trusted ──────────────────────────────────────────────────────────
-    const anonymous = await ask(fleet.base, hubRequest("GET /api/agents"));
-    const devicesRead = await ask(fleet.base, hubRequest("GET /api/devices"));
+    const anonymous = await ask(fleet.base, (hub) => hub.api.agents.get());
+    const devicesRead = await ask(fleet.base, (hub) => hub.api.devices.get());
     check(
       "(t1) trusted: an owner request with no credential works (GET /api/agents, GET /api/devices)",
       anonymous.status === 200 &&
@@ -368,19 +372,19 @@ const spec: Spec = {
         devicesRead.status === 200,
       `${anonymous.status}, ${devicesRead.status} ${devicesRead.text.slice(0, 200)}`
     );
-    const asSession = await ask(fleet.base, hubRequest("GET /api/agents"), {
+    const asSession = await ask(fleet.base, (hub) => hub.api.agents.get(), {
       headers: bearer,
     });
     const turnOn = await ask(
       fleet.base,
-      hubRequest("PUT /api/auth/pairing", { body: { required: true } }),
+      (hub) => hub.api.auth.pairing.put({ required: true }),
       { headers: bearer }
     );
-    const forged = await ask(fleet.base, hubRequest("GET /api/agents"), {
+    const forged = await ask(fleet.base, (hub) => hub.api.agents.get(), {
       headers: { authorization: `Bearer ${"x".repeat(43)}` },
     });
     const mode = JSON.parse(
-      (await ask(fleet.base, hubRequest("GET /api/auth"))).text
+      (await ask(fleet.base, (hub) => hub.api.auth.get())).text
     ) as {
       mode: string;
     };
@@ -400,10 +404,7 @@ const spec: Spec = {
     );
     const archivedByCurl = await ask(
       fleet.base,
-      hubRequest("POST /api/workspaces/:id/archive", {
-        path: { id: "nothing" },
-        body: {},
-      }),
+      (hub) => hub.api.workspaces({ id: "nothing" }).archive.post({}),
       { headers: bearer }
     );
     check(
@@ -414,7 +415,7 @@ const spec: Spec = {
 
     // (t3) The agent records the hub it joined; rediscovery takes that hub alone.
     const { hubId } = JSON.parse(
-      (await ask(fleet.base, hubRequest("GET /health"))).text
+      (await ask(fleet.base, (hub) => hub.health.get())).text
     ) as {
       hubId: string;
     };
@@ -493,7 +494,7 @@ const spec: Spec = {
       .click();
     const after = await until(
       "the browser paired",
-      () =>
+      async () =>
         paired.evaluate(
           (request) =>
             fetch(request.path, request).then(
@@ -504,7 +505,7 @@ const spec: Spec = {
                   mode: string;
                 }>
             ),
-          hubRequest("GET /api/auth")
+          await requestOf((hub) => hub.api.auth.get())
         ),
       (value) => value.mode === "pairing" && value.device !== null,
       30_000
@@ -561,7 +562,7 @@ const spec: Spec = {
     );
 
     // ── Pairing on ───────────────────────────────────────────────────────
-    const refused = await ask(fleet.base, hubRequest("GET /api/agents"));
+    const refused = await ask(fleet.base, (hub) => hub.api.agents.get());
     check(
       "(p1) an anonymous request is refused: 401, marked pairing required",
       refused.status === 401 &&
@@ -571,12 +572,10 @@ const spec: Spec = {
     const held = await machineSocket(fleet.base);
     held.register("probe-anonymous");
     await Bun.sleep(2000);
-    const waitingList = await fleet.api<{ machineId: string }[]>(
-      hubRequest("GET /api/machines/waiting")
+    const waitingList = await fleet.api((hub) =>
+      hub.api.machines.waiting.get()
     );
-    const agentsNow = await fleet.api<{ machineId: string; status: string }[]>(
-      hubRequest("GET /api/agents")
-    );
+    const agentsNow = await fleet.api((hub) => hub.api.agents.get());
     check(
       "(p1) a register with no proof is held: its first frame the challenge, then waiting, no ack, nothing online",
       held.frames[0]?.verb === "admission" &&
@@ -592,9 +591,10 @@ const spec: Spec = {
     );
     await ask(
       fleet.base,
-      hubRequest("POST /api/machines/waiting/:machineId/refuse", {
-        path: { machineId: "probe-anonymous" },
-      }),
+      (hub) =>
+        hub.api.machines
+          .waiting({ machineId: "probe-anonymous" })
+          .refuse.post(),
       { headers: { authorization: `Owner ${cookie?.value ?? ""}` } }
     );
     held.close();
@@ -602,9 +602,7 @@ const spec: Spec = {
     const forger = await machineSocket(fleet.base);
     forger.register(MACHINE);
     await until("the forged register closed", () => forger.closed(), Boolean);
-    const stillOnline = await fleet.api<
-      { machineId: string; status: string }[]
-    >(hubRequest("GET /api/agents"));
+    const stillOnline = await fleet.api((hub) => hub.api.agents.get());
     check(
       "(p2) a forged register with a known machineId is refused and closed (4403); the machine stays online",
       forger.closed()?.code === 4403 &&
@@ -620,16 +618,11 @@ const spec: Spec = {
     joining.catch(() => undefined);
     await until(
       "probe-new waiting",
-      () =>
-        fleet.api<{ machineId: string }[]>(
-          hubRequest("GET /api/machines/waiting")
-        ),
+      () => fleet.api((hub) => hub.api.machines.waiting.get()),
       (list) => list.some((one) => one.machineId === "probe-new"),
       120_000
     );
-    const beforeAdmit = await fleet.api<
-      { machineId: string; status: string }[]
-    >(hubRequest("GET /api/agents"));
+    const beforeAdmit = await fleet.api((hub) => hub.api.agents.get());
     check(
       "(p3) a new machine waits: listed waiting, not online",
       !beforeAdmit.some(
@@ -669,28 +662,20 @@ const spec: Spec = {
         join(machine.home, ".config", "cawco", "machine-key")
       ).text()
     ).trim();
-    const asMachine = (request: HubRequest) =>
-      ask(fleet.base, request, {
+    const asMachine = (request: HubAsk) =>
+      ask(fleet.base, request, (url) => ({
         headers: proofOf(
           "probe-new",
           newMachineKey,
           hubId,
           "GET",
-          request.path
+          new URL(url).pathname
         ),
-      });
+      }));
     const [fleetList, ownRow, otherRow] = await Promise.all([
-      asMachine(hubRequest("GET /api/agents")),
-      asMachine(
-        hubRequest("GET /api/agents/:machineId", {
-          path: { machineId: "probe-new" },
-        })
-      ),
-      asMachine(
-        hubRequest("GET /api/agents/:machineId", {
-          path: { machineId: MACHINE },
-        })
-      ),
+      asMachine((hub) => hub.api.agents.get()),
+      asMachine((hub) => hub.api.agents({ machineId: "probe-new" }).get()),
+      asMachine((hub) => hub.api.agents({ machineId: MACHINE }).get()),
     ]);
     const own = ownRow.status === 200 ? JSON.parse(ownRow.text) : undefined;
     check(
@@ -729,35 +714,27 @@ const spec: Spec = {
       (
         await ask(
           fleet.base,
-          hubRequest("POST /api/pair", {
-            body: { kind: "cli", name: "a session" },
-          }),
+          (hub) => hub.api.pair.post({ kind: "cli", name: "a session" }),
           { headers: bearer }
         )
       ).text
     ) as { userCode: string };
     const selfApprove = await ask(
       fleet.base,
-      hubRequest("POST /api/pair/requests/:userCode/approve", {
-        path: { userCode: started.userCode },
-      }),
+      (hub) =>
+        hub.api.pair.requests({ userCode: started.userCode }).approve.post(),
       { headers: bearer }
     );
-    const anonApprove = await ask(
-      fleet.base,
-      hubRequest("POST /api/pair/requests/:userCode/approve", {
-        path: { userCode: started.userCode },
-      })
+    const anonApprove = await ask(fleet.base, (hub) =>
+      hub.api.pair.requests({ userCode: started.userCode }).approve.post()
     );
     check(
       "(p4) a session that started a pairing can't approve it: 403 with its credential, 401 without",
       selfApprove.status === 403 && anonApprove.status === 401,
       `${selfApprove.status}, ${anonApprove.status}`
     );
-    await fleet.api(
-      hubRequest("POST /api/pair/requests/:userCode/deny", {
-        path: { userCode: started.userCode },
-      })
+    await fleet.api((hub) =>
+      hub.api.pair.requests({ userCode: started.userCode }).deny.post()
     );
     // An install that needs the person is an ask the hub keeps (core
     // asks.ts): the call answers at once, and the answer comes as a send.
@@ -770,13 +747,7 @@ const spec: Spec = {
     );
     const asked = await until(
       "the install ask parked",
-      () =>
-        fleet.api<
-          {
-            requestId?: string;
-            payload?: { askId?: string; toolName?: string };
-          }[]
-        >(hubRequest("GET /api/pending")),
+      () => fleet.api((hub) => hub.api.pending.get()),
       (list) => list.some(isInstallAsk),
       60_000
     );
@@ -867,14 +838,14 @@ const spec: Spec = {
     await approve.click();
     const strangerAuth = await until(
       "the new browser paired",
-      () =>
+      async () =>
         stranger
           .evaluate(
             (request) =>
               fetch(request.path, request).then(
                 (response) => response.json() as Promise<{ caller: string }>
               ),
-            hubRequest("GET /api/auth")
+            await requestOf((hub) => hub.api.auth.get())
           )
           .catch(() => undefined),
       (value) => value.caller === "owner",
@@ -898,17 +869,13 @@ const spec: Spec = {
     // the hub, before any cookie is read.
     const ask2 = JSON.parse(
       (
-        await ask(
-          fleet.base,
-          hubRequest("POST /api/pair", {
-            body: { kind: "cli", name: "a cross-site test" },
-          })
+        await ask(fleet.base, (hub) =>
+          hub.api.pair.post({ kind: "cli", name: "a cross-site test" })
         )
       ).text
     ) as { userCode: string };
-    const approving = hubRequest("POST /api/pair/requests/:userCode/approve", {
-      path: { userCode: ask2.userCode },
-    }).path;
+    const approving = hubPath.api.pair.requests({ userCode: ask2.userCode })
+      .approve["~path"];
     const elsewhere = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -958,9 +925,7 @@ const spec: Spec = {
             : refusalWords(await answered.text(), answered.status()),
         });
       }
-      const still = await fleet.api<{ userCode: string }[]>(
-        hubRequest("GET /api/pair/requests")
-      );
+      const still = await fleet.api((hub) => hub.api.pair.requests.get());
       check(
         "(p5c) a cross-site POST to an owner route is refused (403 at the dashboard and at the hub) and the pairing still waits",
         posted[0]?.status === 403 &&
@@ -972,10 +937,8 @@ const spec: Spec = {
       );
     } finally {
       elsewhere.stop(true);
-      await fleet.api(
-        hubRequest("POST /api/pair/requests/:userCode/deny", {
-          path: { userCode: ask2.userCode },
-        })
+      await fleet.api((hub) =>
+        hub.api.pair.requests({ userCode: ask2.userCode }).deny.post()
       );
     }
 
@@ -983,9 +946,8 @@ const spec: Spec = {
     const install = (headers: Record<string, string>) =>
       ask(
         fleet.base,
-        hubRequest("POST /api/session-identities/install", {
-          body: { instanceIds: [parent] },
-        }),
+        (hub) =>
+          hub.api["session-identities"].install.post({ instanceIds: [parent] }),
         { headers }
       );
     const [byNobody, byOwner, bySession] = await Promise.all([
@@ -1002,20 +964,17 @@ const spec: Spec = {
     );
 
     // (p7) A delegate with pairing on: it lands, and its workspace retires.
-    const delegated = await fleet.api<{
-      workItemId: string;
-      workspaceId: string;
-    }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const delegated = delegateStarted(
+      await fleet.api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: parent,
           title: "Commit and end A",
           prompt: "PROBE-AUTH-A: commit a file.",
           harness: "claude",
           model: "claude-haiku-4-5",
           cwd: src,
-        },
-      })
+        })
+      )
     );
     const item = await until(
       "work item A ended",
@@ -1054,11 +1013,11 @@ const spec: Spec = {
     // (p8) Off is trusted again.
     const off = await ask(
       fleet.base,
-      hubRequest("PUT /api/auth/pairing", { body: { required: false } }),
+      (hub) => hub.api.auth.pairing.put({ required: false }),
       { headers: { authorization: `Owner ${cookie?.value ?? ""}` } }
     );
     fleet.authorize(null);
-    const open200 = await ask(fleet.base, hubRequest("GET /api/agents"));
+    const open200 = await ask(fleet.base, (hub) => hub.api.agents.get());
     check(
       "(p8) turning it off returns to trusted: no credential is the person again, and every key is forgotten",
       off.status === 200 &&

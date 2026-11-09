@@ -59,7 +59,6 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import type { AuthContext } from "ssh2";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import {
   commandLines,
@@ -70,6 +69,7 @@ import { listedPid, signal } from "../../../packages/core/src/signal";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import {
   HELD,
@@ -167,9 +167,7 @@ const seen = (job: SshJoinJob) =>
 /** Stops the add `id` as the dialog's Stop does: the hub's answer, or its refusal, and either said. */
 const stopAdd = (fleet: KitFleet, id: string) =>
   fleet
-    .api<SshJoinJob>(
-      hubRequest("POST /api/machines/ssh/:id/stop", { path: { id } })
-    )
+    .api((hub) => hub.api.machines.ssh({ id }).stop.post())
     .then(
       (job) => ({ job, said: seen(job) }),
       (error: Error) => ({ job: null, said: error.message })
@@ -271,19 +269,15 @@ async function realSshd(
   const { port } = sshd;
   const user = (await Bun.$`id -un`.text()).trim();
   const beginOn = (on: number) =>
-    fleet.api<SshJoinJob>(
-      hubRequest("POST /api/machines/ssh", {
-        body: {
-          target: `${user}@127.0.0.1`,
-          port: on,
-        },
+    fleet.api((hub) =>
+      hub.api.machines.ssh.post({
+        target: `${user}@127.0.0.1`,
+        port: on,
       })
     );
   const begin = () => beginOn(port);
   const read = (id: string) =>
-    fleet.api<SshJoinJob>(
-      hubRequest("GET /api/machines/ssh/:id", { path: { id } })
-    );
+    fleet.api((hub) => hub.api.machines.ssh({ id }).get());
   const holding = () => processes({ parts: HELD, run: marker });
   const watchdogs = () => processes({ parts: ["while ps -p"], run: marker });
   const inGroup = async (group: number | null): Promise<number[]> =>
@@ -364,22 +358,16 @@ async function realSshd(
 async function passwordField(kit: Kit, fleet: KitFleet): Promise<void> {
   const page = await kit.page("desk");
   // Add machine's window on Reach, over SSH, signing in with a password once.
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PATCH /api/installs/draft", {
-      body: {
-        stamp: { page: "probe-kit", seq: 1 },
-        draft: {
-          route: "ssh",
-          target: "",
-          port: "",
-          signIn: "password",
-          address: null,
-        },
-      },
-    })
-  );
+  await hubAt(fleet.base).api.installs.draft.patch({
+    stamp: { page: "probe-kit", seq: 1 },
+    draft: {
+      route: "ssh",
+      target: "",
+      port: "",
+      signIn: "password",
+      address: null,
+    },
+  });
   await open(
     page,
     `${await fleet.dashboard()}/?install=new`,
@@ -544,19 +532,15 @@ async function run(kit: Kit): Promise<void> {
     });
     await fleet.hubUp();
     const begin = (password?: string) =>
-      fleet.api<SshJoinJob>(
-        hubRequest("POST /api/machines/ssh", {
-          body: {
-            target: `${USER}@127.0.0.1`,
-            port,
-            ...(password === undefined ? {} : { password }),
-          },
+      fleet.api((hub) =>
+        hub.api.machines.ssh.post({
+          target: `${USER}@127.0.0.1`,
+          port,
+          ...(password === undefined ? {} : { password }),
         })
       );
     const read = (id: string) =>
-      fleet.api<SshJoinJob>(
-        hubRequest("GET /api/machines/ssh/:id", { path: { id } })
-      );
+      fleet.api((hub) => hub.api.machines.ssh({ id }).get());
     /**
      * One add through the hub API, read until it ends, and how long that
      * took. One still running after {@link ADD_MS} is answered as it reads.
@@ -683,11 +667,10 @@ async function run(kit: Kit): Promise<void> {
     // (f) Nowhere kept.
     const reads = await Promise.all(
       jobs.map((job) =>
-        fetchHub(
-          fetch,
-          fleet.base,
-          hubRequest("GET /api/machines/ssh/:id", { path: { id: job.id } })
-        ).then((r) => r.text())
+        hubAt(fleet.base)
+          .api.machines.ssh({ id: job.id })
+          .get()
+          .then((r) => answerText(r))
       )
     );
     const log = await fleet.logs("hub");

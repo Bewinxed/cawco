@@ -33,10 +33,11 @@
  *
  *   bun scripts/probe-kit/run.ts session-read
  */
+
 import { Doc, encodeStateAsUpdate } from "yjs";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { sessionReadOf } from "../../../packages/hub/src/hub-auth";
 import { toolCall, toolRecord } from "../../lib/tool-call";
@@ -127,16 +128,15 @@ const spec: Spec = {
     const sKey = await credential(s);
     const tKey = await credential(t);
 
-    const made = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: s },
-        body: { kind: "canvas", name: "session-read", draft: true },
-      })
+    const made = await fleet.api((hub) =>
+      hub.api
+        .instances({ id: s })
+        .artifacts.post({ kind: "canvas", name: "session-read", draft: true })
     );
     const { id } = made;
-    const { path } = hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-      path: { id: s, artifact: id },
-    });
+    const path = hubPath.api.instances({ id: s }).artifacts({ artifact: id })[
+      "~path"
+    ];
 
     const person = await asked(fleet.base, path);
     check(
@@ -173,9 +173,7 @@ const spec: Spec = {
     );
     const view = await asked(
       fleet.base,
-      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
-        path: { id: s, artifact: id },
-      }).path
+      hubPath.api.instances({ id: s }).artifacts({ artifact: id }).view["~path"]
     );
     check(
       "(5) the person's view still answers him",

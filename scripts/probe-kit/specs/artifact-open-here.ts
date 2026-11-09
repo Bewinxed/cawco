@@ -43,12 +43,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import {
-  fetchHub,
-  type HubSent,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
+import type { HubClient } from "../../../packages/agent/src/hub-client";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import { type Kit, open, type Spec } from "../kit";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
@@ -101,13 +98,11 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Open here",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Open here",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const inProject = { projectId: project.id };
@@ -122,18 +117,13 @@ const run = async (kit: Kit) => {
 
   const create = (
     id: string,
-    body: HubSent<"POST /api/instances/:id/artifacts">["body"]
-  ) =>
-    fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", { path: { id }, body })
-    );
+    body: Parameters<
+      ReturnType<HubClient["api"]["instances"]>["artifacts"]["post"]
+    >[0]
+  ) => fleet.api((hub) => hub.api.instances({ id }).artifacts.post(body));
   /** The person's Close of `id`'s panel, as its head's Close sends it. */
   const close = async (id: string) => {
-    await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("DELETE /api/instances/:id/preview", { path: { id } })
-    );
+    await hubAt(fleet.base).api.instances({ id }).preview.delete();
   };
   const handed = await create(delegate, {
     kind: "page",
@@ -415,11 +405,11 @@ theirs = Preview("${theirs.id}", "The stranger's page")`,
   };
   /** Pressing Open full on the parent's decision page in `tab`, its panel showing it: the heading the panel on screen shows after, the address, the tabs and the page's refusal. */
   const openFull = async (tab: Page) => {
-    await fleet.api(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-        path: { id: parent, artifact: decision.id },
-        body: {},
-      })
+    await fleet.api((hub) =>
+      hub.api
+        .instances({ id: parent })
+        .artifacts({ artifact: decision.id })
+        .show.post({})
     );
     const button = tab
       .frameLocator(`${PANE} iframe[title="Preview"]`)

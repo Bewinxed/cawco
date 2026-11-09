@@ -68,7 +68,6 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { envOf, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -91,12 +90,7 @@ const offered = async (
   fleet: KitFleet,
   harness: "opencode" | "pi" = "opencode"
 ): Promise<string[]> => {
-  const agents = await fleet.api<
-    {
-      machineId: string;
-      harnesses?: { harness: string; models?: { value: string }[] }[];
-    }[]
-  >(hubRequest("GET /api/agents"));
+  const agents = await fleet.api((hub) => hub.api.agents.get());
   return (
     agents
       .find((row) => row.machineId === MACHINE)
@@ -335,18 +329,13 @@ const run = async (kit: Kit) => {
     none
   );
 
-  const account = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/accounts", {
-      body: { provider: PROVIDER, kind: "api_key" },
-    })
+  const account = await fleet.api((hub) =>
+    hub.api.accounts.post({ provider: PROVIDER, kind: "api_key" })
   );
-  const keyed = await fleet.api<{
-    machines: { machineId: string; error?: string }[];
-  }>(
-    hubRequest("POST /api/accounts/:id/key", {
-      path: { id: account.id },
-      body: { key: KEY, machineIds: [MACHINE] },
-    })
+  const keyed = await fleet.api((hub) =>
+    hub.api
+      .accounts({ id: account.id })
+      .key.post({ key: KEY, machineIds: [MACHINE] })
   );
   kit.check(
     "the key is written on the machine",

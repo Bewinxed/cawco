@@ -27,8 +27,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
-import type { MoveEstimate, MoveJob } from "../../../packages/core/src/move";
+import type { HubClient } from "../../../packages/agent/src/hub-client";
+import type { MoveEstimate } from "../../../packages/core/src/move";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -86,26 +86,21 @@ const run = async (kit: Kit) => {
   await fleet.launchMachine(B);
 
   /** The estimate of moving `projectId` to B's folder `moved-<label>`. */
-  const estimateOf = (projectId: string, label: string) =>
-    hubRequest("GET /api/projects/:id/move-estimate", {
-      path: { id: projectId },
+  const estimateOf = (projectId: string, label: string) => (hub: HubClient) =>
+    hub.api.projects({ id: projectId })["move-estimate"].get({
       query: { machine: B, path: join(fleet.sandbox, `moved-${label}`) },
     });
   for (const round of Array.from({ length: ROUNDS }, (_, index) => index + 1)) {
     const folder = join(fleet.sandbox, `plain-${round}`);
     await plainFolder(folder, `Plain ${round}`);
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: `Settled ${round}`,
-          machineId: MACHINE,
-          cwd: folder,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: `Settled ${round}`,
+        machineId: MACHINE,
+        cwd: folder,
       })
     );
-    const estimate = await fleet.api<MoveEstimate>(
-      estimateOf(project.id, String(round))
-    );
+    const estimate = await fleet.api(estimateOf(project.id, String(round)));
     const first = asked(estimate);
     if (round === 1) {
       // Where it moves is said once, by the title the lines stand under: a
@@ -133,7 +128,7 @@ const run = async (kit: Kit) => {
       `${folder}/.git ${isRepo ? "exists" : "missing"}`
     );
     const settled = asked(
-      await fleet.api<MoveEstimate>(estimateOf(project.id, String(round)))
+      await fleet.api(estimateOf(project.id, String(round)))
     );
     check(
       `round ${round}: the estimate read again says the same`,
@@ -145,28 +140,20 @@ const run = async (kit: Kit) => {
   // The held round: a place added while its remote read is held.
   const folder = join(fleet.sandbox, "plain-held");
   await plainFolder(folder, "Plain held");
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Settled held",
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Settled held",
     })
   );
-  await fleet.api(
-    hubRequest("POST /api/machines/:machineId/pause", {
-      path: { machineId: MACHINE },
-      body: {
-        until: new Date(Date.now() + 10 * 60_000).toISOString(),
-      },
+  await fleet.api((hub) =>
+    hub.api.machines({ machineId: MACHINE }).pause.post({
+      until: new Date(Date.now() + 10 * 60_000).toISOString(),
     })
   );
-  const adding = fleet.api(
-    hubRequest("POST /api/projects/:id/places", {
-      path: { id: project.id },
-      body: {
-        machineId: MACHINE,
-        path: folder,
-      },
+  const adding = fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).places.post({
+      machineId: MACHINE,
+      path: folder,
     })
   );
   await until(
@@ -180,19 +167,15 @@ const run = async (kit: Kit) => {
     20_000
   );
   let answeredAt: number | undefined;
-  const asking = fleet
-    .api<MoveEstimate>(estimateOf(project.id, "held"))
-    .then((estimate) => {
-      answeredAt = Date.now();
-      return estimate;
-    });
+  const asking = fleet.api(estimateOf(project.id, "held")).then((estimate) => {
+    answeredAt = Date.now();
+    return estimate;
+  });
   await Bun.sleep(HELD_MS);
   const answeredWhileHeld = answeredAt !== undefined;
   const resumedAt = Date.now();
-  await fleet.api(
-    hubRequest("POST /api/machines/:machineId/resume", {
-      path: { machineId: MACHINE },
-    })
+  await fleet.api((hub) =>
+    hub.api.machines({ machineId: MACHINE }).resume.post()
   );
   await adding;
   const held = asked(await asking);
@@ -201,9 +184,7 @@ const run = async (kit: Kit) => {
     plainAnswer(held),
     `${JSON.stringify(held)}; answered ${answeredWhileHeld ? "while the read was held" : `${(answeredAt ?? resumedAt) - resumedAt} ms after A resumed`}`
   );
-  const after = asked(
-    await fleet.api<MoveEstimate>(estimateOf(project.id, "held"))
-  );
+  const after = asked(await fleet.api(estimateOf(project.id, "held")));
   check(
     "held round: the estimate read again says the same",
     JSON.stringify(after) === JSON.stringify(held),
@@ -214,15 +195,12 @@ const run = async (kit: Kit) => {
   // refused as any start is (launches.ts `unchosenMode`), before it copies anything.
   const modelessTarget = join(fleet.sandbox, "moved-modeless");
   const modeless = await fleet
-    .api<{ id?: string }>(
-      hubRequest("POST /api/projects/:id/moves", {
-        path: { id: project.id },
-        body: {
-          machineId: B,
-          path: modelessTarget,
-          prompt: "PROBE-MOVE: say ok.",
-          spawn: { harness: "claude", model: "claude-haiku-4-5" },
-        },
+    .api((hub) =>
+      hub.api.projects({ id: project.id }).moves.post({
+        machineId: B,
+        path: modelessTarget,
+        prompt: "PROBE-MOVE: say ok.",
+        spawn: { harness: "claude", model: "claude-haiku-4-5" },
       })
     )
     .then(
@@ -235,9 +213,9 @@ const run = async (kit: Kit) => {
       shaped(spawnWords.modeUnchosen).test(modeless),
     modeless
   );
-  const jobs = (
-    await fleet.api<MoveJob[]>(hubRequest("GET /api/moves"))
-  ).filter((job) => job.projectId === project.id);
+  const jobs = (await fleet.api((hub) => hub.api.moves.get())).filter(
+    (job) => job.projectId === project.id
+  );
   check(
     "modeless leg: no move job was recorded and nothing was cloned",
     jobs.length === 0 && !existsSync(modelessTarget),

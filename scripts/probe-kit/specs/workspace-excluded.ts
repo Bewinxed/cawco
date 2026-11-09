@@ -42,43 +42,33 @@
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import type { HubClient } from "../../../packages/agent/src/hub-client";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  type HubSent,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyGone, copyWritePath, inCopyExists } from "../copy";
+import { answerText, type HubAsk, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 /** One request given `ms` to answer: its status and text. */
 const requestWithin = async (
   ms: number,
   base: string,
-  request: HubRequest
+  request: HubAsk
 ): Promise<{ status: number; text: string }> => {
-  const { method, path } = request;
-  const url = `${base}${path}`;
+  const url = base;
   const read = await readWithin(ms, async (signal) => {
-    const response = await fetchHub(fetch, base, request, { signal });
-    return {
-      status: response.status,
-      text: response.ok
-        ? await response.text()
-        : refusalWords(await response.text(), response.status),
-    };
+    const answer = await request(hubAt(base, { signal }));
+    return { status: answer.status, text: answerText(answer) };
   });
   switch (read.kind) {
     case "answered":
       return read.value;
     case "unanswered":
       throw new Error(
-        `${method} ${url} did not answer within ${read.after} ms (${read.reason})`
+        `${url} did not answer within ${read.after} ms (${read.reason})`
       );
     default:
       unhandled("read", read);
@@ -167,14 +157,6 @@ interface Workspace {
   state: string;
   tmp: string | null;
 }
-
-interface Sweep {
-  failed: { workspaceId: string; reason: string }[];
-  held: { workspaceId: string }[];
-  kept: { workspaceId: string; hold: string }[];
-  retired: { workspaceId: string }[];
-}
-
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
 /** A delegate this spec started, and how its item ended. */
@@ -237,13 +219,11 @@ const spec: Spec = {
       .cwd(src)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Excluded",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Excluded",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {
@@ -265,35 +245,28 @@ const spec: Spec = {
       ).catch(() => workspaceOf(id));
     const archiveOver = (
       id: string,
-      body?: HubSent<"POST /api/workspaces/:id/archive">["body"]
+      body?: Parameters<
+        ReturnType<HubClient["api"]["workspaces"]>["archive"]["post"]
+      >[0]
     ) =>
-      requestWithin(
-        120_000,
-        fleet.base,
-        hubRequest("POST /api/workspaces/:id/archive", {
-          path: { id },
-          ...(body && { body }),
-        })
+      requestWithin(120_000, fleet.base, (hub) =>
+        hub.api.workspaces({ id }).archive.post(body)
       );
     const delegate = async (
       tag: "X" | "Y" | "Z",
       onStart?: (workspace: Workspace) => Promise<void>
     ) => {
-      const started = await fleet.api<{
-        instanceId: string;
-        workItemId: string;
-        workspaceId: string;
-      }>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      const started = delegateStarted(
+        await fleet.api((hub) =>
+          hub.api["work-items"].post({
             parentInstanceId: parent,
             title: `Commit and end ${tag}`,
             prompt: `PROBE-EXCL-${tag}: commit a file.`,
             harness: "claude",
             model: "claude-haiku-4-5",
             cwd: src,
-          },
-        })
+          })
+        )
       );
       await onStart?.(workspaceOf(started.workspaceId));
       const item = await until(
@@ -351,9 +324,7 @@ const excludedPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `${JSON.stringify(refusal.slice(0, 600))}; ${x.item.state} ${x.item.error ?? ""}; ${heldX.state}; ${X_FILE} ${xFile() ? "stands" : "gone"}; harness-X/page.ts ${xFolder() ? "stands" : "gone"}`
   );
   const words = await fleet
-    .api<{ holds: string; excluded?: string[] }>(
-      hubRequest("GET /api/workspaces/:id/held", { path: { id: wx.id } })
-    )
+    .api((hub) => hub.api.workspaces({ id: wx.id }).held.get())
     .catch((error: unknown) => ({ holds: String(error), excluded: [] }));
   check(
     '(a) GET held on X says "1 commit on no remote, 1 excluded file, 1 excluded folder" and names both excluded paths',
@@ -445,13 +416,11 @@ const scratchPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       .env({ ...process.env, HOME: home })
       .quiet();
     scratchProject = (
-      await fleet.api<{ id: string }>(
-        hubRequest("POST /api/projects", {
-          body: {
-            name: "Scratch Z",
-            machineId: MACHINE,
-            cwd: scratch,
-          },
+      await fleet.api((hub) =>
+        hub.api.projects.post({
+          name: "Scratch Z",
+          machineId: MACHINE,
+          cwd: scratch,
         })
       )
     ).id;
@@ -463,9 +432,7 @@ const scratchPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     (now) => now === "sleeping",
     SETTLE_MS
   ).catch(() => undefined);
-  const swept = await fleet.api<Sweep>(
-    hubRequest("POST /api/workspaces/retire")
-  );
+  const swept = await fleet.api((hub) => hub.api.workspaces.retire.post());
   const hold = swept.kept.find((one) => one.workspaceId === wz.id)?.hold ?? "";
   check(
     "(d) Z's work lands and its session sleeps, and its workspace stays active, a sweep naming the project whose folder is in its TMPDIR",
@@ -492,14 +459,10 @@ const scratchPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       workspaceOf(wz.id).state === "active",
     `${kept.status} ${kept.text}; ${discarded.status} ${discarded.text}; ${workspaceOf(wz.id).state}`
   );
-  const forgot = await requestWithin(
-    60_000,
-    fleet.base,
-    hubRequest("DELETE /api/projects/:id", { path: { id: scratchProject } })
+  const forgot = await requestWithin(60_000, fleet.base, (hub) =>
+    hub.api.projects({ id: scratchProject }).delete()
   );
-  const again = await fleet.api<Sweep>(
-    hubRequest("POST /api/workspaces/retire")
-  );
+  const again = await fleet.api((hub) => hub.api.workspaces.retire.post());
   check(
     "(d) the project deleted, the next sweep retires Z: row archived, clone and TMPDIR gone",
     forgot.status === 200 &&

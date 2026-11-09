@@ -31,9 +31,9 @@
 import { existsSync } from "node:fs";
 import { mkdir, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 /** The blob's size on obelisk, as the Backlot session reported it. */
 const BLOB_BYTES = 8_463_330_762;
@@ -78,21 +78,19 @@ const delegate = (
   title: string
 ): Promise<{ workspaceId?: string } | { refused: string }> =>
   fleet
-    .api<{ workspaceId: string }>(
-      hubRequest("POST /api/work-items", {
-        body: {
-          parentInstanceId: parent,
-          title,
-          prompt: `${title}: say ok.`,
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd,
-          lands: "none",
-        },
+    .api((hub) =>
+      hub.api["work-items"].post({
+        parentInstanceId: parent,
+        title,
+        prompt: `${title}: say ok.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd,
+        lands: "none",
       })
     )
     .then(
-      (started) => ({ workspaceId: started.workspaceId }),
+      (answer) => ({ workspaceId: delegateStarted(answer).workspaceId }),
       (error: Error) => ({ refused: error.message })
     );
 
@@ -173,13 +171,11 @@ const projectOf = async (
   git: boolean;
   workspace: { kind: string; repo_root: string } | string;
 }> => {
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name,
-        machineId: MACHINE,
-        cwd: folder,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name,
+      machineId: MACHINE,
+      cwd: folder,
     })
   );
   const parent = await fleet.spawn("claude", `${name} parent`, folder, {
@@ -282,13 +278,11 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const homeProject = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Home",
-        machineId: MACHINE,
-        cwd: home,
-      },
+  const homeProject = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Home",
+      machineId: MACHINE,
+      cwd: home,
     })
   );
   const parent = await fleet.spawn("claude", "Home parent", home, {

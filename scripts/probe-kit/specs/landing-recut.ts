@@ -59,11 +59,10 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { movedLine } from "../../../packages/core/src/injected";
 import { workWords } from "../../../packages/core/src/words/work";
@@ -71,6 +70,7 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-RECUT-GATE-([LNSMK])/u;
@@ -350,34 +350,28 @@ const settled = (fleet: Fleet, label: string, id: string, mark: string) =>
 const delegated = async (fleet: Fleet, tag: Tag, lockfile: boolean) => {
   const repo = join(fleet.sandbox, `code-${tag}`);
   await makeRepo(repo, fleet.env.HOME as string, lockfile);
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: `Landing recut ${tag}`,
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: `Landing recut ${tag}`,
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   await declareGate(fleet.base, project.id, JS_GATE);
   const parent = await fleet.spawn("claude", `Parent ${tag}`, repo, {
     projectId: project.id,
   });
-  const started = await fleet.api<{
-    instanceId: string;
-    workItemId: string;
-    workspaceId: string;
-  }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: `Commit ${tag}`,
         prompt: `PROBE-RECUT-GATE-${tag}: commit a file, then finish.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: repo,
-      },
-    })
+      })
+    )
   );
   return { project, parent, started };
 };

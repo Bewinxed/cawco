@@ -52,7 +52,6 @@
  *    be reached".
  */
 import type { Page, Route } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   INSTANT_REFUSAL_MS,
   type PreviewUnreached,
@@ -284,42 +283,34 @@ const decisionSession = async (
   port: number
 ): Promise<{ decided: string; embedPort: number }> => {
   const decided = await fleet.spawn("claude", "Pictures", fleet.repo);
-  const site = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: decided },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try this page and say whether it works",
-        name: "the-site",
-        port,
-        machine: MACHINE,
-      },
+  const site = await fleet.api((hub) =>
+    hub.api.instances({ id: decided }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try this page and say whether it works",
+      name: "the-site",
+      port,
+      machine: MACHINE,
     })
   );
-  const page = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: decided },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: "Pick one option on each card",
-        name: "pick-host",
-        program: `root = Decisions("Pick the host", [where])
+  const page = await fleet.api((hub) =>
+    hub.api.instances({ id: decided }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: "Pick one option on each card",
+      name: "pick-host",
+      program: `root = Decisions("Pick the host", [where])
 where = Decision("where", "Where does the site run?", [here, there], "It runs on the machine today.", [], [], false, null, "behaviour")
 here = Option("here", "Here", "As it runs now.", true, [live], "Nothing new to try.")
 there = Option("there", "Elsewhere", "Somewhere new.", false, [], "A move to make first.")
 live = Preview("${site.id}", "The site as it runs")`,
-      },
     })
   );
   // The embed's origin, as the hub names it in the page it serves.
-  const { port: own } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/instances/:id/preview-address", {
-      path: { id: decided },
-    })
+  const { port: own } = await fleet.api((hub) =>
+    hub.api.instances({ id: decided })["preview-address"].post()
   );
   const served = await passedFetch(
     fleet,
@@ -615,10 +606,8 @@ const serverGone = async (leg: {
   ported: string;
 }) => {
   const { artifact, base, engine, fleet, kit, ported } = leg;
-  const { port } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact },
-    })
+  const { port } = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact })["preview-address"].post()
   );
   const host = `${new URL(base).hostname}:${port}`;
   await fleet.stop("agent");
@@ -716,17 +705,14 @@ const run = async (kit: Kit) => {
 
   // 1. A page artifact, its first ping refused at this browser.
   const paged = await fleet.spawn("claude", "Refused once", fleet.repo);
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: paged },
-      body: {
-        kind: "page",
-        does: "judge",
-        title: "Probe judge artifact",
-        ask: "Judge this page: pin anything that reads wrong",
-        name: "refused-once",
-        html: pageOf("Refused once"),
-      },
+  await fleet.api((hub) =>
+    hub.api.instances({ id: paged }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      title: "Probe judge artifact",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "refused-once",
+      html: pageOf("Refused once"),
     })
   );
   const desk = await kit.page("desk");
@@ -780,17 +766,14 @@ const run = async (kit: Kit) => {
       }),
   });
   const ported = await fleet.spawn("claude", "Agent away", fleet.repo);
-  const away = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: ported },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try this page and say whether it works",
-        name: "agent-away",
-        port: app.port,
-      },
+  const away = await fleet.api((hub) =>
+    hub.api.instances({ id: ported }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try this page and say whether it works",
+      name: "agent-away",
+      port: app.port,
     })
   );
   for (const engine of GONE_ENGINES) {
@@ -837,9 +820,7 @@ const run = async (kit: Kit) => {
   await frozen.close();
 
   // 4. Each cause, on the pane's card and on a decision page's Preview.
-  const { ports } = await fleet.api<{ ports: string }>(
-    hubRequest("GET /api/preview-settings")
-  );
+  const { ports } = await fleet.api((hub) => hub.api["preview-settings"].get());
   const bare = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -848,10 +829,8 @@ const run = async (kit: Kit) => {
   });
   barePort = Number(bare.port);
   const { decided, embedPort } = await decisionSession(fleet, Number(app.port));
-  const { port: panePort } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/instances/:id/preview-address", {
-      path: { id: paged },
-    })
+  const { port: panePort } = await fleet.api((hub) =>
+    hub.api.instances({ id: paged })["preview-address"].post()
   );
   const legs: Legs = { base, decided, embedPort, kit, paged, panePort, ports };
   for (const cause of CAUSES) {

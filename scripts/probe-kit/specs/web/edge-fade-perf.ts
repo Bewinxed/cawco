@@ -52,7 +52,6 @@ import { writeFile } from "node:fs/promises";
 import { loadavg } from "node:os";
 import { join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
-import { hubRequest } from "../../../../packages/core/src/hub-request";
 import { MACHINE } from "../../../scratch-fleet";
 import { frames, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -547,25 +546,20 @@ const spec: Spec = {
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    const { id: project } = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "long-list",
-          machineId: MACHINE,
-          cwd: fleet.repo,
-          caw: false,
-        },
+    const { id: project } = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "long-list",
+        machineId: MACHINE,
+        cwd: fleet.repo,
+        caw: false,
       })
     );
     for (let i = 0; i < ROWS; i += 1) {
-      await fleet.api(
-        hubRequest("POST /api/projects/:id/tasks", {
-          path: { id: project },
-          body: {
-            title: `Task ${String(i).padStart(3, "0")}: tidy the release notes for the next build`,
-            labels: [["web", "copy", "data"][i % 3] as string],
-            fields: { priority: ["high", "medium", "low"][i % 3] as string },
-          },
+      await fleet.api((hub) =>
+        hub.api.projects({ id: project }).tasks.post({
+          title: `Task ${String(i).padStart(3, "0")}: tidy the release notes for the next build`,
+          labels: [["web", "copy", "data"][i % 3] as string],
+          fields: { priority: ["high", "medium", "low"][i % 3] as string },
         })
       );
     }

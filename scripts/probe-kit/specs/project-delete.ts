@@ -39,19 +39,13 @@ import { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import {
   type MachineFloor,
   removalRefusal,
   removeFolder,
 } from "../../../packages/agent/src/remove-folder";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  fetchHub,
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import {
   type MachinePath,
   machinePath,
@@ -59,6 +53,7 @@ import {
 import { projectTrashWords } from "../../../packages/core/src/words/project-trash";
 import type { RemoveFolder } from "../../../packages/core/src/workspace/controls";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
+import { answerText, type HubAsk, handled, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const B = "probe-delete-b";
@@ -74,7 +69,7 @@ type HubDb = Awaited<ReturnType<typeof inProcess>>["db"];
 
 /** The in-process hub, its second machine's stand-in, and the disk that stand-in holds. */
 interface Rig {
-  call: (request: HubRequest) => Promise<Answer>;
+  call: (request: HubAsk) => Promise<Answer>;
   /** Every call the stand-in was asked, method first. */
   calls: string[];
   db: HubDb;
@@ -83,6 +78,8 @@ interface Rig {
   floor: MachineFloor;
   journal: string[];
   kit: Kit;
+  /** `POST /api/projects/:id/delete`, sent by hand: Treaty cannot name it, as `DELETE /api/projects/:id` takes the `delete` key in the hub's routes. */
+  postDelete: (id: string, body?: object) => Promise<Answer>;
   raw: Database;
   root: (projectId: string) => string;
   trash: () => Promise<string[]>;
@@ -299,11 +296,8 @@ const liveLeg = async (rig: Rig): Promise<void> => {
   const checkout = await folder(join(rig.disk, "src", "delete-live"));
   const at = machinePath(rig.floor.home, checkout, B);
   const id = project(rig, "Probe delete live", at);
-  await call(
-    hubRequest("POST /api/projects/:id/tasks", {
-      path: { id },
-      body: { title: "Delete me" },
-    })
+  await call((hub) =>
+    hub.api.projects({ id }).tasks.post({ title: "Delete me" })
   );
   const ended = session(rig, id, at);
   browser(rig, id, B);
@@ -311,9 +305,7 @@ const liveLeg = async (rig: Rig): Promise<void> => {
   const active = await workspace(rig, id, ended, at, "active", null);
   const archived = await workspace(rig, id, ended, at, "archived", carry);
   const hubFolder = await there(rig.root(id));
-  const deleted = await call(
-    hubRequest("POST /api/projects/:id/delete", { path: { id } })
-  );
+  const deleted = await rig.postDelete(id);
   check(
     rig,
     "a. deleted: 200, the project and its folder on the hub gone",
@@ -356,7 +348,7 @@ const liveLeg = async (rig: Rig): Promise<void> => {
     await there(join(checkout, "kept.txt")),
     checkout
   );
-  const listed = await call(hubRequest("GET /api/projects/forgotten"));
+  const listed = await call((hub) => hub.api.projects.forgotten.get());
   const lines = rig.journal.filter((line) =>
     line.startsWith(projectTrashWords.deleteLine(id))
   );
@@ -378,17 +370,12 @@ const forgottenLeg = async (rig: Rig): Promise<void> => {
   const checkout = await folder(join(rig.disk, "src", "delete-forgotten"));
   const at = machinePath(rig.floor.home, checkout, B);
   const id = project(rig, "Probe delete forgotten", at);
-  await call(
-    hubRequest("POST /api/projects/:id/tasks", {
-      path: { id },
-      body: { title: "Forget me" },
-    })
+  await call((hub) =>
+    hub.api.projects({ id }).tasks.post({ title: "Forget me" })
   );
   const ended = session(rig, id, at);
   browser(rig, id, B);
-  const forgot = await call(
-    hubRequest("DELETE /api/projects/:id", { path: { id } })
-  );
+  const forgot = await call((hub) => hub.api.projects({ id }).delete());
   const kept = (await rig.trash()).filter((one) => one.startsWith(`${id}-`));
   check(
     rig,
@@ -396,14 +383,9 @@ const forgottenLeg = async (rig: Rig): Promise<void> => {
     forgot.status === 200 && kept.length === 2,
     JSON.stringify(kept)
   );
-  const deleted = await call(
-    hubRequest("POST /api/projects/:id/delete", {
-      path: { id },
-      body: {
-        fromDisk: true,
-      },
-    })
-  );
+  const deleted = await rig.postDelete(id, {
+    fromDisk: true,
+  });
   check(
     rig,
     "b. deleted from the trash with fromDisk: 200, its trash entry gone, its checkout removed from its machine's disk",
@@ -440,7 +422,7 @@ const nestedLeg = async (rig: Rig): Promise<void> => {
   const narrow = await folder(join(wide, "a"));
   const wideId = project(rig, "Probe delete wide", at(wide));
   const narrowId = project(rig, "Probe delete narrow", at(narrow));
-  const listed = await rig.call(hubRequest("GET /api/projects"));
+  const listed = await rig.call((hub) => hub.api.projects.get());
   const narrowRow = (
     JSON.parse(listed.text) as {
       id: string;
@@ -455,12 +437,10 @@ const nestedLeg = async (rig: Rig): Promise<void> => {
     ) === JSON.stringify([{ id: wideId, name: "Probe delete wide" }]),
     JSON.stringify(narrowRow?.places)
   );
-  await rig.call(
-    hubRequest("DELETE /api/projects/:id", { path: { id: narrowId } })
-  );
+  await rig.call((hub) => hub.api.projects({ id: narrowId }).delete());
   const forgotten = (
     JSON.parse(
-      (await rig.call(hubRequest("GET /api/projects/forgotten"))).text
+      (await rig.call((hub) => hub.api.projects.forgotten.get())).text
     ) as {
       id: string;
       places: { kind: string; within: { id: string; name: string }[] }[];
@@ -474,14 +454,9 @@ const nestedLeg = async (rig: Rig): Promise<void> => {
     ) === JSON.stringify([{ id: wideId, name: "Probe delete wide" }]),
     JSON.stringify(forgotten?.places)
   );
-  const inside = await rig.call(
-    hubRequest("POST /api/projects/:id/delete", {
-      path: { id: narrowId },
-      body: {
-        fromDisk: true,
-      },
-    })
-  );
+  const inside = await rig.postDelete(narrowId, {
+    fromDisk: true,
+  });
   check(
     rig,
     "c. a project at /x/a with another live at /x deletes with its files: /x/a gone, /x kept",
@@ -496,14 +471,9 @@ const nestedLeg = async (rig: Rig): Promise<void> => {
   const inner = await folder(join(outer, "a"));
   const outerId = project(rig, "Probe delete outer", at(outer));
   project(rig, "Probe delete inner", at(inner));
-  const holds = await rig.call(
-    hubRequest("POST /api/projects/:id/delete", {
-      path: { id: outerId },
-      body: {
-        fromDisk: true,
-      },
-    })
-  );
+  const holds = await rig.postDelete(outerId, {
+    fromDisk: true,
+  });
   check(
     rig,
     "c. a project at /x with another live at /x/a: refused in core's words, nothing removed",
@@ -525,14 +495,9 @@ const nestedLeg = async (rig: Rig): Promise<void> => {
   const same = await folder(join(rig.disk, "src", "delete-same"));
   const sameId = project(rig, "Probe delete same", at(same));
   project(rig, "Probe delete twin", at(same));
-  const shared = await rig.call(
-    hubRequest("POST /api/projects/:id/delete", {
-      path: { id: sameId },
-      body: {
-        fromDisk: true,
-      },
-    })
-  );
+  const shared = await rig.postDelete(sameId, {
+    fromDisk: true,
+  });
   check(
     rig,
     "c. a project at the same folder as another: refused in core's words, nothing removed",
@@ -565,9 +530,7 @@ const awayLeg = async (rig: Rig): Promise<void> => {
     machinePath(rig.floor.home, checkout, B)
   );
   browser(rig, id, AWAY);
-  const refused = await rig.call(
-    hubRequest("POST /api/projects/:id/delete", { path: { id } })
-  );
+  const refused = await rig.postDelete(id);
   check(
     rig,
     "d. a machine holding part of it is away: refused in core's words naming it, nothing removed",
@@ -638,10 +601,12 @@ export default {
       // Listening once it answers.
       for (let tries = 0; tries < 50; tries += 1) {
         if (
-          await fetchHub(fetch, base, hubRequest("GET /health")).then(
-            (r) => r.ok,
-            () => false
-          )
+          await hubAt(base)
+            .health.get()
+            .then(
+              (r) => r.error === null,
+              () => false
+            )
         ) {
           break;
         }
@@ -662,19 +627,34 @@ export default {
       const raw = new Database(dbPath);
       raw.run("PRAGMA busy_timeout = 5000");
       const rig: Rig = {
-        call: async (request) => {
+        postDelete: async (id, body) => {
           const response = await hub.handle(
             new Request(
-              `http://127.0.0.1${request.path}`,
-              hubInit(request, { headers: { [PRESENCE_HEADER]: PRESENCE } })
+              `http://127.0.0.1${hubPath.api.projects({ id })["~path"]}/delete`,
+              {
+                method: "POST",
+                headers: {
+                  [PRESENCE_HEADER]: PRESENCE,
+                  ...(body ? { "content-type": "application/json" } : {}),
+                },
+                ...(body ? { body: JSON.stringify(body) } : {}),
+              }
             )
           );
-          return {
-            status: response.status,
-            text: response.ok
-              ? await response.text()
-              : refusalWords(await response.text(), response.status),
-          };
+          const text = await response.text();
+          let json: unknown;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            // Words, not JSON: a refusal.
+          }
+          return { status: response.status, text, json };
+        },
+        call: async (request) => {
+          const answer = await request(
+            handled((r) => hub.handle(r), { [PRESENCE_HEADER]: PRESENCE })
+          );
+          return { status: answer.status, text: answerText(answer) };
         },
         calls: [],
         db,

@@ -80,15 +80,11 @@
  *     the segment's panel (it holds the cards, so it takes no Tab stop).
  */
 import type { Page } from "playwright-core";
-import { refusalWords } from "../../../../packages/core/src/hub-refusal";
-import {
-  type HubRequest,
-  hubRequest,
-} from "../../../../packages/core/src/hub-request";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { filesWords } from "../../../../packages/core/src/words/files";
 import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { tokenColour } from "../../geom";
+import { type HubAsk, requestOf } from "../../hub";
 import { scan } from "../../journeys/scan";
 import {
   COMPOSER,
@@ -461,18 +457,14 @@ const seed = async (
         ? "The pricing tiers for the hub, and what each plan carries."
         : `Page ${i} of the session's work.`;
     const title = titleOf(name);
-    const created = await pageAsk(
-      page,
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id },
-        body: {
-          kind: "page",
-          name,
-          does: "judge",
-          title,
-          ask: `Judge ${title}: pin anything that reads wrong`,
-          html: `<!doctype html><html><body><h1>${name}</h1><p>${words}</p></body></html>`,
-        },
+    const created = await pageAsk(page, (hub) =>
+      hub.api.instances({ id }).artifacts.post({
+        kind: "page",
+        name,
+        does: "judge",
+        title,
+        ask: `Judge ${title}: pin anything that reads wrong`,
+        html: `<!doctype html><html><body><h1>${name}</h1><p>${words}</p></body></html>`,
       })
     );
     if (!created.ok) {
@@ -491,12 +483,11 @@ const seed = async (
             i,
             shape: SHAPES[name] ?? null,
           });
-    const kept = await pageAsk(
-      page,
-      hubRequest("PUT /api/instances/:id/artifacts/:artifact/thumbnail", {
-        path: { id, artifact: artifactId },
-        body: { light, dark: null, single: true },
-      })
+    const kept = await pageAsk(page, (hub) =>
+      hub.api
+        .instances({ id })
+        .artifacts({ artifact: artifactId })
+        .thumbnail.put({ light, dark: null, single: true })
     );
     if (!kept.ok) {
       throw new Error(`thumbnail ${name}: ${kept.status} ${kept.text}`);
@@ -543,33 +534,30 @@ const drawThumbnail = ({
 };
 
 /** `request` sent from the dashboard's page, as the person's browser sends it: its status and text. */
-const pageAsk = (page: Page, request: HubRequest) =>
-  page.evaluate(async (asked) => {
-    const response = await fetch(asked.path, asked);
-    return {
-      ok: response.ok,
-      status: response.status,
-      text: response.ok
-        ? await response.text()
-        : refusalWords(await response.text(), response.status),
-    };
-  }, request);
+const pageAsk = async (page: Page, request: HubAsk) =>
+  page.evaluate(
+    async (asked) => {
+      const response = await fetch(asked.path, asked);
+      return {
+        ok: response.ok,
+        status: response.status,
+        text: await response.text(),
+      };
+    },
+    await requestOf(request)
+  );
 
 /** Seeds the decision pages, unpictured, as a session's agent makes them (OpenUI programs). */
 const seedDecisions = async (page: Page, id: string) => {
   for (const { name, title, program } of DECISIONS) {
-    const response = await pageAsk(
-      page,
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id },
-        body: {
-          kind: "page",
-          name,
-          does: "pick",
-          title,
-          ask: "Pick one option on each card",
-          program,
-        },
+    const response = await pageAsk(page, (hub) =>
+      hub.api.instances({ id }).artifacts.post({
+        kind: "page",
+        name,
+        does: "pick",
+        title,
+        ask: "Pick one option on each card",
+        program,
       })
     );
     if (!response.ok) {
@@ -1218,9 +1206,9 @@ const reviewLegs = async (
         columns,
       };
     },
-    hubRequest("GET /api/instances/:id/artifacts/files", {
-      path: { id: ids.many },
-    })
+    await requestOf((hub) =>
+      hub.api.instances({ id: ids.many }).artifacts.files.get()
+    )
   );
   kit.check(
     "15: the cards are drawn once, in one grid, in the hub's order (newest first), the first row across every column",
@@ -2104,11 +2092,8 @@ const roundThree = async (
   ).catch(() => null);
   const listed = JSON.parse(
     (
-      await pageAsk(
-        drawn,
-        hubRequest("GET /api/instances/:id/artifacts", {
-          path: { id: ids.many },
-        })
+      await pageAsk(drawn, (hub) =>
+        hub.api.instances({ id: ids.many }).artifacts.get()
       )
     ).text
   ) as { id: string; name: string; thumbnail: unknown }[];
@@ -2130,12 +2115,14 @@ const roundThree = async (
       ),
     {
       names: UNPICTURED,
-      rows: listed.map((one) => ({
-        one,
-        found: hubRequest("GET /api/artifacts/:artifact", {
-          path: { artifact: one.id },
-        }),
-      })),
+      rows: await Promise.all(
+        listed.map(async (one) => ({
+          one,
+          found: await requestOf((hub) =>
+            hub.api.artifacts({ artifact: one.id }).get()
+          ),
+        }))
+      ),
     }
   );
   kit.check(
@@ -2742,7 +2729,7 @@ const keysLeg = async (
   );
   await page.evaluate(
     (request) => fetch(request.path, request),
-    hubRequest("DELETE /api/instances/:id/preview", { path: { id } })
+    await requestOf((hub) => hub.api.instances({ id }).preview.delete())
   );
   await page
     .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {
@@ -3149,7 +3136,7 @@ const pickLeg = async (
   );
   await page.evaluate(
     (request) => fetch(request.path, request),
-    hubRequest("DELETE /api/instances/:id/preview", { path: { id } })
+    await requestOf((hub) => hub.api.instances({ id }).preview.delete())
   );
   await page
     .waitForFunction((name) => !document.querySelector(name), PANE_NAME, {

@@ -38,12 +38,9 @@
  */
 
 import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import {
-  type PreviewTicket,
-  previewEnterUrl,
-} from "../../../packages/core/src/preview/routes";
+import { previewEnterUrl } from "../../../packages/core/src/preview/routes";
 import { type Reply, until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import { type Kit, open, type Spec } from "../kit";
 import { PASS_DOMAIN } from "../pass-legs";
 
@@ -124,39 +121,30 @@ const probe = async (kit: Kit, servedPort: number) => {
   const base = await fleet.dashboard();
   const session = await fleet.spawn("claude", "Preview lock", fleet.repo);
 
-  const range = await fleet.api<{ ports: string }>(
-    hubRequest("GET /api/preview-settings")
-  );
+  const range = await fleet.api((hub) => hub.api["preview-settings"].get());
   const first = Number(range.ports.split("–")[0]);
-  const preview = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try the served page",
-        name: "lock-served",
-        port: servedPort,
-      },
+  const preview = await fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try the served page",
+      name: "lock-served",
+      port: servedPort,
     })
   );
   const previewAt = () =>
-    fleet.api<{ origin?: string; port: number }>(
-      hubRequest("POST /api/artifacts/:artifact/preview-address", {
-        path: { artifact: preview.id },
-      })
+    fleet.api((hub) =>
+      hub.api.artifacts({ artifact: preview.id })["preview-address"].post()
     );
   const sessionAt = () =>
-    fleet.api<{ origin?: string; port: number }>(
-      hubRequest("POST /api/instances/:id/preview-address", {
-        path: { id: session },
-      })
+    fleet.api((hub) =>
+      hub.api.instances({ id: session })["preview-address"].post()
     );
   /** A pass from a ticket spent at `origin` (`name=value`), and the entry's status. */
   const entered = async (origin: string, named?: string) => {
-    const { ticket } = await fleet.api<PreviewTicket>(
-      hubRequest("POST /api/preview-ticket")
+    const { ticket } = await fleet.api((hub) =>
+      hub.api["preview-ticket"].post()
     );
     const entry = await ask(
       previewEnterUrl(origin, ticket, "/"),
@@ -225,21 +213,15 @@ const probe = async (kit: Kit, servedPort: number) => {
   await tab.evaluate(() => {
     (window as unknown as { __stayed: boolean }).__stayed = true;
   });
-  const put = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PUT /api/preview-settings", {
-      body: {
-        mode: "host",
-        pattern: `https://p-{port}.${PASS_DOMAIN}:${first}`,
-      },
-    })
-  );
+  const put = await hubAt(fleet.base).api["preview-settings"].put({
+    mode: "host",
+    pattern: `https://p-{port}.${PASS_DOMAIN}:${first}`,
+  });
   if (
     !kit.check(
       "host mode is taken live, as Settings › Previews saves it (its names must resolve here)",
-      put.ok,
-      `${put.status} ${await put.text()}`
+      put.error === null,
+      `${put.status} ${answerText(put)}`
     )
   ) {
     return;

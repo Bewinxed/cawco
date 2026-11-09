@@ -48,12 +48,13 @@ import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 import { writePin } from "../../../packages/core/src/comments/model";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls, toolReply } from "../../tool-calls";
 import { declareGate } from "../gate";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 import { passedFetch } from "../preview-pass";
 
 const FINISH = "mcp__cawco__finish_item";
@@ -274,9 +275,9 @@ const delegate = async (
   tag: string,
   extra: object = {}
 ): Promise<string> => {
-  const made = await legs.fleet.api<{ workItemId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const made = delegateStarted(
+    await legs.fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: `Restart leg ${tag}`,
         prompt: `PROBE-RH-${tag}: do your part.`,
@@ -284,8 +285,8 @@ const delegate = async (
         model: "claude-haiku-4-5",
         cwd: legs.repo,
         ...extra,
-      },
-    })
+      })
+    )
   );
   await until(
     `${tag}'s session running`,
@@ -568,22 +569,13 @@ const legD = async (legs: Legs) => {
 const legE = async (legs: Legs) => {
   const { check, fleet } = legs;
   const put = (method: "PUT" | "DELETE") =>
-    fetchHub(
-      fetch,
-      fleet.base,
-      method === "PUT"
-        ? hubRequest("PUT /api/delegate-types/:name", {
-            path: { name: TYPE_E },
-            body: {
-              description: "A probe's type",
-              harness: "claude",
-              model: "claude-haiku-4-5",
-            },
-          })
-        : hubRequest("DELETE /api/delegate-types/:name", {
-            path: { name: TYPE_E },
-          })
-    );
+    method === "PUT"
+      ? hubAt(fleet.base).api["delegate-types"]({ name: TYPE_E }).put({
+          description: "A probe's type",
+          harness: "claude",
+          model: "claude-haiku-4-5",
+        })
+      : hubAt(fleet.base).api["delegate-types"]({ name: TYPE_E }).delete();
   const madeType = await put("PUT");
   const item = await delegate(legs, legs.parent, "E", { type: TYPE_E });
   const session = itemOf(fleet, item)?.instance_id ?? "";
@@ -621,8 +613,8 @@ const legE = async (legs: Legs) => {
   ).catch(() => undefined);
   check(
     "(e) an item whose delegate type was deleted, started again after a restart, is blocked, never failed: still running, its message kept at the hub held `blocked`, and Needs you tells you it is blocked and why",
-    madeType.ok &&
-      deleted.ok &&
+    madeType.error === null &&
+      deleted.error === null &&
       status === "sleeping" &&
       blocked?.state === "running" &&
       (blocked.blocked ?? "").includes(TYPE_E) &&
@@ -665,7 +657,10 @@ const legE = async (legs: Legs) => {
   );
   check(
     "(e) the type back, the block clears within the sweep, its notice goes, and the kept message reaches the session",
-    back.ok && !cleared?.blocked && !notice && went?.state === "read",
+    back.error === null &&
+      !cleared?.blocked &&
+      !notice &&
+      went?.state === "read",
     `type put back ${back.status}; item blocked: ${cleared?.blocked ?? "no"}; notice: ${notice?.title ?? "gone"}; send: ${went?.state}`
   );
 };
@@ -753,13 +748,11 @@ const standUp = async (kit: Kit): Promise<Legs> => {
     .cwd(repo)
     .env(env)
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Hub restart",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Hub restart",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", repo, {

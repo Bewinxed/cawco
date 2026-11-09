@@ -65,12 +65,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
-import {
-  fetchHub,
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
@@ -78,6 +76,7 @@ import { askCollapseId } from "../../../packages/hub/src/notifications";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { doorOf, liveBrowser, servedSite } from "../gated-pages";
+import { answerText, hubAt, payloadOf } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { type Phone, standInPhone } from "../phone";
 
@@ -130,7 +129,7 @@ const HELLO = `PROBE-WAITS-HELLO-${crypto.randomUUID().slice(0, 8)}`;
 
 interface Parked {
   instanceId?: string;
-  payload: { browserAsk?: { key: string }; toolName?: string };
+  payload?: unknown;
   requestId?: string;
 }
 
@@ -208,13 +207,11 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Delegate waits",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Delegate waits",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const inProject = { projectId: project.id };
@@ -266,17 +263,12 @@ const run = async (kit: Kit) => {
       item,
       child
     );
-    const renamed = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("PATCH /api/instances/:id", {
-        path: { id: child },
-        body: { title },
-      })
-    );
-    if (!renamed.ok) {
+    const renamed = await hubAt(fleet.base)
+      .api.instances({ id: child })
+      .patch({ title });
+    if (renamed.error !== null) {
       throw new Error(
-        `${title}'s rename: ${renamed.status} ${await renamed.text()}`
+        `${title}'s rename: ${renamed.status} ${answerText(renamed)}`
       );
     }
     workspaces.set(child, workspace);
@@ -329,8 +321,8 @@ const run = async (kit: Kit) => {
   const parked = await until(
     "(a) the browser ask waiting on the person",
     async () =>
-      (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).find(
-        (one) => one.instanceId === delegate && one.payload.browserAsk
+      (await fleet.api((hub) => hub.api.pending.get())).find(
+        (one) => one.instanceId === delegate && payloadOf(one).browserAsk
       ),
     Boolean,
     60_000
@@ -349,18 +341,18 @@ const run = async (kit: Kit) => {
   check(
     "(a) a delegate whose parent ended its turn calls browser_ask: the ask waits on the person, and the parent is woken with the note, once, that its delegate waits on the person, its origin and reason",
     !!parked && !!waits && waitsSent() === 1,
-    `pending: ${parked ? `${parked.requestId} ${parked.payload.browserAsk?.key}` : "none"}; the parent's sends of the wait: ${waitsSent()}; the parent's requests since: ${
+    `pending: ${parked ? `${parked.requestId} ${payloadOf({ payload: payloadOf(parked).browserAsk }).key}` : "none"}; the parent's sends of the wait: ${waitsSent()}; the parent's requests since: ${
       heard
         .slice(before)
         .map((one) => one.last.slice(0, 200))
         .join(" | ") || "none"
     }`
   );
-  if (!(parked?.requestId && parked.payload.browserAsk)) {
+  if (!(parked?.requestId && payloadOf(parked).browserAsk)) {
     return;
   }
   const { requestId } = parked;
-  const { key } = parked.payload.browserAsk;
+  const key = String(payloadOf({ payload: payloadOf(parked).browserAsk }).key);
 
   // (b) The parent cannot answer it in the person's place.
   const refused = await callAs(fleet, parent, "answer_delegate", {
@@ -368,9 +360,9 @@ const run = async (kit: Kit) => {
     requestId,
     deny: true,
   });
-  const still = (
-    await fleet.api<Parked[]>(hubRequest("GET /api/pending"))
-  ).some((one) => one.requestId === requestId);
+  const still = (await fleet.api((hub) => hub.api.pending.get())).some(
+    (one) => one.requestId === requestId
+  );
   check(
     "(b) the parent's answer_delegate deny of the browser ask is refused, saying only the person answers it, and the ask still waits",
     refused.refused &&
@@ -384,13 +376,10 @@ const run = async (kit: Kit) => {
   const tookSent = (): number =>
     sendsOf(fleet, parent, delegateWaitWords.tookOverLine("Waits delegate"));
   const took = await fleet
-    .api<unknown>(
-      hubRequest("POST /api/browsers/:key/takeover", {
-        path: { key },
-        body: {
-          requestId,
-          machineId: MACHINE,
-        },
+    .api((hub) =>
+      hub.api.browsers({ key }).takeover.post({
+        requestId,
+        machineId: MACHINE,
       })
     )
     .then(
@@ -424,11 +413,8 @@ const run = async (kit: Kit) => {
   const backSent = (): number =>
     sendsOf(fleet, parent, delegateWaitWords.endedLine("Waits delegate"));
   const back = await fleet
-    .api<{ origin: string | null }>(
-      hubRequest("POST /api/browsers/:key/handback", {
-        path: { key },
-        body: { machineId: MACHINE },
-      })
+    .api((hub) =>
+      hub.api.browsers({ key }).handback.post({ machineId: MACHINE })
     )
     .then(
       (said) => ({ origin: said.origin, error: undefined }),
@@ -473,18 +459,11 @@ const run = async (kit: Kit) => {
     ["design/manifest.json", `${JSON.stringify({ sources: {}, files: {} })}\n`],
     ["design/DESIGN.md", "# Waits\n"],
   ] as const) {
-    const put = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("PUT /api/projects/:id/folder/file", {
-        path: { id: project.id },
-        body: { path, content },
-      })
-    );
-    if (!put.ok) {
-      throw new Error(
-        `the person's ${path}: ${put.status} ${await put.text()}`
-      );
+    const put = await hubAt(fleet.base)
+      .api.projects({ id: project.id })
+      .folder.file.put({ path, content });
+    if (put.error !== null) {
+      throw new Error(`the person's ${path}: ${put.status} ${answerText(put)}`);
     }
   }
   const folder = join(fleet.sandbox, "hub", "projects", project.id);
@@ -507,7 +486,7 @@ const run = async (kit: Kit) => {
     until(
       what,
       async () =>
-        (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).find(
+        (await fleet.api((hub) => hub.api.pending.get())).find(
           (one) =>
             one.requestId?.startsWith("dp-") && !known.includes(one.requestId)
         ),
@@ -546,7 +525,7 @@ const run = async (kit: Kit) => {
   const again = await until(
     "(e) the proposal parked again after the restart",
     async () =>
-      (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).some(
+      (await fleet.api((hub) => hub.api.pending.get())).some(
         (one) => one.requestId === proposal.requestId
       ),
     Boolean,
@@ -647,7 +626,7 @@ const legsAfter = async ({
   phone,
   waitSends,
   waitsLine,
-}: After): Promise<Parked | undefined> => {
+}: After) => {
   // (f) The person's phone: the first proposal pushed once, across the
   // restart. A push of an ask goes under its collapse id, or leads a
   // burst's push carrying its request id.
@@ -657,7 +636,7 @@ const legsAfter = async ({
       .filter(
         (one) =>
           one.collapseId === askCollapseId(requestId) ||
-          (one.payload.cawco as { requestId?: string } | undefined)
+          (payloadOf(one).cawco as { requestId?: string } | undefined)
             ?.requestId === requestId
       ).length;
   await callAs(fleet, designer, "design_write", {
@@ -683,12 +662,9 @@ const legsAfter = async ({
   // (g) A parent `unknown` as the ask parks is told once its machine registers.
   // The browser (c) started is stopped first: its agent is killed below, and
   // a Chromium whose agent died is left running.
-  await fleet.api(
-    hubRequest("POST /api/browsers/:key/stop", {
-      path: { key },
-      body: {
-        machineId: MACHINE,
-      },
+  await fleet.api((hub) =>
+    hub.api.browsers({ key }).stop.post({
+      machineId: MACHINE,
     })
   );
   await until(
@@ -809,7 +785,7 @@ const legsLast = async ({
   await until(
     "(h) the third proposal parked again",
     async () =>
-      (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).some(
+      (await fleet.api((hub) => hub.api.pending.get())).some(
         (one) => one.requestId === third.requestId
       ),
     Boolean,
@@ -831,7 +807,7 @@ const legsLast = async ({
   const gone = await until(
     "(h) the third proposal declined",
     async () =>
-      !(await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).some(
+      !(await fleet.api((hub) => hub.api.pending.get())).some(
         (one) => one.requestId === third.requestId
       ),
     Boolean,
@@ -882,8 +858,8 @@ const legsLast = async ({
   const browserAsk = await until(
     "(i) the second browser ask waiting on the person",
     async () =>
-      (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).find(
-        (one) => one.instanceId === delegate && one.payload.browserAsk
+      (await fleet.api((hub) => hub.api.pending.get())).find(
+        (one) => one.instanceId === delegate && payloadOf(one).browserAsk
       ),
     Boolean,
     60_000
@@ -940,14 +916,10 @@ const legRouted = async ({
     until(
       "(l) the prompt routed to the parent",
       async () =>
-        (
-          await fleet.api<(Parked & { payload: { routedTo?: string } })[]>(
-            hubRequest("GET /api/pending")
-          )
-        ).find(
+        (await fleet.api((hub) => hub.api.pending.get())).find(
           (one) =>
             one.instanceId === prompter &&
-            one.payload.routedTo === "parent" &&
+            payloadOf(one).routedTo === "parent" &&
             !known.includes(one.requestId ?? "")
         ),
       Boolean,
@@ -957,7 +929,7 @@ const legRouted = async ({
     until(
       "(l) the prompt settled",
       async () =>
-        !(await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).some(
+        !(await fleet.api((hub) => hub.api.pending.get())).some(
           (one) => one.requestId === requestId
         ),
       Boolean,
@@ -1044,14 +1016,10 @@ const routedOf = (fleet: KitFleet, of: string, known: readonly string[] = []) =>
   until(
     "a prompt routed to the parent",
     async () =>
-      (
-        await fleet.api<(Parked & { payload: { routedTo?: string } })[]>(
-          hubRequest("GET /api/pending")
-        )
-      ).find(
+      (await fleet.api((hub) => hub.api.pending.get())).find(
         (one) =>
           one.instanceId === of &&
-          one.payload.routedTo === "parent" &&
+          payloadOf(one).routedTo === "parent" &&
           !known.includes(one.requestId ?? "")
       ),
     Boolean,
@@ -1125,7 +1093,7 @@ const legEnds = async ({
   const atStop = total();
   const told = sendsOf(fleet, parent, otherEnded);
   const gone = routed?.requestId
-    ? !(await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).some(
+    ? !(await fleet.api((hub) => hub.api.pending.get())).some(
         (one) => one.requestId === routed.requestId
       )
     : false;
@@ -1215,8 +1183,8 @@ const legsHub = async ({
   const ask = await until(
     "(j) the third browser ask waiting on the person",
     async () =>
-      (await fleet.api<Parked[]>(hubRequest("GET /api/pending"))).find(
-        (one) => one.instanceId === delegate && one.payload.browserAsk
+      (await fleet.api((hub) => hub.api.pending.get())).find(
+        (one) => one.instanceId === delegate && payloadOf(one).browserAsk
       ),
     Boolean,
     60_000
@@ -1224,13 +1192,10 @@ const legsHub = async ({
   const requestId = ask?.requestId ?? "";
   const took = ask
     ? await fleet
-        .api<unknown>(
-          hubRequest("POST /api/browsers/:key/takeover", {
-            path: { key },
-            body: {
-              requestId,
-              machineId: MACHINE,
-            },
+        .api((hub) =>
+          hub.api.browsers({ key }).takeover.post({
+            requestId,
+            machineId: MACHINE,
           })
         )
         .then(
@@ -1266,21 +1231,15 @@ const legsHub = async ({
     `take-over: ${took}; marked while taken: ${markedTaken}; dropped after the restart: ${dropped}; the parent's notes that it ended with the hub: ${ended.sends}, woken: ${ended.woken}`
   );
   await fleet
-    .api(
-      hubRequest("POST /api/browsers/:key/handback", {
-        path: { key },
-        body: {
-          machineId: MACHINE,
-        },
+    .api((hub) =>
+      hub.api.browsers({ key }).handback.post({
+        machineId: MACHINE,
       })
     )
     .catch(() => undefined);
-  await fleet.api(
-    hubRequest("POST /api/browsers/:key/stop", {
-      path: { key },
-      body: {
-        machineId: MACHINE,
-      },
+  await fleet.api((hub) =>
+    hub.api.browsers({ key }).stop.post({
+      machineId: MACHINE,
     })
   );
 

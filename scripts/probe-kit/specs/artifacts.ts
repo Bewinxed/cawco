@@ -169,7 +169,6 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { artifactWords } from "../../../packages/core/src/words/artifacts";
 import { previewWords } from "../../../packages/core/src/words/preview";
@@ -179,6 +178,7 @@ import type { PromotedFile } from "../../../packages/hub/src/artifacts/shapes";
 import type { ArtifactTool } from "../../../packages/hub/src/artifacts/tools";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
+import { requestOf } from "../hub";
 import {
   type Kit,
   type KitFleet,
@@ -480,10 +480,8 @@ const run = async (kit: Kit) => {
   // H, P: a hand-up's own sessions, before anything opens a dashboard.
   await handChecks({ kit, fleet, callIn });
   const read = (artifact: string) =>
-    fleet.api<View>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
-        path: { id: session, artifact },
-      })
+    fleet.api((hub) =>
+      hub.api.instances({ id: session }).artifacts({ artifact }).view.get()
     );
 
   // 1. The page, made by the session through the MCP tool.
@@ -721,22 +719,9 @@ const handedLine = (from: string, kind: string, name: string, id: string) =>
  * Session `on`'s first page of artifact_list (hub routes.ts
  * `/artifacts/list`, 25 a page): every artifact this spec makes.
  */
-const listedOf = async <T>(fleet: KitFleet, on: string): Promise<T[]> =>
-  (
-    await fleet.api<{ artifacts: T[] }>(
-      hubRequest("GET /api/instances/:id/artifacts/list", { path: { id: on } })
-    )
-  ).artifacts;
-
-/** One artifact as artifact_list answers it (artifacts/service.ts `ArtifactStatus`). */
-interface Listed {
-  ask: string;
-  id: string;
-  madeBy?: string;
-  shown: boolean;
-  title: string;
-  waitingOn: string[];
-}
+const listedOf = async (fleet: KitFleet, on: string) =>
+  (await fleet.api((hub) => hub.api.instances({ id: on }).artifacts.list.get()))
+    .artifacts;
 
 /** H8's re-create of the handed canvas names a new title and ask: H12's show takes them to the panel's row. */
 const ROUND_TWO = {
@@ -770,9 +755,7 @@ const handChecks = async ({
   const callParent = callIn(parent);
   const callDelegate = callIn(delegate);
   const shownOf = (id: string) =>
-    fleet.api<{ instanceId: string; shown: boolean }>(
-      hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } })
-    );
+    fleet.api((hub) => hub.api.artifacts({ artifact: id }).get());
   /** The words of the parent's sends that carry a hand-off tag naming `id` (each body is the harness's JSON line). */
   const handedSends = (id: string) =>
     fleet
@@ -862,7 +845,7 @@ const handChecks = async ({
 
   // H5. artifact_list from the parent: shown false, waiting on the parent.
   const listedText = await callParent("mcp__cawco__artifact_list", {});
-  const listed = await listedOf<Listed>(fleet, parent);
+  const listed = await listedOf(fleet, parent);
   const entry = listed.find((one) => one.id === handedId);
   kit.check(
     "H5: artifact_list from the parent has it shown false, madeBy the delegate, waitingOn the parent's session",
@@ -939,7 +922,7 @@ const handChecks = async ({
     shownOf(ownId),
     shownOf(handedId),
   ]);
-  const stillWaiting = (await listedOf<Listed>(fleet, parent)).find(
+  const stillWaiting = (await listedOf(fleet, parent)).find(
     (one) => one.id === handedId
   );
   kit.check(
@@ -960,7 +943,7 @@ const handChecks = async ({
     shownOf(handedId),
     shownOf(ownId),
   ]);
-  const after = (await listedOf<Listed>(fleet, parent)).find(
+  const after = (await listedOf(fleet, parent)).find(
     (one) => one.id === handedId
   );
   kit.check(
@@ -995,12 +978,6 @@ const panelOf = (fleet: KitFleet, on: string): string | null =>
 /** An artifact_show that went through: opened, or in the panel with no dashboard open to say so (`NO_VIEW`). */
 const showedOk = (answer: string): boolean =>
   answer.includes('"opened":true') || answer.includes(NO_VIEW);
-
-/** One artifact as artifact_list answers it to another session of the tree: its holder as `session`. */
-interface TreeListed {
-  id: string;
-  session?: string;
-}
 
 /**
  * T4–T8: a session shows its tree's artifacts in its own panel, the parent
@@ -1039,7 +1016,7 @@ const treeChecks = async ({
   const callParent = callIn(parent);
   const callSibling = callIn(sibling);
   const callOutsider = callIn(outsider);
-  const listOf = (on: string) => listedOf<TreeListed>(fleet, on);
+  const listOf = (on: string) => listedOf(fleet, on);
 
   // T1. The sibling reads the handed canvas with its picture, listed as the parent's.
   const read = await callSibling("mcp__cawco__artifact_read", {
@@ -1115,8 +1092,8 @@ const treeChecks = async ({
   const siblingShow = await callSibling("mcp__cawco__artifact_show", {
     id: ownId,
   });
-  const ownAfter = await fleet.api<{ instanceId: string; shown: boolean }>(
-    hubRequest("GET /api/artifacts/:artifact", { path: { artifact: ownId } })
+  const ownAfter = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: ownId }).get()
   );
   kit.check(
     "T5: the delegate's artifact_show of its parent's page opens it in the delegate's panel; the parent's panel keeps it",
@@ -1130,15 +1107,15 @@ const treeChecks = async ({
 
   // T4. The parent shows its delegate's own page: it opens in the parent's
   // panel; the page stays the delegate's, and the delegate's panel as it was.
-  const pageBefore = await fleet.api<{ instanceId: string; shown: boolean }>(
-    hubRequest("GET /api/artifacts/:artifact", { path: { artifact: pageId } })
+  const pageBefore = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: pageId }).get()
   );
   const siblingPanelBefore = panelOf(fleet, sibling);
   const parentShow = await callParent("mcp__cawco__artifact_show", {
     id: pageId,
   });
-  const pageAfter = await fleet.api<{ instanceId: string; shown: boolean }>(
-    hubRequest("GET /api/artifacts/:artifact", { path: { artifact: pageId } })
+  const pageAfter = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: pageId }).get()
   );
   kit.check(
     "T4: the parent's artifact_show of its delegate's page opens it in the parent's panel; the page stays the delegate's, and the delegate's panel as it was",
@@ -1268,7 +1245,7 @@ const heldChecks = async ({
     to: "parent",
   });
   const canvasNext = heldOf(again);
-  const relisted = (await listedOf<Listed>(fleet, parent)).find(
+  const relisted = (await listedOf(fleet, parent)).find(
     (one) => one.id === canvasId
   );
   const canvasShown = await shownOf(canvasId);
@@ -1340,7 +1317,7 @@ const heldChecks = async ({
   // H11. The parent's artifact_show opens the new version.
   await callParent("mcp__cawco__artifact_show", { id: pageId });
   const opened = await readOf(pageId);
-  const listed = (await listedOf<Listed>(fleet, parent)).find(
+  const listed = (await listedOf(fleet, parent)).find(
     (one) => one.id === pageId
   );
   const gone = pageNext
@@ -1381,7 +1358,7 @@ const heldChecks = async ({
   const nextCanvas = canvasNext ? await readOf(canvasNext) : null;
   await callParent("mcp__cawco__artifact_show", { id: canvasId });
   const openedCanvas = await readOf(canvasId);
-  const openedRow = (await listedOf<Listed>(fleet, parent)).find(
+  const openedRow = (await listedOf(fleet, parent)).find(
     (one) => one.id === canvasId
   );
   kit.check(
@@ -1611,14 +1588,11 @@ const askChecks = async ({
 }: Pick<OnSession, "call" | "fleet" | "kit" | "session">) => {
   // ask 12: on the hub's route, as the tool posts it.
   const bare = await fleet
-    .api(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: session },
-        body: {
-          kind: "page",
-          name: "no-ask",
-          program: ONE_QUESTION,
-        },
+    .api((hub) =>
+      hub.api.instances({ id: session }).artifacts.post({
+        kind: "page",
+        name: "no-ask",
+        program: ONE_QUESTION,
       })
     )
     .then(
@@ -1854,19 +1828,19 @@ const headChecks = async ({
   // ask 23. The person's Send, with a note: the head says where it went.
   const desk = await kit.page("desk", { theme: "light" });
   await open(desk, `${base}/session/${session}`, "[data-artifact-trigger]");
-  const instance = (
-    await fleet.api<{ id: string; title: string | null }[]>(
-      hubRequest("GET /api/instances")
-    )
-  ).find((one) => one.id === session);
+  const instance = (await fleet.api((hub) => hub.api.instances.get())).find(
+    (one) => one.id === session
+  );
   const sentAt = Date.now();
   const status = await desk.evaluate(
     (request) =>
       fetch(request.path, request).then((response) => response.status),
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/send", {
-      path: { id: session, artifact: id },
-      body: { text: "The denied state reads wrong" },
-    })
+    await requestOf((hub) =>
+      hub.api
+        .instances({ id: session })
+        .artifacts({ artifact: id })
+        .send.post({ text: "The denied state reads wrong" })
+    )
   );
   const sent = await until(
     "the head's Sent line",
@@ -1951,8 +1925,8 @@ const promoteChecks = async ({
 
   // 17. Outside a project the session is never listed the tool, so nothing is
   // written. Every request so far is this session's: the project's is spawned below.
-  const listing = await fleet.api<{ tools: { name: string }[] }>(
-    hubRequest("GET /api/delegation/tools", { query: { instanceId: session } })
+  const listing = await fleet.api((hub) =>
+    hub.api.delegation.tools.get({ query: { instanceId: session } })
   );
   const listed = listing.tools.map((tool) => tool.name);
   const offered = fleet.seen.filter((one) => one.toolNames.includes(PROMOTE));
@@ -1967,14 +1941,12 @@ const promoteChecks = async ({
   );
 
   // 15. A project session's page, with one pick and one pin.
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Promotes",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Promotes",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
     })
   );
   const folder = join(projects, project.id);
@@ -2014,10 +1986,11 @@ const promoteChecks = async ({
   await until(
     "the pick in the hub's read",
     () =>
-      fleet.api<View>(
-        hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
-          path: { id: inProject, artifact: keptId },
-        })
+      fleet.api((hub) =>
+        hub.api
+          .instances({ id: inProject })
+          .artifacts({ artifact: keptId })
+          .view.get()
       ),
     (answer) => answer.choices.hero?.options.join() === "b",
     10_000
@@ -2044,9 +2017,8 @@ const promoteChecks = async ({
   await until(
     "the pin in comment_read",
     () =>
-      fleet.api<{ artifacts: { pins: unknown[] }[] }>(
-        hubRequest("GET /api/instances/:id/artifacts/comments", {
-          path: { id: inProject },
+      fleet.api((hub) =>
+        hub.api.instances({ id: inProject }).artifacts.comments.get({
           query: { artifact: keptId, filter: "all" },
         })
       ),
@@ -2595,9 +2567,7 @@ const fieldChecks = async ({
     (post) => post.artifact === fieldsId && post.body.ok === true
   );
   const fieldsRow = (
-    await fleet.api<{ id: string; shownAt: string | null }[]>(
-      hubRequest("GET /api/instances/:id/artifacts", { path: { id: session } })
-    )
+    await fleet.api((hub) => hub.api.instances({ id: session }).artifacts.get())
   ).find((one) => one.id === fieldsId);
   const shownAt = fieldsRow?.shownAt ? Date.parse(fieldsRow.shownAt) : null;
   kit.check(
@@ -2612,10 +2582,11 @@ const fieldChecks = async ({
     `ready +${(readyAt ?? Number.NaN) - askedAt} ms, /shown +${(ack?.at ?? Number.NaN) - askedAt} ms ${JSON.stringify(ack?.body)}, shownAt +${(shownAt ?? Number.NaN) - askedAt} ms, answer +${madeAt - askedAt} ms: ${made.slice(made.indexOf('{"id"'), made.indexOf('{"id"') + 200)}`
   );
   const readFields = () =>
-    fleet.api<View>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
-        path: { id: session, artifact: fieldsId },
-      })
+    fleet.api((hub) =>
+      hub.api
+        .instances({ id: session })
+        .artifacts({ artifact: fieldsId })
+        .view.get()
     );
   /** Milliseconds until the hub's read passes `test`, or null past 2 s. */
   const within2s = async (test: (answer: View) => boolean, from: number) =>

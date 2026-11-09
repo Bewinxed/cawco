@@ -31,10 +31,12 @@
  *
  *   bun scripts/probe-kit/run.ts mcp-sign-in-live
  */
+
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { CAWCO_OAUTH_URL } from "../../../packages/core/src/fleet";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 /** The fleet's OAuth MCP server, as the person named it. */
@@ -110,26 +112,17 @@ const run = async (kit: Kit) => {
 
     for (const view of ["desk", "phone"] as const) {
       // Each view starts signed out: the server is saved again, as new.
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("DELETE /api/fleet/mcp/:name", { path: { name: SERVER } })
-      );
-      const saved = await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("PUT /api/fleet/mcp/:name", {
-          path: { name: SERVER },
-          body: {
-            config: { type: "http", url: `${providerOrigin}/mcp` },
-            enabled: true,
-          },
-        })
-      );
-      const row = (await saved.json()) as { auth?: { mode?: string } };
+      await hubAt(fleet.base).api.fleet.mcp({ name: SERVER }).delete();
+      const saved = await hubAt(fleet.base)
+        .api.fleet.mcp({ name: SERVER })
+        .put({
+          config: { type: "http", url: `${providerOrigin}/mcp` },
+          enabled: true,
+        });
+      const row = dataOf(saved);
       kit.check(
         `${view} 0: the probe's server is saved to the fleet as an OAuth server`,
-        saved.ok && row.auth?.mode === "oauth",
+        saved.error === null && row.auth?.mode === "oauth",
         `${saved.status} ${JSON.stringify(row)}`
       );
 
@@ -248,13 +241,10 @@ const run = async (kit: Kit) => {
         timeout: 30_000,
       });
       const freshState = stateOf(fresh.url());
-      const first = await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/fleet/mcp/oauth/complete", {
-          body: { code: "probe-code", state },
-        })
-      );
+      const first = await hubAt(fleet.base).api.fleet.mcp.oauth.complete.post({
+        code: "probe-code",
+        state,
+      });
       const retried = {
         newState: freshState !== "" && freshState !== state,
         firstRefused: first.status,
@@ -322,17 +312,12 @@ const run = async (kit: Kit) => {
         (now) => now === "false",
         10_000
       ).catch(() => checked(pressing));
-      const back = await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("PUT /api/fleet/mcp/:name", {
-          path: { name: SERVER },
-          body: {
-            config: { type: "http", url: `${providerOrigin}/mcp` },
-            enabled: true,
-          },
-        })
-      );
+      const back = await hubAt(fleet.base)
+        .api.fleet.mcp({ name: SERVER })
+        .put({
+          config: { type: "http", url: `${providerOrigin}/mcp` },
+          enabled: true,
+        });
       const on = await Promise.all(
         [pressing, other].map((page) =>
           until(
@@ -345,7 +330,9 @@ const run = async (kit: Kit) => {
       );
       kit.check(
         `${view} 4: after the pressing tab's own edit turned the row off, the hub turning it on again reaches both tabs' rows`,
-        off === "false" && back.ok && on.every((one) => one === "true"),
+        off === "false" &&
+          back.error === null &&
+          on.every((one) => one === "true"),
         JSON.stringify({ off, back: back.status, on })
       );
       await pressing.close();

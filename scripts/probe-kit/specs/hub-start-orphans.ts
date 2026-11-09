@@ -19,8 +19,8 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
 
@@ -90,14 +90,12 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const dir = `${fleet.sandbox}/orphans-site`;
   await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
-  const { id: projectId } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Orphans",
-        machineId: MACHINE,
-        cwd: dir,
-        caw: false,
-      },
+  const { id: projectId } = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Orphans",
+      machineId: MACHINE,
+      cwd: dir,
+      caw: false,
     })
   );
   const writer = await fleet.spawn("claude", "Pair the code", dir, {
@@ -114,59 +112,47 @@ const run = async (kit: Kit) => {
         headers: { "content-type": "text/html" },
       }),
   });
-  const site = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: writer },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try this page and say whether it works",
-        name: "orphans-site",
-        port: server.port,
-        machine: MACHINE,
-      },
+  const site = await fleet.api((hub) =>
+    hub.api.instances({ id: writer }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try this page and say whether it works",
+      name: "orphans-site",
+      port: server.port,
+      machine: MACHINE,
     })
   );
-  const kept = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: writer },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: "Pick how the code leaves",
-        name: "pairing",
-        program: KEPT(site.id),
-      },
+  const kept = await fleet.api((hub) =>
+    hub.api.instances({ id: writer }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: "Pick how the code leaves",
+      name: "pairing",
+      program: KEPT(site.id),
     })
   );
-  const orphan = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: other },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: "Pick the plan's name",
-        name: "plan-name",
-        program: ORPHAN,
-      },
+  const orphan = await fleet.api((hub) =>
+    hub.api.instances({ id: other }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: "Pick the plan's name",
+      name: "plan-name",
+      program: ORPHAN,
     })
   );
   for (const [session, id] of [
     [writer, kept.id],
     [other, orphan.id],
   ] as const) {
-    await (
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-          path: { id: session, artifact: id },
-        })
-      )
-    ).text();
+    answerText(
+      await hubAt(fleet.base)
+        .api.instances({ id: session })
+        .artifacts({ artifact: id })
+        .show.post()
+    );
   }
 
   // As an older hub left them, written with no keys enforced.
@@ -217,10 +203,8 @@ const run = async (kit: Kit) => {
     JSON.stringify({ named: named?.n, ports })
   );
 
-  const { port } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/projects/:id/preview-address", {
-      path: { id: projectId },
-    })
+  const { port } = await fleet.api((hub) =>
+    hub.api.projects({ id: projectId })["preview-address"].post()
   );
   const page = await passedFetch(
     fleet,

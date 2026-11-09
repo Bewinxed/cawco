@@ -5,7 +5,6 @@
  * still read what reached the phone.
  */
 
-import { hubRequest } from "../../packages/core/src/hub-request";
 import { until } from "../scratch-fleet";
 import type { KitFleet } from "./kit";
 
@@ -43,15 +42,13 @@ export const standInPhone = (fleet: KitFleet) => {
     /** Pairs one phone with the hub, which must be up. */
     pair: async (): Promise<void> => {
       const bytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
-      await fleet.api(
-        hubRequest("POST /api/push/register", {
-          body: {
-            pairingId: crypto.randomUUID(),
-            secret: Buffer.from(bytes(32)).toString("base64url"),
-            key: Buffer.from(bytes(32)).toString("base64"),
-            name: "Probe iPhone",
-            platform: "ios",
-          },
+      await fleet.api((hub) =>
+        hub.api.push.register.post({
+          pairingId: crypto.randomUUID(),
+          secret: Buffer.from(bytes(32)).toString("base64url"),
+          key: Buffer.from(bytes(32)).toString("base64"),
+          name: "Probe iPhone",
+          platform: "ios",
         })
       );
     },
@@ -96,9 +93,7 @@ export const atRest = async (fleet: KitFleet, id: string): Promise<void> => {
         "SELECT turn_open_at FROM instances WHERE id = ?",
         id
       );
-      const pulses = await fleet.api<Record<string, { busy?: boolean }>>(
-        hubRequest("GET /api/pulses")
-      );
+      const pulses = await fleet.api((hub) => hub.api.pulses.get());
       return row?.turn_open_at === null && !pulses[id]?.busy;
     },
     Boolean,

@@ -45,13 +45,14 @@ import { userInfo } from "node:os";
 import { join } from "node:path";
 import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import type { PreviewAddress } from "../../../packages/core/src/preview/routes";
 import { tailnetWords } from "../../../packages/core/src/words/tailnet";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { leasePortRange, until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
+import { hubAt, requestOf } from "../hub";
 import {
   type Kit,
   type KitFleet,
@@ -539,16 +540,8 @@ const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   const { bin, env, pairAt, set } = await tailnetStub(fleet);
   const read = async (): Promise<Read> =>
-    (
-      await fetchHub(fetch, fleet.base, hubRequest("GET /api/tailnet-https"))
-    ).json() as Promise<Read>;
-  const health = async () =>
-    (
-      await fetchHub(fetch, fleet.base, hubRequest("GET /health"))
-    ).json() as Promise<{
-      dashboard: string;
-      secureDashboard: string | null;
-    }>;
+    dataOf(await hubAt(fleet.base).api["tailnet-https"].get());
+  const health = async () => dataOf(await hubAt(fleet.base).health.get());
   const reads = (what: string, ok: (state: Read) => boolean) =>
     until(what, read, ok, READ_MS);
 
@@ -894,7 +887,7 @@ const run = async (kit: Kit) => {
         origin: location.origin,
         api: (await fetch(request.path, request)).status,
       }),
-      hubRequest("GET /api/tailnet-https")
+      await requestOf((hub) => hub.api["tailnet-https"].get())
     );
     kit.check(
       "5: on its name the dashboard loads in a secure context, its API through the relay",

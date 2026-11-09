@@ -43,11 +43,10 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
-import {
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import {
   SAFE_GIT_ENV,
@@ -58,6 +57,7 @@ import { welcomed } from "../../lib/keeper-dial";
 import { toolCall, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const AHEAD = "PROBE-FROMHELD-AHEAD";
 const AHEAD_MADE = "PROBE-FROMHELD-AHEAD-MADE";
@@ -210,13 +210,11 @@ const scene = async (
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "From held",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "From held",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {
@@ -232,17 +230,17 @@ const heldPhase = async (
   parent: string,
   src: string
 ): Promise<{ head: string; source: Workspace } | undefined> => {
-  const ahead = await fleet.api<{ workItemId: string; workspaceId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const ahead = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Commit and stop",
         prompt: `${AHEAD}: commit a file, then stop.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: src,
-      },
-    })
+      })
+    )
   );
   const item = await until(
     "the delegate's item failed as blocked",
@@ -382,9 +380,7 @@ const cutPhase = async (
   );
   const after = workspaceOf(fleet, source.id);
   const words = await fleet
-    .api<{ holds: string }>(
-      hubRequest("GET /api/workspaces/:id/held", { path: { id: source.id } })
-    )
+    .api((hub) => hub.api.workspaces({ id: source.id }).held.get())
     .catch((error: unknown) => ({ holds: String(error) }));
   const sourceHead = existsSync(source.path)
     ? await gitIn(source.path, "rev-parse", "HEAD")

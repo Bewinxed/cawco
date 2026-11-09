@@ -20,14 +20,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { refusalWords } from "../../../packages/core/src/hub-refusal";
-import {
-  type HubSent,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
+import type { HubClient } from "../../../packages/agent/src/hub-client";
 import { effectiveImageChoice } from "../../../packages/core/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
+import { answerText, type HubAsk, handled } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 export default {
@@ -48,20 +44,13 @@ export default {
         join(scratch, "home")
       );
       const call = async (
-        body?: HubSent<"PUT /api/image-settings">["body"]
+        body?: Parameters<HubClient["api"]["image-settings"]["put"]>[0]
       ) => {
-        const request = body
-          ? hubRequest("PUT /api/image-settings", { body })
-          : hubRequest("GET /api/image-settings");
-        const response = await hub.handle(
-          new Request(`http://127.0.0.1${request.path}`, hubInit(request))
-        );
-        return {
-          status: response.status,
-          text: response.ok
-            ? await response.text()
-            : refusalWords(await response.text(), response.status),
-        };
+        const request: HubAsk = body
+          ? (client) => client.api["image-settings"].put(body)
+          : (client) => client.api["image-settings"].get();
+        const answer = await request(handled((r) => hub.handle(r)));
+        return { status: answer.status, text: answerText(answer) };
       };
 
       const unset = await call();

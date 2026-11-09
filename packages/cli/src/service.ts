@@ -2,8 +2,10 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  dataOf,
   type HubAnswer,
   type HubClient,
+  type HubData,
   hubClient,
   hubPath,
   refusalText,
@@ -455,7 +457,7 @@ const askedHub = <A extends HubAnswer>(
   hub: string,
   url: string,
   ask: (client: HubClient) => Promise<A>
-): Promise<Bounded<Said<Extract<A, { error: null }>["data"]>>> =>
+): Promise<Bounded<Said<HubData<A>>>> =>
   readWithin(PROBE_TIMEOUT_MS, async (signal) => {
     const answer = await ask(
       hubClient(hub, (target, init) => asMachine(target, { ...init, signal }))
@@ -468,7 +470,7 @@ const askedHub = <A extends HubAnswer>(
           );
     }
     return answer.error === null
-      ? { ok: true, value: answer.data }
+      ? { ok: true, value: dataOf(answer) }
       : { ok: false, status: answer.status, said: `HTTP ${answer.status}` };
   });
 

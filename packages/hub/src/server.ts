@@ -565,7 +565,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
-import type { AnyProblem } from "./refusal";
+import type { AnyProblem, ProblemStatus } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl, peekAnswer } from "./relay-control";
@@ -4448,19 +4448,25 @@ export const createServer = (
       routed: async (asker, row, cards, all, state) => {
         const routed = await settling.routed(asker, row, cards, all, state);
         return routed instanceof ElysiaStatus
-          ? problem<number, { code: string; detail: string }>(routed.status, {
-              code: routed.response.code,
-              detail: routed.response.detail,
-            })
+          ? problem<ProblemStatus, { code: string; detail: string }>(
+              routed.status,
+              {
+                code: routed.response.code,
+                detail: routed.response.detail,
+              }
+            )
           : routed;
       },
       settler: async (settler, row, card) => {
         const signs = await settling.settler(settler, row, card);
         return signs instanceof ElysiaStatus
-          ? problem<number, { code: string; detail: string }>(signs.status, {
-              code: signs.response.code,
-              detail: signs.response.detail,
-            })
+          ? problem<ProblemStatus, { code: string; detail: string }>(
+              signs.status,
+              {
+                code: signs.response.code,
+                detail: signs.response.detail,
+              }
+            )
           : signs;
       },
       settled: (row, card, member, answer) =>
@@ -4631,39 +4637,51 @@ export const createServer = (
         artifact
       );
       return built instanceof ElysiaStatus
-        ? problem<number, { code: string; detail: string }>(built.status, {
-            code: built.response.code,
-            detail: built.response.detail,
-          })
+        ? problem<ProblemStatus, { code: string; detail: string }>(
+            built.status,
+            {
+              code: built.response.code,
+              detail: built.response.detail,
+            }
+          )
         : built;
     },
     afterLinks: async (projectId, name, cards) => {
       const links = await decisions.linksOf(projectId, name, cards);
       return links instanceof ElysiaStatus
-        ? problem<number, { code: string; detail: string }>(links.status, {
-            code: links.response.code,
-            detail: links.response.detail,
-          })
+        ? problem<ProblemStatus, { code: string; detail: string }>(
+            links.status,
+            {
+              code: links.response.code,
+              detail: links.response.detail,
+            }
+          )
         : links;
     },
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
       return (
         refused &&
-        problem<number, { code: string; detail: string }>(refused.status, {
-          code: refused.response.code,
-          detail: refused.response.detail,
-        })
+        problem<ProblemStatus, { code: string; detail: string }>(
+          refused.status,
+          {
+            code: refused.response.code,
+            detail: refused.response.detail,
+          }
+        )
       );
     },
     dropPage: async (instance, projectId, name) => {
       const refused = await dropPage(instance, projectId, name);
       return (
         refused &&
-        problem<number, { code: string; detail: string }>(refused.status, {
-          code: refused.response.code,
-          detail: refused.response.detail,
-        })
+        problem<ProblemStatus, { code: string; detail: string }>(
+          refused.status,
+          {
+            code: refused.response.code,
+            detail: refused.response.detail,
+          }
+        )
       );
     },
     sending: async (to, artifact, page) => {

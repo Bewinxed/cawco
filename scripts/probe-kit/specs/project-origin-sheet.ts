@@ -32,8 +32,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import { type Kit, open, type Spec } from "../kit";
 import {
   hear,
@@ -213,49 +213,39 @@ const run = async (kit: Kit) => {
   await Bun.$`git init -q -b main && bun install --lockfile-only --no-progress && git add -A && git -c user.email=p@p -c user.name=p commit -q -m pairing`
     .cwd(dir)
     .quiet();
-  const { id: projectId } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Pairing sheet",
-        machineId: MACHINE,
-        cwd: dir,
-        caw: false,
-      },
+  const { id: projectId } = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Pairing sheet",
+      machineId: MACHINE,
+      cwd: dir,
+      caw: false,
     })
   );
   const writer = await fleet.spawn("claude", "Pair the code", dir, {
     projectId,
   });
-  const sheet = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: writer },
-      body: {
-        kind: "component",
-        does: "judge",
-        title: "Probe judge artifact",
-        ask: "Judge the card",
-        name: "pairing-card",
-        file: STORY,
-      },
+  const sheet = await fleet.api((hub) =>
+    hub.api.instances({ id: writer }).artifacts.post({
+      kind: "component",
+      does: "judge",
+      title: "Probe judge artifact",
+      ask: "Judge the card",
+      name: "pairing-card",
+      file: STORY,
     })
   );
-  const page = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: writer },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: "Pick how the code leaves",
-        name: "pairing-behaviour",
-        program: pageProgram(sheet.id),
-      },
+  const page = await fleet.api((hub) =>
+    hub.api.instances({ id: writer }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: "Pick how the code leaves",
+      name: "pairing-behaviour",
+      program: pageProgram(sheet.id),
     })
   );
   const base = await fleet.dashboard();
-  const range = await fleet.api<{ ports: string }>(
-    hubRequest("GET /api/preview-settings")
-  );
+  const range = await fleet.api((hub) => hub.api["preview-settings"].get());
   const first = Number(range.ports.split("–")[0]);
   const tunnel = await passTunnel(kit.out, first, base);
 
@@ -264,8 +254,8 @@ const run = async (kit: Kit) => {
       fleet,
       mode === "host" ? passPattern("{port}", tunnel.front) : { mode }
     );
-    const settings = await fleet.api<{ mode: string }>(
-      hubRequest("GET /api/preview-settings")
+    const settings = await fleet.api((hub) =>
+      hub.api["preview-settings"].get()
     );
     const board = mode === "host" ? tunnel.board : base;
     const tab = await kit.page("desk", {
@@ -275,15 +265,12 @@ const run = async (kit: Kit) => {
     });
     const heard = hear(tab);
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
-    await (
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-          path: { id: writer, artifact: page.id },
-        })
-      )
-    ).text();
+    answerText(
+      await hubAt(fleet.base)
+        .api.instances({ id: writer })
+        .artifacts({ artifact: page.id })
+        .show.post()
+    );
     const drawn = await until(
       `${mode}: the canvas's card inside the page`,
       () => embedIn(tab),

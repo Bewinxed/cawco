@@ -40,7 +40,6 @@
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { PAGE_SILENT_MS } from "../../../packages/core/src/preview/reach";
 import { OVERLAY_PATH } from "../../../packages/core/src/preview/routes";
 import { commonWords } from "../../../packages/core/src/words/common";
@@ -121,28 +120,23 @@ const previewOf = (
   path: string,
   name: string
 ) =>
-  fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: `Probe ${name}`,
-        ask: "Try this page and say whether it works",
-        name,
-        port,
-        path,
-        machine: MACHINE,
-      },
+  fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: `Probe ${name}`,
+      ask: "Try this page and say whether it works",
+      name,
+      port,
+      path,
+      machine: MACHINE,
     })
   );
 
 /** What the artifact's own origin answers `path`'s load, and a fetch of it. */
 const originReads = async (fleet: KitFleet, id: string, path: string) => {
-  const { port } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact: id },
-    })
+  const { port } = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id })["preview-address"].post()
   );
   const load = await passedFetch(fleet, `http://127.0.0.1:${port}${path}`, {
     headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" },
@@ -220,10 +214,8 @@ const decisionReads = async (page: Page, id: string) => {
 
 /** What the artifact's own origin answers `path`'s load: its status, whether it is CawCo's page, its heading and its overlay tag. */
 const servedReads = async (fleet: KitFleet, id: string, path: string) => {
-  const { port } = await fleet.api<{ port: number }>(
-    hubRequest("POST /api/artifacts/:artifact/preview-address", {
-      path: { artifact: id },
-    })
+  const { port } = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id })["preview-address"].post()
   );
   const load = await passedFetch(fleet, `http://127.0.0.1:${port}${path}`, {
     headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" },
@@ -387,22 +379,19 @@ const spec: Spec = {
       "missing-route"
     );
     const crashHere = await previewOf(fleet, decided, port, CRASH, "crash");
-    await fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: decided },
-        body: {
-          kind: "page",
-          does: "pick",
-          title: "Probe pick artifact",
-          ask: "Pick one option on each card",
-          name: "pick-page",
-          program: `root = Decisions("Pick the page", [which])
+    await fleet.api((hub) =>
+      hub.api.instances({ id: decided }).artifacts.post({
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick one option on each card",
+        name: "pick-page",
+        program: `root = Decisions("Pick the page", [which])
 which = Decision("which", "Which page stays?", [found, broke], "Both are in the app today.", [], [], false, null, "behaviour")
 found = Option("found", "Find in a conversation", "The route as it was.", true, [gone], "Nothing new.")
 broke = Option("broke", "The crashing page", "As it runs.", false, [crashed], "A fix first.")
 gone = Preview("${goneHere.id}", "Find in a conversation")
 crashed = Preview("${crashHere.id}", "The crashing page")`,
-        },
       })
     );
     const page = await kit.page("desk", { oneProcess: true });
@@ -485,22 +474,19 @@ crashed = Preview("${crashHere.id}", "The crashing page")`,
         previewOf(fleet, pageSession, port, one.path, `screen-${one.status}`)
       )
     );
-    await fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: pageSession },
-        body: {
-          kind: "page",
-          does: "pick",
-          title: "Probe pick screens",
-          ask: "Pick one option on each card",
-          name: "pick-screens",
-          program: `root = Decisions("Pick the error screen", [which])
+    await fleet.api((hub) =>
+      hub.api.instances({ id: pageSession }).artifacts.post({
+        kind: "page",
+        does: "pick",
+        title: "Probe pick screens",
+        ask: "Pick one option on each card",
+        name: "pick-screens",
+        program: `root = Decisions("Pick the error screen", [which])
 which = Decision("which", "Which error screen ships?", [nf, se], "Both are drawn by the app.", [], [], false, null, "look")
 nf = Option("nf", "Not found", "The 404 screen.", true, [a], "Nothing new.")
 se = Option("se", "Server error", "The 500 screen.", false, [b], "Nothing new.")
 a = Preview("${styled?.id}", "Not found screen")
 b = Preview("${render?.id}", "Server error screen")`,
-        },
       })
     );
     const screens = await kit.page("desk", { oneProcess: true });

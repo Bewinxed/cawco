@@ -65,7 +65,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
@@ -684,22 +683,16 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
     );
     /** One add through the hub's route, polled until it is not running. */
     const add = async (target: string, at: number) => {
-      const started = await fleet.api<SshJoinJob>(
-        hubRequest("POST /api/machines/ssh", {
-          body: {
-            target,
-            port: at,
-          },
+      const started = await fleet.api((hub) =>
+        hub.api.machines.ssh.post({
+          target,
+          port: at,
         })
       );
       return await until(
         `F: the add to ${target}`,
         () =>
-          fleet.api<SshJoinJob>(
-            hubRequest("GET /api/machines/ssh/:id", {
-              path: { id: started.id },
-            })
-          ),
+          fleet.api((hub) => hub.api.machines.ssh({ id: started.id }).get()),
         (job) => job.state !== "running",
         60_000
       );
@@ -822,26 +815,18 @@ const penalties = async (
     /** One add through the hub's route, read as the hub's install once it ends. */
     const add = async () => {
       // This user: a sshd not run as root signs in its own user alone.
-      const started = await fleet.api<SshJoinJob>(
-        hubRequest("POST /api/machines/ssh", {
-          body: {
-            target: `${userInfo().username}@127.0.0.1`,
-            port,
-          },
+      const started = await fleet.api((hub) =>
+        hub.api.machines.ssh.post({
+          target: `${userInfo().username}@127.0.0.1`,
+          port,
         })
       );
       return await until(
         "F, held back: the add",
         async () =>
-          (
-            await fleet.api<{
-              installs: {
-                id: string;
-                state: string;
-                problem: { kind: string } | null;
-              }[];
-            }>(hubRequest("GET /api/installs"))
-          ).installs.find((one) => one.id === started.id),
+          (await fleet.api((hub) => hub.api.installs.get())).installs.find(
+            (one) => one.id === started.id
+          ),
         (install) => install !== undefined && install.state !== "running",
         60_000
       );

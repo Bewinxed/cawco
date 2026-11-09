@@ -33,6 +33,7 @@ import { type DeclaredLfs, sameEndpoint } from "./git/lfs";
 import {
   type HubAnswer,
   type HubClient,
+  type HubData,
   hubClient,
   refusalText,
   unwrap,
@@ -86,7 +87,7 @@ const askHub = async <A extends HubAnswer>(
   hub: string,
   request: (client: HubClient) => Promise<A>,
   what: string
-): Promise<Extract<A, { error: null }>["data"]> => {
+): Promise<HubData<A>> => {
   const read = await readWithin(HUB_MS, (signal) =>
     request(
       hubClient(hub, (url, init) => provenFetch(url, { ...init, signal }))

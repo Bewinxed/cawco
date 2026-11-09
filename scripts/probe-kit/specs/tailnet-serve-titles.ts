@@ -27,7 +27,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import { gateWords } from "../../../packages/core/src/words/gate";
 import type { Reply } from "../../scratch-fleet";
 import { scratchCertificate } from "../cloudflare-front";
@@ -157,7 +157,7 @@ const run = async (kit: Kit) => {
       port: 0,
       fetch: () =>
         new Response(
-          `<!doctype html><title>other app</title><script>window.posted = fetch(${JSON.stringify(`${dashboard}${hubRequest("POST /api/instances/titles", { body: { ids: ["probe-foreign"] } }).path}`)}, { method: "POST", mode: "no-cors", credentials: "include", headers: { "content-type": "text/plain" }, body: JSON.stringify({ ids: ["probe-foreign"] }) }).then(() => "sent", (e) => String(e));</script>`,
+          `<!doctype html><title>other app</title><script>window.posted = fetch(${JSON.stringify(`${dashboard}${hubPath.api.instances.titles["~path"]}`)}, { method: "POST", mode: "no-cors", credentials: "include", headers: { "content-type": "text/plain" }, body: JSON.stringify({ ids: ["probe-foreign"] }) }).then(() => "sent", (e) => String(e));</script>`,
           { headers: { "content-type": "text/html" } }
         ),
     });

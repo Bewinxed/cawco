@@ -74,7 +74,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import {
   type ToolSession,
@@ -90,7 +89,14 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { hubAt } from "../hub";
+import {
+  delegateStarted,
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+} from "../kit";
 import { writePagePins } from "../pins";
 
 const RUN = crypto.randomUUID().slice(0, 8);
@@ -536,12 +542,7 @@ const otherLeaf = (request: Seen, leg: OtherLeg): Reply => {
   return reply;
 };
 
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-  workspaceTmp: string;
-}
+type Started = ReturnType<typeof delegateStarted>;
 
 const workspaceCount = (fleet: KitFleet): number =>
   fleet.query<{ n: number }>("SELECT COUNT(*) AS n FROM workspaces")[0]?.n ?? 0;
@@ -608,9 +609,8 @@ const pinned = async (
   await until(
     "the hub holding the pin",
     () =>
-      fleet.api<{ artifacts: { pins: { id: string }[] }[] }>(
-        hubRequest("GET /api/instances/:id/artifacts/comments", {
-          path: { id: parent },
+      fleet.api((hub) =>
+        hub.api.instances({ id: parent }).artifacts.comments.get({
           query: { artifact: pageId, filter: "all" },
         })
       ),
@@ -618,11 +618,11 @@ const pinned = async (
       read.artifacts.some((one) => one.pins.some((pin) => pin.id === PIN_ID)),
     30_000
   );
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts/comments/:pin/reply", {
-      path: { id: parent, pin: PIN_ID },
-      body: { text: REPLY_WORDS },
-    })
+  await fleet.api((hub) =>
+    hub.api
+      .instances({ id: parent })
+      .artifacts.comments({ pin: PIN_ID })
+      .reply.post({ text: REPLY_WORDS })
   );
   await page.close();
 };
@@ -662,11 +662,7 @@ const sendPicture = async (fleet: KitFleet, parent: string): Promise<void> => {
   await until(
     "the picture among the parent's attachments",
     () =>
-      fleet.api<{ attachments: { name: string }[] }>(
-        hubRequest("GET /api/instances/:id/attachments", {
-          path: { id: parent },
-        })
-      ),
+      fleet.api((hub) => hub.api.instances({ id: parent }).attachments.get()),
     (read) => read.attachments.some((one) => one.name === "Picture 1"),
     60_000
   );
@@ -730,7 +726,7 @@ const landed = async (
   started: Started,
   reportOf: string
 ): Promise<void> => {
-  const dir = join(started.workspaceTmp, "inputs");
+  const dir = join(started.workspaceTmp ?? "", "inputs");
   const bytes = (name: string) =>
     readFile(join(dir, name)).catch(() => Buffer.alloc(0));
   const text = async (name: string) => (await bytes(name)).toString("utf8");
@@ -791,7 +787,7 @@ const previewReach = async (
   b: Started
 ): Promise<void> => {
   const landedFile = await readFile(
-    join(b.workspaceTmp, "inputs", `artifact-${PREVIEW}.json`),
+    join(b.workspaceTmp ?? "", "inputs", `artifact-${PREVIEW}.json`),
     "utf8"
   ).catch(() => "");
   let said: { pass?: { url?: string } | null; reach?: string } = {};
@@ -901,7 +897,7 @@ const otherHarness = async (
 
 /** A leaf's file in its `$TMPDIR/inputs/`, by its path there, once written; "" when it never is. */
 const inputText = async (started: Started, path: string): Promise<string> => {
-  const file = join(started.workspaceTmp, "inputs", path);
+  const file = join(started.workspaceTmp ?? "", "inputs", path);
   const read = () => readFile(file, "utf8").catch(() => "");
   return await until(`inputs/${path}`, read, Boolean, 60_000).catch(read);
 };
@@ -983,21 +979,18 @@ const refusedBefore = async (
 
   // A decision page's Preview naming an artifact by its short id.
   const page = await fleet
-    .api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: parent },
-        body: {
-          kind: "page",
-          does: "pick",
-          title: "Probe pick artifact",
-          ask: "Pick the page",
-          name: `probe-short-preview-${RUN}`,
-          program: `root = Decisions("Keep the page", [keep])
+    .api((hub) =>
+      hub.api.instances({ id: parent }).artifacts.post({
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick the page",
+        name: `probe-short-preview-${RUN}`,
+        program: `root = Decisions("Keep the page", [keep])
 keep = Decision("keep", "Keep the served page?", [yes, no], "It is the one served.", [], [], false, null, "behaviour")
 yes = Option("yes", "Keep it", "It shows the folder.", true, [live], "Nothing more.")
 no = Option("no", "Redo it", "A new page.", false, [], "Another round.")
 live = Preview("${previewId.slice(0, 8)}", "The served page")`,
-        },
       })
     )
     .then(
@@ -1436,22 +1429,20 @@ const spec: Spec = {
       .cwd(repo)
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Handed inputs",
-          machineId: MACHINE,
-          cwd: repo,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Handed inputs",
+        machineId: MACHINE,
+        cwd: repo,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", repo, {
       projectId: project.id,
     });
     const delegate = (tag: string, inputs: unknown[], outputs?: string[]) =>
-      fleet.api<Started>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      fleet
+        .api((hub) =>
+          hub.api["work-items"].post({
             parentInstanceId: parent,
             title: "Handed inputs probe",
             prompt: `${tag}: do your part, then finish.`,
@@ -1461,9 +1452,9 @@ const spec: Spec = {
             lands: "none",
             inputs,
             ...(outputs ? { outputs } : {}),
-          },
-        })
-      );
+          })
+        )
+        .then(delegateStarted);
 
     // 1. Leaf A hands a canvas up, writes its briefs and reports.
     const a = await delegate(TAG_A, [], ["design-briefs/"]);
@@ -1481,35 +1472,29 @@ const spec: Spec = {
     const drawn = await until(
       "the canvas's picture",
       () =>
-        fetchHub(
-          fetch,
-          fleet.base,
-          hubRequest("GET /api/artifacts/:artifact/thumbnail/:scheme", {
-            path: { artifact: canvasId, scheme: "light" },
-          })
-        ),
-      (picture) => picture.ok,
+        hubAt(fleet.base)
+          .api.artifacts({ artifact: canvasId })
+          .thumbnail({ scheme: "light" })
+          .get(),
+      (picture) => picture.error === null,
       60_000
     ).catch(() => undefined);
     check(
       "1: the canvas A handed up is drawn on the hub machine's screen",
-      !!canvasId && drawn?.ok === true,
+      !!canvasId && drawn?.error === null,
       `${canvasId || "no canvas"}: ${drawn?.status ?? "no picture"}`
     );
 
     // 2. A page with a pin and its reply, a preview of a folder, a picture.
     const pageId = (
-      await fleet.api<{ id: string }>(
-        hubRequest("POST /api/instances/:id/artifacts", {
-          path: { id: parent },
-          body: {
-            kind: "page",
-            does: "judge",
-            title: "Probe judge artifact",
-            ask: "Judge this page",
-            name: PAGE_NAME,
-            html: PAGE,
-          },
+      await fleet.api((hub) =>
+        hub.api.instances({ id: parent }).artifacts.post({
+          kind: "page",
+          does: "judge",
+          title: "Probe judge artifact",
+          ask: "Judge this page",
+          name: PAGE_NAME,
+          html: PAGE,
         })
       )
     ).id;
@@ -1520,26 +1505,24 @@ const spec: Spec = {
       `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Served</title></head><body><p>${PREVIEW_TOKEN}</p></body></html>`
     );
     const previewId = (
-      await fleet.api<{ id: string }>(
-        hubRequest("POST /api/instances/:id/artifacts", {
-          path: { id: parent },
-          body: {
-            kind: "preview",
-            does: "try",
-            title: "Probe try artifact",
-            ask: "Try this page",
-            name: PREVIEW,
-            dir: served,
-          },
+      await fleet.api((hub) =>
+        hub.api.instances({ id: parent }).artifacts.post({
+          kind: "preview",
+          does: "try",
+          title: "Probe try artifact",
+          ask: "Try this page",
+          name: PREVIEW,
+          dir: served,
         })
       )
     ).id;
     state.b.preview = previewId;
     // The address the parent, outside every workspace, is handed.
-    const { url: passUrl } = await fleet.api<{ url: string }>(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/browse", {
-        path: { id: parent, artifact: previewId },
-      })
+    const { url: passUrl } = await fleet.api((hub) =>
+      hub.api
+        .instances({ id: parent })
+        .artifacts({ artifact: previewId })
+        .browse.post()
     );
     // The hub's own port, which serves no preview, on the pass's host.
     state.b.hubApi = `http://${new URL(passUrl).hostname}:${new URL(fleet.base).port}/`;
@@ -1614,7 +1597,7 @@ const spec: Spec = {
       `${handed.status} ${handed.text.slice(0, 300)}`
     );
     const handedWords = await readFile(
-      join(b.workspaceTmp, "inputs", HANDOFF_FILE),
+      join(b.workspaceTmp ?? "", "inputs", HANDOFF_FILE),
       "utf8"
     ).catch(() => "");
     check(

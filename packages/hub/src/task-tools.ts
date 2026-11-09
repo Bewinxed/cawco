@@ -44,7 +44,7 @@ import {
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
-import type { AnyProblem } from "./refusal";
+import type { AnyProblem, ProblemStatus } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import { sessionActor, type Tasks, type TaskView } from "./tasks";
@@ -78,7 +78,9 @@ export interface TaskToolContext {
     asked: string
   ) =>
     | string
-    | ReturnType<typeof problem<number, { code: string; detail: string }>>;
+    | ReturnType<
+        typeof problem<ProblemStatus, { code: string; detail: string }>
+      >;
   /**
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
@@ -146,7 +148,9 @@ const resultArtifact = (
     asked: string
   ) =>
     | string
-    | ReturnType<typeof problem<number, { code: string; detail: string }>>
+    | ReturnType<
+        typeof problem<ProblemStatus, { code: string; detail: string }>
+      >
 ) => {
   const shown = {
     ...(written.name ? { name: written.name } : {}),
@@ -194,7 +198,9 @@ const resultArtifacts = (
     asked: string
   ) =>
     | string
-    | ReturnType<typeof problem<number, { code: string; detail: string }>>
+    | ReturnType<
+        typeof problem<ProblemStatus, { code: string; detail: string }>
+      >
 ) => {
   const artifacts: ResultArtifact[] = [];
   for (const one of written) {

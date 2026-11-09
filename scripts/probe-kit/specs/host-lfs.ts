@@ -43,12 +43,9 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gitUntil } from "../../../packages/agent/src/git/run";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import { lfsCheckout } from "../../../packages/agent/src/workspace";
-import {
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
+import { hubRequested } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const FILTERS = [
@@ -541,8 +538,11 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
 };
 
 /** A hub request as the in-process hub reads it, with `headers`. */
-const asked = (request: HubRequest, headers: Record<string, string> = {}) =>
-  new Request(`http://127.0.0.1${request.path}`, hubInit(request, { headers }));
+const asked = (
+  path: string,
+  method: string,
+  headers: Record<string, string> = {}
+) => new Request(`http://127.0.0.1${path}`, { method, headers });
 
 /**
  * E: the hub's side, a real hub in this process. The person declares the
@@ -593,37 +593,31 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
     const said = async (response: Response) =>
       `${response.status} ${(await response.text()).slice(0, 300)}`;
     const made = await hub.handle(
-      asked(
-        hubRequest("POST /api/connections", {
-          body: {
-            name: "probe-store",
-            service: "github",
-            account: "@probe",
-            transport: "http",
-            url: "http://127.0.0.1:9/mcp",
-            auth: "bearer",
-          },
+      await hubRequested((client) =>
+        client.api.connections.post({
+          name: "probe-store",
+          service: "github",
+          account: "@probe",
+          transport: "http",
+          url: "http://127.0.0.1:9/mcp",
+          auth: "bearer",
         })
       )
     );
     const keyed = await hub.handle(
-      asked(
-        hubRequest("PUT /api/connections/:name/key", {
-          path: { name: "probe-store" },
-          body: { key: "probe-connection-key" },
-        })
+      await hubRequested((client) =>
+        client.api
+          .connections({ name: "probe-store" })
+          .key.put({ key: "probe-connection-key" })
       )
     );
     kit.note(`E: connection ${await said(made)}; key ${keyed.status}`);
     const plain = await hub.handle(
-      asked(
-        hubRequest("PATCH /api/projects/:id", {
-          path: { id: "probe-project" },
-          body: {
-            lfs: {
-              url: "http://lfs.example.com/o/r.git",
-              connection: "probe-store",
-            },
+      await hubRequested((client) =>
+        client.api.projects({ id: "probe-project" }).patch({
+          lfs: {
+            url: "http://lfs.example.com/o/r.git",
+            connection: "probe-store",
           },
         })
       )
@@ -634,14 +628,11 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
       await said(plain)
     );
     const declared = await hub.handle(
-      asked(
-        hubRequest("PATCH /api/projects/:id", {
-          path: { id: "probe-project" },
-          body: {
-            lfs: {
-              url: "https://lfs.example.com/o/r.git",
-              connection: "probe-store",
-            },
+      await hubRequested((client) =>
+        client.api.projects({ id: "probe-project" }).patch({
+          lfs: {
+            url: "https://lfs.example.com/o/r.git",
+            connection: "probe-store",
           },
         })
       )
@@ -660,12 +651,9 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
         row.lfsConnection === "probe-store",
       await said(declared)
     );
-    const lfs = hubRequest("GET /api/lfs/projects/:id", {
-      path: { id: "probe-project" },
-    });
-    const { path } = lfs;
+    const path = hubPath.api.lfs.projects({ id: "probe-project" })["~path"];
     const answer = await hub.handle(
-      asked(lfs, proven("probe-place", keyOf.place, "GET", path))
+      asked(path, "GET", proven("probe-place", keyOf.place, "GET", path))
     );
     const read = (await answer
       .clone()
@@ -682,10 +670,10 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
       await said(answer)
     );
     const stranger = await hub.handle(
-      asked(lfs, proven("probe-none", keyOf.none, "GET", path))
+      asked(path, "GET", proven("probe-none", keyOf.none, "GET", path))
     );
     const session = await hub.handle(
-      asked(lfs, { authorization: "Bearer probe-session" })
+      asked(path, "GET", { authorization: "Bearer probe-session" })
     );
     kit.check(
       "E: a machine with no place of the project, and a session, are refused",
@@ -693,12 +681,21 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
       `${await said(stranger)} / ${await said(session)}`
     );
     const endpoint = "https://third.example.com/x.git/info/lfs";
-    const refusal = hubRequest("POST /api/lfs/projects/:id/refused", {
-      path: { id: "probe-project" },
-      body: { root: "/srv/probe", endpoint, machineId: "probe-place" },
-    });
+    const refusalPath = hubPath.api.lfs.projects({ id: "probe-project" })
+      .refused["~path"];
     const told = await hub.handle(
-      asked(refusal, proven("probe-place", keyOf.place, "POST", refusal.path))
+      new Request(`http://127.0.0.1${refusalPath}`, {
+        method: "POST",
+        headers: {
+          ...proven("probe-place", keyOf.place, "POST", refusalPath),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          root: "/srv/probe",
+          endpoint,
+          machineId: "probe-place",
+        }),
+      })
     );
     // A project with no conversation yet keeps the note for the next one.
     db.projectNotes.adopt("probe-project", "probe-conversation");

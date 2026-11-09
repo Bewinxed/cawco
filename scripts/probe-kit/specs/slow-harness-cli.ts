@@ -58,7 +58,6 @@ import {
 import { versionRefusal } from "../../../packages/agent/src/claude-version";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { harnessRefusal } from "../../../packages/core/src/harness-refusal";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { machineLabel } from "../../../packages/core/src/machine-names";
 import type { ToolState } from "../../../packages/core/src/tools";
 import { unhandled } from "../../../packages/core/src/unhandled";
@@ -187,7 +186,7 @@ const poll = async <T>(
 /** What drives this spec's fleet: its machine's row, a Claude start, the account's sign-in. */
 const drive = (fleet: Fleet) => {
   const row = async (): Promise<AgentRow | undefined> =>
-    (await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
+    (await fleet.api((hub) => hub.api.agents.get())).find(
       (agent) => agent.machineId === MACHINE
     );
   const claudeReport = (agent: AgentRow | undefined) =>

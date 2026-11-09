@@ -37,7 +37,6 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   delay,
   MACHINE,
@@ -164,22 +163,17 @@ const setUp = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Link under load",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Link under load",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
-  await fleet.api(
-    hubRequest("POST /api/projects/:id/places", {
-      path: { id: project.id },
-      body: {
-        machineId: OTHER,
-        path: src,
-      },
+  await fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).places.post({
+      machineId: OTHER,
+      path: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {
@@ -253,19 +247,17 @@ const spec: Spec = {
     const calls = Promise.allSettled(
       inputs.map((paths, lane) =>
         fleet
-          .api<{ workItemId: string }>(
-            hubRequest("POST /api/work-items", {
-              body: {
-                parentInstanceId: parent,
-                title: `Link load ${lane}`,
-                prompt: `${TAG} lane-${lane}: count your inputs, then finish.`,
-                harness: "claude",
-                model: "claude-haiku-4-5",
-                cwd: src,
-                lands: "none",
-                inputs: paths,
-                ...(lane % 2 === 1 ? { machineId: OTHER } : {}),
-              },
+          .api((hub) =>
+            hub.api["work-items"].post({
+              parentInstanceId: parent,
+              title: `Link load ${lane}`,
+              prompt: `${TAG} lane-${lane}: count your inputs, then finish.`,
+              harness: "claude",
+              model: "claude-haiku-4-5",
+              cwd: src,
+              lands: "none",
+              inputs: paths,
+              ...(lane % 2 === 1 ? { machineId: OTHER } : {}),
             })
           )
           .then((started) => ({
