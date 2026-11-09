@@ -43,9 +43,8 @@ cycle	@cawco/hub	packages/hub/src/account-probes.ts	2
 cycle	@cawco/hub	packages/hub/src/account-signin.ts	2
 cycle	@cawco/hub	packages/hub/src/admission.ts	1
 cycle	@cawco/hub	packages/hub/src/artifact-pages.ts	1
-cycle	@cawco/hub	packages/hub/src/artifacts/canvas.ts	1
-cycle	@cawco/hub	packages/hub/src/artifacts/service.ts	3
-cycle	@cawco/hub	packages/hub/src/artifacts/sync.ts	1
+cycle	@cawco/hub	packages/hub/src/artifacts/deps.ts	1
+cycle	@cawco/hub	packages/hub/src/artifacts/service.ts	1
 cycle	@cawco/hub	packages/hub/src/ask-routing.ts	2
 cycle	@cawco/hub	packages/hub/src/at-limit.ts	2
 cycle	@cawco/hub	packages/hub/src/caw-own.ts	1
