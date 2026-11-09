@@ -45,7 +45,7 @@
  *    comes back; with the page revised it goes to the moved tray.
  */
 import type { Frame, Page } from "playwright-core";
-import { bundleOverlay } from "../../../packages/core/src/preview/proxy";
+import { bundleOverlay } from "../../../packages/preview/src/proxy";
 import type { Kit, Spec } from "../kit";
 import { dragFromIcon } from "./ink";
 
@@ -107,7 +107,7 @@ const staysPage = `<!doctype html><html><head>${SEEDED_TAG}</head><body style="m
 <p id="words" style="margin-top:600px;width:300px">plain words of the page</p>
 </body></html>`;
 
-/** The root's gutter the preview proxy keeps on every page (core preview-proxy `GUTTER_FLOOR`). */
+/** The root's gutter the preview proxy keeps on every page (preview proxy `GUTTER_FLOOR`). */
 const gutterPage = `<!doctype html><html style="scrollbar-gutter:stable"><head>${SEEDED_TAG}</head><body style="margin:0;font:18px/1.6 sans-serif;height:3000px">
 <main style="padding:24px"><p id="line" style="width:70%;margin:0">The third paragraph, to draw over end to end.</p></main>
 </body></html>`;
