@@ -285,13 +285,7 @@ export class ClaudeCarry implements SessionCarry {
     ended: Map<string, MoveEnded>
   ): Promise<CarrySessionOutcome | undefined> {
     const { instanceId } = request;
-    const awake = await this.#host.awake(
-      instanceId,
-      running,
-      undefined,
-      true,
-      true
-    );
+    const awake = await this.#host.awakeForMove(instanceId, running);
     if (awake && !(awake.later && request.endLater)) {
       return {
         state: "live",
