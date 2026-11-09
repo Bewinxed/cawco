@@ -800,16 +800,6 @@ export interface HandoffDeps {
     inputs: unknown[],
     compose: (landed: HandoffInputs) => Envelope<SendPayload>
   ) => Promise<SendDelivery>;
-  /**
-   * The harness the tools are listed for and called from: what a tool's
-   * words say can differ by it (delegation-tools.ts `NO_REPLY_WORDS`).
-   */
-  readonly harness: HarnessKind;
-  /**
-   * Whether this session has a parent (it was started by another session):
-   * artifact_create then offers `to: "parent"`.
-   */
-  readonly hasParent?: boolean;
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
   /** The session doing the handing over. */
@@ -820,15 +810,8 @@ export interface HandoffDeps {
    * day ago) still reaches it.
    */
   readonly instancesByShortId?: (prefix: string) => InstanceRow[];
-  /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
-  readonly lands?: ItemEnd;
   /** Whether this session is the conversation of the project of the work item a session runs: it may steer, answer and stop it. */
   readonly ledBy?: (instanceId: string) => boolean;
-  /**
-   * The delegate types THIS session may start (core `MayStart`): its row's
-   * list; absent, a session nobody delegated, which may start any.
-   */
-  readonly mayStart?: MayStart;
   /** The person's message this session has read still has no reply: `no_reply_needed` refuses. */
   readonly personOwed: () => boolean;
   /**
@@ -875,8 +858,6 @@ export interface HandoffDeps {
    * gateway authenticated, never over the hub's own HTTP.
    */
   readonly work: WorkItemCalls;
-  /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
-  readonly workItem?: boolean;
 }
 
 /** The three hand-off actions, each answering with the text the tool returns. */
