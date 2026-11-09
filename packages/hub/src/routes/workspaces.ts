@@ -9,6 +9,7 @@ import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
 import { discardCall } from "../work-item-calls";
 import { WorkItemRefusal } from "../work-item-state";
+import { workspaceOut } from "../work-out";
 import { sessionCallerRefusal } from "./session-caller";
 
 export const workspaceRoutes = ({
@@ -92,7 +93,7 @@ export const workspaceRoutes = ({
               anyway: body?.anyway === true && caller.kind === "owner",
             });
             workspaceArchived(workspace);
-            return { ...workspace, carry };
+            return { ...workspaceOut(workspace), carry };
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
