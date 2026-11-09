@@ -115,12 +115,7 @@
   import { isTyping } from "#lib/utils/typing.js";
   import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";
-  import {
-    answerFor,
-    type PermissionAnswer,
-    permissionAnswer,
-    submitCommand,
-  } from "../client.svelte";
+  import { answerFor, submitCommand } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import { conversationHref, rowHref } from "../links";
@@ -134,6 +129,10 @@
   import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
+  import {
+    type PermissionAnswer,
+    permissionAnswer,
+  } from "../stores/asks.svelte";
   import { boardStore } from "../stores/board.svelte";
   import { takeOverBrowser } from "../stores/browsers.svelte";
   import { decideAction } from "../stores/needs.svelte";
