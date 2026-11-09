@@ -1,13 +1,5 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import {
-    CURVE,
-    dur,
-    easeOut,
-    lifting,
-    motionOk,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { track } from "#lib/cawco/track.js";
   import { ThinkingIndicator } from "#lib/components/ui/thinking-indicator/index.js";
   import {
     ThinkingStep,
@@ -16,6 +8,14 @@
     ThinkingStepsHeader,
   } from "#lib/components/ui/thinking-steps/index.js";
   import { IconCpu } from "#lib/icons.js";
+  import {
+    CURVE,
+    dur,
+    easeOut,
+    lifting,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
 
   let {
     text,

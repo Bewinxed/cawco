@@ -11,11 +11,11 @@
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import {
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
+  import { failureClause, failureWords } from "#lib/platform/hub-read.js";
 
   const section = sectionOf("spend");
 

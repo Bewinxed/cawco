@@ -55,9 +55,13 @@
     IconReset,
     IconTrash,
   } from "#lib/icons.js";
+  import {
+    reveal,
+    revealOut,
+    sheetSlide,
+  } from "#lib/platform/motion/curves.svelte.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import { reveal, revealOut, sheetSlide } from "../motion/curves.svelte";
   import {
     controlOf,
     type SheetInspector,

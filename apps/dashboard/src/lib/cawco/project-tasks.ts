@@ -49,7 +49,7 @@ import {
   hubSaid,
   noAnswer,
   unreachedAnswer,
-} from "./hub-read";
+} from "#lib/platform/hub-read.js";
 
 export type {
   ProjectStarter,

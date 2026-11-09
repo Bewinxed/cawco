@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { completeMcpSignIn } from "#lib/cawco/fleet.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   /**
    * Where a provider's sign-in comes back to, in the tab the sign-in opened
    * (fleet.ts `signInToMcp`). cawco.dev/oauth/callback brings the person
@@ -14,6 +13,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
 
