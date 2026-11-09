@@ -995,6 +995,7 @@ import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
+import { sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { applySetupPicks, isSetupPage } from "./setup";
@@ -8211,25 +8212,13 @@ export const createServer = (
     if (!ended || (ended.tasks.length === 0 && ended.wakeups === 0)) {
       return;
     }
-    deliverSend({
-      verb: "send",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload: {
-        instanceId: row.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: { role: "user", content: endedByMoveWords(ended) },
-          parent_tool_use_id: null,
-          origin: {
-            kind: "system",
-            name: LIMIT_ORIGIN,
-            line: noticeWords.movedEnded(ended.tasks.length),
-          },
-        },
-      },
-    } satisfies Envelope<SendPayload>);
+    deliverSend(
+      sessionWord(row, endedByMoveWords(ended), {
+        kind: "system",
+        name: LIMIT_ORIGIN,
+        line: noticeWords.movedEnded(ended.tasks.length),
+      })
+    );
   };
 
   /**
@@ -20316,21 +20305,9 @@ export const createServer = (
       if (!row) {
         return;
       }
-      deliverSend({
-        verb: "send",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: text },
-            parent_tool_use_id: null,
-            origin: { kind: "system", name: TASK_WAITS_ORIGIN },
-          },
-        },
-      });
+      deliverSend(
+        sessionWord(row, text, { kind: "system", name: TASK_WAITS_ORIGIN })
+      );
     },
   });
   // External items on tasks (external-items.ts): links and comments from
