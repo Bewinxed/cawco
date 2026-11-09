@@ -61,12 +61,7 @@ import type {
   MoveEnded,
   WorkInFlight,
 } from "@cawco/core/session/controls";
-import type {
-  NeutralOrigin,
-  SendMode,
-  SendState,
-  SentMessage,
-} from "@cawco/core/session-messages";
+import type { NeutralOrigin, SentMessage } from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { createAdmission } from "./admission";
@@ -88,7 +83,6 @@ import type {
   ContinuationSource,
   ContinueRequest,
   PreparedContinuation,
-  SendHold,
   StoredSendRefusal,
 } from "./db/stored-types";
 import type { DelegateTypesShape } from "./delegate-types";
@@ -539,128 +533,7 @@ export interface HubContext {
   projectStops: ReturnType<typeof createProjectStops>;
   projectTypes: ProjectDelegateTypes;
   publishInstances: (machineId: string) => void;
-  publishSend: (row: {
-    reason: string | null;
-    uuid: string;
-    anchor: string | null;
-    instanceId: string;
-    mode: SendMode;
-    acceptedAt: Date;
-    readAt: Date | null;
-    answeredAt: Date | null;
-    harnessId: string | null;
-    body: {
-      message: {
-        role: "user";
-        content:
-          | string
-          | (
-              | { type: "text"; text: string }
-              | {
-                  type: "thinking";
-                  thinking: string;
-                  signature?: string | undefined;
-                }
-              | { type: "redacted_thinking" }
-              | {
-                  type: "tool_use";
-                  id: string;
-                  name: string;
-                  input: Record<string, unknown>;
-                }
-              | {
-                  type: "tool_result";
-                  tool_use_id: string;
-                  content: unknown;
-                  is_error?: boolean | undefined;
-                  structuredContent?: Record<string, unknown> | undefined;
-                  questionResult?:
-                    | {
-                        answers: Record<string, string | string[]>;
-                        outcome: "answered";
-                        questions: {
-                          header: string;
-                          multiSelect: boolean;
-                          options: { label: string; description: string }[];
-                          question: string;
-                        }[];
-                        annotations?:
-                          | Record<
-                              string,
-                              {
-                                notes?: string | undefined;
-                                preview?: string | undefined;
-                              }
-                            >
-                          | undefined;
-                        response?: string | undefined;
-                      }
-                    | {
-                        outcome: "dismissed";
-                        questions: {
-                          header: string;
-                          multiSelect: boolean;
-                          options: { label: string; description: string }[];
-                          question: string;
-                        }[];
-                      }
-                    | undefined;
-                }
-              | {
-                  type: "image";
-                  source:
-                    | { type: "base64"; media_type: string; data: string }
-                    | { type: "url"; media_type: string; url: string };
-                }
-            )[];
-        harnessNote?:
-          | {
-              body: string;
-              kind: "task-notification" | "system-reminder";
-              status: string;
-              title: string;
-              toolUseId?: string | undefined;
-            }
-          | undefined;
-      };
-      type: "user";
-      compactSummary?: true | undefined;
-      keepAlive?: true | undefined;
-      origin?:
-        | { kind: "human" }
-        | {
-            kind: "peer";
-            from?: string | undefined;
-            name?: string | undefined;
-            fromSession?: string | undefined;
-            body?: string | undefined;
-          }
-        | {
-            kind: "system";
-            line?: string | undefined;
-            live?: "ended" | "running" | undefined;
-            name?: string | undefined;
-          }
-        | undefined;
-      parent_tool_use_id?: string | null | undefined;
-      raw?: unknown;
-      reminder?: string | undefined;
-      replaces?: string | undefined;
-      session_id?: string | undefined;
-      shouldQuery?: boolean | undefined;
-      timestamp?: string | undefined;
-      uuid?: string | undefined;
-    };
-    replaces: string | null;
-    state: SendState;
-    refusal: StoredSendRefusal | null;
-    replacedBy: string | null;
-    held: boolean;
-    owed: Envelope<SendPayload> | null;
-    hold: SendHold | null;
-    envelope: Envelope<SendPayload> | null;
-    delivery: string | null;
-  }) => void;
+  publishSend: (row: SentMessageRow) => void;
   publishStalls: () => void;
   publishUsage: (machineId?: string) => void;
   pulses: Map<string, SessionPulse>;
