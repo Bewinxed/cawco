@@ -1589,8 +1589,54 @@ console.log(
   `Wire checked against ${bases.map((base) => base.label).join(", ")}; agent routes against ${agents.map((agent) => agent.label).join(", ")}`
 );
 
+/**
+ * The document in one order, whatever order the checker met its types in: a
+ * union's members by their text (a union with a member naming `null` stays as it is:
+ * the generator reads the first member of such a union), and the components
+ * by name. Moving a function between files changes the checker's order and
+ * nothing the document says.
+ */
+const namesNull = (member: unknown): boolean => {
+  const type = (member as Schema | null)?.type;
+  return type === "null" || (Array.isArray(type) && type.includes("null"));
+};
+const unionInOrder = (members: unknown[]): unknown[] =>
+  members.some(namesNull)
+    ? members
+    : members.toSorted((a, b) => {
+        const [x, y] = [JSON.stringify(a), JSON.stringify(b)];
+        return x < y ? -1 : Number(x > y);
+      });
+const inOneOrder = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(inOneOrder);
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      if (key === "schemas" && typeof item === "object" && item !== null) {
+        return [
+          key,
+          inOneOrder(
+            Object.fromEntries(
+              Object.entries(item).toSorted(([a], [b]) =>
+                a < b ? -1 : Number(a > b)
+              )
+            )
+          ),
+        ];
+      }
+      if ((key === "anyOf" || key === "oneOf") && Array.isArray(item)) {
+        return [key, unionInOrder(item.map(inOneOrder))];
+      }
+      return [key, inOneOrder(item)];
+    })
+  );
+};
 const outputs: [string, string][] = [
-  [OUT, `${JSON.stringify(document, null, 2)}\n`],
+  [OUT, `${JSON.stringify(inOneOrder(document), null, 2)}\n`],
   [join(dirname(OUT), "OpenEnums.swift"), swiftEnums],
   [join(dirname(OUT), "openapi-generator-config.yaml"), generatorConfig],
 ];
