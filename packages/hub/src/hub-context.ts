@@ -34,7 +34,11 @@ import type {
   SkillFile,
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
-import type { ControlResultFrame, FramePayload } from "@cawco/core/frames";
+import type {
+  ControlResultFrame,
+  FramePayload,
+  PreviewFrame,
+} from "@cawco/core/frames";
 import type {
   HandoverCommand,
   HandoverEvent,
@@ -52,11 +56,13 @@ import type { MachinePath } from "@cawco/core/machine-path";
 import type {
   AgentRow,
   BuildInfo,
+  ContinuationJob,
   Envelope,
   FsPayload,
   InstanceRow,
   NamedSpawn,
   SendPayload,
+  SessionCustody,
   SessionEndIntent,
   SessionOrigin,
   SessionPulse,
@@ -86,14 +92,20 @@ import type { Artifacts } from "./artifacts/service";
 import type { createAsks } from "./asks";
 import type { createAtLimit, Kept, Stall, TakenUpBy } from "./at-limit";
 import type { createBrowserAsks } from "./browser-tools";
+import type { createBrowsers } from "./browsers";
 import type { Caw, createCaw } from "./caw";
 import type { createConnectAsks } from "./connect-asks";
 import type { createConnections } from "./connections";
+import type { damagedRecordsOf } from "./damaged-rows";
 import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { LimitCompaction } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
-import type { InstanceKind, PublicInstanceRow } from "./db/instances";
+import type {
+  BoardInstanceRow,
+  InstanceKind,
+  PublicInstanceRow,
+} from "./db/instances";
 import type { OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -146,13 +158,14 @@ import type { createMachineCredentials } from "./machine-credentials";
 import type { MachinePause } from "./machine-pause";
 import type { createMemory, createTurnWatch } from "./memory";
 import type { createMoves } from "./moves";
+import type { createNoticesSeen } from "./notices";
 import type { createNotifications } from "./notifications";
 import type { createOpenItems } from "./open-items";
 import type { AnswerFrom, PendingShape } from "./pending";
 import type { PlacementInput } from "./placement";
 import type { PlanChanges } from "./plan-changes";
 import type { createPlans } from "./plans";
-import type { createPreviewListeners } from "./preview";
+import type { createPreviewListeners, PreviewTarget } from "./preview";
 import type { createPreviewService } from "./preview-service";
 import type { createCaps } from "./project-caps";
 import type { ProjectDelegateTypes } from "./project-delegate-types";
@@ -281,6 +294,7 @@ export interface HubContext {
   awayError: (machineId: string) => MachineAway;
   awayWords: (machineId: string, answer: Unanswered) => string;
   binaryUpdateStates: Map<string, BinaryUpdateState>;
+  boardBase: Map<string, BoardInstanceRow>;
   bounded: (payload: SpawnPayload, knownRow?: InstanceRow) => NamedSpawn;
   boundProblem: ({
     projectId,
@@ -290,6 +304,7 @@ export interface HubContext {
     projectId?: string | null;
   }) => string | undefined;
   browserAsks: ReturnType<typeof createBrowserAsks>;
+  browsers: ReturnType<typeof createBrowsers>;
   byIdNow: <P extends { instanceId?: string }>(
     envelope: Envelope<P>
   ) => Envelope<P>;
@@ -360,10 +375,12 @@ export interface HubContext {
     request: ContinueRequest,
     askedBy: ContinuationAsker
   ) => Promise<string | undefined>;
+  continuationTable: () => ContinuationJob[];
   createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade>;
   credentialTurns: Set<string>;
   cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   cutTurn: (instanceId: string, cause: string) => void;
+  damagedRecords: ReturnType<typeof damagedRecordsOf>;
   db: DbShape;
   decisions: ReturnType<typeof createDecisions>;
   decisionsChanged: (projectId: string) => void;
@@ -434,6 +451,7 @@ export interface HubContext {
     source: string
   ) => Promise<("changed" | "failed" | "same") | undefined>;
   find: ReturnType<typeof createFind>;
+  findHears: (ids: string[]) => void;
   firstTurnOf: (transcript: unknown[]) => string | undefined;
   fleetChanged: (why?: string) => void;
   fleetMcp: FleetMcp;
@@ -511,6 +529,7 @@ export interface HubContext {
   hubAsks: ReturnType<typeof createAsks>;
   hubAuth: ReturnType<typeof createHubAuth>;
   hubBuild: BuildInfo;
+  hubRun: `${string}-${string}-${string}-${string}-${string}`;
   hubStep: (event: HandoverEvent) => HandoverCommand[];
   identities: ReturnType<typeof createSessionIdentities>;
   inFlightFor: (
@@ -615,6 +634,7 @@ export interface HubContext {
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
   MOVE_TICK_MS: number;
   machineCredentials: ReturnType<typeof createMachineCredentials>;
+  machineCustody: Map<string, SessionCustody>;
   machineFault: (
     machineId: string,
     fault: MachineFault,
@@ -709,11 +729,15 @@ export interface HubContext {
   ) => boolean;
   noteFreshStart: (row: InstanceRow) => void;
   noteInterrupt: (instanceId: string, hold?: boolean) => void;
+  noticesSeen: ReturnType<typeof createNoticesSeen>;
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
   openInstance: (row: Parameters<DbShape["openInstance"]>[0]) => void;
   openItems: ReturnType<typeof createOpenItems>;
+  owedAfterBoard: (
+    broken: ReturnType<HubContext["laws"]["broken"]>
+  ) => FramePayload[];
   owedCarries: Map<string, Promise<void>>;
   owedMoves: {
     get: (instanceId: string) => OwedMove | undefined;
@@ -777,6 +801,19 @@ export interface HubContext {
   projectOut: ReturnType<typeof createProjectOut>;
   projectStops: ReturnType<typeof createProjectStops>;
   projectTypes: ProjectDelegateTypes;
+  publishedAgents: Map<string, string>;
+  publishedMetadata: Map<
+    | "previews"
+    | "continuations"
+    | "handoffs"
+    | "formerIds"
+    | "noticesSeen"
+    | "noticesDamaged"
+    | "previewSettings",
+    string
+  >;
+  publishedOverlays: Map<string, string>;
+  publishedRows: Map<string, string>;
   publishInstances: (machineId: string) => void;
   publishSend: (row: SentMessageRow) => void;
   publishStalls: () => void;
@@ -952,6 +989,11 @@ export interface HubContext {
     bound: string | null | undefined,
     shared: boolean
   ) => string | undefined;
+  shownFrame: (
+    instanceId: string,
+    target: PreviewTarget,
+    open: boolean
+  ) => PreviewFrame;
   silentWords: (
     machineId: string,
     answer: { kind: "unanswered"; after: number; reason: "timeout" | "dead" }
