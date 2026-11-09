@@ -65,7 +65,7 @@ import {
   runsOutBy,
 } from "./placement";
 import { createRebalancer, readForecast, sessionBurn } from "./rebalance";
-import { isLive } from "./work-items";
+import { isLive } from "./work-item-state";
 
 /**
  * A running Claude session whose account reached its limit: its turn was
