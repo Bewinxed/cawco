@@ -78,7 +78,7 @@ every machine reads `offline`; the live ones flip to `online` within the next he
 reported.
 
 **Violated: session status.** `instances.status` is a stored column, written directly in
-roughly seven places across `packages/hub/src/db/index.ts` — on register, on restore, on stop,
+roughly seven places across `packages/hub/src/db/instances.ts` — on register, on restore, on stop,
 on error, on discard, and elsewhere — and until this build, read back exactly as written, with
 no equivalent of `withPresence()` standing between the column and the API response. The result
 was measurable: `/api/instances` reported 178 instances as `running` on one machine while only
