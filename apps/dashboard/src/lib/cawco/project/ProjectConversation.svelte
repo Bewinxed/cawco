@@ -41,7 +41,6 @@
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import type { HeldSend, SendExtras } from "#lib/cawco/client.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { rowHref } from "#lib/cawco/links.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -54,7 +53,9 @@
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import { asksStore } from "#lib/cawco/stores/asks.svelte.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import type { SendExtras } from "#lib/cawco/stores/commands.svelte.js";
   import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
+  import type { HeldSend } from "#lib/cawco/stores/session-start.svelte.js";
   import type { PendingPermission } from "#lib/cawco/stores/sessions.svelte.js";
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";

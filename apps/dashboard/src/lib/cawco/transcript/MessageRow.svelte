@@ -35,29 +35,31 @@
   import { goto } from "$app/navigation";
   import { hueVar, nameOf } from "../accounts/model.svelte";
   import { moveTo, movingTo } from "../accounts/switch.svelte";
-  import {
-    canWithdraw,
-    discardUnreached,
-    editAndResend,
-    editFailed,
-    failedSendPayload,
-    forkPointOf,
-    relaunchSession,
-    removeSend,
-    restoreDraft,
-    retryFailed,
-    retryOf,
-    retrySend,
-    userTurnActions,
-  } from "../client.svelte";
   import { answeredOr } from "../hub/control";
   import { ModeUnchosen } from "../hub/socket.svelte";
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { newSession, startFork } from "../spawn/new-session.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import {
+    canWithdraw,
+    discardUnreached,
+    editFailed,
+    failedSendPayload,
+    removeSend,
+    restoreDraft,
+    retryFailed,
+    retryOf,
+    retrySend,
+  } from "../stores/commands.svelte";
   import { commandRecord } from "../stores/ledger.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
+  import {
+    editAndResend,
+    forkPointOf,
+    relaunchSession,
+    userTurnActions,
+  } from "../stores/turns.svelte";
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";

@@ -16,8 +16,8 @@ import type { StarterPlace } from "@cawco/core/starters";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
-import type { SendExtras } from "../client.svelte";
 import type { DraftContent } from "../draft-store";
+import type { SendExtras } from "../stores/commands.svelte";
 import { uploadFile } from "./file-upload";
 
 /** A paste longer than this rides as a named attachment, not inline text. */
