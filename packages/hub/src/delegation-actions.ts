@@ -136,6 +136,13 @@ async function fetchDelegateTypes(projectId?: string): Promise<DelegateType[]> {
   }
 }
 
+/** `list_delegate_types`'s answer: the live types, a project's own replacing the fleet's of the same name. */
+export const delegateTypesListed = async (
+  projectId?: string
+): Promise<{ types: DelegateType[] }> => ({
+  types: await fetchDelegateTypes(projectId),
+});
+
 /**
  * What a type the caller named adds to a started session. Denied tools come
  * only with a named type: the default type picks what runs, but its deny
@@ -1781,10 +1788,7 @@ export const handoffActions = ({
       }
       return response.json();
     },
-    async listDelegateTypes() {
-      const types = await fetchDelegateTypes(projectId);
-      return { types };
-    },
+    listDelegateTypes: () => delegateTypesListed(projectId),
     async listSessions(query: SessionListQuery): Promise<SessionList> {
       const { peers, own, hosts } = roster(fleet, instanceId);
       const machines = fleet.machines();
