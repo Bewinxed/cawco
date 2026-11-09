@@ -334,7 +334,6 @@ as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NativeClass	apps/dashboard/src/lib/cawco/frame-observer.ts	1
 as-unknown-as	NeutralAssistantMessage	packages/hub/src/sends.ts	1
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
-as-unknown-as	NeutralMessage	packages/agent/src/session.ts	7
 as-unknown-as	NeutralMessage	scripts/probe-kit/specs/find-places.ts	1
 as-unknown-as	new ( cb: (...a: unknown[]) => void, o?: unknown ) => object	scripts/probe-kit/frames.ts	1
 as-unknown-as	new ( url: string, options: { headers: Record<string, string> } ) => Web	scripts/probe-kit/cloudflare-front.ts	1
