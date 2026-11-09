@@ -15,6 +15,8 @@
  * Every control names what it does in `data-action`; the rail has one
  * press handler that reads it.
  */
+
+import { toHost } from "@cawco/preview/overlay/host-origin";
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import type {
   ExcalidrawImperativeAPI,
@@ -33,7 +35,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { toHost } from "../preview-overlay/host-origin";
 import { type Glyph, Icon } from "./icons";
 import { IMAGE_ACCEPT, placeImage, refusalOf } from "./images";
 
