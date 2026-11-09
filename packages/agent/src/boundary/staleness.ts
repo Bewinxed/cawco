@@ -1,14 +1,7 @@
-/**
- * Which boundaries are stale or stubbed, and the words for what they leave
- * running.
- */
-
-import { existsSync } from "node:fs";
-import { until } from "@cawco/core/until";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
-import { readRetiring, STOP_TIMEOUT_MS, starting } from "./state";
+import { readRetiring, starting } from "./state";
 
 /** How often the boundaries of an older form are looked at. */
 export const STALE_LOOK_MS = 5000;
@@ -32,15 +25,6 @@ export const stubbed = new Map<
   string,
   { readonly ref: WorkspaceRef; commands: readonly number[] }
 >();
-
-/** Waits for each sandbox init in `inners` to be gone, up to {@link STOP_TIMEOUT_MS}; answers whether all are. */
-export const sandboxesGone = async (
-  inners: readonly number[]
-): Promise<boolean> =>
-  await until(() => !inners.some((pid) => existsSync(`/proc/${pid}`)), {
-    deadline: Date.now() + STOP_TIMEOUT_MS,
-    every: 20,
-  });
 
 /**
  * Why the start-up pass left each older boundary of workspaces `ids`
