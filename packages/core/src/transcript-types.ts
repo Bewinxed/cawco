@@ -219,7 +219,11 @@ export interface BlockMetadata {
   trigger?: "manual" | "auto";
 }
 
-/** One row of a transcript, as the hub built it. */
+/**
+ * One row of a transcript, as the hub built it.
+ *
+ * @socketFrame fromHub
+ */
 export interface TranscriptBlock {
   content: string;
   /**
@@ -252,6 +256,8 @@ export interface TranscriptBlock {
 /**
  * A subagent's branch: the Task call it hangs under, and how far it has got.
  * Its blocks are the blocks whose `parentToolUseId` is {@link toolUseId}.
+ *
+ * @socketFrame fromHub
  */
 export interface TranscriptBranch {
   completedAt?: string;
@@ -350,6 +356,8 @@ export interface TranscriptFacts {
  * One change to a transcript, in the order the hub made it. Applied in
  * sequence to the page a client fetched, it gives exactly the blocks the hub
  * holds.
+ *
+ * @socketFrame fromHub
  */
 export type TranscriptEvent =
   /** A new block at the end of the main transcript, or of its branch's. */
@@ -387,6 +395,8 @@ export type TranscriptPageBranch = TranscriptBranch & {
  * One page of a session's transcript, newest first. The newest page carries
  * the live state too, and the stream position it is consistent with: a client
  * subscribes with `afterSeq: seq` and applies the events after it.
+ *
+ * @socketFrame fromHub
  */
 export interface TranscriptPage {
   /** The main transcript's blocks on this page, oldest first. */
@@ -466,7 +476,11 @@ export interface TranscriptWhere {
   sessionKey: string;
 }
 
-/** A transcript event batch, as it rides a session's Ledger stream. */
+/**
+ * A transcript event batch, as it rides a session's Ledger stream.
+ *
+ * @socketFrame fromHub
+ */
 export interface TranscriptStreamFrame {
   events: TranscriptEvent[];
   instanceId: string;
