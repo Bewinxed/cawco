@@ -156,7 +156,6 @@ import {
   claudePrefixOf,
   claudePrefixScript,
   hookScript,
-  JUDGE_READY,
   JUDGE_SCRIPT,
   JUDGE_SERVER,
   type JudgeAt,
@@ -192,6 +191,12 @@ import {
   killAnswering,
   type Work,
 } from "./processes";
+import {
+  HOST_GONE_STATUS,
+  JUDGE_PROTOCOL_FILE,
+  JUDGE_READY,
+  judgeArgv,
+} from "./protocol";
 import { srtTmpOf } from "./runner";
 import { endMembers, goneWithin, isBwrap, sandboxes } from "./sandboxes";
 import {
@@ -239,7 +244,6 @@ import {
   cloneWatches,
   folderGone,
   goneStops,
-  HOST_GONE_STATUS,
   keepListed,
   lookAgainEverywhere,
   plainFolder,
@@ -261,7 +265,7 @@ const judgeFor = async (
 ): Promise<JudgeAt> => {
   const runtime = await bunRuntime(id);
   const scripts = await judgeScripts();
-  const [judgeText, serverText] = scripts;
+  const [judgeText, serverText, protocolText] = scripts;
   const server = join(stateDir(id), JUDGE_SERVER);
   const handed = judgeHanded(id, held.exec, hook, policy);
   // The keeper it runs on is part of its form: after a keeper handover, the
@@ -280,7 +284,16 @@ const judgeFor = async (
   // would not look. Its form differs, so this build's starts at once beside
   // it, and the hook names a judge that answers.
   const form = createHash("sha256")
-    .update([serverText, judgeText, ...handed, keeper, place].join("\0"))
+    .update(
+      [
+        serverText,
+        judgeText,
+        protocolText,
+        ...Object.values(handed),
+        keeper,
+        place,
+      ].join("\0")
+    )
     .digest("hex")
     .slice(0, JUDGE_FORM_LENGTH);
   // A judge of this form may be listening there already, so nothing is removed.
@@ -290,6 +303,7 @@ const judgeFor = async (
   // Written each time: OpenCode's plugin imports this build's judge from here.
   await Promise.all([
     writeWhole(join(stateDir(id), JUDGE_SCRIPT), judgeText, 0o644),
+    writeWhole(join(stateDir(id), JUDGE_PROTOCOL_FILE), protocolText, 0o644),
     writeWhole(server, serverText, 0o644),
   ]);
   let started = judging.get(procId);
@@ -302,7 +316,10 @@ const judgeFor = async (
       await client.spawnProc(procId, {
         command: runtime,
         // Its build last: what it answers when asked which it runs.
-        args: [server, socket, ...handed, judgeBuildOf(scripts)],
+        args: [
+          server,
+          ...judgeArgv({ socket, ...handed, build: judgeBuildOf(scripts) }),
+        ],
         // Bun reads bunfig.toml and .env from where it starts: the state dir,
         // which nothing inside the boundary writes.
         cwd: stateDir(id),
