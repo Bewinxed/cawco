@@ -47,7 +47,6 @@
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { messageAuth } from "y-websocket";
 import type { Pin } from "../../../packages/core/src/comments/model";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { until } from "../../scratch-fleet";
@@ -406,17 +405,14 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
   const session = await fleet.spawn("claude", "Pins held", fleet.repo);
-  const { id } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "page",
-        does: "judge",
-        title: "Probe judge artifact",
-        ask: "Judge this page: pin anything that reads wrong",
-        name: "pins-held",
-        html: PAGE,
-      },
+  const { id } = await fleet.api((client) =>
+    client.api.instances({ id: session }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      title: "Probe judge artifact",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "pins-held",
+      html: PAGE,
     })
   );
   const at = { base, fleet, id, kit, session };
@@ -426,17 +422,14 @@ const run = async (kit: Kit) => {
     await heldBack(at, leg);
     await refused(at, leg);
   }
-  const none = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "page",
-        does: "judge",
-        title: "Probe judge artifact",
-        ask: "Judge this page: pin anything that reads wrong",
-        name: "pins-none",
-        html: PAGE,
-      },
+  const none = await fleet.api((client) =>
+    client.api.instances({ id: session }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      title: "Probe judge artifact",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "pins-none",
+      html: PAGE,
     })
   );
   await nothing({ ...at, id: none.id });
@@ -538,11 +531,10 @@ interface At {
 /** The hub's pins on the artifact. */
 const hubPins = async ({ fleet, id, session }: At): Promise<HubPin[]> =>
   (
-    await fleet.api<{ artifacts: { id: string; pins: HubPin[] }[] }>(
-      hubRequest("GET /api/instances/:id/artifacts/comments", {
-        path: { id: session },
-        query: { artifact: id, filter: "all" },
-      })
+    await fleet.api((client) =>
+      client.api
+        .instances({ id: session })
+        .artifacts.comments.get({ query: { artifact: id, filter: "all" } })
     )
   ).artifacts.find((one) => one.id === id)?.pins ?? [];
 
@@ -604,11 +596,11 @@ const pinned = async (at: At): Promise<HubPin[]> => {
         .join() === "2,3",
     JSON.stringify(moved)
   );
-  await at.fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts/comments/:pin/resolve", {
-      path: { id: at.session, pin: "probe-pin-2" },
-      body: {},
-    })
+  await at.fleet.api((client) =>
+    client.api
+      .instances({ id: at.session })
+      .artifacts.comments({ pin: "probe-pin-2" })
+      .resolve.post({})
   );
   const resolved = await until(
     "pin 2 resolved on the hub",

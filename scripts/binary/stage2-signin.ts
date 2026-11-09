@@ -15,8 +15,8 @@
  * {@link ANSWER_MS}. Nothing else is written to stdout: every line is a sample.
  */
 import { existsSync } from "node:fs";
+import { hubClient } from "../../packages/agent/src/hub-client";
 import { readWithin } from "../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
 
 const [, , hub, accountId, machineId, stop] = Bun.argv;
 if (!(hub && accountId && machineId && stop)) {
@@ -25,18 +25,14 @@ if (!(hub && accountId && machineId && stop)) {
 const EVERY_MS = 1000;
 const ANSWER_MS = 30_000;
 
-interface Accounts {
-  signins?: { accountId?: string; machineId?: string; state?: string }[];
-}
-
 /** The hub's word on the sign-in, or `hub-away` (no answer in time, refused, not a 2xx, not its JSON). */
 const ask = async (): Promise<string> => {
   try {
     const read = await readWithin(ANSWER_MS, async (signal) => {
-      const res = await fetchHub(fetch, hub, hubRequest("GET /api/accounts"), {
-        signal,
-      });
-      return res.ok ? ((await res.json()) as Accounts) : undefined;
+      const answer = await hubClient(hub, (url, init) =>
+        fetch(url, { ...init, signal })
+      ).api.accounts.get();
+      return answer.data ?? undefined;
     });
     if (read.kind === "unanswered" || !read.value) {
       return "hub-away";

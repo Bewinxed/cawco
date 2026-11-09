@@ -39,9 +39,10 @@
  *   bun scripts/probe-kit/run.ts hub-loopback-relay   # on the host, outside every workspace
  */
 import { networkInterfaces } from "node:os";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { carryElsewhere } from "../../../packages/agent/src/hub-loopback";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 import { freePort } from "../socket-served";
 import {
@@ -80,12 +81,7 @@ const overTailnet = async (kit: Kit) => {
   await fleet.hubUp();
   const serving = await until(
     "the hub serving HTTPS on the stub's tailnet address",
-    async () =>
-      (await (
-        await fetchHub(fetch, fleet.base, hubRequest("GET /api/tailnet-https"))
-      ).json()) as {
-        state: string;
-      },
+    async () => dataOf(await hubAt(fleet.base).api["tailnet-https"].get()),
     (read) => read.state === "serving",
     45_000
   );

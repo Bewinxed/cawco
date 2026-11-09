@@ -2,15 +2,18 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import {
+  type HubAnswer,
+  type HubClient,
+  hubClient,
+  hubPath,
+  refusalText,
+  unwrap,
+} from "../../packages/agent/src/hub-client";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
 import { readWithin } from "../../packages/core/src/bounded";
 import { detach } from "../../packages/core/src/detach";
 import { withFetchCap } from "../../packages/core/src/fetch-cap";
-import {
-  fetchHub,
-  type HubRequest,
-  hubRequest,
-} from "../../packages/core/src/hub-request";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -341,7 +344,7 @@ const systemd = process.env.CAWCO_PROOF_SYSTEMD === "1";
 const browserDone = process.env.CAWCO_PROOF_BROWSER_DONE;
 /** The session's stub dev server, and the open that shows it as its preview. */
 let devServer: Bun.Server<undefined> | undefined;
-let previewShown: Promise<Record<string, unknown>> | undefined;
+let previewShown: Promise<unknown> | undefined;
 /**
  * The proof's session once it is asked for: stopped through the hub as the
  * run ends, so its held process ends with it rather than outliving a run
@@ -385,7 +388,7 @@ async function stopStarted(): Promise<string | undefined> {
   try {
     for (const end = Date.now() + 10_000; Date.now() < end;) {
       const rows = (await (
-        await fetch(`${HUB}${hubRequest("GET /api/instances").path}`)
+        await fetch(`${HUB}${hubPath.api.instances["~path"]}`)
       ).json()) as { id: string; status: string }[];
       if (
         !rows.some((row) => row.id === sessionId && row.status === "running")
@@ -406,9 +409,7 @@ try {
   await exec("proof-fixture");
   spawn("sessiond");
   const hub = watchChild("the hub", "hub", spawn("hub"));
-  console.log(
-    `health ${await wait(`${HUB}${hubRequest("GET /health").path}`, hub)}`
-  );
+  console.log(`health ${await wait(`${HUB}${hubPath.health["~path"]}`, hub)}`);
   // The machine joined this hub as an install joins it (cli joined-hub.ts,
   // binary-install's own step): `up --hub` names a hub for its run and saves
   // none (discover.ts `settle`), so without this the agent is not the
@@ -419,7 +420,7 @@ try {
   const captureWs = await capture();
   let agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const registered = await wait(
-    `${HUB}${hubRequest("GET /api/agents").path}`,
+    `${HUB}${hubPath.api.agents["~path"]}`,
     watchChild("the agent", "up", agent),
     (s) => JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
@@ -431,13 +432,13 @@ try {
   if (!machine) {
     throw new Error("No online proof machine");
   }
-  async function post(request: HubRequest) {
-    const response = await fetchHub(fetch, HUB, request);
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(`Hub API ${request.path}: ${response.status} ${text}`);
-    }
-    return JSON.parse(text) as Record<string, unknown>;
+  async function post<A extends HubAnswer>(
+    request: (hub: HubClient) => Promise<A>
+  ) {
+    return unwrap(
+      await request(hubClient(HUB, fetch)),
+      (denial) => new Error(`Hub API: ${denial.status} ${refusalText(denial)}`)
+    );
   }
   if (systemd) {
     await command(["systemctl", "start", "cawco-binary-dashboard.socket"]);
@@ -469,7 +470,7 @@ try {
   // A form's POST from another site to the hub's agents path through the
   // dashboard: refused by the origin check before any route is read.
   const crossOrigin = await fetch(
-    `http://127.0.0.1:43458${hubRequest("GET /api/agents").path}`,
+    `http://127.0.0.1:43458${hubPath.api.agents["~path"]}`,
     {
       method: "POST",
       headers: {
@@ -504,11 +505,9 @@ try {
   // A CawCo account the machine signs in to as it registers again below, as
   // `claude auth login` leaves one (prove-stage2.sh account-dir.sh): no real
   // credential, only what lets the stub harness start a session.
-  const account = (await post(
-    hubRequest("POST /api/accounts", {
-      body: { provider: "anthropic", kind: "subscription" },
-    })
-  )) as { id: string };
+  const account = await post((client) =>
+    client.api.accounts.post({ provider: "anthropic", kind: "subscription" })
+  );
   const accountDir = accountConfigDir(account.id);
   mkdirSync(accountDir, { recursive: true, mode: 0o700 });
   writeFileSync(
@@ -525,11 +524,11 @@ try {
   await agent.exited;
   agent = spawn("up", ["--hub", "http://127.0.0.1:43456"]);
   const restarted = watchChild("the agent", "up", agent);
-  await wait(`${HUB}${hubRequest("GET /api/agents").path}`, restarted, (s) =>
+  await wait(`${HUB}${hubPath.api.agents["~path"]}`, restarted, (s) =>
     JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
   await exec("proof-custody-check");
-  await wait(`${HUB}${hubRequest("GET /api/accounts").path}`, restarted, (s) =>
+  await wait(`${HUB}${hubPath.api.accounts["~path"]}`, restarted, (s) =>
     (
       JSON.parse(s) as { signins: { accountId: string; state: string }[] }
     ).signins.some(
@@ -571,7 +570,7 @@ try {
     );
   // A first start materializes the harness's runtime: as long as stage 2 gives one.
   await wait(
-    `${HUB}${hubRequest("GET /api/instances").path}`,
+    `${HUB}${hubPath.api.instances["~path"]}`,
     restarted,
     (s) =>
       refusal() !== undefined ||
@@ -624,17 +623,15 @@ try {
         { headers: { "content-type": "text/html; charset=utf-8" } }
       ),
   });
-  previewShown = post(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: sessionId },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try this page and say whether it works",
-        name: "binary-proof",
-        port: devServer.port,
-      },
+  const previewPort = devServer.port;
+  previewShown = post((client) =>
+    client.api.instances({ id: sessionId }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try this page and say whether it works",
+      name: "binary-proof",
+      port: previewPort,
     })
   );
   let previewAnswer = "no answer yet";

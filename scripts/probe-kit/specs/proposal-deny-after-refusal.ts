@@ -17,8 +17,6 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
-import type { MoveJob } from "../../../packages/core/src/move";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
@@ -54,28 +52,27 @@ const moveLeg = async (
   const folder = join(fleet.sandbox, "plain-move");
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, "README.md"), "# Plain move\n");
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: { name: "Plain move", machineId: MACHINE, cwd: folder },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Plain move",
+      machineId: MACHINE,
+      cwd: folder,
     })
   );
-  const started = await fleet.api<{ id?: string }>(
-    hubRequest("POST /api/projects/:id/moves", {
-      path: { id: project.id },
-      body: {
-        machineId: B,
-        path: join(fleet.sandbox, "moved"),
-        prompt: "PROBE-MOVE: say ok.",
-        spawn: {
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          permissionMode: "default",
-        },
+  const started = await fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).moves.post({
+      machineId: B,
+      path: join(fleet.sandbox, "moved"),
+      prompt: "PROBE-MOVE: say ok.",
+      spawn: {
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        permissionMode: "default",
       },
     })
   );
   const jobOf = async () =>
-    (await fleet.api<MoveJob[]>(hubRequest("GET /api/moves"))).find(
+    (await fleet.api((hub) => hub.api.moves.get())).find(
       (each) => each.id === started.id
     );
   const job = await until(

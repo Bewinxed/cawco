@@ -62,10 +62,7 @@
  * `window.cawcoCanvasProbe`.
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
-import {
-  type HubSent,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
+import type { HubClient } from "../../../packages/agent/src/hub-client";
 import { previewRoute } from "../../../packages/core/src/preview/routes";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -96,15 +93,6 @@ const ARROW = /^arrow (\S+)(?: "[^"]*")?: (\S+) → (\S+)$/mu;
 const INK = /^ink (\S+): (\d+) points, .*, over (.*)$/gmu;
 /** One of check 13's 29 cells in the outline. */
 const CELL = /^cell-\d+ rectangle at /u;
-
-interface Read {
-  changed?: string[];
-  outline?: string;
-  pictureAt?: string | null;
-  png?: string | null;
-  seq: number;
-}
-
 interface Box {
   id: string;
   text: string;
@@ -408,10 +396,8 @@ const runSpec = async (kit: Kit) => {
   // session's preview origin, where its canvases stand (an origin of its
   // own, which the hub names and the dashboard picks: core frames.ts
   // `previewRoute`).
-  const address = await on.fleet.api<{ origin?: string; port?: number }>(
-    hubRequest("POST /api/instances/:id/preview-address", {
-      path: { id: on.session },
-    })
+  const address = await on.fleet.api((hub) =>
+    hub.api.instances({ id: on.session })["preview-address"].post()
   );
   const base = new URL(await on.fleet.dashboard());
   const route = previewRoute(address, base);
@@ -746,21 +732,16 @@ const imageChecks = async (on: OnCanvas) => {
     on.said.push(`pageerror (second screen): ${error.message}`)
   );
   await open(other, `${await fleet.dashboard()}/session/${session}`, COMPOSER);
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-      path: { id: session, artifact: id },
-      body: {},
-    })
+  await fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts({ artifact: id }).show.post({})
   );
   const otherFrame = await frameOf(other, id);
   // This screen's frame as it stands after the show: the canvas is an
   // origin of its own, its frame a target of its own, and the show's load
   // closes the one read before it.
   const frame = await frameOf(page, id);
-  const empty = await fleet.api<{ png: string | null }>(
-    hubRequest("GET /api/artifacts/:artifact/export", {
-      path: { artifact: id },
-    })
+  const empty = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id }).export.get()
   );
 
   // A press on the canvas with Select (clear of the empty state's Draw), as
@@ -814,26 +795,11 @@ const imageChecks = async (on: OnCanvas) => {
   // The export: its file in canvas.excalidraw, and its PNG draws the red square.
   const exported = await until(
     "the picture with the image",
-    () =>
-      fleet.api<{
-        file: { files: Record<string, { dataURL?: string }> };
-        png: string | null;
-      }>(
-        hubRequest("GET /api/artifacts/:artifact/export", {
-          path: { artifact: id },
-        })
-      ),
+    () => fleet.api((hub) => hub.api.artifacts({ artifact: id }).export.get()),
     (answer) => !!answer.png,
     10_000
   ).catch(() =>
-    fleet.api<{
-      file: { files: Record<string, { dataURL?: string }> };
-      png: string | null;
-    }>(
-      hubRequest("GET /api/artifacts/:artifact/export", {
-        path: { artifact: id },
-      })
-    )
+    fleet.api((hub) => hub.api.artifacts({ artifact: id }).export.get())
   );
   const red = exported.png
     ? await page.evaluate(async (png) => {
@@ -855,7 +821,9 @@ const imageChecks = async (on: OnCanvas) => {
         return count;
       }, exported.png)
     : 0;
-  const filed = !!image && !!exported.file.files[image.fileId]?.dataURL;
+  const filed =
+    !!image &&
+    !!Reflect.get(exported.file.files[image.fileId] ?? {}, "dataURL");
   kit.check(
     "26: canvas.excalidraw holds the image's file, and the export's PNG draws it where the empty canvas had none",
     empty.png === null && !!exported.png && red >= 32 * 32 && filed,
@@ -2795,14 +2763,19 @@ const shapeChecks = async (on: OnCanvas) => {
 const reader =
   ({ fleet, session }: OnCanvas, id: string) =>
   (
-    query: HubSent<"GET /api/instances/:id/artifacts/:artifact">["query"] = {}
+    query: NonNullable<
+      Parameters<
+        ReturnType<
+          ReturnType<HubClient["api"]["instances"]>["artifacts"]
+        >["get"]
+      >[0]
+    >["query"] = {}
   ) =>
-    fleet.sessionApi<Read>(
-      session,
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-        path: { id: session, artifact: id },
-        query,
-      })
+    fleet.sessionApi(session, (hub) =>
+      hub.api
+        .instances({ id: session })
+        .artifacts({ artifact: id })
+        .get({ query })
     );
 
 /** Checks 1 and 2: the canvas from Mermaid, its row in the menu, B moved by id; its id and A and B. */
@@ -2993,14 +2966,8 @@ const pictureChecks = async (on: OnCanvas, id: string, lifted: number) => {
     (answer) => ({ ms: Date.now() - lifted, at: answer.pictureAt }),
     () => null
   );
-  const exported = await on.fleet.api<{
-    file: { type: string };
-    outline: string;
-    png: string | null;
-  }>(
-    hubRequest("GET /api/artifacts/:artifact/export", {
-      path: { artifact: id },
-    })
+  const exported = await on.fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id }).export.get()
   );
   const bytes = exported.png ? Buffer.from(exported.png, "base64").length : 0;
   const withPng = await read({ png: true });
