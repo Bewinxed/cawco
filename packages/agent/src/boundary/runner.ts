@@ -359,7 +359,7 @@ export const hostBwrap = (): string => systemProgram("bwrap");
  * boundary-policy.ts `readOnlyDeniesBwrap`): the host's, with each
  * read-denied dir remounted read-only. Named `bwrap`, and it execs the host's
  * in its own process, so the outer sandbox process reads as a bwrap
- * ({@link isBwrap}).
+ * (sandboxes.ts `isBwrap`).
  */
 export const bwrapLauncherOf = (id: string, gen: string): string =>
   join(generationDir(id, gen), "bwrap");
