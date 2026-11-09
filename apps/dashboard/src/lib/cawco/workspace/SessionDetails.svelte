@@ -44,7 +44,6 @@
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
   import {
-    answeredOr,
     cawco,
     holdDetails,
     latestCommandFor,
@@ -56,6 +55,7 @@
   } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
+  import { answeredOr } from "../hub/control";
   import { connectionStore } from "../hub/socket.svelte";
   import { describingRow, modelLabel } from "../models.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
