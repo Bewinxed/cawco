@@ -707,6 +707,7 @@ import { imageSettingRoutes } from "./routes/image-settings";
 import { instanceDeleteRoutes } from "./routes/instance-delete";
 import { instanceMediaRoutes } from "./routes/instance-media";
 import { instancePreviewRoutes } from "./routes/instance-previews";
+import { instanceTitleRenameRoutes } from "./routes/instance-title";
 import { lfsRoutes } from "./routes/lfs";
 import { machinePauseRoutes } from "./routes/machines";
 import { mcpRoutes } from "./routes/mcp";
@@ -826,7 +827,6 @@ import {
   isLive,
   mayStartRefusal,
   outputsFolder,
-  titleProblem,
   type Unlanded,
   WorkItemRefusal,
   type WorkItemRequest,
@@ -12486,32 +12486,7 @@ export const createServer = (
         }
       ),
     pendingRoutes(ctx),
-    new Elysia()
-      // The session naming itself (`set_title`). Refused, with the owner's
-      // name in the answer, once the owner has renamed it.
-      .post(
-        "/api/instances/:id/title",
-        { ...hidden, body: t.Object({ title: t.String() }) },
-        ({ params, body, status }) => {
-          const title = body.title.trim();
-          const problem = titleProblem(title);
-          if (problem) {
-            return status(400, problem);
-          }
-          const result = db.nameInstance(params.id, title, "agent");
-          if (!result) {
-            return status(404, `no session ${params.id}`);
-          }
-          if (!result.named) {
-            return status(
-              409,
-              `The owner named this session "${result.row.title}", so set_title leaves it alone. Carry on with the task; do not call set_title again.`
-            );
-          }
-          publishInstances(result.row.machineId);
-          return `Named this session "${title}".`;
-        }
-      ),
+    instanceTitleRenameRoutes(ctx),
     findRoutes(ctx),
     delegateEventRoutes(ctx),
     workItemRoutes(ctx),
