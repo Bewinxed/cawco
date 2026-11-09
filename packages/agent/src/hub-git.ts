@@ -1002,7 +1002,7 @@ const hostGitEnv = async (): Promise<Record<string, string>> => {
   );
 };
 
-/** The git-lfs pins of {@link hostOriginGitEnv}, for `origin` and its project's `declared` endpoint. */
+/** The git-lfs pins a host-origin push takes ({@link serveConnection}), for `origin` and its project's `declared` endpoint. */
 const originLfsPins = async (
   origin: string,
   declared: DeclaredLfs | undefined
