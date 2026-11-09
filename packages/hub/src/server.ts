@@ -1096,6 +1096,7 @@ import { pendingRoutes } from "./routes/pending";
 import { continueBody } from "./routes/session-bodies";
 import { sessionIdentityRoutes } from "./routes/session-identities";
 import { toolRoutes } from "./routes/tools";
+import { trashRoutes } from "./routes/trash";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import {
@@ -33989,38 +33990,9 @@ export const createServer = (
         }
         ruleEngine.reload();
         return undoable(trashed);
-      })
-      /**
-       * Undo, for every config delete (db/trash.ts): the item back whole,
-       * what its putting back sets going (a fan-out, a probe, the rule engine)
-       * set going, and the item as its list reads it, under `row`.
-       */
-      .post(
-        "/api/trash/:id/restore",
-        { params: t.Object({ id: t.Numeric() }) },
-        async ({ params, status }) => {
-          const back = db.trash.take(params.id, Date.now());
-          if (!back.ok) {
-            switch (back.why) {
-              case "taken":
-                return status(
-                  409,
-                  "Something of the same name was made while it waited, and that one stays."
-                );
-              case "unbound":
-                return status(409, areaWords.undoUnbound);
-              case "gone":
-                return status(
-                  404,
-                  "It can no longer be brought back: its undo has run out."
-                );
-              default:
-                throw unreachable(back);
-            }
-          }
-          return { kind: back.kind, row: await returned(back.kind, back.key) };
-        }
-      )
+      }),
+    trashRoutes(ctx),
+    new Elysia()
       /**
        * What a rule has actually been doing, per session: fires, and whether
        * each session is still pending on it. A session never sees the rule's
