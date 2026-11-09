@@ -91,7 +91,6 @@ import {
 } from "@cawco/core/comments/model";
 import type { Member } from "@cawco/core/decides";
 import {
-  type AfterLinks,
   type DecisionCard,
   type ProgramRead,
   pickMade,
@@ -131,17 +130,10 @@ import { machineLabel } from "@cawco/core/machine-names";
 import {
   faultsAt,
   faultsWith,
-  type PageFault,
   type PageFaultReport,
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
-import type { PlanStep } from "@cawco/core/plan";
-import type {
-  PreviewDown,
-  PreviewSource,
-  ShownFailure,
-} from "@cawco/core/preview/protocol";
-import type { PreviewAddress } from "@cawco/core/preview/routes";
+import type { PreviewSource, ShownFailure } from "@cawco/core/preview/protocol";
 import type {
   AgentRow,
   ArtifactHit,
@@ -164,8 +156,6 @@ import type {
   SessionQuestionsRead,
 } from "@cawco/core/session-questions";
 import {
-  type CanvasDial,
-  type CanvasEdge,
   type CanvasMap,
   type CanvasMapNode,
   type CanvasShapes,
@@ -178,10 +168,7 @@ import {
   type EmbedShape,
   type RenderReport,
   type SectionUndrawn,
-  type ServeSpec,
   type SheetRead,
-  type SheetWeight,
-  type SheetWrite,
   type SheetWritten,
   STAGE_IDLE_MS,
   type StageError,
@@ -207,24 +194,21 @@ import {
 } from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
-import { applyPatch, type Operation } from "rfc6902";
+import { applyPatch } from "rfc6902";
 import type { Doc } from "yjs";
-import type { ArtifactRow, ArtifactServed, ArtifactsDb } from "../db/artifacts";
+import type { ArtifactRow, ArtifactServed } from "../db/artifacts";
 import { SettleRefusal } from "../decides-file";
 import {
-  type ArtifactNamed,
   type BuiltProgram,
   keptImagePaths,
   mergeProgram,
   PROGRAM_FILE,
   ProgramRefusal,
   readKept,
-  type StatementChange,
 } from "../decision-program";
-import type { AskedArtifact } from "../design-verify";
 import { byHandle, HANDLE_MIN, type Handled, namesAny } from "../handles";
 import { sessionLabel } from "../labels";
-import type { HubLifetimeShape, HubTimer } from "../lifetime";
+import type { HubTimer } from "../lifetime";
 import { storedFilePath } from "../media";
 import {
   changeFolderFiles,
@@ -232,7 +216,7 @@ import {
   folderFileNames,
   folderPath,
 } from "../project-folder";
-import { isSetupPage, type SentPage } from "../setup";
+import { isSetupPage } from "../setup";
 import {
   canvasEntries,
   clearDrawing,
@@ -254,14 +238,13 @@ import {
   movesSaid,
   READ_HINT,
   renderSaid,
-  type StateAsk,
   specOf,
   stateSaid,
   storiesSaid,
   unseen,
   weightSaid,
 } from "./component";
-import type { ArtifactDocs } from "./docs";
+import type { ArtifactServiceDeps } from "./deps";
 import { heldPictures } from "./held-pictures";
 import {
   type ArtifactFacts,
@@ -296,6 +279,51 @@ import {
   questionsOf,
   stillAsked,
 } from "./questions";
+import { ArtifactRefusal, NothingNewToSend } from "./refusals";
+import {
+  type ArtifactInput,
+  type ArtifactList,
+  type ArtifactRead,
+  type ArtifactStatus,
+  type AskedOf,
+  type Browsed,
+  type CanvasChange,
+  type CanvasExport,
+  type CanvasScreen,
+  type CommentRead,
+  type ComponentReadAsk,
+  type ComponentWritten,
+  type Created,
+  type DecisionAnswer,
+  type HandedArtifactFile,
+  type Making,
+  type MarksOutcome,
+  type Opened,
+  type PageBroken,
+  type PageChange,
+  type PageFrom,
+  type PageHearer,
+  type PageWas,
+  type PanelHand,
+  type PictureAsk,
+  type Placed,
+  type Placement,
+  PROMOTED_FILES,
+  type Promoted,
+  type PromotedFile,
+  type QuestionClosed,
+  type ReadEntry,
+  type Removed,
+  type Revised,
+  type ServedMedia,
+  type Settled,
+  type SheetChange,
+  type Shown,
+  type ShownAck,
+  type ShowStep,
+  type SkeletonElement,
+  type StageAt,
+} from "./shapes";
 import { picturePath, thumbnailPath } from "./sync";
 import { LIST_PAGE } from "./tools";
 
@@ -311,42 +339,9 @@ const artifactByHandle = (
   asked: string,
   rows: readonly { id: string; kind: string; name: string }[]
 ): string => byHandle(asked, rows, ARTIFACT_KEYS, "artifact").id;
-
-export class ArtifactRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
-  constructor(
-    status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = status;
-  }
-}
-
-/**
- * A Send that carries nothing new: every pick has gone to the session (by
- * the hub's own send or an earlier press). Agents and the API hear it as
- * the 409 it is; the page's own Send reads it as sent (sync.ts
- * `artifactSend`), since what he asked for already holds.
- */
-export class NothingNewToSend extends ArtifactRefusal {
-  constructor() {
-    super(409, "Nothing new to send: every pick here has gone to the session.");
-  }
-}
-
 /** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
 const refusedProgram = (error: ProgramRefusal): ArtifactRefusal =>
   new ArtifactRefusal(error.status, error.message, { cause: error });
-
-/** A page's files as they stood before a revision wrote the next: its HTML, a decision page's program, and its pictures' fingerprints by address. */
-interface PageWas {
-  files: ReadonlyMap<string, string>;
-  html: string;
-  program?: string;
-}
-
 /**
  * Pin `pin`'s link on artifact `artifact`, labelled by what it stands on
  * (core pin-name.ts): what the agent names it by to the person, drawn as
@@ -362,154 +357,6 @@ const unmerged = (error: unknown): ArtifactRefusal =>
     `The statements did not merge: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`,
     { cause: error }
   );
-
-/**
- * What a create or a re-create names: a page from `html` or `dir`, a
- * preview of `port` or `dir` on `machine`, opened at `path`, or a canvas
- * drawn from skeleton `elements` or `mermaid`; each kind's fields only.
- */
-/**
- * What a decision page's media says of an artifact it shows (its program's
- * Canvas and Preview pieces): its kind; a component canvas's shapes. Never
- * its name: the page names each piece by its own words (its caption, its
- * option's label, its card's question), and a name in the page's media is a
- * text node of it (a blind benchmark's arms were named there).
- */
-export interface ServedMedia {
-  /** The version the page draws: the artifact's newest, a next version held for its owner's panel included (service `newestVersion`). */
-  id: string;
-  kind: ArtifactKind;
-  /** That version's revision: a Preview of a server loads again when it moves (a server made again on another port). */
-  revision: number;
-  shapes?: CanvasShapes;
-}
-
-export interface ArtifactInput {
-  /**
-   * The panel head's one line under its name: what the person does here,
-   * in their words (core `ASK_LIMIT`). Every create names it but the
-   * person's own composer canvas (`draft`), which asks them nothing.
-   */
-  ask?: string | undefined;
-  /** A component canvas's dials: a CSS variable on every frame, or an arg. */
-  dials?: CanvasDial[] | undefined;
-  dir?: string | undefined;
-  /** What the person does on it (core `ARTIFACT_DOES`); named with `ask`. */
-  does?: ArtifactDoes | undefined;
-  /**
-   * A canvas the person opened in the composer (a pen's swipe, Draw, ⌘⇧D):
-   * always a new one, `meta.draft` until its first send,
-   * and not shown in the panel by being made.
-   */
-  draft?: boolean | undefined;
-  /** A component canvas's layout edges between frames, by story. */
-  edges?: CanvasEdge[] | undefined;
-  /** A canvas's skeleton elements (Excalidraw's `convertToExcalidrawElements`). */
-  elements?: SkeletonElement[] | undefined;
-  /** A component canvas's states file (or files, one section each), from the session's clone's root or absolute. */
-  file?: string | string[] | undefined;
-  /** A component canvas's groups: story → the parent story or heading it stands under. */
-  group?: Record<string, string> | undefined;
-  html?: string | undefined;
-  /** A browser artifact is the hub's alone (browsers.ts): no session makes one. */
-  kind: Exclude<ArtifactKind, "browser">;
-  machine?: string | undefined;
-  /** A canvas's Mermaid diagram. */
-  mermaid?: string | undefined;
-  name: string;
-  path?: string | undefined;
-  port?: number | undefined;
-  /** A decision page's OpenUI Lang program over the decision library (decision-program.ts). */
-  program?: string | undefined;
-  /**
-   * What serves a workspace's port (core `ServeSpec`): the command the
-   * workspace's stage runs and keeps up on `port`, in `cwd` from the clone's
-   * root. A preview of a port in a workspace names it.
-   */
-  serve?: { command: string; cwd?: string | undefined } | undefined;
-  /**
-   * What every surface names it by to the person, in plain words (core
-   * `ARTIFACT_TITLE_LIMIT`): every create names it. The person's own
-   * composer canvas (`draft`) takes the dashboard's.
-   */
-  title?: string | undefined;
-  /**
-   * `parent`: a delegate hands it to its parent, readied and not opened.
-   * The parent owns it (its panel, its list, the person's picks and pins on
-   * it), is told once per hand-off and opens it itself with artifact_show;
-   * the delegate stays its maker ({@link ArtifactRow.madeBy}).
-   */
-  to?: "parent" | undefined;
-  /**
-   * The workspace whose dev server a port is: the caller's own, or one of its
-   * delegates'. Omitted, the caller's own when it runs in one, unless
-   * `machine` names the host the port is on.
-   */
-  workspace?: string | undefined;
-}
-
-/** What says where an artifact is served from, before it has a row or with one. */
-type Placed = Pick<ArtifactRow, "kind" | "machineId" | "name" | "source">;
-
-/** Where a create put an artifact (service `placed`), and what to put back to let it go (`unplace`). */
-interface Placement {
-  before: ArtifactRow | undefined;
-  holding: { fresh: boolean; next: ArtifactRow } | null;
-  /** The session whose panel held what this create made again, when it was another's: a project's page, or a tree's preview its holder left. */
-  movedFrom?: string | undefined;
-  row: ArtifactRow;
-  /** The row it made again, as it was before; none for a row this create made (a new one, a fresh next version). */
-  was: ArtifactRow | undefined;
-}
-
-/** The hub machine's headless screen on one canvas ({@link ArtifactServiceDeps.screen}). */
-export interface CanvasScreen {
-  /** Keeps it open through another write. */
-  hold: () => void;
-  /** Lets it go. */
-  release: () => void;
-}
-
-/** Whose panel a create puts the artifact in (`owner`), and whose call it was (`maker`): one session, or a delegate and its parent. */
-interface Making {
-  /**
-   * The artifact the create lands on when the owner's panel holds none of
-   * its name: its delegation tree's preview whose holder acts no more,
-   * taken into the owner's panel (`makingFor` in createArtifacts).
-   */
-  lands?: ArtifactRow;
-  maker: InstanceRow;
-  owner: InstanceRow;
-}
-
-/** A skeleton element as the agent writes it: a type, an optional id, and Excalidraw's own fields. */
-export type SkeletonElement = { id?: string; type: string } & Record<
-  string,
-  unknown
->;
-
-/** What `artifact_update` changes on a canvas: exactly one of these. */
-export type CanvasChange =
-  { elements: SkeletonElement[] } | { delete: string[] } | { mermaid: string };
-
-/**
- * What `artifact_update` changes on a page: exactly one of these. A
- * decision page's `statements` are merged into its program by name.
- */
-export type PageChange =
-  { html: string } | { patch: Operation[] } | { statements: string };
-
-/** What `artifact_update` and the inspector's Save change on a sheet: one story's args, or one story op. */
-export type SheetChange =
-  | {
-      args: {
-        story: string;
-        unset?: string[];
-        values: Record<string, unknown>;
-      };
-    }
-  | { story: StoryOp };
-
 /** The fields each kind takes, and what its refusal says it takes. */
 const KIND_FIELDS = {
   page: { fields: ["program", "html", "dir"], takes: "program, html or dir" },
@@ -635,23 +482,6 @@ const capturesRefused = (n: number): string =>
  */
 const NOT_SERVED =
   'A preview of a port in a workspace names what serves it: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }. CawCo runs it in the workspace and keeps it up for as long as the preview and the workspace last; a server started in your own shell ends with it.';
-
-/** The session a handed file is written for, and the machine of the workspace it is written into. */
-export interface HandedReceiver {
-  machineId: string;
-  session: InstanceRow;
-}
-
-/**
- * One file of an artifact handed to another session (hub handed-inputs.ts):
- * its bytes, or, for a preview's pass, the bytes made for the session it is
- * handed to once that session stands, in the workspace it reads them in.
- */
-export interface HandedArtifactFile {
-  bytes: Buffer | ((receiver: HandedReceiver) => Promise<Buffer>);
-  name: string;
-}
-
 /** A value as a JSON file a session reads. */
 const jsonFile = (value: unknown): Buffer =>
   Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
@@ -659,197 +489,8 @@ const jsonFile = (value: unknown): Buffer =>
 /** A whole artifact id, which needs no resolving. */
 const WHOLE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-
-/** An entry as `artifact_read` answers it. */
-type ReadEntry = ChoiceEntry & { earlierRevision?: true };
-
-/**
- * One choice a page asks the person (a decision page's question, or a
- * `data-cawco-choice` an HTML page declares), as they answered it: not yet
- * (`open`, perhaps with a note), with options (`picked`), picked then
- * unpicked (`cleared`), or with an option a revision took out (`gone`).
- * `earlierRevision`: answered on a revision before the one shown now.
- */
-export type DecisionAnswer = {
-  id: string;
-  /** Its question; a choice an HTML page declares has none. */
-  question?: string;
-} & (
-  | { answer: "open"; note?: string }
-  | {
-      answer: "picked";
-      at: string;
-      earlierRevision?: true;
-      note?: string;
-      options: { id: string; label?: string }[];
-      /** Who settled it for the person (`settle`), why and its sources; absent for his own pick. */
-      settled?: SettledBy;
-    }
-  | { answer: "cleared"; at: string; earlierRevision?: true; note?: string }
-  | {
-      answer: "gone";
-      at: string;
-      earlierRevision?: true;
-      gone: string[];
-      note?: string;
-      options: string[];
-    }
-);
-
-export interface ArtifactRead {
-  /** When his newest pick, note or value on it came; null before any. */
-  answeredAt?: string | null;
-  /** A canvas's elements the person changed since `since` (or since your last read). */
-  changed?: string[];
-  /** A canvas's elements you replaced that the person had changed since your last read: "<id> changed under you". */
-  changedUnderYou?: string[];
-  /** A page's choices in page order, each answered or not ({@link DecisionAnswer}); on every read of a page that asks any. */
-  decisions?: DecisionAnswer[];
-  /** Elements an update deleted, and the ids it named that the canvas does not hold. */
-  deleted?: string[];
-  /** A canvas the person opened in the composer and has not sent yet. */
-  draft?: boolean;
-  /** A sheet's write: the story file, from the clone's root, the 1-based lines it changed, and the formatter that shaped them. */
-  edit?: {
-    file: string;
-    formatted?: string | null;
-    lines: { from: number; to: number };
-  };
-  /** What a browser met drawing it at this revision (core page-faults.ts): dials its panel doesn't draw, uncaught errors, assets that failed. */
-  faults?: PageFault[];
-  /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
-  held?: string;
-  id: string;
-  kind: ArtifactKind;
-  /** What this update changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`): what the agent names each to the person by. */
-  marked?: string[];
-  missing?: string[];
-  /** Its slug, what every artifact tool takes. */
-  name: string;
-  /** A canvas, as you read it: one line per element (core `canvasOutline`). */
-  outline?: string;
-  /** A built page's hash, which each pick records; null for a preview (the hub never built it) and a canvas. Wire-pinned: installable app builds decode it. */
-  pageHash: string | null;
-  /** When the canvas's latest picture was drawn; null when it has none. */
-  pictureAt?: string | null;
-  /** A canvas's picture is from before your last write to it: no screen drew it again within the wait. */
-  pictureBehind?: true;
-  /** Its picture, base64 PNG, when asked (`png: true`): a canvas's latest, the one after your last write once a screen draws it, null when it has none yet; a preview or a page drawn now as the panel draws it; a component's drawn by its stage. */
-  png?: string | null;
-  /** A decision page's program as the hub keeps it, on a read without `since`: re-emit a statement from it to revise one. */
-  program?: string;
-  /** Keys that changed since `since` and are no longer there. */
-  removed?: string[];
-  revision: number;
-  /** Where its picture was kept, as the session names the path (`save`). */
-  saved?: string;
-  /** When the page was last sent, by him or by the hub ({@link sentBy}); null before it was (and on a canvas, which has no Send). */
-  sentAt: string | null;
-  /** Who sent it at {@link sentAt}: the person pressing Send, or the hub once every question had his answer (needs.ts `answeredWhole`). */
-  sentBy?: SentBy;
-  /** What the page's `cawco.send(text)` sent with the person's last send. */
-  sentText?: string;
-  /** The cursor for the next read's `since`. */
-  seq: number;
-  /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
-  sheet?: SheetRead;
-  /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`. */
-  stage?: StageState;
-  /** Every key, or with `since` only those changed after it; a canvas's is empty. */
-  state: Record<string, ReadEntry>;
-  /** A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
-  /** What it is named by to the person. */
-  title: string;
-  unreached?: StageUnreached;
-  /** A component canvas's design system round, as `verify: true` asked it: what the ask did. */
-  verify?: string;
-  /** What a sheet loads, from its stage's module graph; null until a view has loaded it. */
-  weight?: SheetWeight | null;
-  /** A port preview's workspace, whose dev server it is. */
-  workspace?: string;
-  /** The element ids an update wrote. */
-  wrote?: string[];
-}
-
-/**
- * What a decision page's program leaves broken on the person's picks and
- * the project's links between pages, for its writer to put back or tell
- * the person.
- * Each list only when it has something.
- */
-export interface PageBroken {
-  /** Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no link is made for them. */
-  after?: Record<string, string[]>;
-  /** Options taken out that the person picked, by decision: the pick is kept, and its card says the option is gone. */
-  options?: Record<string, string[]>;
-  /** Decisions taken out that the person picked: the pick is kept, on no card. */
-  picked?: string[];
-  /** Its `after`s naming no decision of the project's: no link is made for them. */
-  unlinked?: string[];
-}
-
-/**
- * What a decision page's revision (`statements`) answers: what it changed,
- * not the page. The person's picks are read with `artifact_read`.
- */
-export interface Revised {
-  /** What it left broken on the picks and the links; absent when nothing. */
-  broken?: PageBroken;
-  /** The cards it put in or rewrote, each by its link (`[question](cawco:decision/<artifact>/<card>)`), by id. */
-  cards: Record<string, string>;
-  /** Its decisions now, by id, in page order. */
-  decisions: string[];
-  /** Components the library does not have, dropped and never drawn. */
-  dropped?: string[];
-  /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
-  held?: string;
-  id: string;
-  /** What it changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`). */
-  marked?: string[];
-  /** Decisions the revision added or took out, by id; a removed one's pick is kept. */
-  moved: { added: string[]; removed: string[] };
-  pageHash: string;
-  revision: number;
-  /** The route of each card it put in or rewrote, by the project's Who decides, by id; absent when no card on the page carries a kind. */
-  routes?: Record<string, string>;
-  /** Statements by name: new, rewritten, and dropped because nothing reaches them. */
-  statements: StatementChange;
-}
-
-/** What `settle` answers: the card, the option it holds now, and who settled it. */
-export interface Settled {
-  /** The card's link, `[question](cawco:decision/<artifact>/<card>)`. */
-  card: string;
-  option: { id: string; label: string };
-  settled: SettledBy;
-}
-
 /** A decision page's choice, as the kit marks it (`data-cawco-choice="<id>"`). */
 const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/gu;
-
-/** One artifact's questions to the person as `open_items` lists them (questions.ts): each open or answered; one taken or withdrawn is left out. */
-export interface AskedOf {
-  artifact: {
-    does: ArtifactDoes;
-    id: string;
-    kind: ArtifactKind;
-    link: string;
-    name: string;
-    title: string;
-  };
-  questions: Question[];
-  /** The session that holds it, when it is not the reader: its id, title and link, and whether it ended (the reader takes its questions up). */
-  session: { ended: boolean; id: string; link: string; title: string } | null;
-}
-
-/** What `question_close` answers: the question, by its link, as it stands now. */
-export interface QuestionClosed {
-  as: QuestionClose["as"];
-  link: string;
-  /** Its words as asked. */
-  words: string;
-}
-
 /** A markdown link's destination, the last one in `text`. */
 const LINK_DESTINATION = /\]\((cawco:[^)\s]+)\)\s*$/u;
 
@@ -880,57 +521,6 @@ const questionKeyOf = (asked: string): [artifact: string, key: string] => {
     ? [trimmed.slice(0, hash), `card:${trimmed.slice(hash + 1)}`]
     : [trimmed, "judge"];
 };
-
-/** One artifact as `artifact_list` answers it. */
-export interface ArtifactStatus {
-  /** Its line in the panel's head. */
-  ask: string;
-  /** What the person does on it. */
-  does: ArtifactDoes;
-  id: string;
-  kind: ArtifactKind;
-  /** The delegate that put it in this session's panel, when another session made it. */
-  madeBy?: string;
-  /** That delegate's link, `[title](cawco:session/<id>)`, what the agent names it by. */
-  madeByLink?: string;
-  /** Its slug, what every artifact tool takes. */
-  name: string;
-  /** Whether the person has had its latest revision on screen. */
-  opened: boolean;
-  /** A decision page's choices: how many it asks, how many are picked, how many picks are not sent yet. */
-  picks?: { asked: number; made: number; unsent: number };
-  /** Picks the person sent that the session has not read. */
-  picksAwaiting: number;
-  /** Pins the person left open. */
-  pins: number;
-  /** It was sent since your last change (a revision, or a new ask), by him or by the hub ({@link sentBy}). */
-  sent: boolean;
-  /** Who sent it last, when it was sent. */
-  sentBy?: SentBy;
-  /** The session that made it, when it is not the caller's own (a conversation reading its project's). */
-  session?: string;
-  /** That session's link, what the agent names it by. */
-  sessionLink?: string;
-  /** Whether its session's panel shows it now. */
-  shown: boolean;
-  /** What it is named by to the person. */
-  title: string;
-  /** The person's changes (picks, notes, drawn elements) since the session last read it. */
-  unread: number;
-  updatedAt: string;
-  /** Whose move it is: the person's (what Needs you lists it for: never opened, picks not made, marks not sent, an answer not looked at, its ask not retired), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet). */
-  waitingOn: ("person" | "session")[];
-}
-
-/** A page of `artifact_list`, newest first. */
-export interface ArtifactList {
-  artifacts: ArtifactStatus[];
-  /** What `cursor` takes for the page after this one; null on the last. */
-  next_cursor: string | null;
-  /** How many the whole list holds, every page. */
-  total: number;
-}
-
 /** Newest made first; one id before another at the same time, so a cursor stands between any two. */
 const newestFirst = (a: ArtifactRow, b: ArtifactRow): number =>
   b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1);
@@ -974,102 +564,6 @@ const pageOf = (
     rows: page,
   };
 };
-
-export interface Created {
-  /** What a decision page's program left broken on the picks and the links; absent when nothing. */
-  broken?: PageBroken;
-  /** A decision page's cards' links, by id (`[question](cawco:decision/<artifact>/<card>)`): what the agent names each by. */
-  cards?: Record<string, string>;
-  /** A decision page's decisions, by id, in page order. */
-  decisions?: string[];
-  /** Components a decision page's program names that the library does not have: dropped, never drawn. */
-  dropped?: string[];
-  /** A component canvas's compile errors, from the modules its states files import. */
-  errors?: ReturnType<typeof errorsSaid>;
-  /** Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show. */
-  held?: string;
-  /** A component canvas's next reads, one line. */
-  hint?: string;
-  /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
-  host?: string;
-  id: string;
-  kind: ArtifactKind;
-  /** Its link, `[title](cawco:artifact/<id>)`: what the agent names it by to the person. */
-  link?: string;
-  /** Made again under its name: what it changed, each by its link (`[label](cawco:change/<artifact>/<anchor>)`). */
-  marked?: string[];
-  /** A component canvas's flow moves, each with the animations it fired. */
-  moves?: ReturnType<typeof movesSaid>;
-  /** Its slug, what every artifact tool takes. */
-  name: string;
-  /** A canvas made with nothing to draw says so. */
-  note?: string;
-  /** Whether a view the person is looking at has it on screen ({@link Opened}). */
-  opened: boolean;
-  /**
-   * A draft canvas's: its session's preview origin (core `PreviewAddress`),
-   * where a client loads the canvas at `/__cawco/canvas/<id>/`: its port on
-   * the hub's host, and (host mode) a whole origin of its own too, which a
-   * client picks by where it reached the hub (core `previewRoute`).
-   */
-  origin?: string;
-  /** A canvas's outline once drawn (core `canvasOutline`). */
-  outline?: string;
-  port?: number;
-  /** What a browser drew of a component canvas (the panel's, else the daemon's): each frame's state, and what it loads. */
-  render?: ReturnType<typeof renderSaid> & {
-    weight: ReturnType<typeof weightSaid>;
-  };
-  /** Its live document on the hub's preview listener. */
-  route: string;
-  /** Each card's route by the project's Who decides, by id, a line after its link; absent when no card carries a kind. */
-  routes?: Record<string, string>;
-  /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
-  sheet?: SheetRead;
-  /** A sheet's stage, or a served preview's server, as it stands once started. */
-  stage?: StageState;
-  /** A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`). */
-  tailnet?: PreviewAddress["tailnet"];
-  /** What it is named by to the person. */
-  title: string;
-  /** A folder preview's: what it loads at most, from its folder's files. */
-  weight?: FolderWeight;
-  /** Why it is not on screen, one sentence; only with `opened: false`. */
-  why?: string;
-  /** The element ids a canvas's create wrote. */
-  wrote?: string[];
-}
-
-/**
- * Whether a view the person is looking at has the artifact on screen: a
- * dashboard tab (or the app) showing the session heard the open frame,
- * mounted the pane and loaded the page, and said so ({@link Artifacts.shown})
- * within {@link SHOWN_WAIT_MS}; else why not, in one sentence.
- */
-export type Opened =
-  | { opened: true }
-  | {
-      opened: false;
-      why: string;
-      /** A project's setup page: where the person goes to it (core `setupLanding`), as their show takes them ({@link landingOf}). */
-      href?: string;
-    };
-
-/** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[title](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
-export type Shown =
-  | { link: string; opened: true }
-  | { href?: string; link: string; opened: false; why: string };
-
-/**
- * What `artifact_browse` answers: the address the session's own browser
- * loads, an entry that sets the session's pass, and when that pass stops
- * opening (ISO).
- */
-export interface Browsed {
-  expiresAt: string;
-  url: string;
-}
-
 /** How long a show waits for a view to say it has the artifact on screen. The spec's number. */
 export const SHOWN_WAIT_MS = 10_000;
 
@@ -1099,58 +593,6 @@ const HELD_NEXT = artifactToolWords.heldAsNext;
 
 /** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
 const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/u;
-
-/** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */
-export interface ShownAck {
-  /** Which view: a dashboard tab's id, or the app's. */
-  client: string;
-  /** Why the page didn't load; only with `ok: false`. */
-  error?: ShownFailure | undefined;
-  ok: boolean;
-  /** The open frame's revision the view loaded. */
-  revision: string;
-}
-
-/**
- * What `comment_read` answers: each of the session's artifacts with pins
- * that match, the page's address the person last marked it at, and the time to
- * pass as the next `since`. A pin on ink carries the ink's box in the page.
- */
-export interface CommentRead {
-  artifacts: {
-    /** The page's address the person last marked it at; its own route before any delivery. */
-    address: string;
-    id: string;
-    kind: ArtifactKind;
-    /** Its link, `[title](cawco:artifact/<id>)`: what the agent names it by to the person. */
-    link: string;
-    name: string;
-    /** Each with its link, `[label](cawco:pin/<artifact>/<number>)`. */
-    pins: (Pin & { inkBox?: InkGroup["page"]; link: string })[];
-  }[];
-  at: string;
-}
-
-/** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
-export interface CanvasExport {
-  file: ReturnType<typeof excalidrawFile>;
-  /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
-  host?: string;
-  /** Its session's preview origin, where the canvas's page stands (`Created.port` / `origin`). */
-  origin?: string;
-  outline: string;
-  /** Base64 PNG; null until a screen has drawn one. */
-  png: string | null;
-  port?: number;
-}
-
-/** What `artifact_promote` answers: the project folder's commit, and the folder it wrote. */
-export interface Promoted {
-  commit: string;
-  /** `artifacts/<name>/`, from the project folder's root. */
-  path: string;
-}
-
 const PAGE_HIDDEN = /<(script|style|template|noscript)\b[\s\S]*?<\/\1\s*>/giu;
 const PAGE_TAG = /<[^>]+>/gu;
 const PAGE_ENTITY = /&(amp|lt|gt|quot|#39|apos|nbsp);/gu;
@@ -1192,25 +634,6 @@ const TRAILING_STOPS = /[\s.]+$/u;
 /** A promote from a session outside a project. DESIGN.md's error formula. */
 const NO_PROJECT =
   "This session belongs to no project, so there is nowhere to promote to.";
-
-/**
- * Every file a promote may write into `artifacts/<name>/`: one of these an
- * earlier promote wrote and this one does not (a picture since cleared) is
- * taken out in the same commit.
- */
-const PROMOTED_FILES = [
-  "artifact.json",
-  "index.html",
-  "state.json",
-  "canvas.excalidraw",
-  "outline.md",
-  "preview.json",
-  "pins.json",
-  "ink.json",
-  "picture.png",
-] as const;
-export type PromotedFile = (typeof PROMOTED_FILES)[number];
-
 /** `artifacts/<name>`, inside the project folder; refused for a name that would leave it. */
 const promotedFolder = (name: string): string => {
   const folder = `artifacts/${name}`;
@@ -1394,17 +817,6 @@ const patchedEntries = (
   }
   return next;
 };
-
-/** What `artifact_update` answers for a component canvas's write: nothing past the story it wrote (component canvas §4, G2). */
-export interface ComponentWritten {
-  file: string;
-  /** The project's formatter that shaped the lines, like "prettier 3.9.10"; null when the project has none. */
-  formatted: string | null;
-  lines: { from: number; to: number };
-  render: ReturnType<typeof renderSaid>["frames"] | "unseen";
-  story: { args: Record<string, unknown>; name: string } | null;
-}
-
 /** The story a story op names. */
 const storyOfOp = (op: StoryOp): string | null => {
   if ("add" in op) {
@@ -1419,32 +831,6 @@ const storyOfOp = (op: StoryOp): string | null => {
 /** How long a canvas just shown waits for the panel's page to draw it, and how often it looks. Ours: the page posts within a second of loading. */
 const PANEL_DRAW_MS = 4000;
 const PANEL_DRAW_POLL_MS = 500;
-
-/** What `artifact_read` asks of a component canvas beyond its picks (component canvas §4). */
-export interface ComponentReadAsk {
-  /** `story`: one story's args and code too. */
-  detail?: "summary" | "story";
-  /** A picture: of `state`'s frame, else the canvas, drawn by the daemon. */
-  png?: boolean;
-  /** Draw it now on the daemon's Chromium and answer that report. */
-  render?: boolean;
-  /** One frame's delta from rest, its transitions and parts. */
-  state?: StateAsk;
-  story?: string;
-  /** Ask the design system's verifier for a round on it; its findings come as a message. */
-  verify?: boolean;
-  /** A preview's or a page's picture: its width in CSS px; the panel's (core `PICTURE_VIEW`) when none. */
-  width?: number;
-}
-
-/** What `artifact_read` asks of any artifact's picture beyond the component's own. */
-export interface PictureAsk extends ComponentReadAsk {
-  /** A preview or a page drawn at its state's own link: the query or hash it adds (`?__state=pairing:asking`). */
-  link?: string;
-  /** Keep the picture at this path in the session's workspace. */
-  save?: string;
-}
-
 /**
  * Why `row` can't be read as `ask` asks, or nothing: a state's link draws a
  * preview or a page, a frame is a component's, and the project's browser
@@ -1569,25 +955,6 @@ const errorSection = (error: StageError): string => {
     ...(error.frame ? ["```", error.frame, "```"] : []),
   ].join("\n");
 };
-
-/**
- * Who moved a session's panel: the person (a press in the panel, the artifact
- * menu, a pin's link, a page's Open to draw), or the agent through its tools.
- */
-export type PanelHand = "person" | "agent";
-
-/** What `artifact_delete` and the panel's Remove answer: the artifact removed, and what the session's panel shows now, or null for nothing. */
-export interface Removed {
-  /** The artifact the call named, as it was resolved before it went. */
-  removed: { id: string; kind: ArtifactKind; name: string; title: string };
-  showing: {
-    id: string;
-    kind: ArtifactKind;
-    name: string;
-    title: string;
-  } | null;
-}
-
 /** A sentence's closing full stop, for one folded into another. */
 const FINAL_STOP = /\.$/u;
 
@@ -1654,16 +1021,6 @@ const COMMENTS_QUIET_MS = 3000;
  * for a minute is not held back past it. Our call.
  */
 const MARKS_LONGEST_MS = 60_000;
-
-/** What a delivery of the person's marks carries: the words, the pictures, and the texts and files their comments attach. */
-export interface MarksDelivery {
-  /** The texts folded in and the files the session's machine keeps (core attachments.ts), as a send carries them. */
-  attachments: SendAttachment[];
-  images: { data: string; mediaType: string }[];
-  /** The comments notice (core `artifactCommentsNotice`), its sections the marks themselves. */
-  text: string;
-}
-
 /** The person's marks as the journal names them: each pin by number and id, then the loose stroke groups' count. */
 const marksNamed = (pins: Pin[], strokes: number): string =>
   [
@@ -1676,10 +1033,6 @@ const marksNamed = (pins: Pin[], strokes: number): string =>
       ? [`${strokes} ${strokes === 1 ? "stroke group" : "stroke groups"}`]
       : []),
   ].join(" and ") || "no marks";
-
-/** Whether someone took a delivery of the marks; why not, when no one did. */
-export type MarksOutcome = { ok: true } | { ok: false; reason: string };
-
 /** Artifact `row` as the journal names it: its id, kind and name. */
 const labelOf = (row: Pick<ArtifactRow, "id" | "kind" | "name">): string =>
   `${row.id} (${row.kind} "${row.name}")`;
@@ -1691,10 +1044,6 @@ const labelOf = (row: Pick<ArtifactRow, "id" | "kind" | "name">): string =>
  * named nowhere.
  */
 export const SLOW_SHOW_STEP_MS = 300;
-
-/** One step of a show: its open, its machine's listener reached, its frame published, or its wait for a view. */
-export type ShowStep = "open" | "reach" | "publish" | "shown wait";
-
 /**
  * Runs step `step` of a show of `artifact` in session `panel`'s panel, and
  * says it in the journal when it took longer than {@link SLOW_SHOW_STEP_MS},
@@ -1786,454 +1135,6 @@ const sayDelivery = (
     );
   }
 };
-
-/**
- * Where a stage runs: a session's own workspace (a sheet being made), or
- * the workspace a sheet was made in (every use after), whichever session's
- * panel it is in.
- */
-export type StageAt = { session: InstanceRow } | { workspace: string };
-
-/**
- * What a page is built from: a decision page's `program` (with the folder
- * its relative Image files are in, when it has one, and on a revision the
- * pictures the page already shows), inline `html`, a work folder's page.oui
- * or page.html (`dir`), or the project folder's `decisions/<name>/`.
- */
-export type PageFrom =
-  | {
-      program: string;
-      dir?: string | undefined;
-      /**
-       * A revision's: each picture the page shows, by the name its Image
-       * gives. A name is read where its file stands, as on a create; one
-       * whose file no longer stands there (its folder gone with the session
-       * that wrote it, its machine away) shows the picture the page keeps.
-       */
-      shown?: ReadonlyMap<string, Uint8Array>;
-      /**
-       * A revision's: the machine each Image's file is read on (none known:
-       * not read, the picture the page keeps or a refusal); the building
-       * session's own when not given.
-       */
-      readOn?: (file: string) => string | undefined;
-    }
-  | { html: string }
-  | { dir: string }
-  | { folder: true };
-
-/**
- * Who hears a page's Send: the session that holds it, or, once that one has
- * ended, the project's Caw, told the person's act in its words (decisions.ts
- * `send`), whose conversation a message starts again.
- */
-export type PageHearer =
-  | { session: InstanceRow }
-  | {
-      caw: {
-        line: string;
-        projectId: string;
-        text: string;
-        /** Why Caw is woken, in its wake's words. */
-        trigger: string;
-      };
-    };
-
-export interface ArtifactServiceDeps {
-  /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
-  acknowledged: () => readonly string[];
-  /**
-   * What decision page `name` drawn with `cards` does to its project's
-   * links (decisions.ts `linksOf`): its `after`s naming no decision, and
-   * its decisions other pages come after. Said to its writer.
-   */
-  afterLinks: (
-    projectId: string,
-    name: string,
-    cards: DecisionCard[]
-  ) => Promise<AfterLinks>;
-  /**
-   * Who hears the person on `artifact`, which `writer` made: the one his
-   * marks and the hub's own send of his answers go to (artifacts/taker.ts),
-   * its writer while it takes input, else the session that delegated it,
-   * else the project's Caw; none when no one can.
-   */
-  answersTo: (
-    writer: InstanceRow | undefined,
-    artifact: ArtifactRow
-  ) => PageHearer | null;
-  /** The step of the session's plan an ask of the artifact is made at: the open one naming it, else the one in progress; null when it is at work on none (plans.ts `askedAt`). */
-  askedAt: (instanceId: string, artifactId: string) => string | null;
-  /**
-   * Where session `instance`'s own browser opens artifact `row`, which it
-   * may read (`artifact_browse`, preview-browse.ts `browseAt`): its address, behind
-   * a one-time entry and a pass of the session's own in host mode.
-   */
-  browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
-  /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
-  close: (instanceId: string) => void;
-  /**
-   * Whether a session is cold now: no turn under way and its prompt cache
-   * expired, the test by which `handoff` refuses to hand it work without
-   * asking (keep-alive.ts `cacheWarmNow`). What it left in its project is
-   * then its project's to take up (`leftFor` below).
-   */
-  cold: (instance: InstanceRow) => boolean;
-  db: ArtifactsDb;
-  /**
-   * Who decides (settling.ts): each card a session just wrote, sent to its
-   * member by the project's table and said back as a line after its link;
-   * the member a session settles a card for, and how it signs, refused in
-   * words when it may not; and a settled card's ledger stamp and push.
-   */
-  decides: {
-    routed: (
-      asker: InstanceRow,
-      row: ArtifactRow,
-      cards: DecisionCard[],
-      all: DecisionCard[],
-      state: Record<string, ChoiceEntry>
-    ) => Promise<Record<string, string>>;
-    settled: (
-      row: ArtifactRow,
-      card: DecisionCard,
-      member: Member,
-      answer: { label: string; why: string }
-    ) => void;
-    settler: (
-      settler: InstanceRow,
-      row: ArtifactRow,
-      card: DecisionCard
-    ) => Promise<Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }>;
-  };
-  /**
-   * Whether `workspaceId` holds a work item of the session's delegates: one it
-   * delegated, or one of a project it is the conversation of (as `stop_delegate` decides).
-   */
-  delegatesIn: (instance: InstanceRow, workspaceId: string) => boolean;
-  /**
-   * Delivers the person's marks on `artifact` to the session that made it,
-   * waking it as their own words do; to the project's Caw when that session
-   * takes no input any more (server.ts `deliverMarks`).
-   */
-  deliverMarks: (
-    instance: InstanceRow,
-    artifact: ArtifactRow,
-    delivery: MarksDelivery
-  ) => Promise<MarksOutcome>;
-  docs: ArtifactDocs;
-  /**
-   * Page `name`'s source taken out of project `projectId`'s folder
-   * (`decisions/<name>/page.oui` or its built `index.html`) in one commit by
-   * `instance`: a project's page lives as long as it. Why not, when the
-   * folder refuses.
-   */
-  dropPage: (
-    instance: InstanceRow,
-    projectId: string,
-    name: string
-  ) => Promise<
-    { refused: string; status: ArtifactRefusal["status"] } | undefined
-  >;
-  /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks go to its parent, else its project's Caw. */
-  ended: (instance: InstanceRow) => boolean;
-  /**
-   * Whether a session's asks are over for good (Needs you's rule 4): it
-   * finished, its workspace was archived or moved on, its conversation is
-   * gone, or nothing can give it a turn again. A machine away is not.
-   */
-  finished: (instance: InstanceRow) => boolean;
-  /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
-  folderWeight: (
-    machineId: string,
-    dir: string,
-    path: string | undefined
-  ) => Promise<FolderWeight>;
-  /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
-  followed: (instanceId: string) => boolean;
-  /**
-   * Tells `parent` once that its delegate `maker` handed it `artifact`, not
-   * opened, or changed it while its panel shows it, the change held as
-   * `next` (core `artifactHandedNotice`), on the channel the person's picks
-   * take (artifact-events.ts `handArtifactUp`).
-   */
-  handedUp: (
-    parent: InstanceRow,
-    maker: InstanceRow,
-    artifact: ArtifactRow,
-    next?: ArtifactRow
-  ) => Promise<void>;
-  instance: (id: string) => InstanceRow | undefined;
-  /** The rows of `ids` the hub holds, in one read. */
-  instances: (ids: string[]) => InstanceRow[];
-  /**
-   * Whether the session's work item ended (done, failed or cancelled),
-   * whatever its workspace's state: the sessions up its delegation tree may
-   * then delete what it wrote ({@link Artifacts.remove}). False for a session
-   * with no item, and while its item is live (a reopened one included).
-   */
-  itemEnded: (instance: InstanceRow) => boolean;
-  /**
-   * Page `name`'s source kept in `instance`'s project folder at
-   * `decisions/<name>/`, as a build with `keep` keeps it: a held next
-   * version's, once its parent opens it. Why not, when the folder refuses.
-   */
-  keepPage: (
-    instance: InstanceRow,
-    name: string,
-    page: { html: string; program?: string }
-  ) => Promise<
-    { refused: string; status: ArtifactRefusal["status"] } | undefined
-  >;
-  /**
-   * Picture `png` (base64) kept at `path` in session `instance`'s workspace
-   * (`artifact_read`'s `save`), written by its machine (core
-   * `CONTROL_WORKSPACE_SAVE`). The path written; throws an
-   * {@link ArtifactRefusal} saying why when it wasn't.
-   */
-  keepPicture: (
-    instance: InstanceRow,
-    path: string,
-    png: string
-  ) => Promise<string>;
-  /**
-   * The projects session `instance` is the conversation of (their Caw): an ended writer's
-   * marks are routed to him, and he answers them in their pins' threads.
-   * He also reads every page of his project, so a page whose session ended
-   * or is gone is his to act on (Projects spec §5.8, decisions.ts).
-   */
-  ledProjects: (instance: InstanceRow) => string[];
-  /** The hub's lifetime: the marks' delivery and the shown acks' keep run on it. */
-  lifetime: HubLifetimeShape;
-  /**
-   * The session's panel is listed: the browser it uses gets its artifact
-   * there, made the first time (browsers.ts `listed`).
-   */
-  listing: (instance: InstanceRow) => void;
-  /** The person looked at artifact `id` (a view's word that it had it on screen): its push is over. */
-  looked: (id: string) => void;
-  /** The machines the hub knows. */
-  machines: () => Pick<AgentRow, "machineId" | "hostname">[];
-  /**
-   * Something an artifact's Needs-you item is read from moved (its row, its
-   * ask, the person's look): the lane is read again and every screen told.
-   */
-  needsMoved: () => void;
-  /**
-   * Publishes `artifact` to session `panel`'s panel (its own session's
-   * unless named: another session of its delegation tree shows it in its
-   * own) at a fresh revision (the open frame every view of that session
-   * hears); why not, when its server could not be started. Whether a view
-   * put it on screen is that view's word ({@link Artifacts.shown}).
-   */
-  open: (
-    artifact: ArtifactRow,
-    panel?: string | null
-  ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
-  /** The workspace a session runs in, by id; undefined outside one. */
-  ownWorkspace: (instance: InstanceRow) => string | undefined;
-  /**
-   * A page's HTML built as the decision-page skill builds one: from inline
-   * `html`, from `dir`'s page.html on the session's machine, or (neither) from
-   * `decisions/<name>/page.html` in the session's project folder; written to
-   * `decisions/<name>/` too when the session is in a project and `keep`.
-   */
-  page: (
-    instance: InstanceRow,
-    name: string,
-    from: PageFrom,
-    keep: boolean,
-    /** The artifact a program's Canvas or Preview names, whole (`whole`). */
-    artifact: ArtifactNamed
-  ) => Promise<
-    | { html: string; program?: BuiltProgram }
-    | { refused: string; status: ArtifactRefusal["status"] }
-  >;
-  /**
-   * Preview or page `artifact` drawn as the person's panel draws it, for
-   * session `instance`'s `artifact_read` with `png` (server.ts, agent
-   * artifact-picture.ts): on its own preview origin in the Chromium of the
-   * hub's machine, `width` CSS px wide, at its state's `link` when one is
-   * named, a sleeping server woken first. Its picture, base64 PNG; throws an
-   * {@link ArtifactRefusal} saying why when it can't be drawn.
-   */
-  picture: (
-    instance: InstanceRow,
-    artifact: ArtifactRow,
-    drawn: { link?: string; width: number }
-  ) => Promise<string>;
-  /**
-   * The agent's reply `text` on a pin of artifact `artifactId` asks the
-   * person something (`comment_reply`'s `asks`): its push, grouped per
-   * artifact (push.ts `pinAsked`).
-   */
-  pinAsked: (artifactId: string, text: string) => void;
-  /**
-   * Session `instanceId`'s preview origin (preview.ts), its listener started
-   * when it has none; throws a refusal when every port is taken.
-   */
-  previewAddress: (instanceId: string) => PreviewAddress;
-  /**
-   * A session closed one of artifact `artifactId`'s questions to the person
-   * (taken or withdrawn): every screen listing a session's questions reads
-   * them again (core `QuestionsMovedFrame`).
-   */
-  questionsMoved: (artifactId: string) => void;
-  /**
-   * A preview no panel shows, loaded once on its own origin as a pane's
-   * load would be (its machine's listener started for what its row names
-   * now: hub preview-service.ts): null when nothing stands in its way (a
-   * page its server is still making among that), else the hop that failed
-   * and the machine's words for it, or `error` and the page's status and
-   * first error line when it answered an error status (4xx, 5xx). A
-   * preview handed to a parent is checked
-   * so before it reaches them.
-   */
-  reachable: (
-    row: ArtifactRow
-  ) => Promise<{ failure: PreviewDown; why: string | null } | null>;
-  /**
-   * Every view of session `instanceId`'s panel hears its artifacts again on
-   * the frame it follows (the panel's open frame, unchanged otherwise); none
-   * when the panel shows nothing.
-   */
-  relist: (instanceId: string) => void;
-  /**
-   * An artifact was taken out: a preview it was no longer holds the
-   * workspace it showed (work-items.ts `settleShown`). The origin its row
-   * pointed at ends with the row (db `onArtifactsGone`), not here.
-   */
-  removed?: (row: ArtifactRow) => void;
-  /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
-  root: string;
-  /**
-   * Canvas `artifact`'s host page opened in the Chromium of the hub's own
-   * machine (agent canvas-screen.ts), told it is that canvas, its doc at
-   * `sync`, where it joins the doc as a screen: what holds it on through a
-   * write, and what lets it go. Throws an {@link ArtifactRefusal} saying why
-   * when none can open.
-   */
-  screen: (artifact: ArtifactRow, sync: string) => Promise<CanvasScreen>;
-  /**
-   * What a send applies before the session hears it (setup.ts
-   * `applySetupPicks`): the page as it stands ({@link SentPage}); a
-   * refusal throws and nothing is sent.
-   */
-  sending: (
-    to: PageHearer,
-    artifact: ArtifactRow,
-    page: SentPage
-  ) => Promise<void>;
-  /**
-   * A workspace preview's server (agent stage.ts `ensureServed`), started or
-   * woken on the workspace's machine and waited on until its port answers:
-   * its state. Throws an {@link ArtifactRefusal} saying why it didn't start.
-   * A decision page's Previews of it wake it as the page goes out, unwaited
-   * (`warmPreviews`).
-   */
-  serve: (
-    machineId: string,
-    workspace: string,
-    serve: ServeSpec
-  ) => Promise<StageState>;
-  /** Whether project `projectId` is set up (tasks.ts `isSetUp`): where its setup page lands (core `setupLanding`). */
-  setUp: (projectId: string) => boolean;
-  /** The artifact a session's panel shows now, if any. */
-  showing: (instanceId: string) => string | undefined;
-  /**
-   * Tells `to` the person sent their picks on `artifact`: its session,
-   * which reads them from `since` with `artifact_read` (core
-   * `artifactResponsesNotice`), one it has not read yet for the same
-   * artifact superseded, not added to, so it hears once, from the earliest
-   * `since` it was not told of; or the project's Caw, in `to`'s words.
-   * Answers the session that heard it.
-   */
-  signal: (
-    to: PageHearer,
-    artifact: ArtifactRow,
-    responses: { since: number }
-  ) => Promise<string>;
-  /**
-   * The stage story file `file` runs on in a workspace (agent stage.ts
-   * `ensureStage`), started or woken there and waited on: its port, root and
-   * state, the sheet's stories, with the workspace and its machine. Throws
-   * an {@link ArtifactRefusal} saying why it can't run, and, `opening` a
-   * canvas, naming a states file that isn't written. A decision page's
-   * Previews of sheets start or wake theirs as the page goes out, unwaited
-   * ({@link ArtifactServiceDeps.warmStage}).
-   */
-  stage: (
-    at: StageAt,
-    file: string,
-    files?: string[],
-    opening?: boolean
-  ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
-  /** The design map of session `instance`'s workspace (agent stage.ts `stageComponents`): its components, paged, or one's card. */
-  stageComponents: (at: StageAt, ask: DesignQuery) => Promise<DesignMap>;
-  /** A canvas drawn by its workspace's daemon in the machine's Chromium (agent stage-render.ts): within its limit, what it drew and what it did not. */
-  stageRender: (
-    at: StageAt,
-    ask: { files: string[]; png?: boolean; spec?: CanvasSpec; state?: StateAsk }
-  ) => Promise<StageRendered>;
-  /**
-   * A write to a sheet's story file in its workspace, made by its stage
-   * (agent stage.ts `writeSheet`): the lines it changed and the sheet after.
-   * Throws an {@link ArtifactRefusal} saying why it can't.
-   */
-  stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
-  /** The session's plan's steps: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
-  steps: (instanceId: string) => readonly PlanStep[];
-  /**
-   * Whether a session can no longer act, ever: no one, its parent and the
-   * person included, can give it a turn again. Its item ended and its
-   * workspace was discarded or retired past cutting again, or a newer item
-   * holds that workspace, or the session itself ended for good (continued
-   * into another, its conversation gone). What it wrote is then deleted by
-   * the sessions up its delegation tree ({@link Artifacts.remove}), as it is
-   * once its work item ended ({@link ArtifactServiceDeps.itemEnded}).
-   */
-  stranded: (instance: InstanceRow) => boolean;
-  /**
-   * Every session of `instance`'s delegation tree (delegation-tree.ts
-   * `treeSessions`): each reads, never changes, the others' artifacts of
-   * its project; one up a writer whose work item ended deletes that
-   * writer's ({@link ArtifactServiceDeps.stranded}).
-   */
-  tree: (instance: InstanceRow) => Set<string>;
-  /** Stops the server on `port` of workspace `workspace` (agent stage.ts `stopServed`): no artifact previews it any more. Never throws. */
-  unserve: (machineId: string, workspace: string, port: number) => void;
-  /**
-   * A component canvas drawn by its workspace's daemon in the machine's own
-   * Chromium (agent stage.ts `renderStage`): the stage's report once every
-   * section drew, and a picture when asked.
-   */
-  /**
-   * A design system round asked of a component canvas in a chat (hub
-   * design-verify.ts `ask`): its verdict goes to `requester`. Answers what
-   * the ask did, one sentence.
-   */
-  verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
-  /**
-   * One stage warmed for a decision page as it goes out (agent stage.ts
-   * `warmStage`): started or woken there and every canvas of `warm` compiled
-   * as its Preview's page loads it. Settles once the machine took it, before
-   * the warm-up runs; throws an {@link ArtifactRefusal} when it can't be
-   * reached.
-   */
-  warmStage: (at: StageAt, warm: StageWarm) => Promise<void>;
-  /**
-   * Why a browser in a workspace on machine `machineId` cannot open `url`,
-   * or null when it can (server.ts, core boundary-reach.ts
-   * `workspaceReach`): a Linux workspace's boundary reaches public hosts
-   * only; a Mac's dials as its host does.
-   */
-  workspaceReach: (url: string, machineId: string) => Promise<string | null>;
-  /** The workspaces an id or its prefix names, each with the machine it is on. */
-  workspaces: (
-    needle: string
-  ) => { id: string; machineId: string; state: string }[];
-}
-
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
 
