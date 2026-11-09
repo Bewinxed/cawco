@@ -175,7 +175,7 @@ const REFUSED = [
 
 /** The pass host mode's lock gives for a ticket, as the browser sends it back: `name=value`. */
 const PASS = /^set-cookie:\s*([^;]+)/imu;
-/** What the closed page and the locked page carry (core preview-proxy `downResponse`, hub preview-access `lockedResponse`). */
+/** What the closed page and the locked page carry (preview proxy `downResponse`, hub preview-access `lockedResponse`). */
 const CLOSED_PAGE = '<meta name="cawco-preview-down" content="closed">';
 const LOCKED_PAGE = '<meta name="cawco-preview-locked" content="1">';
 /** A request head's Cookie line. */
