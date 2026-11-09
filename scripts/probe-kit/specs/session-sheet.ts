@@ -197,6 +197,7 @@
  *
  *   bun scripts/probe-kit/run.ts session-sheet
  */
+
 import { existsSync } from "node:fs";
 import {
   mkdir,
@@ -208,6 +209,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright-core";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -1577,7 +1579,12 @@ async function treeSheetLeg(
   const panelPost = (request: HubRequest) =>
     desk.evaluate(async (asked) => {
       const response = await fetch(asked.path, asked);
-      return { status: response.status, text: await response.text() };
+      return {
+        status: response.status,
+        text: response.ok
+          ? await response.text()
+          : refusalWords(await response.text(), response.status),
+      };
     }, request);
   const sheetPost = (who: string, body: typeof save) =>
     panelPost(

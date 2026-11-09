@@ -94,7 +94,7 @@ const askHub = async (
   const { ok, status, text } = read.value;
   if (!ok) {
     throw new Error(
-      `the hub did not say ${what} (${status}: ${refusalWords(text)})`
+      `the hub did not say ${what} (${status}: ${refusalWords(text, status)})`
     );
   }
   return JSON.parse(text) as unknown;

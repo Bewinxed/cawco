@@ -212,7 +212,7 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     );
     if (!saved.ok) {
       throw new Error(
-        `The hub did not save the update settings: ${refusalWords(await saved.text())}`
+        `The hub did not save the update settings: ${refusalWords(await saved.text(), saved.status)}`
       );
     }
   } else {

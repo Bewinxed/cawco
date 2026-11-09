@@ -51,6 +51,7 @@
  */
 
 import { readWithin } from "../../../packages/core/src/bounded";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
@@ -299,7 +300,12 @@ const serving = async (
         const response = await passedFetch(fleet, `http://127.0.0.1:${port}/`, {
           signal,
         });
-        return { status: response.status, body: await response.text() };
+        return {
+          status: response.status,
+          body: response.ok
+            ? await response.text()
+            : refusalWords(await response.text(), response.status),
+        };
       });
       if (read.kind === "answered") {
         last = `${read.value.status}: ${read.value.body.slice(0, 160)}`;
