@@ -49,11 +49,11 @@
 
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { downOf } from "../../../packages/core/src/preview/proxy";
 import { artifactLink } from "../../../packages/core/src/references";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { workWords } from "../../../packages/core/src/words/work";
 import { handle } from "../../../packages/hub/src/presenters/words";
+import { downOf } from "../../../packages/preview/src/proxy";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
