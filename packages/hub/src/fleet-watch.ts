@@ -80,6 +80,7 @@ import { askJev, type JevAccess, jevAccess, jevUnanswered } from "./jev";
 import type { HubLifetimeShape } from "./lifetime";
 import { sentence, tool } from "./mcp-tool";
 import { MEANING_THRESHOLD } from "./meaning";
+import { sessionWord } from "./session-word";
 import { CAWCO_TOOL } from "./web-reads";
 import { isLive } from "./work-items";
 
@@ -792,21 +793,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const content = fleetWatchNudge(`${name}: ${line}`, body);
     const target = steward.kind === "session" ? rowOf(steward.id) : undefined;
     if (target) {
-      deps.send({
-        verb: "send",
-        machineId: target.machineId,
-        instanceId: target.id,
-        payload: {
-          instanceId: target.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content },
-            parent_tool_use_id: null,
-            origin: ORIGIN,
-          },
-        },
-      });
+      deps.send(sessionWord(target, content, ORIGIN));
       return;
     }
     if (steward.kind !== "caw") {
