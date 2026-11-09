@@ -35,7 +35,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
       harness,
       ctx.resolvedModel(machineId, harness, model)
     );
-    if (traitsOf(harness).accountModel === "dir") {
+    if (traitsOf(harness).soleProvider !== null) {
       return candidates[0];
     }
     const signedIn = new Set(
@@ -104,7 +104,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     why: string
   ): void => {
     const [row] = ctx.db.getInstancesByIds([rowId]);
-    if (row && traitsOf(row.harness).accountModel === "dir" && row.sessionId) {
+    if (row && traitsOf(row.harness).accountDir && row.sessionId) {
       launchClaims.set(rowId, { accountId, at: Date.now() });
       console.log(spawnWords.launchesOnLine(rowId, accountId, why));
       return;
@@ -137,7 +137,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
       return { accountId: held };
     }
     const moved =
-      traitsOf(row.harness).accountModel === "dir" && movedFrom().has(row.id)
+      traitsOf(row.harness).accountDir && movedFrom().has(row.id)
         ? ctx.homeMovedAccountOn(machineId)
         : undefined;
     if (moved) {
@@ -266,7 +266,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     }
     const { accountId } = claimed;
     if (!accountId) {
-      return traitsOf(harness).accountModel === "dir"
+      return traitsOf(harness).accountDir
         ? {
             refusal: noAccountRefusal(machine),
             cause: { kind: "no-account", machineId },
@@ -357,10 +357,11 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     machineId: string,
     row: { accountId?: string | null; harness?: string | null }
   ) =>
-    traitsOf(row.harness).accountModel === "dir"
+    traitsOf(row.harness).accountDir &&
+    traitsOf(row.harness).homeLogin === "dir"
       ? movingLogins().find(
           (move) =>
-            traitsOf(move.store).accountModel === "dir" &&
+            move.store === row.harness &&
             move.machineId === machineId &&
             (!row.accountId ||
               row.accountId === move.accountId ||
@@ -392,7 +393,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     model?: string | null;
   }) => {
     const { harness } = row;
-    if (traitsOf(harness).accountModel === "dir") {
+    if (traitsOf(harness).homeLogin === "dir") {
       return homeLoginMoveOf(row.machineId, row);
     }
     return movingLogins().find(
