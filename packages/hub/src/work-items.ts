@@ -355,7 +355,7 @@ export const budgetProblem = (budget: WorkBudget): string | undefined => {
 };
 
 /** What an item has used of a budget: dollars, turns ended, minutes since it started. */
-export interface BudgetUse {
+interface BudgetUse {
   minutes: number;
   turns: number;
   usd: number;
@@ -689,7 +689,7 @@ export interface WorkItemStart {
   workspace: WorkspaceRow;
 }
 
-export interface WorkItemDeps extends Pick<
+interface WorkItemDeps extends Pick<
   WorkspacesDeps,
   "call" | "command" | "db" | "end"
 > {
@@ -1278,8 +1278,10 @@ const waitClock = (at: Date): string =>
     hour12: false,
   });
 
-export const WAIT_ITEM_LIMIT =
-  "Wait not set. Use whole minutes from 1 to 120 and a non-empty reason for waiting on a command you started.";
+/** The longest wait `wait_item` declares, in whole minutes: its tool, its route and {@link WorkItems.waitItem} read it here. */
+export const WAIT_ITEM_MAX_MINUTES = 120;
+
+export const WAIT_ITEM_LIMIT = `Wait not set. Use whole minutes from 1 to ${WAIT_ITEM_MAX_MINUTES} and a non-empty reason for waiting on a command you started.`;
 
 /** A `from` request with what it cannot go with: a new workspace, cut where its source's repository is. */
 const fromProblem = (request: WorkItemRequest): string | undefined => {
@@ -4978,7 +4980,7 @@ export const createWorkItems = ({
         typeof minutes !== "number" ||
         !Number.isInteger(minutes) ||
         minutes < 1 ||
-        minutes > 120 ||
+        minutes > WAIT_ITEM_MAX_MINUTES ||
         typeof reason !== "string" ||
         !reason.trim()
       ) {
