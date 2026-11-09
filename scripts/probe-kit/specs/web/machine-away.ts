@@ -61,7 +61,7 @@ const AWAY_LINE = '[data-slot="machine-away"]';
 const SOURCE_TITLE = "Away source";
 /** The sizing the continue form reads once the hub answers it. */
 const SIZED = new RegExp(literal(spawnWords.currentContext), "u");
-/** How long the line may take: the hub's read deadline (server.ts `READ_TIMEOUT_MS`), and a margin. */
+/** How long the line may take: the hub's read deadline (machine-read-timeouts.ts `READ_TIMEOUT_MS`), and a margin. */
 const LINE_WITHIN_MS = 30_000;
 /** How long the answer may take once the machine is back. */
 const BACK_WITHIN_MS = 60_000;
