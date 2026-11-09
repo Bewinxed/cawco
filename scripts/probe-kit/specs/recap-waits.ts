@@ -377,9 +377,10 @@ const run = async ({ check }: Kit) => {
   const plan = await plans.read(SESSION);
   check(
     "r2: the plan panel's needs hold the open page alone (the stepped page shows on its step), never the closed or answered page",
-    JSON.stringify(plan.needs) === JSON.stringify([OPEN]) &&
+    "steps" in plan &&
+      JSON.stringify(plan.needs) === JSON.stringify([OPEN]) &&
       plan.steps.some((step) => stepNamesArtifact(step, STEPPED)),
-    JSON.stringify(plan.needs)
+    JSON.stringify("steps" in plan ? plan.needs : plan.response)
   );
 
   // r3. The recap names exactly Needs you.
@@ -438,7 +439,8 @@ const run = async ({ check }: Kit) => {
   const heard = published.slice(before);
   check(
     "r5: Needs you moves (the open page answered): the plan is read again, its followers hear its needs go, and its steps stay",
-    again.needs === undefined &&
+    "steps" in again &&
+      again.needs === undefined &&
       heard.length === 1 &&
       JSON.stringify(heard[0]).includes("/needs") &&
       again.steps.length === STEPS.length,
