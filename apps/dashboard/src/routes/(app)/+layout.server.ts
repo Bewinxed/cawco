@@ -1,7 +1,5 @@
 import { harnessNamed } from "@cawco/core/harness/kinds";
-import type { HubAuthState } from "@cawco/core/hub-auth";
-import { hubRequest } from "@cawco/core/hub-request";
-import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";
+import type { SessionPulse } from "@cawco/core/protocol";
 import {
   isSessionTab,
   projectOfTab,
@@ -15,7 +13,8 @@ import {
   placeTab,
 } from "#lib/cawco/workspace/tree.js";
 import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
-import { type HubRead, readHub } from "#lib/platform/hub-read.js";
+import { hubThrough } from "#lib/platform/hub.js";
+import { type HubRead, hubRead } from "#lib/platform/hub-read.js";
 import {
   clampRail,
   FOLD_BOXES_PREF,
@@ -72,8 +71,8 @@ export const load: LayoutServerLoad = async ({
   // number is in the first paint and the bar does not widen when the
   // socket's list lands; null where the hub would not say.
   const [authRead, machinesRead] = await Promise.all([
-    readHub<HubAuthState>(fetch, hubRequest("GET /api/auth")),
-    readHub<AgentRow[]>(fetch, hubRequest("GET /api/agents")),
+    hubRead(hubThrough(fetch).api.auth.get()),
+    hubRead(hubThrough(fetch).api.agents.get()),
   ]);
   const auth = authRead.ok ? authRead.value : null;
   const machineCount =
@@ -156,10 +155,7 @@ export const load: LayoutServerLoad = async ({
     leaf.tabs.filter((tab) => !isSessionTab(tab))
   );
   if (projectTabs.length > 0) {
-    const projects = await readHub<{ id: string; name: string }[]>(
-      fetch,
-      hubRequest("GET /api/projects")
-    );
+    const projects = await hubRead(hubThrough(fetch).api.projects.get());
     for (const tab of projectTabs) {
       const project = projects.ok
         ? projects.value.find((row) => row.id === projectOfTab(tab))
@@ -193,8 +189,8 @@ export const load: LayoutServerLoad = async ({
   // (stores/board.svelte.ts `pulseOf`), so a working tab is drawn working from the
   // first paint. A read that fails leaves the socket to say it, as before.
   const [listing, pulseRead] = await Promise.all([
-    readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
-    readHub<Record<string, SessionPulse>>(fetch, hubRequest("GET /api/pulses")),
+    hubRead(hubThrough(fetch).api.instances.get()),
+    hubRead(hubThrough(fetch).api.pulses.get()),
   ]);
   if (pulseRead.ok) {
     for (const id of open) {
@@ -232,17 +228,14 @@ export const load: LayoutServerLoad = async ({
   const unnamed = open.filter((id) => !names[id]);
   if (unnamed.length > 0) {
     const ctx = workspace.ctx ?? {};
-    const titles = await readHub<{ id: string; title: string | null }[]>(
-      fetch,
-      hubRequest("POST /api/instances/titles", {
-        body: {
-          ids: unnamed.map((id) => ({
-            id,
-            machine: ctx[id]?.machine ?? undefined,
-            cwd: ctx[id]?.cwd,
-            harness: ctx[id]?.harness,
-          })),
-        },
+    const titles = await hubRead(
+      hubThrough(fetch).api.instances.titles.post({
+        ids: unnamed.map((id) => ({
+          id,
+          machine: ctx[id]?.machine ?? undefined,
+          cwd: ctx[id]?.cwd,
+          harness: ctx[id]?.harness,
+        })),
       })
     );
     if (titles.ok) {

@@ -5,9 +5,9 @@
  */
 import type { ListedBrowser } from "@cawco/core/browser";
 import type { BrowserAskFrame } from "@cawco/core/frames";
-import { hubRequest } from "@cawco/core/hub-request";
 import { askWords } from "@cawco/core/words/asks";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubDone } from "#lib/platform/hub-read.js";
 import type { FrameOf } from "../hub/frames";
 
 const browsersState = $state({
@@ -37,15 +37,12 @@ export async function takeOverBrowser(
   browserAsk: BrowserAskFrame
 ): Promise<string | null> {
   try {
-    const response = await hubFetch(
-      hubRequest("POST /api/browsers/:key/takeover", {
-        path: { key: browserAsk.key },
-        body: { requestId, machineId: browserAsk.machineId },
+    await hubDone(
+      hub.api.browsers({ key: browserAsk.key }).takeover.post({
+        requestId,
+        machineId: browserAsk.machineId,
       })
     );
-    if (!response.ok) {
-      throw await hubRefusal(response);
-    }
     return null;
   } catch (error) {
     return `${askWords.cantTakeOver} ${error instanceof Error ? error.message : String(error)} ${askWords.stillWaiting}`;

@@ -5,12 +5,11 @@
  * loads only what the view needs.
  */
 
-import { hubRequestAsGiven } from "@cawco/core/hub-request";
 import type { ViewToolName } from "@cawco/core/views";
-import { hub } from "#lib/platform/hub.js";
+import { hub, hubPath } from "#lib/platform/hub.js";
 import {
   hubData,
-  hubJson,
+  refusedOf,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 
@@ -38,17 +37,24 @@ export const discardView = (projectId: string, name: string) =>
  * are the view's own, as its program wrote them: data no type holds here,
  * held to the tool's schema by the hub's draft check and, as they are sent,
  * by the route's 422 naming any field it doesn't take, whose words the view
- * shows. So they go as given (core `hubRequestAsGiven`).
+ * shows. So they go as given, by `fetch` at the route's own path: Eden's
+ * client takes each tool's body as its route types it, which they are not.
  */
-export const viewTool = (
+export const viewTool = async (
   projectId: string,
   tool: ViewToolName,
   args: Record<string, unknown>
-): Promise<unknown> =>
-  hubJson(
-    hubRequestAsGiven(`POST /api/projects/:id/view-tools/${tool}`, {
-      path: { id: projectId },
-      body: args,
-    }),
-    { failure: refusedOrUnreached }
+): Promise<unknown> => {
+  const response = await fetch(
+    hubPath(hub.api.projects({ id: projectId })["view-tools"][tool]),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(args),
+    }
   );
+  if (!response.ok) {
+    throw refusedOrUnreached(await refusedOf(response));
+  }
+  return await response.json();
+};

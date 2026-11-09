@@ -25,8 +25,9 @@ import type {
   RefusalVerdict,
 } from "@cawco/core/accounts";
 import type { AccountHue } from "@cawco/core/accounts/kinds";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubRequest } from "@cawco/core/hub-request";
+import { hub } from "#lib/platform/hub.js";
+import { hubData, hubJson, hubRefusal } from "#lib/platform/hub-read.js";
 import { load } from "../hub/load";
 import { equal } from "./same";
 
@@ -101,8 +102,8 @@ export async function readAccounts(): Promise<void> {
   accountsReads += 1;
   const ticket = accountsReads;
   const [view, providers] = await Promise.all([
-    load<AccountsView>(hubRequest("GET /api/accounts")),
-    load<ProviderChoice[]>(hubRequest("GET /api/accounts/providers")),
+    load(hubData(hub.api.accounts.get())),
+    load(hubData(hub.api.accounts.providers.get())),
   ]);
   // Reads overlap (every `usage` frame and every write asks again): only the
   // newest one's answer is kept, so an older one landing last never stands.
@@ -123,12 +124,8 @@ export async function readAccounts(): Promise<void> {
  * sentence, which is written for people; the accounts are read again after
  * every write that landed, since only a sign-in makes the hub say so.
  */
-async function accountsWrite<T>(request: HubRequest): Promise<T> {
-  const response = await hubFetch(request);
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
-  const answer = (await response.json()) as T;
+async function accountsWrite<T>(written: Promise<T>): Promise<T> {
+  const answer = await written;
   await readAccounts();
   return answer;
 }
@@ -141,8 +138,7 @@ export const createAccount = (body: {
   label?: string;
   /** Made by the setup: the step it stands at, until it is done. */
   setupStep?: AccountSetupStep;
-}): Promise<Account> =>
-  accountsWrite(hubRequest("POST /api/accounts", { body }));
+}): Promise<Account> => accountsWrite(hubData(hub.api.accounts.post(body)));
 
 /** Changes an account's nickname (null: its email), colour, order or limits. */
 export const patchAccount = (
@@ -157,9 +153,7 @@ export const patchAccount = (
     setupStep?: AccountSetupStep | null;
   }
 ): Promise<Account> =>
-  accountsWrite(
-    hubRequest("PATCH /api/accounts/:id", { path: { id }, body: patch })
-  );
+  accountsWrite(hubData(hub.api.accounts({ id }).patch(patch)));
 
 /**
  * What removing an account does with the sessions on it, for its confirm:
@@ -169,14 +163,14 @@ export const patchAccount = (
 export const accountRemoval = (
   id: string
 ): Promise<{ moving: number; staying: number } | null> =>
-  load(hubRequest("GET /api/accounts/:id/removal", { path: { id } }));
+  load(hubData(hub.api.accounts({ id }).removal.get()));
 
 /**
  * Removes an account, signing it out on every machine signed in to it; its
  * sessions move to the accounts placement carries them to.
  */
-export const deleteAccount = (id: string): Promise<{ ok: true }> =>
-  accountsWrite(hubRequest("DELETE /api/accounts/:id", { path: { id } }));
+export const deleteAccount = (id: string) =>
+  accountsWrite(hubData(hub.api.accounts({ id }).delete()));
 
 /** Sets how a provider's new sessions choose among its accounts: the fields the hub's route takes. */
 export const putRouting = (
@@ -184,14 +178,13 @@ export const putRouting = (
   routing: Omit<ProviderRouting, "provider">
 ): Promise<ProviderRouting> =>
   accountsWrite(
-    hubRequest("PUT /api/accounts/routing/:provider", {
-      path: { provider },
-      body: {
+    hubData(
+      hub.api.accounts.routing({ provider }).put({
         yours: routing.yours,
         delegates: routing.delegates,
         atLimit: routing.atLimit,
-      },
-    })
+      })
+    )
   );
 
 /** Starts Claude Code's own login for the account on a machine: the link to open. */
@@ -200,9 +193,11 @@ export const beginSignin = (
   machineId: string
 ): Promise<{ url: string }> =>
   accountsWrite(
-    hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
-      path: { id, machineId },
-    })
+    hubJson(
+      hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
+        path: { id, machineId },
+      })
+    )
   );
 
 /** Types the pasted code into that login: signed in, or someone else's account. */
@@ -212,10 +207,12 @@ export const completeSignin = (
   code: string
 ): Promise<AccountSigninResult> =>
   accountsWrite(
-    hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
-      path: { id, machineId },
-      body: { code },
-    })
+    hubJson(
+      hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
+        path: { id, machineId },
+        body: { code },
+      })
+    )
   );
 
 /**
@@ -227,9 +224,11 @@ export const beginDeviceSignin = (
   machineId: string
 ): Promise<ProviderSigninChallenge> =>
   accountsWrite(
-    hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
-      path: { id, machineId },
-    })
+    hubJson(
+      hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
+        path: { id, machineId },
+      })
+    )
   );
 
 /**
@@ -241,10 +240,12 @@ export const awaitDeviceSignin = (
   machineId: string
 ): Promise<ProviderSigninResult> =>
   accountsWrite(
-    hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
-      path: { id, machineId },
-      body: {},
-    })
+    hubJson(
+      hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
+        path: { id, machineId },
+        body: {},
+      })
+    )
   );
 
 /**
@@ -253,9 +254,7 @@ export const awaitDeviceSignin = (
  * out. The accounts are read again once it answers.
  */
 export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
-  accountsWrite(
-    hubRequest("POST /api/accounts/:id/refusal-check", { path: { id } })
-  );
+  accountsWrite(hubData(hub.api.accounts({ id })["refusal-check"].post()));
 
 /**
  * Signs an account out on one machine and drops its store there; the hub
@@ -263,9 +262,7 @@ export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
  */
 export const signOutOn = (id: string, machineId: string): Promise<unknown> =>
   accountsWrite(
-    hubRequest("DELETE /api/accounts/:id/machines/:machineId", {
-      path: { id, machineId },
-    })
+    hubData(hub.api.accounts({ id }).machines({ machineId }).delete())
   );
 
 /** What sending a key came to on one machine: its result, or why it didn't arrive. */
@@ -280,13 +277,7 @@ export const sendAccountKey = (
   machineIds: string[]
 ): Promise<{ machines: KeyDelivery[] }> =>
   accountsWrite(
-    hubRequest("POST /api/accounts/:id/key", {
-      path: { id },
-      body: {
-        key,
-        machineIds,
-      },
-    })
+    hubData(hub.api.accounts({ id }).key.post({ key, machineIds }))
   );
 
 /**
@@ -303,15 +294,14 @@ export async function placementFor(query: {
   model?: string;
   projectId?: string;
 }): Promise<PlacementPreview | undefined> {
-  const response = await hubFetch(
-    hubRequest("GET /api/accounts/placement", { query })
-  );
-  if (response.status === 400 || response.status === 503) {
-    throw await hubRefusal(response);
+  const answer = await hub.api.accounts.placement.get({ query });
+  if (answer.error) {
+    if (answer.error.status === 400 || answer.error.status === 503) {
+      throw hubRefusal(answer);
+    }
+    return undefined;
   }
-  return response.ok
-    ? ((await response.json()) as PlacementPreview)
-    : undefined;
+  return await hubData(answer);
 }
 
 /** The hub's accounts and the providers the fleet can sign in to; null until read. */

@@ -8,59 +8,26 @@
  */
 
 import type { ApprovedActionView } from "@cawco/core/actions";
-import type { ConnectionView } from "@cawco/core/connections";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { RelayView } from "@cawco/core/relays";
-import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
+import type { RoutineRunView } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
+import type { Treaty } from "@elysia/eden";
 import { hub } from "#lib/platform/hub.js";
-import {
-  hubData,
-  hubJson,
-  refusedOrUnreached,
-} from "#lib/platform/hub-read.js";
+import { hubData, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** One run, as the hub answers it (times in ms). */
 export type RoutineRun = RoutineRunView;
 
 /** A routine, as the hub answers it (times in ms), with its newest runs. */
-export interface Routine {
-  createdBy: string;
-  cron: string;
-  disabledReason: string | null;
-  enabled: boolean;
-  /** When an agent's routine turns itself off unless kept; null for the owner's. */
-  expiresAt: number | null;
-  id: string;
-  keep: boolean;
-  lastSlot: number | null;
-  name: string;
-  /** Its runs ahead, as the hub's scheduler will start them (hub `nextRunsOf`): the next week's, at most 288, epoch ms. */
-  nextRuns: number[];
-  nextSlot: number;
-  projectId: string | null;
-  prompt: string;
-  runs: RoutineRun[];
-  target: RoutineTarget;
-  timeZone: string;
-}
+export type Routine = Treaty.Data<typeof hub.api.routines.get>[number];
 
-/** A route that sends a service's events to a routine (ingress.ts `EventRouteView`). */
-interface EventRoute {
-  author: string | null;
-  branch: string | null;
-  enabled: boolean;
-  id: string;
-  kinds: string[];
-  label: string | null;
-  /** When an event it fits last went to its routine; null when none has. */
-  lastDeliveryAt: number | null;
-  regex: string | null;
-  routineId: string;
-  /** The service its source is, as a provider mark names it (lower case). */
-  service: string;
-  source: string;
-}
+/** What the page reads of `GET /api/projects/:id/ingress`. */
+type IngressRead = Treaty.Data<
+  ReturnType<typeof hub.api.projects>["ingress"]["get"]
+>;
+
+/** A route that sends a service's events to a routine (ingress.ts `EventRouteView`), with the service its source is, as a provider mark names it (lower case). */
+type EventRoute = IngressRead["routes"][number] & { service: string };
 
 /** A source read on a schedule: a connector poll, or the repository's GitHub poller. */
 export interface Poll {
@@ -86,54 +53,29 @@ export interface RoutinesPage {
   routines: Routine[];
 }
 
-/** What the page reads of `GET /api/projects/:id/ingress`. */
-interface IngressRead {
-  connectorPolls: {
-    connection: string;
-    enabled: boolean;
-    id: string;
-    intervalS: number;
-    polledAt: number | null;
-    reason: string | null;
-    tool: string;
-  }[];
-  github: {
-    connection: string | null;
-    polled: boolean;
-    polledAt: number | null;
-    /** Every GitHub repository the project links, `owner/repo`. */
-    repos: string[];
-    state: string;
-  };
-  routes: Omit<EventRoute, "service">[];
-}
-
 /** The project's routines page, each part read at once. */
 export async function readRoutinesPage(
   projectId: string
 ): Promise<RoutinesPage> {
   const id = encodeURIComponent(projectId);
   const [routines, ingress, relays, actions, connections] = await Promise.all([
-    hubJson<Routine[]>(
-      hubRequest("GET /api/routines", { query: { projectId: id } }),
-      { failure: refusedOrUnreached }
+    hubData(
+      hub.api.routines.get({ query: { projectId: id } }),
+      refusedOrUnreached
     ),
-    hubJson<IngressRead>(
-      hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } }),
-      { failure: refusedOrUnreached }
+    hubData(
+      hub.api.projects({ id: projectId }).ingress.get(),
+      refusedOrUnreached
     ),
-    hubJson<RelayView[]>(
-      hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } }),
-      { failure: refusedOrUnreached }
+    hubData(
+      hub.api.projects({ id: projectId }).relays.get(),
+      refusedOrUnreached
     ),
-    hubJson<{ actions: ApprovedActionView[] }>(
-      hubRequest("GET /api/actions", { query: { projectId: id } }),
-      { failure: refusedOrUnreached }
+    hubData(
+      hub.api.actions.get({ query: { projectId: id } }),
+      refusedOrUnreached
     ),
-    hubJson<{ connections: ConnectionView[] }>(
-      hubRequest("GET /api/connections"),
-      { failure: refusedOrUnreached }
-    ),
+    hubData(hub.api.connections.get(), refusedOrUnreached),
   ]);
   /** Each connection by its name: what polls and `conn:` sources name it by. */
   const connectionOf = new Map(

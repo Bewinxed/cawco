@@ -13,7 +13,8 @@ import type { FramePayload } from "@cawco/core/frames";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import type { SessionStreamFrame } from "@cawco/core/stream";
-import type { UsageLimitsResponse } from "@cawco/core/usage/types";
+import { hub } from "#lib/platform/hub.js";
+import { hubData, hubJson } from "#lib/platform/hub-read.js";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { devDebug } from "./dev-debug";
 import { heardSince } from "./heard";
@@ -97,9 +98,9 @@ import {
   takePreview,
   takePreviewSettings,
 } from "./stores/previews.svelte";
+import type { ProjectRow } from "./stores/projects.svelte";
 import {
   keepProjects,
-  type ProjectRow,
   projectsLeave,
   projectsState,
   rereadProjects,
@@ -249,11 +250,11 @@ async function refresh(): Promise<boolean> {
   const asked = projectsLeave();
   const { mark } = asked;
   const [projects, pending, usage] = await Promise.all([
-    load<ProjectRow[]>(hubRequest("GET /api/projects")),
-    load<Envelope<FramePayload>[]>(hubRequest("GET /api/pending")),
+    load(hubJson<ProjectRow[]>(hubRequest("GET /api/projects"))),
+    load(hubJson<Envelope<FramePayload>[]>(hubRequest("GET /api/pending"))),
     // Read on connect, not only broadcast on change: a dashboard opened
     // between reports has missed the frames.
-    load<UsageLimitsResponse>(hubRequest("GET /api/usage/limits")),
+    load(hubData(hub.api.usage.limits.get())),
   ]);
 
   if (projects) {

@@ -33,14 +33,13 @@
  * while it is open, and at once on a change.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import {
   AWAY_AFTER_DEFAULT_MS,
   type MachineState,
   PRESENCE_BEAT_MS,
-  type PresenceBeat,
 } from "@cawco/core/notifications";
-import { hubFetch } from "#lib/platform/hub-read.js";
+import { hub, hubPath } from "#lib/platform/hub.js";
+import { hubReached } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { store, stored } from "#lib/platform/storage.js";
 import { lastInputAt, onInput } from "./reload.svelte";
@@ -123,7 +122,7 @@ const reading = (): boolean =>
   inFront() !== null && seen() && document.hasFocus();
 
 /** Every chat the person can see on this page; none while it is hidden or going. */
-const showing = (): readonly string[] =>
+const showing = (): string[] =>
   seen() ? [...new Set(docked ? [...drawn, docked] : drawn)] : [];
 
 /** What Idle Detection says of this computer now; undefined while it doesn't run. */
@@ -163,20 +162,24 @@ const handheld = (): boolean =>
   typeof matchMedia !== "undefined" &&
   matchMedia("(pointer: coarse) and (hover: none)").matches;
 
-const post = (beat: PresenceBeat, leaving: boolean): void => {
-  const request = hubRequest("POST /api/presence", { body: beat });
+const post = (
+  beat: Parameters<typeof hub.api.presence.post>[0],
+  leaving: boolean
+): void => {
   if (leaving) {
     // The page is going: only a beacon is sure to leave with it.
     navigator.sendBeacon(
-      request.path,
-      new Blob([request.body ?? ""], { type: "application/json" })
+      hubPath(hub.api.presence),
+      new Blob([JSON.stringify(beat)], { type: "application/json" })
     );
     return;
   }
-  hubFetch(request, { keepalive: true }).catch((error: unknown) => {
-    // The next change or beat says it again.
-    console.warn("[cawco] presence not sent:", error);
-  });
+  hubReached(hub.api.presence.post(beat, { fetch: { keepalive: true } })).catch(
+    (error: unknown) => {
+      // The next change or beat says it again.
+      console.warn("[cawco] presence not sent:", error);
+    }
+  );
 };
 
 /** Tells the hub this tab's state when it changed, or on a beat. */

@@ -5,10 +5,10 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { WorkItemSummary } from "@cawco/core/protocol";
 import { workWords } from "@cawco/core/words/work";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { type HubAnswer, hubData, hubRefusal } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
 import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
@@ -44,8 +44,8 @@ export async function loadWorkItems(instanceId: string): Promise<void> {
   }
   trayRead.add(instanceId);
   const mark = readLeaves();
-  const items = await load<WorkItemSummary[]>(
-    hubRequest("GET /api/work-items", { query: { parent: instanceId } })
+  const items = await load(
+    hubData(hub.api["work-items"].get({ query: { parent: instanceId } }))
   );
   if (!items) {
     trayRead.delete(instanceId);
@@ -72,7 +72,7 @@ export function dismissWorkItem(
   why: { reason: string } | { replacedBy: string }
 ): Promise<void> {
   return workItemAct(
-    hubRequest("POST /api/work-items/:id/dismiss", { path: { id }, body: why }),
+    hub.api["work-items"]({ id }).dismiss.post(why),
     workWords.notDismissedThen
   );
 }
@@ -83,21 +83,20 @@ export function dismissWorkItem(
  */
 export function retryWorkItem(id: string): Promise<void> {
   return workItemAct(
-    hubRequest("POST /api/work-items/:id/retry", { path: { id } }),
+    hub.api["work-items"]({ id }).retry.post(),
     workWords.notRetriedThen
   );
 }
 
 async function workItemAct(
-  request: HubRequest,
+  call: Promise<HubAnswer<WorkItemSummary>>,
   outcome: string
 ): Promise<void> {
   const mark = readLeaves();
-  const response = await hubFetch(request);
-  if (!response.ok) {
-    throw await hubRefusal(response, outcome);
-  }
-  keepWorkItem((await response.json()) as WorkItemSummary, mark);
+  keepWorkItem(
+    await hubData(call, (refused) => hubRefusal(refused, outcome)),
+    mark
+  );
 }
 
 export function takeWorkItem(frame: FrameOf<"work_item">): void {

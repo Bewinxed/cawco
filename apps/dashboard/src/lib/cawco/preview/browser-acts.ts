@@ -6,16 +6,18 @@
  * sentence.
  */
 import type { BrowserKey } from "@cawco/core/browser";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import {
+  failureWords,
+  type HubAnswer,
+  hubDone,
+} from "#lib/platform/hub-read.js";
 
-const post = async (request: HubRequest): Promise<string | null> => {
+const post = async (
+  call: Promise<HubAnswer<unknown>>
+): Promise<string | null> => {
   try {
-    const response = await hubFetch(request);
-    if (!response.ok) {
-      throw await hubRefusal(response);
-    }
-    await response.body?.cancel();
+    await hubDone(call);
     return null;
   } catch (error) {
     return failureWords(error);
@@ -28,13 +30,10 @@ export const takeOverFromPanel = (
   at: { instanceId: string; machineId: string; viewer?: string | null }
 ): Promise<string | null> =>
   post(
-    hubRequest("POST /api/browsers/:key/takeover", {
-      path: { key },
-      body: {
-        instanceId: at.instanceId,
-        machineId: at.machineId,
-        ...(at.viewer ? { viewer: at.viewer } : {}),
-      },
+    hub.api.browsers({ key }).takeover.post({
+      instanceId: at.instanceId,
+      machineId: at.machineId,
+      ...(at.viewer ? { viewer: at.viewer } : {}),
     })
   );
 
@@ -42,20 +41,10 @@ export const handBackFromPanel = (
   key: BrowserKey,
   machineId: string
 ): Promise<string | null> =>
-  post(
-    hubRequest("POST /api/browsers/:key/handback", {
-      path: { key },
-      body: { machineId },
-    })
-  );
+  post(hub.api.browsers({ key }).handback.post({ machineId }));
 
 export const startFromPanel = (
   key: BrowserKey,
   machineId: string
 ): Promise<string | null> =>
-  post(
-    hubRequest("POST /api/browsers/:key/start", {
-      path: { key },
-      body: { machineId },
-    })
-  );
+  post(hub.api.browsers({ key }).start.post({ machineId }));

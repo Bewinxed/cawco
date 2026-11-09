@@ -7,16 +7,17 @@ import type {
   ProjectOfferAccepted,
   ProjectOfferSummary,
 } from "@cawco/core/frames";
-import { hubRequest } from "@cawco/core/hub-request";
 import type {
   DesignOfferState,
   LfsOfferState,
 } from "@cawco/core/project-conversation";
 import { offerWords } from "@cawco/core/words/offers";
+import { hub } from "#lib/platform/hub.js";
 import {
-  hubFetch,
-  hubJson,
+  hubData,
+  hubDone,
   hubRefusal,
+  type Refused,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
@@ -52,9 +53,7 @@ export function takeProjectOffer(frame: FrameOf<"project_offer">): void {
  */
 export async function readProjectOffers(): Promise<void> {
   const mark = readLeaves();
-  const offers = await load<ProjectOfferSummary[]>(
-    hubRequest("GET /api/project-offers")
-  );
+  const offers = await load(hubData(hub.api["project-offers"].get()));
   if (!offers) {
     return;
   }
@@ -80,27 +79,20 @@ export async function answerProjectOffer(
   answer: "accept" | "dismiss"
 ): Promise<ProjectOfferAccepted | null> {
   const mark = readLeaves();
-  const response = await hubFetch(
-    hubRequest(
-      answer === "accept"
-        ? "POST /api/project-offers/:instanceId/accept"
-        : "POST /api/project-offers/:instanceId/dismiss",
-      { path: { instanceId } }
-    )
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, offerWords.nothingChangedThen);
-  }
+  const offer = hub.api["project-offers"]({ instanceId });
+  const refusal = (refused: Refused) =>
+    hubRefusal(refused, offerWords.nothingChangedThen);
   const offerGone = () => {
     if (!heardSince(`project_offer:${instanceId}`, mark)) {
       delete offersState.projectOffers[instanceId];
     }
   };
   if (answer === "dismiss") {
+    await hubDone(offer.dismiss.post(), refusal);
     offerGone();
     return null;
   }
-  const accepted = (await response.json()) as ProjectOfferAccepted;
+  const accepted = await hubData(offer.accept.post(), refusal);
   if (!accepted.conversation) {
     // In the same change as the offer leaving: its card turns, never blinks.
     offersState.projectJoins[instanceId] = accepted;
@@ -116,12 +108,10 @@ export function dismissProjectJoin(instanceId: string): void {
 }
 
 /** Where a project's design-system offer stands (hub design-offers.ts). */
-export const readDesignOffer = (projectId: string): Promise<DesignOfferState> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/design-offer", {
-      path: { id: projectId },
-    }),
-    { failure: refusedOrUnreached }
+export const readDesignOffer = (projectId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId })["design-offer"].get(),
+    refusedOrUnreached
   );
 
 /** Answers it: Build files the task, Not now records it; the offer as it stands after. */
@@ -129,35 +119,27 @@ export const answerDesignOffer = (
   projectId: string,
   answer: "build" | "dismiss"
 ): Promise<DesignOfferState> =>
-  hubJson(
-    hubRequest(
-      answer === "build"
-        ? "POST /api/projects/:id/design-offer/build"
-        : "POST /api/projects/:id/design-offer/dismiss",
-      { path: { id: projectId } }
-    ),
-    { failure: refusedOrUnreached }
+  hubData(
+    answer === "build"
+      ? hub.api.projects({ id: projectId })["design-offer"].build.post()
+      : hub.api.projects({ id: projectId })["design-offer"].dismiss.post(),
+    refusedOrUnreached
   );
 
 /** Where an offer of Git LFS for a place's left-out large files stands (hub lfs-offers.ts). */
-export const readLfsOffer = (id: string): Promise<LfsOfferState> =>
-  hubJson(hubRequest("GET /api/lfs-offers/:id", { path: { id } }), {
-    failure: refusedOrUnreached,
-  });
+export const readLfsOffer = (id: string) =>
+  hubData(hub.api["lfs-offers"]({ id }).get(), refusedOrUnreached);
 
 /** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
 export const answerLfsOffer = (
   id: string,
   answer: "track" | "dismiss"
 ): Promise<LfsOfferState> =>
-  hubJson(
-    hubRequest(
-      answer === "track"
-        ? "POST /api/lfs-offers/:id/track"
-        : "POST /api/lfs-offers/:id/dismiss",
-      { path: { id } }
-    ),
-    { failure: refusedOrUnreached }
+  hubData(
+    answer === "track"
+      ? hub.api["lfs-offers"]({ id }).track.post()
+      : hub.api["lfs-offers"]({ id }).dismiss.post(),
+    refusedOrUnreached
   );
 
 /** The offers standing on sessions, and the joins answered here. */
