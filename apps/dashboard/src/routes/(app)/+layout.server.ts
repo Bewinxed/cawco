@@ -2,7 +2,6 @@ import { harnessNamed } from "@cawco/core/harness/kinds";
 import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";
-import { clampRail } from "#lib/cawco/rail.js";
 import {
   isSessionTab,
   projectOfTab,
@@ -18,6 +17,7 @@ import {
 import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
 import { type HubRead, readHub } from "#lib/platform/hub-read.js";
 import {
+  clampRail,
   FOLD_BOXES_PREF,
   NARROW_PREF,
   type Pref,
