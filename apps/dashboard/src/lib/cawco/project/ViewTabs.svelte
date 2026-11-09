@@ -33,7 +33,6 @@
    * list ending at the room it has.
    */
   import { viewsWords } from "@cawco/core/words/views";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -43,6 +42,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { IconChevronDown, IconMore } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import type { BarView } from "./ViewBar.svelte";
 
   let {

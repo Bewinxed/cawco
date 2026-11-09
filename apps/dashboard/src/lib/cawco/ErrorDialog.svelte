@@ -9,8 +9,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { IconAlert, IconCheck, IconCopy } from "#lib/icons.js";
-  import { copyRefused, copyToClipboard } from "./copy";
-  import { dur } from "./motion/curves.svelte";
+  import { copyRefused, copyToClipboard } from "#lib/platform/copy.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import RowFault from "./RowFault.svelte";
   import { refusals } from "./refusals.svelte";
 

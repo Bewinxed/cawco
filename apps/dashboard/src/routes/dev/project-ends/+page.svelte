@@ -38,7 +38,6 @@
   } from "#lib/cawco/project-end-fixtures.js";
   import StopTrayView from "#lib/cawco/StopTrayView.svelte";
   import type { StopJob, StopRow } from "#lib/cawco/stop-work.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     TabItem,
@@ -58,6 +57,7 @@
     IconSettings,
     IconUsage,
   } from "#lib/icons.js";
+  import { toast } from "#lib/platform/toasts.js";
 
   const narrowToasts = new MediaQuery("(max-width: 640px)");
 
