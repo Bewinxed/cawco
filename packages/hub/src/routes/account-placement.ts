@@ -208,7 +208,7 @@ export const accountPlacementRoutes = ({
           return status(asked.status, asked.refusal);
         }
         // Where a start would go says what its start would: a machine
-        // that refuses the harness refuses it ({@link placeSpawn}).
+        // that refuses the harness refuses it (`placeSpawn`).
         const refused = refusedHarness(query.machineId, asked.harness);
         if (refused) {
           return status(400, refused);
