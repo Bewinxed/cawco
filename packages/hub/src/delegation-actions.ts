@@ -850,7 +850,7 @@ export interface HandoffDeps {
   ) => string | undefined;
   /**
    * Starts a session now and holds until its machine says it is in place
-   * (server.ts `spawnSession`); answers the folder it runs in as the hub
+   * (spawns.ts `spawnSession`); answers the folder it runs in as the hub
    * settled it. A refused or failed start throws the hub's words.
    */
   readonly spawn: (
