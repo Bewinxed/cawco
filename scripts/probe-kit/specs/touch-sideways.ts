@@ -25,8 +25,8 @@
  *   bun scripts/probe-kit/run.ts touch-sideways
  */
 import type { Frame, Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { type SidewaysRead, sideways, sidewaysHolds } from "../sideways";
 import { fleetUp, made, planOn } from "./artifact-resize-loop";
@@ -76,13 +76,10 @@ const legs = async (
 ) => {
   // The decision page in the session's panel: the last leg's own tab of
   // the other artifact showed that one there.
-  await fetchHub(
-    fetch,
-    base,
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-      path: { id: ids.session, artifact: ids.decision },
-    })
-  );
+  await hubAt(base)
+    .api.instances({ id: ids.session })
+    .artifacts({ artifact: ids.decision })
+    .show.post();
   const page = await kit.page("phone", { theme: "light", engine });
   const at = (where: string) => `touch 390 ${engine}, ${where}`;
   const holds = async (where: string, frame?: Frame | null) => {
@@ -196,17 +193,14 @@ const spec: Spec = {
     if (!artifact) {
       return;
     }
-    const { id: decision } = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: session },
-        body: {
-          kind: "page",
-          does: "pick",
-          title: "Probe pick artifact",
-          ask: "Pick the channel that carries the launch",
-          name: "launch-reach",
-          program: DECISION,
-        },
+    const { id: decision } = await fleet.api((hub) =>
+      hub.api.instances({ id: session }).artifacts.post({
+        kind: "page",
+        does: "pick",
+        title: "Probe pick artifact",
+        ask: "Pick the channel that carries the launch",
+        name: "launch-reach",
+        program: DECISION,
       })
     );
     const base = await fleet.dashboard();

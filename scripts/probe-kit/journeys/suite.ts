@@ -28,11 +28,11 @@ import { join } from "node:path";
 import type { ConsoleMessage, Locator, Page } from "playwright-core";
 import type { ArtifactNeedsFrame } from "../../../packages/core/src/artifact-needs";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { PRESENCE_ONBOARDING_SKIPPED } from "../../../packages/core/src/presence-onboarding";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { SpecGroup } from "../groups";
+import { hubAt, payloadOf } from "../hub";
 import {
   type Engine,
   type Kit,
@@ -232,14 +232,12 @@ async function furnish(fleet: KitFleet, data: Data): Promise<void> {
     const dir = join(fleet.sandbox, `${data}-project-${at}`);
     await mkdir(dir, { recursive: true });
     await Bun.$`git init -q -b main ${dir}`.quiet();
-    await fleet.api(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: long(name),
-          machineId: MACHINE,
-          cwd: dir,
-          caw: false,
-        },
+    await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: long(name),
+        machineId: MACHINE,
+        cwd: dir,
+        caw: false,
       })
     );
   }
@@ -279,18 +277,16 @@ async function restore(
   since: number,
   hubMachine?: string
 ): Promise<void> {
-  const up = await fetchHub(fetch, fleet.base, hubRequest("GET /health"))
-    .then((r) => r.ok)
+  const up = await hubAt(fleet.base)
+    .health.get()
+    .then((r) => r.error === null)
     .catch(() => false);
   if (!up) {
     await hubUp(fleet, hubMachine);
   }
   await eventually(
     "the machine online on the hub",
-    () =>
-      fleet.api<{ machineId: string; status: string }[]>(
-        hubRequest("GET /api/agents")
-      ),
+    () => fleet.api((hub) => hub.api.agents.get()),
     (rows) =>
       rows.some((row) => row.machineId === MACHINE && row.status === "online"),
     120_000
@@ -321,10 +317,6 @@ const PRESENCE_ANSWERED = {
   content: `if (self.origin !== "null") localStorage.setItem(${JSON.stringify(PRESENCE_ONBOARDING_SKIPPED.key)}, ${JSON.stringify(PRESENCE_ONBOARDING_SKIPPED.value)});`,
 };
 
-/** One `/api/pending` entry: a parked ask, or the artifact lane. */
-type Pending =
-  { payload: { kind?: undefined } } | { payload: ArtifactNeedsFrame };
-
 /**
  * What waits on the person, as `/api/pending` lists it: each ask parked on
  * them, and apart from them Needs you's artifacts, which come as one
@@ -334,12 +326,15 @@ type Pending =
 export async function waiting(
   fleet: KitFleet
 ): Promise<{ artifacts: ArtifactNeedsFrame["needs"]; asks: unknown[] }> {
-  const listed = await fleet.api<Pending[]>(hubRequest("GET /api/pending"));
+  const listed = await fleet.api((hub) => hub.api.pending.get());
   const asks: unknown[] = [];
   const artifacts: ArtifactNeedsFrame["needs"] = [];
   for (const { payload } of listed) {
-    if (payload.kind === "artifact.needs") {
-      artifacts.push(...payload.needs);
+    if (payloadOf({ payload }).kind === "artifact.needs") {
+      const needs: unknown = payloadOf({ payload }).needs;
+      if (Array.isArray(needs)) {
+        artifacts.push(...needs);
+      }
     } else {
       asks.push(payload);
     }
