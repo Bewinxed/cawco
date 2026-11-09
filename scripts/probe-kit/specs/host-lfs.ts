@@ -42,7 +42,8 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gitUntil, lfsCheckout } from "../../../packages/agent/src/workspace";
+import { gitUntil } from "../../../packages/agent/src/git/run";
+import { lfsCheckout } from "../../../packages/agent/src/workspace";
 import {
   type HubRequest,
   hubInit,
