@@ -4,7 +4,7 @@
  * fleet carried for it.
  *
  * The path a session reads, `<dir>/<name>`, is a relative link into the tree
- * store beside the dir (core paths.ts `TREE_STORE_DIR`). A new version is
+ * store beside the dir (core claude-dirs.ts `TREE_STORE_DIR`). A new version is
  * written whole as a fresh tree in the store, a new link to it is made beside
  * the old one, and the new link is renamed over the old: the path names the
  * old tree or the new one at every instant, never a missing or half-written
