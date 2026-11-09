@@ -19,7 +19,6 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import { sendKept } from "#lib/cawco/kept.svelte.js";
-  import { clampRail, RAIL_MAX, RAIL_MIN } from "#lib/cawco/rail.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
@@ -46,9 +45,12 @@
   import { pageIn, pageOut, route } from "#lib/platform/motion/route.svelte.js";
   import { reflow, reflowOn } from "#lib/platform/motion/rows.svelte.js";
   import {
+    clampRail,
     keepPrefs,
     NARROW_PREF,
     RAIL_HIDDEN_PREF,
+    RAIL_MAX,
+    RAIL_MIN,
     RAIL_PREF,
   } from "#lib/platform/prefs.js";
   import { theme } from "#lib/theme.svelte.js";
