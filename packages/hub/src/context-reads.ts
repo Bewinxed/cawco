@@ -61,7 +61,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
    * catalogs leave it out too. A cancel rejects the wait and stops it from
    * outside ({@link cancelContinuation}); `cancelled` keeps a spawn that was
    * still in flight from being asked anything. `mode` is the one it runs in
-   * ({@link continuationSummary} picks it).
+   * (`continuationSummary` picks it).
    */
   const summariserRun = async (
     source: ContinuationSource & { machineId: string },
