@@ -18,7 +18,7 @@ import type {
 import { type HubSent, hubRequest } from "@cawco/core/hub-request";
 import type { ContinuationJob } from "@cawco/core/protocol";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubFetch, hubJson, hubRefusal } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { cawco, type SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
@@ -95,16 +95,12 @@ export async function startContinuation(
   source: ContinueSource,
   body: HubSent<"POST /api/instances/:id/continue">["body"]
 ): Promise<string> {
-  const response = await hubFetch(
+  const { continuationId } = (await hubJson(
     hubRequest("POST /api/instances/:id/continue", {
       path: { id: source.instanceId },
       body,
     })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
-  const { continuationId } = (await response.json()) as {
+  )) as {
     continuationId: string;
   };
   return continuationId;
