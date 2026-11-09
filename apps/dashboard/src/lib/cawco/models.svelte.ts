@@ -19,7 +19,8 @@ import {
   modelNameIn,
 } from "@cawco/core/model-names";
 import { z } from "zod";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { cawco } from "./client.svelte";
 import {
   admittedOn,
@@ -29,7 +30,6 @@ import {
   modelsForHarness,
   typedOffered,
 } from "./model-catalog";
-import { readJson, writeJson } from "./storage";
 import { speakerName } from "./transcript/speaker";
 
 /**

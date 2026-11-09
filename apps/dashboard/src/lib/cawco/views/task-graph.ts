@@ -13,8 +13,8 @@
 
 import type { TaskEdge as TaskLink } from "@cawco/core/task-edges";
 import dagre from "@dagrejs/dagre";
-import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
 import type { TaskSummary } from "#lib/cawco/project-tasks.js";
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 
 /** The edges the graph draws (core `TASK_EDGES`): a duplicate closes its task, so it draws none. */
 export type TaskEdgeKind = Exclude<TaskLink, "duplicate_of">;

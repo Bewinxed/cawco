@@ -12,11 +12,11 @@
     type FileDiffMetadata,
     parseDiffFromFile,
   } from "@pierre/diffs";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { IconAlignLeft, IconColumns } from "#lib/icons.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
   import { fileName, languageOf } from "./diff-language";
   import { houseDiff } from "./diff-theme.svelte";
 

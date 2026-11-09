@@ -2,7 +2,7 @@
   import {
     type FrameObserver,
     frameObserver,
-  } from "#lib/cawco/frame-observer.js";
+  } from "#lib/platform/frame-observer.js";
   import type { FoldMeasure } from "./fold-memory";
 
   /** A folder tab's measure and what it draws from it, by its box. */
@@ -92,11 +92,16 @@
   import type { Component, Snippet } from "svelte";
   import { untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { HALF } from "#lib/cawco/motion/hang-shape.js";
+  import {
+    type FoldPose,
+    foldPath,
+    restPose,
+    taperStops,
+  } from "#lib/platform/motion/fold-path.js";
+  import { HALF } from "#lib/platform/motion/hang-shape.js";
   import { cn } from "#lib/utils.js";
   import { restRank, useList, useTabs } from "./context.svelte";
   import { rememberFoldBox } from "./fold-memory";
-  import { type FoldPose, foldPath, restPose, taperStops } from "./fold-path";
 
   /** How long a box holds still before its measure is kept, ms (a resize settling). */
   const KEEP_AFTER = 400;

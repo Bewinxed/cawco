@@ -7,7 +7,7 @@
  * drawer's 390 and 680.
  */
 
-import { ease } from "#lib/cawco/motion/curves.svelte.js";
+import { ease } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
 import type { MoveState } from "./MoveFace.svelte";
 import MoveFace from "./MoveFace.svelte";
