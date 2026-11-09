@@ -58,6 +58,7 @@ import type { BoardRow } from "../links";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import type { TaskSummary } from "../project-tasks";
 import { QUESTION_KEYS } from "../question";
+import { boardStore } from "../stores/board.svelte";
 import { clockStore } from "../stores/clock.svelte";
 import { needsStore } from "../stores/needs.svelte";
 import { isRetry } from "../tasks/retry";
@@ -387,7 +388,7 @@ export class CawLead {
   readonly conversation = $derived.by((): BoardRow | null => {
     const named = this.project?.conversationInstanceId;
     return named
-      ? (cawco.listedInstances.find((row) => row.id === named) ?? null)
+      ? (boardStore.listedInstances.find((row) => row.id === named) ?? null)
       : null;
   });
   /** Its session's id; null for none. */
@@ -397,7 +398,9 @@ export class CawLead {
    * the socket's first snapshot is in, the page load's read until then.
    */
   readonly #machinesOnline = $derived.by(() =>
-    cawco.liveRead ? cawco.onlineMachines.length > 0 : this.#loadedOnline()
+    boardStore.liveRead
+      ? boardStore.onlineMachines.length > 0
+      : this.#loadedOnline()
   );
   /**
    * The session a start of his conversation is making, while that start

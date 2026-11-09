@@ -101,6 +101,7 @@
   import { markFind, rangesOf } from "../find/find-marks";
   import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
+  import { boardStore } from "../stores/board.svelte";
   import type { Message } from "../types";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
@@ -1267,7 +1268,7 @@
    * (switch.svelte.ts `stopWords`); every older one stays history.
    */
   const stop = $derived.by(() => {
-    const instance = cawco.instanceIndex.byId.get(session.instanceId);
+    const instance = boardStore.instanceIndex.byId.get(session.instanceId);
     const words = instance ? stopWords(instance) : undefined;
     const key = words
       ? rows.findLast((one) => one.kind === "account")?.key

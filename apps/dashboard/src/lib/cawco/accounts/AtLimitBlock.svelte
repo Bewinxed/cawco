@@ -20,8 +20,9 @@
   } from "@cawco/core/accounts/kinds";
   import { HARNESSES } from "@cawco/core/harness/kinds";
   import { accountsWords } from "@cawco/core/words/accounts";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
@@ -66,7 +67,7 @@
   );
   /** The machines a summariser may run on: every connected one. */
   const online = $derived(
-    cawco.machines.filter((machine) => machine.status === "online")
+    boardStore.machines.filter((machine) => machine.status === "online")
   );
   const installed = $derived(
     HARNESSES.filter((kind) =>

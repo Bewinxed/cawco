@@ -45,7 +45,7 @@
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { z } from "zod";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import StickyFoot from "#lib/cawco/config/StickyFoot.svelte";
   import {
@@ -59,6 +59,7 @@
     patchAccount,
     putRouting,
   } from "#lib/cawco/stores/accounts.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -150,7 +151,7 @@
   );
   /** The machines that run any of a row's harnesses. */
   const runsOn = (harnesses: HarnessKind[]) =>
-    cawco.machines.filter((machine) =>
+    boardStore.machines.filter((machine) =>
       machine.harnesses?.some((entry) =>
         harnesses.includes(entry.harness as HarnessKind)
       )

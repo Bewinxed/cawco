@@ -18,13 +18,13 @@ import { SvelteMap } from "svelte/reactivity";
 import { failureWords as messageOf } from "#lib/platform/hub-read.js";
 import {
   answeredOr,
-  cawco,
   loadCatalog,
   machineControl,
   renameInstance,
   stopSession,
 } from "./client.svelte";
 import { instanceForSession } from "./links";
+import { boardStore } from "./stores/board.svelte";
 
 export interface RowFaultState {
   again?: () => unknown;
@@ -152,7 +152,7 @@ export async function renameSession(
     return;
   }
   const { info, machineId } = target;
-  const row = instanceForSession(cawco.instanceIndex, info.sessionId, {
+  const row = instanceForSession(boardStore.instanceIndex, info.sessionId, {
     machineId,
     cwd: info.cwd,
   });

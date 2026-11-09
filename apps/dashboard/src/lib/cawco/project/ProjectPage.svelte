@@ -93,6 +93,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import BulkBar from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
@@ -229,7 +230,9 @@
   const machine = $derived.by(() => {
     const primary = project ? checkoutOf(project) : undefined;
     return primary
-      ? (cawco.machines.find((row) => row.machineId === primary.machineId) ??
+      ? (boardStore.machines.find(
+          (row) => row.machineId === primary.machineId
+        ) ??
           untrack(() => seed?.machine) ??
           null)
       : null;
@@ -349,7 +352,7 @@
     project: () => project,
     machinesOnline: () =>
       seed?.machinesOnline ??
-      cawco.machines.some((row) => row.status === "online"),
+      boardStore.machines.some((row) => row.status === "online"),
     tasks: () => board.tasks,
     reading: () => reading.current,
   });

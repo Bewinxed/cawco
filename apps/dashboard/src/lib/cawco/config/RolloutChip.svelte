@@ -30,12 +30,12 @@
    */
   import { failureWords } from "#lib/platform/hub-read.js";
   import { appear } from "#lib/platform/motion/curves.svelte.js";
-  import type { Machine } from "../client.svelte";
   import AddMachineLink from "../connect/AddMachineLink.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
   import { causeOf } from "../fleet-faults";
   import { machineOs } from "../machine";
+  import type { Machine } from "../stores/board.svelte";
 
   let {
     machines,

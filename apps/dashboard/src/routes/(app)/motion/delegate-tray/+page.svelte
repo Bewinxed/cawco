@@ -22,10 +22,11 @@
   import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { onMount } from "svelte";
-  import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
+  import { blankSession } from "#lib/cawco/client.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
@@ -177,7 +178,7 @@
     session.permissionMode = "bypassPermissions";
     session.model = "claude-opus-4-5";
     session.effort = "medium";
-    cawco.machines.push({
+    boardStore.machines.push({
       auth: "unknown",
       harnesses: [
         {
@@ -321,8 +322,8 @@
     delete debug.plansState.plans[ID];
     debug.adoptInstances([]);
     if (details) {
-      cawco.machines.splice(
-        cawco.machines.findIndex((one) => one.machineId === "bench"),
+      boardStore.machines.splice(
+        boardStore.machines.findIndex((one) => one.machineId === "bench"),
         1
       );
     }

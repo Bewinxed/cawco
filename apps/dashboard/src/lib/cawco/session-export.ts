@@ -15,19 +15,15 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { unhandled } from "@cawco/core/unhandled";
 import type { UsageSummaryRow } from "@cawco/core/usage/types";
 import { accountsWords } from "@cawco/core/words/accounts";
-import {
-  type ContextRead,
-  cawco,
-  isFailed,
-  refreshContext,
-} from "./client.svelte";
+import { type ContextRead, cawco, refreshContext } from "./client.svelte";
 import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
+import { boardStore, isFailed } from "./stores/board.svelte";
 
 const HARNESS: Record<string, string> = accountsWords.harnesses;
 
 const machineName = (machineId: string): string => {
-  const machine = cawco.machines.find((m) => m.machineId === machineId);
+  const machine = boardStore.machines.find((m) => m.machineId === machineId);
   return machine ? machineLabel(machine.hostname) : machineId;
 };
 
@@ -112,7 +108,7 @@ function contextCell(read: ContextRead): string {
 export async function sessionsCsv(spend: SessionSpend): Promise<string> {
   const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const seen = new Set<string>();
-  const running = cawco.runningInstances;
+  const running = boardStore.runningInstances;
   const reads = await Promise.all(
     running.map((row) => refreshContext(row.id, row.machineId))
   );
@@ -134,14 +130,14 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
       ...spendCells(row.sessionId ? spend.get(row.sessionId) : undefined),
     ];
   });
-  const stored = cawco.machines.flatMap((machine) =>
+  const stored = boardStore.machines.flatMap((machine) =>
     cawco
       .catalogOf(machine.machineId)
       .filter((info) => !seen.has(info.sessionId))
       .map((info) => {
         seen.add(info.sessionId);
         return [
-          catalogTitle(info, cawco.instanceIndex, machine.machineId),
+          catalogTitle(info, boardStore.instanceIndex, machine.machineId),
           machineLabel(machine.hostname),
           HARNESS[info.harness] ?? info.harness,
           "",

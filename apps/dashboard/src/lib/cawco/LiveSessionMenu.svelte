@@ -67,6 +67,7 @@
   import { stopOnRow } from "./session-acts.svelte";
   import { sessionName } from "./session-name";
   import { startFork } from "./spawn/new-session.svelte";
+  import { boardStore } from "./stores/board.svelte";
   import { TRY_AGAIN } from "./unanswered";
   import OpenItems from "./workspace/OpenItems.svelte";
   import { focusAfterMenu } from "./workspace/open-beside.svelte";
@@ -85,7 +86,9 @@
 
   let { asker, instance, onarchive, onrename, children }: Props = $props();
 
-  const href = $derived(conversationHref(instance.id, cawco.instanceIndex));
+  const href = $derived(
+    conversationHref(instance.id, boardStore.instanceIndex)
+  );
   const scratch = $derived(instance.kind === "scratch");
   const running = $derived(
     instance.status === "running" || instance.status === "starting"
@@ -99,8 +102,9 @@
   /** The SDK session a fork branches from. */
   const forkable = $derived(session?.sessionId ?? instance.sessionId ?? null);
   const machine = $derived(
-    cawco.machines.find((entry) => entry.machineId === instance.machineId) ??
-      null
+    boardStore.machines.find(
+      (entry) => entry.machineId === instance.machineId
+    ) ?? null
   );
 
   /**
@@ -149,7 +153,7 @@
           forked,
           "whether the fork started is not known"
         ),
-        cawco.instanceIndex
+        boardStore.instanceIndex
       )
     );
   }

@@ -27,12 +27,8 @@ import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import { failureWords } from "#lib/platform/hub-read.js";
-import {
-  cawco,
-  didntAnswer,
-  type Machine,
-  relaunchSession,
-} from "./client.svelte";
+import { cawco, didntAnswer, relaunchSession } from "./client.svelte";
+import { boardStore, type Machine } from "./stores/board.svelte";
 import { TabDraft } from "./tab-draft.svelte";
 import { installTool } from "./tools";
 import { TRY_AGAIN } from "./unanswered";
@@ -311,7 +307,9 @@ async function startAgain(
   harness: HarnessKind,
   machineId: string
 ): Promise<void> {
-  const machine = cawco.machines.find((one) => one.machineId === machineId);
+  const machine = boardStore.machines.find(
+    (one) => one.machineId === machineId
+  );
   const refuse = (why: string) => {
     followed.value.refused[instanceId] = {
       harness,

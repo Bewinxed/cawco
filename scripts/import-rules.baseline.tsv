@@ -13,7 +13,7 @@ cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/client.svelte.ts	3
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/draft-store.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/WholeCard.svelte	1
-cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/plan/PlanPane.svelte	2
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/plan/PlanPane.svelte	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/project-end.svelte.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/reference-open.svelte.ts	2
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/reference-things.svelte.ts	2

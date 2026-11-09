@@ -10,7 +10,7 @@
     type MarketplacePluginInfo,
   } from "@cawco/core/fleet";
   import { skillsWords as words } from "@cawco/core/words/skills";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import {
     deleteMarketplace,
     deletePlugin,
@@ -58,6 +58,7 @@
   import { MachineWait } from "#lib/cawco/machine-wait.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -92,12 +93,12 @@
   /** Links with no row yet: under way, or refused and not let go. */
   const links = $derived(fleet?.links ?? []);
   const plugins = $derived(fleet?.config.plugins ?? []);
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   const hubBroken = $derived(
     hubFaults(
       skills,
       plugins,
-      cawco.machines.map((machine) => machine.fleet)
+      boardStore.machines.map((machine) => machine.fleet)
     )
   );
 
