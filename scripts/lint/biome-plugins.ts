@@ -24,13 +24,10 @@
 import { cpSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { biomeLint } from "../lib/biome-run";
 
 const ROOT = join(import.meta.dir, "../..");
 const FIXTURES = "scripts/lint/fixtures/biome";
-const BIOME = join(ROOT, "node_modules/.bin/biome");
-/** Biome's words when a plugin did not load, whichever reporter prints them. */
-const NOT_LOADED =
-  /Failed to compile the Grit plugin|during loading of plugins/u;
 const SPACES = /\s+/u;
 
 interface Config {
@@ -48,9 +45,12 @@ interface Config {
 const config = Bun.JSONC.parse(
   await Bun.file(join(ROOT, "biome.jsonc")).text()
 ) as Config;
+/** Plugins a ratchet runs alone (escape-hatch-ratchet.ts) rather than biome.jsonc. */
+const RATCHETED = ["as-unknown-as"];
 const plugins = [
   ...(config.plugins ?? []),
   ...(config.overrides ?? []).flatMap((o) => o.plugins ?? []),
+  ...RATCHETED,
 ].map((path) => basename(path, ".grit"));
 
 /**
@@ -100,12 +100,6 @@ const expected = new Set(
     .filter((line) => line && !line.startsWith("#"))
 );
 
-interface Diagnostic {
-  category: string;
-  location: { path: string; start: { column: number; line: number } };
-  message: string;
-}
-
 const scratch = join(
   process.env.TMPDIR ?? tmpdir(),
   `biome-plugins-${process.pid}`
@@ -128,33 +122,12 @@ const run = async (plugin: string): Promise<string[]> => {
     })
   );
   const folder = join(FIXTURES, plugin);
-  const biome = Bun.spawn(
-    [
-      BIOME,
-      "lint",
-      "--reporter=json",
-      "--max-diagnostics=none",
-      `--config-path=${dir}`,
-      folder,
-    ],
-    { env: process.env, cwd: ROOT, stdout: "pipe", stderr: "pipe" }
-  );
-  const [out, err] = await Promise.all([
-    new Response(biome.stdout).text(),
-    new Response(biome.stderr).text(),
-    biome.exited,
-  ]);
-  const said = `${out}\n${err}`;
-  if (NOT_LOADED.test(said)) {
-    problems.push(`${plugin}: Biome did not load it:\n${said.trim()}`);
+  const result = await biomeLint([`--config-path=${dir}`, folder], ROOT);
+  if ("failed" in result) {
+    problems.push(`${plugin}: Biome did not load it:\n${result.failed}`);
     return [];
   }
-  const report = out.split("\n").find((line) => line.startsWith("{"));
-  if (!report) {
-    problems.push(`${plugin}: Biome printed no report:\n${said.trim()}`);
-    return [];
-  }
-  const { diagnostics } = JSON.parse(report) as { diagnostics: Diagnostic[] };
+  const { diagnostics } = result;
   const found: string[] = [];
   for (const d of diagnostics) {
     const at = `${d.location.path.slice(FIXTURES.length + 1)}:${d.location.start.line}:${d.location.start.column}`;
@@ -208,26 +181,12 @@ const runConfigured = async (name: string): Promise<string[]> => {
       javascript: config.javascript,
     })
   );
-  const biome = Bun.spawn(
-    [BIOME, "lint", "--reporter=json", "--max-diagnostics=none", "."],
-    {
-      env: process.env,
-      cwd: dir,
-      stdout: "pipe",
-      stderr: "pipe",
-    }
-  );
-  const [out, err] = await Promise.all([
-    new Response(biome.stdout).text(),
-    new Response(biome.stderr).text(),
-    biome.exited,
-  ]);
-  const report = out.split("\n").find((line) => line.startsWith("{"));
-  if (!report) {
-    problems.push(`${name}: Biome printed no report:\n${out}${err}`.trim());
+  const result = await biomeLint(["."], dir);
+  if ("failed" in result) {
+    problems.push(`${name}: Biome printed no report:\n${result.failed}`);
     return [];
   }
-  const { diagnostics } = JSON.parse(report) as { diagnostics: Diagnostic[] };
+  const { diagnostics } = result;
   const lines: string[] = [];
   for (const d of diagnostics) {
     const at = `${name}/${d.location.path}:${d.location.start.line}:${d.location.start.column}`;
