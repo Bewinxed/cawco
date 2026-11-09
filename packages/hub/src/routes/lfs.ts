@@ -27,13 +27,13 @@ export const lfsRoutes = ({
     .get(
       "/api/lfs/projects/:id",
       { ...hidden, params: t.Object({ id: t.String() }) },
-      ({ params, request, server, status }) => {
+      ({ params, request, server }) => {
         const project = lfsMachineProject(
           params.id,
           hubAuth.callerOf(request, addressOf(server, request))
         );
         if ("refused" in project) {
-          return status(project.status, project.refused);
+          return refusal(project.status, "lfs-refused", project.refused);
         }
         const { lfsUrl, lfsConnection } = project.row;
         if (!(lfsUrl && lfsConnection)) {
@@ -72,11 +72,11 @@ export const lfsRoutes = ({
           machineId: t.String({ minLength: 1, maxLength: 200 }),
         }),
       },
-      ({ body, params, request, server, status }) => {
+      ({ body, params, request, server }) => {
         const caller = hubAuth.callerOf(request, addressOf(server, request));
         const project = lfsMachineProject(params.id, caller);
         if ("refused" in project) {
-          return status(project.status, project.refused);
+          return refusal(project.status, "lfs-refused", project.refused);
         }
         if (!db.lfsOffers.refused(params.id, body.endpoint)) {
           return { ok: true };

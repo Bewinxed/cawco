@@ -55,6 +55,7 @@ import { answered, BrowserRefusal } from "./browsers";
 import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
+import { refusal } from "./refusal";
 import type { RelayCall } from "./stream-relay";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
@@ -670,7 +671,7 @@ export const browserStreamRoutes = (stream: BrowserStream) =>
           );
         } catch (error) {
           if (error instanceof BrowserRefusal) {
-            return new Response(error.message, { status: error.status });
+            return refusal(error.status, "browser-refused", error.message);
           }
           throw error;
         }

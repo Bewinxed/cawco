@@ -69,14 +69,14 @@ import { AFTER_REF } from "@cawco/core/decisions-library";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { PageHearer } from "./artifacts/shapes";
 import type { ArtifactTaker } from "./artifacts/taker";
 import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
-import { StatusRefusal } from "./refusal";
+import { refusal, StatusRefusal } from "./refusal";
 
 export class DecisionRefusal extends StatusRefusal<
   400 | 404 | 409 | 422 | 503
@@ -1342,7 +1342,7 @@ export type Decisions = ReturnType<typeof createDecisions>;
 
 const refused = (error: unknown) => {
   if (error instanceof DecisionRefusal) {
-    return status(error.status, error.message);
+    return refusal(error.status, "decision-refused", error.message);
   }
   throw error;
 };
