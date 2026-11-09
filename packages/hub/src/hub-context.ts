@@ -39,6 +39,7 @@ import type {
   HandoverEvent,
   Presence,
 } from "@cawco/core/handover";
+import type { HarnessReport } from "@cawco/core/harness";
 import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
 import type {
   FleetHarnessConfig,
@@ -58,6 +59,7 @@ import type {
   SessionEndIntent,
   SessionOrigin,
   SessionPulse,
+  SpawnPayload,
 } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type {
@@ -66,7 +68,12 @@ import type {
   MoveEnded,
   WorkInFlight,
 } from "@cawco/core/session/controls";
-import type { NeutralOrigin, SentMessage } from "@cawco/core/session-messages";
+import type {
+  ModeAsk,
+  NeutralOrigin,
+  SendRefusal,
+  SentMessage,
+} from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { createAdmission } from "./admission";
@@ -107,17 +114,20 @@ import type { FleetWatch } from "./fleet-watch";
 import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
 import type {
+  AccountUse,
   FetchedCopy,
   FolderSkillBody,
   Located,
   MachineAway,
   ReportTold,
   SessionLocation,
+  SettledSpawn,
 } from "./hub-shapes";
 import type { KeepAliveRow } from "./keep-alive";
 import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape } from "./lifetime";
+import type { StoredRow } from "./limit-moves";
 import type {
   ControlResult,
   MemoryRead,
@@ -167,7 +177,29 @@ import type { createWorkItems, Unlanded, WorkItemRequest } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
 
 export interface HubContext {
+  accountLaunch: (
+    machineId: string,
+    row: {
+      accountId?: string | null;
+      harness: HarnessKind;
+      id?: string;
+      model?: string | null;
+      projectId?: string | null;
+    },
+    session: string,
+    use: AccountUse
+  ) => { accountId?: string } | { refusal: string; cause: SendRefusal };
   accountOf: (id: string) => Account | undefined;
+  accountProviderFor: (
+    machineId: string,
+    harness: string,
+    model: string | null | undefined
+  ) => AccountProvider | undefined;
+  accountStartRefusal: (
+    machineId: string,
+    row: Parameters<HubContext["launchAccount"]>[1],
+    session: string
+  ) => string | undefined;
   accountWords: (accountId: string | null | undefined) => string;
   addProjectPlace: (
     projectId: string,
@@ -200,12 +232,19 @@ export interface HubContext {
   asRead: (answer: Bounded<ControlResult>) => Bounded<ControlResult>;
   atLimit: ReturnType<typeof createAtLimit>;
   autoInstall: (machineId: string, agent: HubSocket) => void;
+  awaitingFirstTurn: Set<string>;
   awaitReply: (
     machineId: string,
     requestId: string,
     timeoutMs: number,
     send: () => Envelope | undefined,
     letGo?: AbortSignal
+  ) => Promise<Bounded<ControlResult>>;
+  awaitStart: (
+    machineId: string,
+    instanceId: string,
+    requestId: string,
+    send: () => Envelope | undefined
   ) => Promise<Bounded<ControlResult>>;
   /** Sends a hub frame to every dashboard. */
   awayAnswer: <Answer>(
@@ -216,6 +255,7 @@ export interface HubContext {
   ) => Answer;
   awayError: (machineId: string) => MachineAway;
   awayWords: (machineId: string, answer: Unanswered) => string;
+  bounded: (payload: SpawnPayload, knownRow?: InstanceRow) => NamedSpawn;
   boundProblem: ({
     projectId,
     areaId,
@@ -382,6 +422,7 @@ export interface HubContext {
   ) => void;
   forgetPendingOf: (accountId: string) => void;
   forgottenProjects: ProjectTrash;
+  forkedFromOf: (payload: SpawnPayload) => { forkedFrom?: string };
   forkNoticeFor: (instanceId: string) => string | undefined;
   gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
   handoffs: Map<string, { from: string; at: number }>;
@@ -399,6 +440,11 @@ export interface HubContext {
     body: HarnessConfigBody,
     status: (code: 400, text: string) => unknown
   ) => unknown;
+  harnessReportOf: (
+    machineId: string,
+    harness: string
+  ) => HarnessReport | undefined;
+  heldClaim: (rowId: string) => string | undefined;
   hookCopyOff: <Refused>(
     body: { id: string; machineId: string },
     set: RouteSet,
@@ -422,6 +468,7 @@ export interface HubContext {
   inFlightFor: (
     sourceId: string
   ) => Promise<{ work?: WorkInFlight | undefined } | { refusal: string }>;
+  inFlightRefusal: (instanceId: string) => string | undefined;
   inputRefusal: (
     instanceId: string,
     origin: NeutralOrigin
@@ -469,9 +516,18 @@ export interface HubContext {
     } & { id: string; parentInstanceId?: string | null | undefined }
   ) => boolean;
   keptNextWords: (why: Kept, toName: string) => string;
+  keptOn: Map<string, Set<string>>;
   keptWarm: (machineId: string, ids: string[]) => string[];
   knownProviders: () => ProviderInfo[];
   lastRequestContext: Map<string, number>;
+  launchAccount: (
+    machineId: string,
+    row: Parameters<HubContext["accountLaunch"]>[1],
+    session: string,
+    use: AccountUse
+  ) =>
+    | { accountId?: string; homeLoginMove?: { accountId: string } }
+    | { refusal: string; cause?: SendRefusal };
   launchClaims: Map<string, { accountId: string; at: number }>;
   launchInFlight: (instanceId: string) => boolean;
   launchStarted: (instanceId: string, why: string) => void;
@@ -491,6 +547,7 @@ export interface HubContext {
   linkMarketplace: (source: string) => MarketplaceLink;
   liveFrom: (move: LoginMove) => string[];
   locateSession: (id: string) => Promise<Located>;
+  locations: Map<string, SessionLocation | null>;
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
   MOVE_TICK_MS: number;
   machineCredentials: ReturnType<typeof createMachineCredentials>;
@@ -590,6 +647,7 @@ export interface HubContext {
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
+  openInstance: (row: Parameters<DbShape["openInstance"]>[0]) => void;
   openItems: ReturnType<typeof createOpenItems>;
   owedCarries: Map<string, Promise<void>>;
   owedMoves: {
@@ -599,10 +657,17 @@ export interface HubContext {
     set: (instanceId: string, owed: OwedMove) => void;
     delete: (instanceId: string) => void;
   };
+  owedOn: (row: StoredRow) => StoredRow;
   owedTargets: () => Map<string, string>;
+  /** This hub's own machine id, once read; undefined before. */
+  ownMachineIdRead: string | undefined;
   parkForPerson: (envelope: Envelope<unknown>, outlivesHub?: boolean) => void;
   pending: PendingShape;
   pendingToolSignins: Map<string, ToolSigninChallenge>;
+  piDefaultFor: (
+    machineId: string,
+    payload: NamedSpawn
+  ) => Promise<NamedSpawn | { refusal: string }>;
   placedOn: (machineId: string, accountId: string) => boolean;
   planChanges: PlanChanges | undefined;
   plans: ReturnType<typeof createPlans>;
@@ -672,6 +737,10 @@ export interface HubContext {
   reconnectingFor: (machineId: string) => number;
   refusalMoved: Map<string, string>;
   refusedFailures: Map<string, { accountId: string; words: string }>;
+  refusedHarness: (
+    machineId: string,
+    harness: HarnessKind
+  ) => string | undefined;
   registry: RegistryShape;
   releaseOne: (send: SentMessageRow) => void;
   releaseOwed: (of: { instanceId: string } | { machineId: string }) => void;
@@ -749,6 +818,12 @@ export interface HubContext {
         refusal?: StoredSendRefusal | undefined;
       }
     | undefined;
+  sendSpawn: (
+    agent: HubSocket | undefined,
+    machineId: string,
+    envelope: Envelope<SpawnPayload>,
+    paced?: boolean
+  ) => Envelope<unknown> | undefined;
   sentFrame: (arg0: SendPayload) => SentMessage;
   sessionAsleep: (machineId: string, instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
@@ -758,6 +833,13 @@ export interface HubContext {
     title?: string | null;
   }) => string;
   sessionStartOf: (where: SessionLocation) => Promise<string>;
+  settleMode: (
+    machineId: string,
+    payload: NamedSpawn,
+    fallback?: string | null
+  ) =>
+    | { payload: SettledSpawn; permissionMode: string | null }
+    | { refusal: string; ask?: ModeAsk };
   sharedProblem: (
     name: string,
     config: Record<string, unknown>,
@@ -834,6 +916,14 @@ export interface HubContext {
     machineId: string
   ) =>
     { kind: "build" | "paused" | "update" | "away"; words: string } | undefined;
+  /** What a start begins with: its delegate type's starting set, else its project's; a resume takes its conversation's. */
+  startingSetOf: (
+    payload: Pick<
+      NamedSpawn,
+      "delegateType" | "projectId" | "resume" | "skills"
+    >
+  ) => Pick<Parameters<DbShape["openInstance"]>[0], "startingSet">;
+  startsOnHomeLogin: (machineId: string, payload: SpawnPayload) => boolean;
   startsTurnIn: (
     row: { status: string; parentInstanceId?: string | null | undefined },
     {
@@ -888,6 +978,10 @@ export interface HubContext {
     string,
     { machineId: string; resolve: () => void; reject: (error: Error) => void }
   >;
+  /** A row's delegate type as a spawn names it, with the tools that type denies. */
+  typeSettingsOf: (
+    row: Pick<InstanceRow, "delegateType" | "delegateTypeProject">
+  ) => Pick<SpawnPayload, "delegateType" | "denyTools">;
   unansweredError: (
     machineId: string,
     answer: Unanswered,
