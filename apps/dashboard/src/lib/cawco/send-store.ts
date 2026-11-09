@@ -10,8 +10,8 @@
  */
 
 import { KeptSendSchema } from "#lib/cawco/stored-shapes.js";
-import type { SendExtras } from "./client.svelte";
 import { database, done, result, SENDS } from "./idb";
+import type { SendExtras } from "./stores/commands.svelte";
 
 /** One send as it is kept: enough to send it again exactly as it went. */
 export interface KeptSend {
