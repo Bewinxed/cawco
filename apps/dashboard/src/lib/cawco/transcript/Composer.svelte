@@ -1378,7 +1378,7 @@
     if (signingIn === null) {
       return draftNote;
     }
-    const server = (fleet?.cawco.fleetMcp ?? []).find(
+    const server = (fleet?.mcpServersStore.fleetMcp ?? []).find(
       (one) => one.name === signingIn
     );
     return server?.auth?.state === "signed-in"
@@ -1461,7 +1461,7 @@
     }
     const intent = fleet.mcpSignInIntent(
       draft.text,
-      fleet.cawco.fleetMcp ?? []
+      fleet.mcpServersStore.fleetMcp ?? []
     );
     if (intent.kind === "go") {
       const { name } = intent;
