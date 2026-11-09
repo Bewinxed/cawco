@@ -72,9 +72,10 @@ import { stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
+import { gitUntil } from "./git/run";
 import { removeTree } from "./remove-tree";
 import { forgetInstalls, installProject } from "./stage-install";
-import { copyOwnSecrets, gitUntil } from "./workspace";
+import { copyOwnSecrets } from "./workspace";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
 export const MIRROR_MS = 1000;
