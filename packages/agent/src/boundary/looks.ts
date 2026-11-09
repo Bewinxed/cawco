@@ -20,7 +20,13 @@ import { closeGitDoor } from "../hub-git";
 import type { HeldProc } from "../keepers";
 import { isBoundaryOf, isJudgeOf, judgeProcId } from "../proc-id";
 import { closeToolDoor } from "../tool-door";
-import { allArming, armingOf, armPhase, ensureBoundary } from "./arming";
+import {
+  allArming,
+  armingOf,
+  armPhase,
+  ensureBoundary,
+  unasked,
+} from "./arming";
 import {
   behindGate,
   decided,
@@ -215,7 +221,8 @@ const recheckNow = async (
         held,
         narrowed,
         await ownKeeperOwed(),
-        cause
+        cause,
+        unasked
       ))();
     markStarting(id, replaced);
     await replaced
@@ -581,7 +588,7 @@ const repairJudge = async (
   }
   let started = "its judge was started again";
   try {
-    await ensureNow(ref);
+    await ensureNow(ref, unasked);
     await armingOf(ref.id);
   } catch (error) {
     started = `its boundary could not be started again (${error instanceof Error ? error.message : String(error)})`;
