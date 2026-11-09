@@ -1,6 +1,5 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
-import { machineCalled } from "@cawco/core/machine-names";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import type { InstanceRow, InstanceStatus } from "@cawco/core/protocol";
@@ -45,6 +44,7 @@ import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import { soon } from "./lifetime";
+import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
 import { handle } from "./presenters/words";
 import { makeProjectFolder, writeFolderFiles } from "./project-folder";
@@ -428,9 +428,6 @@ export const createWorkspaces = ({
   waitingOnPerson,
   workspaceChanged,
 }: WorkspacesDeps) => {
-  /** A machine as a line names it: its hostname as the fleet shows it. */
-  const machineName = (machineId: string): string =>
-    machineCalled(machineId, db.listAgents());
   /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
   const opening = new Set<string>();
   const discarding = new Map<string, Promise<void>>();
@@ -487,7 +484,7 @@ export const createWorkspaces = ({
     heldAt: (workspace.heldAt ?? workspace.createdAt).toISOString(),
     holds: holdingWords(workspace.holding),
     size: sizeWords(workspace.holding.bytes),
-    machine: machineName(workspace.machineId),
+    machine: machineName(db, workspace.machineId),
     machineId: workspace.machineId,
     path: workspace.path,
     workspaceId: workspace.id,
@@ -595,7 +592,7 @@ export const createWorkspaces = ({
    * follow-up cuts the clone again with them ({@link recut}).
    */
   const carryNotice = (workspace: WorkspaceRow, carry: string): void => {
-    const machine = machineName(workspace.machineId);
+    const machine = machineName(db, workspace.machineId);
     workspaceNotice(workspace, (latest) => ({
       text: workWords.carriedNotice(
         handle(workspace.id),
@@ -1036,7 +1033,7 @@ export const createWorkspaces = ({
         stageFor: frame.place,
       });
       console.log(
-        `[workspaces] ${filed.id} on ${machineName(machineId)}: filed, the stage clone of place ${frame.place} at ${path}`
+        `[workspaces] ${filed.id} on ${machineName(db, machineId)}: filed, the stage clone of place ${frame.place} at ${path}`
       );
       workspaceChanged?.(filed);
       return;
@@ -1053,7 +1050,7 @@ export const createWorkspaces = ({
         tmp: frame.tmp,
       }) ?? row;
     console.log(
-      `[workspaces] ${row.id} on ${machineName(machineId)}: active again, the stage clone of place ${frame.place} at ${row.path}`
+      `[workspaces] ${row.id} on ${machineName(db, machineId)}: active again, the stage clone of place ${frame.place} at ${row.path}`
     );
     workspaceChanged?.(active);
   };
@@ -1089,7 +1086,7 @@ export const createWorkspaces = ({
    * work told once, as a notice, and the log says so once.
    */
   const settleFailed = (workspace: WorkspaceRow, reason: string): void => {
-    const machine = machineName(workspace.machineId);
+    const machine = machineName(db, workspace.machineId);
     const was = settleFailures.get(workspace.id);
     const count = (was?.count ?? 0) + 1;
     const wait = settleBackoffMs(count);
@@ -1151,7 +1148,7 @@ export const createWorkspaces = ({
         .map((check) => closeWorkspace(check, "check"))
     );
     console.log(
-      `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: retired, its work over and nothing of it anywhere but on its remote${closed.carry ? ` or in its carry ${closed.carry}` : ""}; ${workspace.path} and what it owned there are gone`
+      `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: retired, its work over and nothing of it anywhere but on its remote${closed.carry ? ` or in its carry ${closed.carry}` : ""}; ${workspace.path} and what it owned there are gone`
     );
     return { kind: "retired", carry: closed.carry };
   };
@@ -1187,7 +1184,7 @@ export const createWorkspaces = ({
       if (listFailures.get(machineId) !== reason) {
         listFailures.set(machineId, reason);
         console.warn(
-          `[workspaces] ${machineName(machineId)} did not list its ~/.worktrees, so no archived workspace's clone there was looked for: ${reason}`
+          `[workspaces] ${machineName(db, machineId)} did not list its ~/.worktrees, so no archived workspace's clone there was looked for: ${reason}`
         );
       }
       return [];
@@ -1220,7 +1217,7 @@ export const createWorkspaces = ({
               } satisfies WorkspaceArchive,
             ]);
             console.log(
-              `[workspaces] ${now.id} on ${machineName(now.machineId)}: archived, and a folder stood at ${now.path} again; it is gone`
+              `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: archived, and a folder stood at ${now.path} again; it is gone`
             );
             return { kind: "retired", carry: null };
           } finally {
@@ -1284,7 +1281,7 @@ export const createWorkspaces = ({
       return;
     }
     workEndedFor.set(workspace.id, ended);
-    const machine = machineName(workspace.machineId);
+    const machine = machineName(db, workspace.machineId);
     console.log(
       `[workspaces] ${workspace.id} on ${machine}: ${workWords.workEnding(awake, hold)}`
     );
@@ -1388,12 +1385,12 @@ export const createWorkspaces = ({
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(
-        `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: its host-scope scratch dir stays: ${reason}`
+        `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir stays: ${reason}`
       );
       return { kind: "failed", reason };
     }
     console.log(
-      `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: its host-scope scratch dir removed, its outputs kept`
+      `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir removed, its outputs kept`
     );
     return { kind: "none" };
   };
@@ -1570,7 +1567,7 @@ export const createWorkspaces = ({
       const hold = held?.words;
       if (hold) {
         console.log(
-          `[workspaces] ${now.id} on ${machineName(now.machineId)}: its commits landed through the workspace cut from it, and it stays held: ${hold}`
+          `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: its commits landed through the workspace cut from it, and it stays held: ${hold}`
         );
         return;
       }
@@ -1584,7 +1581,7 @@ export const createWorkspaces = ({
           .map((check) => closeWorkspace(check, "check"))
       );
       console.log(
-        `[workspaces] ${now.id} on ${machineName(now.machineId)}: retired, its commits landed through the workspace cut from it and nothing else of it anywhere but on its remote`
+        `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: retired, its commits landed through the workspace cut from it and nothing else of it anywhere but on its remote`
       );
     });
     detach(again, `resettle ${id}`);
@@ -1653,7 +1650,7 @@ export const createWorkspaces = ({
         [ahead, dirty, stashes].some((count) => !Number.isInteger(count))
       ) {
         throw new Error(
-          `git in workspace ${id} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+          `git in workspace ${id} on ${machineName(db, workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
         );
       }
       return {
@@ -1685,7 +1682,7 @@ export const createWorkspaces = ({
     if (member.kind === "hostFolder") {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`
+        `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(db, workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`
       );
     }
     if (member.kind === "gateClone") {
@@ -1780,7 +1777,7 @@ export const createWorkspaces = ({
   /** Why an archived workspace is not cut again ({@link recuttable}), in words. */
   const archivedWords = (workspace: WorkspaceRow): string => {
     if (workspace.carry) {
-      return `its workspace ${handle(workspace.id)} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone.`;
+      return `its workspace ${handle(workspace.id)} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(db, workspace.machineId)}, and its clone is gone.`;
     }
     if (isGateClone(workspace)) {
       return `its workspace ${handle(workspace.id)} is archived: its clone and boundary are gone.`;
@@ -1873,8 +1870,8 @@ export const createWorkspaces = ({
     head: WorkspaceRow["head"]
   ): string =>
     head
-      ? `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
-      : `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: made again of ${workspace.repoRoot} as it is now, for its delegate to go on`;
+      ? `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: cut again at ${workspace.path}, at ${head.commit.slice(0, 9)} on ${head.branch}, where its clone was when it retired, for its delegate to go on`
+      : `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: made again of ${workspace.repoRoot} as it is now, for its delegate to go on`;
   const recut = (
     workspace: WorkspaceRow,
     onCut?: () => void
@@ -2139,12 +2136,12 @@ export const createWorkspaces = ({
     if (isWorkspaceNeedsRefusal(reason)) {
       if (pending) {
         console.warn(
-          `[work-items] workspace ${id}, refused on ${machineName(machineId)} for what it lacks, is discarded when the machine next registers: ${pending}`
+          `[work-items] workspace ${id}, refused on ${machineName(db, machineId)} for what it lacks, is discarded when the machine next registers: ${pending}`
         );
       }
       return reason;
     }
-    const failed = `Workspace create on ${machineName(machineId)} failed after ${waited}s: ${reason}.`;
+    const failed = `Workspace create on ${machineName(db, machineId)} failed after ${waited}s: ${reason}.`;
     return pending
       ? `${failed} Discard of workspace ${id} is pending (${pending}); it will be retried when the machine next registers.`
       : `${failed} Workspace ${id.slice(0, 8)} was discarded; no clone or boundary was left.`;

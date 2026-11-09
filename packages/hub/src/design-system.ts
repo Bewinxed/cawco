@@ -54,7 +54,6 @@ import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
-import { machineCalled } from "@cawco/core/machine-names";
 import { DESIGN_PROPOSAL_TOOL } from "@cawco/core/permission-presentation";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -72,6 +71,7 @@ import type { DesignProposalRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
 import type { DesignProposalFile } from "./db/stored-types";
 import { boardTitle } from "./labels";
+import { machineName } from "./machine-name";
 import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
@@ -1224,7 +1224,7 @@ export const createDesignSystem = (deps: {
       return;
     }
     if (!deps.online(workspace.machineId)) {
-      return `The builder's workspace is on ${machineCalled(workspace.machineId, deps.db.listAgents())}, which is offline, so CawCo can't read whether its design/ is committed. Approve once that machine is back.`;
+      return `The builder's workspace is on ${machineName(deps.db, workspace.machineId)}, which is offline, so CawCo can't read whether its design/ is committed. Approve once that machine is back.`;
     }
     // A live clone is read inside its boundary (core safe-git.ts).
     // A live attempt's clone is read inside its boundary; a finished one's,
@@ -1440,7 +1440,7 @@ export const createDesignSystem = (deps: {
     }
     if (!deps.online(row.machineId)) {
       throw new Error(
-        `The proposal's repository is on ${machineCalled(row.machineId, deps.db.listAgents())}, which is offline. Approve once it is back.`
+        `The proposal's repository is on ${machineName(deps.db, row.machineId)}, which is offline. Approve once it is back.`
       );
     }
     const own = workspaceOfSession(row.instanceId);
