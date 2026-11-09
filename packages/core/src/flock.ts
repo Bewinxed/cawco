@@ -4,8 +4,7 @@
  * namespace of their own, so a pid read from a file names nobody, or
  * someone else, in another workspace or on the host; a file's lock is the
  * same lock wherever it is opened, and the kernel frees it when its holder
- * ends, a SIGKILL included. Users: a scratch fleet's folders
- * (scripts/scratch-fleet.ts `FleetDirs`), the fleet's browsers (agent
+ * ends, a SIGKILL included. Users: the fleet's browsers (agent
  * browser/), and a workspace's lock (agent workspace.ts).
  */
 import { dlopen, FFIType } from "bun:ffi";

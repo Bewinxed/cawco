@@ -1,9 +1,7 @@
 /**
  * What the dashboard's frame says around every page: the theme switch, the
  * jump to a session, the error page, the empty fleet, a transcript catching
- * up, a fault's details. The dashboard renders them from here, and the
- * probe kit finds them by these same words (scripts/probe-words-check.ts
- * refuses a copy).
+ * up, a fault's details. The dashboard renders them from here.
  */
 export const shellWords = {
   /** The theme switch, named for the theme it stands in. */
