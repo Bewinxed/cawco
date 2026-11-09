@@ -154,7 +154,7 @@ export interface MoveState {
   /**
    * The source's `origin` URL carries a credential. It is never kept here:
    * each target step that reaches the remote has the source read it for
-   * that one call ({@link remoteAuthFor}).
+   * that one call (`remoteAuthFor`).
    */
   cloneCredential?: true;
   /** The outside remote's URL, as the source's `origin` names it, with no credential in it. */
