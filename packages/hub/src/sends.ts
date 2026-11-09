@@ -308,7 +308,7 @@ const normalizeRelayMessage = (body: unknown): string | undefined => {
  * overtook, never reached it, and is owed to it again. That is decided only
  * on a read the machine answered.
  */
-type Unstored = "fail" | "owe" | "wait" | "unheld";
+export type Unstored = "fail" | "owe" | "wait" | "unheld";
 
 /** What a session's machine and item hold a send for ({@link workHoldOf}). */
 interface WorkHolds {
