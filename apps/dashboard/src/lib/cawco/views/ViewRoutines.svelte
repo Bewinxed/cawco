@@ -15,6 +15,7 @@
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { startConversation } from "#lib/cawco/project/conversation.js";
   /**
@@ -173,7 +174,7 @@
   let pageOf = "";
   $effect(() => {
     const { id } = project;
-    if (cawco.status !== "connected") {
+    if (connectionStore.status !== "connected") {
       readFor = "";
       return;
     }
