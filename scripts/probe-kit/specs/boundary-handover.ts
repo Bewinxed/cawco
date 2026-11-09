@@ -1,6 +1,6 @@
 /**
  * What a delegate leaves running in its boundary keeps running across its
- * turns, and stays where its next command finds it (agent boundary.ts
+ * turns, and stays where its next command finds it (agent boundary/
  * `replaceOlder`, `workLeft`). On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model), boundaries included: run it
  * where a workspace boundary can start (not inside another one).
@@ -24,7 +24,7 @@
  *    137. The command finishes with its own exit code, 7, in the boundary it
  *    started in (`FG-STATUS-7`, not the executor's "boundary stopped" line);
  *    the agent records that it cannot compare the grant and keeps the
- *    boundary while its command runs (agent boundary.ts `compareGrant`,
+ *    boundary while its command runs (agent boundary/narrowing.ts `compareGrant`,
  *    `BoundaryDecision`), and stops nothing as narrowed. Once the command
  *    has ended, F resting with nothing in its boundary, the boundary is
  *    handed over, as the agent records, to one that starts with this
@@ -48,7 +48,7 @@
  * 4. The policy then narrows with no word to H (the project's folder on the
  *    hub, which it read, is renamed aside by hand, which no event says):
  *    within 10 s the boundary is replaced by the agent's look at the
- *    boundaries in use (agent boundary.ts `recheckNarrowed`,
+ *    boundaries in use (agent boundary/looks.ts `recheckNarrowed`,
  *    `replaceNarrowed`), the loop stopped with it, the heartbeat stopped,
  *    the new boundary started without the folder.
  * 5. A message gives H a third turn: its command shows the line naming the
@@ -71,7 +71,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
+import type { BoundaryDecision } from "../../../packages/agent/src/boundary/decisions";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
@@ -101,9 +101,9 @@ const FG_STATUS = /FG-STATUS-(\d+)/u;
 const FG_TAG = "PROBE-FG-F:";
 /** The account round 0's restart adds to F's policy: a form change of F's boundary alone. */
 const FG_ACCOUNT = "acct-probe-older-form-fg";
-/** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
+/** The executor's line for a command cut off by its boundary's end (agent boundary/exec.ts `execScript`). */
 const CUT_OFF = "boundary stopped while this command ran";
-/** How long after F's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
+/** How long after F's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary/staleness.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;
 const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/u;
 /** The loop's beat, `sleep 2`: a read of the heartbeat that must see it grow waits more than one. */
@@ -113,7 +113,7 @@ const STARTED = /BEAT-STARTED-(\d+):/u;
 const ALIVE = /BEAT-ALIVE-(\d+):/u;
 const BEATS = /BEAT-COUNT-(\d+):/u;
 const ACCOUNT_ADDED = "acct-probe-older-form";
-/** The line a session's command shows once its access narrowed (agent boundary.ts `narrowedLine`). */
+/** The line a session's command shows once its access narrowed (agent boundary/ `narrowedLine`). */
 const NARROWED_LINE = /^cawco: this workspace's access was narrowed /u;
 /** H's rest after each command: longer than the spec, so its item stays live. */
 const REST = { minutes: 60, reason: "its parent's word on the heartbeat" };
@@ -257,7 +257,7 @@ const projectFolderOf = (fleet: Fleet, id: string): string =>
 const stateOf = (home: string, id: string): string =>
   join(home, ".cawco", "workspaces", id);
 
-/** Workspace `id`'s current boundary as the agent records it (agent boundary.ts `readHeld`): its generation and pid. */
+/** Workspace `id`'s current boundary as the agent records it (agent boundary/state.ts `readHeld`): its generation and pid. */
 const heldOf = async (
   home: string,
   id: string
@@ -298,13 +298,13 @@ const decisionSaid = (
     ? JSON.stringify(decision)
     : "no decision recorded";
 
-/** The agent's stops of workspace `id`'s boundaries as their access narrowed (agent boundary.ts `replaceNarrowed`), oldest first. */
+/** The agent's stops of workspace `id`'s boundaries as their access narrowed (agent boundary/lifecycle.ts `replaceNarrowed`), oldest first. */
 const stopsOf = async (home: string, id: string): Promise<BoundaryDecision[]> =>
   (await decisionsOf(home, id)).filter(
     (one) => one.decision === "narrowed-stopped"
   );
 
-/** The policy workspace `id`'s current boundary started with, as its generation keeps it (agent boundary.ts `grantedOf`); none on record. */
+/** The policy workspace `id`'s current boundary started with, as its generation keeps it (agent boundary/state.ts `grantedOf`); none on record. */
 const grantedNow = async (
   home: string,
   id: string
