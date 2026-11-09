@@ -1088,7 +1088,6 @@ const specFor = (
   };
 };
 
-/** What the hub reports for one machine's daemon. */
 /**
  * How many of this machine's sessions are mid-turn, in words, or why that is
  * unknown: the hub did not answer, or answered without saying (it is old
