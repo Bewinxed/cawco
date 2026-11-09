@@ -48,7 +48,6 @@
     cawco,
     holdDetails,
     latestCommandFor,
-    machineConnected,
     refreshContext,
     relaunchSession,
     settingFault,
@@ -70,6 +69,7 @@
     NO_EFFORT_MODEL,
   } from "../spawn/ToolChips.svelte";
   import { accountsStore } from "../stores/accounts.svelte";
+  import { boardStore, machineConnected } from "../stores/board.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import LimitBar from "../usage/LimitBar.svelte";
@@ -123,13 +123,13 @@
   }
   const uid = $props.id();
   const session = $derived(cawco.session(sessionId));
-  const row = $derived(cawco.instanceIndex.byId.get(sessionId));
+  const row = $derived(boardStore.instanceIndex.byId.get(sessionId));
   const context = $derived(contextOf(sessionId));
   const machineId = $derived(
     session?.machineId || row?.machineId || context?.machine
   );
   const machine = $derived(
-    cawco.machines.find((item) => item.machineId === machineId)
+    boardStore.machines.find((item) => item.machineId === machineId)
   );
   const harness = $derived(
     (kept?.harness || session?.harness || row?.harness || context?.harness) as
@@ -217,7 +217,7 @@
    * hub is reachable ({@link accountOpen}).
    */
   const machineAway = $derived(!(machineId && machineConnected(machineId)));
-  const editable = $derived(!machineAway && cawco.liveId(sessionId));
+  const editable = $derived(!machineAway && boardStore.liveId(sessionId));
   /** A move can be asked: the hub takes it in any state of the session (accounts/switch.svelte.ts). */
   const accountOpen = $derived(connectionStore.status === "connected");
   /** Why the live controls are locked, and until when. */
