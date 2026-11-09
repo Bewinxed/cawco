@@ -83,7 +83,7 @@ interface FleetFetchListener {
   heard: (frame: FleetFetchFrame) => void;
 }
 
-export const fleetFetchListeners = new Set<FleetFetchListener>();
+const fleetFetchListeners = new Set<FleetFetchListener>();
 
 /**
  * Hears each `fleet.fetch` frame: a skill or plugin fetch at the hub began
@@ -242,4 +242,11 @@ export async function removeSession(instanceId: string): Promise<void> {
     throw await hubRefusal(response, sidebarWords.sessionNotRemovedThen);
   }
   await rereadHub();
+}
+
+/** The socket closed: every fleet fetch this page listens to hears its link dropped. */
+export function dropFleetFetches(): void {
+  for (const listener of fleetFetchListeners) {
+    listener.dropped();
+  }
 }
