@@ -65,7 +65,6 @@ import {
   withLandingLine,
   withWorkspaceLine,
 } from "@cawco/core/injected";
-import { machineCalled } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type { PlanStep } from "@cawco/core/plan";
@@ -151,6 +150,7 @@ import {
   reportLine,
 } from "./landing-run";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
+import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import { handle } from "./presenters/words";
 import { FolderRefusal, folderPath } from "./project-folder";
@@ -3550,7 +3550,7 @@ export const createWorkItems = ({
       ])) as WorkspaceRef | null);
     return held
       ? workWords.hostRefused([
-          `cwd ${path}: it is inside workspace ${handle(held.id)}'s clone ${held.path} on ${machineName(machineId)}, where a session runs inside that workspace's boundary. Name a folder outside every clone, or leave cwd out for the agent user's home.`,
+          `cwd ${path}: it is inside workspace ${handle(held.id)}'s clone ${held.path} on ${machineName(db, machineId)}, where a session runs inside that workspace's boundary. Name a folder outside every clone, or leave cwd out for the agent user's home.`,
         ])
       : undefined;
   };
@@ -3592,7 +3592,7 @@ export const createWorkItems = ({
       createdByInstanceId: parent.id,
     });
     console.log(
-      `[workspaces] ${workspace.id} on ${machineName(machineId)}: a host-scope delegate's folder ${path}, no clone and no boundary`
+      `[workspaces] ${workspace.id} on ${machineName(db, machineId)}: a host-scope delegate's folder ${path}, no clone and no boundary`
     );
     return spawnIn(workspace, settings, parent, request, inputs);
   };
@@ -3907,7 +3907,7 @@ export const createWorkItems = ({
             ? withHostLine(
                 content,
                 workspace.path,
-                machineName(workspace.machineId),
+                machineName(db, workspace.machineId),
                 item.projectId ? outputsFolder(item) : undefined
               )
             : withWorkspaceLine(
@@ -3977,7 +3977,7 @@ export const createWorkItems = ({
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, starting with every turn of yours so far, `
           : `a fresh ${harness} session, `) +
         (isHostFolder(workspace)
-          ? `work item ${item.id.slice(0, 8)} with host scope on ${machineName(workspace.machineId)} (${placeOf(workspace)}; nothing lands).`
+          ? `work item ${item.id.slice(0, 8)} with host scope on ${machineName(db, workspace.machineId)} (${placeOf(workspace)}; nothing lands).`
           : `work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}).`) +
         ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${label}", ...): the message lands in the same session and its cached transcript.` +
@@ -4344,7 +4344,7 @@ export const createWorkItems = ({
         endWait(
           item.id,
           false,
-          capableOnline(needs, machineName(machine.machineId))
+          capableOnline(needs, machineName(db, machine.machineId))
         );
       }
     }
@@ -4407,9 +4407,6 @@ export const createWorkItems = ({
     return true;
   };
 
-  /** A machine as a line names it: its hostname as the fleet shows it. */
-  const machineName = (machineId: string): string =>
-    machineCalled(machineId, db.listAgents());
   const workspaces = createWorkspaces({
     ...forWorkspaces,
     call,
@@ -4510,7 +4507,7 @@ export const createWorkItems = ({
       counts.some((count) => !Number.isInteger(count))
     ) {
       throw new Error(
-        `git in workspace ${handle(workspace.id)} on ${machineName(workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
+        `git in workspace ${handle(workspace.id)} on ${machineName(db, workspace.machineId)} said: ${(read.stderr || read.stdout).trim() || `exit ${read.exitCode}`}`
       );
     }
     return counts.some((count) => count > 0);
@@ -5239,7 +5236,7 @@ export const createWorkItems = ({
         }
         if (!(await withClone(workspace))) {
           throw new Error(
-            `the clone of workspace ${handle(workspace.id)} is gone from ${machineName(workspace.machineId)}`
+            `the clone of workspace ${handle(workspace.id)} is gone from ${machineName(db, workspace.machineId)}`
           );
         }
         return workspaces.holdForContinuation(itemId, workspaceId);
@@ -5584,7 +5581,7 @@ export const createWorkItems = ({
         if (!folder) {
           throw new WorkItemRefusal(
             409,
-            `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`
+            `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(db, row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`
           );
         }
         return sendLanded({ folder, inputs: named, cut: false });
