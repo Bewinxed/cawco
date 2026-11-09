@@ -26,6 +26,7 @@ import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
 import { hub, hubPath } from "#lib/platform/hub.js";
 import {
+  answerOf,
   hubData,
   hubDone,
   hubFetch,
@@ -385,9 +386,9 @@ export async function deleteProjectForGood(
     },
     body: JSON.stringify({ fromDisk }),
   });
-  if (!response.ok) {
-    throw hubRefusal(await refusedOf(response), projectEndWords.notDeletedThen);
-  }
+  await hubDone(answerOf(response), (refused) =>
+    hubRefusal(refused, projectEndWords.notDeletedThen)
+  );
 }
 
 /** A refusal that asking again the same way can't change (a conflict, an entry gone): no Try again. */
