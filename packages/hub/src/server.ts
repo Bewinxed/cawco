@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join, posix } from "node:path";
-import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type { CompactStage } from "@cawco/core/accounts";
 import {
   ACCOUNT_KINDS,
@@ -541,7 +540,6 @@ import {
   WIRE_PROTOCOL,
 } from "@cawco/core/stream";
 import type { RelayFrame } from "@cawco/core/stream-relay";
-import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type {
@@ -1090,6 +1088,7 @@ import { hubInfoRoutes } from "./routes/hub-info";
 import { lfsRoutes } from "./routes/lfs";
 import { machinePauseRoutes } from "./routes/machines";
 import { mcpRoutes } from "./routes/mcp";
+import { modelAccessRoutes } from "./routes/model-access";
 import { modelWindowRoutes } from "./routes/model-windows";
 import { moveRoutes } from "./routes/moves";
 import { pendingRoutes } from "./routes/pending";
@@ -1136,7 +1135,6 @@ import { received } from "./stored-json";
 import { createStoredRecent } from "./stored-recent";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
-import { suggest } from "./suggest";
 import {
   createTailnetHttps,
   dashboardRelay,
@@ -5909,11 +5907,7 @@ export const createServer = (
       },
     });
   };
-  /**
-   * The PKCE verifier of the OpenRouter connect in progress. One at a time: a
-   * new connect replaces it, and a finished exchange spends it.
-   */
-  let openrouterVerifier: string | undefined;
+
   /**
    * What Settings shows of Jev: the route it takes now (jev.ts `jevAccess`;
    * null is off), the TypeSafe key's last four characters and when it was
@@ -34021,136 +34015,9 @@ export const createServer = (
             };
           }),
         };
-      })
-      // ── OpenRouter (OAuth PKCE; the key never leaves the hub) ─────────────
-      .get("/api/openrouter", () => {
-        const connection = db.getOpenRouterConnection();
-        return {
-          connected: connection !== undefined,
-          connectedAt: connection?.connectedAt.getTime() ?? null,
-        };
-      })
-      // ── Jev: its route, the TypeSafe key, suggestions ─────────────────────
-      // The key is set from the owner's terminal (`cawco jev set-key`) or
-      // Settings, and no route answers it: only its last four characters.
-      .get("/api/jev", () => jevView())
-      .put(
-        "/api/jev/typesafe-key",
-        { body: t.Object({ key: t.String({ minLength: 1 }) }) },
-        ({ body, status }) => {
-          const key = body.key.trim();
-          if (!key) {
-            return status(400, "The TypeSafe key is empty; nothing was saved.");
-          }
-          db.setTypesafeKey(key);
-          console.log("[jev] TypeSafe key set: Jev takes route=typesafe");
-          return jevView();
-        }
-      )
-      .delete("/api/jev/typesafe-key", () => {
-        db.setTypesafeKey(null);
-        const view = jevView();
-        console.log(
-          `[jev] TypeSafe key removed: Jev takes ${view.route ? `route=${view.route}` : "no route (off)"}`
-        );
-        return view;
-      })
-      .put(
-        "/api/jev/suggest",
-        { body: t.Object({ enabled: t.Boolean() }) },
-        ({ body, status }) => {
-          if (!jevAccess(db)) {
-            return status(
-              409,
-              "Jev is off. Set a TypeSafe key or connect OpenRouter in Settings first."
-            );
-          }
-          db.setSuggestWhileTyping(body.enabled);
-          return { ok: true };
-        }
-      )
-      .post(
-        "/api/suggest",
-        {
-          body: t.Object({
-            text: t.String(),
-            candidates: t.Array(
-              t.Object({
-                id: t.String(),
-                kind: t.Union(CAPABILITY_KINDS.map((kind) => t.Literal(kind))),
-                name: t.String(),
-                description: t.String(),
-              })
-            ),
-          }),
-        },
-        async ({ body, status }) => {
-          const access = jevAccess(db);
-          if (!access) {
-            return status(
-              409,
-              "Jev is off. Set a TypeSafe key or connect OpenRouter in Settings first."
-            );
-          }
-          const result = await suggest(db, access, body.text, body.candidates);
-          if ("error" in result) {
-            return status(502, result.error);
-          }
-          return result;
-        }
-      )
-      .post(
-        "/api/openrouter/connect",
-        { body: t.Object({ callbackUrl: t.String() }) },
-        ({ body }) => {
-          openrouterVerifier = generateCodeVerifier();
-          const auth = new URL("https://openrouter.ai/auth");
-          auth.searchParams.set("callback_url", body.callbackUrl);
-          auth.searchParams.set(
-            "code_challenge",
-            generateCodeChallenge(openrouterVerifier)
-          );
-          auth.searchParams.set("code_challenge_method", "S256");
-          return { authUrl: auth.toString() };
-        }
-      )
-      .post(
-        "/api/openrouter/exchange",
-        { body: t.Object({ code: t.String() }) },
-        async ({ body, status }) => {
-          if (!openrouterVerifier) {
-            return status(
-              409,
-              "No OpenRouter connect is in progress on this hub. Start again from Settings."
-            );
-          }
-          const response = await fetch(
-            "https://openrouter.ai/api/v1/auth/keys",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                code: body.code,
-                code_verifier: openrouterVerifier,
-                code_challenge_method: "S256",
-              }),
-            }
-          );
-          if (!response.ok) {
-            return new Response(await response.text(), {
-              status: response.status,
-            });
-          }
-          const { key } = (await response.json()) as { key: string };
-          db.setOpenRouterConnection(key);
-          openrouterVerifier = undefined;
-          return { ok: true };
-        }
-      )
-      .delete("/api/openrouter", () => {
-        db.clearOpenRouterConnection();
-        return { ok: true };
-      })
+      }),
+    modelAccessRoutes(ctx),
+    new Elysia()
       // ── image default (core ImageSettings) ────────────────────────────────
       // The provider and model a generate_image call that names no provider
       // goes to; with no row, ChatGPT on its own model.
