@@ -46,6 +46,7 @@ import {
   launchdJob,
   launchdLog,
   launchdLogsDir,
+  unxml,
 } from "@cawco/core/launchd";
 import { hubDbPath } from "@cawco/core/paths/hub";
 import {
@@ -1511,13 +1512,6 @@ const UNIT_ENVIRONMENT = /^Environment=([^=\n]+)=(.*)$/gmu;
 const PLIST_ENVIRONMENT =
   /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/u;
 const PLIST_PAIR = /<key>([^<]*)<\/key>\s*<string>([^<]*)<\/string>/gu;
-
-/** What `xml` escaped, as it was. */
-const unxml = (value: string): string =>
-  value
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&");
 
 /** The environment a unit (systemd) or plist (launchd) was written with. */
 const recordedEnvironment = (
