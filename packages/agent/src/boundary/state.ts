@@ -27,6 +27,7 @@ import { reportDamaged } from "../damaged-records";
 import { type HeldProc, KeeperPool } from "../keepers";
 import { boundaryProcId } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
+import { HOST_FILES } from "./protocol";
 
 /** A running boundary, as a harness uses it. */
 const BoundaryShape = z.object({
@@ -179,7 +180,7 @@ export const STOP_TIMEOUT_MS = 5000;
 
 /** Linux: where the srt host names the sandbox it runs now ({@link Place}): `sandbox` in its working dir. */
 export const placeOf = (id: string, gen: string): string =>
-  join(generationDir(id, gen), "sandbox");
+  join(generationDir(id, gen), HOST_FILES.sandbox);
 
 /**
  * Linux: the protected binds of the sandbox {@link placeOf} names, one mount
@@ -187,7 +188,7 @@ export const placeOf = (id: string, gen: string): string =>
  * before the place, so the executor checks what that very sandbox holds.
  */
 export const guardedOf = (id: string, gen: string): string =>
-  join(generationDir(id, gen), "guarded");
+  join(generationDir(id, gen), HOST_FILES.guarded);
 
 export const readPlace = async (
   id: string,
