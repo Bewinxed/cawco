@@ -2852,7 +2852,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     makingFrom: (id: string): boolean => makingIn.has(id),
 
     /**
-     * Of `served` (the artifacts a workspace serves: work-items.ts
+     * Of `served` (the artifacts a workspace serves: workspaces.ts
      * `servedFrom`), each one waiting on the person, and every decision
      * page waiting on the person that shows one of them as a Canvas or
      * Preview piece: what a workspace's archive or discard refuses on. One
@@ -2887,8 +2887,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Of `served` (work-items.ts `servedFrom`), those its workspace's
-     * retirement still waits on (work-items.ts `owedFrom`). One waiting on
+     * Of `served` (workspaces.ts `servedFrom`), those its workspace's
+     * retirement still waits on (workspaces.ts `owedFrom`). One waiting on
      * the person itself is owed; one a decision page shows is otherwise
      * owed only while a page showing it waits on him, or is handed up to a
      * parent that hasn't opened it: a preview handed up and put on a page
