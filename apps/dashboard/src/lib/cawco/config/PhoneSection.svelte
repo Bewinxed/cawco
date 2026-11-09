@@ -12,6 +12,7 @@
   import { hub } from "#lib/platform/hub.js";
   import {
     failureClause,
+    hubAsk,
     hubData,
     hubRefusal,
   } from "#lib/platform/hub-read.js";
@@ -51,33 +52,37 @@
     testing = true;
     deviceError = null;
     outcomes = [];
-    const answer = await hub.api.push.test.post();
-    if (answer.error) {
-      deviceError = hubRefusal(answer).message;
-    } else {
-      ({ outcomes } = answer.data);
+    const answer = await hubAsk(hub.api.push.test.post());
+    if (answer.ok) {
+      ({ outcomes } = answer.value);
       await read();
+    } else {
+      deviceError = hubRefusal(answer.refused).message;
     }
     testing = false;
   }
 
   async function setQuiet(device: Device, quiet: boolean) {
     deviceError = null;
-    const answer = await hub.api.push.devices({ id: device.id }).put({ quiet });
-    if (answer.error) {
-      deviceError = hubRefusal(answer).message;
-    } else {
+    const answer = await hubAsk(
+      hub.api.push.devices({ id: device.id }).put({ quiet })
+    );
+    if (answer.ok) {
       device.quiet = quiet;
+    } else {
+      deviceError = hubRefusal(answer.refused).message;
     }
   }
 
   async function forget(device: Device) {
     deviceError = null;
-    const answer = await hub.api.push.devices({ id: device.id }).delete();
-    if (answer.error) {
-      deviceError = hubRefusal(answer).message;
-    } else {
+    const answer = await hubAsk(
+      hub.api.push.devices({ id: device.id }).delete()
+    );
+    if (answer.ok) {
       devices = devices.filter((each) => each.id !== device.id);
+    } else {
+      deviceError = hubRefusal(answer.refused).message;
     }
   }
 

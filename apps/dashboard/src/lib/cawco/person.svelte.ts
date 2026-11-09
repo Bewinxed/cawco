@@ -10,7 +10,6 @@ import { MediaQuery } from "svelte/reactivity";
 import { hub } from "#lib/platform/hub.js";
 import {
   failureWords,
-  type HubAnswer,
   hubData,
   hubReached,
   refusedOrUnreached,
@@ -120,14 +119,11 @@ export async function readPerson(): Promise<void> {
 }
 
 /** Runs one press against the hub: its answer is the view, its refusal said in words. */
-async function press(
-  key: string,
-  call: Promise<HubAnswer<PersonView>>
-): Promise<void> {
+async function press(key: string, view: Promise<PersonView>): Promise<void> {
   state.pending = key;
   state.refusal = null;
   try {
-    takePerson(await hubData(call, refusedOrUnreached));
+    takePerson(await view);
   } catch (error) {
     state.refusal = {
       blocked: false,
@@ -141,18 +137,30 @@ async function press(
 
 /** Appear away on or off: agents go quiet and the phone gets pushes while it is on. */
 export const setAppearAway = (on: boolean): Promise<void> =>
-  press("away", hub.api.person.away.post({ on }));
+  press("away", hubData(hub.api.person.away.post({ on }), refusedOrUnreached));
 
 /** The away clock, ms: how long without input on any device before the person is away. */
 export const setAwayAfter = (awayAfterMs: number): Promise<void> =>
-  press("clock", hub.api.person["away-clock"].post({ awayAfterMs }));
+  press(
+    "clock",
+    hubData(
+      hub.api.person["away-clock"].post({ awayAfterMs }),
+      refusedOrUnreached
+    )
+  );
 
 /** Whether a machine's desktop counts toward whether the person is here. */
 export const setMachineCounts = (
   machineId: string,
   counts: boolean
 ): Promise<void> =>
-  press(machineId, hub.api.person.devices({ machineId }).post({ counts }));
+  press(
+    machineId,
+    hubData(
+      hub.api.person.devices({ machineId }).post({ counts }),
+      refusedOrUnreached
+    )
+  );
 
 /** How long the row's tick stands before it leaves. */
 const TICK_MS = 2400;
