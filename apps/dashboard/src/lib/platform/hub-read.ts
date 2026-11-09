@@ -156,10 +156,9 @@ export async function hubSaid(response: Response): Promise<string> {
  * THE ONE READER of a hub request's JSON answer, everywhere the dashboard
  * asks the hub for one. Refused, `failure`'s error is thrown: the hub's
  * refusal in its own words ({@link hubRefusal}) unless the caller words it
- * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`). An
- * answer that does not say it is JSON is the hub not answering, thrown as
- * {@link noAnswer}: a proxy's or a restarting hub's text answer is never
- * read as data.
+ * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`).
+ * Answered, its body is read by {@link answerOf}, as {@link readHub} reads a
+ * load's.
  */
 export async function hubJson<T>(
   request: HubRequest,
@@ -175,10 +174,25 @@ export async function hubJson<T>(
   if (!response.ok) {
     throw await failure(response);
   }
-  if (!response.headers.get("content-type")?.includes("application/json")) {
-    throw new Error(`${noAnswer(response.status)}.`);
+  return await answerOf<T>(response);
+}
+
+/**
+ * An answered request's body as JSON, whatever type it says it is: Elysia
+ * sends a route's bare `true`, number or string as text, and that is the
+ * route's answer. A body that is no JSON at all (a proxy's page, an empty
+ * answer) is the hub not answering, thrown as {@link noAnswer}.
+ */
+async function answerOf<T>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch (error) {
+    // A read cut off (its signal aborted, the network gone) rejects as it is.
+    if (!(error instanceof SyntaxError)) {
+      throw error;
+    }
+    throw new Error(`${noAnswer(response.status)}.`, { cause: error });
   }
-  return (await response.json()) as T;
 }
 
 /**
@@ -418,7 +432,11 @@ export function failureClause(error: unknown): string {
   return failureWords(error).replace(FINAL_STOP, "");
 }
 
-/** Reads `request` through the given fetch (a load's own) and parses its JSON, or says why not. */
+/**
+ * Reads `request` through the given fetch (a load's own): refused, why, as
+ * the load shows it; answered, its body read by {@link answerOf}, as
+ * {@link hubJson} reads one.
+ */
 export async function readHub<T>(
   fetch: typeof globalThis.fetch,
   request: HubRequest,
@@ -428,5 +446,5 @@ export async function readHub<T>(
   if (!response.ok) {
     return { ok: false, ...(await hubFailure(response)) };
   }
-  return { ok: true, value: (await response.json()) as T };
+  return { ok: true, value: await answerOf<T>(response) };
 }
