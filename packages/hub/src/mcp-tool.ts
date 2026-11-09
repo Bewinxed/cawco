@@ -65,7 +65,7 @@ const responseFormat = () => z.enum(RESPONSE_FORMATS).optional();
  *
  * What a harness is shown never says `additionalProperties: false`: OpenCode's
  * own `opencode.tool.input.repair` hook deletes every key such a schema does
- * not name (anomalyco/opencode packages/core/src/plugin/tool-input-repair.ts:
+ * not name (anomalyco/opencode/packages/core/src/plugin/tool-input-repair.ts:
  * `if (!declared && schema.additionalProperties === false && !patterned &&
  * !composed)`), and the refusal is said at the call, by the hub, either way.
  */

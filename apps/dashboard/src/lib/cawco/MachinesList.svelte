@@ -187,7 +187,7 @@
   }
   /**
    * What the machine lacks for a delegate's workspace, as its report says
-   * (agent workspace-needs.ts): the refusal a delegate there gets, read
+   * (core workspace-needs.ts): the refusal a delegate there gets, read
    * before one is sent, its install command in a well of its own with Copy,
    * and where each tool was looked for under Show details.
    */
