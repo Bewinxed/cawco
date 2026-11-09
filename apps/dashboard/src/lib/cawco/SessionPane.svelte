@@ -104,6 +104,9 @@
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
+  import { offersStore } from "./stores/offers.svelte";
+  import { plansStore } from "./stores/plans.svelte";
+  import { tickersStore } from "./stores/tickers.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
@@ -257,7 +260,7 @@
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
-  const plan = $derived(cawco.planOf(viewId));
+  const plan = $derived(plansStore.planOf(viewId));
   const planProgressNow = $derived(
     planShows(plan) && plan ? planProgress(plan) : null
   );
@@ -288,7 +291,7 @@
       besideStages = null;
       return;
     }
-    track(cawco.tasksChangedOf(projectId));
+    track(tickersStore.tasksChangedOf(projectId));
     untrack(() => {
       readBeside(projectId).catch(() => undefined);
     });
@@ -1142,9 +1145,9 @@
   });
 
   /** "Make this a project", when the hub offered it to this session. */
-  const projectOffer = $derived(cawco.projectOfferOf(viewId));
+  const projectOffer = $derived(offersStore.projectOfferOf(viewId));
   /** The project the offer joined: the card says so where it stood. */
-  const projectJoin = $derived(cawco.projectJoinOf(viewId));
+  const projectJoin = $derived(offersStore.projectJoinOf(viewId));
 
   /** What this conversation has half-written, whichever composer draws it; docked, the panel's. */
   const draft = untrack(() => docked?.draft) ?? new ComposerDraft();
