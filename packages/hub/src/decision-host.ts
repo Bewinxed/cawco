@@ -29,7 +29,6 @@
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
-import { agentReact } from "@cawco/core/agent-react";
 import { readBuildInfo } from "@cawco/core/build-info";
 import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
@@ -38,6 +37,7 @@ import { DIALS_REM, DIALS_ROOT } from "@cawco/core/dials-root";
 import { houseFaceSheet } from "@cawco/core/house-faces";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { SveltePlugin } from "bun-plugin-svelte";
+import { agentReact } from "./agent-react";
 import { hostFiles, writeHostFiles } from "./host-build";
 import { compileSheets, pageFiles, shadowSheet } from "./page-css";
 
