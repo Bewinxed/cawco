@@ -11,10 +11,16 @@
  * ({@link HealthProblem}).
  */
 
+import {
+  type HubAnswer,
+  type HubClient,
+  hubClient,
+  hubPath,
+  reached,
+} from "@cawco/agent/hub-client";
 import { machineFetch } from "@cawco/agent/machine-fetch";
 import type { BinaryInstallation } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { hubRequest } from "@cawco/core/hub-request";
 import { unhandled } from "@cawco/core/unhandled";
 
 /**
@@ -33,22 +39,6 @@ const PROBE_TIMEOUT_MS = 30_000;
 /** The least a request is waited on, however near the deadline it is asked. */
 const PROBE_FLOOR_MS = 1000;
 
-interface HealthBody {
-  build?: {
-    protocol?: { max: number; min: number };
-    startedAt?: number;
-    version?: string;
-  };
-  ok?: boolean;
-}
-interface AgentRow {
-  build?: { startedAt?: number; version?: string };
-  /** The agent's read of its sessiond at its last register (`SessionCustody` in core). */
-  custody?: { state?: string };
-  machineId: string;
-  status: string;
-}
-
 /**
  * One request of a probe: whether it was answered in time, and the line that
  * says what came back (`GET <url>: <what came back> after <ms>ms`). An
@@ -61,10 +51,17 @@ type Asked<T> =
   | { kind: "unanswered"; said: string }
   | { kind: "failed"; said: string };
 
-/** GETs `url` once; `read` takes the body of a 2xx answer, within the same time, which ends by `byMs` (or {@link PROBE_TIMEOUT_MS} from now, whichever is sooner). */
-async function ask<T>(
+/** What one try of a probe came to. */
+interface Tried<T> {
+  status: number;
+  unread?: true;
+  value?: T;
+}
+
+/** One read of a probe, ended by `byMs` (or {@link PROBE_TIMEOUT_MS} from now, whichever is sooner). */
+async function askWithin<T>(
   url: string,
-  read: (response: Response) => Promise<T>,
+  try_: (signal: AbortSignal) => Promise<Tried<T>>,
   byMs = Number.POSITIVE_INFINITY
 ): Promise<Asked<T>> {
   const started = performance.now();
@@ -73,22 +70,9 @@ async function ask<T>(
     PROBE_FLOOR_MS,
     Math.min(PROBE_TIMEOUT_MS, byMs - Date.now())
   );
-  let got: Bounded<{ status: number; value?: T; unread?: true }>;
+  let got: Bounded<Tried<T>>;
   try {
-    got = await readWithin(within, async (signal) => {
-      // As this machine: a hub that requires paired devices answers an
-      // admitted machine its own row (machine-key.ts).
-      const response = await machineFetch(url, { signal });
-      if (!response.ok) {
-        await response.body?.cancel();
-        return { status: response.status };
-      }
-      try {
-        return { status: response.status, value: await read(response) };
-      } catch {
-        return { status: response.status, unread: true as const };
-      }
-    });
+    got = await readWithin(within, try_);
   } catch (error) {
     return {
       kind: "failed",
@@ -115,7 +99,57 @@ async function ask<T>(
   }
 }
 
-const json = <T>(response: Response) => response.json() as Promise<T>;
+/** GETs `url` once as this machine; `read` takes the body of a 2xx answer, within the same time, which ends by `byMs` (or {@link PROBE_TIMEOUT_MS} from now, whichever is sooner). */
+const ask = <T>(
+  url: string,
+  read: (response: Response) => Promise<T>,
+  byMs = Number.POSITIVE_INFINITY
+): Promise<Asked<T>> =>
+  askWithin(
+    url,
+    async (signal) => {
+      // As this machine: a hub that requires paired devices answers an
+      // admitted machine its own row (machine-key.ts).
+      const response = await machineFetch(url, { signal });
+      if (!response.ok) {
+        await response.body?.cancel();
+        return { status: response.status };
+      }
+      try {
+        return { status: response.status, value: await read(response) };
+      } catch {
+        return { status: response.status, unread: true as const };
+      }
+    },
+    byMs
+  );
+
+/** One of the hub's routes asked once as this machine: its data when it is what the route answers, within the same time. */
+const askHub = <A extends HubAnswer>(
+  url: string,
+  hub: string,
+  request: (client: HubClient) => Promise<A>,
+  byMs: number | undefined
+): Promise<Asked<Extract<A, { error: null }>["data"]>> =>
+  askWithin(
+    url,
+    async (signal) => {
+      const answer = reached(
+        await request(
+          hubClient(hub, (target, init) =>
+            machineFetch(target, { ...init, signal })
+          )
+        )
+      );
+      if (answer.error !== null) {
+        return { status: answer.status };
+      }
+      return typeof answer.data === "object"
+        ? { status: answer.status, value: answer.data }
+        : { status: answer.status, unread: true };
+    },
+    byMs
+  );
 
 /**
  * What stands between the new build and healthy. `hubSilent`: the hub said
@@ -177,9 +211,11 @@ async function probeHubMachine(
 ): Promise<string | undefined> {
   // A probe with no answer is a problem that stands for now: the trial's
   // verification asks again until its deadline (cli binary-apply.ts `verify`).
-  const health = await ask(
-    `${installation.hubUrl}${hubRequest("GET /health").path}`,
-    json<HealthBody>,
+  const hub = installation.hubUrl;
+  const health = await askHub(
+    `${hub}${hubPath.health["~path"]}`,
+    hub,
+    (client) => client.health.get(),
     byMs
   );
   switch (health.kind) {
@@ -233,11 +269,11 @@ async function probeAgentRow(options: {
 }): Promise<HealthProblem | undefined> {
   const { installation, machineId, version, agentSince } = options;
   // This machine's own row: the fleet's list is the person's (hub hub-auth.ts).
-  const asked = await ask(
-    `${installation.hubUrl}${
-      hubRequest("GET /api/agents/:machineId", { path: { machineId } }).path
-    }`,
-    json<AgentRow>,
+  const hub = installation.hubUrl;
+  const asked = await askHub(
+    `${hub}${hubPath.api.agents({ machineId })["~path"]}`,
+    hub,
+    (client) => client.api.agents({ machineId }).get(),
     options.byMs
   );
   const silent = (what: string): HealthProblem => ({
