@@ -45,7 +45,7 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubRefusal, hubSend } from "#lib/platform/hub-read.js";
 import { openPageWrites } from "./open-pages";
 
 /**
@@ -209,15 +209,13 @@ async function postSend(
   body: Pick<SendBody, "again" | "control" | "pins" | "writes">,
   again: string
 ): Promise<void> {
-  const response = await hubFetch(
+  await hubSend(
     hubRequest("POST /api/instances/:id/artifacts/:artifact/send", {
       path: { id: instanceId, artifact: artifactId },
       body,
-    })
+    }),
+    { failure: (refused) => hubRefusal(refused, again) }
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, again);
-  }
 }
 
 /**
