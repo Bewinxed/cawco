@@ -63,13 +63,10 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { setupPageAt } from "../../../packages/core/src/artifact-needs";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
-import type {
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
+import type { Sending } from "../../../packages/core/src/sending";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, toolReply } from "../../tool-calls";
