@@ -1,0 +1,29 @@
+{
+  "name": "@cawco/preview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./proxy": "./src/proxy.ts",
+    "./overlay/*": "./src/overlay/*.ts"
+  },
+  "scripts": {
+    "fmt": "bun ../../scripts/fmt.ts ."
+  },
+  "dependencies": {
+    "@cawco/core": "workspace:*",
+    "@floating-ui/dom": "1.8.0",
+    "idiomorph": "0.8.0",
+    "modern-screenshot": "4.7.0",
+    "perfect-freehand": "1.2.3",
+    "y-indexeddb": "9.0.12",
+    "y-protocols": "1.0.7",
+    "y-websocket": "3.1.0",
+    "yjs": "13.6.33",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@iconify-json/solar": "1.2.13",
+    "@types/bun": "^1.4.3"
+  }
+}

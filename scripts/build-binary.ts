@@ -35,11 +35,11 @@ import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { bundled } from "../packages/core/src/bundled";
 import { fileViewerAssets } from "../packages/core/src/file-viewer";
-import { bundleOverlay } from "../packages/core/src/preview/proxy";
 import { publishedFile } from "../packages/core/src/runtime";
 import { agentReact } from "../packages/hub/src/agent-react";
 import { canvasHostAssets } from "../packages/hub/src/canvas-host";
 import { decisionHostAssets } from "../packages/hub/src/decision-host";
+import { bundleOverlay } from "../packages/preview/src/proxy";
 import { dashboardBuild } from "./dashboard-build-cache";
 
 export const PINNED_BUN = "1.4.4";
