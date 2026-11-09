@@ -40,7 +40,13 @@ import type {
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
-import { awayOf, couldNot, hubCall, hubFetch } from "#lib/platform/hub-read.js";
+import {
+  awayOf,
+  couldNot,
+  couldNotOrAway,
+  hubFetch,
+  hubJson,
+} from "#lib/platform/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -304,7 +310,7 @@ export function formatBytes(bytes: number): string {
 const TRAILING_STOPS = /\.+$/u;
 
 const put = <T>(request: HubRequest, attempt: string): Promise<T> =>
-  hubCall<T>(request, attempt);
+  hubJson<T>(request, { failure: couldNotOrAway(attempt) });
 
 /**
  * A config delete: the hub moves the row into its trash and answers the
@@ -314,7 +320,7 @@ const put = <T>(request: HubRequest, attempt: string): Promise<T> =>
  * somewhere else.
  */
 const erase = (request: HubRequest, attempt: string): Promise<Deleted> =>
-  hubCall<Deleted>(request, attempt);
+  hubJson<Deleted>(request, { failure: couldNotOrAway(attempt) });
 
 /**
  * Saves an MCP server. `projectId` binds it to one project, placed at each of
@@ -371,7 +377,7 @@ export const signInToMcp = async (
   let authorizationUrl: string;
   let expiresAt: number;
   try {
-    ({ authorizationUrl, expiresAt } = await hubCall<{
+    ({ authorizationUrl, expiresAt } = await hubJson<{
       authorizationUrl: string;
       expiresAt: number;
     }>(
@@ -379,7 +385,7 @@ export const signInToMcp = async (
         path: { name },
         ...(access ? { body: { access } } : {}),
       }),
-      `start sign-in to ${name}`
+      { failure: couldNotOrAway(`start sign-in to ${name}`) }
     ));
   } catch (error) {
     tab.close();
@@ -403,11 +409,11 @@ export const completeMcpSignIn = (
   state: string,
   iss: string | null
 ): Promise<{ name: string }> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/mcp/oauth/complete", {
       body: { code, state, ...(iss ? { iss } : {}) },
     }),
-    "finish the sign-in"
+    { failure: couldNotOrAway("finish the sign-in") }
   );
 
 /**
@@ -483,9 +489,9 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
     (frame) =>
       frame.marketplace?.source === source ? frame.marketplace : undefined,
     () =>
-      hubCall<MarketplaceRead>(
+      hubJson<MarketplaceRead>(
         hubRequest("GET /api/fleet/marketplace-read", { query: { source } }),
-        `read ${source}`
+        { failure: couldNotOrAway(`read ${source}`) }
       )
   );
   if (!read.name) {
@@ -507,17 +513,17 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
  */
 export const linkMarketplace = (wanted: string): Promise<MarketplaceLink> => {
   const source = wanted.trim();
-  return hubCall<MarketplaceLink>(
+  return hubJson<MarketplaceLink>(
     hubRequest("POST /api/fleet/marketplace-links", { body: { source } }),
-    `link ${source}`
+    { failure: couldNotOrAway(`link ${source}`) }
   );
 };
 
 /** Lets a refused link go: it leaves the marketplace list. */
 export const dropMarketplaceLink = (source: string): Promise<unknown> =>
-  hubCall(
+  hubJson(
     hubRequest("DELETE /api/fleet/marketplace-links", { query: { source } }),
-    `let go of ${source}`
+    { failure: couldNotOrAway(`let go of ${source}`) }
   );
 
 export const removeMarketplace = (name: string): Promise<Deleted> =>
@@ -594,7 +600,9 @@ export const installPlugin = (id: string): Promise<FleetPlugin> =>
   );
 
 const switchRow = <T>(request: HubRequest, enabled: boolean, what: string) =>
-  hubCall<T>(request, `${enabled ? "turn on" : "turn off"} ${what}`);
+  hubJson<T>(request, {
+    failure: couldNotOrAway(`${enabled ? "turn on" : "turn off"} ${what}`),
+  });
 
 /**
  * Switches an installed plugin on or off: the stored row's flag, nothing
@@ -647,9 +655,9 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
     `refresh ${id}`,
     (frame) => (frame.plugin?.id === id ? frame.plugin : undefined),
     () =>
-      hubCall(
+      hubJson(
         hubRequest("POST /api/fleet/plugins/:id/refresh", { path: { id } }),
-        `refresh ${id}`
+        { failure: couldNotOrAway(`refresh ${id}`) }
       )
   );
 
@@ -677,12 +685,12 @@ export const inspectMachine = (
   machineId: string,
   cwd?: string
 ): Promise<ConfigInspection> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/agents/:machineId/inspect", {
       path: { machineId },
       body: cwd ? { cwd } : {},
     }),
-    "read what this machine has"
+    { failure: couldNotOrAway("read what this machine has") }
   );
 
 /**
@@ -707,12 +715,12 @@ export const adoptSkill = (
  * its edited copy aside before it writes the fleet's.
  */
 export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/skills/:name/push", {
       path: { name },
       body: { machineId },
     }),
-    "overwrite this machine"
+    { failure: couldNotOrAway("overwrite this machine") }
   );
 
 /**
@@ -721,17 +729,15 @@ export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
  * machine's edited copy an overwrite replaced.
  */
 export const skillHistory = (name: string): Promise<ListedVersion[]> =>
-  hubCall(
-    hubRequest("GET /api/fleet/skills/history", { query: { name } }),
-    "load this skill’s history"
-  );
+  hubJson(hubRequest("GET /api/fleet/skills/history", { query: { name } }), {
+    failure: couldNotOrAway("load this skill’s history"),
+  });
 
 /** Writes a past version back as the fleet's copy, keeping what it replaces. */
 export const restoreSkillVersion = (id: number): Promise<FleetSkillMeta> =>
-  hubCall(
-    hubRequest("POST /api/fleet/skills/restore", { body: { id } }),
-    "restore that version"
-  );
+  hubJson(hubRequest("POST /api/fleet/skills/restore", { body: { id } }), {
+    failure: couldNotOrAway("restore that version"),
+  });
 
 /**
  * Resolves the same source again — for a skill whose repo has moved on. Comes
@@ -743,9 +749,9 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
     `refresh ${name}`,
     (frame) => (frame.skill?.name === name ? frame.skill : undefined),
     () =>
-      hubCall(
+      hubJson(
         hubRequest("POST /api/fleet/skills/:name/refresh", { path: { name } }),
-        `refresh ${name}`
+        { failure: couldNotOrAway(`refresh ${name}`) }
       )
   );
 
@@ -759,7 +765,9 @@ export const checkForUpdates = (): Promise<{ fetching: boolean }> =>
     "check for updates",
     (frame) => frame.check,
     () =>
-      hubCall(hubRequest("POST /api/fleet/updates/check"), "check for updates")
+      hubJson(hubRequest("POST /api/fleet/updates/check"), {
+        failure: couldNotOrAway("check for updates"),
+      })
   );
 
 /**
@@ -850,10 +858,9 @@ export const removeAgent = (
 
 /** Writes the subagents again, at every machine that is online. */
 export const pushAgents = (): Promise<{ unpushable: Record<string, string> }> =>
-  hubCall(
-    hubRequest("POST /api/fleet/agents/push"),
-    "push the subagents to the machines"
-  );
+  hubJson(hubRequest("POST /api/fleet/agents/push"), {
+    failure: couldNotOrAway("push the subagents to the machines"),
+  });
 
 /** One subagent found on a machine, whoever wrote it. */
 export interface DiscoveredAgent {
@@ -1012,7 +1019,7 @@ export async function saveMemory(
 /** What one machine really has, without adopting it: the read behind Compare. */
 /**
  * A machine with no user CLAUDE.md is answered 204 — a fact, not a failure.
- * `send` would choke parsing that empty answer as JSON, and the memory tab
+ * `hubJson` would refuse that empty answer as not JSON, and the memory tab
  * would report the fetch's own exception as what the machine said.
  */
 export async function peekMemory(
@@ -1038,36 +1045,33 @@ export async function peekMemory(
  * document at a time: a `path` for a linked one, the main file without.
  */
 export const memoryHistory = (path?: string): Promise<FleetMemoryVersion[]> =>
-  hubCall(
+  hubJson(
     hubRequest("GET /api/fleet/memory/history", {
       ...(path === undefined ? {} : { query: { path } }),
     }),
-    "read the memory history"
+    { failure: couldNotOrAway("read the memory history") }
   );
 
 export const memoryVersion = (
   id: number
 ): Promise<FleetMemoryVersion & { content: string }> =>
-  hubCall(
-    hubRequest("GET /api/fleet/memory/history/:id", { path: { id } }),
-    "read that version"
-  );
+  hubJson(hubRequest("GET /api/fleet/memory/history/:id", { path: { id } }), {
+    failure: couldNotOrAway("read that version"),
+  });
 
 /** The memory's documents as they stand now, files and all (`GET /api/fleet`'s `memoryDocs`). */
 export const memoryDocsNow = async (): Promise<FleetMemoryDocRow[]> =>
   (
-    await hubCall<FleetSnapshot>(
-      hubRequest("GET /api/fleet"),
-      "read the memory documents"
-    )
+    await hubJson<FleetSnapshot>(hubRequest("GET /api/fleet"), {
+      failure: couldNotOrAway("read the memory documents"),
+    })
   ).memoryDocs;
 
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
 export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
-  hubCall(
-    hubRequest("POST /api/fleet/memory/restore", { body: { id } }),
-    "restore that version"
-  );
+  hubJson(hubRequest("POST /api/fleet/memory/restore", { body: { id } }), {
+    failure: couldNotOrAway("restore that version"),
+  });
 
 /** Drops it, and with it the copy on every machine that still has cawco's. */
 export const removeMemory = (): Promise<Deleted> =>
@@ -1115,19 +1119,18 @@ export const removeMemoryDoc = (path: string): Promise<Deleted> =>
  * that drifted has its version win.
  */
 export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
-  hubCall(
-    hubRequest("POST /api/fleet/memory/adopt", { body: { machineId } }),
-    "adopt this machine's memory"
-  );
+  hubJson(hubRequest("POST /api/fleet/memory/adopt", { body: { machineId } }), {
+    failure: couldNotOrAway("adopt this machine's memory"),
+  });
 
 /** The same for one document of the set, for the drifted row being settled. */
 export const adoptMemoryDoc = (
   machineId: string,
   path: string
 ): Promise<FleetMemoryDocRow> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/memory/adopt", { body: { machineId, path } }),
-    `adopt this machine's ${path}`
+    { failure: couldNotOrAway(`adopt this machine's ${path}`) }
   );
 
 /**
@@ -1139,9 +1142,9 @@ export const pushMemory = (
   machineId: string,
   path?: string
 ): Promise<unknown> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/memory/push", { body: { machineId, path } }),
-    "overwrite this machine"
+    { failure: couldNotOrAway("overwrite this machine") }
   );
 
 /**
@@ -1169,16 +1172,16 @@ export async function peekHook(
 
 /** Takes one machine's edited script for a hook as the fleet's. */
 export const adoptHook = (machineId: string, id: string): Promise<FleetHook> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/hooks/adopt", { body: { machineId, id } }),
-    "adopt this machine's script"
+    { failure: couldNotOrAway("adopt this machine's script") }
   );
 
 /** The other direction: the fleet's script over a machine's edited one. */
 export const pushHook = (machineId: string, id: string): Promise<unknown> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/hooks/push", { body: { machineId, id } }),
-    "overwrite this machine"
+    { failure: couldNotOrAway("overwrite this machine") }
   );
 
 /** The items that did not set up on a machine, converged again: the hub sends them forced in one delta (hub fleet-sync.ts `retry`). */
@@ -1186,9 +1189,9 @@ export const retryFleetItems = (
   machineId: string,
   ids: readonly string[]
 ): Promise<unknown> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/items/retry", { body: { machineId, ids } }),
-    "set these up again"
+    { failure: couldNotOrAway("set these up again") }
   );
 
 /**
@@ -1197,11 +1200,11 @@ export const retryFleetItems = (
  * machine that was asleep when one happened.
  */
 export const syncFleet = (machineId?: string): Promise<unknown> =>
-  hubCall(
+  hubJson(
     hubRequest("POST /api/fleet/sync", {
       body: machineId ? { machineId } : {},
     }),
-    "sync the fleet"
+    { failure: couldNotOrAway("sync the fleet") }
   );
 
 /**
@@ -1218,11 +1221,11 @@ export const marketplaceCatalog = async (
     (frame) =>
       frame.marketplace?.source === row.source ? frame.marketplace : undefined,
     () =>
-      hubCall<MarketplaceRead>(
+      hubJson<MarketplaceRead>(
         hubRequest("GET /api/fleet/marketplace-read", {
           query: { source: row.source },
         }),
-        `read ${row.name}`
+        { failure: couldNotOrAway(`read ${row.name}`) }
       )
   );
   if (read.error) {

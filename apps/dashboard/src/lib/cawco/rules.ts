@@ -8,7 +8,7 @@ import {
   ruleSettings,
 } from "@cawco/core/rules";
 import { routinesWords } from "@cawco/core/words/routines";
-import { hubCall } from "#lib/platform/hub-read.js";
+import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -49,31 +49,29 @@ export interface RuleActivity {
 export const loadRuleActivity = (
   id: string
 ): Promise<{ activity: RuleActivity[] }> =>
-  hubCall<{ activity: RuleActivity[] }>(
+  hubJson<{ activity: RuleActivity[] }>(
     hubRequest("GET /api/rules/:id/activity", { path: { id } }),
-    "load what this rule has caught"
+    { failure: couldNotOrAway("load what this rule has caught") }
   );
 
 /** Create: the hub mints the id and answers with the whole rule. */
 export const createRule = (draft: RuleDraft): Promise<Rule> =>
-  hubCall<Rule>(
-    hubRequest("POST /api/rules", { body: draft }),
-    `save ${draft.name || "the rule"}`
-  );
+  hubJson<Rule>(hubRequest("POST /api/rules", { body: draft }), {
+    failure: couldNotOrAway(`save ${draft.name || "the rule"}`),
+  });
 
 /** Edit: strictly an existing id — the hub 404s anything it never minted. */
 export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
-  hubCall<Rule>(
+  hubJson<Rule>(
     hubRequest("PUT /api/rules/:id", { path: { id }, body: draft }),
-    `save ${draft.name || "the rule"}`
+    { failure: couldNotOrAway(`save ${draft.name || "the rule"}`) }
   );
 
 /** Delete: the rule stops at once, into the hub's trash for its Undo (config/undo.ts). */
 export const removeRule = (id: string, name: string): Promise<Deleted> =>
-  hubCall<Deleted>(
-    hubRequest("DELETE /api/rules/:id", { path: { id } }),
-    `delete ${name}`
-  );
+  hubJson<Deleted>(hubRequest("DELETE /api/rules/:id", { path: { id } }), {
+    failure: couldNotOrAway(`delete ${name}`),
+  });
 
 /** A blank rule, on the defaults that make the common case one field of typing. */
 export const blankRule = (): RuleDraft => ({

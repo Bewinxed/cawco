@@ -16,31 +16,24 @@ import type {
   SessionAttachments,
 } from "@cawco/core/protocol";
 import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  hubFetch,
+  hubJson,
+  hubRefusal,
+  hubSend,
+} from "#lib/platform/hub-read.js";
 import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
-
-/** The hub's refusal, in its own words. */
-async function ok(response: Response): Promise<Response> {
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
-  return response;
-}
 
 /** Every artifact a session holds, newest first (Projects spec §5.10): the panel's menu. */
 export async function listArtifacts(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/instances/:id/artifacts", {
-          path: { id: instanceId },
-        })
-      )
-    )
-  ).json();
+  return await hubJson(
+    hubRequest("GET /api/instances/:id/artifacts", {
+      path: { id: instanceId },
+    })
+  );
 }
 
 /**
@@ -52,15 +45,11 @@ export async function listArtifacts(
 export async function listFiles(
   instanceId: string
 ): Promise<ArtifactSummary[]> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/instances/:id/artifacts/files", {
-          path: { id: instanceId },
-        })
-      )
-    )
-  ).json();
+  return await hubJson(
+    hubRequest("GET /api/instances/:id/artifacts/files", {
+      path: { id: instanceId },
+    })
+  );
 }
 
 /**
@@ -70,15 +59,11 @@ export async function listFiles(
 export async function listAttachments(
   instanceId: string
 ): Promise<SessionAttachments> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/instances/:id/attachments", {
-          path: { id: instanceId },
-        })
-      )
-    )
-  ).json();
+  return await hubJson(
+    hubRequest("GET /api/instances/:id/attachments", {
+      path: { id: instanceId },
+    })
+  );
 }
 
 /**
@@ -90,17 +75,13 @@ export async function searchArtifacts(
   q: string,
   signal?: AbortSignal
 ): Promise<ArtifactHit[]> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/instances/:id/artifacts/search", {
-          path: { id: instanceId },
-          query: { q },
-        }),
-        { signal }
-      )
-    )
-  ).json();
+  return await hubJson(
+    hubRequest("GET /api/instances/:id/artifacts/search", {
+      path: { id: instanceId },
+      query: { q },
+    }),
+    { init: { signal } }
+  );
 }
 
 /** Where an artifact's latest picture is served in `scheme`, named by when it was drawn. */
@@ -123,13 +104,11 @@ export async function keepThumbnail(
   id: string,
   shot: { light: string | null; dark: string | null; single: boolean }
 ): Promise<void> {
-  await ok(
-    await hubFetch(
-      hubRequest("PUT /api/instances/:id/artifacts/:artifact/thumbnail", {
-        path: { id: instanceId, artifact: id },
-        body: shot,
-      })
-    )
+  await hubSend(
+    hubRequest("PUT /api/instances/:id/artifacts/:artifact/thumbnail", {
+      path: { id: instanceId, artifact: id },
+      body: shot,
+    })
   );
 }
 
@@ -188,12 +167,10 @@ export async function removeArtifact(
   instanceId: string,
   id: string
 ): Promise<void> {
-  await ok(
-    await hubFetch(
-      hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
-        path: { id: instanceId, artifact: id },
-      })
-    )
+  await hubSend(
+    hubRequest("DELETE /api/instances/:id/artifacts/:artifact", {
+      path: { id: instanceId, artifact: id },
+    })
   );
 }
 
@@ -209,13 +186,11 @@ export async function artifactShown(
     { ok: true } | { ok: false; error: ShownFailure }
   )
 ): Promise<void> {
-  await ok(
-    await hubFetch(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/shown", {
-        path: { id: instanceId, artifact: id },
-        body: { client: currentClientId(), ...word },
-      })
-    )
+  await hubSend(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/shown", {
+      path: { id: instanceId, artifact: id },
+      body: { client: currentClientId(), ...word },
+    })
   );
 }
 
@@ -226,15 +201,12 @@ export async function artifactShown(
 export async function createDraftCanvas(
   instanceId: string
 ): Promise<{ id: string; name: string }> {
-  const response = await ok(
-    await hubFetch(
-      hubRequest("POST /api/instances/:id/artifacts", {
-        path: { id: instanceId },
-        body: { kind: "canvas", name: "canvas", draft: true },
-      })
-    )
+  const made = await hubJson<{ id: string; name: string }>(
+    hubRequest("POST /api/instances/:id/artifacts", {
+      path: { id: instanceId },
+      body: { kind: "canvas", name: "canvas", draft: true },
+    })
   );
-  const made = (await response.json()) as { id: string; name: string };
   return { id: made.id, name: made.name };
 }
 
@@ -247,15 +219,11 @@ export interface CanvasExport {
 
 /** A canvas's export, waited on for as long as the hub takes. */
 export async function exportCanvas(id: string): Promise<CanvasExport> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/artifacts/:artifact/export", {
-          path: { artifact: id },
-        })
-      )
-    )
-  ).json();
+  return await hubJson(
+    hubRequest("GET /api/artifacts/:artifact/export", {
+      path: { artifact: id },
+    })
+  );
 }
 
 /**
@@ -268,16 +236,12 @@ export function exportCanvasWithin(
   withinMs: number
 ): Promise<Bounded<CanvasExport>> {
   return readWithin(withinMs, async (signal): Promise<CanvasExport> =>
-    (
-      await ok(
-        await hubFetch(
-          hubRequest("GET /api/artifacts/:artifact/export", {
-            path: { artifact: id },
-          }),
-          { signal }
-        )
-      )
-    ).json()
+    hubJson(
+      hubRequest("GET /api/artifacts/:artifact/export", {
+        path: { artifact: id },
+      }),
+      { init: { signal } }
+    )
   );
 }
 
@@ -305,16 +269,12 @@ export async function writeSheet(
   edit?: { file: string; lines: { from: number; to: number } };
   sheet?: SheetRead;
 }> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("POST /api/instances/:id/artifacts/:artifact/sheet", {
-          path: { id: instanceId, artifact: id },
-          body: change,
-        })
-      )
-    )
-  ).json();
+  return await hubJson(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/sheet", {
+      path: { id: instanceId, artifact: id },
+      body: change,
+    })
+  );
 }
 
 /** A component canvas's map: its component, what renders it and what it renders, each with its states and frames in miniature. */
@@ -323,16 +283,12 @@ export async function fetchCanvasMap(
   id: string,
   component: string | null = null
 ): Promise<CanvasMap> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/instances/:id/artifacts/:artifact/map", {
-          path: { id: instanceId, artifact: id },
-          ...(component ? { query: { component } } : {}),
-        })
-      )
-    )
-  ).json();
+  return await hubJson(
+    hubRequest("GET /api/instances/:id/artifacts/:artifact/map", {
+      path: { id: instanceId, artifact: id },
+      ...(component ? { query: { component } } : {}),
+    })
+  );
 }
 
 /** The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session. Answers what the hub did, one sentence. */
@@ -340,15 +296,11 @@ export async function verifyArtifact(
   instanceId: string,
   id: string
 ): Promise<string> {
-  const answer = (await (
-    await ok(
-      await hubFetch(
-        hubRequest("POST /api/instances/:id/artifacts/:artifact/verify", {
-          path: { id: instanceId, artifact: id },
-        })
-      )
-    )
-  ).json()) as { verify: string };
+  const answer = (await hubJson(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/verify", {
+      path: { id: instanceId, artifact: id },
+    })
+  )) as { verify: string };
   return answer.verify;
 }
 
@@ -357,12 +309,10 @@ export async function canvasSent(
   instanceId: string,
   id: string
 ): Promise<void> {
-  await ok(
-    await hubFetch(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/sent", {
-        path: { id: instanceId, artifact: id },
-      })
-    )
+  await hubSend(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/sent", {
+      path: { id: instanceId, artifact: id },
+    })
   );
 }
 
@@ -370,25 +320,23 @@ export async function canvasSent(
 export async function findArtifact(
   id: string
 ): Promise<ArtifactSummary & { instanceId: string; shown: boolean }> {
-  const response = await hubFetch(
-    hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } })
+  return await hubJson(
+    hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } }),
+    {
+      failure: async (response) =>
+        new ArtifactRefused(
+          response.status,
+          (await hubRefusal(response)).message
+        ),
+    }
   );
-  if (!response.ok) {
-    throw new ArtifactRefused(
-      response.status,
-      (await hubRefusal(response)).message
-    );
-  }
-  return response.json();
 }
 
 /** Closes the session's panel; each store marks its own copy closed once the hub took it. */
 export async function deletePreview(instanceId: string): Promise<void> {
-  await ok(
-    await hubFetch(
-      hubRequest("DELETE /api/instances/:id/preview", {
-        path: { id: instanceId },
-      })
-    )
+  await hubSend(
+    hubRequest("DELETE /api/instances/:id/preview", {
+      path: { id: instanceId },
+    })
   );
 }
