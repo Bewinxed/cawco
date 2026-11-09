@@ -1,8 +1,7 @@
 /**
  * What a project's page says around its board: the head's actions and its
  * ⋯ menu, the stages, a task card's state. The dashboard renders them from
- * here, and the probe kit finds them by these same words
- * (scripts/probe-words-check.ts refuses a copy).
+ * here.
  */
 export const projectWords = {
   /** A project's details changed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
