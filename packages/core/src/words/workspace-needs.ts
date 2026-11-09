@@ -1,7 +1,7 @@
 /**
  * What a machine lacks for a delegate's workspace, in the person's words:
  * the refusal of a delegate there (agent workspace.ts, place-repo.ts,
- * boundary.ts; hub work-items.ts passes it on whole) and the fault under the
+ * boundary/; hub work-items.ts passes it on whole) and the fault under the
  * machine's row (dashboard MachinesList.svelte), both read from the
  * machine's one report of it (core workspace-needs.ts, the `workspace`
  * capability). The install command always stands apart, so it is copied as
