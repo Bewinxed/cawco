@@ -1,9 +1,10 @@
 /**
- * React in every bundle CawCo builds with Bun is the agent package's,
- * whoever imports it: the canvas host (canvas-host.ts), the decision host
- * (decision-host.ts) and the standalone binary's compile
- * (scripts/build-binary.ts) each take this plugin, so a page or the binary
- * runs one React. Excalidraw's `tunnel-rat` imports `react` without
+ * The plugin that resolves `react` and `react-dom` in a bundle from one
+ * package's install, the package that declares them. Every bundle CawCo
+ * builds with Bun passes the agent package's folder here: the canvas host
+ * (hub canvas-host.ts), the decision host (hub decision-host.ts) and the
+ * standalone binary's compile (scripts/build-binary.ts), so a page or the
+ * binary runs one React. Excalidraw's `tunnel-rat` imports `react` without
  * declaring it (pmndrs/tunnel-rat#24, open; 0.1.2 is its latest), and from
  * bun's global store, which a workspace installs from, nothing of ours lies
  * above it to reach one through, so unpinned a bundle fails ("Could not
@@ -15,16 +16,13 @@
  * resolved from the package that declares it.
  */
 
-/** The agent package, which declares react and react-dom. */
-const AGENT_DIR = new URL("../../agent/", import.meta.url).pathname;
-
 const REACT = /^react(?:-dom)?(?:\/.*)?$/u;
 
-export const agentReact: Bun.BunPlugin = {
-  name: "agent-react",
+export const reactFrom = (packageDir: string): Bun.BunPlugin => ({
+  name: "react-from",
   setup(build) {
     build.onResolve({ filter: REACT }, ({ path }) => ({
-      path: Bun.resolveSync(path, AGENT_DIR),
+      path: Bun.resolveSync(path, packageDir),
     }));
   },
-};
+});
