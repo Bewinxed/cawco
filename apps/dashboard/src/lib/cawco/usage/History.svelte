@@ -20,6 +20,7 @@
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import { newestRead } from "#lib/platform/newest-read.js";
   import { cawco } from "../client.svelte";
   import { hubMidnight, money, summaryReader } from "../usage";
   import ReadFailed from "./ReadFailed.svelte";
@@ -66,10 +67,9 @@
   ): Promise<UsageSummary | null> =>
     start === null ? Promise.resolve(null) : summaryOf(harness, "start", start);
 
-  let ticket = 0;
+  const reads = newestRead();
   async function read(): Promise<void> {
-    ticket += 1;
-    const mine = ticket;
+    const newest = reads.next();
     const { claude, opencode } = since;
     const per = hourly;
     if (claude === undefined || opencode === undefined) {
@@ -80,7 +80,7 @@
         readOne("claude", claude),
         readOne("opencode", opencode),
       ]);
-      if (mine === ticket) {
+      if (newest()) {
         shown = {
           hourly: per,
           series: { claude: c, opencode: o },
@@ -89,7 +89,7 @@
         failed = false;
       }
     } catch {
-      if (mine === ticket) {
+      if (newest()) {
         failed = true;
       }
     }
