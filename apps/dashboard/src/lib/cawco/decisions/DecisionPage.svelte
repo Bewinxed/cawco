@@ -26,7 +26,8 @@
    */
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { asksStore } from "#lib/cawco/stores/asks.svelte.js";
+
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
@@ -120,7 +121,8 @@
   /** Its record shows while it is decided; a page its session asked again is picked on live, its record kept. */
   const decided = $derived(!!read?.record && isDecided(read));
   const working = $derived(
-    !!shown?.writer && cawco.activityOf(shown.writer.instanceId) === "working"
+    !!shown?.writer &&
+      asksStore.activityOf(shown.writer.instanceId) === "working"
   );
   const pill = $derived(shown ? pillOf(shown, working, false) : null);
   const figure = $derived.by(() => {

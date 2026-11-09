@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { cawco } from "./client.svelte";
   import { machineName } from "./home/home-state.svelte";
   import { markHue } from "./mark";
   import StopTrayView from "./StopTrayView.svelte";
@@ -15,8 +14,14 @@
    * where the tray stands (stop-tray-here). Put away, it hands the focus
    * back to what opened it (`opener`).
    */
-  import type { StopJob, StopRow } from "./stop-work.svelte";
-  import { endWordsOf, stopShare, stopWork } from "./stop-work.svelte";
+  import {
+    endWordsOf,
+    type StopJob,
+    type StopRow,
+    stopShare,
+    stopWork,
+  } from "./stop-work.svelte";
+  import { asksStore } from "./stores/asks.svelte";
 
   let {
     class: className,
@@ -49,7 +54,7 @@
 </script>
 
 <StopTrayView
-  activityOf={(id) => cawco.activityOf(id)}
+  activityOf={(id) => asksStore.activityOf(id)}
   bind:this={view}
   class={className}
   fillOf={(row: StopRow) => `var(--mark-${markHue(sessionPlace(row.s.id))})`}
