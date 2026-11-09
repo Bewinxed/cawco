@@ -58,12 +58,7 @@
     UNKNOWN_LABEL,
   } from "./activity";
   import ContextMeter from "./ContextMeter.svelte";
-  import {
-    cawco,
-    type PermissionAnswer,
-    permissionAnswer,
-    submitCommand,
-  } from "./client.svelte";
+  import { submitCommand } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { answeredOr } from "./hub/control";
   import { conversationHref } from "./links";
@@ -78,6 +73,11 @@
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus } from "./session-status";
   import { startFork } from "./spawn/new-session.svelte";
+  import {
+    asksStore,
+    type PermissionAnswer,
+    permissionAnswer,
+  } from "./stores/asks.svelte";
   import {
     boardStore,
     isFailed,
@@ -142,7 +142,7 @@
   const running = $derived(
     row?.status === "running" || row?.status === "starting"
   );
-  const activity = $derived(cawco.activityOf(target.viewId));
+  const activity = $derived(asksStore.activityOf(target.viewId));
   /** What was asked of it and is on its way, or did not go (session-acts). */
   const act = $derived(row ? sessionAct(row.id) : undefined);
   /** The state word's status ink: failed in crimson, needs you in spark's. */
@@ -173,7 +173,7 @@
     }
     return ACTIVITY_LABEL[activity];
   });
-  const tool = $derived(cawco.currentToolOf(target.viewId));
+  const tool = $derived(asksStore.currentToolOf(target.viewId));
   /**
    * A tool by the name the transcript gives it (@cawco/core `describeTool`'s
    * `tool-name` rule: an MCP tool's own name past its server, in words), not
