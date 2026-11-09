@@ -42,6 +42,7 @@
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
   import { newestRead } from "#lib/platform/newest-read.js";
+  import { plainClick } from "#lib/platform/plain-click.js";
   import {
     makeDecisionTasks,
     readDecision,
@@ -310,13 +311,7 @@
                   data-link-to={link.name}
                   href={pageHref(link.name)}
                   onclick={(event) => {
-                    if (
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.altKey ||
-                      event.button !== 0
-                    ) {
+                    if (!plainClick(event)) {
                       return;
                     }
                     event.preventDefault();
