@@ -815,20 +815,19 @@ import {
   noteTailnetDashboard,
   secureDashboardUrl,
 } from "./dashboard-url";
-import type {
-  BoardInstanceRow,
-  DbShape,
-  InstanceKind,
-  MachineLineKind,
-  PublicInstanceRow,
-} from "./db";
-import { listedAt } from "./db";
+import type { DbShape, MachineLineKind } from "./db";
 import type { AccountLeave, LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type { SourceNote } from "./db/fleet-catalog";
 import { hashHookMaterial, MEMORY_ID } from "./db/fleet-catalog";
+import type {
+  BoardInstanceRow,
+  InstanceKind,
+  PublicInstanceRow,
+} from "./db/instances";
+import { listedAt } from "./db/instances";
 import type { AgentAuth } from "./db/machines";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
