@@ -50,7 +50,7 @@ import {
   stepLines,
   type WrittenStep,
 } from "./plans";
-import { folderAttempt } from "./project-folder";
+import { projectAttempt } from "./project-refusal";
 import { type Refused, refusal } from "./refusal";
 
 /** What became of a message to a session about its plan's changes. */
@@ -480,5 +480,5 @@ export const planChangeRoutes = (changes: PlanChanges) =>
     "/api/instances/:id/plan/edits",
     { params: t.Object({ id: t.String() }), body: PLAN_EDIT_SCHEMA },
     ({ params, body }) =>
-      folderAttempt(() => changes.edit(params.id, body as PlanEdit))
+      projectAttempt(() => changes.edit(params.id, body as PlanEdit))
   );

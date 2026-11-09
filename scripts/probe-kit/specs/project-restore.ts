@@ -707,12 +707,15 @@ const foldLeg = async (rig: Rig): Promise<void> => {
     "Only mine",
   ]);
   const files = await Promise.all(
-    dupTitles.map(async (title, at) => ({
-      path: taskPath(at + 2, title),
-      content: (await readFolderFile(dup, taskPath(at + 1, title))).content,
-    }))
+    dupTitles.map(async (title, at) => {
+      const file = await readFolderFile(dup, taskPath(at + 1, title));
+      if (!("content" in file)) {
+        throw new Error(file.response.detail);
+      }
+      return { path: taskPath(at + 2, title), content: file.content };
+    })
   );
-  await writeFolderFiles(keeper, files, {
+  const committed = await writeFolderFiles(keeper, files, {
     author: hubActor("Probe dup shares a repository with this project").author,
     message: mergedInMessage(
       hubActor("Probe dup shares a repository with this project"),
@@ -720,6 +723,9 @@ const foldLeg = async (rig: Rig): Promise<void> => {
       "Probe dup"
     ),
   });
+  if (!("sha" in committed)) {
+    throw new Error(committed.response.detail);
+  }
   await forgetAsBefore(rig, dup);
   await forgetAsBefore(rig, partly);
   const list = await listed(rig);
@@ -845,7 +851,7 @@ const placesLeg = async (rig: Rig): Promise<void> => {
       })
     );
   }
-  await writeFolderFiles(
+  const committed = await writeFolderFiles(
     old,
     [
       {
@@ -862,6 +868,9 @@ const placesLeg = async (rig: Rig): Promise<void> => {
       message: "probe",
     }
   );
+  if (!("sha" in committed)) {
+    throw new Error(committed.response.detail);
+  }
   const wrote = Date.now();
   await forgetAsBefore(rig, old);
   const hinted = (await listed(rig)).find((one) => one.id === old);
@@ -968,7 +977,12 @@ const twoTasksLeg = async (
     );
   }
   if (template !== "code") {
-    await deleteFolderFile(id, "stages.md", { message: "stages: none" });
+    const committed = await deleteFolderFile(id, "stages.md", {
+      message: "stages: none",
+    });
+    if (!("sha" in committed)) {
+      throw new Error(committed.response.detail);
+    }
   }
   await forgetAsBefore(rig, id);
   const entry = (await listed(rig)).find((one) => one.id === id);
@@ -1025,8 +1039,10 @@ export default {
       const { hubInProcess } =
         await import("../../../packages/hub/scripts/hub-in-process");
       const { db, hub } = await hubInProcess(dbPath, join(scratch, "home"));
-      const { PROJECT_TRASH_DIR, projectRoot } =
+      const { PROJECT_TRASH_DIR } =
         await import("../../../packages/hub/src/project-folder");
+      const { projectRootOf } =
+        await import("../../../packages/hub/src/project-refusal");
       const raw = new Database(dbPath);
       raw.run("PRAGMA busy_timeout = 5000");
       const rig: Rig = {
@@ -1050,7 +1066,7 @@ export default {
         journal,
         kit,
         raw,
-        root: projectRoot,
+        root: projectRootOf,
         trash: async () =>
           (await readdir(PROJECT_TRASH_DIR).catch(() => [] as string[])).sort(),
         trashDir: PROJECT_TRASH_DIR,

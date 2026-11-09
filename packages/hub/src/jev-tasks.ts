@@ -50,7 +50,7 @@ import {
   sameFilesAndChecks,
   TRIAGE_FIELD,
 } from "./jev-placement";
-import { FolderRefusal } from "./project-folder";
+import { ProjectRefusal } from "./project-refusal";
 import { refusal } from "./refusal";
 import {
   hubActor,
@@ -188,7 +188,7 @@ export const createJevTasks = ({
     try {
       await tasks.link(projectId, task.id, { duplicateOf: of }, hubActor(why));
     } catch (error) {
-      if (error instanceof FolderRefusal) {
+      if (error instanceof ProjectRefusal) {
         return error.message;
       }
       throw error;
@@ -579,7 +579,7 @@ export const createJevTasks = ({
   /** The task a phone request is about, named or picked; refused when there is none. */
   const named = (picked: string | undefined, action: PhoneAction): string => {
     if (!picked) {
-      throw new FolderRefusal(
+      throw new ProjectRefusal(
         409,
         `Jev read the request as “${action}” but it names no task the project has.`
       );
@@ -673,7 +673,7 @@ export const createJevTasks = ({
     },
     move: async (projectId, _sentence, about, stage) => {
       if (!stage) {
-        throw new FolderRefusal(
+        throw new ProjectRefusal(
           409,
           "Jev read the request as a move, but the project has no stages."
         );
@@ -730,7 +730,7 @@ export const createJevTasks = ({
   ): Promise<PhoneDone> => {
     const sentence = text.trim();
     if (!sentence) {
-      throw new FolderRefusal(400, "A request needs words.");
+      throw new ProjectRefusal(400, "A request needs words.");
     }
     const task = taskId ? await tasks.get(projectId, taskId) : undefined;
     const jev = key();
@@ -774,8 +774,8 @@ export const phoneRequestRoutes = (jevTasks: JevTasks) =>
       try {
         return await jevTasks.phoneRequest(params.id, body.text, body.taskId);
       } catch (error) {
-        if (error instanceof FolderRefusal) {
-          return refusal(error.status, "folder-refused", error.message);
+        if (error instanceof ProjectRefusal) {
+          return refusal(error.status, "project-refused", error.message);
         }
         return refusal(502, "jev-folder", words(error));
       }
