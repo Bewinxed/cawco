@@ -11,7 +11,12 @@ import type {
   RelayProofReport,
   RelayTry,
 } from "@cawco/core/stream-relay";
-import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import {
+  hubData,
+  hubJson,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 
 const relayState = $state({
   /**
@@ -40,9 +45,7 @@ export function keepRelayJourney(journey: RelayJourneyView): void {
 
 /** The stream relay's journey as the hub has it now, with this page's domain; a failed read throws its words. */
 export async function readRelayJourney(): Promise<void> {
-  const read = await hubJson<RelayAnswer>(hubRequest("GET /api/stream-relay"), {
-    failure: refusedOrUnreached,
-  });
+  const read = await hubData(hub.api["stream-relay"].get(), refusedOrUnreached);
   relayState.relayDomain = read.domain;
   keepRelayJourney(read.journey);
 }

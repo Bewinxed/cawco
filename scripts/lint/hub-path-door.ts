@@ -73,8 +73,6 @@ const OWN: Record<string, string> = {
 /** The files that may send a body as given (`hubRequestAsGiven`), each with why. */
 const AS_GIVEN: Record<string, string> = {
   "packages/core/src/hub-request.fixtures.ts": "the door's own proof",
-  "apps/dashboard/src/lib/cawco/views-api.ts":
-    "a view's own Query arguments, data no type holds, held by the hub's draft check and its 422",
   "scripts/probe-kit/specs/setup-send.ts":
     "leg 9 proves the show refuses `{ card }`, its shape before 5646cadda",
   "scripts/probe-kit/specs/view-args.ts":
