@@ -30,7 +30,7 @@ import {
   gitSection,
   openingMessage,
   summariserPrompt,
-} from "./continuation";
+} from "./continuation-words";
 import type { ContinuationRow, ContinuationSlip } from "./db/continuations";
 import type {
   ContinuationAsker,
