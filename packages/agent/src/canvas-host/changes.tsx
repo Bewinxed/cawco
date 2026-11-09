@@ -25,12 +25,9 @@
  * so does the person selecting a ringed element; so does a Send (the
  * hub's). The tag leaves once every stop is seen.
  */
-import {
-  type ArtifactChanges,
-  type ChangedItem,
-  seeChanges,
-  seenOf,
-} from "@cawco/core/comments/model";
+
+import { seeChanges, seenOf } from "@cawco/core/comments/model";
+import type { ArtifactChanges, ChangedItem } from "@cawco/core/doc-meta";
 import { commentWords } from "@cawco/core/words/comments";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
