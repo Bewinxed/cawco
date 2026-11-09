@@ -26,7 +26,7 @@ import type { TailnetServing } from "./tailnet-https";
  * client built for the version before would misread what the hub now sends.
  * A tab outlives the deploy that loaded it, so the hub names this on the
  * board frame every dashboard socket receives first, and a page built for an
- * older version reloads itself (the dashboard's `protocol-reload.ts`).
+ * older version reloads itself (the dashboard's `reload.svelte.ts`).
  *
  * 2: a session's stream carries the hub's transcript events (3721295c).
  * 3: raised on the live fleet to show a tab built for 2 reload itself with

@@ -4,7 +4,7 @@
  * design-previews/state-switcher.js (the `interfaces:state-machine` skill's
  * switcher), and none carries a switcher of its own. Refused:
  *
- *   copy       a folder-served preview's `state-switcher.js` that is not
+ *   copy       a `state-switcher.js` in a folder-served preview that is not
  *              byte for byte the shared one (a folder served on its own
  *              reaches nothing outside it, so each carries a copy)
  *   unloaded   a preview page that does not load the switcher: a folder's
