@@ -1,3 +1,4 @@
+import { refusalWords } from "@cawco/core/hub-refusal";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { delegationHubUrl } from "./delegation";
 import { hubAnswer } from "./hub-away";
@@ -33,7 +34,7 @@ export const acknowledgeSessionCredential = async (
     NOT_ACKNOWLEDGED
   );
   if (!response.ok) {
-    const said = `${NOT_ACKNOWLEDGED}: ${await response.text()}`;
+    const said = `${NOT_ACKNOWLEDGED}: ${refusalWords(await response.text())}`;
     throw response.status === 401
       ? new CredentialUnknown(said)
       : new Error(said);

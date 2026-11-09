@@ -4,6 +4,7 @@
  * this registers it with the service manager, brings the machine up, and tells
  * the person what is missing and offers to install it.
  */
+
 import { mkdtemp, rm } from "node:fs/promises";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +34,7 @@ import type {
 import { writeWrapper } from "@cawco/core/binary-wrapper";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { HARNESSES } from "@cawco/core/harness/kinds";
+import { refusalWords } from "@cawco/core/hub-refusal";
 import { fetchHub, hubRequest } from "@cawco/core/hub-request";
 import { INSTALL_JOINED, INSTALL_STEP_PREFIX } from "@cawco/core/join";
 import { machineId } from "@cawco/core/machine-id";
@@ -210,7 +212,7 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     );
     if (!saved.ok) {
       throw new Error(
-        `The hub did not save the update settings: ${await saved.text()}`
+        `The hub did not save the update settings: ${refusalWords(await saved.text())}`
       );
     }
   } else {
