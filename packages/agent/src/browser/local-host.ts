@@ -33,6 +33,7 @@ import {
   spawnedPid,
 } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { until } from "@cawco/core/until";
 import { z } from "zod";
 import { browserExecutable, chromiumSandboxed } from "../capabilities";
 import { resolveBin, toolEnv } from "../tools";
@@ -298,14 +299,14 @@ export class LocalHost implements BrowserHost {
       host: "local",
       local: { pid, procStart, ...(boot ? { bootId: boot } : {}) },
     };
-    const until = Date.now() + LIVE_MS;
+    const liveBy = Date.now() + LIVE_MS;
     while (!(await answers(devtools))) {
       if (!isAlive(pid)) {
         throw new Error(
           `Chromium ended before its DevTools answered: ${await lastWords(record)}`
         );
       }
-      if (Date.now() > until) {
+      if (Date.now() > liveBy) {
         await this.stop(next);
         throw new Error(
           `Chromium's DevTools did not answer on 127.0.0.1:${devtools} within ${LIVE_MS / 1000} s.`
@@ -322,10 +323,10 @@ export class LocalHost implements BrowserHost {
       return;
     }
     signalGroup(pid, "SIGTERM");
-    const until = Date.now() + STOP_MS;
-    while (isAlive(pid) && Date.now() < until) {
-      await Bun.sleep(POLL_MS);
-    }
+    await until(() => !isAlive(pid), {
+      deadline: Date.now() + STOP_MS,
+      every: POLL_MS,
+    });
     if (isAlive(pid)) {
       signalGroup(pid, "SIGKILL");
     }
