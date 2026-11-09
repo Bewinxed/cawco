@@ -2907,7 +2907,7 @@ export const limitEvents = sqliteTable(
  *
  * One row per window per CHANGE, not per reading: an integer percent moves
  * maybe 100 times a day, and every report in between repeats it.
- * {@link CawcoDb.putAccountReading} diffs against the previous reading and
+ * hub db/accounts.ts `putReading` diffs against the previous reading and
  * writes only what moved.
  */
 export const usageLimitHistory = sqliteTable(

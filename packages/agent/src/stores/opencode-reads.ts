@@ -122,7 +122,7 @@ export interface SessionQuery {
  * and so no session.
  *
  * The last user message is read through 2.0's index on `session_message`
- * (`session_id`, `time_created`, `id`: packages/core/src/session/sql.ts
+ * (`session_id`, `time_created`, `id`: OpenCode's
  * `session_message_session_time_created_id_idx`), newest first, to the first
  * `user` row: a session's own rows, never the table. A user row in 2.0 is
  * the person's prompt; a tool's answer is in the assistant message's
