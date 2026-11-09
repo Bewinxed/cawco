@@ -14,7 +14,7 @@ import type {
   SlashCommand,
   SupportedCommands,
 } from "@cawco/core/session-messages";
-import { hubCall } from "#lib/platform/hub-read.js";
+import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
 
 /**
  * What one session answers behind `/` (NEW.md §11), from its two sources: every
@@ -144,7 +144,7 @@ export const folderCommands = async (ask: {
   machineId: string;
   model: string;
 }): Promise<AvailableCommand[]> => {
-  const answer = await hubCall<SupportedCommands>(
+  const answer = await hubJson<SupportedCommands>(
     hubRequest("GET /api/agents/:machineId/commands", {
       path: { machineId: ask.machineId },
       query: {
@@ -154,7 +154,7 @@ export const folderCommands = async (ask: {
         ...(ask.model ? { model: ask.model } : {}),
       },
     }),
-    `list the commands of ${ask.cwd}`
+    { failure: couldNotOrAway(`list the commands of ${ask.cwd}`) }
   );
   return availableCommands({ at: 0, skills: [], ...answeredCommands(answer) });
 };
