@@ -22,7 +22,7 @@ const GUARDED_DEPTH = Math.max(
 /**
  * A place's guard (`place-guard.pl before REQ PLACE` before
  * each command, `after REQ PLACE SCRATCH POLICY HOME` once it has run), the
- * executor's on the host ({@link execScript}). A person's own folder gets no
+ * executor's on the host (exec.ts `execScript`). A person's own folder gets no
  * stand-ins (never write into a person's own folder), so srt binds only the
  * protected config the place has; what a command makes of the rest is
  * judged here, by the place's real path, once the command and everything it
@@ -191,7 +191,7 @@ exit($moved ? 3 : 0);
 export const guardFiles = (id: string, gen: string): [string, string][] =>
   isPlace(id) ? [[guardOf(id, gen), placeGuard()]] : [];
 
-/** One process, as {@link busyOld} reads it. */
+/** One process, as processes.ts `busyOld` reads it. */
 export interface Seen {
   readonly command: string;
   readonly pid: number;
@@ -199,7 +199,7 @@ export interface Seen {
   readonly ppid: number;
 }
 
-/** Every process on the machine, read once for every workspace {@link busyOld} looks at. */
+/** Every process on the machine, read once for every workspace processes.ts `busyOld` looks at. */
 export const snapshot = async (): Promise<Seen[]> => {
   const [rows, lines] = await Promise.all([processLineage(), commandLines()]);
   const commands = new Map(lines.map((line) => [line.pid, line.command]));
