@@ -42,7 +42,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
-import { hostGit } from "./host-git";
+import { hostGit } from "./git/run";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
 import { probeStarted } from "./probe-count";
 
