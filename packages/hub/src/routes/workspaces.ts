@@ -7,6 +7,7 @@ import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 import { discardCall } from "../work-item-calls";
 import { WorkItemRefusal } from "../work-item-state";
 import { workspaceOut } from "../work-out";
@@ -51,14 +52,15 @@ export const workspaceRoutes = ({
       // What a held workspace's clone holds that is nowhere else, as its
       // machine read it once its boundary was closed: what a discard saves
       // to a carry before deleting.
-      .get("/api/workspaces/:id/held", ({ params, status }) => {
+      .get("/api/workspaces/:id/held", ({ params }) => {
         try {
           return workItems.held(params.id);
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
-          return status(
+          return refusal(
             error instanceof WorkItemRefusal ? error.status : 502,
+            "work-item-refused",
             message
           );
         }
@@ -85,7 +87,7 @@ export const workspaceRoutes = ({
             })
           ),
         },
-        async ({ params, body, request, server, status }) => {
+        async ({ params, body, request, server }) => {
           const caller = hubAuth.callerOf(request, addressOf(server, request));
           try {
             const { workspace, carry } = await workItems.archive(params.id, {
@@ -97,8 +99,9 @@ export const workspaceRoutes = ({
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
-            return status(
+            return refusal(
               error instanceof WorkItemRefusal ? error.status : 502,
+              "work-item-refused",
               message
             );
           }
@@ -107,7 +110,7 @@ export const workspaceRoutes = ({
       // What a workspace serves that waits on the person, each by its id,
       // name and link: what an archive of it waits on, which the person's
       // confirm names (dashboard LiveSessionMenu).
-      .get("/api/workspaces/:id/waiting", ({ params, status }) => {
+      .get("/api/workspaces/:id/waiting", ({ params }) => {
         try {
           return {
             waiting: workItems.waiting(params.id).map((one) => ({
@@ -118,8 +121,9 @@ export const workspaceRoutes = ({
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
-          return status(
+          return refusal(
             error instanceof WorkItemRefusal ? error.status : 502,
+            "work-item-refused",
             message
           );
         }
@@ -140,7 +144,7 @@ export const workspaceRoutes = ({
             reason: t.Optional(t.String({ maxLength: 300 })),
           }),
         },
-        async ({ params, body, request, status }) => {
+        async ({ params, body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
@@ -160,8 +164,9 @@ export const workspaceRoutes = ({
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
-            return status(
+            return refusal(
               error instanceof WorkItemRefusal ? error.status : 502,
+              "work-item-refused",
               message
             );
           }

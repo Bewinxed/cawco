@@ -69,7 +69,7 @@ import { Elysia, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
-import { StatusRefusal } from "./refusal";
+import { refusal, StatusRefusal } from "./refusal";
 import type { RelayCall } from "./stream-relay";
 
 /** How a take-over came to end, as the hub's log says it. */
@@ -596,12 +596,12 @@ const keyOf = (raw: string): BrowserKey => {
   return key;
 };
 
-const run = async <T>(work: () => Promise<T> | T): Promise<T | Response> => {
+const run = async <T>(work: () => Promise<T> | T) => {
   try {
     return await work();
   } catch (error) {
     if (error instanceof BrowserRefusal) {
-      return new Response(error.message, { status: error.status });
+      return refusal(error.status, "browser-refused", error.message);
     }
     throw error;
   }
