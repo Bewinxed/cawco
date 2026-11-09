@@ -46,12 +46,12 @@ import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { msOf } from "#lib/platform/motion/time.js";
 import { store, stored } from "#lib/platform/storage.js";
 import { browser } from "$app/env";
-import { cawco } from "../client.svelte";
 import { connectionStore } from "../hub/socket.svelte";
 import type { BoardRow } from "../links";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import type { TaskSummary } from "../project-tasks";
 import { QUESTION_KEYS } from "../question";
+import { asksStore } from "../stores/asks.svelte";
 import { boardStore } from "../stores/board.svelte";
 import { clockStore } from "../stores/clock.svelte";
 import { needsStore } from "../stores/needs.svelte";
@@ -481,7 +481,7 @@ export class CawLead {
   /** What the conversation has asked, oldest first: its parked asks. */
   readonly asks = $derived.by((): BlockedRequest[] => {
     const id = this.conversationId;
-    return id ? cawco.blocked.filter((row) => row.instanceId === id) : [];
+    return id ? asksStore.blocked.filter((row) => row.instanceId === id) : [];
   });
 
   /**
@@ -514,12 +514,12 @@ export class CawLead {
     // card or canvas of his in Needs you. His row's mark and his tab's
     // glyph read the same.
     const id = this.conversationId;
-    if (id && cawco.activityOf(id) === "blocked") {
+    if (id && asksStore.activityOf(id) === "blocked") {
       return "needs-you";
     }
     // The conversation's own turn: an attempt it parents running is not Caw
     // working. Off, it still answers your words, and works while it does.
-    if (id && cawco.busyOf(id)) {
+    if (id && asksStore.busyOf(id)) {
       return "working";
     }
     if (!this.project.eventsOn) {
@@ -570,7 +570,7 @@ export class CawLead {
         );
       case "working": {
         const id = this.conversationId;
-        const tool = id ? cawco.currentToolOf(id) : null;
+        const tool = id ? asksStore.currentToolOf(id) : null;
         return tool
           ? [tool.name, tool.glance].filter(Boolean).join(" · ")
           : said.working;
