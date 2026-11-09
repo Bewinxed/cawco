@@ -34,9 +34,8 @@
   import {
     failureClause,
     failureWords,
-    hubFetch,
     hubJson,
-    hubRefusal,
+    hubSend,
   } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -135,12 +134,9 @@
 
   async function remove(device: OwnerDevice) {
     await act(`device:${device.id}`, async () => {
-      const response = await hubFetch(
+      await hubSend(
         hubRequest("DELETE /api/devices/:id", { path: { id: device.id } })
       );
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
     });
   }
 
