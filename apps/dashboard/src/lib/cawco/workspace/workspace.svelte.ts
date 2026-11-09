@@ -38,6 +38,7 @@ import { conversationHref, isSessionRow } from "../links";
 import { openArtifactIn } from "../reference-open.svelte";
 import { boardStore } from "../stores/board.svelte";
 import { catalogStore } from "../stores/catalog.svelte";
+import { followTabs } from "../stores/follows.svelte";
 import { askOpenAt, carryOpenAt, MATCH } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -686,9 +687,9 @@ export const workspace = {
     if (!isSessionTab(sessionId)) {
       // A project's tab: no conversation to visit.
     } else if (ctx) {
-      workingSet.visit(sessionId, ctx);
+      workingSet.visit(sessionId, workspace.openIds, ctx);
     } else {
-      workingSet.visit(sessionId);
+      workingSet.visit(sessionId, workspace.openIds);
     }
     this.activate(sessionId, leafHolding(sessionId)?.id ?? into);
   },
@@ -704,9 +705,9 @@ export const workspace = {
     if (sessionId && isSessionTab(sessionId)) {
       remember(sessionId, ctx);
       if (ctx) {
-        workingSet.visit(sessionId, ctx);
+        workingSet.visit(sessionId, workspace.openIds, ctx);
       } else {
-        workingSet.visit(sessionId);
+        workingSet.visit(sessionId, workspace.openIds);
       }
     }
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
@@ -822,7 +823,7 @@ export const workspace = {
       leaf.opened.from = to;
     }
     workingSet.forget(from);
-    workingSet.visit(to);
+    workingSet.visit(to, workspace.openIds);
     if (held.ctx) {
       delete held.ctx[from];
     }
@@ -874,7 +875,7 @@ export const workspace = {
    */
   land(sessionId: string): void {
     restore();
-    workingSet.visit(sessionId);
+    workingSet.visit(sessionId, workspace.openIds);
     const leaf = leafHolding(sessionId) ?? focused();
     placeTab(leaf, sessionId);
     show(leaf, sessionId);
@@ -1090,3 +1091,11 @@ export const workspace = {
   /** Once the first paint is up: the tree localStorage keeps, in front of the server's (Persistence above). */
   restore,
 };
+
+followTabs({
+  get openIds() {
+    return workspace.openIds;
+  },
+  named: (id) => workspace.named(id),
+  machineOf: (id) => contextOf(id)?.machine,
+});
