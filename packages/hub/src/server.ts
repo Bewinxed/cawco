@@ -1123,6 +1123,7 @@ import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
 import { lfsRoutes } from "./routes/lfs";
 import { mcpRoutes } from "./routes/mcp";
+import { modelWindowRoutes } from "./routes/model-windows";
 import { continueBody, permissionModeSchema } from "./routes/session-bodies";
 import { sessionIdentityRoutes } from "./routes/session-identities";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
@@ -33159,12 +33160,9 @@ export const createServer = (
               throw unreachable(answer);
           }
         }
-      )
-      // Claude models' context windows as their turns last reported them; the
-      // dashboard's model list carries them for claude rows.
-      .get("/api/model-windows", () => ({
-        claude: db.claudeContextWindows(),
-      }))
+      ),
+    modelWindowRoutes(ctx),
+    new Elysia()
       // What a continuation of this session would carry, sized — for the
       // dialog's pickers, which enable only models that fit.
       .get(
