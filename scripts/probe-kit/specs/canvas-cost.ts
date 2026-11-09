@@ -1981,7 +1981,7 @@ async function awayScript(): Promise<string> {
   const entry = join(process.env.TMPDIR ?? "/tmp", "canvas-cost-away.ts");
   writeFileSync(
     entry,
-    `import { holdSkipped } from ${JSON.stringify(join(APP, "src/lib/cawco/motion/rest.ts"))};
+    `import { holdSkipped } from ${JSON.stringify(join(APP, "src/lib/platform/motion/rest.ts"))};
 import { relayAway } from ${JSON.stringify(join(APP, "src/lib/cawco/decisions/host/away.ts"))};
 (window as unknown as { __probeAway: object }).__probeAway = { holdSkipped, relayAway };
 `

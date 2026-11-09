@@ -107,8 +107,6 @@
   } from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { offerUndo } from "#lib/cawco/config/undo.js";
-  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { send } from "#lib/cawco/project-tasks.js";
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -129,6 +127,8 @@
     IconToolTodo,
     IconTrash,
   } from "#lib/icons.js";
+  import { failureClause, failureWords } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   const section = sectionOf("connections");
 

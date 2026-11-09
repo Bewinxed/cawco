@@ -61,12 +61,12 @@
   import type { FleetSkillMeta } from "@cawco/core/fleet";
   import { skillsWords as words } from "@cawco/core/words/skills";
   import Coded from "#lib/cawco/Coded.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { cawco } from "../client.svelte";
   import {
     normalizeSkillSource,

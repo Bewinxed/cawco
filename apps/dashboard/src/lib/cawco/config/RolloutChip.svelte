@@ -2,16 +2,6 @@
   import type { FleetReportSection } from "@cawco/core/fleet";
   import { machineLabel } from "@cawco/core/machine-names";
   import { commonWords } from "@cawco/core/words/common";
-  /**
-   * Where one row has landed: "2/2 machines" on the row, and machine by
-   * machine in the popover. A machine that refused it opens the full fault —
-   * the same reading, remedy and retry the row's own alert gives — rather than
-   * the raw string the machine printed.
-   *
-   * The chip's glyph cross-fades between refused, landed everywhere and a
-   * sync on its way (--dur-control) while its tint turns over --dur-panel.
-   */
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
@@ -29,13 +19,23 @@
     IconRefresh,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  /**
+   * Where one row has landed: "2/2 machines" on the row, and machine by
+   * machine in the popover. A machine that refused it opens the full fault —
+   * the same reading, remedy and retry the row's own alert gives — rather than
+   * the raw string the machine printed.
+   *
+   * The chip's glyph cross-fades between refused, landed everywhere and a
+   * sync on its way (--dur-control) while its tint turns over --dur-panel.
+   */
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import type { Machine } from "../client.svelte";
   import AddMachineLink from "../connect/AddMachineLink.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
   import { causeOf } from "../fleet-faults";
   import { machineOs } from "../machine";
-  import { appear } from "../motion/curves.svelte";
 
   let {
     machines,

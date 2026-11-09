@@ -7,10 +7,8 @@
    * the app, the app's own task sheet.
    */
   import type { ProjectView } from "@cawco/core/views";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { provideMarkdownFleet } from "#lib/cawco/markdown-fleet.js";
   import { liveMarkdown } from "#lib/cawco/markdown-live.js";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import { viewsOf } from "#lib/cawco/views-api.js";
@@ -18,6 +16,8 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconAlert } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
 

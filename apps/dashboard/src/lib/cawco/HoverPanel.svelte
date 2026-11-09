@@ -49,6 +49,13 @@
   import type { Attachment } from "svelte/attachments";
   import type { HTMLAttributes } from "svelte/elements";
   import type { TransitionConfig } from "svelte/transition";
+  import {
+    dur,
+    easeOut,
+    lifting,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { onNavigate } from "$app/navigation";
   import {
     cawco,
@@ -57,8 +64,6 @@
     watchDelegate,
   } from "./client.svelte";
   import { provideEntrance } from "./hover-entrance";
-  import { dur, easeOut, lifting, motionOk } from "./motion/curves.svelte";
-  import { morph } from "./motion/morph.svelte";
 
   let {
     key,

@@ -6,7 +6,7 @@
  * whether there is anything to peek yet. Set up with the chip.
  */
 import { MediaQuery } from "svelte/reactivity";
-import { dur } from "./motion/curves.svelte";
+import { dur } from "#lib/platform/motion/curves.svelte.js";
 
 const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
 

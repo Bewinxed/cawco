@@ -17,7 +17,7 @@ import type {
 } from "@cawco/core/accounts";
 import { detach } from "@cawco/core/detach";
 import { accountsWords } from "@cawco/core/words/accounts";
-import { failureWords } from "#lib/cawco/hub-read.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
 
 export type DevicePhase =
