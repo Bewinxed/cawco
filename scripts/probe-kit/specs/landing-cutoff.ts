@@ -19,7 +19,7 @@
  * process that answers `locks/verify` as GitHub did, 401 without a
  * credential, then, with the one the machine's credential helper gives, a
  * slow 200. A hub origin's git-lfs runs against its own repository's LFS on
- * the hub alone, whatever `.lfsconfig` says (agent move.ts `hubGitEnv`).
+ * the hub alone, whatever `.lfsconfig` says (agent git/hub-remote.ts `hubGitEnv`).
  *
  * - A, the cause: a delegate commits a file, starts `sleep` in the
  *   background, then calls finish_item. Its item ends done, saying it
