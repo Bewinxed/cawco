@@ -733,6 +733,7 @@ suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/das
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/fleet-converger.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/claude-transcript.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/claude.ts	2
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/opencode-docs.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/opencode-session.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/opencode-transcript.ts	2
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/opencode.ts	5
@@ -807,6 +808,7 @@ suppression	biome-ignore lint/plugin/no-system-path	scripts/probe-kit/fake-agy.t
 suppression	biome-ignore lint/plugin/no-system-path	scripts/probe-kit/specs/boundary-writes.ts	1
 suppression	biome-ignore lint/plugin/no-system-path	scripts/probe-kit/specs/install-method-runs.ts	1
 suppression	biome-ignore lint/plugin/no-system-path	scripts/probe-kit/specs/keeper-stop-container.ts	2
+suppression	biome-ignore lint/plugin/stored-json	packages/agent/src/harnesses/opencode-docs.ts	1
 suppression	biome-ignore lint/security/noDangerouslySetInnerHtml	packages/agent/src/canvas-host/icons.tsx	1
 suppression	biome-ignore lint/security/useIframeSandbox	apps/dashboard/src/lib/cawco/canvas/CanvasStages.svelte	1
 suppression	biome-ignore lint/security/useIframeSandbox	apps/dashboard/src/lib/cawco/decisions/host/Canvas.svelte	1
@@ -818,6 +820,7 @@ suppression	biome-ignore lint/security/useIframeSandbox	apps/dashboard/src/route
 suppression	biome-ignore lint/security/useIframeSandbox	apps/dashboard/src/routes/(app)/motion/usage-relay/+page.svelte	1
 suppression	biome-ignore lint/style/noDescendingSpecificity	apps/dashboard/src/app.css	1
 suppression	biome-ignore lint/style/noNamespace	apps/dashboard/src/app.d.ts	1
+suppression	biome-ignore lint/style/noNestedTernary	packages/agent/src/harnesses/opencode-docs.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/ask-routing.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/history.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/rules.ts	2
