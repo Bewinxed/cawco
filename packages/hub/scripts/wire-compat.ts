@@ -57,6 +57,86 @@ export interface SocketFrames {
   sent: Set<string>;
 }
 
+/** How far a tag's name may be from `socketFrame` and still be read as a try at it. */
+const NEAR_MISS = 3;
+
+/** The edits between two words (Levenshtein), case aside. */
+const distance = (a: string, b: string): number => {
+  const [x, y] = [a.toLowerCase(), b.toLowerCase()];
+  let row = Array.from({ length: y.length + 1 }, (_, j) => j);
+  for (const [i, char] of [...x].entries()) {
+    const next = [i + 1];
+    for (const [j, other] of [...y].entries()) {
+      next.push(
+        Math.min(row[j + 1] + 1, next[j] + 1, row[j] + (char === other ? 0 : 1))
+      );
+    }
+    row = next;
+  }
+  return row[y.length];
+};
+
+/**
+ * Each type a core file marks as a frame: its name and which way it travels.
+ * The tag goes on a top-level interface or type alias; one anywhere else, or
+ * a tag spelled near it (`@socketframe`, `@socketFrames`), fails here naming
+ * the file, so a frame never falls out of the document unseen.
+ */
+const framesIn = (
+  file: string,
+  text: string
+): { direction: string; name: string }[] => {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const marked: { direction: string; name: string }[] = [];
+  const misplaced: string[] = [];
+  // A tag the checker reads on a declaration and on its parts is the outer one's.
+  const seen = new Set<ts.JSDocTag>();
+  const visit = (node: ts.Node): void => {
+    for (const tag of ts.getJSDocTags(node)) {
+      const said = tag.tagName.text;
+      if (
+        seen.has(tag) ||
+        (said !== FRAME_TAG && distance(said, FRAME_TAG) > NEAR_MISS)
+      ) {
+        continue;
+      }
+      seen.add(tag);
+      const { line } = source.getLineAndCharacterOfPosition(tag.getStart());
+      const at = `${file}:${line + 1}`;
+      if (said !== FRAME_TAG) {
+        misplaced.push(`${at}: @${said} is not @${FRAME_TAG}`);
+      } else if (
+        node.parent === source &&
+        (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node))
+      ) {
+        marked.push({
+          name: node.name.text,
+          direction: ts.getTextOfJSDocComment(tag.comment)?.trim() ?? "",
+        });
+      } else {
+        misplaced.push(
+          `${at}: @${FRAME_TAG} is on \`${node.getText(source).split("\n")[0]}\`; it marks a top-level interface or type alias`
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  // A tag in a comment no declaration owns is read by nothing above.
+  const written = [...text.matchAll(/@([A-Za-z][\w-]*)/gu)].filter(
+    ([, word]) => word === FRAME_TAG || distance(word, FRAME_TAG) <= NEAR_MISS
+  ).length;
+  if (written > seen.size) {
+    misplaced.push(
+      `${file}: ${written - seen.size} @${FRAME_TAG} tag${written - seen.size === 1 ? " is" : "s are"} in a comment no declaration owns`
+    );
+  }
+  if (misplaced.length) {
+    throw new Error(misplaced.join("\n"));
+  }
+  return marked;
+};
+
 /**
  * The dashboard socket's frames: every type in core's sources whose
  * declaration carries `@socketFrame fromHub` (the Ledger Protocol's server
@@ -65,33 +145,6 @@ export interface SocketFrames {
  * a client sends: the Ledger Protocol's client messages and the verbs'
  * payloads). The fleet types they carry come along as components.
  */
-/** Each type a core file marks as a frame: its name and which way it travels. */
-const framesIn = (
-  file: string,
-  text: string
-): { direction: string; name: string }[] =>
-  ts
-    .createSourceFile(file, text, ts.ScriptTarget.Latest, true)
-    .statements.filter(
-      (statement) =>
-        ts.isInterfaceDeclaration(statement) ||
-        ts.isTypeAliasDeclaration(statement)
-    )
-    .flatMap((statement) => {
-      const tag = ts
-        .getJSDocTags(statement)
-        .find((one) => one.tagName.text === FRAME_TAG);
-      const name = (statement as ts.InterfaceDeclaration).name.text;
-      return tag
-        ? [
-            {
-              name,
-              direction: ts.getTextOfJSDocComment(tag.comment)?.trim() ?? "",
-            },
-          ]
-        : [];
-    });
-
 export const socketFrames = (repo = REPO): SocketFrames => {
   const root = join(repo, CORE_SOURCE);
   const declaredIn = new Map<string, string>();
@@ -100,8 +153,7 @@ export const socketFrames = (repo = REPO): SocketFrames => {
   for (const path of [...sources].sort()) {
     const file = join(root, path);
     const text = readFileSync(file, "utf8");
-    const marked = text.includes(`@${FRAME_TAG}`) ? framesIn(file, text) : [];
-    for (const { name, direction } of marked) {
+    for (const { name, direction } of framesIn(relative(repo, file), text)) {
       if (!DIRECTIONS.has(direction)) {
         throw new Error(
           `${relative(repo, file)}: ${name}'s @${FRAME_TAG} says ${JSON.stringify(direction)}; it says fromHub or toHub`
