@@ -112,7 +112,7 @@ const CAPABILITIES = [SESSIOND_V1, SESSIOND_RELEASE];
 
 /**
  * The graceful window between stdin-EOF and SIGKILL during drain, mirroring
- * the agent's existing drain discipline (`agent/src/session.ts:57`,
+ * the agent's existing drain discipline (its
  * `DRAIN_TIMEOUT_MS = 8_000`).
  */
 const DRAIN_TIMEOUT_MS = 8000;
