@@ -39,7 +39,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { stepLink, taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
 import type { QuestionAnswer } from "./artifacts/questions";
-import type { AskedOf } from "./artifacts/service";
+import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { Note } from "./memory";
 import type { Tasks } from "./tasks";
