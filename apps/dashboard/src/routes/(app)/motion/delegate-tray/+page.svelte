@@ -23,6 +23,7 @@
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { onMount } from "svelte";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
@@ -302,7 +303,7 @@
   // stand-in, which never sends a board (the page stays connecting): the
   // bench says the hub is reached, after the page has said it is reaching.
   $effect(() => {
-    if (details && cawco.status !== "connected") {
+    if (details && connectionStore.status !== "connected") {
       debug.connectionState.status = "connected";
     }
   });
