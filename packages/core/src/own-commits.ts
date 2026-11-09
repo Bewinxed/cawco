@@ -2,13 +2,13 @@
  * How many commits a workspace's clone holds that are nowhere else: one
  * reckoning, run by the machine's host git once the boundary is closed
  * (agent workspace.ts `holding`, what retires or holds a workspace) and by
- * the hub inside a live boundary (work-items.ts `unlandedOf`, what a cold
+ * the hub inside a live boundary (workspaces.ts `unlandedOf`, what a cold
  * follow-up and a stop say it holds).
  *
  * A commit counts when HEAD or a local branch has it and no ref of `origin`
  * does (`git rev-list HEAD --branches --not --remotes=origin`: landed work
  * was pushed, onto the base or to a branch of its own), past the commits
- * `landed` reaches (hub work-items.ts `vouchLanded`), unless a commit on
+ * `landed` reaches (hub landing-run.ts `vouchLanded`), unless a commit on
  * `origin/<base>` that the clone does not have carries the same change
  * (`git patch-id --stable`, as `git cherry` matches them). On 2026-10-23
  * two workspaces whose landing failed at the gate's Mac step stayed held
