@@ -80,6 +80,7 @@
  *     the segment's panel (it holds the cards, so it takes no Tab stop).
  */
 import type { Page } from "playwright-core";
+import { refusalWords } from "../../../../packages/core/src/hub-refusal";
 import {
   type HubRequest,
   hubRequest,
@@ -548,7 +549,9 @@ const pageAsk = (page: Page, request: HubRequest) =>
     return {
       ok: response.ok,
       status: response.status,
-      text: await response.text(),
+      text: response.ok
+        ? await response.text()
+        : refusalWords(await response.text(), response.status),
     };
   }, request);
 

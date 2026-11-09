@@ -98,6 +98,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -138,7 +139,9 @@ const requestWithin = async (
     return {
       ok: response.ok,
       status: response.status,
-      text: await response.text(),
+      text: response.ok
+        ? await response.text()
+        : refusalWords(await response.text(), response.status),
     };
   });
   switch (read.kind) {
