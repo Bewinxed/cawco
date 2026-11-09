@@ -482,7 +482,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     row: InstanceRow | undefined,
     model: string
   ): row is InstanceRow => {
-    if (!row || traitsOf(row.harness).accountModel === "dir") {
+    if (!row || traitsOf(row.harness).soleProvider !== null) {
       return false;
     }
     const current = row.accountId

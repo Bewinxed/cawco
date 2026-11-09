@@ -1964,7 +1964,7 @@ const attach = (
     const keepReport = (report: MachineHarnessReport): void => {
       // A machine with no Claude Code has its sentence in the report's
       // `authReason`, not the one about its accounts' sign-ins.
-      if (traitsOf(report.harness).accountModel === "dir" && report.installed) {
+      if (traitsOf(report.harness).accountDir && report.installed) {
         noteClaudeAuth(report.auth);
       }
       reportedHarnesses = [
