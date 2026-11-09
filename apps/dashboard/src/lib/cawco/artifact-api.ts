@@ -21,6 +21,7 @@ import {
   hubJson,
   hubRefusal,
   hubSend,
+  refusedOf,
 } from "#lib/platform/hub-read.js";
 import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
@@ -146,7 +147,7 @@ export async function showArtifact(
   if (!response.ok) {
     throw new ArtifactRefused(
       response.status,
-      (await hubRefusal(response)).message
+      hubRefusal(await refusedOf(response)).message
     );
   }
   const shown = (await response.json().catch(() => null)) as {
@@ -323,10 +324,10 @@ export async function findArtifact(
   return await hubJson(
     hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } }),
     {
-      failure: async (response) =>
+      failure: (refused) =>
         new ArtifactRefused(
-          response.status,
-          (await hubRefusal(response)).message
+          refused.response.status,
+          hubRefusal(refused).message
         ),
     }
   );

@@ -140,16 +140,7 @@ function refusedAnswer(refused: Refused): Response {
  * A refusal as the {@link MachineAwayError} it is when the hub says its
  * machine is away; null otherwise, for the caller's own refusal.
  */
-export function awayOf(refused: Refused): MachineAwayError | null;
-/** A refused `response` as {@link awayOf} reads it, its body read first. */
-export function awayOf(response: Response): Promise<MachineAwayError | null>;
-export function awayOf(
-  input: Refused | Response
-): MachineAwayError | null | Promise<MachineAwayError | null> {
-  if (input instanceof Response) {
-    return refusedOf(input).then((read) => awayOf(read));
-  }
-  const refused = input;
+export function awayOf(refused: Refused): MachineAwayError | null {
   const { away, reconnectingMs } = machineAway(refusedAnswer(refused));
   return away
     ? new MachineAwayError(
@@ -168,16 +159,7 @@ export function awayOf(
  * `code`. Anything else (a proxy's page in front of the hub, an empty body)
  * is the hub not answering: that, with its status ({@link noAnswer}).
  */
-export function hubFailure(refused: Refused): HubFailure;
-/** A refused `response` as {@link hubFailure} reads it, its body read first. */
-export function hubFailure(response: Response): Promise<HubFailure>;
-export function hubFailure(
-  input: Refused | Response
-): HubFailure | Promise<HubFailure> {
-  if (input instanceof Response) {
-    return refusedOf(input).then((read) => hubFailure(read));
-  }
-  const refused = input;
+export function hubFailure(refused: Refused): HubFailure {
   const { status } = refusedAnswer(refused);
   const problem = problemOf(refused.error.value);
   return {
@@ -196,17 +178,8 @@ export function hubFailure(
  * caller says came of it ("so the project was not saved. Try again."),
  * said after the hub not answering; the hub's own words already say it.
  */
-export function hubRefusal(refused: Refused, then?: string): Error;
-/** A refused `response` as {@link hubRefusal} reads it, its body read first. */
-export function hubRefusal(response: Response, then?: string): Promise<Error>;
-export function hubRefusal(
-  input: Refused | Response,
-  then?: string
-): Error | Promise<Error> {
-  if (input instanceof Response) {
-    return refusedOf(input).then((refused) => hubRefusal(refused, then));
-  }
-  const failure = hubFailure(input);
+export function hubRefusal(refused: Refused, then?: string): Error {
+  const failure = hubFailure(refused);
   const { detail, status } = failure;
   return new Error(
     then && detail === noAnswer(status)
@@ -216,14 +189,8 @@ export function hubRefusal(
 }
 
 /** What the hub said went wrong, in one clause without its stop, its status after it ({@link refusalClause}). */
-export function hubSaid(refused: Refused): string;
-/** A refused `response` as {@link hubSaid} reads it, its body read first. */
-export function hubSaid(response: Response): Promise<string>;
-export function hubSaid(input: Refused | Response): string | Promise<string> {
-  if (input instanceof Response) {
-    return refusedOf(input).then((refused) => hubSaid(refused));
-  }
-  return refusalClause(hubFailure(input));
+export function hubSaid(refused: Refused): string {
+  return refusalClause(hubFailure(refused));
 }
 
 /**
@@ -237,16 +204,16 @@ export function hubSaid(input: Refused | Response): string | Promise<string> {
 export async function hubJson<T>(
   request: HubRequest,
   {
-    failure = (response) => hubRefusal(response),
+    failure = hubRefusal,
     init,
   }: {
-    failure?: (response: Response) => Promise<Error>;
+    failure?: Refusal;
     init?: RequestInit;
   } = {}
 ): Promise<T> {
   const response = await hubFetch(request, init);
   if (!response.ok) {
-    throw await failure(response);
+    throw failure(await refusedOf(response));
   }
   return await answerOf<T>(response);
 }
@@ -276,16 +243,16 @@ async function answerOf<T>(response: Response): Promise<T> {
 export async function hubSend(
   request: HubRequest,
   {
-    failure = (response) => hubRefusal(response),
+    failure = hubRefusal,
     init,
   }: {
-    failure?: (response: Response) => Promise<Error>;
+    failure?: Refusal;
     init?: RequestInit;
   } = {}
 ): Promise<void> {
   const response = await hubFetch(request, init);
   if (!response.ok) {
-    throw await failure(response);
+    throw failure(await refusedOf(response));
   }
 }
 
@@ -436,20 +403,10 @@ export async function hubRead<T>(
  * words." ({@link couldNot}), or the {@link MachineAwayError} when the hub
  * says the machine it asked is away ({@link awayOf}).
  */
-export function couldNotOrAway(attempt: string): {
-  (refused: Refused): Error;
-  (response: Response): Promise<Error>;
-} {
-  function refusal(refused: Refused): Error;
-  function refusal(response: Response): Promise<Error>;
-  function refusal(input: Refused | Response): Error | Promise<Error> {
-    if (input instanceof Response) {
-      return refusedOf(input).then((refused) => refusal(refused));
-    }
-    return awayOf(input) ?? couldNot(attempt, input);
-  }
-  return refusal;
-}
+export const couldNotOrAway =
+  (attempt: string) =>
+  (refused: Refused): Error =>
+    awayOf(refused) ?? couldNot(attempt, refused);
 
 /**
  * A refusal where a hub away or restarting throws its one wording: a
@@ -457,18 +414,10 @@ export function couldNotOrAway(attempt: string): {
  * {@link HubUnreachable} it is; any other, the hub's sentence, thrown as it
  * is (it already says what to do).
  */
-export function refusedOrUnreached(refused: Refused): Error;
-/** A refused `response` as {@link refusedOrUnreached} reads it, its body read first. */
-export function refusedOrUnreached(response: Response): Promise<Error>;
-export function refusedOrUnreached(
-  input: Refused | Response
-): Error | Promise<Error> {
-  if (input instanceof Response) {
-    return refusedOf(input).then((refused) => refusedOrUnreached(refused));
-  }
-  return unreachedAnswer(refusedAnswer(input))
+export function refusedOrUnreached(refused: Refused): Error {
+  return unreachedAnswer(refusedAnswer(refused))
     ? new HubUnreachable(HUB_UNREACHABLE)
-    : hubRefusal(input);
+    : hubRefusal(refused);
 }
 
 /**
@@ -477,18 +426,9 @@ export function refusedOrUnreached(
  * ({@link failureSentence}): "Couldn't start sign-in to ElevenLabs. This
  * server refused client registration (400)."
  */
-export function couldNot(attempt: string, refused: Refused): Error;
-/** A refused `response` as {@link couldNot} reads it, its body read first. */
-export function couldNot(attempt: string, response: Response): Promise<Error>;
-export function couldNot(
-  attempt: string,
-  input: Refused | Response
-): Error | Promise<Error> {
-  if (input instanceof Response) {
-    return refusedOf(input).then((refused) => couldNot(attempt, refused));
-  }
+export function couldNot(attempt: string, refused: Refused): Error {
   return new Error(
-    `Couldn't ${attempt}. ${failureSentence(hubFailure(input))}`
+    `Couldn't ${attempt}. ${failureSentence(hubFailure(refused))}`
   );
 }
 
