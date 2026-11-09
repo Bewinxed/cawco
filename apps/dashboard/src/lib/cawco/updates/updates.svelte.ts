@@ -17,11 +17,11 @@ import { hub } from "#lib/platform/hub.js";
 import {
   failureClause,
   failureSentence,
+  hubAsk,
   hubData,
   hubFailure,
   hubRefusal,
   hubSaid,
-  unanswered,
 } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -139,15 +139,18 @@ class Updates {
 
   async loadPolicy(): Promise<void> {
     try {
-      const answer = await hub.api["binary-updates"].settings.get();
+      const answer = await hubAsk(hub.api["binary-updates"].settings.get());
       // Its record damaged: the hub's own words, and Reset offered.
-      if (answer.error && answer.error.status === 409) {
+      if (answer.ok) {
+        this.policy = answer.value;
+      } else if (answer.refused.error.status === 409) {
         this.policy = null;
         this.damaged = true;
-        this.problem = failureSentence(hubFailure(answer));
+        this.problem = failureSentence(hubFailure(answer.refused));
         return;
+      } else {
+        throw hubRefusal(answer.refused);
       }
-      this.policy = await hubData(answer);
       this.damaged = false;
       this.problem = null;
     } catch (error) {
@@ -180,14 +183,14 @@ class Updates {
   ): Promise<boolean> {
     this.settingRefused.delete(setting);
     this.keep();
-    const answer = await hub.api["binary-updates"].settings.put({
-      channel: next.channel,
-      autoUpdate: next.autoUpdate,
-    });
-    if (answer.error) {
-      const why = unanswered(answer)
-        ? "the hub did not answer"
-        : hubSaid(answer);
+    const answer = await hubAsk(
+      hub.api["binary-updates"].settings.put({
+        channel: next.channel,
+        autoUpdate: next.autoUpdate,
+      })
+    ).catch(() => null);
+    if (!answer?.ok) {
+      const why = answer ? hubSaid(answer.refused) : "the hub did not answer";
       this.settingRefused.set(setting, {
         policy: next,
         reason:
@@ -198,15 +201,17 @@ class Updates {
       this.keep();
       return false;
     }
-    this.policy = await hubData(answer);
+    this.policy = answer.value;
     await this.loadChannels();
     return true;
   }
 
   async loadChannels(): Promise<void> {
-    const answer = await hub.api["binary-updates"].channels.get();
-    if (!answer.error) {
-      this.channels = await hubData(answer);
+    const answer = await hubAsk(hub.api["binary-updates"].channels.get()).catch(
+      () => null
+    );
+    if (answer?.ok) {
+      this.channels = answer.value;
     }
   }
 
@@ -214,18 +219,18 @@ class Updates {
   async refreshChannels(): Promise<boolean> {
     this.settingRefused.delete("check");
     this.keep();
-    const answer = await hub.api["binary-updates"].channels.post();
-    if (answer.error) {
-      const why = unanswered(answer)
-        ? "the hub did not answer"
-        : hubSaid(answer);
+    const answer = await hubAsk(
+      hub.api["binary-updates"].channels.post()
+    ).catch(() => null);
+    if (!answer?.ok) {
+      const why = answer ? hubSaid(answer.refused) : "the hub did not answer";
       this.settingRefused.set("check", {
         reason: updatesWords.noNewBuilds(why),
       });
       this.keep();
       return false;
     }
-    this.channels = await hubData(answer);
+    this.channels = answer.value;
     return true;
   }
 
@@ -242,25 +247,24 @@ class Updates {
     this.commanded.add(machineId);
     this.refused.delete(machineId);
     this.keep();
-    const answer = await hub.api
-      .agents({ machineId })
-      .update.post({
+    const answer = await hubAsk(
+      hub.api.agents({ machineId }).update.post({
         commandId: newId(),
         version: machine.binaryUpdate?.availableVersion,
       })
-      .catch(() => null);
-    if (!answer?.error || unanswered(answer)) {
+    ).catch(() => null);
+    if (!answer || answer.ok) {
       return;
     }
-    if (answer.status === 404) {
+    if (answer.refused.response.status === 404) {
       this.refuse(machineId, {
         act: "install",
         reason: updatesWords.notConnected(name),
       });
-    } else if (answer.status === 500) {
+    } else if (answer.refused.response.status === 500) {
       this.refuse(machineId, {
         act: "install",
-        reason: `${name} could not start the update: ${hubSaid(answer)}. It keeps the build it runs; Retry to install it again.`,
+        reason: `${name} could not start the update: ${hubSaid(answer.refused)}. It keeps the build it runs; Retry to install it again.`,
       });
     }
   }
@@ -288,14 +292,14 @@ class Updates {
     const { machineId } = machine;
     this.refused.delete(machineId);
     this.keep();
-    const answer = await hub.api["binary-updates"]
-      .machines({ machineId })
-      .cancel.post();
-    if (answer.error) {
+    const answer = await hubAsk(
+      hub.api["binary-updates"].machines({ machineId }).cancel.post()
+    ).catch(() => null);
+    if (!answer?.ok) {
       // The install it meant to call off goes on: still this tab's to follow.
       this.refused.set(machineId, {
         act: "cancel",
-        reason: `The install on ${machineLabel(machine.hostname)} was not called off: ${unanswered(answer) ? "the hub did not answer" : hubSaid(answer)}. It still installs; Retry to call it off.`,
+        reason: `The install on ${machineLabel(machine.hostname)} was not called off: ${answer ? hubSaid(answer.refused) : "the hub did not answer"}. It still installs; Retry to call it off.`,
       });
       this.keep();
       return;
