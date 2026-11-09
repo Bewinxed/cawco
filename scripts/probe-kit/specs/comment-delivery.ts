@@ -2,7 +2,7 @@
  * The person's comments go to the session by themselves (the owner's pick,
  * "Go by themselves", 2026-10-23, replacing "On Send"): a few seconds after
  * their last mark, with no Send (artifacts/service.ts `personMarked`,
- * `marked`, `deliverMarks`; server.ts `deliverArtifactMarks`). Send is the
+ * `marked`, `deliverMarks`; artifact-events.ts `deliverArtifactMarks`). Send is the
  * page's picks alone.
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the

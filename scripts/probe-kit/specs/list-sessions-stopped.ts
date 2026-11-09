@@ -153,7 +153,7 @@ const run = async (kit: Kit): Promise<void> => {
     send(m1, yesterday - 10 * MINUTE_MS, "build the importer", {
       kind: "human",
     });
-    // The recap's send as the hub sends it (server.ts `tellBack`).
+    // The recap's send as the hub sends it (sends.ts `tellBack`).
     send(m2, now - 11 * MINUTE_MS, BACK_MESSAGE, {
       kind: "system",
       name: "back",
