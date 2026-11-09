@@ -403,7 +403,8 @@ const stageIn = (id: string): Stage | undefined =>
  * it. Any other workspace's stages end first, and only that workspace's:
  * nothing of it is left to serve. A request naming no workspace is refused
  * at the door, nothing ended: every caller (hub work-items.ts `archive`,
- * `discardCreate` and its sweep's re-close, project-delete.ts `dropClone`)
+ * workspaces.ts `discardCreate` and its sweep's re-close, project-delete.ts
+ * `dropClone`)
  * sends core `WorkspaceArchive`, whose `id` is required.
  */
 export const closingStages = <T>(
