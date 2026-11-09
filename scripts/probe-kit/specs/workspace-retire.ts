@@ -1244,7 +1244,7 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     `boundaries: ${left.join(", ") || "none"}; something at: ${at().join(", ") || "none"}`
   );
 
-  // The agent's start-up pass (boundary.ts `rearmHooks`) rewrites each
+  // The agent's start-up pass (boundary/control.ts `rearmHooks`) rewrites each
   // workspace whose boundary runs, and says so once it is done; one with
   // none running, as each of these three is once its boundary closed, waits
   // unarmed for a session there. Its record of the pass (agent-state.ts
