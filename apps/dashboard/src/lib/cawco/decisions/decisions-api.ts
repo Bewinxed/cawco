@@ -10,21 +10,12 @@ import type {
 } from "@cawco/core/decisions";
 import { hubRequest } from "@cawco/core/hub-request";
 import { openPageWrites } from "#lib/cawco/preview/open-pages.js";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
-
-async function answered<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
-  return (await response.json()) as T;
-}
+import { hubJson } from "#lib/platform/hub-read.js";
 
 /** The project's pages, newest first, each with the pages it links to. */
 export async function listDecisions(projectId: string): Promise<DecisionsList> {
-  return answered(
-    await hubFetch(
-      hubRequest("GET /api/projects/:id/decisions", { path: { id: projectId } })
-    )
+  return await hubJson(
+    hubRequest("GET /api/projects/:id/decisions", { path: { id: projectId } })
   );
 }
 
@@ -33,12 +24,10 @@ export async function readDecision(
   projectId: string,
   name: string
 ): Promise<DecisionPageRead> {
-  return answered(
-    await hubFetch(
-      hubRequest("GET /api/projects/:id/decisions/:name", {
-        path: { id: projectId, name },
-      })
-    )
+  return await hubJson(
+    hubRequest("GET /api/projects/:id/decisions/:name", {
+      path: { id: projectId, name },
+    })
   );
 }
 
@@ -57,16 +46,14 @@ export async function sendDecision(
 ): Promise<DecisionSent> {
   const writes =
     text || !artifactId ? undefined : await openPageWrites(artifactId);
-  return answered(
-    await hubFetch(
-      hubRequest("POST /api/projects/:id/decisions/:name/send", {
-        path: { id: projectId, name },
-        body: {
-          ...(text ? { text } : {}),
-          ...(writes ? { writes } : {}),
-        },
-      })
-    )
+  return hubJson(
+    hubRequest("POST /api/projects/:id/decisions/:name/send", {
+      path: { id: projectId, name },
+      body: {
+        ...(text ? { text } : {}),
+        ...(writes ? { writes } : {}),
+      },
+    })
   );
 }
 
@@ -75,11 +62,9 @@ export async function makeDecisionTasks(
   projectId: string,
   name: string
 ): Promise<DecisionPageRead> {
-  return answered(
-    await hubFetch(
-      hubRequest("POST /api/projects/:id/decisions/:name/tasks", {
-        path: { id: projectId, name },
-      })
-    )
+  return await hubJson(
+    hubRequest("POST /api/projects/:id/decisions/:name/tasks", {
+      path: { id: projectId, name },
+    })
   );
 }
