@@ -101,14 +101,17 @@ import {
 } from "@cawco/core/decisions";
 import type { PictureSize } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
+import type { MapChange } from "@cawco/core/doc-maps";
 import {
   type ArtifactAsked,
   type ArtifactChanges,
   type ChangedItem,
-  type DrawnKept,
-  QUESTIONS_CLOSED,
+  docMeta,
+  getMeta,
+  type MetaMap,
   type QuestionClose,
   type SentBy,
+  setMeta,
 } from "@cawco/core/doc-meta";
 import {
   excerptOf,
@@ -129,7 +132,6 @@ import {
   faultsWith,
   type PageFault,
   type PageFaultReport,
-  type PageFaultsKept,
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
 import type { PlanStep } from "@cawco/core/plan";
@@ -204,7 +206,7 @@ import {
 import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { applyPatch, type Operation } from "rfc6902";
-import type { Doc, YMapEvent } from "yjs";
+import type { Doc } from "yjs";
 import type { ArtifactRow, ArtifactServed, ArtifactsDb } from "../db/artifacts";
 import { SettleRefusal } from "../decides-file";
 import {
@@ -1092,29 +1094,6 @@ export const boardOf = (row: ArtifactRow): string | null =>
 /** Why a maker's change opened nothing: the parent had opened the artifact, so the change waits as its next version ({@link holdNext}). */
 const HELD_NEXT = artifactToolWords.heldAsNext;
 
-/** The doc meta key of an artifact handed to its parent and not opened since (service `handOver`). */
-const HANDED = "handed";
-
-/** The doc meta key of a held next version: its artifact's seq when it was forked ({@link holdNext}), after which the person's answers there are newer than it ({@link promote}). */
-const FORKED_AT = "forkedAt";
-
-/** The doc meta key a decision page's open views follow for its pieces' versions: the last piece moved and the version it stands at (service `versionMoved`, preview overlay/page.ts `mediaMoved`). */
-const MEDIA_AT = "mediaAt";
-
-/** The doc meta key of what a browser met drawing a page or preview at its revision now (core page-faults.ts, service `pageFault`). */
-const FAULTS = "faults";
-
-/** The doc meta key of a preview whose folder its machine said is gone at its last start, with the daemon's words (service `sourceSeen`). */
-const SOURCE_GONE = "sourceGone";
-
-/** The doc meta key of an option's media whose decision page went: the page's id (service `discard`). */
-const MEDIA_OF = "mediaOf";
-/** A decision page's doc meta: the work folder its relative Images were last published from, and the machine that folder is on. */
-const PROGRAM_DIR = "programDir";
-const PROGRAM_MACHINE = "programMachine";
-/** A decision page's doc meta: the machine each picture it shows was read on, by the name its Image gives. */
-const PICTURE_MACHINES = "pictureMachines";
-
 /** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
 const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/u;
 
@@ -1273,16 +1252,15 @@ const stateOf = (doc: Doc): Record<string, ChoiceEntry> => {
 /** A source common practice cites: a web link. */
 const WEB_SOURCE = /^https:\/\/\S+$/u;
 const metaOf = (doc: Doc) => {
-  const meta = doc.getMap("meta");
-  const sentAt = (meta.get("sentAt") as string | null | undefined) ?? null;
+  const meta = docMeta(doc);
+  const sentAt = meta.get("sentAt") ?? null;
   return {
-    pageHash: (meta.get("pageHash") as string | null | undefined) ?? null,
+    pageHash: meta.get("pageHash") ?? null,
     sentAt,
     ...(sentAt === null
       ? {}
       : {
-          sentBy:
-            (meta.get("sentBy") as SentBy | undefined) ?? ("person" as const),
+          sentBy: meta.get("sentBy") ?? ("person" as const),
         }),
   };
 };
@@ -1310,7 +1288,7 @@ const answeredAtOf = (state: Record<string, ChoiceEntry>): string | null =>
 
 /** The words a page's `cawco.send(text)` sent with the person's last send; none when it sent none. */
 const sentTextOf = (doc: Doc): string | null =>
-  (doc.getMap("meta").get("sentText") as string | null | undefined) ?? null;
+  getMeta(doc, "sentText") ?? null;
 
 /** How the person answered one choice a page asks ({@link DecisionAnswer}), from its entry in the doc's state. */
 const answerOf = (
@@ -2343,7 +2321,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (row.kind !== "canvas") {
       return keptThumbnail(row.id);
     }
-    const at = docs.doc(row.id).getMap("meta").get("pictureAt");
+    const at = getMeta(docs.doc(row.id), "pictureAt");
     if (typeof at !== "string") {
       return null;
     }
@@ -2367,9 +2345,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * and every new ask moves ({@link stampMeta}, {@link askNow}).
    */
   const sentOf = (row: ArtifactRow): boolean => {
-    const meta = docs.doc(row.id).getMap("meta");
-    const sentAt = meta.get("sentAt") as string | null | undefined;
-    const revisedAt = meta.get("revisedAt") as string | undefined;
+    const meta = docMeta(docs.doc(row.id));
+    const sentAt = meta.get("sentAt");
+    const revisedAt = meta.get("revisedAt");
     return !!sentAt && (!revisedAt || sentAt > revisedAt);
   };
 
@@ -2460,9 +2438,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       updatedAt: row.updatedAt.toISOString(),
       shownAt: row.shownAt?.toISOString() ?? null,
       ...(isProjectPage(row) ? { project: row.projectId as string } : {}),
-      promoted:
-        (docs.doc(row.id).getMap("meta").get("promoted") as
-          ArtifactPromotion | undefined) ?? null,
+      promoted: getMeta(docs.doc(row.id), "promoted") ?? null,
       thumbnail: thumbnailOf(row),
     };
   };
@@ -2998,10 +2974,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const nextNewest = (instance: InstanceRow): ArtifactRow | undefined =>
     db.ofInstance(instance.id).find((other) => {
-      const meta = docs.doc(other.id).getMap("meta");
+      const meta = docMeta(docs.doc(other.id));
       return (
         meta.get("draft") !== true &&
-        meta.get(HANDED) !== true &&
+        meta.get("handed") !== true &&
         boardOf(other) === null
       );
     });
@@ -3105,7 +3081,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** Whether an artifact waits on its parent unopened ({@link handOver}). */
   const isHanded = (row: ArtifactRow): boolean =>
-    docs.doc(row.id).getMap("meta").get(HANDED) === true;
+    getMeta(docs.doc(row.id), "handed") === true;
 
   /**
    * Whether a maker's change to its parent's artifact `row` is held as its
@@ -3161,9 +3137,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs.fork(row.id, next.id);
     // Nothing shows it: a canvas's writes are drawn on the headless screen (draw).
     docs.transact(next.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
-      meta.set(HANDED, true);
-      meta.set(FORKED_AT, row.seq);
+      const meta = docMeta(doc);
+      meta.set("handed", true);
+      meta.set("forkedAt", row.seq);
     });
     return { fresh: true, next };
   };
@@ -3247,7 +3223,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * A create's show, and what readies the artifact after it (`ready`, a
    * canvas's drawing). The session's own artifact is shown in its panel,
    * then readied there. One handed to its parent ({@link handing}) is
-   * marked {@link HANDED} and not shown, until the parent's own show opens
+   * marked `meta.handed` and not shown, until the parent's own show opens
    * it; it is readied unopened, and only then is the parent told, once per
    * hand-off: when it wasn't waiting on them already, or came from another
    * delegate than the one it was waiting from. A `ready` that throws tells
@@ -3272,13 +3248,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const was = isHanded(row);
     const waiting = was && before?.madeBy === making.maker.id;
-    const meta = docs.doc(row.id).getMap("meta");
-    docs.transact(row.id, "hub", () => meta.set(HANDED, true));
+    const meta = docMeta(docs.doc(row.id));
+    docs.transact(row.id, "hub", () => meta.set("handed", true));
     try {
       await ready?.();
     } catch (error) {
       if (!was) {
-        docs.transact(row.id, "hub", () => meta.delete(HANDED));
+        docs.transact(row.id, "hub", () => meta.delete("handed"));
       }
       throw error;
     }
@@ -3461,7 +3437,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Artifact `row`'s version moved (a next version held, opened or let go,
    * or it was made again): every decision page of its delegation tree or
    * its project that shows it as a Canvas or Preview piece hears it (doc
-   * meta {@link MEDIA_AT}), and one open takes its media again in place,
+   * `meta.mediaAt`), and one open takes its media again in place,
    * its picks and notes kept (preview overlay/page.ts).
    */
   const versionMoved = (row: ArtifactRow): void => {
@@ -3483,9 +3459,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const now = newestVersion(artifact);
     const at = `${id}@${now.id}:${now.revision}`;
     for (const page of pages.values()) {
-      const meta = docs.doc(page.id).getMap("meta");
-      if (meta.get(MEDIA_AT) !== at) {
-        docs.transact(page.id, "hub", () => meta.set(MEDIA_AT, at));
+      const meta = docMeta(docs.doc(page.id));
+      if (meta.get("mediaAt") !== at) {
+        docs.transact(page.id, "hub", () => meta.set("mediaAt", at));
       }
     }
   };
@@ -3499,7 +3475,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * `answersKept`). The fork's own mark leaves with the merge.
    */
   const mergeKeepingAnswers = (row: ArtifactRow, next: ArtifactRow): void => {
-    const forkedAt = docs.doc(next.id).getMap("meta").get(FORKED_AT);
+    const forkedAt = getMeta(docs.doc(next.id), "forkedAt");
     const since = unheardKeys(
       typeof forkedAt === "number" ? forkedAt : 0,
       db.changes(row.id, { by: "person" })
@@ -3508,7 +3484,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs.merge(next.id, row.id, "agent");
     const kept = answersKept(his, stateOf(docs.doc(row.id)), since);
     docs.transact(row.id, "hub", (doc) => {
-      doc.getMap("meta").delete(FORKED_AT);
+      docMeta(doc).delete("forkedAt");
       const state = doc.getMap("state");
       for (const [key, entry] of Object.entries(kept)) {
         state.set(key, entry);
@@ -3559,8 +3535,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     // own source's, set beside it since the fork, and the merge keeps
     // whichever of two such sets its client id ranks last, never the newer.
     const stage = servedOf(next)
-      ? (docs.doc(next.id).getMap("meta").get("stage") as
-          StageState | undefined)
+      ? getMeta(docs.doc(next.id), "stage")
       : undefined;
     mergeKeepingAnswers(row, next);
     // What serves it is the version's: its one write, which the preview
@@ -3776,11 +3751,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const media = db.get(id);
       if (
         media?.instanceId === page.instanceId &&
-        !docs.doc(id).getMap("meta").has(MEDIA_OF)
+        !docMeta(docs.doc(id)).has("mediaOf")
       ) {
-        docs.transact(id, "hub", (doc) =>
-          doc.getMap("meta").set(MEDIA_OF, page.id)
-        );
+        docs.transact(id, "hub", (doc) => setMeta(doc, "mediaOf", page.id));
       }
     }
   };
@@ -3843,8 +3816,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * set and in the pin's lines.
    */
   const answeredHere = (doc: Doc, pin: string, at: string) => {
-    const meta = doc.getMap("meta");
-    const changes = meta.get("changes") as ArtifactChanges | undefined;
+    const meta = docMeta(doc);
+    const changes = meta.get("changes");
     if (!changes) {
       return;
     }
@@ -3874,12 +3847,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const markRevision = (
     row: ArtifactRow,
     items: ChangedItem[],
-    revision: (meta: ReturnType<Doc["getMap"]>) => number
+    revision: (meta: MetaMap) => number
   ): ChangedItem[] => {
     let bound: ChangedItem[] = [];
     docs.transact(row.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
-      const was = meta.get("changes") as ArtifactChanges | undefined;
+      const meta = docMeta(doc);
+      const was = meta.get("changes");
       const seen = new Set(
         was ? (seenOf(doc).get(String(was.revision)) ?? []) : []
       );
@@ -4087,7 +4060,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const ownSend = row.kind === "page" && choicesAsked(row).length > 0;
     const hash = given ?? componentHash(row);
     docs.transact(row.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
+      const meta = docMeta(doc);
       meta.set("ownSend", ownSend);
       meta.set("kind", row.kind);
       meta.set("name", row.name);
@@ -4118,7 +4091,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /** A new ask in the doc, as a revision is: every open view's head morphs to it, and a Send before it is answered. */
   const askNow = (id: string, ask: string) => {
     docs.transact(id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
+      const meta = docMeta(doc);
       meta.set("ask", ask);
       meta.set("revisedAt", new Date().toISOString());
     });
@@ -4178,18 +4151,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     }
     docs.transact(row.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
-      meta.set(PICTURE_MACHINES, read);
+      const meta = docMeta(doc);
+      meta.set("pictureMachines", read);
       const { folder } = sources;
       if (!folder) {
         return;
       }
       if (folder.dir === undefined) {
-        meta.delete(PROGRAM_DIR);
-        meta.delete(PROGRAM_MACHINE);
+        meta.delete("programDir");
+        meta.delete("programMachine");
       } else {
-        meta.set(PROGRAM_DIR, folder.dir);
-        meta.set(PROGRAM_MACHINE, folder.machine);
+        meta.set("programDir", folder.dir);
+        meta.set("programMachine", folder.machine);
       }
     });
   };
@@ -4224,9 +4197,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     reviser: InstanceRow,
     shown: ReadonlyMap<string, Uint8Array>
   ): ((file: string) => string | undefined) => {
-    const meta = docs.doc(row.id).getMap("meta");
-    const read = (meta.get(PICTURE_MACHINES) ?? {}) as Record<string, string>;
-    const folder = meta.get(PROGRAM_MACHINE);
+    const meta = docMeta(docs.doc(row.id));
+    const read = meta.get("pictureMachines") ?? {};
+    const folder = meta.get("programMachine");
     return (file) => {
       if (Object.hasOwn(read, file)) {
         return read[file];
@@ -4287,10 +4260,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     doc: Doc
   ): Pick<ArtifactRead, "faults"> => {
-    const faults = faultsAt(
-      doc.getMap("meta").get(FAULTS) as PageFaultsKept | undefined,
-      row.revision
-    );
+    const faults = faultsAt(getMeta(doc, "faults"), row.revision);
     return faults.length > 0 ? { faults } : {};
   };
 
@@ -4360,8 +4330,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...("workspace" in row.source && row.source.workspace
         ? { workspace: row.source.workspace }
         : {}),
-      ...(servedOf(row) && doc.getMap("meta").get("stage")
-        ? { stage: doc.getMap("meta").get("stage") as StageState }
+      ...(servedOf(row) && getMeta(doc, "stage")
+        ? { stage: getMeta(doc, "stage") }
         : {}),
       ...faultsOf(row, doc),
     };
@@ -4837,9 +4807,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return { opened: false, why: published.error, started: false };
     }
     const owns = panel === row.instanceId;
-    const meta = docs.doc(row.id).getMap("meta");
-    if (owns && meta.get(HANDED) === true) {
-      docs.transact(row.id, "hub", () => meta.delete(HANDED));
+    const meta = docMeta(docs.doc(row.id));
+    if (owns && meta.get("handed") === true) {
+      docs.transact(row.id, "hub", () => meta.delete("handed"));
     }
     const shown = await timedShowStep(
       "shown wait",
@@ -5048,7 +5018,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ink.set(group.id, { ...group, sentAt: at });
         }
       }
-      live.getMap("meta").set("sentUrl", url);
+      setMeta(live, "sentUrl", url);
     });
   };
 
@@ -5077,8 +5047,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         "Its comments are on their way to the session already, so this didn't go."
       );
     }
-    const changes = doc.getMap("meta").get("changes") as
-      ArtifactChanges | undefined;
+    const changes = getMeta(doc, "changes");
     const url = addressOf(row.id, doc);
     const sections = pins.map((pin) =>
       [
@@ -5232,8 +5201,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       await deps.sending(to, row, {
         state,
         sentAt,
-        revisedAt:
-          (doc.getMap("meta").get("revisedAt") as string | undefined) ?? null,
+        revisedAt: getMeta(doc, "revisedAt") ?? null,
         setup,
       });
     }
@@ -5242,15 +5210,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : null;
     const at = new Date().toISOString();
     docs.transact(row.id, "hub", (live) => {
-      const meta = live.getMap("meta");
+      const meta = docMeta(live);
       meta.set("sentAt", at);
       meta.set("sentBy", by);
       meta.set("sentText", note);
       // His Send is a look at everything on this revision: every change and every answer. The hub's is none.
-      const changes =
-        by === "person"
-          ? (meta.get("changes") as ArtifactChanges | undefined)
-          : undefined;
+      const changes = by === "person" ? meta.get("changes") : undefined;
       if (changes) {
         seeChanges(
           live,
@@ -5360,9 +5325,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** Where the person marked artifact `id`: the page's address the page last said, else the last delivery's, else its own route. */
   const addressOf = (id: string, doc: Doc): string =>
-    held.url(id) ??
-    (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
-    routeOf(id);
+    held.url(id) ?? getMeta(doc, "sentUrl") ?? routeOf(id);
 
   /** Each owed pin's section of artifact `artifact`, its link with it, what it carries named as the delivery carries it. */
   const pinSections = (
@@ -5448,10 +5411,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     if (note && owed.length > 0) {
       docs.transact(id, "hub", (live) => {
-        const meta = live.getMap("meta");
-        if (
-          (meta.get("heldNote") as { at?: string } | undefined)?.at === note.at
-        ) {
+        const meta = docMeta(live);
+        if (meta.get("heldNote")?.at === note.at) {
           meta.delete("heldNote");
         }
       });
@@ -5559,7 +5520,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const entries = canvasEntries(docs, row.id);
     const present = new Set(entries.map((entry) => entry.el.id));
     const doc = docs.doc(row.id);
-    const meta = doc.getMap("meta");
+    const meta = docMeta(doc);
     if (ownersRead) {
       const through = readTo(row, stateOf(doc), () => false);
       db.update(row.id, { deliveredSeq: through, readSeq: through });
@@ -5576,7 +5537,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       state: {},
       outline: canvasOutline(entries.map((entry) => entry.el)),
       changed: personChangedAfter(row, since ?? row.deliveredSeq, present),
-      pictureAt: (meta.get("pictureAt") as string | null | undefined) ?? null,
+      pictureAt: meta.get("pictureAt") ?? null,
       draft: meta.get("draft") === true,
       ...(png ? { png: pictureOf(row.id) } : {}),
       // Asked for after the wait for it (canvasNow): one still behind is said so.
@@ -5660,8 +5621,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (screen.writing > 0) {
       return;
     }
-    const meta = docs.doc(id).getMap("meta");
-    const pictured = (event: YMapEvent<unknown>) => {
+    const meta = docMeta(docs.doc(id));
+    const pictured = (event: MapChange) => {
       if (event.keysChanged.has("pictureAt")) {
         letGoHeadless(id);
       }
@@ -5774,9 +5735,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       shownAt: null,
     });
     stampMeta(row, null);
-    docs.transact(row.id, "hub", (doc) =>
-      doc.getMap("meta").set("draft", true)
-    );
+    docs.transact(row.id, "hub", (doc) => setMeta(doc, "draft", true));
     return {
       id: row.id,
       kind: row.kind,
@@ -6048,7 +6007,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     sheet?: SheetRead
   ) =>
     docs.transact(row.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
+      const meta = docMeta(doc);
       const mine = sheetState(row, state);
       meta.set("stage", mine);
       // The stage was reached: by a read, or by the daemon's word of it.
@@ -6071,8 +6030,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const drawnWritten = (row: ArtifactRow, report: RenderReport) => {
     const doc = docs.doc(row.id);
-    const had = (doc.getMap("meta").get("drawnShapes") ??
-      {}) as CanvasShapes["drawn"];
+    const had = getMeta(doc, "drawnShapes") ?? {};
     const now: CanvasShapes["drawn"] = { ...had };
     for (const frame of report.sections.flatMap((one) => one.frames)) {
       if (
@@ -6086,7 +6044,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     if (JSON.stringify(now) !== JSON.stringify(had)) {
       docs.transact(row.id, "hub", (written) => {
-        written.getMap("meta").set("drawnShapes", now);
+        setMeta(written, "drawnShapes", now);
       });
     }
   };
@@ -6100,12 +6058,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * the hub takes from a stage comes through here.
    */
   const drawnHeld = (row: ArtifactRow, from: RenderReport): RenderReport => {
-    const meta = docs.doc(row.id).getMap("meta");
-    const had = (meta.get("drawn") ?? {}) as Record<string, DrawnKept>;
+    const meta = docMeta(docs.doc(row.id));
+    const had = meta.get("drawn") ?? {};
     const { kept, report } = drawsHeld(from, had);
     if (JSON.stringify(kept) !== JSON.stringify(had)) {
       docs.transact(row.id, "hub", (written) => {
-        written.getMap("meta").set("drawn", kept);
+        setMeta(written, "drawn", kept);
       });
     }
     drawnWritten(row, report);
@@ -6114,10 +6072,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** The shapes a decision page's media carries of component canvas `row` (core `CanvasShapes`). */
   const shapesOf = (row: ArtifactRow): CanvasShapes => {
-    const meta = docs.doc(row.id).getMap("meta");
+    const meta = docMeta(docs.doc(row.id));
     return {
-      said: (meta.get("saidShapes") ?? {}) as CanvasShapes["said"],
-      drawn: (meta.get("drawnShapes") ?? {}) as CanvasShapes["drawn"],
+      said: meta.get("saidShapes") ?? {},
+      drawn: meta.get("drawnShapes") ?? {},
     };
   };
 
@@ -6137,8 +6095,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       down = "machine";
     }
     docs.transact(row.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
-      const had = meta.get("unreached") as StageUnreached | undefined;
+      const meta = docMeta(doc);
+      const had = meta.get("unreached");
       meta.set("unreached", {
         down,
         why: error instanceof Error ? error.message : String(error),
@@ -6155,11 +6113,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (row.kind !== "component") {
       return [];
     }
-    const meta = doc.getMap("meta");
-    const stage = meta.get("stage") as StageState | undefined;
-    const already = new Set(
-      (meta.get("errorsHeard") as string[] | undefined) ?? []
-    );
+    const meta = docMeta(doc);
+    const stage = meta.get("stage");
+    const already = new Set(meta.get("errorsHeard") ?? []);
     return (stage?.errors ?? []).filter(
       (error) => !already.has(errorKey(error))
     );
@@ -6171,8 +6127,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     docs.transact(id, "hub", (live) => {
-      const meta = live.getMap("meta");
-      const already = (meta.get("errorsHeard") as string[] | undefined) ?? [];
+      const meta = docMeta(live);
+      const already = meta.get("errorsHeard") ?? [];
       meta.set("errorsHeard", [
         ...new Set([...already, ...errors.map(errorKey)]),
       ]);
@@ -6181,9 +6137,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** What the person saved from a sheet's inspector that the session has not heard: one section each. */
   const savesOwed = (row: ArtifactRow, doc: Doc): string[] =>
-    row.kind === "component"
-      ? ((doc.getMap("meta").get("saves") as string[] | undefined) ?? [])
-      : [];
+    row.kind === "component" ? (getMeta(doc, "saves") ?? []) : [];
 
   /** A delivery carried these saves: the session has heard them. */
   const savesHeard = (id: string, saves: string[]) => {
@@ -6191,8 +6145,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     docs.transact(id, "hub", (live) => {
-      const meta = live.getMap("meta");
-      const now = (meta.get("saves") as string[] | undefined) ?? [];
+      const meta = docMeta(live);
+      const now = meta.get("saves") ?? [];
       const left = now.filter((one) => !saves.includes(one));
       if (left.length > 0) {
         meta.set("saves", left);
@@ -6278,10 +6232,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : { file, story: change.story }
     );
     docs.transact(row.id, "hub", (doc) => {
-      const meta = doc.getMap("meta");
+      const meta = docMeta(doc);
       meta.set("sheet", edit.sheet);
       if (by === "person") {
-        const owed = (meta.get("saves") as string[] | undefined) ?? [];
+        const owed = meta.get("saves") ?? [];
         meta.set("saves", [...owed, saveSection(change, edit)]);
       }
     });
@@ -6557,10 +6511,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         report = await drawnOut(row, at, sheet.files, report);
       }
     }
-    const meta = docs.doc(row.id).getMap("meta");
-    const stage = meta.get("stage") as StageState | undefined;
-    const unreached = meta.get("unreached") as StageUnreached | undefined;
-    const sheetNow = meta.get("sheet") as SheetRead | undefined;
+    const meta = docMeta(docs.doc(row.id));
+    const stage = meta.get("stage");
+    const unreached = meta.get("unreached");
+    const sheetNow = meta.get("sheet");
     const base = read(row, since, ownersRead);
     const {
       dials,
@@ -7189,7 +7143,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): Promise<Revised> => {
     // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
     const broken = await brokenBy(row, readKept(merged.merged).cards);
-    const dir = docs.doc(row.id).getMap("meta").get(PROGRAM_DIR);
+    const dir = getMeta(docs.doc(row.id), "programDir");
     const shown = shownPictures(row.id, existing);
     const readOn = revisionReadsOn(row, instance, shown);
     const page = await built(
@@ -7270,10 +7224,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return entry > resolved ? entry : resolved;
   };
 
-  /** The agent's closes of an artifact's questions (questions.ts `QUESTIONS_CLOSED`). */
+  /** The agent's closes of an artifact's questions (`meta.questionsClosed`). */
   const closesOf = (doc: Doc): Record<string, QuestionClose> =>
-    (doc.getMap("meta").get(QUESTIONS_CLOSED) as
-      Record<string, QuestionClose> | undefined) ?? {};
+    getMeta(doc, "questionsClosed") ?? {};
 
   /** The card each Canvas or Preview piece of page `row` is a picture of, by the artifact it shows. */
   const mediaCards = (row: ArtifactRow): Map<string, string> => {
@@ -7324,8 +7277,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** The latest revision's changes the person hasn't looked at. */
   const changesFacts = (doc: Doc): ArtifactFacts["changes"] => {
-    const changes = doc.getMap("meta").get("changes") as
-      ArtifactChanges | undefined;
+    const changes = getMeta(doc, "changes");
     if (!changes) {
       return null;
     }
@@ -7352,7 +7304,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return heldNext ? { ...kept.facts, handed: true } : kept.facts;
     }
     const doc = docs.doc(row.id);
-    const meta = doc.getMap("meta");
+    const meta = docMeta(doc);
     const state = stateOf(doc);
     const { sentAt } = metaOf(doc);
     const pins = pinsToTell(readPins(doc).values()).sort(
@@ -7371,7 +7323,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const asking = pins.filter((pin) => open.has(`pin:${pin.id}`));
     const facts: ArtifactFacts = {
       ...answersFacts(questions),
-      asked: (meta.get("asked") as ArtifactAsked | undefined) ?? null,
+      asked: meta.get("asked") ?? null,
       asking: asking.map((pin) => pin.number),
       askingAt: asking
         .map(answeredOn)
@@ -7381,12 +7333,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .filter((pin) => pin.resolvedAt && newAnswer(pin))
         .map((pin) => ({ pin: pin.number, at: answeredOn(pin) })),
       draft: meta.get("draft") === true,
-      gone: (meta.get(SOURCE_GONE) as { why: string } | undefined)?.why ?? null,
-      lookedAt: (meta.get("lookedAt") as string | undefined) ?? null,
+      gone: meta.get("sourceGone")?.why ?? null,
+      lookedAt: meta.get("lookedAt") ?? null,
       // Its page gone; one standing now is read beside the facts (mediaNow).
-      media: meta.has(MEDIA_OF),
-      revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
-      handed: meta.get(HANDED) === true,
+      media: meta.has("mediaOf"),
+      revisedAt: meta.get("revisedAt") ?? null,
+      handed: meta.get("handed") === true,
       unsent: unsentChoices(state, sentAt),
     };
     factsKept.set(row.id, { facts, mark });
@@ -7479,7 +7431,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row.kind === "browser" ||
     row.openedRevision !== null ||
     row.shownAt !== null ||
-    docs.doc(row.id).getMap("meta").has("draft") ||
+    docMeta(docs.doc(row.id)).has("draft") ||
     putBeforePerson(row);
 
   /** The artifacts each decision page's Canvas and Preview pieces show, by the page's id, read once per change of it. */
@@ -7547,7 +7499,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (
       !row ||
       row.heldFor !== null ||
-      docs.doc(row.id).getMap("meta").get("draft") === true
+      getMeta(docs.doc(row.id), "draft") === true
     ) {
       return;
     }
@@ -7560,9 +7512,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       at: new Date().toISOString(),
       ...(step ? { step } : {}),
     };
-    docs.transact(row.id, "hub", (doc) =>
-      doc.getMap("meta").set("asked", asked)
-    );
+    docs.transact(row.id, "hub", (doc) => setMeta(doc, "asked", asked));
     deps.needsMoved();
   };
 
@@ -7692,11 +7642,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : undefined;
     const shown = inPanel(row);
     const opened = row.openedRevision === row.revision;
-    const draft = doc.getMap("meta").get("draft") === true;
+    const draft = getMeta(doc, "draft") === true;
     // Handed up and not opened, or a maker's change held for the parent to open.
     const handed =
-      doc.getMap("meta").get(HANDED) === true ||
-      db.heldOf(row.id) !== undefined;
+      getMeta(doc, "handed") === true || db.heldOf(row.id) !== undefined;
     const waitingOn: ArtifactStatus["waitingOn"] = [];
     // The person's move: what Needs you lists it for (needs.ts), its asks retired by their rules.
     if (pendingFor(row)) {
@@ -8049,16 +7998,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!row) {
         return;
       }
-      const meta = docs.doc(id).getMap("meta");
-      const was = (meta.get(SOURCE_GONE) as { why: string } | undefined)?.why;
+      const meta = docMeta(docs.doc(id));
+      const was = meta.get("sourceGone")?.why;
       if ((was ?? null) === gone) {
         return;
       }
       docs.transact(id, "hub", () => {
         if (gone === null) {
-          meta.delete(SOURCE_GONE);
+          meta.delete("sourceGone");
         } else {
-          meta.set(SOURCE_GONE, { at: new Date().toISOString(), why: gone });
+          meta.set("sourceGone", { at: new Date().toISOString(), why: gone });
         }
       });
       deps.needsMoved();
@@ -8127,9 +8076,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...asked,
           movedAt: endedAt.toISOString(),
         };
-        docs.transact(row.id, "hub", (doc) =>
-          doc.getMap("meta").set("asked", next)
-        );
+        docs.transact(row.id, "hub", (doc) => setMeta(doc, "asked", next));
         moved = true;
       }
       if (moved) {
@@ -8844,16 +8791,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row?.kind !== "component") {
         return false;
       }
-      const meta = docs.doc(id).getMap("meta");
-      const had = (meta.get("saidShapes") ?? {}) as CanvasShapes["said"];
+      const meta = docMeta(docs.doc(id));
+      const had = meta.get("saidShapes") ?? {};
       const before = had[key];
       if (before?.h === shape.h && before.w === shape.w) {
         return true;
       }
       docs.transact(id, "hub", (doc) => {
-        doc
-          .getMap("meta")
-          .set("saidShapes", { ...had, [key]: { h: shape.h, w: shape.w } });
+        setMeta(doc, "saidShapes", {
+          ...had,
+          [key]: { h: shape.h, w: shape.w },
+        });
       });
       return true;
     },
@@ -9015,9 +8963,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const kept = title.trim();
       db.update(row.id, { title: kept, updatedAt: new Date() });
-      docs.transact(row.id, "hub", (doc) =>
-        doc.getMap("meta").set("title", kept)
-      );
+      docs.transact(row.id, "hub", (doc) => setMeta(doc, "title", kept));
       relistOf(row);
       return { id: row.id, title: kept };
     },
@@ -9062,8 +9008,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const doc = docs.doc(row.id);
       return {
         choices: stateOf(doc),
-        sentAt:
-          (doc.getMap("meta").get("sentAt") as string | undefined) ?? null,
+        sentAt: getMeta(doc, "sentAt") ?? null,
       };
     },
 
@@ -9075,8 +9020,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     stageFor: (id: string): StageState | null => {
       const row = db.get(id);
       return row && (row.kind === "component" || servedOf(row))
-        ? ((docs.doc(row.id).getMap("meta").get("stage") as
-            StageState | undefined) ?? null)
+        ? (getMeta(docs.doc(row.id), "stage") ?? null)
         : null;
     },
 
@@ -9095,15 +9039,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      */
     machineBack: (machineId: string): void => {
       for (const row of db.componentsOn(machineId)) {
-        const unreached = docs.doc(row.id).getMap("meta").get("unreached") as
-          StageUnreached | undefined;
+        const unreached = getMeta(docs.doc(row.id), "unreached");
         if (!(unreached && unreached.down !== "workspace")) {
           continue;
         }
         // One doc that can't be written is that canvas's: the register goes on.
         try {
           docs.transact(row.id, "hub", (doc) => {
-            doc.getMap("meta").delete("unreached");
+            docMeta(doc).delete("unreached");
           });
         } catch (error) {
           console.warn(
@@ -9134,14 +9077,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return;
       }
       const kept = faultsWith(
-        docs.doc(row.id).getMap("meta").get(FAULTS) as
-          PageFaultsKept | undefined,
+        getMeta(docs.doc(row.id), "faults"),
         row.revision,
         report.fault
       );
       if (kept) {
         docs.transact(row.id, "hub", (doc) => {
-          doc.getMap("meta").set(FAULTS, kept);
+          setMeta(doc, "faults", kept);
         });
       }
     },
@@ -9158,11 +9100,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(row && row.kind === "component")) {
         return;
       }
-      if (!docs.doc(id).getMap("meta").has("unreached")) {
+      if (!docMeta(docs.doc(id)).has("unreached")) {
         return;
       }
       docs.transact(id, "hub", (doc) => {
-        doc.getMap("meta").delete("unreached");
+        docMeta(doc).delete("unreached");
       });
       if (inPanel(row)) {
         relistOf(row);
@@ -9289,7 +9231,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           bytes: jsonFile({
             ...answer,
             files: sheet?.files ?? [],
-            sheet: docs.doc(row.id).getMap("meta").get("sheet") ?? null,
+            sheet: getMeta(docs.doc(row.id), "sheet") ?? null,
           }),
         });
       }
@@ -9363,9 +9305,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw notCommitted(row.name, error);
       }
       const promoted: ArtifactPromotion = { commit, at };
-      docs.transact(row.id, "hub", (doc) =>
-        doc.getMap("meta").set("promoted", promoted)
-      );
+      docs.transact(row.id, "hub", (doc) => setMeta(doc, "promoted", promoted));
       return { commit, path: `${folder}/` };
     },
 
@@ -9378,9 +9318,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${row.name} is a ${row.kind}: only a canvas is sent from the composer.`
         );
       }
-      docs.transact(row.id, "hub", (doc) =>
-        doc.getMap("meta").set("draft", false)
-      );
+      docs.transact(row.id, "hub", (doc) => setMeta(doc, "draft", false));
       return { draft: false };
     },
 
@@ -9606,7 +9544,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         db.update(row.id, { openedRevision: row.revision });
         // The person's look (needs.ts rule 6): their own mark in the doc, on every device.
         docs.transact(row.id, "hub", (doc) =>
-          doc.getMap("meta").set("lookedAt", new Date().toISOString())
+          setMeta(doc, "lookedAt", new Date().toISOString())
         );
         deps.looked(row.id);
         deps.needsMoved();
@@ -9672,9 +9610,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           const link = linkOfPin(row.id, pin);
           return inkBox ? { ...pin, inkBox, link } : { ...pin, link };
         });
-        const address =
-          (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
-          routeOf(row.id);
+        const address = getMeta(doc, "sentUrl") ?? routeOf(row.id);
         return answered.length > 0
           ? [
               {
@@ -9828,7 +9764,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * `question_close`: the session takes question `question` (it acted on
      * his answer, `why` his words quoted) or withdraws it (`why` what
      * superseded it). Kept in the artifact's doc
-     * ({@link QUESTIONS_CLOSED}), the hub's alone to write; nothing is
+     * (`meta.questionsClosed`), the hub's alone to write; nothing is
      * deleted. Neither counts as asking the person (needs.ts), and a newer
      * answer of his to one taken stands answered again.
      */
@@ -9845,8 +9781,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         why: asked.why.trim(),
       };
       docs.transact(row.id, "hub", (doc) => {
-        const meta = doc.getMap("meta");
-        meta.set(QUESTIONS_CLOSED, {
+        const meta = docMeta(doc);
+        meta.set("questionsClosed", {
           ...closesOf(doc),
           [question.key]: close,
         });
