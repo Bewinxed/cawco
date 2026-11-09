@@ -567,6 +567,15 @@
       },
     },
     {
+      // The phone's line is PHONE_QUERY, beside DRAWER_QUERY
+      // (lib/hooks/is-mobile.svelte.ts). Refused by scripts/lint/phone-query.grit.
+      "includes": [
+        "apps/dashboard/src/**",
+        "!apps/dashboard/src/lib/hooks/is-mobile.svelte.ts",
+      ],
+      "plugins": ["./scripts/lint/phone-query.grit"],
+    },
+    {
       // A comment card and its reply composer load no fleet store
       // (composer-weight's legs 1 and 2): the modules they draw from import
       // the store's types alone and draw a session through the host's
