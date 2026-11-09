@@ -10,7 +10,10 @@
   import type { LfsOfferState } from "@cawco/core/project-conversation";
   import { lfsWords } from "@cawco/core/words/lfs";
   import { untrack } from "svelte";
-  import { answerLfsOffer, readLfsOffer } from "#lib/cawco/client.svelte.js";
+  import {
+    answerLfsOffer,
+    readLfsOffer,
+  } from "#lib/cawco/stores/offers.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import type { MessageMetadata } from "../types";
