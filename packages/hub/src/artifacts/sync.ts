@@ -92,7 +92,7 @@ import {
   elementsOf,
   MAPS,
 } from "./docs";
-import { ArtifactRefusal, NothingNewToSend } from "./service";
+import { ArtifactRefusal, NothingNewToSend } from "./refusals";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
