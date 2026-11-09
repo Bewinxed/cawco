@@ -24,6 +24,7 @@
  */
 import { createHash } from "node:crypto";
 import { TOOL_CALL_KEY_HEADER } from "@cawco/core/binary-updates";
+import { problemResponse } from "elysia/error";
 import type { ToolCallKeysDb } from "./db/tool-call-keys";
 import type { HubLifetimeShape } from "./lifetime";
 
@@ -236,10 +237,11 @@ export const createToolCallKeys = ({
     try {
       response = await run();
     } catch (error) {
-      response = new Response(
-        error instanceof Error ? error.message : String(error),
-        { status: 500 }
-      );
+      response = problemResponse({
+        status: 500,
+        code: "refused",
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
     keep(id, running, response).catch((error: unknown) =>
       console.warn(
