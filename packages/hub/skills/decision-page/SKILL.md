@@ -35,7 +35,7 @@ A choice reaches the person only as a decision card on a page, so every pick is 
 
 ## Who decides
 
-A choice that is not yours to make is a decision card with its kind; wait on the card — the hub settles it by the project's Who decides.
+A choice that is not yours to make is a decision card with its kind, which the hub settles by the project's Who decides: the work that depends on it waits on the card, and the rest goes on.
 
 Every Decision names its `kind`, the 9th argument, and the hub refuses one without it: `Decision("cache", "Where do builds cache?", [disk, s3], "Disk is free.", [], [], false, null, "approach")`.
 
