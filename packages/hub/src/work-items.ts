@@ -140,6 +140,7 @@ import {
 import { type HeldInput, handedInputs } from "./handed-input";
 import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
 import { byId } from "./handles";
+import { type ItemHold, itemHold, itemHolds } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { statusCommand } from "./landing";
 import {
@@ -1438,6 +1439,25 @@ const landingOf = (item: WorkItemRow): WorkspaceLanding => ({
 /** How long a tray shows a finished item before it leaves (the dashboard's hold). */
 const TRAY_HOLD_MS = 6000;
 
+/**
+ * The holds a turn's end reads ({@link WorkItems.turnEnded}), in order: an
+ * interrupt's or a stop's, a declared wait, a verifier's judgement, a
+ * landing under way.
+ */
+const TURN_HOLDS = [
+  "held",
+  "stopping",
+  "waiting",
+  "verifying",
+  "landing",
+  "completing",
+] as const satisfies readonly ItemHold[];
+
+/** {@link TURN_HOLDS} for a turn that failed: no waiting turn, and no verifier waits on it. */
+const FAILED_TURN_HOLDS = TURN_HOLDS.filter(
+  (hold) => hold !== "waiting" && hold !== "verifying"
+);
+
 export const createWorkItems = ({
   projectReached,
   awaitsSend,
@@ -2111,9 +2131,23 @@ export const createWorkItems = ({
   const leftToFollow = (
     item: WorkItemRow,
     row: InstanceRow | undefined
-  ): boolean =>
-    (!!row && (row.workItemId !== item.id || !!item.landingSince)) ||
-    custodyPending(row?.machineId ?? standIn(item).machineId, item.instanceId);
+  ): boolean => {
+    const holds = itemHolds(item, {
+      custody: custodyPending(
+        row?.machineId ?? standIn(item).machineId,
+        item.instanceId
+      ),
+      movedOn: !!row && row.workItemId !== item.id,
+    });
+    return (
+      holds.includes("custody") ||
+      (!!row &&
+        holds.some(
+          (hold) =>
+            hold === "movedOn" || hold === "landing" || hold === "completing"
+        ))
+    );
+  };
 
   /** The session rows of `items`, by id. */
   const sessionRows = (
@@ -2195,18 +2229,15 @@ export const createWorkItems = ({
    */
   const leftAsleep = (item: WorkItemRow, row: InstanceRow): boolean =>
     !(row.status === "sleeping" || GONE.has(row.status)) ||
-    item.heldAt !== null ||
-    item.blocked !== null ||
-    item.stoppingAt !== null ||
-    custodyPending(row.machineId, row.id) ||
-    pausedWorkspace(item.workspaceId) !== undefined ||
-    !!(item.waitUntil || item.waitResumeBy) ||
-    !!item.landingSince ||
-    finishing.has(item.id) ||
-    row.workItemId !== item.id ||
-    !online(row.machineId) ||
-    awaitsSend(row.id) ||
-    onPerson(row.id);
+    itemHolds(item, {
+      custody: custodyPending(row.machineId, row.id),
+      paused: pausedWorkspace(item.workspaceId) !== undefined,
+      finishing: finishing.has(item.id),
+      movedOn: row.workItemId !== item.id,
+      offline: !online(row.machineId),
+      sendComing: awaitsSend(row.id),
+      onPerson: onPerson(row.id),
+    }).length > 0;
 
   /**
    * THE RULE FOR WORK ASLEEP: a live item whose session has no process while
@@ -4615,12 +4646,17 @@ export const createWorkItems = ({
         `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`
       );
     }
-    if (item.stoppingAt) {
+    const hold = itemHold(item, { finishing: finishing.has(item.id) }, [
+      "stopping",
+      "landing",
+      "finishing",
+    ]);
+    if (hold === "stopping") {
       throw new WorkItemRefusal(409, workWords.stoppingRefused);
     }
     // A completing item's submission waits on its own delegates: a new
     // call replaces it ({@link completeIfDrained}).
-    if (landingHolds(item)) {
+    if (hold === "landing") {
       throw new WorkItemRefusal(
         409,
         "the merge checks already run for this item; their outcome comes to you when they end"
@@ -4628,7 +4664,7 @@ export const createWorkItems = ({
     }
     // A stop cancels every command its landing has running (landingStops);
     // the landing settles once they answer, and one runs at a time per item.
-    if (finishing.has(item.id)) {
+    if (hold === "finishing") {
       throw new WorkItemRefusal(
         409,
         "the landing this item's stop cut short is still ending (its commands are being cancelled); call finish_item again in a minute"
@@ -5422,22 +5458,38 @@ export const createWorkItems = ({
       // interrupt_delegate (an error result, never OpenCode's `aborted`)
       // failed its item ("[ede_diagnostic] result_type=user … stop_reason=
       // tool_use", seen on the host, 2026-10-15), or, ending quietly, got the
-      // "still open" reminder. Here before every such branch.
-      if (item.heldAt || item.stoppingAt) {
-        quiet.delete(item.id);
-        return undefined;
+      // "still open" reminder. Here before every such branch. A turn that
+      // failed is no waiting turn and waits for no verifier.
+      const ok = turn.error === undefined;
+      const hold = itemHold(
+        item,
+        { verifying: ok && designHeld(item.id) },
+        ok ? TURN_HOLDS : FAILED_TURN_HOLDS
+      );
+      switch (hold) {
+        case "held":
+        case "stopping":
+          quiet.delete(item.id);
+          return undefined;
+        case "waiting":
+          waitingTurn(item);
+          return undefined;
+        // A verifier judges its result: the turn that ended waits for its word.
+        case "verifying":
+          quiet.delete(item.id);
+          return undefined;
+        // One whose landing is running reports when it settles (its
+        // session's own call may have died with the hub).
+        case "landing":
+        case "completing":
+          return undefined;
+        case undefined:
+          break;
+        default:
+          unhandled("hold", hold);
       }
-      if (turn.error === undefined && waitingTurn(item)) {
-        return undefined;
-      }
-      // A verifier judges its result: the turn that ended waits for its word.
-      if (turn.error === undefined && designHeld(item.id)) {
-        quiet.delete(item.id);
-        return undefined;
-      }
-      // A finished item has reported; one whose landing is running reports
-      // when it settles (its session's own call may have died with the hub).
-      if (!LIVE.has(item.state) || item.landingSince) {
+      // A finished item has reported.
+      if (!LIVE.has(item.state)) {
         return undefined;
       }
       return openItemTurnEnded(row, item, turn, endedAt, worked);
