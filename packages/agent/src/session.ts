@@ -3822,7 +3822,7 @@ export class SessionSupervisor {
         }
         // Its process may still run: its harness's stream failed, not the
         // CLI. Ended here, as a stop ends it, before the hub hears the
-        // failure: a failed row holds no workspace (work-items.ts `holdOn`),
+        // failure: a failed row holds no workspace (workspaces.ts `holdsOf`),
         // and a CLI left running in one was closed under ({@link #endFailed}).
         if (holder.session) {
           this.#ending.add(holder.session);
@@ -4629,7 +4629,7 @@ export class SessionSupervisor {
    * A FAILED SESSION LEAVES NO PROCESS RUNNING. Its keeper's child (only the
    * one of `pid`, when given) is ended and waited out ({@link endHeld}),
    * then the hub hears the failure ({@link #fail}). The hub files the row
-   * failed and holds its workspace no longer (work-items.ts `holdOn`), and
+   * failed and holds its workspace no longer (workspaces.ts `holdsOf`), and
    * nothing ends a CLI left running there: no custody names a failed session
    * again. One that outlives its kill is said beside the failure.
    */
