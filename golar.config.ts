@@ -10,8 +10,9 @@
  * caller of the hub's source; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
- * scripts/), cawrier's and the site's, and the design rules (scripts/lint/design) over the dashboard's
- * `src`, each with the fixtures that prove it (scripts/lint/fixtures). The
+ * scripts/), cawrier's and the site's, the design rules (scripts/lint/design) over the dashboard's
+ * `src`, and the frame observer's first place (scripts/lint/resize-delivery-first.ts)
+ * over each page's client entry, each with the fixtures that prove it (scripts/lint/fixtures). The
  * files are those git tracks or would track, narrowed to the list
  * `CAWCO_CHECK_FILES` names (one repository path a line) when it is set.
  *
@@ -24,6 +25,7 @@ import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
 import { hubPathDoor } from "./scripts/lint/hub-path-door.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
+import { resizeDeliveryFirst } from "./scripts/lint/resize-delivery-first.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
 /** The planted mistakes, read by their own globs below and never as product code. */
@@ -36,6 +38,13 @@ const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
 const HUB_PATH_FIXTURES = `${LINT_FIXTURES}hub-path.ts`;
 /** The bindings of `fetch` to another sender the alias rule must refuse. */
 const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
+/** A client entry that reads another module before the frame observer. */
+const RESIZE_DELIVERY_FIXTURES = `${LINT_FIXTURES}resize-delivery-late.ts`;
+/** Each page's client entry: the app's client hooks and the address preview's. */
+const CLIENT_ENTRIES = [
+  "apps/dashboard/src/hooks.client.ts",
+  "apps/dashboard/src/lib/cawco/address/flow/main.ts",
+];
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -127,6 +136,13 @@ export default defineConfig({
       {
         files: [...hubCallers.map(literal), FETCH_ALIAS_FIXTURES],
         rules: [noFetchAlias],
+      },
+      {
+        files: [
+          ...within(CLIENT_ENTRIES).map(literal),
+          RESIZE_DELIVERY_FIXTURES,
+        ],
+        rules: [resizeDeliveryFirst],
       },
     ],
   },
