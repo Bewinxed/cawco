@@ -2138,7 +2138,7 @@ export const plugins = sqliteTable(
     ...fetchedColumns(),
     createdAt: stampedNow("created_at"),
   },
-  // Every column the fleet's listing reads (db/index.ts `listPlugins`), so
+  // Every column the fleet's listing reads (db/fleet-catalog.ts `listPlugins`), so
   // it is read off this index alone: those after `files` sat behind its
   // megabytes in each row, and a listing walked them all (12.6 ms a read on
   // the live database, asked once per row of a pass). A column the listing
@@ -2186,7 +2186,7 @@ export const skills = sqliteTable(
     areaId: fleetRowArea(),
     createdAt: stampedNow("created_at"),
   },
-  // Every column the fleet's listing reads (db/index.ts `listSkills`), so it
+  // Every column the fleet's listing reads (db/fleet-catalog.ts `listSkills`), so it
   // is read off this index alone, never past `files` (10 ms a read on the
   // live database, 0.1 ms off the index). A column the listing reads is
   // added here with it.
@@ -4448,7 +4448,7 @@ export const artifacts = sqliteTable(
      * life is its source's in the project's folder (`decisions/<name>/`), so
      * a deleted session leaves it here with no session (null), its picks and
      * places kept. Every other artifact goes with its session
-     * (db/index.ts `dropInstances`).
+     * (db/core.ts `dropInstances`).
      */
     instanceId: text("instance_id").references(() => instances.id, {
       onDelete: "set null",
