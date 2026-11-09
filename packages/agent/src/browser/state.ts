@@ -43,7 +43,22 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { BrowserRecordSchema } from "../stored-shapes";
-import type { MachineNetwork } from "./egress";
+
+/**
+ * The machine's network as pasta copies it when a container starts: whether
+ * it has an IPv4 default route, the first nameserver, and the IPv4 address
+ * of the default route's interface. pasta takes that address as the
+ * namespace's own and as the target of `--map-guest-addr` (resolved once, at
+ * start), so `host.containers.internal` and `host-gateway` reach the
+ * machine only while it holds it.
+ */
+export interface MachineNetwork {
+  /** The default route's interface's IPv4 address. */
+  address?: string;
+  /** The first nameserver of /etc/resolv.conf. */
+  resolver?: string;
+  routed: boolean;
+}
 
 /** What a browser's record keeps between processes. */
 export interface BrowserRecord {
