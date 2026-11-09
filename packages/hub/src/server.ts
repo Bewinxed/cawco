@@ -1056,6 +1056,7 @@ import { delegateEventRoutes } from "./routes/delegate-events";
 import { delegationRoutes } from "./routes/delegation";
 import { fileRoutes } from "./routes/files";
 import { findRoutes } from "./routes/find";
+import { fleetRoutes } from "./routes/fleet";
 import { followupStateRoutes } from "./routes/followup-state";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
@@ -33433,42 +33434,8 @@ export const createServer = (
           : (workItems.summary(item.id) ?? status(404, "gone"));
       }),
     toolRoutes(ctx),
+    fleetRoutes(ctx),
     new Elysia()
-      // The fleet's desired state (NEW.md §11), every table at once: it is one
-      // page in the dashboard and one `syncFleetConfig` on a machine.
-      //
-      // The skills come back as rows rather than as part of the config: what the
-      // machines get carries every skill's files, and a page that only lists them
-      // must not weigh what the fleet weighs. The subagents do carry their files —
-      // a definition is a page of markdown, and an editor that has to fetch each
-      // one again is a round trip for nothing.
-      .get("/api/fleet", async () => {
-        await mcpReady;
-        await fleetMcp.ready();
-        const { mcp, marketplaces } = db.fleetConfig();
-        return {
-          // The plugins come from `listPlugins`, not from `fleetConfig`: the
-          // config is what a MACHINE is sent, and it carries neither the hash a
-          // resolve produced nor the sentence a failed one left. The dashboard
-          // needs both — a plugin the hub could not fetch and a plugin a machine
-          // would not install are different faults with different fixes.
-          config: {
-            mcp,
-            marketplaces,
-            plugins: db.listPlugins().map(pluginRow),
-          },
-          // Links with no row yet: under way, or refused and not let go.
-          links: [...marketplaceLinks.values()],
-          skills: db.listSkills().map(skillRow),
-          agents: db.listFleetAgents(),
-          memory: db.getFleetMemory() ?? null,
-          // The linked documents carry their files for the same reason the
-          // subagents do: each one is a page of markdown, and the panel that
-          // lists them is the panel that edits them.
-          memoryDocs: db.listFleetMemoryDocs(),
-          unpushable: Object.fromEntries(unpushable),
-        };
-      })
       .put(
         "/api/fleet/mcp/:name",
         {
