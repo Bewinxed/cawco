@@ -85,7 +85,7 @@ const STAND_IN_SHIM = join(
   process.platform === "darwin" ? "/private/tmp" : "/tmp",
   `bun-node-${process.getuid?.()}-${STAND_IN_SHA}`
 );
-/** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
+/** How finish_item answers a failed gate (landing-run.ts `gateFailedText`). */
 const NOT_LANDED = "Not landed: the merge checks ran on";
 /** The gate's declared steps (gate.ts `JS_GATE`), each a `bun …` command; the delegate's own install is its first. */
 const [INSTALL = "", LINT = "", TYPECHECK = ""] = JS_GATE.split("\n").filter(
