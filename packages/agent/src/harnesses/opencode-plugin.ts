@@ -756,10 +756,8 @@ export default {
       });
       if (!response.ok) {
         // A refusal is the hub's problem: its sentence is its \`detail\`.
-        const said = await response.text().catch(() => "");
-        let words = said;
-        try { words = JSON.parse(said).detail ?? said; } catch { /* plain text: said as it came */ }
-        throw new Error("the hub answered " + response.status + ": " + words);
+        const problem = await response.json().catch(() => null);
+        throw new Error("the hub answered " + response.status + (typeof problem?.detail === "string" ? ": " + problem.detail : ""));
       }
       const answer = await response.json();
       const text = (answer.content ?? []).flatMap((part) => (part?.type === "text" ? [part.text] : [])).join("\\n");
