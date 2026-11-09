@@ -8101,7 +8101,7 @@ export async function deleteTranscript(
  * refuses any other kind and says why; that answer is thrown as it is, for
  * the confirm dialog to show under its question.
  */
-/** What a held workspace's clone holds that is nowhere else, as its machine read it once its boundary was closed (hub work-items.ts `HeldWork`). */
+/** What a held workspace's clone holds that is nowhere else, as its machine read it once its boundary was closed (hub workspaces.ts `HeldWork`). */
 export interface WorkspaceHeld extends WorkspaceHolding {
   /** In words: "2 commits on no remote, 3 changed files, 1 stash". */
   holds: string;
