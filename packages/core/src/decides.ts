@@ -14,15 +14,7 @@ import type { SettingSource } from "./areas";
 import { decidesWords } from "./words/decides";
 
 /** Who decides a kind. The five built in are constants; the rest are rows. */
-export type MemberType =
-  | "you"
-  | "caw"
-  | "advisor"
-  | "practice"
-  | "asker"
-  | "agent"
-  | "person"
-  | "channel";
+type MemberType = BuiltInMember | "agent" | "person" | "channel";
 export const BUILT_IN_MEMBERS = [
   "you",
   "caw",
@@ -166,7 +158,7 @@ export interface DecidesOwn {
 }
 
 /** The six kinds every fleet starts with, in the order they are listed. */
-export const BUILT_IN_KINDS = [
+const BUILT_IN_KINDS = [
   "look",
   "behaviour",
   "scope",
