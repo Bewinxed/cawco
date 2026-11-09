@@ -12,7 +12,7 @@
  *   machine's measured room: …", the failing reading marked ✗), and the
  *   agent's log says the start waits;
  * - that `room` line is what keeps the hub waiting on the start past its
- *   120 s spawn wait (hub server.ts `awaitStart`), so the spec reads the
+ *   120 s spawn wait (hub machine-calls.ts `awaitStart`), so the spec reads the
  *   line and does not sit the wait out;
  * - a stop ends the wait: the agent says so, and no Claude process was ever
  *   launched for it.
