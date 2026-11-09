@@ -88,6 +88,7 @@
     type Sample,
     sampleAt,
   } from "#lib/platform/motion/spring.js";
+  import { plainClick } from "#lib/platform/plain-click.js";
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
   import { ACTIVITY_LABEL, FAILED_LABEL, UNKNOWN_LABEL } from "../activity";
@@ -631,13 +632,7 @@
     }
   }
   function clickTab(id: string, event: MouseEvent) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
+    if (!plainClick(event)) {
       return;
     }
     // The tab's box, whichever of its parts was clicked: the chevron's
