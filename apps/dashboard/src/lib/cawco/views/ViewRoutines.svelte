@@ -111,6 +111,7 @@
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { failureWords as message } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
+  import { newestRead } from "#lib/platform/newest-read.js";
   import { goto, replaceState } from "$app/navigation";
   import { page as here } from "$app/state";
 
@@ -149,19 +150,18 @@
   /** Why the last read failed, while nothing has been read. */
   let problem = $state<string | null>(null);
   /** Reads so far: only the newest one's answer is kept. */
-  let reads = 0;
+  const reads = newestRead();
   async function read() {
     const { id } = project;
-    reads += 1;
-    const ticket = reads;
+    const newest = reads.next();
     try {
       const next = await readRoutinesPage(id);
-      if (id === project.id && ticket === reads) {
+      if (id === project.id && newest()) {
         page = next;
         problem = null;
       }
     } catch (error) {
-      if (id === project.id && ticket === reads) {
+      if (id === project.id && newest()) {
         problem = message(error);
       }
     }
