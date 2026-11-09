@@ -1,6 +1,7 @@
 /**
  * Shapes the hub's sections read of each other, away from any one section's file.
  */
+import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 
 /**
@@ -55,3 +56,15 @@ export interface ReportTold {
   /** The folder paths its finish copied its outputs to. */
   outputs?: string[];
 }
+
+/** A folder-sourced skill's PUT body, as the route has read it and the install reads it (`installFromFolder`). */
+export interface FolderSkillBody {
+  areaId?: string | null;
+  contentHash?: string;
+  enabled?: boolean;
+  projectId?: string | null;
+  source: string;
+}
+
+/** A fleet item's copy before or after a fetch: its version, its hash and where it came from. */
+export type FetchedCopy = FleetVersioned & { hash?: string; source?: string };
