@@ -232,6 +232,9 @@
       // pass rewrites them.
       "complexity": { "useMathMinMax": "off" },
       "performance": {
+        // `export *` hides what a module carries from its reader and from
+        // knip; a module names what it re-exports. Ultracite 8.1 leaves it off.
+        "noReExportAll": "error",
         "useDomNodeTextContent": "off",
         // CawCo's loops are sequential on purpose (ordered effects, one git
         // or process at a time); a parallel loop is written with Promise.all
@@ -261,27 +264,57 @@
   },
   "overrides": [
     {
-      // Modules whose job is to be an import surface: the shadcn-svelte kit's
-      // component groups, imported as a namespace (`* as DropdownMenu`, read
-      // as `DropdownMenu.Root`, `.Item`) through each group's index; the
-      // dashboard's one icon module (DESIGN.md, The Solar Duotone Rule); and
-      // each module a package's manifest names as an entry (`exports`,
-      // Workers' `main`, where a Durable Object class is found among the
-      // entry's exports). A namespace import of anything but a kit group is
+      // The shadcn-svelte kit's component groups are imported as a namespace
+      // (`* as DropdownMenu`, read as `DropdownMenu.Root`, `.Item`) through
+      // each group's index. A namespace import of anything but a kit group is
       // refused by scripts/lint/kit-namespace-only.grit.
       "includes": [
         "apps/dashboard/src/**/*.svelte",
         "apps/dashboard/src/lib/components/ui/**",
-        "apps/dashboard/src/lib/icons.ts",
-        "apps/cawrier/src/index.ts",
-        "packages/*/src/index.ts",
-        "packages/core/src/signal.ts",
-        "packages/icons/src/marks.ts",
       ],
       "plugins": ["./scripts/lint/kit-namespace-only.grit"],
       "linter": {
         "rules": {
-          "performance": { "noNamespaceImport": "off", "noBarrelFile": "off" },
+          "performance": { "noNamespaceImport": "off" },
+        },
+      },
+    },
+    {
+      // A module that re-exports what another module holds (noBarrelFile),
+      // where re-exporting is its job; everywhere else an import names the
+      // module that owns the name:
+      // - each kit group's index: the namespace a group is imported as,
+      //   shadcn-svelte's own layout (`shadcn-svelte add` writes it);
+      // - the icons, each a `~icons/…` module unplugin-icons makes, named
+      //   for the product in @cawco/icons (index, and marks for the brand
+      //   marks) and nowhere else (scripts/icon-imports-check.ts), and the
+      //   dashboard's one icon module (DESIGN.md, The Solar Duotone Rule);
+      // - core's signal.ts, the one door to signal-wall.ts, which imports
+      //   nothing so the srt host can signal through it alone;
+      // - cawrier's entry, Workers' `main`, where a Durable Object class is
+      //   found among the entry's exports.
+      "includes": [
+        "apps/dashboard/src/lib/components/ui/**/index.ts",
+        "apps/dashboard/src/lib/icons.ts",
+        "packages/icons/src/index.ts",
+        "packages/icons/src/marks.ts",
+        "packages/core/src/signal.ts",
+        "apps/cawrier/src/index.ts",
+      ],
+      "linter": {
+        "rules": {
+          "performance": { "noBarrelFile": "off" },
+        },
+      },
+    },
+    {
+      // The dashboard's one icon module carries every icon @cawco/icons
+      // names (`export *`): naming each again here would be a second list of
+      // the same names to keep in step with the first.
+      "includes": ["apps/dashboard/src/lib/icons.ts"],
+      "linter": {
+        "rules": {
+          "performance": { "noReExportAll": "off" },
         },
       },
     },

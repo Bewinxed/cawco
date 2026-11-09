@@ -600,7 +600,7 @@ const probeDashboard = async (): Promise<string> => {
 const joinedHub = async (): Promise<string | undefined> => {
   // Imported here rather than at the top so the verbs that never ask about
   // the agent never pay for the agent package.
-  const { readConfig } = await import("@cawco/agent");
+  const { readConfig } = await import("@cawco/agent/config");
   return (await readConfig())?.hubUrl || undefined;
 };
 
