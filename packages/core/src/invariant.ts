@@ -71,7 +71,7 @@ export const LAWS = {
    * while that machine reads reconnecting (its window's deadline ahead) or
    * paused, never while it reads offline with no deadline (dad89261b).
    *
-   * Born red: server.ts `owedForMachine` records its line.
+   * Born red: sends.ts `owedForMachine` records its line.
    */
   "owed-send-machine-has-deadline":
     "A send kept for its machine waits only while that machine reads reconnecting or paused, never offline with no deadline.",
