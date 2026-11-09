@@ -307,7 +307,7 @@ export interface SessionPlan {
 }
 
 /** One RFC 6902 operation (https://www.rfc-editor.org/rfc/rfc6902). */
-export type JsonPatchOperation =
+type JsonPatchOperation =
   | { op: "add" | "replace" | "test"; path: string; value: unknown }
   | { op: "remove"; path: string }
   | { op: "copy" | "move"; from: string; path: string };

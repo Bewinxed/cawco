@@ -20,13 +20,13 @@ import type { OfferedMode } from "./harness/kinds";
 export type SettingSource = "project" | "area" | "fleet";
 
 /** A setting in effect, and where it came from. */
-export interface Sourced<T> {
+interface Sourced<T> {
   from: SettingSource;
   value: T;
 }
 
 /** A spend cap's amount and the span it counts over. */
-export interface CapAmount {
+interface CapAmount {
   period: CapPeriod;
   usd: number;
 }
