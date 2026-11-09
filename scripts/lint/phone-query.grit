@@ -1,0 +1,10 @@
+language js
+
+// The dashboard asks the phone's line through PHONE_QUERY
+// (apps/dashboard/src/lib/hooks/is-mobile.svelte.ts), beside DRAWER_QUERY:
+// a query that writes 640px out again drifts from it, and a near one
+// (`max-width: 639px`) leaves a fractional width out.
+JsStringLiteralExpression() as $hit where {
+  $hit <: r"[\"']\(?(?:width < 640px|max-width: ?639px)\)?[\"']",
+  register_diagnostic(span=$hit, message="Ask the phone's line with PHONE_QUERY (lib/hooks/is-mobile.svelte.ts), beside DRAWER_QUERY.")
+}
