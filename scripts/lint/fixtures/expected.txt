@@ -78,10 +78,9 @@ scripts/lint/fixtures/design/planted-bar-item.svelte:13:49 house/bar-item-in-kit
 scripts/lint/fixtures/design/planted-bar-item.svelte:18:3 house/bar-item-in-kit
 scripts/lint/fixtures/design/planted-count-badge.svelte:14:10 house/count-in-badge
 scripts/lint/fixtures/design/planted-count-badge.svelte:18:10 house/count-in-badge
-scripts/lint/fixtures/hub-path.ts:11:13 house/hub-path-door
-scripts/lint/fixtures/hub-path.ts:12:20 house/hub-path-door
-scripts/lint/fixtures/hub-path.ts:13:16 house/hub-path-door
-scripts/lint/fixtures/hub-path.ts:14:1 house/hub-path-door
+scripts/lint/fixtures/hub-path.ts:8:13 house/hub-path-by-hand
+scripts/lint/fixtures/hub-path.ts:9:20 house/hub-path-by-hand
+scripts/lint/fixtures/hub-path.ts:10:16 house/hub-path-by-hand
 scripts/lint/fixtures/fetch-alias-const.ts:5:9 house/no-fetch-alias
 scripts/lint/fixtures/fetch-alias.ts:2:22 house/no-fetch-alias
 scripts/lint/fixtures/design/planted-bar-menu.svelte:20:5 house/no-detached-bar-menu
