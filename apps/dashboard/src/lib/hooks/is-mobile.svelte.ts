@@ -30,6 +30,12 @@ export class IsCoarsePointer extends MediaQuery {
 export const DRAWER_QUERY = "(width < 900px)";
 
 /**
+ * The phone's line: under 640px wide (DESIGN.md, Breakpoints, `phone:`),
+ * where dialogs become bottom sheets and a page lays out for one hand.
+ */
+export const PHONE_QUERY = "(width < 640px)";
+
+/**
  * The app's one narrow line: under 900px wide, or a touch device held
  * upright. The Shell, the session deck and `/config` all ask this, and the
  * Shell keeps the answer in the `cawco-narrow` cookie the server reads.
