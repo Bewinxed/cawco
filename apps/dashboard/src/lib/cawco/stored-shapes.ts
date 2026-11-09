@@ -12,287 +12,6 @@ import {
 } from "@cawco/core/plan";
 import { z } from "zod";
 
-const CompactMethodShape = z.enum(["native", "summary", "whole"]);
-export type CompactMethodOutput = z.output<typeof CompactMethodShape>;
-
-const HarnessKindShape = z.enum(HARNESSES);
-export const HarnessKindSchema = HarnessKindShape;
-export type HarnessKindOutput = z.output<typeof HarnessKindShape>;
-
-const CompactionShape = z.object({
-  atLimit: CompactMethodShape,
-  beforeMove: CompactMethodShape,
-  fileRoom: z.number(),
-  summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
-});
-export type CompactionOutput = z.output<typeof CompactionShape>;
-
-const AtLimitShape = z.object({
-  compaction: CompactionShape,
-  move: z.boolean(),
-  moveWholeUnderK: z.number(),
-  staleAfterHours: z.number(),
-  waitMinutes: z.number(),
-});
-export const AtLimitSchema = AtLimitShape;
-export type AtLimitOutput = z.output<typeof AtLimitShape>;
-
-const PlacementStrategyShape = z.enum([
-  "pinned",
-  "fill-first",
-  "spread",
-  "soonest-reset",
-]);
-export type PlacementStrategyOutput = z.output<typeof PlacementStrategyShape>;
-
-const StrategyChoiceShape = z.object({
-  pinnedAccountId: z.string().optional(),
-  strategy: PlacementStrategyShape,
-});
-export const StrategyChoiceSchema = StrategyChoiceShape;
-export type StrategyChoiceOutput = z.output<typeof StrategyChoiceShape>;
-
-const ContinueSourceShape = z.object({
-  cwd: z.string(),
-  harness: HarnessKindShape,
-  instanceId: z.string(),
-  machineId: z.string(),
-  model: z.string().optional(),
-  title: z.string(),
-});
-export const ContinueSourceSchema = ContinueSourceShape;
-export type ContinueSourceOutput = z.output<typeof ContinueSourceShape>;
-
-const EmbedShapeShape = z.object({ h: z.number(), w: z.number().nullable() });
-export type EmbedShapeOutput = z.output<typeof EmbedShapeShape>;
-
-const CanvasShapesShape = z.object({
-  drawn: z.record(z.string(), z.object({ h: z.number(), w: z.number() })),
-  said: z.record(z.string(), EmbedShapeShape),
-});
-export type CanvasShapesOutput = z.output<typeof CanvasShapesShape>;
-
-const DecisionMediaShape = z
-  .object({
-    embed: z.string().optional(),
-    unopened: z.string().optional(),
-    id: z.string(),
-    kind: z.string(),
-    revision: z.number(),
-    shapes: CanvasShapesShape.optional(),
-  })
-  .nullable();
-export type DecisionMediaOutput = z.output<typeof DecisionMediaShape>;
-
-const MediaArtifactShape = DecisionMediaShape;
-export const MediaArtifactSchema = MediaArtifactShape;
-export type MediaArtifactOutput = z.output<typeof MediaArtifactShape>;
-
-const DraftCanvasShape = z.object({
-  folded: z.boolean(),
-  id: z.string(),
-  name: z.string(),
-  thumb: z.string().nullable(),
-});
-export type DraftCanvasOutput = z.output<typeof DraftCanvasShape>;
-
-const PendingFileShape = z.object({
-  as: z.enum(["image", "text"]).optional(),
-  blob: z.instanceof(Blob).optional(),
-  error: z.string().optional(),
-  height: z.number().optional(),
-  id: z.string(),
-  mediaType: z.string(),
-  name: z.string(),
-  preview: z.string().optional(),
-  progress: z.number(),
-  ref: z.string().optional(),
-  size: z.number(),
-  width: z.number().optional(),
-});
-export type PendingFileOutput = z.output<typeof PendingFileShape>;
-
-const StoredFileShape = PendingFileShape.pick({
-  name: true,
-  mediaType: true,
-  size: true,
-  ref: true,
-}).extend({ blob: z.instanceof(Blob).optional() });
-export type StoredFileOutput = z.output<typeof StoredFileShape>;
-
-const PendingTextShape = z.object({
-  content: z.string(),
-  kind: z.literal("text"),
-  name: z.string(),
-});
-export type PendingTextOutput = z.output<typeof PendingTextShape>;
-
-const DraftRecordShape = z.object({
-  canvas: DraftCanvasShape.nullable().optional(),
-  files: z.array(StoredFileShape).optional(),
-  images: z.array(
-    z.object({
-      blob: z.instanceof(Blob),
-      mediaType: z.string(),
-      name: z.string(),
-    })
-  ),
-  sessionId: z.string(),
-  size: z.number(),
-  text: z.string(),
-  texts: z.array(PendingTextShape),
-  updatedAt: z.number(),
-});
-export const DraftRecordSchema = DraftRecordShape;
-export type DraftRecordOutput = z.output<typeof DraftRecordShape>;
-
-const KeptStateShape = z.object({
-  state: z.string(),
-  variant: z.string().nullable(),
-});
-export type KeptStateOutput = z.output<typeof KeptStateShape>;
-
-const GraphKeptShape = z.object({
-  ask: z.string(),
-  front: z.string().nullable(),
-  kept: z.record(z.string(), KeptStateShape),
-});
-export const GraphKeptSchema = GraphKeptShape;
-export type GraphKeptOutput = z.output<typeof GraphKeptShape>;
-
-const PairingStageShape = z.union([
-  z.object({
-    kind: z.literal("waiting"),
-    expiresAt: z.number(),
-    userCode: z.string(),
-    verificationUriComplete: z.string(),
-  }),
-  z.object({ kind: z.literal("failed"), message: z.string() }),
-  z.object({ kind: z.literal("idle") }),
-  z.object({ kind: z.literal("asking") }),
-  z.object({ kind: z.enum(["denied", "expired"]) }),
-]);
-export type PairingStageOutput = z.output<typeof PairingStageShape>;
-
-const KeptPairingShape = z.object({
-  deviceCode: z.string().optional(),
-  interval: z.number().optional(),
-  stage: PairingStageShape,
-});
-export const KeptPairingSchema = KeptPairingShape;
-export type KeptPairingOutput = z.output<typeof KeptPairingShape>;
-
-const PlanEditKindShape = z.enum(PLAN_EDIT_KINDS);
-export type PlanEditKindOutput = z.output<typeof PlanEditKindShape>;
-
-const PlanReceiverShape = z.union([
-  z.object({ kind: z.literal("session"), instanceId: z.string() }),
-  z.object({ kind: z.literal("caw"), projectId: z.string() }),
-]);
-export type PlanReceiverOutput = z.output<typeof PlanReceiverShape>;
-
-const PlanChangeShape = z.object({
-  at: z.string(),
-  id: z.string(),
-  kind: PlanEditKindShape,
-  step: z.string(),
-  to: PlanReceiverShape,
-  toldAt: z.string().optional(),
-  undelivered: z.string().optional(),
-  was: z.string(),
-  words: z.string(),
-});
-export type PlanChangeOutput = z.output<typeof PlanChangeShape>;
-
-const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
-export type PlanCommentOutput = z.output<typeof PlanCommentShape>;
-
-const OrphanedCommentsShape = z.object({
-  comments: z.array(PlanCommentShape),
-  step: z.string(),
-});
-export type OrphanedCommentsOutput = z.output<typeof OrphanedCommentsShape>;
-
-const PlanSpecShape = z.object({ at: z.string(), markdown: z.string() });
-export type PlanSpecOutput = z.output<typeof PlanSpecShape>;
-
-const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
-export type PlanStepPriorityOutput = z.output<typeof PlanStepPriorityShape>;
-
-const PlanStepStatusShape = z.enum(PLAN_STEP_STATUSES);
-export type PlanStepStatusOutput = z.output<typeof PlanStepStatusShape>;
-
-const PlanStepShape = z.object({
-  comments: z.array(PlanCommentShape).optional(),
-  content: z.string(),
-  depth: z.number(),
-  id: z.string(),
-  priority: PlanStepPriorityShape.optional(),
-  status: PlanStepStatusShape,
-  waitsOn: z.string().optional(),
-});
-export type PlanStepOutput = z.output<typeof PlanStepShape>;
-
-const TaskTodoShape = z.object({
-  depth: z.number(),
-  done: z.boolean(),
-  id: z.string().nullable(),
-  path: z.string(),
-  promoted: z.string().nullable(),
-  proposed: z.boolean(),
-  text: z.string(),
-});
-export type TaskTodoOutput = z.output<typeof TaskTodoShape>;
-
-const SessionPlanShape = z.object({
-  awayUnseen: z.object({ since: z.string() }).optional(),
-  changes: z.array(PlanChangeShape).optional(),
-  needs: z.array(z.string()).optional(),
-  orphanedComments: z.array(OrphanedCommentsShape).optional(),
-  source: z.literal("cawco"),
-  spec: PlanSpecShape.optional(),
-  steps: z.array(PlanStepShape),
-  taskId: z.string().optional(),
-  todos: z.array(TaskTodoShape).optional(),
-});
-export const SessionPlanSchema = SessionPlanShape;
-export type SessionPlanOutput = z.output<typeof SessionPlanShape>;
-
-const ComposeTargetShape = z.object({
-  anchor: z.union([
-    z.object({ element: z.string() }),
-    z.looseObject({ selector: z.string() }),
-  ]),
-  elements: z.array(z.unknown()),
-});
-export const ComposeTargetSchema = ComposeTargetShape;
-export type ComposeTargetOutput = z.output<typeof ComposeTargetShape>;
-
-const CommentAttachmentShape = z.object({
-  height: z.number().optional(),
-  kind: z.enum(["image", "text", "file"]),
-  mediaType: z.string(),
-  name: z.string(),
-  ref: z.string(),
-  size: z.number(),
-  width: z.number().optional(),
-});
-export type CommentAttachmentOutput = z.output<typeof CommentAttachmentShape>;
-
-const ThreadEntryShape = z.object({
-  asks: z.literal(true).optional(),
-  at: z.string(),
-  attachments: z.array(CommentAttachmentShape).optional(),
-  by: z.enum(["person", "agent"]),
-  files: z.array(z.string()).optional(),
-  held: z.literal(true).optional(),
-  id: z.string(),
-  sentAt: z.string().optional(),
-  text: z.string(),
-});
-export const ThreadEntrySchema = ThreadEntryShape;
-export type ThreadEntryOutput = z.output<typeof ThreadEntryShape>;
-
 const BrowserKeyShape = z.union([
   z.templateLiteral(["project:", z.string()]),
   z.templateLiteral(["machine:", z.string()]),
@@ -489,20 +208,41 @@ export type ArtifactSessionHeardOutput = z.output<
   typeof ArtifactSessionHeardShape
 >;
 
+const CompactMethodShape = z.enum(["native", "summary", "whole"]);
+export type CompactMethodOutput = z.output<typeof CompactMethodShape>;
+
+const HarnessKindShape = z.enum(HARNESSES);
+export const HarnessKindSchema = HarnessKindShape;
+export type HarnessKindOutput = z.output<typeof HarnessKindShape>;
+
+const CompactionShape = z.object({
+  atLimit: CompactMethodShape,
+  beforeMove: CompactMethodShape,
+  fileRoom: z.number(),
+  summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
+});
+export type CompactionOutput = z.output<typeof CompactionShape>;
+
+const AtLimitShape = z.object({
+  compaction: CompactionShape,
+  move: z.boolean(),
+  moveWholeUnderK: z.number(),
+  staleAfterHours: z.number(),
+  waitMinutes: z.number(),
+});
+export const AtLimitSchema = AtLimitShape;
+export type AtLimitOutput = z.output<typeof AtLimitShape>;
+
+const BesideShape = z.object({ projectId: z.string(), taskId: z.string() });
+export const BesideSchema = BesideShape;
+export type BesideOutput = z.output<typeof BesideShape>;
+
 export const CalledArtifactShape = z.object({
   id: z.string(),
   kind: ArtifactKindShape.optional(),
   title: z.string().optional(),
 });
 export type CalledArtifactOutput = z.output<typeof CalledArtifactShape>;
-
-const PinShape = z.object({ id: z.string(), kind: z.literal("project") });
-
-export const RailLayoutShape = z.object({
-  machines: z.array(z.string()),
-  pins: z.array(PinShape),
-});
-export type RailLayoutOutput = z.output<typeof RailLayoutShape>;
 
 const CommandRefusalShape = z.object({
   asked: z.unknown().optional(),
@@ -511,15 +251,124 @@ const CommandRefusalShape = z.object({
 export const CommandRefusalSchema = CommandRefusalShape;
 export type CommandRefusalOutput = z.output<typeof CommandRefusalShape>;
 
-const RoutineActShape = z.enum(["run", "pause", "resume", "keep", "remove"]);
-export type RoutineActOutput = z.output<typeof RoutineActShape>;
-
-const RoutineRefusalShape = z.object({
-  act: RoutineActShape,
-  reason: z.string(),
+const ComposeTargetShape = z.object({
+  anchor: z.union([
+    z.object({ element: z.string() }),
+    z.looseObject({ selector: z.string() }),
+  ]),
+  elements: z.array(z.unknown()),
 });
-export const RoutineRefusalSchema = RoutineRefusalShape;
-export type RoutineRefusalOutput = z.output<typeof RoutineRefusalShape>;
+export const ComposeTargetSchema = ComposeTargetShape;
+export type ComposeTargetOutput = z.output<typeof ComposeTargetShape>;
+
+const ConnectFaultShape = z.union([
+  z.object({ kind: z.literal("refused"), reason: z.string() }),
+  z.object({ kind: z.literal("expired") }),
+]);
+export type ConnectFaultOutput = z.output<typeof ConnectFaultShape>;
+
+const ConnectStageShape = z.enum(["asking", "waiting", "done", "failed"]);
+
+const ConnectSignInShape = z.object({
+  expiresAt: z.number().optional(),
+  fault: ConnectFaultShape.nullable(),
+  stage: ConnectStageShape,
+});
+export const ConnectSignInSchema = ConnectSignInShape;
+export type ConnectSignInOutput = z.output<typeof ConnectSignInShape>;
+
+const ContinueSourceShape = z.object({
+  cwd: z.string(),
+  harness: HarnessKindShape,
+  instanceId: z.string(),
+  machineId: z.string(),
+  model: z.string().optional(),
+  title: z.string(),
+});
+export const ContinueSourceSchema = ContinueSourceShape;
+export type ContinueSourceOutput = z.output<typeof ContinueSourceShape>;
+
+const DraftCanvasShape = z.object({
+  folded: z.boolean(),
+  id: z.string(),
+  name: z.string(),
+  thumb: z.string().nullable(),
+});
+export type DraftCanvasOutput = z.output<typeof DraftCanvasShape>;
+
+const PendingFileShape = z.object({
+  as: z.enum(["image", "text"]).optional(),
+  blob: z.instanceof(Blob).optional(),
+  error: z.string().optional(),
+  height: z.number().optional(),
+  id: z.string(),
+  mediaType: z.string(),
+  name: z.string(),
+  preview: z.string().optional(),
+  progress: z.number(),
+  ref: z.string().optional(),
+  size: z.number(),
+  width: z.number().optional(),
+});
+export type PendingFileOutput = z.output<typeof PendingFileShape>;
+
+const StoredFileShape = PendingFileShape.pick({
+  name: true,
+  mediaType: true,
+  size: true,
+  ref: true,
+}).extend({ blob: z.instanceof(Blob).optional() });
+export type StoredFileOutput = z.output<typeof StoredFileShape>;
+
+const PendingTextShape = z.object({
+  content: z.string(),
+  kind: z.literal("text"),
+  name: z.string(),
+});
+export type PendingTextOutput = z.output<typeof PendingTextShape>;
+
+const DraftRecordShape = z.object({
+  canvas: DraftCanvasShape.nullable().optional(),
+  files: z.array(StoredFileShape).optional(),
+  images: z.array(
+    z.object({
+      blob: z.instanceof(Blob),
+      mediaType: z.string(),
+      name: z.string(),
+    })
+  ),
+  sessionId: z.string(),
+  size: z.number(),
+  text: z.string(),
+  texts: z.array(PendingTextShape),
+  updatedAt: z.number(),
+});
+export const DraftRecordSchema = DraftRecordShape;
+export type DraftRecordOutput = z.output<typeof DraftRecordShape>;
+
+const KeptStateShape = z.object({
+  state: z.string(),
+  variant: z.string().nullable(),
+});
+export type KeptStateOutput = z.output<typeof KeptStateShape>;
+
+const GraphKeptShape = z.object({
+  ask: z.string(),
+  front: z.string().nullable(),
+  kept: z.record(z.string(), KeptStateShape),
+});
+export const GraphKeptSchema = GraphKeptShape;
+export type GraphKeptOutput = z.output<typeof GraphKeptShape>;
+
+const ForkSourceShape = z.object({
+  at: z.string().optional(),
+  cwd: z.string(),
+  harness: HarnessKindShape,
+  machineId: z.string(),
+  resumes: z.literal(true).optional(),
+  sessionId: z.string(),
+});
+export type ForkSourceOutput = z.output<typeof ForkSourceShape>;
 
 const TextAttachmentShape = z.object({
   content: z.string(),
@@ -704,6 +553,46 @@ const SendExtrasShape = SendPayloadShape.pick({
 });
 export type SendExtrasOutput = z.output<typeof SendExtrasShape>;
 
+const SpawnPrefillShape = z.object({
+  cwd: z.string().optional(),
+  fork: ForkSourceShape.optional(),
+  machineId: z.string().optional(),
+  projectId: z.string().optional(),
+  prompt: z.object({ text: z.string(), extras: SendExtrasShape }).optional(),
+  spinOff: z.boolean().optional(),
+});
+export type SpawnPrefillOutput = z.output<typeof SpawnPrefillShape>;
+
+const KeptFormShape = z.object({
+  open: z.boolean(),
+  prefill: SpawnPrefillShape.optional(),
+  shown: z.string().nullable(),
+});
+export const KeptFormSchema = KeptFormShape;
+export type KeptFormOutput = z.output<typeof KeptFormShape>;
+
+const PairingStageShape = z.union([
+  z.object({
+    kind: z.literal("waiting"),
+    expiresAt: z.number(),
+    userCode: z.string(),
+    verificationUriComplete: z.string(),
+  }),
+  z.object({ kind: z.literal("failed"), message: z.string() }),
+  z.object({ kind: z.literal("idle") }),
+  z.object({ kind: z.literal("asking") }),
+  z.object({ kind: z.enum(["denied", "expired"]) }),
+]);
+export type PairingStageOutput = z.output<typeof PairingStageShape>;
+
+const KeptPairingShape = z.object({
+  deviceCode: z.string().optional(),
+  interval: z.number().optional(),
+  stage: PairingStageShape,
+});
+export const KeptPairingSchema = KeptPairingShape;
+export type KeptPairingOutput = z.output<typeof KeptPairingShape>;
+
 const KeptSendShape = z.object({
   at: z.number(),
   commandId: z.string(),
@@ -716,6 +605,75 @@ const KeptSendShape = z.object({
 });
 export const KeptSendSchema = KeptSendShape;
 export type KeptSendOutput = z.output<typeof KeptSendShape>;
+
+const RefusalShape = z.object({
+  act: z.enum(["install", "cancel"]),
+  reason: z.string(),
+});
+export type RefusalOutput = z.output<typeof RefusalShape>;
+
+const UpdateSettingShape = z.enum(["channel", "auto", "check"]);
+
+const BinaryUpdatePolicyShape = z.object({
+  autoUpdate: z.boolean(),
+  channel: z.enum(["stable", "nightly"]),
+});
+export type BinaryUpdatePolicyOutput = z.output<typeof BinaryUpdatePolicyShape>;
+
+const SettingRefusalShape = z.object({
+  policy: BinaryUpdatePolicyShape.optional(),
+  reason: z.string(),
+});
+
+const KeptUpdatesShape = z.object({
+  commanded: z.array(z.string()),
+  refused: z.array(z.tuple([z.string(), RefusalShape])),
+  settings: z
+    .array(z.tuple([UpdateSettingShape, SettingRefusalShape]))
+    .optional(),
+});
+export const KeptUpdatesSchema = KeptUpdatesShape;
+export type KeptUpdatesOutput = z.output<typeof KeptUpdatesShape>;
+
+const EmbedShapeShape = z.object({ h: z.number(), w: z.number().nullable() });
+export type EmbedShapeOutput = z.output<typeof EmbedShapeShape>;
+
+const CanvasShapesShape = z.object({
+  drawn: z.record(z.string(), z.object({ h: z.number(), w: z.number() })),
+  said: z.record(z.string(), EmbedShapeShape),
+});
+export type CanvasShapesOutput = z.output<typeof CanvasShapesShape>;
+
+const DecisionMediaShape = z
+  .object({
+    embed: z.string().optional(),
+    unopened: z.string().optional(),
+    id: z.string(),
+    kind: z.string(),
+    revision: z.number(),
+    shapes: CanvasShapesShape.optional(),
+  })
+  .nullable();
+export type DecisionMediaOutput = z.output<typeof DecisionMediaShape>;
+
+const MediaArtifactShape = DecisionMediaShape;
+export const MediaArtifactSchema = MediaArtifactShape;
+export type MediaArtifactOutput = z.output<typeof MediaArtifactShape>;
+
+const ModelUseShape = z.object({
+  lastSpawnAt: z.string().optional(),
+  lastUsedAt: z.record(z.string(), z.string()),
+});
+export const ModelUseSchema = ModelUseShape;
+export type ModelUseOutput = z.output<typeof ModelUseShape>;
+
+const ParkedAskShape = z.object({
+  asked: z.boolean(),
+  instanceId: z.string(),
+  machineId: z.string(),
+  sent: z.boolean(),
+});
+export type ParkedAskOutput = z.output<typeof ParkedAskShape>;
 
 const EffortLevelShape = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type EffortLevelOutput = z.output<typeof EffortLevelShape>;
@@ -746,49 +704,6 @@ const SessionDraftShape = z.object({
 export const SessionDraftSchema = SessionDraftShape;
 export type SessionDraftOutput = z.output<typeof SessionDraftShape>;
 
-const ModelUseShape = z.object({
-  lastSpawnAt: z.string().optional(),
-  lastUsedAt: z.record(z.string(), z.string()),
-});
-export const ModelUseSchema = ModelUseShape;
-export type ModelUseOutput = z.output<typeof ModelUseShape>;
-
-const ForkSourceShape = z.object({
-  at: z.string().optional(),
-  cwd: z.string(),
-  harness: HarnessKindShape,
-  machineId: z.string(),
-  resumes: z.literal(true).optional(),
-  sessionId: z.string(),
-});
-export type ForkSourceOutput = z.output<typeof ForkSourceShape>;
-
-const SpawnPrefillShape = z.object({
-  cwd: z.string().optional(),
-  fork: ForkSourceShape.optional(),
-  machineId: z.string().optional(),
-  projectId: z.string().optional(),
-  prompt: z.object({ text: z.string(), extras: SendExtrasShape }).optional(),
-  spinOff: z.boolean().optional(),
-});
-export type SpawnPrefillOutput = z.output<typeof SpawnPrefillShape>;
-
-const KeptFormShape = z.object({
-  open: z.boolean(),
-  prefill: SpawnPrefillShape.optional(),
-  shown: z.string().nullable(),
-});
-export const KeptFormSchema = KeptFormShape;
-export type KeptFormOutput = z.output<typeof KeptFormShape>;
-
-const ParkedAskShape = z.object({
-  asked: z.boolean(),
-  instanceId: z.string(),
-  machineId: z.string(),
-  sent: z.boolean(),
-});
-export type ParkedAskOutput = z.output<typeof ParkedAskShape>;
-
 const ParkedStartShape = z.object({
   askedAt: z.number(),
   asks: z.array(ParkedAskShape),
@@ -806,6 +721,108 @@ const ParkedStartShape = z.object({
 });
 export const ParkedStartSchema = ParkedStartShape;
 export type ParkedStartOutput = z.output<typeof ParkedStartShape>;
+
+const PinShape = z.object({ id: z.string(), kind: z.literal("project") });
+
+export const RailLayoutShape = z.object({
+  machines: z.array(z.string()),
+  pins: z.array(PinShape),
+});
+export type RailLayoutOutput = z.output<typeof RailLayoutShape>;
+
+const RoutineActShape = z.enum(["run", "pause", "resume", "keep", "remove"]);
+export type RoutineActOutput = z.output<typeof RoutineActShape>;
+
+const RoutineRefusalShape = z.object({
+  act: RoutineActShape,
+  reason: z.string(),
+});
+export const RoutineRefusalSchema = RoutineRefusalShape;
+export type RoutineRefusalOutput = z.output<typeof RoutineRefusalShape>;
+
+const SessionContextShape = z.object({
+  cwd: z.string(),
+  harness: HarnessKindShape,
+  machine: z.string(),
+});
+export const SessionContextSchema = SessionContextShape;
+export type SessionContextOutput = z.output<typeof SessionContextShape>;
+
+const PlanEditKindShape = z.enum(PLAN_EDIT_KINDS);
+export type PlanEditKindOutput = z.output<typeof PlanEditKindShape>;
+
+const PlanReceiverShape = z.union([
+  z.object({ kind: z.literal("session"), instanceId: z.string() }),
+  z.object({ kind: z.literal("caw"), projectId: z.string() }),
+]);
+export type PlanReceiverOutput = z.output<typeof PlanReceiverShape>;
+
+const PlanChangeShape = z.object({
+  at: z.string(),
+  id: z.string(),
+  kind: PlanEditKindShape,
+  step: z.string(),
+  to: PlanReceiverShape,
+  toldAt: z.string().optional(),
+  undelivered: z.string().optional(),
+  was: z.string(),
+  words: z.string(),
+});
+export type PlanChangeOutput = z.output<typeof PlanChangeShape>;
+
+const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
+export type PlanCommentOutput = z.output<typeof PlanCommentShape>;
+
+const OrphanedCommentsShape = z.object({
+  comments: z.array(PlanCommentShape),
+  step: z.string(),
+});
+export type OrphanedCommentsOutput = z.output<typeof OrphanedCommentsShape>;
+
+const PlanSpecShape = z.object({ at: z.string(), markdown: z.string() });
+export type PlanSpecOutput = z.output<typeof PlanSpecShape>;
+
+const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
+export type PlanStepPriorityOutput = z.output<typeof PlanStepPriorityShape>;
+
+const PlanStepStatusShape = z.enum(PLAN_STEP_STATUSES);
+export type PlanStepStatusOutput = z.output<typeof PlanStepStatusShape>;
+
+const PlanStepShape = z.object({
+  comments: z.array(PlanCommentShape).optional(),
+  content: z.string(),
+  depth: z.number(),
+  id: z.string(),
+  priority: PlanStepPriorityShape.optional(),
+  status: PlanStepStatusShape,
+  waitsOn: z.string().optional(),
+});
+export type PlanStepOutput = z.output<typeof PlanStepShape>;
+
+const TaskTodoShape = z.object({
+  depth: z.number(),
+  done: z.boolean(),
+  id: z.string().nullable(),
+  path: z.string(),
+  promoted: z.string().nullable(),
+  proposed: z.boolean(),
+  text: z.string(),
+});
+export type TaskTodoOutput = z.output<typeof TaskTodoShape>;
+
+const SessionPlanShape = z.object({
+  awayUnseen: z.object({ since: z.string() }).optional(),
+  changes: z.array(PlanChangeShape).optional(),
+  needs: z.array(z.string()).optional(),
+  orphanedComments: z.array(OrphanedCommentsShape).optional(),
+  source: z.literal("cawco"),
+  spec: PlanSpecShape.optional(),
+  steps: z.array(PlanStepShape),
+  taskId: z.string().optional(),
+  todos: z.array(TaskTodoShape).optional(),
+});
+export const SessionPlanSchema = SessionPlanShape;
+export type SessionPlanOutput = z.output<typeof SessionPlanShape>;
 
 export const SpawnPrefsShape = z.object({
   effort: EffortLevelShape.nullable(),
@@ -882,54 +899,45 @@ const StopJobShape = z.object({
 export const StopJobSchema = StopJobShape;
 export type StopJobOutput = z.output<typeof StopJobShape>;
 
-const BesideShape = z.object({ projectId: z.string(), taskId: z.string() });
-export const BesideSchema = BesideShape;
-export type BesideOutput = z.output<typeof BesideShape>;
-
-const ConnectFaultShape = z.union([
-  z.object({ kind: z.literal("refused"), reason: z.string() }),
-  z.object({ kind: z.literal("expired") }),
+const PlacementStrategyShape = z.enum([
+  "pinned",
+  "fill-first",
+  "spread",
+  "soonest-reset",
 ]);
-export type ConnectFaultOutput = z.output<typeof ConnectFaultShape>;
+export type PlacementStrategyOutput = z.output<typeof PlacementStrategyShape>;
 
-const ConnectStageShape = z.enum(["asking", "waiting", "done", "failed"]);
-
-const ConnectSignInShape = z.object({
-  expiresAt: z.number().optional(),
-  fault: ConnectFaultShape.nullable(),
-  stage: ConnectStageShape,
+const StrategyChoiceShape = z.object({
+  pinnedAccountId: z.string().optional(),
+  strategy: PlacementStrategyShape,
 });
-export const ConnectSignInSchema = ConnectSignInShape;
-export type ConnectSignInOutput = z.output<typeof ConnectSignInShape>;
+export const StrategyChoiceSchema = StrategyChoiceShape;
+export type StrategyChoiceOutput = z.output<typeof StrategyChoiceShape>;
 
-const RefusalShape = z.object({
-  act: z.enum(["install", "cancel"]),
-  reason: z.string(),
+const CommentAttachmentShape = z.object({
+  height: z.number().optional(),
+  kind: z.enum(["image", "text", "file"]),
+  mediaType: z.string(),
+  name: z.string(),
+  ref: z.string(),
+  size: z.number(),
+  width: z.number().optional(),
 });
-export type RefusalOutput = z.output<typeof RefusalShape>;
+export type CommentAttachmentOutput = z.output<typeof CommentAttachmentShape>;
 
-const UpdateSettingShape = z.enum(["channel", "auto", "check"]);
-
-const BinaryUpdatePolicyShape = z.object({
-  autoUpdate: z.boolean(),
-  channel: z.enum(["stable", "nightly"]),
+const ThreadEntryShape = z.object({
+  asks: z.literal(true).optional(),
+  at: z.string(),
+  attachments: z.array(CommentAttachmentShape).optional(),
+  by: z.enum(["person", "agent"]),
+  files: z.array(z.string()).optional(),
+  held: z.literal(true).optional(),
+  id: z.string(),
+  sentAt: z.string().optional(),
+  text: z.string(),
 });
-export type BinaryUpdatePolicyOutput = z.output<typeof BinaryUpdatePolicyShape>;
-
-const SettingRefusalShape = z.object({
-  policy: BinaryUpdatePolicyShape.optional(),
-  reason: z.string(),
-});
-
-const KeptUpdatesShape = z.object({
-  commanded: z.array(z.string()),
-  refused: z.array(z.tuple([z.string(), RefusalShape])),
-  settings: z
-    .array(z.tuple([UpdateSettingShape, SettingRefusalShape]))
-    .optional(),
-});
-export const KeptUpdatesSchema = KeptUpdatesShape;
-export type KeptUpdatesOutput = z.output<typeof KeptUpdatesShape>;
+export const ThreadEntrySchema = ThreadEntryShape;
+export type ThreadEntryOutput = z.output<typeof ThreadEntryShape>;
 
 const VisitShape = z.object({
   at: z.number(),
@@ -941,11 +949,3 @@ const VisitShape = z.object({
 });
 export const VisitSchema = VisitShape;
 export type VisitOutput = z.output<typeof VisitShape>;
-
-const SessionContextShape = z.object({
-  cwd: z.string(),
-  harness: HarnessKindShape,
-  machine: z.string(),
-});
-export const SessionContextSchema = SessionContextShape;
-export type SessionContextOutput = z.output<typeof SessionContextShape>;
