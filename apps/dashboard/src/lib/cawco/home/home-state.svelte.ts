@@ -84,6 +84,12 @@ import { sameRow } from "../same-row";
 import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
+import { mcpServersStore } from "../stores/mcp-servers.svelte";
+import { movesStore } from "../stores/moves.svelte";
+import { needsStore } from "../stores/needs.svelte";
+import { relayStore } from "../stores/relay.svelte";
+import { tailnetStore } from "../stores/tailnet.svelte";
+import { tickersStore } from "../stores/tickers.svelte";
 import { rooted, standsAlone, tree } from "../tree";
 import { choices } from "./choices.svelte";
 
@@ -1218,7 +1224,7 @@ class Home {
           return;
         }
         for (const project of cawco.projects) {
-          const changes = cawco.tasksChangedOf(project.id);
+          const changes = tickersStore.tasksChangedOf(project.id);
           if (this.#waitingRead.get(project.id) === changes) {
             continue;
           }
@@ -1332,7 +1338,7 @@ class Home {
           ]
         : []
     );
-    const actions: NeedsItem[] = cawco.actions.map((action) => {
+    const actions: NeedsItem[] = needsStore.actions.map((action) => {
       const project = cawco.projects.find((one) => one.id === action.projectId);
       const at = `/project/${encodeURIComponent(action.projectId)}`;
       return {
@@ -1356,7 +1362,7 @@ class Home {
             : (action.endedAt ?? action.createdAt),
       };
     });
-    const watched: NeedsItem[] = cawco.watchNotices.map((notice) => {
+    const watched: NeedsItem[] = needsStore.watchNotices.map((notice) => {
       const row = cawco.instanceIndex.byId.get(notice.instanceId);
       return {
         kind: "watch",
@@ -1372,11 +1378,11 @@ class Home {
       };
     });
     // HTTPS on the tailnet name: its step while one stands, its tick a moment after.
-    const tailnet = cawco.tailnetHttps;
+    const tailnet = tailnetStore.tailnetHttps;
     const secured: NeedsItem[] =
       tailnet &&
       (tailnet.state === "needs" ||
-        (tailnet.state === "serving" && cawco.tailnetTicked))
+        (tailnet.state === "serving" && tailnetStore.tailnetTicked))
         ? [
             {
               kind: "tailnet",
@@ -1417,9 +1423,9 @@ class Home {
           ]
         : [];
     // The stream relay's journey: its row while it asks, its tick a moment after.
-    const journey = cawco.relayJourney;
+    const journey = relayStore.relayJourney;
     const relaying: NeedsItem[] =
-      journey && (journey.asks || (journey.done && cawco.relayTicked))
+      journey && (journey.asks || (journey.done && relayStore.relayTicked))
         ? [
             {
               kind: "relay",
@@ -1500,7 +1506,7 @@ class Home {
     );
     // The artifacts waiting on you, each under its session as an ask is;
     // one put away with Not now waits in Files until it is raised again.
-    const artifacts: NeedsItem[] = cawco.artifactNeedsOpen.map((need) => {
+    const artifacts: NeedsItem[] = needsStore.artifactNeedsOpen.map((need) => {
       const row = cawco.instanceIndex.byId.get(need.instanceId);
       const machine = cawco.machines.find(
         (one) => one.machineId === need.machineId
@@ -1532,23 +1538,25 @@ class Home {
       };
     });
     // A fleet MCP server's sign-in that ended without the person.
-    const signIns: NeedsItem[] = (cawco.fleetMcp ?? []).flatMap((server) => {
-      const ended = server.auth?.state === "needs-auth" && server.auth.ended;
-      return ended
-        ? [
-            {
-              kind: "mcp" as const,
-              key: `mcp:${server.name}`,
-              server: server.name,
-              title: mcpWords.signInAgain(server.name),
-              why: ended.why,
-              place: mcpWords.what,
-              href: "/config/mcp",
-              raisedAt: ended.at,
-            },
-          ]
-        : [];
-    });
+    const signIns: NeedsItem[] = (mcpServersStore.fleetMcp ?? []).flatMap(
+      (server) => {
+        const ended = server.auth?.state === "needs-auth" && server.auth.ended;
+        return ended
+          ? [
+              {
+                kind: "mcp" as const,
+                key: `mcp:${server.name}`,
+                server: server.name,
+                title: mcpWords.signInAgain(server.name),
+                why: ended.why,
+                place: mcpWords.what,
+                href: "/config/mcp",
+                raisedAt: ended.at,
+              },
+            ]
+          : [];
+      }
+    );
     // Longest wait first; an ask the hub has not stamped sorts last.
     return [
       ...asks,
@@ -1891,7 +1899,7 @@ class Home {
       return waiting.instanceId;
     }
     const cancelled = new Set(
-      cawco.moves
+      movesStore.moves
         .filter((job) => job.stage === "cancelled")
         .map((job) => job.targetInstanceId)
     );
