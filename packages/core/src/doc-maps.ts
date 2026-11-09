@@ -4,7 +4,7 @@
  * group, a choice entry), and a transaction round a batch of writes. A Yjs
  * `Doc` is one, on the hub, in the dashboard and in the overlay's doc
  * worker; so is the overlay's mirror of that worker's doc on the page
- * (agent preview-overlay mirror.ts), which loads no Yjs into the page.
+ * (preview overlay/mirror.ts), which loads no Yjs into the page.
  */
 
 /** What a map's watcher hears of one transaction: the keys it changed, and whether this view made it. */
