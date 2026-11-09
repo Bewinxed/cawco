@@ -534,7 +534,7 @@ export interface HeartbeatAckPayload {
   /**
    * Every workspace on the machine with a live work item (starting or
    * running), the whole list on every beat: the machine keeps each one's
-   * boundary up whatever else holds it (agent boundary.ts `liveWhy`), and
+   * boundary up whatever else holds it (agent boundary/holding.ts `liveWhy`), and
    * closes none until it has heard this once.
    */
   liveWorkspaces: string[];
