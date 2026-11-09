@@ -52,11 +52,12 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactLink, stepLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
-import { FolderRefusal, refused } from "./project-folder";
+import { folderAttempt } from "./project-folder";
+import { refusal } from "./refusal";
 import type { TaskEvent, Tasks } from "./tasks";
 
 export interface PlansDeps {
@@ -292,23 +293,35 @@ interface Applied {
   words: string;
 }
 
-/** The place of step `id` in `steps`; refused when the plan has no such step. */
-const placeOf = (steps: PlanStep[], id: string): number => {
-  const index = steps.findIndex((step) => step.id === id);
-  if (index < 0) {
-    throw new FolderRefusal(
+/** Step `id` of `steps` and its place; refused when the plan has no such step. */
+const placeOf = (steps: PlanStep[], id: string) => {
+  const index = steps.findIndex((one) => one.id === id);
+  const step = steps[index];
+  if (!step) {
+    return refusal(
       404,
+      "plan-step-missing",
       `This plan has no step ${id}: it may have changed since you opened it.`
     );
   }
-  return index;
+  return { index, step };
+};
+
+/** Step `id` of `steps` and where the block it heads (it and its children) starts and ends; refused when the plan has no such step. */
+const blockAt = (steps: PlanStep[], id: string) => {
+  const placed = placeOf(steps, id);
+  if (placed instanceof ElysiaStatus) {
+    return placed;
+  }
+  const [start, end] = blockOf(steps, placed.index);
+  return { step: placed.step, start, end };
 };
 
 /** The person's words, trimmed; refused when there are none. */
-const wordsOf = (given: string, what: string): string => {
+const wordsOf = (given: string, what: string) => {
   const words = given.trim();
   if (!words) {
-    throw new FolderRefusal(400, `${what} needs words.`);
+    return refusal(400, "plan-words-missing", `${what} needs words.`);
   }
   return words;
 };
@@ -316,31 +329,56 @@ const wordsOf = (given: string, what: string): string => {
 const reword = (
   steps: PlanStep[],
   edit: Extract<PlanEdit, { kind: "reword" }>
-): Applied => {
-  const index = placeOf(steps, edit.step);
-  const step = steps[index] as PlanStep;
+) => {
+  const placed = placeOf(steps, edit.step);
+  if (placed instanceof ElysiaStatus) {
+    return placed;
+  }
+  const { index, step } = placed;
   const words = wordsOf(edit.content, "A step");
+  if (words instanceof ElysiaStatus) {
+    return words;
+  }
   if (words === step.content) {
-    throw new FolderRefusal(400, "The step reads the same as before.");
+    return refusal(
+      400,
+      "plan-step-unchanged",
+      "The step reads the same as before."
+    );
   }
   const next = [...steps];
   next[index] = { ...step, content: words };
-  return { steps: next, step: step.id, was: step.content, words };
+  const applied: Applied = {
+    steps: next,
+    step: step.id,
+    was: step.content,
+    words,
+  };
+  return applied;
 };
 
-const add = (
-  steps: PlanStep[],
-  edit: Extract<PlanEdit, { kind: "add" }>
-): Applied => {
+const add = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "add" }>) => {
   const words = wordsOf(edit.content, "A step");
+  if (words instanceof ElysiaStatus) {
+    return words;
+  }
   const id = `you-${crypto.randomUUID().slice(0, 8)}`;
   const next = [...steps];
   if (edit.after === undefined) {
     next.push({ id, content: words, status: "pending", depth: 0 });
-    return { steps: next, step: id, was: steps.at(-1)?.content ?? "", words };
+    const last: Applied = {
+      steps: next,
+      step: id,
+      was: steps.at(-1)?.content ?? "",
+      words,
+    };
+    return last;
   }
-  const index = placeOf(steps, edit.after);
-  const after = steps[index] as PlanStep;
+  const placed = placeOf(steps, edit.after);
+  if (placed instanceof ElysiaStatus) {
+    return placed;
+  }
+  const { index, step: after } = placed;
   const [, end] = blockOf(steps, index);
   next.splice(end, 0, {
     id,
@@ -348,57 +386,80 @@ const add = (
     status: "pending",
     depth: after.depth,
   });
-  return { steps: next, step: id, was: after.content, words };
+  const applied: Applied = { steps: next, step: id, was: after.content, words };
+  return applied;
 };
 
 const remove = (
   steps: PlanStep[],
   edit: Extract<PlanEdit, { kind: "remove" }>
-): Applied => {
-  const index = placeOf(steps, edit.step);
-  const step = steps[index] as PlanStep;
-  const [start, end] = blockOf(steps, index);
+) => {
+  const block = blockAt(steps, edit.step);
+  if (block instanceof ElysiaStatus) {
+    return block;
+  }
+  const { step, start, end } = block;
   const next = [...steps];
   next.splice(start, end - start);
-  return { steps: next, step: step.id, was: step.content, words: "" };
+  const applied: Applied = {
+    steps: next,
+    step: step.id,
+    was: step.content,
+    words: "",
+  };
+  return applied;
 };
 
 const comment = (
   steps: PlanStep[],
   edit: Extract<PlanEdit, { kind: "comment" }>,
   at: Date
-): Applied => {
-  const index = placeOf(steps, edit.step);
-  const step = steps[index] as PlanStep;
+) => {
+  const placed = placeOf(steps, edit.step);
+  if (placed instanceof ElysiaStatus) {
+    return placed;
+  }
+  const { index, step } = placed;
   const words = wordsOf(edit.text, "A comment");
+  if (words instanceof ElysiaStatus) {
+    return words;
+  }
   const next = [...steps];
   next[index] = {
     ...step,
     comments: [...(step.comments ?? []), { at: at.toISOString(), text: words }],
   };
-  return { steps: next, step: step.id, was: step.content, words };
+  const applied: Applied = {
+    steps: next,
+    step: step.id,
+    was: step.content,
+    words,
+  };
+  return applied;
 };
 
-const tick = (
-  steps: PlanStep[],
-  edit: Extract<PlanEdit, { kind: "tick" }>
-): Applied => {
-  const index = placeOf(steps, edit.step);
-  const step = steps[index] as PlanStep;
+const tick = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "tick" }>) => {
+  const placed = placeOf(steps, edit.step);
+  if (placed instanceof ElysiaStatus) {
+    return placed;
+  }
+  const { index, step } = placed;
   if ((step.status === "completed") === edit.done) {
-    throw new FolderRefusal(
+    return refusal(
       409,
+      "plan-step-ticked-already",
       `“${step.content}” is ${edit.done ? "done" : "not done"} already.`
     );
   }
   const next = [...steps];
   next[index] = { ...step, status: edit.done ? "completed" : "pending" };
-  return {
+  const applied: Applied = {
     steps: next,
     step: step.id,
     was: step.content,
     words: edit.done ? "done" : "not done",
   };
+  return applied;
 };
 
 /** Where the step at `start` (depth `depth`) goes one place up: the start of the sibling before it. */
@@ -416,20 +477,20 @@ const siblingBefore = (
     : undefined;
 };
 
-const move = (
-  steps: PlanStep[],
-  edit: Extract<PlanEdit, { kind: "move" }>
-): Applied => {
-  const index = placeOf(steps, edit.step);
-  const step = steps[index] as PlanStep;
-  const [start, end] = blockOf(steps, index);
+const move = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "move" }>) => {
+  const found = blockAt(steps, edit.step);
+  if (found instanceof ElysiaStatus) {
+    return found;
+  }
+  const { step, start, end } = found;
   const block = steps.slice(start, end);
   const next = [...steps];
   if (edit.by === -1) {
     const before = siblingBefore(steps, start, step.depth);
     if (before === undefined) {
-      throw new FolderRefusal(
+      return refusal(
         409,
+        "plan-step-first-at-level",
         `“${step.content}” is the first step at its level.`
       );
     }
@@ -437,24 +498,26 @@ const move = (
     next.splice(before, 0, ...block);
   } else {
     if (end >= steps.length || (steps[end]?.depth ?? 0) !== step.depth) {
-      throw new FolderRefusal(
+      return refusal(
         409,
+        "plan-step-last-at-level",
         `“${step.content}” is the last step at its level.`
       );
     }
     const [, nextEnd] = blockOf(steps, end);
     next.splice(start, nextEnd - start, ...steps.slice(end, nextEnd), ...block);
   }
-  return {
+  const applied: Applied = {
     steps: next,
     step: step.id,
     was: step.content,
     words: edit.by === -1 ? "up" : "down",
   };
+  return applied;
 };
 
 /** The person's edit applied to a plan's steps; refused, in words, when it names no step or changes nothing. */
-const applyEdit = (steps: PlanStep[], edit: PlanEdit, at: Date): Applied => {
+const applyEdit = (steps: PlanStep[], edit: PlanEdit, at: Date) => {
   switch (edit.kind) {
     case "reword":
       return reword(steps, edit);
@@ -498,10 +561,14 @@ export const createPlans = (deps: PlansDeps) => {
     return next;
   };
 
-  const rowOf = (instanceId: string): InstanceRow => {
+  const rowOf = (instanceId: string) => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
-      throw new FolderRefusal(404, "No session with that id on this hub.");
+      return refusal(
+        404,
+        "plan-session-unknown",
+        "No session with that id on this hub."
+      );
     }
     return row;
   };
@@ -582,14 +649,17 @@ export const createPlans = (deps: PlansDeps) => {
     }
   };
 
-  const settle = (instanceId: string): Promise<Held> =>
+  const settle = (instanceId: string) =>
     inTurn(instanceId, async () => {
       const row = rowOf(instanceId);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       await dropSettled(row);
       const plan = await compute(row);
       const before = held.get(instanceId);
       if (!before) {
-        const first = { plan, rev: 1 };
+        const first: Held = { plan, rev: 1 };
         held.set(instanceId, first);
         deps.publish(instanceId, snapshotOf(instanceId, first));
         return first;
@@ -598,7 +668,7 @@ export const createPlans = (deps: PlansDeps) => {
       if (patch.length === 0) {
         return before;
       }
-      const after = { plan, rev: before.rev + 1 };
+      const after: Held = { plan, rev: before.rev + 1 };
       held.set(instanceId, after);
       deps.publish(
         instanceId,
@@ -609,18 +679,30 @@ export const createPlans = (deps: PlansDeps) => {
       return after;
     });
 
+  /** A plan read that could not be, in the hub's log. */
+  const unread = (instanceId: string, words: string) =>
+    console.warn(`[plans] ${instanceId}: ${words}`);
+
   const settleQuietly = (instanceId: string): void => {
-    settle(instanceId).catch((error: unknown) =>
-      console.warn(
-        `[plans] ${instanceId}: ${error instanceof Error ? error.message : String(error)}`
-      )
+    settle(instanceId).then(
+      (settled) => {
+        if (settled instanceof ElysiaStatus) {
+          unread(instanceId, settled.response.detail);
+        }
+      },
+      (error: unknown) =>
+        unread(
+          instanceId,
+          error instanceof Error ? error.message : String(error)
+        )
     );
   };
 
   return {
     /** What `GET /api/instances/:id/plan` answers: read now, and the followers told of any change. */
-    async read(instanceId: string): Promise<SessionPlan> {
-      return (await settle(instanceId)).plan;
+    async read(instanceId: string) {
+      const settled = await settle(instanceId);
+      return settled instanceof ElysiaStatus ? settled : settled.plan;
     },
 
     /**
@@ -637,13 +719,24 @@ export const createPlans = (deps: PlansDeps) => {
           send(snapshotOf(instanceId, known));
           return;
         }
-        const first = { plan: await compute(rowOf(instanceId)), rev: 1 };
+        const row = rowOf(instanceId);
+        if (row instanceof ElysiaStatus) {
+          return row;
+        }
+        const first = { plan: await compute(row), rev: 1 };
         held.set(instanceId, first);
         send(snapshotOf(instanceId, first));
-      }).catch((error: unknown) =>
-        console.warn(
-          `[plans] ${instanceId}: ${error instanceof Error ? error.message : String(error)}`
-        )
+      }).then(
+        (refused) => {
+          if (refused) {
+            unread(instanceId, refused.response.detail);
+          }
+        },
+        (error: unknown) =>
+          unread(
+            instanceId,
+            error instanceof Error ? error.message : String(error)
+          )
       );
     },
 
@@ -660,7 +753,7 @@ export const createPlans = (deps: PlansDeps) => {
     async write(
       row: InstanceRow,
       written: { steps?: WrittenStep[]; spec?: string }
-    ): Promise<SessionPlan> {
+    ) {
       const { steps } = written;
       if (steps) {
         const before = db.sessionPlan(row.id)?.steps ?? [];
@@ -683,7 +776,8 @@ export const createPlans = (deps: PlansDeps) => {
       if (written.spec !== undefined) {
         db.putSessionSpec(row.id, written.spec);
       }
-      return (await settle(row.id)).plan;
+      const settled = await settle(row.id);
+      return settled instanceof ElysiaStatus ? settled : settled.plan;
     },
 
     /**
@@ -697,13 +791,13 @@ export const createPlans = (deps: PlansDeps) => {
       edit: PlanEdit,
       to: PlanReceiver,
       settled: boolean
-    ): Promise<PlanChangeRow> {
+    ) {
       const at = new Date();
-      const { steps, step, was, words } = applyEdit(
-        db.sessionPlan(row.id)?.steps ?? [],
-        edit,
-        at
-      );
+      const applied = applyEdit(db.sessionPlan(row.id)?.steps ?? [], edit, at);
+      if (applied instanceof ElysiaStatus) {
+        return applied;
+      }
+      const { steps, step, was, words } = applied;
       const change: PlanChangeRow = {
         id: crypto.randomUUID(),
         instanceId: row.id,
@@ -720,8 +814,8 @@ export const createPlans = (deps: PlansDeps) => {
       };
       db.putSessionSteps(row.id, steps);
       db.putPlanChange(change);
-      await settle(row.id);
-      return change;
+      const now = await settle(row.id);
+      return now instanceof ElysiaStatus ? now : change;
     },
 
     /** A wait of the session's steps may have settled (a page's picks moved): the plan is read again, settled waits dropped. */
@@ -798,15 +892,15 @@ export const createPlans = (deps: PlansDeps) => {
      * `recapFor`). Answers whether they were unseen till now; the plan's
      * followers hear `awayUnseen` go.
      */
-    async seeAway(instanceId: string): Promise<boolean> {
+    async seeAway(instanceId: string) {
       const own = db.sessionPlan(instanceId);
       const away = awayNotesOf(own?.spec ?? undefined);
       if (!away || away.notes === own?.awaySeen) {
         return false;
       }
       db.putAwaySeen(instanceId, away.notes);
-      await settle(instanceId);
-      return true;
+      const settled = await settle(instanceId);
+      return settled instanceof ElysiaStatus ? settled : true;
     },
 
     /** The plan's followers hear its changes' new state (told, or reaching no one). */
@@ -844,17 +938,12 @@ export type Plans = ReturnType<typeof createPlans>;
  */
 export const planRoutes = (plans: Plans) =>
   new Elysia()
-    .get("/api/instances/:id/plan", async ({ params }) => {
-      try {
-        return await plans.read(params.id);
-      } catch (error) {
-        return refused(error);
-      }
-    })
-    .post("/api/instances/:id/plan/seen", async ({ params }) => {
-      try {
-        return { seen: await plans.seeAway(params.id) };
-      } catch (error) {
-        return refused(error);
-      }
-    });
+    .get("/api/instances/:id/plan", ({ params }) =>
+      folderAttempt(() => plans.read(params.id))
+    )
+    .post("/api/instances/:id/plan/seen", ({ params }) =>
+      folderAttempt(async () => {
+        const seen = await plans.seeAway(params.id);
+        return typeof seen === "boolean" ? { seen } : seen;
+      })
+    );
