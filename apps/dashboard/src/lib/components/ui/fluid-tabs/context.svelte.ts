@@ -15,11 +15,15 @@ export type TabsSize = "default" | "compact";
 /** A segmented control in a well, or folder tabs standing on a shelf. */
 export type TabsVariant = "segmented" | "folder";
 /**
- * A host strip the track stands in, by role: `session`, a pane's session
- * tabs on their own shelf (PaneTabs); `hosted`, the same tabs standing in a
- * host's row, which draws the shelf.
+ * A host strip the track stands in, its tuning said by the host as classes
+ * (cawco/tab-strips.ts): the root's, the track's, and the track's when it
+ * scrolls.
  */
-export type TabsStrip = "session" | "hosted";
+export interface TabsStrip {
+  list: string;
+  root: string;
+  scrolled?: string;
+}
 /**
  * The indicator part-way from the chosen item toward another, by a fraction
  * of the way: a gesture in progress, driving it by hand.
