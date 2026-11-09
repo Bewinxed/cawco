@@ -8,6 +8,7 @@ import { rm } from "node:fs/promises";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import { hasLeftDirs } from "../stand-ins";
+import { ensureBoundary } from "./arming";
 import {
   behindGate,
   decided,
@@ -15,7 +16,6 @@ import {
   reasonsOf,
   recordDecision,
 } from "./decisions";
-import { ensureBoundary } from "./lifecycle";
 import { supersededPorts, tellStopped, workIn, workLeft } from "./narrowing";
 import { type Seen, snapshot } from "./place-guard";
 import {
