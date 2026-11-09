@@ -43,10 +43,10 @@
  *    does the overlay, at its own key (core `keyOverlay`). A document the
  *    page frames on its own origin (the heavy page frames itself, at
  *    `./index.html?frame`) is no file of the page: every hop serves a
- *    document `no-store` (preview proxy.ts:126, as it names the
+ *    document `no-store` (preview proxy.ts `keyOverlay`, as it names the
  *    overlay's key when served and a page artifact's carries its doc's
  *    state), and a frame loaded again "asks the network for its document
- *    alone" (preview proxy.ts:338). It is noted, address and bytes, asked at
+ *    alone" (preview proxy.ts `IMMUTABLE`). It is noted, address and bytes, asked at
  *    most once; the files it loads are the page's, each at its key and from
  *    the cache.
  * 6. A file of the folder changed on disk, then the pane's Reload: the
@@ -342,10 +342,10 @@ const bornOf = (page: Page, origin: string): Promise<number | null> =>
  * cache (`transferSize` 0) or the network.
  *
  * A document is not one of the page's files. Every hop serves it `no-store`
- * (preview proxy.ts:126, `keyOverlay`: it names the overlay's key as it
+ * (preview proxy.ts `keyOverlay`: it names the overlay's key as it
  * is when served, and a page artifact's carries its doc's state), and "a
  * frame loaded again (a reload, a tab back from parked) asks the network for
- * its document alone" (preview proxy.ts:338). So a document the page frames
+ * its document alone" (preview proxy.ts `IMMUTABLE`). So a document the page frames
  * (an entry an `iframe` or `frame` started) is said apart in `documents`,
  * with its address and bytes; its own files are the page's, read in `nested`.
  */
