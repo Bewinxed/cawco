@@ -21,7 +21,7 @@ import type { Envelope } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import type { DbShape } from "./db";
-import type { DelegateTypesShape } from "./delegate-types";
+import type { DelegateTypesShape } from "./db/delegate-types";
 import { boardTitle } from "./labels";
 
 /** A permission (not a question) parked on this envelope, else undefined. */
