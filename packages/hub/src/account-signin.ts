@@ -384,7 +384,7 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
       (id): id is string => typeof id === "string" && !ctx.db.accounts.get(id)
     );
     // A store a process there still runs in stays until none does: its
-    // sign-out is {@link leaveAccounts}'s.
+    // sign-out is `leaveAccounts`'s.
     const leaving = new Set(
       ctx.db.accounts
         .leaves()
