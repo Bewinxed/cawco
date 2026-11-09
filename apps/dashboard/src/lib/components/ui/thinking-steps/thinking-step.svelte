@@ -34,7 +34,6 @@
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
   import { untrack } from "svelte";
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { IconCheck, IconGlobe, IconSearch } from "#lib/icons.js";
   import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
   import { restOffscreen } from "#lib/platform/motion/rest.js";
@@ -50,7 +49,7 @@
     enters = false,
     fades = false,
     isLast = false,
-    markdown = false,
+    markdown: Markdown,
     children,
     class: className = "",
   }: {
@@ -70,8 +69,12 @@
     /** Chunks streaming into this step's text fade in as they land. */
     fades?: boolean;
     isLast?: boolean;
-    /** Render the description as markdown rather than plain streamed text. */
-    markdown?: boolean;
+    /** Render the description as markdown, drawn by this, rather than plain streamed text. */
+    markdown?: Component<{
+      fades: boolean;
+      source: string;
+      streaming: boolean;
+    }>;
     children?: Snippet;
     class?: string;
   } = $props();
@@ -166,7 +169,7 @@
           data-status={status}>{label}</span
         >
       {/if}
-      {#if description && markdown}
+      {#if description && Markdown}
         <!-- Markdown keeps the plain description's type, and a step is
              exactly as tall as its text. -->
         <div
