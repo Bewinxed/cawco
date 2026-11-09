@@ -10,28 +10,21 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
-import {
-  workspaceClaudeTmpDir,
-  workspacePolicyFile,
-  workspacesDir,
-} from "@cawco/core/paths/workspace";
+import { workspacesDir } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { listedPid } from "@cawco/core/signal";
 import { readRecord } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram, workspaceNeeds } from "@cawco/core/workspace-needs";
-import { isPlace, workspacePolicy } from "@cawco/core/workspace-policy";
+import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureGateToken } from "../browser/gate";
 import { isGitDir } from "../git-dir";
-import { openGithubDoor } from "../github-door";
-import { openGitDoor } from "../hub-git";
 import { ensureView, layerOf, ownFolderSync, ownModules } from "../layer";
 import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { hasLeftDirs, listStandIns, rewriteLeftFiles } from "../stand-ins";
-import { openToolDoor } from "../tool-door";
 import { linkWorkspaceModules } from "../workspace-modules";
+import { armHook } from "./arm";
 import {
   behindGate,
   decided,
@@ -44,15 +37,8 @@ import {
   saidUnknown,
   viewOfBoundary,
 } from "./decisions";
-import { execScript, gateOf, ready } from "./exec";
+import { gateOf, ready } from "./exec";
 import { attachedIn, commandsNow, inUse, liveAt } from "./holding";
-import {
-  bunRuntime,
-  claudePrefixOf,
-  claudePrefixScript,
-  hookScript,
-} from "./hook-judge";
-import { judgeFor, whileArming } from "./judge-process";
 import {
   keeperTakingOver,
   type Narrowed,
@@ -78,12 +64,6 @@ import {
 import { srtTmpOf } from "./runner";
 import { endMembers, sandboxes } from "./sandboxes";
 import {
-  writeChromiumShim,
-  writeGitShim,
-  writeGuardedGhConfig,
-  writeShims,
-} from "./shims";
-import {
   closeWhenIdle,
   forgetRetiring,
   forgetStale,
@@ -100,8 +80,6 @@ import {
   closing,
   fifoOf,
   generationDir,
-  gitSystemConfig,
-  gitSystemConfigOf,
   type Held,
   keepers,
   READY,
@@ -111,7 +89,6 @@ import {
   readRetiring,
   refusal,
   retiringFileOf,
-  roOf,
   running,
   scratchOf,
   sessiond,
@@ -121,76 +98,6 @@ import {
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
 import { watchCloneOf, watchHost } from "./watch";
-
-/**
- * Starts the workspace's judge in this build's form and writes its hook for
- * `held` to ask it, its executor in this build's form for the boundary `held`
- * names, and the record of them, and serves its tool door. An executor only
- * hands commands in, so it is current from the next command on, whatever form
- * the boundary is. A running CLI reads its hook at every call, so it asks
- * the new judge from the next call on. On macOS also its shims. The
- * workspace's policy is written again too, as this machine stands now
- * (`workspacePolicy`): every harness reads it at each file tool call, so a
- * store, toolchain or account added since is in it from the next call on.
- */
-export const armHook = (
-  id: string,
-  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">
-): Promise<Held> => whileArming(id, () => armHookNow(id, held));
-
-/** {@link armHook}'s writes and starts, counted as {@link arming}. */
-const armHookNow = async (
-  id: string,
-  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">
-): Promise<Held> => {
-  const hook = join(stateDir(id), "hook");
-  const prefix = claudePrefixOf(id);
-  const policy = workspacePolicyFile(id);
-  // The CLI makes its own `claude-<uid>` in it, 0700, and refuses a root it
-  // does not own; inside the boundary it is read only, as the rest of `ro`.
-  const claudeTmp = workspaceClaudeTmpDir(id);
-  await mkdir(claudeTmp, { recursive: true, mode: 0o700 });
-  await writeWhole(
-    policy,
-    `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
-    0o644
-  );
-  const judge = await judgeFor(id, held, hook, policy);
-  await writeWhole(hook, hookScript(id, hook, judge), 0o755);
-  const runtime = await bunRuntime(id);
-  if (process.platform === "darwin") {
-    await writeShims(id, runtime);
-  }
-  await writeGuardedGhConfig(id);
-  await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id), 0o644);
-  await writeGitShim(id, held.path);
-  await writeChromiumShim(id);
-  // The copy of gh's token an earlier build's executor kept beside the
-  // workspace: nothing reads it now, and a token is kept nowhere it is not used.
-  await rm(join(stateDir(id), "gh-token"), { force: true });
-  // The repository rule an earlier build wrote for the workspace's doors:
-  // nothing reads it now.
-  await rm(join(roOf(id), "upstream.json"), { force: true });
-  // Its host's pid as the keeper listed it at its start, and matched to
-  // the keeper's list again before any boundary on record is armed.
-  await writeWhole(
-    held.exec,
-    execScript(id, { ...held, pid: listedPid(held.pid) }),
-    0o755
-  );
-  await writeWhole(prefix, claudePrefixScript(id, held.exec), 0o755);
-  await openToolDoor(id);
-  await openGitDoor({ id, path: held.path });
-  await openGithubDoor(id);
-  await watchHost(id, held);
-  const armed: Held = { ...held, claudeTmp, hook, policy, prefix };
-  await writeWhole(
-    join(stateDir(id), "boundary.json"),
-    `${JSON.stringify(armed)}\n`,
-    0o644
-  );
-  return armed;
-};
 
 /**
  * Writes one workspace's hook and its script again, in this build's form,
