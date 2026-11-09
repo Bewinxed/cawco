@@ -1,5 +1,5 @@
 // The design rules as Golar runs them (golar.config.ts), with the options
-// the dashboard ran them under ESLint (apps/dashboard/eslint.config.mjs at the
+// the dashboard ran them under ESLint (its ESLint config at the
 // move): which rules a file gets, and each one's allow lists. A file is named
 // by its path from apps/dashboard, as the ESLint config named it.
 import path from "node:path";
