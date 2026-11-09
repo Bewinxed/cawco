@@ -1,5 +1,4 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
-import { machineCalled } from "@cawco/core/machine-names";
 import { isMachinePath, type MachinePath } from "@cawco/core/machine-path";
 import type { DeclaredStep, RunsOnCapability } from "@cawco/core/project-gate";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -22,6 +21,7 @@ import {
   projectGate,
 } from "./gate-file";
 import { type GateStep, statusCommand } from "./landing";
+import { machineName } from "./machine-name";
 import {
   type CommandOptions,
   CommandStopped,
@@ -263,9 +263,6 @@ export const createGate = ({
   update,
   workspaces,
 }: GateDeps) => {
-  /** A machine as a gate step's line names it: its hostname as the fleet shows it. */
-  const machineName = (machineId: string): string =>
-    machineCalled(machineId, db.listAgents());
   /**
    * The gate commands that passed for a live item, by what they passed on
    * ({@link passKey}: the whole tree, or the trees of the paths a step
@@ -338,7 +335,7 @@ export const createGate = ({
     if (!(projectId && repository)) {
       throw new Error(
         projectId
-          ? `the hub knows no repository of this project on ${machineName(machineId)}: no checkout place there, and no workspace of it was ever cut there. Your parent delegates once to that machine with cwd at the repository there (or adds it as a checkout of the project); then call finish_item again.`
+          ? `the hub knows no repository of this project on ${machineName(db, machineId)}: no checkout place there, and no workspace of it was ever cut there. Your parent delegates once to that machine with cwd at the repository there (or adds it as a checkout of the project); then call finish_item again.`
           : "this item belongs to no project, so the hub knows no checkout of its repository there."
       );
     }
@@ -456,7 +453,7 @@ export const createGate = ({
       step: GateStep,
       limit: number
     ): Promise<Ran | undefined> => {
-      const on = `on ${machineName(machineId)}`;
+      const on = `on ${machineName(db, machineId)}`;
       try {
         const { at, head } = await atCommit(machineId);
         const complete = await command(
@@ -520,7 +517,7 @@ export const createGate = ({
       return complete.cancelled ? undefined : { complete, where: undefined };
     };
     if (how.inTurn) {
-      refuseAway(steps, workspace.machineId, machineName);
+      refuseAway(steps, workspace.machineId, (id) => machineName(db, id));
     }
     try {
       const outcomes: StepOutcome[] = [];
