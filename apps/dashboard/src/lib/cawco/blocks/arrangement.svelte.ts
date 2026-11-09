@@ -21,7 +21,11 @@ import {
   viewBlock,
 } from "@cawco/core/blocks";
 import { hub } from "#lib/platform/hub.js";
-import { failureWords, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import {
+  failureWords,
+  hubData,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 import { newestRead } from "#lib/platform/newest-read.js";
 
 export const isBlockPage = (value: string): value is ShownBlockPage =>
@@ -47,11 +51,10 @@ export class ProjectBlocks {
     const id = this.#projectId();
     const newest = this.#reads.next();
     try {
-      const blocksAnswer = await hub.api.projects({ id }).blocks.get();
-      if (blocksAnswer.error) {
-        throw refusedOrUnreached(blocksAnswer);
-      }
-      const next = blocksAnswer.data;
+      const next = await hubData(
+        hub.api.projects({ id }).blocks.get(),
+        refusedOrUnreached
+      );
       if (id === this.#projectId() && newest()) {
         this.arrangement = next;
       }
@@ -90,14 +93,10 @@ export class ProjectBlocks {
   async set(page: ShownBlockPage, places: BlockPlace[]): Promise<boolean> {
     const id = this.#projectId();
     try {
-      const blocksAnswer = await hub.api
-        .projects({ id })
-        .blocks({ page })
-        .put({ blocks: places });
-      if (blocksAnswer.error) {
-        throw refusedOrUnreached(blocksAnswer);
-      }
-      const next = blocksAnswer.data;
+      const next = await hubData(
+        hub.api.projects({ id }).blocks({ page }).put({ blocks: places }),
+        refusedOrUnreached
+      );
       if (id === this.#projectId()) {
         this.arrangement = next;
         const { [page]: _, ...rest } = this.refused;
