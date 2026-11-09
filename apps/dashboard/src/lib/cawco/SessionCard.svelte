@@ -24,6 +24,7 @@
   import { cawOf } from "./session-status";
   import { boardStore, isFailed } from "./stores/board.svelte";
   import { sessionsStore } from "./stores/sessions.svelte";
+  import { workItemsStore } from "./stores/work-items.svelte";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
@@ -87,7 +88,7 @@
     if (shownTone === "failed") {
       // A delegate whose work item failed fails for the item's reason; its
       // session's own error is only the process's.
-      const item = cawco.workItemFor(of);
+      const item = workItemsStore.workItemFor(of);
       const why =
         item?.state === "failed"
           ? item.firstLines.error

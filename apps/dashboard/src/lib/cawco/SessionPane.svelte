@@ -52,22 +52,10 @@
   import { page } from "$app/state";
   import {
     cawco,
-    clearReadFault,
     commandFault,
-    faultMessage,
     holdForStart,
-    keepServedAway,
-    keepServedPage,
-    openSession,
-    type ReadCause,
-    readFaultOf,
-    readTranscript,
-    reconnectingNow,
     type SendExtras,
-    type ServerTail,
     submitCommand,
-    unwatchDelegate,
-    watchDelegate,
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
   import EmptyAsk from "./EmptyAsk.svelte";
@@ -111,7 +99,23 @@
     type SessionState,
     sessionsStore,
   } from "./stores/sessions.svelte";
+  import {
+    openSession,
+    unwatchDelegate,
+    watchDelegate,
+  } from "./stores/subscriptions.svelte";
   import { tickersStore } from "./stores/tickers.svelte";
+  import {
+    clearReadFault,
+    faultMessage,
+    keepServedAway,
+    keepServedPage,
+    type ReadCause,
+    readFaultOf,
+    readTranscript,
+    reconnectingNow,
+    type ServerTail,
+  } from "./stores/transcript-reads.svelte";
   import { seededSession } from "./stores/transcripts.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
