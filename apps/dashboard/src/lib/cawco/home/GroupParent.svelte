@@ -19,10 +19,10 @@
    * unfolds under this row (`endAt`).
    */
   import { IconCalendar, IconLayers } from "#lib/icons.js";
+  import { landRegroup } from "../../platform/motion/share.svelte";
   import { cawco } from "../client.svelte";
   import FolderMenu from "../FolderMenu.svelte";
   import { markHue } from "../mark";
-  import { landRegroup } from "../motion/share.svelte";
   import OsMark from "../OsMark.svelte";
   import ProjectMark from "../ProjectMark.svelte";
   import { inRailSheet, openProjectPress } from "../project-press";

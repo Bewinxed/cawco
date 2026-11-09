@@ -21,8 +21,8 @@
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
   import { IconSubagent } from "#lib/icons.js";
-  import { appear, crossOut } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
+  import { appear, crossOut } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import {
     hueVar,
     nameOf,

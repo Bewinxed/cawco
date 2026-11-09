@@ -27,17 +27,17 @@
    */
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconKey, IconRefresh, IconSubagents } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { cawco } from "./client.svelte";
-  import { dur, motionOk } from "./motion/curves.svelte";
-  import { morph } from "./motion/morph.svelte";
-  import { reflow } from "./motion/rows.svelte";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
   import { claudeGap } from "./usage";
   import Figure from "./usage/Figure.svelte";

@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { IconClose } from "#lib/icons.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   /**
    * Direction B: one status card that changes its mood (design 6ddc57c4,
    * Option B), in PairingScreen's own shape: Caw at 64px over a title and
@@ -13,11 +16,8 @@
    * meta line only ever says what it waits on. Caw never moves; a failure
    * keeps him at the top in his needs-you pose. × only, never ‹.
    */
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconClose } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import Confetti from "./Confetti.svelte";
   import { arrive, depart } from "./motion";
   import StateObject, { hasObject } from "./StateObject.svelte";

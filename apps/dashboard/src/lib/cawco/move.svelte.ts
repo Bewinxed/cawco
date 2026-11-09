@@ -9,8 +9,8 @@
 
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core/move";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { cawco, heardMove } from "./client.svelte";
-import { hubFetch, hubRefusal } from "./hub-read";
 
 /** The hub's refusal, in its one sentence (hub-read `hubRefusal`). */
 const refusal = (response: Response): Promise<Error> => hubRefusal(response);

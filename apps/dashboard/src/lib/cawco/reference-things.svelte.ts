@@ -17,7 +17,7 @@ import type { SessionPlan } from "@cawco/core/plan";
 import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
-import { hubFetch } from "#lib/cawco/hub-read.js";
+import { hubFetch } from "#lib/platform/hub-read.js";
 import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";

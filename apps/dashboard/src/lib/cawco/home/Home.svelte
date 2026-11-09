@@ -21,10 +21,10 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
   import { page } from "$app/state";
+  import { crossIn, crossOut } from "../../platform/motion/curves.svelte";
+  import { reflow } from "../../platform/motion/rows.svelte";
   import MachinesEmpty from "../MachinesEmpty.svelte";
   import MachinesList from "../MachinesList.svelte";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
   import { workspace } from "../workspace/workspace.svelte";

@@ -2,7 +2,6 @@
   import { detach } from "@cawco/core/detach";
   import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
   import { spawnWords } from "@cawco/core/words/spawn";
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
@@ -15,6 +14,7 @@
    * any pick does.
    */
   import { IconSuccess as Check } from "#lib/icons.js";
+  import { staggered } from "#lib/platform/motion/curves.svelte.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { fullSendCopy } from "../permission-modes";

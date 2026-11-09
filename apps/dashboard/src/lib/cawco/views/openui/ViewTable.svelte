@@ -12,7 +12,7 @@
    * widening under it never takes the room back.
    */
   import * as Table from "#lib/components/ui/table/index.js";
-  import { frameSize } from "../../frame-observer.js";
+  import { frameSize } from "../../../platform/frame-observer";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
   let {

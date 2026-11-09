@@ -26,11 +26,11 @@
   import { madeWords } from "@cawco/core/words/made";
   import type { Attachment } from "svelte/attachments";
   import { on } from "svelte/events";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { track } from "#lib/cawco/track.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
-  import { failureWords } from "../hub-read";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
+  import { failureWords } from "../../platform/hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { readOutputText } from "../project-tasks";

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { departBox, land } from "#lib/platform/motion/share.svelte.js";
   /**
    * Caw off's tray: a job of stop-work.svelte.ts drawn as the pick section
    * (StopTrayPick), under his switch (CawLeadSwitch) or, reopened from where
@@ -13,7 +14,6 @@
   import { cawco } from "./client.svelte";
   import { machineName } from "./home/home-state.svelte";
   import { resolveSessionTitle } from "./links";
-  import { departBox, land } from "./motion/share.svelte";
   import StopTrayPick, {
     type PickRow,
     type PickStep,
