@@ -231,7 +231,7 @@ export class ArtifactSession implements PaneFleet {
     }
   }
 
-  /** The fleet store's rule for a preview frame (client.svelte.ts `preview`), for one session. */
+  /** The fleet store's rule for a preview frame (stores/previews.svelte.ts `takePreview`), for one session. */
   #keepPreview(frame: ArtifactSessionFrame["preview"]): void {
     const previous = this.#preview;
     if (!frame) {
