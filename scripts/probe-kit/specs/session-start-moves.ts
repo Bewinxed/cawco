@@ -152,9 +152,12 @@ const run = async (
       },
       remote: null,
     });
-    await writeFolderFile(id, "stages.md", stages, {
+    const committed = await writeFolderFile(id, "stages.md", stages, {
       author: { name: "probe" },
     });
+    if (!("sha" in committed)) {
+      throw new Error(committed.response.detail);
+    }
     const session = crypto.randomUUID();
     db.openInstance({
       id: session,

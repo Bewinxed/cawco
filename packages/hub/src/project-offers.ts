@@ -38,7 +38,7 @@ import type { ProjectOfferRow, ProjectRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
 import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
-import { FolderRefusal, refused } from "./project-folder";
+import { ProjectRefusal, projectRefused } from "./project-refusal";
 import { normaliseRemote } from "./projects";
 import type { Refused } from "./refusal";
 import type { TaskActor, Tasks } from "./tasks";
@@ -315,7 +315,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   const answerable = (id: string): InstanceShape => {
     const row = rowOf(id);
     if (!row) {
-      throw new FolderRefusal(404, "No session with that id on this hub.");
+      throw new ProjectRefusal(404, "No session with that id on this hub.");
     }
     return row;
   };
@@ -354,20 +354,20 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     async accept(instanceId: string, actor: TaskActor): Promise<AcceptResult> {
       const row = answerable(instanceId);
       if (row.projectId) {
-        throw new FolderRefusal(
+        throw new ProjectRefusal(
           409,
           "This session is already in a project; there is nothing to make."
         );
       }
       if (row.parentInstanceId || row.workItemId) {
-        throw new FolderRefusal(
+        throw new ProjectRefusal(
           409,
           "A delegate belongs to the session that started it. Make that session the project."
         );
       }
       // Its `cwd` may be a folder its CLI wandered into, not its checkout.
       if (row.launchDir === "unknown") {
-        throw new FolderRefusal(
+        throw new ProjectRefusal(
           409,
           `${sessionLabel(row).name}'s conversation is no longer on its machine, so its folder is unknown and it can't be made a project.`
         );
@@ -425,14 +425,14 @@ export const projectOfferRoutes = (offers: ProjectOffers, you: TaskActor) =>
         offers.dismiss(params.instanceId);
         return { ok: true };
       } catch (error) {
-        return refused(error);
+        return projectRefused(error);
       }
     })
     .post("/api/project-offers/:instanceId/accept", async ({ params }) => {
       try {
         return await offers.accept(params.instanceId, you);
       } catch (error) {
-        return refused(error);
+        return projectRefused(error);
       }
     });
 

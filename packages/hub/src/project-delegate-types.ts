@@ -47,7 +47,7 @@ import {
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus } from "elysia";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
 import { refusal } from "./refusal";
@@ -317,8 +317,12 @@ const readFolderTypes = (
   const types: CatalogType[] = [];
   const problems: TypeFileProblem[] = [];
   let dir: string;
+  const root = projectRoot(folder);
+  if (root instanceof ElysiaStatus) {
+    return { types, problems };
+  }
   try {
-    dir = join(projectRoot(folder), DELEGATES);
+    dir = join(root, DELEGATES);
     if (!lstatSync(dir).isDirectory()) {
       return { types, problems };
     }
