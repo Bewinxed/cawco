@@ -17,9 +17,10 @@
    * would paint under the panes.
    */
   import { Portal } from "bits-ui";
-  import { cawco, readTranscript } from "./client.svelte";
+  import { readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import SessionCard from "./SessionCard.svelte";
+  import { sessionsStore } from "./stores/sessions.svelte";
 
   /** The rail whose session rows open the card. */
   let { within }: { within: HTMLElement | undefined } = $props();
@@ -45,7 +46,7 @@
       return;
     }
     fetched = id;
-    if (!cawco.session(id)?.messages.length) {
+    if (!sessionsStore.session(id)?.messages.length) {
       detach(readTranscript(id), "readTranscript");
     }
   }

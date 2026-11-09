@@ -46,13 +46,7 @@ import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { msOf } from "#lib/platform/motion/time.js";
 import { store, stored } from "#lib/platform/storage.js";
 import { browser } from "$app/env";
-import {
-  type BlockedRequest,
-  cawco,
-  cawOf,
-  configureCaw,
-  type ProjectRow,
-} from "../client.svelte";
+import { cawco } from "../client.svelte";
 import { connectionStore } from "../hub/socket.svelte";
 import type { BoardRow } from "../links";
 import { minimizedAsks } from "../minimized-asks.svelte";
@@ -61,6 +55,13 @@ import { QUESTION_KEYS } from "../question";
 import { boardStore } from "../stores/board.svelte";
 import { clockStore } from "../stores/clock.svelte";
 import { needsStore } from "../stores/needs.svelte";
+import {
+  cawOf,
+  configureCaw,
+  type ProjectRow,
+  projectsStore,
+} from "../stores/projects.svelte";
+import type { BlockedRequest } from "../stores/sessions.svelte";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
@@ -541,7 +542,7 @@ export class CawLead {
 
   /** The project's spend cap while it holds the project back. */
   readonly cap = $derived.by((): ProjectCap | null =>
-    cawco.capHolding(this.#projectId())
+    projectsStore.capHolding(this.#projectId())
   );
 
   /** The cap's line: reached, and when the next period starts it clear. */
