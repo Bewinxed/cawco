@@ -68,6 +68,10 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Subprocess } from "bun";
+import {
+  JUDGE_PROTOCOL_FILE,
+  judgeArgv,
+} from "../../../packages/agent/src/boundary/protocol";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
@@ -334,13 +338,13 @@ const run = async (kit: Kit) => {
   const judges: { proc: Subprocess; socket: string }[] = [];
   const startJudge = async (
     script: string,
-    handed: string[]
+    argv: (socket: string) => string[]
   ): Promise<string> => {
     const listening = join(
       process.env.TMPDIR ?? "/tmp",
       `cpj-${crypto.randomUUID().slice(0, 8)}.sock`
     );
-    const proc = Bun.spawn([bun, script, listening, ...handed], {
+    const proc = Bun.spawn([bun, script, ...argv(listening)], {
       env: process.env,
       cwd: dirname(script),
       stdout: "pipe",
@@ -352,7 +356,7 @@ const run = async (kit: Kit) => {
     says.releaseLock();
     return listening;
   };
-  // This build's judge, its two scripts in the state dir.
+  // This build's judge, its scripts in the state dir.
   await copyFile(
     join(ROOT, "packages", "agent", "src", "boundary-judge.ts"),
     join(state, "boundary-judge.ts")
@@ -361,10 +365,18 @@ const run = async (kit: Kit) => {
     join(ROOT, "packages", "core", "src", "workspace-judge.ts"),
     join(state, "workspace-judge.ts")
   );
-  const socket = await startJudge(join(state, "boundary-judge.ts"), [
-    ...parts.judgeHanded(policy),
-    "probe-build",
-  ]);
+  await mkdir(dirname(join(state, JUDGE_PROTOCOL_FILE)), { recursive: true });
+  await copyFile(
+    join(ROOT, "packages", "agent", "src", "boundary", "protocol.ts"),
+    join(state, JUDGE_PROTOCOL_FILE)
+  );
+  const socket = await startJudge(join(state, "boundary-judge.ts"), (at) =>
+    judgeArgv({
+      socket: at,
+      ...parts.judgeHanded(policy),
+      build: "probe-build",
+    })
+  );
   await writeFile(parts.hookAt, await parts.hook(socket));
   await chmod(parts.hookAt, 0o755);
   const boundary = {
@@ -791,14 +803,18 @@ const run = async (kit: Kit) => {
         )
       )
     );
-    const earlierSocket = await startJudge(join(earlier, "boundary-judge.ts"), [
-      parts.hookAt,
-      "90",
-      parts.execAt,
-      parts.scratch,
-      policy,
-      "probe-before",
-    ]);
+    const earlierSocket = await startJudge(
+      join(earlier, "boundary-judge.ts"),
+      (at) => [
+        at,
+        parts.hookAt,
+        "90",
+        parts.execAt,
+        parts.scratch,
+        policy,
+        "probe-before",
+      ]
+    );
     await writeFile(parts.hookAt, await parts.hook(earlierSocket));
     const legacy = await session(
       [
