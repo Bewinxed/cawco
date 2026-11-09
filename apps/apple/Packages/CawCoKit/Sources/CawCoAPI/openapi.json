@@ -38765,7 +38765,7 @@
                         "type": "string"
                       },
                       "notice": {
-                        "description": "The hub's own word about the delegate's work, not the delegate's\nreport (core injected.ts `reportMarker`, its outcome `notice`):\nits workspace held, or retired with its commits in a carry (hub\nwork-items.ts `workspaceNotice`). Absent on a report.",
+                        "description": "The hub's own word about the delegate's work, not the delegate's\nreport (core injected.ts `reportMarker`, its outcome `notice`):\nits workspace held, or retired with its commits in a carry (hub\nworkspaces.ts `workspaceNotice`). Absent on a report.",
                         "const": true,
                         "type": "boolean"
                       },
@@ -38961,7 +38961,7 @@
                         "type": "string"
                       },
                       "notice": {
-                        "description": "The hub's own word about the delegate's work, not the delegate's\nreport (core injected.ts `reportMarker`, its outcome `notice`):\nits workspace held, or retired with its commits in a carry (hub\nwork-items.ts `workspaceNotice`). Absent on a report.",
+                        "description": "The hub's own word about the delegate's work, not the delegate's\nreport (core injected.ts `reportMarker`, its outcome `notice`):\nits workspace held, or retired with its commits in a carry (hub\nworkspaces.ts `workspaceNotice`). Absent on a report.",
                         "const": true,
                         "type": "boolean"
                       },
@@ -62705,7 +62705,7 @@
         ]
       },
       "WorkspaceCut": {
-        "description": "Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s\n`at`): the commit its clone's HEAD was on when it retired, on `origin`'s\nbranch `branch` that held it then (its base when the base held it), read\nby its machine's archive ({@link WorkspaceArchived} `head`) and fetched as\nthe clone is. Never the base's tip: a landing stopped while queued leaves\ncommits no landing recorded, and a cut at the tip left them behind\n(2026-10-17).\n\n`carry`, for a workspace whose commits went to a carry as it retired (an\nitem that lands none, hub work-items.ts `settle`): that carry's folder on\nits machine. `commit` is then where its HEAD built on `branch`, and the\ncarry's commits are fetched from its bundle on top: the clone is cut again\nat the HEAD it had.",
+        "description": "Where a workspace cut again is cut ({@link CONTROL_WORKSPACE_CREATE}'s\n`at`): the commit its clone's HEAD was on when it retired, on `origin`'s\nbranch `branch` that held it then (its base when the base held it), read\nby its machine's archive ({@link WorkspaceArchived} `head`) and fetched as\nthe clone is. Never the base's tip: a landing stopped while queued leaves\ncommits no landing recorded, and a cut at the tip left them behind\n(2026-10-17).\n\n`carry`, for a workspace whose commits went to a carry as it retired (an\nitem that lands none, hub workspaces.ts `settle`): that carry's folder on\nits machine. `commit` is then where its HEAD built on `branch`, and the\ncarry's commits are fetched from its bundle on top: the clone is cut again\nat the HEAD it had.",
         "type": "object",
         "properties": {
           "branch": {
@@ -62732,7 +62732,7 @@
             "type": "string"
           },
           "landed": {
-            "description": "Whether this workspace's landing put every patch of that commit's work\non the base branch (work-items.ts `vouchLanded`): then the source holds\nnone of it as its own, and an archive is told so (core\n`WorkspaceArchive.landed`).",
+            "description": "Whether this workspace's landing put every patch of that commit's work\non the base branch (landing-run.ts `vouchLanded`): then the source holds\nnone of it as its own, and an archive is told so (core\n`WorkspaceArchive.landed`).",
             "type": "boolean"
           },
           "workspace": {
@@ -62809,7 +62809,7 @@
         ]
       },
       "WorkspaceState": {
-        "description": "A workspace's life, which is its work items' (work-items.ts `settle`):\n`active` while an item there is live, or ended a moment ago and the hub\nhas not settled it, or while something holds it (a session attached, an\nartifact showing what it serves); `held` once its item ended with work\nthat is nowhere else, which the session that started its work ends, told\nso, by continuing it or discarding it (work-items.ts `heldNotice`), or a\nworkspace cut from it ends by landing that work (`vouchLanded`);\n`archived` once its boundary and clone are gone.",
+        "description": "A workspace's life, which is its work items' (workspaces.ts `settle`):\n`active` while an item there is live, or ended a moment ago and the hub\nhas not settled it, or while something holds it (a session attached, an\nartifact showing what it serves); `held` once its item ended with work\nthat is nowhere else, which the session that started its work ends, told\nso, by continuing it or discarding it (workspaces.ts `heldNotice`), or a\nworkspace cut from it ends by landing that work (`vouchLanded`);\n`archived` once its boundary and clone are gone.",
         "type": "string",
         "enum": [
           "active",
