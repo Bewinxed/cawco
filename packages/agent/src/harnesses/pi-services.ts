@@ -77,7 +77,7 @@ import { piMcpEntry, piMcpList } from "./pi-mcp";
 import { piOpenTurns } from "./pi-sessiond";
 import {
   LineIndexes,
-  readUnlessGone,
+  transcriptOrGone,
   windowCuts,
   windowRange,
 } from "./transcript-index";
@@ -1095,7 +1095,7 @@ export class PiProfile {
       return [];
     }
     // A session file deleted while it is read reads as one never found.
-    return readUnlessGone(async () => {
+    return transcriptOrGone(async () => {
       const plan = await piPlanOf(path, dir);
       const nodes = span === "whole" ? plan.stored : plan.path;
       return piEntriesAt(path, sessionKey, nodes, plan, 0, nodes.length);
@@ -1119,7 +1119,7 @@ export class PiProfile {
       return { entries: [], older: null, newer: null };
     }
     // A session file deleted while it is read reads as one never found.
-    return readUnlessGone(() => piWindow(path, dir, sessionKey, ask), {
+    return transcriptOrGone(() => piWindow(path, dir, sessionKey, ask), {
       entries: [],
       older: null,
       newer: null,
