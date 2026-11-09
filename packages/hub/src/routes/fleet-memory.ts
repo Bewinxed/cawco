@@ -118,9 +118,7 @@ export const fleetMemoryRoutes = ({
           expectedHash: t.Optional(t.String()),
           scope: t.Optional(
             t.Object({
-              role: t.Optional(
-                t.Union(MEMORY_ROLES.map((role) => t.Literal(role)))
-              ),
+              role: t.Optional(t.UnionEnum(MEMORY_ROLES)),
               projectIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
               areaIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
               delegateTypes: t.Optional(t.Array(t.String(), { minItems: 1 })),

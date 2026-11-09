@@ -75,7 +75,7 @@ export const modelAccessRoutes = ({
             candidates: t.Array(
               t.Object({
                 id: t.String(),
-                kind: t.Union(CAPABILITY_KINDS.map((kind) => t.Literal(kind))),
+                kind: t.UnionEnum(CAPABILITY_KINDS),
                 name: t.String(),
                 description: t.String(),
               })
