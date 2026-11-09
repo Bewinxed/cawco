@@ -136,7 +136,7 @@ export const continuationRoutes = ({
           return status(422, inFlight.refusal);
         }
         const row = startContinuation(prepared, request, asker, inFlight.work);
-        // Its record holds the source's workspace from here (work-items.ts `holdOn`).
+        // Its record holds the source's workspace from here (workspaces.ts `holdsOf`).
         release();
         const job = continuationJob(row);
         return {
