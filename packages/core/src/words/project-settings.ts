@@ -10,7 +10,7 @@ import { areaWords } from "./areas";
 import { projectAccountWords } from "./project-account";
 
 /** A setting in effect as the read says it: its value in words, and where it came from in words. */
-export interface SettingRead {
+interface SettingRead {
   /** `its own`, `from its area Acme`, `the fleet's` (areas.ts `source`). */
   from: string;
   value: string;
