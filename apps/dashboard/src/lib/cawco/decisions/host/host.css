@@ -1,4 +1,4 @@
-/* The decision host's stylesheet (core decision-host.ts compiles it with
+/* The decision host's stylesheet (hub decision-host.ts compiles it with
    Tailwind 4.3.3 through PostCSS, then Lightning CSS, and serves it as
    /__cawco/decision/host.css): the house design layer the dashboard is built
    on, its utilities generated only for the host's own markup and the kit
