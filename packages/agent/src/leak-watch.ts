@@ -35,7 +35,7 @@
  *
  * A delegate whose work item has ended takes no word, and is never told of a
  * leftover: what its session left running in its workspace ends as the hub
- * settles that workspace (hub work-items.ts `endLeftWork`), or is kept while
+ * settles that workspace (hub workspaces.ts `endLeftWork`), or is kept while
  * an artifact shows it. Its parent is told of a climb in memory alone (hub
  * session-notes.ts `tellLeak`).
  *
