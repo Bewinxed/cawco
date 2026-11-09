@@ -338,7 +338,6 @@
         "zod": "4.6.5",
       },
       "devDependencies": {
-        "@cawco/hub": "workspace:*",
         "@iconify-json/solar": "1.2.13",
         "@types/bun": "^1.4.3",
       },
