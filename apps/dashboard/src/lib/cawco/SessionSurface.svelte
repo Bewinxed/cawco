@@ -50,6 +50,7 @@
   import { instanceForSession } from "#lib/cawco/links.js";
   import MachinesEmpty from "#lib/cawco/MachinesEmpty.svelte";
   import { presenceWorkspace } from "#lib/cawco/presence.js";
+  import { continuationsStore } from "#lib/cawco/stores/continuations.svelte.js";
   import { fullSize } from "#lib/cawco/workspace/full-size.svelte.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
@@ -433,7 +434,7 @@
      session's tab, under its id now. */
   $effect(() => {
     const index = cawco.instanceIndex;
-    const former = cawco.formerIds;
+    const former = continuationsStore.formerIds;
     if (!workspace.restored) {
       return;
     }

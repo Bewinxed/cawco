@@ -6,26 +6,22 @@
 
 import type { ProjectAtLimit } from "@cawco/core/accounts";
 
-import type { ApprovedActionView } from "@cawco/core/actions";
 import {
   type Activity,
   sessionChain,
   waitingOnYou,
 } from "@cawco/core/activity";
 import type { OnCap, ProjectCap } from "@cawco/core/areas";
-import type {
-  ArtifactNeed,
-  ArtifactNeedNotice,
-} from "@cawco/core/artifact-needs";
+
 import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import type { ListedBrowser } from "@cawco/core/browser";
+
 import { PRESENCE_HEADER } from "@cawco/core/browser-gate";
 import type { ConnectionView } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import type { AvailableCommand } from "@cawco/core/fleet";
-import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
+
 import type {
   ForgottenProject,
   ProjectRestored,
@@ -37,8 +33,6 @@ import type {
   FramePayload,
   HarnessFailed,
   HarnessUnanswered,
-  ProjectOfferAccepted,
-  ProjectOfferSummary,
   ProjectStopFrame,
 } from "@cawco/core/frames";
 import type {
@@ -54,18 +48,16 @@ import type {
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
-import type { LawBroken } from "@cawco/core/invariant";
+
 import { machineLabel } from "@cawco/core/machine-names";
-import type { MoveJob } from "@cawco/core/move";
+
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { PlaceProject } from "@cawco/core/place-nesting";
-import type { SessionPlan } from "@cawco/core/plan";
+
 import type { PreviewSettings } from "@cawco/core/preview/routes";
 import type {
   CawInitiated,
   CawStart,
-  DesignOfferState,
-  LfsOfferState,
   ProjectConversationView,
   ProjectSpend,
 } from "@cawco/core/project-conversation";
@@ -73,7 +65,6 @@ import { capHolds } from "@cawco/core/project-conversation";
 import type {
   AgentRow,
   BuildInfo,
-  ContinuationJob,
   ControlPayload,
   DelegateEvent,
   DelegateSummary,
@@ -102,17 +93,9 @@ import type {
   SendRecord,
   SupportedCommands,
 } from "@cawco/core/session-messages";
-import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
+
 import type { CommandKind, SessionStreamFrame } from "@cawco/core/stream";
 
-import type {
-  RelayAct,
-  RelayAnswer,
-  RelayJourneyView,
-  RelayProofReport,
-  RelayTry,
-} from "@cawco/core/stream-relay";
-import type { TailnetHttps } from "@cawco/core/tailnet-https";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import type {
   ToolGlance,
@@ -128,11 +111,11 @@ import { unhandled } from "@cawco/core/unhandled";
 import type { UsageLimitsResponse } from "@cawco/core/usage/types";
 import type { StagesTemplate } from "@cawco/core/views";
 import { accountsWords } from "@cawco/core/words/accounts";
-import { askWords } from "@cawco/core/words/asks";
+
 import { catalogWords } from "@cawco/core/words/catalog";
 import { machineWords } from "@cawco/core/words/machine";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
-import { offerWords } from "@cawco/core/words/offers";
+
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
 import { sidebarWords } from "@cawco/core/words/sidebar";
@@ -172,6 +155,7 @@ import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import {
+  type BoardFrame,
   type FrameKind,
   type FrameOf,
   hubOnly,
@@ -213,7 +197,7 @@ import {
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
-import { type HeldPlan, handlePlanMessage } from "./plan";
+import { handlePlanMessage } from "./plan";
 import { presenceAgain, presenceClientId } from "./presence";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
 import { noteChange } from "./repeated-keys";
@@ -226,8 +210,33 @@ import {
   detailsOf,
 } from "./slash-commands";
 import { readAccounts } from "./stores/accounts.svelte";
+import { takeBrowsers } from "./stores/browsers.svelte";
 import { ahead, minute } from "./stores/clock.svelte";
+import { takeBoardContinuations } from "./stores/continuations.svelte";
+import { takeFleetMcp } from "./stores/mcp-servers.svelte";
+import { takeBoardMoves, takeMoves } from "./stores/moves.svelte";
+import {
+  needsStore,
+  readWaitingActions,
+  readWatchNotices,
+  takeActions,
+  takeArtifactNeeds,
+  takeLawsBroken,
+  takeQuestionsMoved,
+  takeWatchNotices,
+} from "./stores/needs.svelte";
+import { readProjectOffers, takeProjectOffer } from "./stores/offers.svelte";
+import { plansState } from "./stores/plans.svelte";
+import { keepRelayJourney, readRelayJourney } from "./stores/relay.svelte";
 import { equal, keepsLast, patchRows, reconcileRows } from "./stores/same";
+import { readTailnetHttps, takeTailnet } from "./stores/tailnet.svelte";
+import {
+  forgetStarters,
+  takeBlocksChanged,
+  takeDecisionsChanged,
+  takeStarters,
+  takeTasksChanged,
+} from "./stores/tickers.svelte";
 import {
   adoptUsageLimits,
   readSpend,
@@ -1005,10 +1014,6 @@ const boardState = $state({
   liveRead: false,
 });
 
-const fleetMcpState = $state({
-  fleetMcp: null as import("@cawco/core/fleet").FleetMcpServer[] | null,
-});
-
 const previewsState = $state({
   previews: {} as Record<
     string,
@@ -1031,101 +1036,10 @@ const previewsState = $state({
   previewSettings: null as PreviewSettings | null,
 });
 
-const continuationsState = $state({
-  /**
-   * The continuations the hub is carrying, as it publishes them: what the
-   * Continue dialog follows, and what opens the new session of one this tab
-   * started after its dialog was dismissed.
-   */
-  continuations: [] as ContinuationJob[],
-  /**
-   * The ids sessions had before the hub folded each one's continuations at
-   * its account's limit into it: former id → its id now. A tab on a former
-   * id is that session's.
-   */
-  formerIds: {} as Record<string, string>,
-});
-
-const movesState = $state({
-  /**
-   * The project moves the hub is carrying (core move.ts), whole: handed on
-   * connect in the `instances` frame, then replaced by each `moves` frame.
-   */
-  moves: [] as MoveJob[],
-});
-
 const projectsState = $state({
   projects: [] as ProjectRow[],
   /** `/api/projects` has answered this page once: an empty list then means none (home FirstRun). */
   projectsRead: false,
-});
-
-const tickersState = $state({
-  /**
-   * How many times each project's tasks have changed since this page
-   * connected, by project id (`tasks.changed` frames): what shows its tasks
-   * reads them again when it moves.
-   */
-  tasksChanged: {} as Record<string, number>,
-  /**
-   * How many `tasks.changed` frames have named each task, by
-   * `projectId/taskId`, and how many named none, by project id: an open
-   * task reads itself again when either moves (`taskChangedOf`).
-   */
-  taskChanged: {} as Record<string, number>,
-  tasksChangedUnnamed: {} as Record<string, number>,
-  /**
-   * How many times each project's decision pages have changed since this
-   * page connected (`decisions.changed` frames): the Decisions tab reads them
-   * again when it moves.
-   */
-  decisionsChanged: {} as Record<string, number>,
-  /**
-   * How many times each project's arrangement of blocks has changed since
-   * this page connected (`blocks.changed` frames): its pages read it again
-   * when it moves.
-   */
-  blocksChanged: {} as Record<string, number>,
-  /**
-   * Each project's starters for each place as the hub last wrote them while
-   * this page was connected (`starters.changed` frames), by
-   * `<place>:<project id>`: newer than the set its stages read carried.
-   */
-  starters: {} as Record<string, ProjectStarter[]>,
-});
-
-const needsState = $state({
-  /**
-   * How many times a session closed one of its questions to the person
-   * since this page connected (`questions.moved` frames): a session's
-   * list of what it asked him (waiting/questions.svelte.ts) reads again
-   * when it moves, as it does on each `artifact.needs` frame.
-   */
-  questionsMoved: 0,
-  /**
-   * Approved actions waiting on the operator (proposed, or failed or of
-   * unknown outcome until put away): read on connect, then kept whole by
-   * `actions` frames.
-   */
-  actions: [] as ApprovedActionView[],
-  /**
-   * Fleet watch's needs-you notices (core `FleetWatchNotice`), oldest first:
-   * read as the dashboard connects, then kept whole by the hub's
-   * `fleet_watch.notices` frames.
-   */
-  watchNotices: [] as FleetWatchNotice[],
-  /**
-   * The artifacts waiting on the person, and their notices (core
-   * artifact-needs.ts): read as the dashboard connects, in `/api/pending`'s
-   * `artifact.needs` envelope, then kept whole by the hub's frames.
-   */
-  artifactNeeds: [] as ArtifactNeed[],
-  artifactNotices: [] as ArtifactNeedNotice[],
-  /**
-   * Every system law the hub caught broken since it started (core
-   * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
-   */
-  lawsBroken: [] as LawBroken[],
 });
 
 const sessionsState = $state({
@@ -1154,60 +1068,6 @@ const workItemsState = $state({
    * read when the parent's view opens, then kept by `work_item` frames.
    */
   workItems: {} as Record<string, WorkItemSummary>,
-});
-
-const offersState = $state({
-  /**
-   * "Make this a project" offers standing on plain sessions, by session id:
-   * read on connect, then kept by `project_offer` frames.
-   */
-  projectOffers: {} as Record<string, ProjectOfferSummary>,
-  /**
-   * An offer this tab answered by joining a project that already was: the
-   * card stays where the offer stood, saying what it joined, until put away.
-   */
-  projectJoins: {} as Record<string, ProjectOfferAccepted>,
-});
-
-const plansState = $state({
-  /**
-   * Each followed session's plan (plan.ts): its steps, its spec, an
-   * attempt's to-dos, as the hub's `plan.snapshot` and `plan.delta` keep it.
-   */
-  plans: {} as Record<string, HeldPlan>,
-});
-
-const browsersState = $state({
-  /**
-   * Every machine's browsers as the hub lists them: the `browser_list`
-   * frame the socket opens with, then each one on a change; undefined until
-   * the first.
-   */
-  browsers: undefined as ListedBrowser[] | undefined,
-});
-
-const tailnetState = $state({
-  /**
-   * HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`, then
-   * each `tailnet.https` frame): Needs you shows its step while one needs
-   * the person; undefined until read.
-   */
-  tailnetHttps: undefined as TailnetHttps | undefined,
-  /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
-  tailnetTicked: false,
-});
-
-const relayState = $state({
-  /**
-   * The stream relay's journey (`GET /api/stream-relay`, then each
-   * `stream_relay.journey` frame): Needs you shows its row while it asks,
-   * Settings › Browsers its card or its summary; undefined until read.
-   */
-  relayJourney: undefined as RelayJourneyView | undefined,
-  /** The domain this page reached CawCo through, as the hub saw it (null by IP, the tailnet, a name of the hub's). */
-  relayDomain: null as string | null,
-  /** It went live and was proven from outside while this page stood: the row ticks until the next open. */
-  relayTicked: false,
 });
 
 /**
@@ -2476,44 +2336,6 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
   }
 }
 
-/** Who hears the continuation table each time it moves (see {@link followContinuations}). */
-let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
-
-/**
- * Hands `follower` the continuation table every time the hub's word on it
- * lands — a publish, or the read on connect. One follower: the parked
- * starts' (spawn/parked.svelte.ts), which follow every continuation this tab
- * started.
- */
-export function followContinuations(
-  follower: (table: ContinuationJob[]) => void
-): void {
-  continuationFollower = follower;
-}
-
-/**
- * A move as the hub just answered a Cancel or a Retry: it stands in the table
- * at once, so no screen reads an older stage than that answer while the
- * `moves` frame carrying it is still on its way. The frame replaces it.
- */
-export function heardMove(job: MoveJob): void {
-  const at = movesState.moves.findIndex((one) => one.id === job.id);
-  const held = movesState.moves[at];
-  if (held && Date.parse(held.updatedAt) > Date.parse(job.updatedAt)) {
-    return;
-  }
-  movesState.moves =
-    at === -1 ? [...movesState.moves, job] : movesState.moves.with(at, job);
-}
-
-function adoptContinuations(table: ContinuationJob[]): void {
-  if (equal(continuationsState.continuations, table)) {
-    return;
-  }
-  continuationsState.continuations = table;
-  continuationFollower?.(table);
-}
-
 /**
  * The order this device hears the hub's word on asks in: each ask parked and
  * each ask settled takes the next number. A read of `/api/pending` notes the
@@ -2825,12 +2647,6 @@ function clearTurnPhase(target: SessionState): void {
   target.thinkingSince = null;
 }
 
-function takeFleetMcp(frame: FrameOf<"fleet_mcp">): void {
-  if (!equal(fleetMcpState.fleetMcp, frame.servers)) {
-    fleetMcpState.fleetMcp = frame.servers;
-  }
-}
-
 function takePermissionSettled(frame: FrameOf<"permission_settled">): void {
   // The hub's word that the ask is over, whoever settled it: the card goes,
   // and a read already on its way cannot bring it back.
@@ -2909,8 +2725,6 @@ function takeBoard(frame: BoardFrame): void {
   takeBoardPulses(frame);
 }
 
-type BoardFrame = FrameOf<"instances" | "instances_delta">;
-
 /** The previews the board lists; one it no longer lists is closed. */
 function takeBoardPreviews(frame: BoardFrame): void {
   if (!frame.previews) {
@@ -2944,28 +2758,6 @@ function takeBoardMachines(frame: BoardFrame): void {
         (row) => row.machineId
       )
     );
-  }
-}
-
-/** The continuations the hub carries, and the ids its folds left behind. */
-function takeBoardContinuations(frame: BoardFrame): void {
-  if (frame.continuations) {
-    adoptContinuations(frame.continuations);
-  }
-  // Whole whenever it moved: a session folded into its continuation
-  // leaves its tab on the session it is now (SessionSurface).
-  if (
-    frame.formerIds &&
-    !equal(continuationsState.formerIds, frame.formerIds)
-  ) {
-    continuationsState.formerIds = frame.formerIds;
-  }
-}
-
-/** The project moves, handed whole with every snapshot. */
-function takeBoardMoves(frame: BoardFrame): void {
-  if (frame.kind === "instances") {
-    movesState.moves = frame.moves;
   }
 }
 
@@ -3056,94 +2848,15 @@ function takeProjectCap(frame: FrameOf<"project.cap">): void {
   }
 }
 
-function takeActions(frame: FrameOf<"actions">): void {
-  heardFrame("actions");
-  needsState.actions = frame.actions;
-}
-
-function takeWatchNotices(frame: FrameOf<"fleet_watch.notices">): void {
-  heardFrame("fleet_watch.notices");
-  needsState.watchNotices = frame.notices;
-}
-
-function takeArtifactNeeds(frame: FrameOf<"artifact.needs">): void {
-  needsState.artifactNeeds = frame.needs;
-  needsState.artifactNotices = frame.notices;
-}
-
-function takeLawsBroken(frame: FrameOf<"laws.broken">): void {
-  needsState.lawsBroken = frame.broken;
-}
-
 function takeProjectStop(frame: FrameOf<"project.stop">): void {
   for (const listener of projectStopListeners) {
     listener(frame);
   }
 }
 
-// A browser changed (a take-over, its state, its page's origin): every view of one follows.
-function takeBrowsers(frame: FrameOf<"browser_list">): void {
-  browsersState.browsers = frame.browsers;
-}
-
-// HTTPS on the tailnet name changed: Needs you's step moves on, or ticks.
-function takeTailnet(frame: FrameOf<"tailnet.https">): void {
-  heardFrame("tailnet.https");
-  const ticked =
-    tailnetState.tailnetHttps?.state === "needs" &&
-    frame.tailnet.state === "serving";
-  tailnetState.tailnetHttps = frame.tailnet;
-  tailnetState.tailnetTicked = ticked;
-  if (ticked) {
-    setTimeout(() => {
-      tailnetState.tailnetTicked = false;
-    }, TAILNET_TICK_MS);
-  }
-}
-
 function takeFleetFetch(frame: FrameOf<"fleet.fetch">): void {
   for (const listener of fleetFetchListeners) {
     listener.heard(frame);
-  }
-}
-
-function takeQuestionsMoved(): void {
-  needsState.questionsMoved += 1;
-}
-
-function takeTasksChanged(frame: FrameOf<"tasks.changed">): void {
-  tickersState.tasksChanged[frame.projectId] =
-    (tickersState.tasksChanged[frame.projectId] ?? 0) + 1;
-  if (frame.taskId) {
-    const named = `${frame.projectId}/${frame.taskId}`;
-    tickersState.taskChanged[named] =
-      (tickersState.taskChanged[named] ?? 0) + 1;
-  } else {
-    tickersState.tasksChangedUnnamed[frame.projectId] =
-      (tickersState.tasksChangedUnnamed[frame.projectId] ?? 0) + 1;
-  }
-}
-
-function takeDecisionsChanged(frame: FrameOf<"decisions.changed">): void {
-  tickersState.decisionsChanged[frame.projectId] =
-    (tickersState.decisionsChanged[frame.projectId] ?? 0) + 1;
-}
-
-function takeBlocksChanged(frame: FrameOf<"blocks.changed">): void {
-  tickersState.blocksChanged[frame.projectId] =
-    (tickersState.blocksChanged[frame.projectId] ?? 0) + 1;
-}
-
-function takeStarters(frame: FrameOf<"starters.changed">): void {
-  tickersState.starters[`${frame.place}:${frame.projectId}`] = frame.starters;
-}
-
-function takeProjectOffer(frame: FrameOf<"project_offer">): void {
-  heardFrame(`project_offer:${frame.instanceId}`);
-  if (frame.offer) {
-    offersState.projectOffers[frame.instanceId] = frame.offer;
-  } else {
-    delete offersState.projectOffers[frame.instanceId];
   }
 }
 
@@ -3208,11 +2921,6 @@ function takeControlResult(frame: FrameOf<"control_result">): void {
       )
     );
   }
-}
-
-/** Every project move, whole, on each change (and `heardMove` between). */
-function takeMoves(frame: FrameOf<"moves">): void {
-  movesState.moves = frame.moves;
 }
 
 /**
@@ -3358,11 +3066,7 @@ wireHub({
   take: takeHubMessage,
   onConnect: [
     presenceAgain,
-    // A set heard before the socket went may have been replaced while it was
-    // away: the stages each page reads again on a connection carry the newer.
-    () => {
-      tickersState.starters = {};
-    },
+    forgetStarters,
     readFleet,
     () => detach(readInstalls(), "readInstalls"),
     rereadFollowed,
@@ -5964,188 +5668,6 @@ export async function projectAtFolder(project: {
   return created;
 }
 
-/**
- * The standing "make this a project" offers, as the hub holds them now: each
- * session's as the read answered it, or as a `project_offer` frame since left it.
- */
-async function readProjectOffers(): Promise<void> {
-  const mark = readLeaves();
-  const offers = await load<ProjectOfferSummary[]>(
-    hubRequest("GET /api/project-offers")
-  );
-  if (!offers) {
-    return;
-  }
-  const framed = (instanceId: string) =>
-    heardSince(`project_offer:${instanceId}`, mark);
-  offersState.projectOffers = Object.fromEntries([
-    ...offers
-      .filter((offer) => !framed(offer.instanceId))
-      .map((offer) => [offer.instanceId, offer] as const),
-    ...Object.entries(offersState.projectOffers).filter(([instanceId]) =>
-      framed(instanceId)
-    ),
-  ]);
-}
-
-/** How long HTTPS's onboarding row stands ticked once its step is taken. Our choice: long enough to read and press its Open. */
-const TAILNET_TICK_MS = 12_000;
-
-/** HTTPS on the hub machine's tailnet name, as the hub has it now. */
-async function readTailnetHttps(): Promise<void> {
-  const mark = readLeaves();
-  const read = await load<TailnetHttps>(hubRequest("GET /api/tailnet-https"));
-  if (read && !heardSince("tailnet.https", mark)) {
-    tailnetState.tailnetHttps = read;
-  }
-}
-
-/** The journey as the hub has it now (none older than the one held), and whether it ticked while this page stood (asking, then done). */
-function keepRelayJourney(journey: RelayJourneyView): void {
-  const before = relayState.relayJourney;
-  if (before && journey.revision < before.revision) {
-    return;
-  }
-  relayState.relayJourney = journey;
-  if (before?.asks && !journey.asks && journey.done) {
-    relayState.relayTicked = true;
-  }
-}
-
-/** The stream relay's journey as the hub has it now, with this page's domain; a failed read throws its words. */
-export async function readRelayJourney(): Promise<void> {
-  const read = await hubJson<RelayAnswer>(hubRequest("GET /api/stream-relay"), {
-    failure: refusedOrUnreached,
-  });
-  relayState.relayDomain = read.domain;
-  keepRelayJourney(read.journey);
-}
-
-/** One act on the stream relay's journey: the hub's answer kept, its refusal thrown in its words. */
-export async function actOnRelay(act: RelayAct): Promise<void> {
-  const answered = await hubJson<RelayAnswer>(
-    hubRequest("POST /api/stream-relay/act", { body: act }),
-    { failure: refusedOrUnreached }
-  );
-  relayState.relayDomain = answered.domain;
-  keepRelayJourney(answered.journey);
-}
-
-/** What this screen's proof found, told to the hub, and its answer kept. */
-export async function reportRelayProof(
-  report: RelayProofReport
-): Promise<void> {
-  const answered = await hubJson<RelayAnswer>(
-    hubRequest("POST /api/stream-relay/proof", { body: report }),
-    { failure: refusedOrUnreached }
-  );
-  keepRelayJourney(answered.journey);
-}
-
-/** A 60 s credential for this screen's proof of the relay. */
-export function relayTry(): Promise<RelayTry> {
-  return hubJson<RelayTry>(hubRequest("GET /api/stream-relay/try"), {
-    failure: refusedOrUnreached,
-  });
-}
-
-/** Fleet watch's needs-you notices, as the hub holds them now. */
-async function readWatchNotices(): Promise<void> {
-  const mark = readLeaves();
-  const read = await load<{ notices: FleetWatchNotice[] }>(
-    hubRequest("GET /api/fleet-watch/notices")
-  );
-  if (read && !heardSince("fleet_watch.notices", mark)) {
-    needsState.watchNotices = read.notices;
-  }
-}
-
-/** The approved actions waiting on you, as the hub holds them now. */
-async function readWaitingActions(): Promise<void> {
-  const mark = readLeaves();
-  const read = await load<{ actions: ApprovedActionView[] }>(
-    hubRequest("GET /api/actions/waiting")
-  );
-  if (read && !heardSince("actions", mark)) {
-    needsState.actions = read.actions;
-  }
-}
-
-/**
- * Your decision on an approved action: approve the exact call shown (named
- * by its arguments' hash, so the hub refuses any other), deny it, or put a
- * failed or unknown one away once you have read it. Nothing is optimistic: the
- * card leaves when the hub's `actions` frame says so. A refusal is thrown in
- * the hub's own sentence.
- */
-export async function decideAction(
-  action: Pick<ApprovedActionView, "argsHash" | "id">,
-  decision: "approve" | "deny" | "checked"
-): Promise<void> {
-  const path = { id: action.id };
-  const response = await hubFetch(
-    decision === "approve"
-      ? hubRequest("POST /api/actions/:id/approve", {
-          path,
-          body: { argsHash: action.argsHash },
-        })
-      : hubRequest(
-          decision === "deny"
-            ? "POST /api/actions/:id/deny"
-            : "POST /api/actions/:id/checked",
-          { path }
-        )
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
-}
-
-/**
- * Answers a session's offer. "Create project" makes (or joins, by remote) the
- * project from the session's folder and moves the session and its delegates
- * into it; "Not now" is recorded, and the session is never offered again.
- */
-export async function answerProjectOffer(
-  instanceId: string,
-  answer: "accept" | "dismiss"
-): Promise<ProjectOfferAccepted | null> {
-  const mark = readLeaves();
-  const response = await hubFetch(
-    hubRequest(
-      answer === "accept"
-        ? "POST /api/project-offers/:instanceId/accept"
-        : "POST /api/project-offers/:instanceId/dismiss",
-      { path: { instanceId } }
-    )
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, offerWords.nothingChangedThen);
-  }
-  const offerGone = () => {
-    if (!heardSince(`project_offer:${instanceId}`, mark)) {
-      delete offersState.projectOffers[instanceId];
-    }
-  };
-  if (answer === "dismiss") {
-    offerGone();
-    return null;
-  }
-  const accepted = (await response.json()) as ProjectOfferAccepted;
-  if (!accepted.conversation) {
-    // In the same change as the offer leaving: its card turns, never blinks.
-    offersState.projectJoins[instanceId] = accepted;
-  }
-  offerGone();
-  await rereadHub();
-  return accepted;
-}
-
-/** Puts away the card that said what an offer joined. */
-export function dismissProjectJoin(instanceId: string): void {
-  delete offersState.projectJoins[instanceId];
-}
-
 // --- a project's conversation and views -------------------------------------
 
 /** A project's conversation: on or off, its harness, its session, why it cannot start, its spend. */
@@ -6243,51 +5765,6 @@ export const readRoutine = (routineId: string): Promise<RoutineState> =>
   hubJson(hubRequest("GET /api/routines/:id", { path: { id: routineId } }), {
     failure: refusedOrUnreached,
   });
-
-/** Where a project's design-system offer stands (hub design-offers.ts). */
-export const readDesignOffer = (projectId: string): Promise<DesignOfferState> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/design-offer", {
-      path: { id: projectId },
-    }),
-    { failure: refusedOrUnreached }
-  );
-
-/** Answers it: Build files the task, Not now records it; the offer as it stands after. */
-export const answerDesignOffer = (
-  projectId: string,
-  answer: "build" | "dismiss"
-): Promise<DesignOfferState> =>
-  hubJson(
-    hubRequest(
-      answer === "build"
-        ? "POST /api/projects/:id/design-offer/build"
-        : "POST /api/projects/:id/design-offer/dismiss",
-      { path: { id: projectId } }
-    ),
-    { failure: refusedOrUnreached }
-  );
-
-/** Where an offer of Git LFS for a place's left-out large files stands (hub lfs-offers.ts). */
-export const readLfsOffer = (id: string): Promise<LfsOfferState> =>
-  hubJson(hubRequest("GET /api/lfs-offers/:id", { path: { id } }), {
-    failure: refusedOrUnreached,
-  });
-
-/** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
-export const answerLfsOffer = (
-  id: string,
-  answer: "track" | "dismiss"
-): Promise<LfsOfferState> =>
-  hubJson(
-    hubRequest(
-      answer === "track"
-        ? "POST /api/lfs-offers/:id/track"
-        : "POST /api/lfs-offers/:id/dismiss",
-      { path: { id } }
-    ),
-    { failure: refusedOrUnreached }
-  );
 
 /** The fleet's connections, never their keys (`GET /api/connections`). */
 export const readConnections = async (): Promise<ConnectionView[]> =>
@@ -8241,45 +7718,6 @@ export function permissionAnswer(
 }
 
 /**
- * Take over on a browser ask (core `BrowserAskFrame`), from its transcript
- * card or its Needs you row alike: the hub's `/takeover` (browsers.ts)
- * starts the private period for that ask, takes it off every screen and
- * opens the session's panel on its browser. Answers null once the hub has
- * it, else the line the refusal reads, the hub's own sentence inside it
- * (WORDS, the error formula).
- */
-export async function takeOverBrowser(
-  requestId: string,
-  browserAsk: BrowserAskFrame
-): Promise<string | null> {
-  try {
-    const response = await hubFetch(
-      hubRequest("POST /api/browsers/:key/takeover", {
-        path: { key: browserAsk.key },
-        body: { requestId, machineId: browserAsk.machineId },
-      })
-    );
-    if (!response.ok) {
-      throw await hubRefusal(response);
-    }
-    return null;
-  } catch (error) {
-    return `${askWords.cantTakeOver} ${error instanceof Error ? error.message : String(error)} ${askWords.stillWaiting}`;
-  }
-}
-
-/**
- * Needs you's artifacts as this page lists them: the hub's, less the ones
- * put away with Not now (the hub's `parked`, and here at once its
- * acknowledged id, before the hub's frame says so).
- */
-const artifactNeedsOpen = $derived(
-  needsState.artifactNeeds.filter(
-    (need) => !(need.parked || notices.seen.has(need.notNow))
-  )
-);
-
-/**
  * Who started each delegate, by its instance id, from its work item: a
  * delegate's row may not be on the board (asleep, its item over and taken
  * up again) while its ask stands, and its work item still names its parent.
@@ -8317,7 +7755,7 @@ const waiting = $derived.by((): ReadonlySet<string> => {
         routedTo: request.routedTo,
       }))
     ),
-    artifacts: artifactNeedsOpen,
+    artifacts: needsStore.artifactNeedsOpen,
     parentOf,
   });
   if (
@@ -8413,9 +7851,6 @@ const sameAsk = (a: BlockedRequest, b: BlockedRequest | undefined): boolean =>
   a.stale === b.stale;
 
 export const cawco = {
-  get fleetMcp() {
-    return fleetMcpState.fleetMcp;
-  },
   /** The board's snapshot and the first read of the projects after it are in. */
   get fleetRead() {
     return boardState.fleetRead;
@@ -8436,21 +7871,9 @@ export const cawco = {
   /** One machine's stored sessions have been read, or failed to be. */
   catalogRead: (machineId: string): boolean =>
     catalogsTried[machineId] === true,
-  /** The continuations the hub is carrying, settled ones for a few minutes after. */
-  get continuations(): ContinuationJob[] {
-    return continuationsState.continuations;
-  },
-  /** Former id → the id its session has now (the hub's fold of older continuations). */
-  get formerIds(): Record<string, string> {
-    return continuationsState.formerIds;
-  },
   /** The fleet's preview mode, as the board last carried it; null before the first board. */
   get previewSettings(): PreviewSettings | null {
     return previewsState.previewSettings;
-  },
-  /** The project moves the hub is carrying, settled ones for a few minutes after (move.svelte.ts). */
-  get moves(): MoveJob[] {
-    return movesState.moves;
   },
   get machines() {
     return boardState.machines;
@@ -8530,43 +7953,6 @@ export const cawco = {
       capHolds(project.cap, minute.now)
     );
   },
-  /** Approved actions waiting on you: proposed, or failed or unknown until put away. */
-  get actions(): ApprovedActionView[] {
-    return needsState.actions;
-  },
-  /**
-   * What says a session's questions to the person may have moved: Needs
-   * you's artifacts (`artifact.needs`, an answer, a new ask, a session
-   * ending) and the count of `questions.moved` frames (a take or a
-   * withdrawal). An effect that calls it runs again on each.
-   */
-  questionsMoved: (): readonly [ArtifactNeed[], number] => [
-    needsState.artifactNeeds,
-    needsState.questionsMoved,
-  ],
-  /** A count that moves each time the project's tasks change (`tasks.changed`). */
-  tasksChangedOf: (projectId: string): number =>
-    tickersState.tasksChanged[projectId] ?? 0,
-  /** A count that moves each time a `tasks.changed` frame names the task, or names none of the project's. */
-  taskChangedOf: (projectId: string, taskId: string): number =>
-    (tickersState.taskChanged[`${projectId}/${taskId}`] ?? 0) +
-    (tickersState.tasksChangedUnnamed[projectId] ?? 0),
-  /** A count that moves each time the project's decision pages change (`decisions.changed`). */
-  decisionsChangedOf: (projectId: string): number =>
-    tickersState.decisionsChanged[projectId] ?? 0,
-  /** A count that moves each time the project's arrangement of blocks changes (`blocks.changed`). */
-  blocksChangedOf: (projectId: string): number =>
-    tickersState.blocksChanged[projectId] ?? 0,
-  /**
-   * The project's starters for a place: the set the hub last sent while
-   * this page was connected, else `read`, the set its stages read carried.
-   */
-  startersOf: (
-    projectId: string,
-    where: StarterPlace,
-    read: ProjectStarter[] | undefined
-  ): ProjectStarter[] =>
-    tickersState.starters[`${where}:${projectId}`] ?? read ?? [],
   session: (instanceId: string): SessionState | null =>
     sessionsState.sessions[instanceId] ?? null,
   /**
@@ -8604,64 +7990,11 @@ export const cawco = {
     const row = rowsById.get(instanceId);
     return row && isStarted(row) ? sessionChild(row) : undefined;
   },
-  /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */
-  planOf: (instanceId: string): SessionPlan | undefined =>
-    plansState.plans[instanceId]?.plan,
-  /** The "make this a project" offer standing on a session, if one does. */
-  projectOfferOf: (instanceId: string): ProjectOfferSummary | undefined =>
-    offersState.projectOffers[instanceId],
-  /** The project an offer on this session joined, while its card stands. */
-  projectJoinOf: (instanceId: string): ProjectOfferAccepted | undefined =>
-    offersState.projectJoins[instanceId],
   /** The work item a delegate session runs, when its parent's tray was told of it. */
   workItemFor: (instanceId: string): WorkItemSummary | undefined =>
     Object.values(workItemsState.workItems).find(
       (item) => item.instanceId === instanceId
     ),
-  /** Fleet watch's needs-you notices, oldest first. */
-  get watchNotices(): FleetWatchNotice[] {
-    return needsState.watchNotices;
-  },
-  /** The artifacts waiting on the person, longest wait first. */
-  get artifactNeeds(): ArtifactNeed[] {
-    return needsState.artifactNeeds;
-  },
-  /** Needs you's artifacts, less the ones put away with Not now: what Needs you lists, and a session's mark reads. */
-  get artifactNeedsOpen(): ArtifactNeed[] {
-    return artifactNeedsOpen;
-  },
-  /** The artifacts' notices, newest first. */
-  get artifactNotices(): ArtifactNeedNotice[] {
-    return needsState.artifactNotices;
-  },
-  /** Every system law the hub caught broken since it started. */
-  get lawsBroken(): LawBroken[] {
-    return needsState.lawsBroken;
-  },
-  /** Every machine's browsers as the hub last told them; undefined until its first frame. */
-  get browsers(): ListedBrowser[] | undefined {
-    return browsersState.browsers;
-  },
-  /** HTTPS on the hub machine's tailnet name; undefined until read. */
-  get tailnetHttps(): TailnetHttps | undefined {
-    return tailnetState.tailnetHttps;
-  },
-  /** Its step was taken while this page stood, a moment ago: the row ticks. */
-  get tailnetTicked(): boolean {
-    return tailnetState.tailnetTicked;
-  },
-  /** The stream relay's journey, as the hub has it; undefined until read. */
-  get relayJourney(): RelayJourneyView | undefined {
-    return relayState.relayJourney;
-  },
-  /** The domain this page reached CawCo through, as the hub saw it; null by IP, the tailnet or a name of the hub's. */
-  get relayDomain(): string | null {
-    return relayState.relayDomain;
-  },
-  /** The relay went live and was proven from outside while this page stood: its row ticks. */
-  get relayTicked(): boolean {
-    return relayState.relayTicked;
-  },
   /**
    * What a session needs from you — `idle` for one nothing has been heard
    * from. A hub row's is held per row ({@link RowActivity}).

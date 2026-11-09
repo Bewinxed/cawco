@@ -9,6 +9,7 @@ import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { cawco, closePreview, didntAnswer, machineFs } from "../client.svelte";
 import { conversationHref } from "../links";
+import { browsersStore } from "../stores/browsers.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 import { TRY_AGAIN } from "../unanswered";
@@ -57,7 +58,7 @@ export const fleetPane: PaneFleet = {
     const machineId = cawco.instanceIndex.byId.get(instanceId)?.machineId;
     return (
       (key &&
-        cawco.browsers?.find(
+        browsersStore.browsers?.find(
           (one) => one.key === key && one.machineId === machineId
         )) ||
       null
