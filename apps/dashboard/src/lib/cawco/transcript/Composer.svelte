@@ -121,7 +121,6 @@
   import { msOf } from "#lib/platform/motion/time.js";
   import { track } from "#lib/platform/track.js";
   import { handBack, stages } from "../canvas/stage.svelte";
-  import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import type { ConversationFind } from "../find/conversation-find.svelte";
   import FindLayer from "../find/FindLayer.svelte";
@@ -131,6 +130,7 @@
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
   import { skillsOf } from "../skill-chips";
+  import type { SendExtras } from "../stores/commands.svelte";
   import {
     loadSuggestSetting,
     type SuggestCandidate,
