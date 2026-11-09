@@ -42,6 +42,7 @@
  *   `unlocks`. An `after` naming no decision of the project's links
  *   nothing; its writer is told so on create and revision (`linksOf`).
  */
+
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { SEND_WRITES_MAX } from "@cawco/core/comments/model";
 import {
@@ -75,18 +76,11 @@ import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
+import { StatusRefusal } from "./refusal";
 
-export class DecisionRefusal extends Error {
-  readonly status: 400 | 404 | 409 | 422 | 503;
-  constructor(
-    code: 400 | 404 | 409 | 422 | 503,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = code;
-  }
-}
+export class DecisionRefusal extends StatusRefusal<
+  400 | 404 | 409 | 422 | 503
+> {}
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
