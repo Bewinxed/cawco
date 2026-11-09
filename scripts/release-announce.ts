@@ -2,10 +2,11 @@
  * The last step of a published release, shared by release.ts and
  * republish.ts: the hub on this host told the release is up.
  */
+
+import { machineFetch } from "../packages/agent/src/machine-fetch";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
 import { hubInit, hubRequest } from "../packages/core/src/hub-request";
-import { machineFetch } from "../packages/core/src/machine-key";
 import type { ReleaseManifest } from "../packages/core/src/release-manifest";
 
 /** How long the hub has to look at its release host and answer, each ask. */

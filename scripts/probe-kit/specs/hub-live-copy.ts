@@ -1,7 +1,7 @@
 /**
  * Updates › a hub started on a copy of a live hub's database answers what
  * the updater's trial probes, `GET /health` and this machine's row, within
- * the probe's 3 s, every second of the trial's confirmation (core
+ * the probe's 3 s, every second of the trial's confirmation (cli
  * binary-health.ts `PROBE_TIMEOUT_MS`; cli binary-apply.ts `verify` holds
  * 60 s), and its loop is never held long enough to say so.
  *
@@ -47,7 +47,7 @@ import {
 import { MACHINE } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-/** The trial's probe: once a second, each request given 3 s (core binary-health.ts). */
+/** The trial's probe: once a second, each request given 3 s (cli binary-health.ts). */
 const PROBE_EVERY_MS = 1000;
 const PROBE_TIMEOUT_MS = 3000;
 /** How long the hub is probed: the trial's 60 s held, and the 30 s of looks before it. */
