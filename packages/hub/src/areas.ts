@@ -366,7 +366,7 @@ export const createAreas = ({
     }
   };
 
-  const MODE = t.Union(PERMISSION_MODES.map((mode) => t.Literal(mode)));
+  const MODE = t.UnionEnum(PERMISSION_MODES);
   const ON_CAP = t.Union([
     t.Literal("pause"),
     t.Literal("quiet"),
