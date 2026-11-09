@@ -7,7 +7,7 @@
    * reach the `.prose` root Markdown renders below it: prose-sm restates its
    * own size and leading on that root.
    */
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import Markdown from "#lib/cawco/Markdown.svelte";
 
   let { source }: { source: string } = $props();
 </script>
