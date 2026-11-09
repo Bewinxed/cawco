@@ -2284,12 +2284,6 @@ export const memoryBriefings = sqliteTable(
   (table) => [primaryKey({ columns: [table.instanceId, table.path] })]
 );
 
-/**
- * The projects a fleet memory document is scoped to, one row each: the
- * sessions in their checkouts and workspaces load it. A document whose last
- * project goes, goes with it (db `deleteProject`), never widening to every
- * session.
- */
 /** The areas a scoped memory document reaches: every project in each, as read (core `inScopedProjects`). */
 export const fleetMemoryDocAreas = sqliteTable(
   "fleet_memory_doc_areas",
@@ -2302,6 +2296,12 @@ export const fleetMemoryDocAreas = sqliteTable(
   (table) => [primaryKey({ columns: [table.path, table.areaId] })]
 );
 
+/**
+ * The projects a fleet memory document is scoped to, one row each: the
+ * sessions in their checkouts and workspaces load it. A document whose last
+ * project goes, goes with it (db/forget.ts `forget`), never widening to every
+ * session.
+ */
 export const fleetMemoryDocProjects = sqliteTable(
   "fleet_memory_doc_projects",
   {
@@ -4415,8 +4415,8 @@ export const artifacts = sqliteTable(
     /**
      * The session's project when it made it; a page there is also written
      * to `decisions/<name>/`, and is the project's (served on its origin).
-     * A project's delete takes its pages first (db/index.ts
-     * `deleteProject`); anything else of it outlives it with no project.
+     * A project's delete takes its pages first (db/forget.ts `forget`);
+     * anything else of it outlives it with no project.
      */
     projectId: projectColumn("project_id").references(() => projects.id, {
       onDelete: "set null",
