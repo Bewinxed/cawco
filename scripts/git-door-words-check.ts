@@ -13,7 +13,7 @@
  * a `!`, the two characters git takes backslashed between quotes), on the
  * hub, or a local path, and with no hub known at all, the words are given to
  * `git config --list --show-scope`, alone and after srt's own as the runner
- * joins them (boundary.ts: `${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS
+ * joins them (boundary/: `${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS
  * }$CAWCO_GIT_PARAMETERS`). The laws:
  *
  * - Law A: git exits 0.

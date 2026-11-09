@@ -66,7 +66,7 @@ export const fleetDesiredFile = (): string =>
  * report that converge came to. The converge's basis (an item whose hash
  * the file already holds is not written again, through a restart too), and
  * what a workspace boundary's form names of what the fleet sync wrote
- * (agent boundary.ts `SYNCED_PART`).
+ * (agent boundary/plan.ts `SYNCED_PART`).
  */
 export const fleetConvergedFile = (): string =>
   join(cawcoDataDir(), "fleet-converged.json");

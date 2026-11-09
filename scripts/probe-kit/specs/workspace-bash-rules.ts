@@ -1,7 +1,7 @@
 /**
  * In a real workspace boundary, a delegate's shell commands meet its
  * repository's own permission rules as the model wrote them, then run inside
- * (agent boundary.ts `claudePrefixScript`, `execScript`'s `--claude`); and
+ * (agent boundary/hook-judge.ts `claudePrefixScript`, `execScript`'s `--claude`); and
  * every harness's sessions there reach the fleet's chrome-devtools through
  * the workspace's MCP gate on the agent (mcp-gate.ts, mcp-host.ts
  * `fetchGate`), which runs it on the host through the workspace's door.
@@ -46,7 +46,7 @@ import { readlinkSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Boundary } from "../../../packages/agent/src/boundary";
+import type { Boundary } from "../../../packages/agent/src/boundary/state";
 import { BROWSER_GATE_PORT } from "../../../packages/core/src/browser";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
