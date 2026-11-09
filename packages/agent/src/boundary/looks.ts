@@ -42,8 +42,8 @@ import {
   judgeAnswer,
   judgeBuildOf,
   judgeScripts,
-  settling,
 } from "./hook-judge";
+import { settling } from "./judge-process";
 import {
   armState,
   ensureBoundary,
