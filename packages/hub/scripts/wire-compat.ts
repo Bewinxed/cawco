@@ -26,6 +26,10 @@
  * a new optional property, a new value of an open enum, a new route.
  */
 
+import { readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import ts from "typescript";
+
 /** Where the app's schema and its generator's config sit, from the repository's root. */
 export const APP_SCHEMA =
   "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json";
@@ -34,59 +38,94 @@ export const GENERATOR_CONFIG =
 const STREAM = "packages/core/src/stream.ts";
 const WIRE_PROTOCOL_LINE = /export const WIRE_PROTOCOL = (\d+);/u;
 
-/**
- * The dashboard socket's frames, by the core file that declares them: the
- * Ledger Protocol's messages both ways, the transcript a session's stream
- * carries (blocks the hub built, and the events that change them), and the
- * envelope every other message rides in — `FramePayload` out, the verbs'
- * payloads in. The fleet types they carry come along as components.
- */
-export const FRAMES: Record<string, string[]> = {
-  "stream.ts": ["StreamServerMessage", "StreamClientMessage"],
-  "transcript-types.ts": [
-    "TranscriptBlock",
-    "TranscriptBranch",
-    "TranscriptEvent",
-    "TranscriptPage",
-    "TranscriptStreamFrame",
-  ],
-  // `FramePayload` is frames.ts's, found through this program; listed here so
-  // the schema keeps its order.
-  "protocol.ts": [
-    "Envelope",
-    "FramePayload",
-    "SpawnPayload",
-    "StopPayload",
-    "ControlPayload",
-    "FsPayload",
-    "FsEntry",
-    "FsMedia",
-    "SendPayload",
-    "UpdateReport",
-  ],
-  // `NeutralSessionInfo`: what a machine's `listSessions` control answers,
-  // the stored transcripts the home's Recent lists.
-  "harness.ts": [
-    "NeutralMessage",
-    "NeutralSessionInfo",
-    "ModelInfo",
-    "McpServerStatus",
-    "SupportedCommands",
-    "AuthState",
-  ],
-  "tools.ts": ["ToolStatus"],
-};
+/** The JSDoc tag that marks a core type as one of the dashboard socket's frames. */
+const FRAME_TAG = "socketFrame";
+/** What a frame's tag says of it: which way it travels. */
+const DIRECTIONS = new Set(["fromHub", "toHub"]);
+const CORE_SOURCE = "packages/core/src";
+const REPO = resolve(import.meta.dir, "../../..");
 
-/** The frames only the app sends: the rest it receives. */
-export const SENT = new Set([
-  "StreamClientMessage",
-  "Envelope",
-  "SpawnPayload",
-  "StopPayload",
-  "ControlPayload",
-  "FsPayload",
-  "SendPayload",
-]);
+/** The dashboard socket's frames, as core's sources mark them. */
+export interface SocketFrames {
+  /** Each frame's declaring file, by its name. */
+  declaredIn: Map<string, string>;
+  /** The files that declare them, for a program to read. */
+  files: string[];
+  /** Every frame type's name. */
+  frames: string[];
+  /** The frames a client sends the hub; the app receives the rest. */
+  sent: Set<string>;
+}
+
+/**
+ * The dashboard socket's frames: every type in core's sources whose
+ * declaration carries `@socketFrame fromHub` (the Ledger Protocol's server
+ * messages, the transcript a session's stream carries, the envelope's
+ * payloads, the fleet types a machine reports) or `@socketFrame toHub` (what
+ * a client sends: the Ledger Protocol's client messages and the verbs'
+ * payloads). The fleet types they carry come along as components.
+ */
+/** Each type a core file marks as a frame: its name and which way it travels. */
+const framesIn = (
+  file: string,
+  text: string
+): { direction: string; name: string }[] =>
+  ts
+    .createSourceFile(file, text, ts.ScriptTarget.Latest, true)
+    .statements.filter(
+      (statement) =>
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement)
+    )
+    .flatMap((statement) => {
+      const tag = ts
+        .getJSDocTags(statement)
+        .find((one) => one.tagName.text === FRAME_TAG);
+      const name = (statement as ts.InterfaceDeclaration).name.text;
+      return tag
+        ? [
+            {
+              name,
+              direction: ts.getTextOfJSDocComment(tag.comment)?.trim() ?? "",
+            },
+          ]
+        : [];
+    });
+
+export const socketFrames = (repo = REPO): SocketFrames => {
+  const root = join(repo, CORE_SOURCE);
+  const declaredIn = new Map<string, string>();
+  const sent = new Set<string>();
+  const sources = new Bun.Glob("**/*.ts").scanSync({ cwd: root });
+  for (const path of [...sources].sort()) {
+    const file = join(root, path);
+    const text = readFileSync(file, "utf8");
+    const marked = text.includes(`@${FRAME_TAG}`) ? framesIn(file, text) : [];
+    for (const { name, direction } of marked) {
+      if (!DIRECTIONS.has(direction)) {
+        throw new Error(
+          `${relative(repo, file)}: ${name}'s @${FRAME_TAG} says ${JSON.stringify(direction)}; it says fromHub or toHub`
+        );
+      }
+      const before = declaredIn.get(name);
+      if (before) {
+        throw new Error(
+          `${name} is marked @${FRAME_TAG} in ${relative(repo, before)} and ${relative(repo, file)}: a frame's name names one type`
+        );
+      }
+      declaredIn.set(name, file);
+      if (direction === "toHub") {
+        sent.add(name);
+      }
+    }
+  }
+  return {
+    declaredIn,
+    files: [...new Set(declaredIn.values())],
+    frames: [...declaredIn.keys()].sort(),
+    sent,
+  };
+};
 
 /**
  * A field the hub still sends only so shipped readers can read it: in every
@@ -276,11 +315,11 @@ interface Parameter {
 type Direction = "receives" | "sends";
 
 export interface WireRoots {
-  /** The socket's frame types by name, as openapi.ts's FRAMES lists them. */
+  /** The socket's frame types by name ({@link socketFrames}). */
   frames: string[];
   /** Enums the base's app reads open (the base's generator typeOverrides). */
   openBefore: Set<string>;
-  /** The frames only the app sends (openapi.ts's SENT). */
+  /** The frames a client sends the hub ({@link socketFrames}). */
   sent: Set<string>;
 }
 
@@ -836,12 +875,13 @@ const commitBreaks = (
 ): { allowed: boolean; breaks: string[]; app: number; hub: number } => {
   const appProtocol = wireProtocolAt((path) => show(app, path));
   const hubProtocol = wireProtocolAt((path) => show(hub, path));
+  const socket = socketFrames();
   const breaks = wireBreaks(
     JSON.parse(show(app, APP_SCHEMA)),
     JSON.parse(show(hub, APP_SCHEMA)),
     {
-      frames: Object.values(FRAMES).flat(),
-      sent: SENT,
+      frames: socket.frames,
+      sent: socket.sent,
       openBefore: openEnumNames(show(app, GENERATOR_CONFIG)),
     }
   );
