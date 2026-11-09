@@ -244,19 +244,19 @@ export const keeperOf = (
  * boundary again, the timer starts that look, and a judge that exited has its
  * workspace armed again. The loops are the system's own: ensuring a boundary
  * follows its host, whose exit ensures it again. So that boundary/'s imports
- * still run one way, `arming.ts` holds these and hands them, as an argument,
+ * still run one way, `ensure.ts` holds these and hands them, as an argument,
  * to whatever starts or follows a boundary: each file that makes one of these
  * calls has it in hand where it does.
  */
 export interface UnaskedCalls {
-  /** Workspace `ref`'s boundary, running: what `arming.ts` `ensureBoundary` answers. */
+  /** Workspace `ref`'s boundary, running: what `ensure.ts` `ensureBoundary` answers. */
   readonly ensureAgain: (ref: WorkspaceRef) => Promise<Boundary>;
   /** Moves workspace `id`'s arming on from its judge's exit, `held` saying whether its boundary is on record, and answers its arming under way, if any. */
   readonly judgeExited: (
     id: string,
     held: boolean
   ) => Promise<void> | undefined;
-  /** One look at the older boundaries: `stale-look.ts` `lookAtStale`. */
+  /** One look at the older boundaries: `ensure.ts` `lookAtStale`. */
   readonly lookAtOlder: () => Promise<void>;
 }
 

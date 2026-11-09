@@ -3316,7 +3316,7 @@ const startDaemon = (rediscover = false) =>
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each
     // session waits for its own workspace's hook alone before it is adopted
-    // or launched (boundary/arming.ts `hookArmed`).
+    // or launched (boundary/ensure.ts `hookArmed`).
     rearmHooks().catch((error: unknown) =>
       console.warn(
         `[workspace] boundary hooks could not be written again: ${error instanceof Error ? error.message : String(error)}`
