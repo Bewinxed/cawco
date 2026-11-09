@@ -8,7 +8,7 @@
  */
 import { onMount } from "svelte";
 import type { z } from "zod";
-import { closeInto } from "#lib/cawco/motion/share.svelte.js";
+import { closeInto } from "#lib/platform/motion/share.svelte.js";
 import { TabDraft } from "../tab-draft.svelte";
 
 /**

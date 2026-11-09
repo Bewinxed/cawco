@@ -3,7 +3,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconSuccess, IconWarningTriangle } from "#lib/icons.js";
-  import { crossIn, crossOut } from "./motion/curves.svelte";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
 
   /**
    * What a machine's unlock shows under its row once the reader has sent

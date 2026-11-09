@@ -10,6 +10,7 @@
 
 import { detach } from "@cawco/core/detach";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { newId } from "#lib/platform/id.js";
 import {
   answeredOr,
   conversationStart,
@@ -22,7 +23,6 @@ import {
 } from "../client.svelte";
 import { continuationStageWords } from "../continue.svelte";
 import type { DraftContent } from "../draft-store";
-import { newId } from "../id";
 import {
   askedFor,
   beginStart,

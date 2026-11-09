@@ -17,7 +17,7 @@
 import { DEFAULT_AT_LIMIT } from "@cawco/core/accounts";
 import type { CompactMethod } from "@cawco/core/accounts/kinds";
 import { accountsWords } from "@cawco/core/words/accounts";
-import { ease } from "../motion/curves.svelte";
+import { ease } from "#lib/platform/motion/curves.svelte.js";
 
 export type Board = "pinned" | "fill" | "spread" | "soonest" | "limit";
 

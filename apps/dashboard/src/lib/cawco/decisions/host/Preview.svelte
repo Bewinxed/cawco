@@ -98,16 +98,20 @@
     previewsNeedWords,
     previewUnreachedWords,
   } from "@cawco/core/words/preview-reach";
-  import {
-    type FrameObserver,
-    frameObserver,
-  } from "#lib/cawco/frame-observer.js";
-  import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconRefresh } from "#lib/icons.js";
-  import { dur, reveal, revealHere } from "../../motion/curves.svelte";
+  import {
+    type FrameObserver,
+    frameObserver,
+  } from "#lib/platform/frame-observer.js";
+  import {
+    dur,
+    reveal,
+    revealHere,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { type EmbedTurn, embedTurn, scrollerOf } from "./embed-turns.js";
   import { bridge, pieceName, served } from "./page.svelte.js";

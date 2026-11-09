@@ -13,10 +13,11 @@
    * Nothing here once the harness runs: the surface it stood in goes on.
    */
   import { untrack } from "svelte";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconDownload, IconWarningTriangle } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import { didntAnswer } from "./client.svelte";
   import {
     fixHarness,
@@ -25,7 +26,6 @@
     offersPress,
     harnessWords as words,
   } from "./harness-block.svelte";
-  import { failureWords } from "./hub-read";
   import { TRY_AGAIN } from "./unanswered";
 
   let {

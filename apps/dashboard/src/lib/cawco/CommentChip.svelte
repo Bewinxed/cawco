@@ -40,11 +40,12 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconArrowUpRight } from "#lib/icons.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { floor } from "#lib/platform/visible-viewport.svelte.js";
   import { ARTIFACT_GLYPH } from "./artifact-glyph";
   import { artifactNamed, pinNamed } from "./artifact-names.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import { sessionName } from "./home/home-state.svelte";
-  import { dur } from "./motion/curves.svelte";
   import { pressOutside } from "./press-outside";
   import {
     type ArtifactDoc,
@@ -62,7 +63,6 @@
   import { noteChange } from "./repeated-keys";
   import { sessionHere } from "./session-here";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
-  import { floor } from "./visible-viewport.svelte";
 
   let {
     id,
