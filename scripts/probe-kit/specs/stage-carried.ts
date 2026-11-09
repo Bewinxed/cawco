@@ -43,7 +43,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import {
   STAGE_RESUMED_SAID,
@@ -51,7 +51,9 @@ import {
 } from "../../../packages/core/src/stage";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
+import { hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 import { passedFetch } from "../preview-pass";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -287,26 +289,28 @@ const run = async (kit: Kit) => {
   await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo carried > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm 'First commit'`
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: { name: "Stage carried", machineId: MACHINE, cwd: repo },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Stage carried",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });
-  await fleet.api(
-    hubRequest("POST /api/work-items", {
-      body: {
+  await fleet
+    .api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Serve a page",
         prompt: `${DELEGATE}: hand up your page, then wait.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: repo,
-      },
-    })
-  );
+      })
+    )
+    .then(delegateStarted);
   await until(
     "the delegate resting in its wait",
     () => step,
@@ -321,10 +325,8 @@ const run = async (kit: Kit) => {
     if (!servedId) {
       return "no preview row";
     }
-    const { port: at } = await fleet.api<{ port: number }>(
-      hubRequest("POST /api/artifacts/:artifact/preview-address", {
-        path: { artifact: servedId },
-      })
+    const { port: at } = await fleet.api((hub) =>
+      hub.api.artifacts({ artifact: servedId })["preview-address"].post()
     );
     const response = await passedFetch(fleet, `http://127.0.0.1:${at}/`, {
       headers: { "sec-fetch-mode": "navigate" },
@@ -374,15 +376,11 @@ const run = async (kit: Kit) => {
   const rootBefore = rootStageLines(await mark.since());
   const rootNow = nowIn(rootBefore);
   const rootStartsBefore = startsIn(rootBefore);
-  const { port } = (await (
-    await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/artifacts/:artifact/preview-address", {
-        path: { artifact },
-      })
-    )
-  ).json()) as { port?: number };
+  const { port } = dataOf(
+    await hubAt(fleet.base)
+      .api.artifacts({ artifact })
+      ["preview-address"].post()
+  );
   const answered = () =>
     passedFetch(
       fleet,

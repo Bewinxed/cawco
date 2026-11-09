@@ -64,7 +64,6 @@
  */
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { hiddenTabs } from "../hidden-tab";
 import { idleProxy } from "../idle-proxy";
@@ -296,16 +295,10 @@ const paneLinks = (seen: Recorded) =>
 
 const hubPins = async ({ fleet, id, session }: At) =>
   (
-    await fleet.api<{
-      artifacts: {
-        id: string;
-        pins: { id: string; thread: { text: string }[] }[];
-      }[];
-    }>(
-      hubRequest("GET /api/instances/:id/artifacts/comments", {
-        path: { id: session },
-        query: { artifact: id, filter: "all" },
-      })
+    await fleet.api((hub) =>
+      hub.api
+        .instances({ id: session })
+        .artifacts.comments.get({ query: { artifact: id, filter: "all" } })
     )
   ).artifacts.find((one) => one.id === id)?.pins ?? [];
 
@@ -347,17 +340,14 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const dashboard = await servedDashboard(kit, fleet);
   const session = await fleet.spawn("claude", "Comment link", fleet.repo);
-  const { id } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "page",
-        does: "judge",
-        title: "Probe judge artifact",
-        ask: "Judge this page: pin anything that reads wrong",
-        name: NAME,
-        html: PAGE,
-      },
+  const { id } = await fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      title: "Probe judge artifact",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: NAME,
+      html: PAGE,
     })
   );
   const proxy = await idleProxy(IDLE_MS);

@@ -22,7 +22,6 @@
  * 2. those programs gone, Try again draws the page.
  */
 import type { Socket, TCPSocketListener } from "bun";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { previewPortWords } from "../../../packages/core/src/words/preview-ports";
 import { type Reply, until } from "../../scratch-fleet";
@@ -65,17 +64,14 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
   const session = await fleet.spawn("claude", "Full range", fleet.repo);
-  const page = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Probe pick artifact",
-        ask: "Pick the word",
-        name: "full-range-page",
-        program: PROGRAM,
-      },
+  const page = await fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Probe pick artifact",
+      ask: "Pick the word",
+      name: "full-range-page",
+      program: PROGRAM,
     })
   );
   const tab = await kit.page("desk", { engine: "chromium" });

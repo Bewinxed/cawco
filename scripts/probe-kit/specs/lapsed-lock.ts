@@ -30,13 +30,14 @@
  *   bun scripts/probe-kit/run.ts lapsed-lock
  */
 
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import {
   AWAY_AFTER_DEFAULT_MS,
   DEVICE_TTL_MS,
   type MachineState,
 } from "../../../packages/core/src/notifications";
 import { type Reply, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
@@ -45,17 +46,8 @@ const TAB = "probe-lapsed-lock-tab";
 const OTHER = "probe-lapsed-lock-other";
 /** How far back the locked tab's last word moves: past its hold, by half a minute. */
 const QUIET_MS = DEVICE_TTL_MS + 30_000;
-
-interface Person {
-  readonly state: string;
-}
-
 const person = async (fleet: KitFleet): Promise<string> =>
-  (
-    (await (
-      await fetchHub(fetch, fleet.base, hubRequest("GET /api/person"))
-    ).json()) as Person
-  ).state;
+  dataOf(await hubAt(fleet.base).api.person.get()).state;
 
 /** A tab's beat: the person's last input `idleMs` ago, its machine as Idle Detection reads it. */
 const beat = (
@@ -64,22 +56,16 @@ const beat = (
   machine: MachineState | undefined,
   clientId = TAB
 ) =>
-  fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/presence", {
-      body: {
-        clientId,
-        client: "web",
-        sessionId: null,
-        active: true,
-        showing: [],
-        saidAt: Date.now(),
-        ...(idleMs === undefined ? {} : { idleMs }),
-        ...(machine === undefined ? {} : { machine }),
-      },
-    })
-  );
+  hubAt(fleet.base).api.presence.post({
+    clientId,
+    client: "web",
+    sessionId: null,
+    active: true,
+    showing: [],
+    saidAt: Date.now(),
+    ...(idleMs === undefined ? {} : { idleMs }),
+    ...(machine === undefined ? {} : { machine }),
+  });
 
 const reads = (fleet: KitFleet, want: string) =>
   until(
