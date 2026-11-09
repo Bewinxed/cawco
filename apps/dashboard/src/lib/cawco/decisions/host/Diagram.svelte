@@ -17,7 +17,7 @@
   import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { hubRefusal } from "#lib/platform/hub-read.js";
+  import { hubRefusal, refusedOf } from "#lib/platform/hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { overlayTag } from "./page.svelte.js";
   import Well from "./Well.svelte";
@@ -106,8 +106,10 @@
         body: JSON.stringify({ mermaid: text, from: statementId ?? null }),
       });
       if (!response.ok) {
-        said = (await hubRefusal(response, decisionsWords.canvasNotOpenedThen))
-          .message;
+        said = hubRefusal(
+          await refusedOf(response),
+          decisionsWords.canvasNotOpenedThen
+        ).message;
       }
     } catch {
       said = "The canvas didn't open: the hub didn't answer.";
