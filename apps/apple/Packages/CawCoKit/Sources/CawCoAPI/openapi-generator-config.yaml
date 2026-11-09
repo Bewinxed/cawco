@@ -87,7 +87,7 @@ typeOverrides:
     FindLiveState: OpenEnums.FindLiveState
     FindPlaceWhose: OpenEnums.FindPlaceWhose
     FleetConvergeState: OpenEnums.FleetConvergeState
-    FleetDecidesCaw: OpenEnums.FleetDecidesCaw
+    FleetDecidesAdvisor: OpenEnums.FleetDecidesAdvisor
     FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerViewMode: OpenEnums.FleetMcpServerViewMode
     FleetMcpServerViewState: OpenEnums.FleetMcpServerViewState
