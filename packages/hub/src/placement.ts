@@ -32,6 +32,7 @@ import { areaWords } from "@cawco/core/words/areas";
 import { configurePage } from "@cawco/core/words/configure";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
+import type { DbShape } from "./db";
 import type { AccountPaces } from "./forecast";
 
 /**
@@ -1317,3 +1318,13 @@ export const place = (asked: PlacementInput): Placement => {
   }
   return choose(input, allowed, name);
 };
+
+/** What placing a session reads of `provider`'s accounts: its accounts, their sign-ins, readings and the bench. */
+export const accountFacts = (db: DbShape, provider: string) => ({
+  accounts: db.accounts
+    .list()
+    .filter((account) => account.provider === provider),
+  signins: db.accounts.signins(),
+  readings: db.accounts.readings(),
+  bench: db.accounts.bench(),
+});
