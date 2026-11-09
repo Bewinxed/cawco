@@ -8,26 +8,16 @@
  * first paint draws (first-paint.ts) and in the page from the machine's own
  * row once the socket has brought it.
  */
-import type { Machine } from "./client.svelte";
+import type { AgentRow } from "@cawco/core/protocol";
 import { machineSync, syncNotice } from "./convergence";
 import { machineFaults } from "./fleet-faults";
 import { harnessWords, machineBlocksOf } from "./harness-block.svelte";
 import { signInWarning } from "./machine";
+import type { MachineVerdict } from "./served-board";
 import { span } from "./span";
 
-export interface MachineVerdict {
-  /** Its harness CLIs refused here, each said; null for none. */
-  blocked: string | null;
-  /** Fleet rows it could not apply: slow while all only timed out; null for none. */
-  faults: "sync slow" | "sync failed" | null;
-  /** Every harness's sign-in words; null for none. */
-  signIn: string | null;
-  /** Its sync never landed, failed or went unanswered, in a word or two; null when it converged. */
-  sync: string | null;
-}
-
 /** {@link MachineVerdict} of `machine`, its ages read at `now`. */
-export function machineVerdict(machine: Machine, now: number): MachineVerdict {
+export function machineVerdict(machine: AgentRow, now: number): MachineVerdict {
   const blocks = machineBlocksOf(machine);
   const signIn = [
     signInWarning(machine, "pi"),
