@@ -84,6 +84,23 @@ export interface BoundaryHolders {
   readonly sessions: () => Iterable<string>;
 }
 
+/**
+ * The workspaces with a live work item on this machine, as the hub said on
+ * its last answer to a beat (`HeartbeatAckPayload.liveWorkspaces`); none yet
+ * until it has said, and nothing closes until then.
+ */
+let hubLive: ReadonlySet<string> | undefined;
+
+/** What {@link hubLive} holds now. */
+export const hubLiveNow = (): ReadonlySet<string> | undefined => hubLive;
+
+/** Takes the hub's list of workspaces with a live work item ({@link hubLive}); anything but a list is ignored. */
+export const liveWorkItems = (ids: unknown): void => {
+  if (Array.isArray(ids)) {
+    hubLive = new Set(ids.filter((id): id is string => typeof id === "string"));
+  }
+};
+
 /** Every process's command line, as one list and by pid: read once for every workspace a look covers. */
 interface Commands {
   readonly byPid: ReadonlyMap<number, string>;
