@@ -43,7 +43,7 @@ import {
 const judging = new Map<string, Promise<void>>();
 
 /**
- * How many arms of each workspace's hook are under way ({@link armHook}),
+ * How many arms of each workspace's hook are under way (arm.ts `armHook`),
  * from a judge's exit to its start again too ({@link watchJudge}): its hook
  * may name a judge that is going while it is.
  */
@@ -184,7 +184,7 @@ export const judgeFor = async (
 
 /**
  * Starts the workspace's judge again when it exits while the workspace is
- * still held, by arming its hook again ({@link armHook}): a crashed judge
+ * still held, by arming its hook again (arm.ts `armHook`): a crashed judge
  * would refuse every call. One that left because a newer judge took over, or
  * the workspace closed, finds the current one running, or no workspace. A
  * watch lives on its sessiond connection, so a new connection watches again.
@@ -207,7 +207,7 @@ const watchJudge = async (
       stop();
       client.release(procId, pid);
       // Counted as arming from its exit until it is started again, as the
-      // handover decides ({@link armStep}).
+      // handover decides (arming.ts `armStep`).
       whileArming(id, async () => {
         const held = await readHeld(id);
         if (held) {
