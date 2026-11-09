@@ -222,7 +222,7 @@ export const PROTECTED_CONFIG: readonly string[] = [
 
 /**
  * What a place's guard moves aside when a command made or changed it while
- * no bind held it (agent boundary.ts `placeGuard`): {@link PROTECTED_CONFIG}
+ * no bind held it (agent boundary/place-guard.ts `placeGuard`): {@link PROTECTED_CONFIG}
  * but what the fleet places. The guard tells who wrote an entry only by
  * whether it changed while the command ran, and the fleet writes its
  * placements from outside at any time, a first skill into a folder that had
