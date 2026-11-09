@@ -423,7 +423,7 @@ export const HARNESS_TOOLS = {
 >;
 
 /** A kind of tool {@link HARNESS_TOOLS} names on each harness. */
-export type HarnessToolKind = keyof (typeof HARNESS_TOOLS)[HarnessKind];
+type HarnessToolKind = keyof (typeof HARNESS_TOOLS)[HarnessKind];
 
 /** Every harness's tools of `kinds`, by their own names ({@link HARNESS_TOOLS}). */
 const harnessToolsOf = (
