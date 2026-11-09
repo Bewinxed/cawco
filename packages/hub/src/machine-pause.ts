@@ -8,7 +8,7 @@
  * Its agent stays connected the whole time (heartbeats only). What the pause
  * holds is decided at the hub's own doors, each of which asks {@link
  * MachinePause.until}:
- * - a session's start (server.ts `startHold`) and every send into a session
+ * - a session's start (start-holds.ts `startHold`) and every send into a session
  *   (`deliverToSession`): kept at the hub as owed, and handed over in the
  *   order taken once the pause ends (`releaseOwed`, `flushOwedStarts`);
  * - a keep-alive's ping: not sent;
@@ -37,7 +37,7 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 /** The origin name of the word a pause sends the sessions it cut, to carry on. */
 export const PAUSE_ORIGIN = "machine-pause";
 
-/** How a caller has the hub run a command on a machine (server.ts `runOnMachine`). */
+/** How a caller has the hub run a command on a machine (machine-commands.ts `runOnMachine`). */
 export interface CommandOptions {
   /**
    * The run is one of a work item's merge checks, in these words (core

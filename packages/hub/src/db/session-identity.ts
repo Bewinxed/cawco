@@ -146,7 +146,7 @@ export interface SessionIdentityDb {
   /**
    * Session `instanceId`'s credentials revoked, installed and on their way:
    * its process is gone (asleep, or dead of a signal), so nothing it held
-   * grants again; its next launch mints its own (server.ts `grantLaunch`).
+   * grants again; its next launch mints its own (launches.ts `grantLaunch`).
    */
   readonly revokeSessionIdentity: (instanceId: string) => void;
   readonly sessionIdentity: (
