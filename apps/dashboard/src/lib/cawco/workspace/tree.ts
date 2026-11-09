@@ -158,3 +158,23 @@ export const blankWorkspace = (): WorkspaceV1 => ({
   focusedLeaf: "p0",
   ctx: {},
 });
+
+/**
+ * Puts a conversation in a group's strip if it is not there yet: just after
+ * the tab in front, which it was opened from, else (the board in front) at
+ * the end.
+ */
+export function placeTab(leaf: LeafNode, sessionId: string): void {
+  if (leaf.tabs.includes(sessionId)) {
+    return;
+  }
+  const from = leaf.active;
+  const at = from ? leaf.tabs.indexOf(from) : -1;
+  if (!from || at === -1) {
+    leaf.tabs.push(sessionId);
+    leaf.opened = null;
+    return;
+  }
+  leaf.tabs.splice(at + 1, 0, sessionId);
+  leaf.opened = { id: sessionId, from };
+}
