@@ -237,26 +237,6 @@ async function answerOf<T>(response: Response): Promise<T> {
 }
 
 /**
- * A hub write whose answer is not read: refused, `failure`'s error is
- * thrown, worded as {@link hubJson}'s.
- */
-export async function hubSend(
-  request: HubRequest,
-  {
-    failure = hubRefusal,
-    init,
-  }: {
-    failure?: Refusal;
-    init?: RequestInit;
-  } = {}
-): Promise<void> {
-  const response = await hubFetch(request, init);
-  if (!response.ok) {
-    throw failure(await refusedOf(response));
-  }
-}
-
-/**
  * An answer as Eden's client hands one back (hub.ts): answered, its `data`;
  * refused, its `error` and the answer itself ({@link Refused}).
  */
