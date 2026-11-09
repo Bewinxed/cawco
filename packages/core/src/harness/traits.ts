@@ -24,12 +24,11 @@ export interface HarnessTraits {
    * credential the harness is handed, and a session's model picks which.
    */
   readonly accountDir: boolean;
-  /** After a compaction's boundary the session may still report the compaction failed (hub compaction.ts `compactionFailedAfterBoundary`). */
+  /** Whether it can report a compaction failed after it already reported that compaction's boundary. */
   readonly boundaryBeforeCompactionFailure: boolean;
   /**
-   * Whether a stored conversation missing from the machine's catalog is
-   * gone: the catalog is the harness's whole store, read for one account's
-   * sessions (hub db `settleInstances`).
+   * Whether a stored conversation its machine's catalog leaves out is gone:
+   * the catalog is the harness's whole store.
    */
   readonly catalogProvesGone: boolean;
   /**
@@ -63,14 +62,14 @@ export interface HarnessTraits {
   readonly homeLogin: "dir" | "credentials";
   /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
   readonly listsAllConversations: boolean;
-  /** Whether a live session reloads its skills and reinitializes in place (hub server.ts: these are Claude Code's `Query` methods). */
+  /** Whether a live session can reload its skills and reinitialize in place. */
   readonly liveSkillReload: boolean;
   /**
    * Where a harness's model list comes from. `account`: read per account by
    * the hub. `machine`: the machine's own report.
    */
   readonly modelCatalog: "account" | "machine";
-  /** Whether it names providers by ids of its own ({@link accountProviderIds}, core accounts.ts). */
+  /** Whether it names providers by ids of its own rather than pi-ai's. */
   readonly ownProviderIds: boolean;
   /** Whether it takes a permission mode at all. */
   readonly permissionModes: boolean;
@@ -95,7 +94,7 @@ export interface HarnessTraits {
    * while it waits. Without one, a session stores a send as it is handed it.
    */
   readonly queuesSends: boolean;
-  /** Whether a machine's context for a stored conversation can be read back (hub server.ts `CONTROL_READ_SESSION_CONTEXT`). */
+  /** Whether its machine can read a stored conversation's context back. */
   readonly readsStoredContext: boolean;
   /** Whether a machine with this harness missing fails the fleet's check: the one every machine runs, and that accounts sign in on. */
   readonly requiredOnEveryMachine: boolean;
