@@ -485,7 +485,7 @@ const run = async (kit: Kit) => {
     Boolean,
     60_000
   ).catch(() => undefined);
-  // Its own previews go with it (db/index.ts `dropInstances`), the page
+  // Its own previews go with it (db/core.ts `dropInstances`), the page
   // staying with the project: waited for before the hub restarts below.
   const leftOver = await until(
     "the writer's previews gone with it",
