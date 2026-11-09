@@ -5,7 +5,7 @@
  *  - a session's turn, every harness's (session.ts `turnsRunning`);
  *  - a command the hub asked of this machine, a landing gate's step among
  *    them (hub-command.ts `commandsRunning`);
- *  - a command in a workspace's boundary (boundary/
+ *  - a command in a workspace's boundary (boundary/processes.ts
  *    `workspacesWithCommands`, its executors' marks);
  *  - a run a session's processes are working on past its turn (a probe kit
  *    run, a typecheck or a release left running in its shell), as the leak
