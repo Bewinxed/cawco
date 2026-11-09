@@ -69,6 +69,7 @@ import { Elysia, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
+import { StatusRefusal } from "./refusal";
 import type { RelayCall } from "./stream-relay";
 
 /** How a take-over came to end, as the hub's log says it. */
@@ -94,17 +95,9 @@ const RELAY_TTL_MS = 7 * DAY_MS;
 export type LiveBrowserFacts = Pick<BrowserRow, "why" | "progress" | "origin">;
 
 /** A refusal the routes answer with its status and the sentence. */
-export class BrowserRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409 | 503;
-  constructor(
-    status: 400 | 403 | 404 | 409 | 503,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = status;
-  }
-}
+export class BrowserRefusal extends StatusRefusal<
+  400 | 403 | 404 | 409 | 503
+> {}
 
 export interface BrowsersDeps {
   /** The browser asks waiting on the person (browser-tools.ts), made after this. */
