@@ -1,5 +1,5 @@
 import { idList } from "./id-list";
-import { SESSION_GOES } from "./owned-rows";
+import { walkOwned } from "./owned-rows";
 import { singleton } from "./singleton";
 /**
  * What the domain stores share: the connection and the closures more than
@@ -58,19 +58,22 @@ export const dbCore = (
       return;
     }
     const list = [...ids];
-    revokeIdentities(tx, list);
-    // What belonged to those sessions goes with them.
-    for (const { table, column } of SESSION_GOES) {
-      tx.run(
-        sql`DELETE FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} IN (${idList(list)})`
-      );
-    }
-    // What only pointed at one keeps its own history, pointing nowhere: a
-    // delegate whose parent went.
-    tx.update(instances)
-      .set({ parentInstanceId: null })
-      .where(inArray(instances.parentInstanceId, list))
-      .run();
+    // What belonged to those sessions goes with them; what only pointed at
+    // one keeps its own history, pointing nowhere (a delegate whose parent
+    // went); and what their credentials granted ends.
+    walkOwned(
+      "drop",
+      { session_identities: () => revokeIdentities(tx, list) },
+      ({ table, column, drop }) => {
+        const name = sql.identifier(table);
+        const by = sql.identifier(column);
+        tx.run(
+          drop === "delete"
+            ? sql`DELETE FROM ${name} WHERE ${by} IN (${idList(list)})`
+            : sql`UPDATE ${name} SET ${by} = NULL WHERE ${by} IN (${idList(list)})`
+        );
+      }
+    );
     // Their artifacts go with them, but a project's page: its life is its
     // source's in the project's folder, so it stays with no session (the
     // key's set null), its picks and places kept.
