@@ -1800,7 +1800,7 @@ const attach = (
         ? registeredAs.machineId
         : undefined;
     // What it holds of the fleet, read back from disk before it says so.
-    yield* Effect.promise(() => supervisor.fleetLoaded());
+    yield* Effect.promise(() => supervisor.fleet.fleetLoaded());
     const registerPayload = (
       snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({
@@ -1808,7 +1808,9 @@ const attach = (
       ...keyProof(challenge, identity.machineId),
       ...(formerMachineId ? { formerMachineId } : {}),
       ...(machineAgent ? { accountStores: accountStoreIds() } : {}),
-      ...(supervisor.fleetHeld() ? { fleetHeld: supervisor.fleetHeld() } : {}),
+      ...(supervisor.fleet.fleetHeld()
+        ? { fleetHeld: supervisor.fleet.fleetHeld() }
+        : {}),
       sessionAddresses: supervisor.sessionAddresses,
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
@@ -3558,7 +3560,7 @@ const startDaemon = (rediscover = false) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
           : createWorkspace(
-              (path, project) => supervisor.placeClone(path, project),
+              (path, project) => supervisor.fleet.placeClone(path, project),
               cwd,
               id,
               projectId,
