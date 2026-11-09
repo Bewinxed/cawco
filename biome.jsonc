@@ -613,7 +613,7 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                // The fleet store by any of its names: `#lib/cawco/client.svelte(.js)`, `../client.svelte.js`.
+                // The fleet store by any of its names: `#lib/cawco/client.svelte(.js)`, `../client.svelte.js`, and its stores and socket.
                 "patterns": [
                   {
                     "group": [
@@ -623,6 +623,12 @@
                       "./client.svelte.js",
                       "../client.svelte",
                       "../client.svelte.js",
+                      "**/cawco/stores/*",
+                      "**/cawco/hub/*",
+                      "./stores/*",
+                      "../stores/*",
+                      "./hub/*",
+                      "../hub/*",
                     ],
                     "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
                   },
@@ -876,6 +882,12 @@
                       "./client.svelte.js",
                       "../client.svelte",
                       "../client.svelte.js",
+                      "**/cawco/stores/*",
+                      "**/cawco/hub/*",
+                      "./stores/*",
+                      "../stores/*",
+                      "./hub/*",
+                      "../hub/*",
                     ],
                     "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
                   },
