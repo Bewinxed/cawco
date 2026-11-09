@@ -133,7 +133,7 @@ EOF
   # A machine with nothing CawCo uses: no git, Bun, Node or openssl. Its only package source is a local folder holding
   # openssl, so the installer's own package-manager step runs for real with no network, and git, which the workspace
   # rig installs on the joined machine (a workspace is a git clone). It has what a workspace's srt boundary runs on
-  # (packages/agent/src/boundary.ts HOST_TOOLS, srt's own checkLinuxDependencies): bubblewrap and socat; srt's ripgrep
+  # (packages/agent/src/boundary/ HOST_TOOLS, srt's own checkLinuxDependencies): bubblewrap and socat; srt's ripgrep
   # ships in the build. The installer offers git only at a terminal and installs nothing without one (offerTools in
   # packages/cli/src/binary-install.ts), so git stays uninstalled.
   # A machine has the task room of a real one: podman's default pids limit (2048) makes systemd's own defaults, which
@@ -2474,13 +2474,13 @@ rig_pins() {
 # running in it: the boundary is kept as it is while its work listens on a port, so the delegate's next command still
 # reaches its server (each generation has a network of its own; 5be5bfbb, 2026-10-15). Once the listener stops, the
 # boundary is handed over to a new generation on the new build's keeper, and the older one closes once nothing runs in
-# it (boundary.ts replaceOlder, handOver, closeIdle). srt's host and ripgrep ship inside the build.
+# it (boundary/ replaceOlder, handOver, closeIdle). srt's host and ripgrep ship inside the build.
 export WS_REPO=/home/cawco/proof-repo WS_ORIGIN=/home/cawco/proof-origin.git
 ws_state() { echo "/home/cawco/.cawco/workspaces/$(cat "$rigdir/ws-id")"; }
 ws_json() { as_user "$joinerc" sh -c 'cat "$1" 2> /dev/null || true' sh "$(ws_state)/$1" | json "$2"; }
 ws_gen() { ws_json boundary.json 'd => d.gen'; }
 # What the agent decided of the workspace's boundaries, its latest decisions in order, as it records them beside
-# boundary.json (boundary.ts `BoundaryDecision`, boundary-decisions.json): kept, handed over or replaced across an
+# boundary.json (boundary/decisions.ts `BoundaryDecision`, boundary-decisions.json): kept, handed over or replaced across an
 # update and why (the ports its work listens on, its commands by executor pid, a keeper still owed, a grant not
 # comparable), an older generation closed, a narrowing's stop, a quiet close. Its log says the same for people; a proof
 # reads this. $1 a JS function of the list, printed.
@@ -2500,7 +2500,7 @@ ws_place() { as_user "$joinerc" cat "$(ws_state)/boundaries/$1/sandbox"; }
 # gone, when a path it guards is renamed or unlinked on the host, which drops that path's bind inside
 # (boundary-host.ts `guard`, then its loop), and the agent says the host's line naming the path ("[workspace] <id>:
 # its boundary <pid> says: cawco: <path> was changed on the host, … so the sandbox <init> was stopped …",
-# boundary.ts `watchHost`). If it has, says so with those lines.
+# boundary/lifecycle.ts `watchHost`). If it has, says so with those lines.
 ws_same_sandbox() {
   local now
   read -r _ now _ <<< "$(ws_place "$1")"
@@ -2557,7 +2557,7 @@ ws_session_env() {
   as_user "$joinerc" cat "/proc/$pid/environ" | tr '\0' '\n' | grep -E '^CAWCO_(INSTANCE_ID|SESSION_CREDENTIAL)='
 }
 # One command through the workspace's executor from the delegate's shell, as its harness's shell tool runs one: the
-# session's identity in the caller's environment, which the executor hands the command (boundary.ts execScript).
+# session's identity in the caller's environment, which the executor hands the command (boundary/ execScript).
 ws_exec_as_session() {
   local vars
   mapfile -t vars < <(ws_session_env)
@@ -2674,7 +2674,7 @@ ws_preview_enter() {
   [[ $(head -1 <<< "$headers") == *" 302"* ]] || { echo "the entry answered: $headers" >&2; return 1; }
   grep -i '^set-cookie: __Secure-cawco-pass=' <<< "$headers" | sed 's/^[^:]*: *//; s/;.*//'
 }
-# Every process that descends from the sandbox init $1, by each one's parent: the tree boundary.ts inTree judges.
+# Every process that descends from the sandbox init $1, by each one's parent: the tree boundary/ inTree judges.
 ws_tree() { as_user "$joinerc" ps -e -o pid=,ppid= | awk -v root="$1" '{ parent[$1] = $2 } END { tree[root] = 1; do { grew = 0; for (p in parent) if (!(p in tree) && (parent[p] in tree)) { tree[p] = 1; grew = 1 } } while (grew); for (p in tree) print p }'; }
 # The process $1 and each of its parents up to the machine's init: pid, parent, start, pid namespace, cgroup and
 # command line (its first 200 characters, on one line), read on the joined machine in one pass.
@@ -2933,7 +2933,7 @@ workspace_across_update() {
   wait_until 90 '[[ "$(ws_preview_says)" == *"served '"$old_ns"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
   echo "after the update the preview's server is $(ws_served_pid), in $old_ns"
   # With the job gone, the listener alone keeps the boundary as it is: through four of the agent's looks at it
-  # (boundary.ts STALE_LOOK_MS, 5 s), its generation, its sandbox and the listener's answer stay, nothing retires, and
+  # (boundary/ STALE_LOOK_MS, 5 s), its generation, its sandbox and the listener's answer stay, nothing retires, and
   # the next command still reaches the listener.
   as_user "$joinerc" kill "$job"
   sleep 20
@@ -3060,7 +3060,7 @@ workspace_updated_serving() {
   ws_item_live || { echo "ASSERTION FAILED: after the update the work item is $(ws_item_says)"; return 1; }
 }
 # Archiving the workspace ends everything its boundary started: a `setsid -f` listener and every other process that
-# descends from its sandbox's init, with the sandbox itself (boundary.ts closeBoundary).
+# descends from its sandbox's init, with the sandbox itself (boundary/ closeBoundary).
 workspace_archive_ends_all() {
   need_hub
   local id gen inner listener served tree answer left pid
@@ -3496,7 +3496,7 @@ rig_slowfleet() {
 # ---------------------------------------------------------------- bare: a machine with none of what a workspace needs
 # (the bare image: no bubblewrap, socat or git), as a person's fresh server is, joined and signed in. A delegate from
 # its home folder either works (its session runs, and a command through its workspace's executor runs when it has
-# one), or is refused in words that name what to install (agent boundary.ts names each host tool it lacks with its
+# one), or is refused in words that name what to install (agent boundary/ names each host tool it lacks with its
 # package): never a refusal that leaves the person to work out the fix.
 bare_delegate_from_home() {
   need_hub
