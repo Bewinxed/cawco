@@ -10,7 +10,7 @@
   import { accountsWords } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { sendAccountKey } from "#lib/cawco/client.svelte.js";
+  import { sendAccountKey } from "#lib/cawco/stores/accounts.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";

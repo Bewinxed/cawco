@@ -18,7 +18,10 @@ import type {
 import { detach } from "@cawco/core/detach";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { failureWords } from "#lib/platform/hub-read.js";
-import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
+import {
+  awaitDeviceSignin,
+  beginDeviceSignin,
+} from "../stores/accounts.svelte";
 
 export type DevicePhase =
   "idle" | "starting" | "waiting" | "expired" | "signed-in" | "mismatch";
