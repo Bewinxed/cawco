@@ -11,8 +11,7 @@ import {
   HUB_UNREACHABLE,
   HUB_UNREACHABLE_HEADER,
   HubUnreachable,
-  hubRefusal,
-  unreachedAnswer,
+  refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 
 export function uploadFile(
@@ -40,7 +39,7 @@ export function uploadFile(
     };
     request.onload = () => {
       if (request.status !== 200) {
-        // The hub's refusal read as every other is (hub-read `hubRefusal`):
+        // The hub's refusal read as every other is (hub-read `refusedOrUnreached`):
         // its words with their status, never its body as it came.
         const answer = new Response(request.responseText, {
           status: request.status,
@@ -50,11 +49,7 @@ export function uploadFile(
               request.getResponseHeader(HUB_UNREACHABLE_HEADER) ?? "",
           },
         });
-        if (unreachedAnswer(answer)) {
-          reject(new HubUnreachable(HUB_UNREACHABLE));
-          return;
-        }
-        hubRefusal(answer).then(reject, reject);
+        refusedOrUnreached(answer).then(reject, reject);
         return;
       }
       const { ref, size, mediaType } = z
