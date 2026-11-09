@@ -22,6 +22,7 @@
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
+  import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
   import { answeredOr, cawco, deleteTranscript } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
@@ -173,16 +174,12 @@
       <IconPenLine />
       <span>Rename</span>
     </ContextMenu.Item>
-    <ContextMenu.CopyItem
-      disabled={!info.cwd}
-      text={info.cwd ?? ""}
-      what="Path"
-    >
+    <ContextMenuCopyItem disabled={!info.cwd} text={info.cwd ?? ""} what="Path">
       Copy path
-    </ContextMenu.CopyItem>
-    <ContextMenu.CopyItem text={info.sessionId} what="Session id">
+    </ContextMenuCopyItem>
+    <ContextMenuCopyItem text={info.sessionId} what="Session id">
       Copy session id
-    </ContextMenu.CopyItem>
+    </ContextMenuCopyItem>
 
     <ContextMenu.Separator />
 
