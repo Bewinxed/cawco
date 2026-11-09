@@ -6,13 +6,6 @@
 </script>
 
 <script lang="ts">
-  /**
-   * The one object a state holds under its words (§4.2): NetBird's key
-   * field, the admin's command, the address that answers, the phone's QR
-   * (or the phone that opened it, in its place), the secure address, and
-   * Done's address with its three marks. Every icon is the glyph alone.
-   */
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -25,6 +18,13 @@
     IconPhone,
     IconSuccess,
   } from "#lib/icons.js";
+  /**
+   * The one object a state holds under its words (§4.2): NetBird's key
+   * field, the admin's command, the address that answers, the phone's QR
+   * (or the phone that opened it, in its place), the secure address, and
+   * Done's address with its three marks. Every icon is the glyph alone.
+   */
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import AdminCommand from "../AdminCommand.svelte";
   import { arrive, depart } from "../motion";
   import PhoneQr from "../PhoneQr.svelte";

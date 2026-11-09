@@ -27,13 +27,6 @@
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import {
-    appear,
-    reveal,
-    revealOut,
-  } from "#lib/cawco/motion/curves.svelte.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -41,6 +34,13 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconChevronLeft, IconSend } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import {
+    appear,
+    reveal,
+    revealOut,
+  } from "#lib/platform/motion/curves.svelte.js";
   import {
     makeDecisionTasks,
     readDecision,

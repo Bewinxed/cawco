@@ -14,7 +14,7 @@
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
 import { CommandRefusalSchema } from "#lib/cawco/stored-shapes.js";
-import { readJson, writeJson } from "./storage";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 
 const KEPT = "cawco:refusals";
 
