@@ -7,6 +7,8 @@ cycle	@cawco/agent	packages/agent/src/forges/forge.ts	3
 cycle	@cawco/agent	packages/agent/src/forges/gitea.ts	1
 cycle	@cawco/agent	packages/agent/src/forges/github.ts	1
 cycle	@cawco/agent	packages/agent/src/forges/gitlab.ts	1
+cycle	@cawco/agent	packages/agent/src/session.ts	1
+cycle	@cawco/agent	packages/agent/src/spin-offs.ts	1
 cycle	@cawco/agent	packages/agent/src/stage-host/canvas/runtime.ts	1
 cycle	@cawco/agent	packages/agent/src/stage-host/canvas/stage.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/client.svelte.ts	4
