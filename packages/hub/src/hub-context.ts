@@ -41,6 +41,7 @@ import type {
   FleetAgent,
   FleetPlugin,
   FleetSkillMeta,
+  FleetSyncReport,
   MachineHookScript,
   MarketplaceLink,
   MarketplaceRead,
@@ -63,6 +64,7 @@ import type {
 import type { FleetHook, HookDraft } from "@cawco/core/hooks";
 import type { MachineFault } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { HubPreviewOrigins } from "@cawco/core/preview/hub-previews";
 import type {
   AgentRow,
   BuildInfo,
@@ -74,6 +76,7 @@ import type {
   KeepAlive,
   NamedSpawn,
   SendPayload,
+  SessionAddress,
   SessionCustody,
   SessionEndIntent,
   SessionOrigin,
@@ -90,12 +93,15 @@ import type {
 } from "@cawco/core/session/controls";
 import type {
   ModeAsk,
+  NeutralMessage,
   NeutralOrigin,
+  NeutralResultMessage,
   SendRecord,
   SendRefusal,
   SentMessage,
   SessionMessage,
 } from "@cawco/core/session-messages";
+import type { StageFrame } from "@cawco/core/stage";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type {
   TranscriptPage,
@@ -105,17 +111,26 @@ import type {
 } from "@cawco/core/transcript-types";
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import type { createAccountCarry } from "./account-carry";
+import type { createAccountProbes } from "./account-probes";
+import type { createAccountSignin } from "./account-signin";
 import type { createAdmission } from "./admission";
+import type { createArtifactPages } from "./artifact-pages";
 import type { createArtifactSessions } from "./artifact-session";
 import type { createArtifactLane } from "./artifacts/lane";
 import type { Artifacts } from "./artifacts/service";
+import type { createAskRouting } from "./ask-routing";
 import type { createAsks } from "./asks";
 import type { createAtLimit, Kept, Stall, TakenUpBy } from "./at-limit";
+import type { createBrowserStream } from "./browser-routes";
 import type { createBrowserAsks } from "./browser-tools";
 import type { createBrowsers } from "./browsers";
 import type { Caw, createCaw } from "./caw";
+import type { createCompaction } from "./compaction";
 import type { createConnectAsks } from "./connect-asks";
 import type { createConnections } from "./connections";
+import type { createContinuations } from "./continuations";
+import type { createCutTurns } from "./cut-turns";
 import type { damagedRecordsOf } from "./damaged-rows";
 import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
@@ -147,14 +162,16 @@ import type { createDesignSystem } from "./design-system";
 import type { AttemptAsk, createDispatcher } from "./dispatch";
 import type { createFind } from "./find";
 import type { FleetMcp } from "./fleet-mcp";
-import type { FleetMcpChanges } from "./fleet-mcp-changes";
+import type { FleetMcpChanges, RidingChanges } from "./fleet-mcp-changes";
 import type { FleetSync } from "./fleet-sync";
 import type { FleetWatch } from "./fleet-watch";
 import type { createForgePosts } from "./forge-posts";
 import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
+import type { hubRestarts } from "./hub-restart";
 import type {
   AccountUse,
+  AuthSocket,
   ContinueOutcome,
   FetchedCopy,
   FolderSkillBody,
@@ -170,8 +187,11 @@ import type {
 } from "./hub-shapes";
 import type { createKeepAliveScheduler, KeepAliveRow } from "./keep-alive";
 import type { LabelledRow } from "./labels";
+import type { createLaunches } from "./launches";
 import type { createLaws } from "./laws";
-import type { HubLifetimeShape } from "./lifetime";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import type { createLimitMoves } from "./limit-moves";
+import type { createLoginMoves } from "./login-moves";
 import type {
   ControlResult,
   MemoryRead,
@@ -179,6 +199,8 @@ import type {
   RouteSet,
   Unanswered,
 } from "./machine-answers";
+import type { createMachineCalls } from "./machine-calls";
+import type { createMachineCommands } from "./machine-commands";
 import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
@@ -199,22 +221,30 @@ import type { projectDelete } from "./project-delete";
 import type { createProjectEdits } from "./project-edit";
 import type { ProjectAsk, ProjectMade } from "./project-making";
 import type { MergeDeps } from "./project-merge";
+import type { createProjectOffers } from "./project-offers";
 import type { createProjectOut, placeAddedOf } from "./project-out";
 import type { createProjectStarters } from "./project-starters";
 import type { createProjectStops } from "./project-stops";
 import type { ProjectTrash } from "./project-trash";
+import type { createProviderRetries } from "./provider-retries";
 import type { createPush } from "./push";
 import type { ForecastRead } from "./rebalance";
 import type { RegistryShape } from "./registry";
-import type { Routines } from "./routines";
+import type { createRelayControl } from "./relay-control";
+import type { createRelayJourney } from "./relay-journey";
+import type { createRoutines, Routines } from "./routines";
 import type { createRuleRows } from "./rule-rows";
 import type { RuleEngine } from "./rules";
+import type { createSends } from "./sends";
 import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
+import type { createSessionNotes } from "./session-notes";
 import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
+import type { createStartHolds } from "./start-holds";
 import type { createStoredRecent } from "./stored-recent";
 import type { ControlResultFrame, StreamHubShape } from "./stream";
+import type { createStreamRelay } from "./stream-relay";
 import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
@@ -226,11 +256,12 @@ import type {
 } from "./transcripts";
 import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
+import type { turnUsageOf } from "./turn-usage";
 import type { UsageCounter } from "./usage-count";
+import type { WelcomeConverge } from "./welcome-converge";
 import type { HubSocket } from "./wire-socket";
 import type { createWorkItems, Unlanded, WorkItemRequest } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
-
 export interface HubContext {
   accountKindRefusal: (
     provider: string,
@@ -278,7 +309,11 @@ export interface HubContext {
   ) => Promise<ReturnType<typeof placeAddedOf>>;
   admission: ReturnType<typeof createAdmission>;
   advanceCompaction: (instanceId: string) => void;
+  advanceContinuation: ReturnType<
+    typeof createContinuations
+  >["advanceContinuation"];
   advanceMove: (move: LoginMove) => Promise<void>;
+  afterPausingCall: (instanceId: string, neutral: NeutralMessage) => void;
   agentMoved: (
     name: string,
     expectedHash: string | undefined
@@ -287,10 +322,15 @@ export interface HubContext {
     | { answer: string; status: 404 }
     | undefined;
   agentProtocols: Map<string, { min: number; max: number } | undefined>;
+  allowGranted: ReturnType<typeof createRelayControl>["allowGranted"];
   anchors: Map<string, string>;
   announceMcp: () => void;
   announceSkill: (name: string, source: string) => void;
+  answerBorrow: ReturnType<typeof createLoginMoves>["answerBorrow"];
   answeredFrom: (socket: HubSocket) => AnswerFrom;
+  answeredSinceCompaction: ReturnType<
+    typeof createCompaction
+  >["answeredSinceCompaction"];
   answeringPermissions: Map<
     string,
     { answer: AskAnswer; outcome?: "answered" | "cancelled" | undefined }
@@ -324,6 +364,12 @@ export interface HubContext {
   }) => Promise<NamedSpawn | { refusal: string; status: 400 | 503 }>;
   askerOf: (request: Request) => string;
   askersOf: (row: InstanceRow | undefined) => string[];
+  askInOrder: (
+    requestId: string,
+    park: () => boolean,
+    publish: () => void
+  ) => boolean;
+  askRefusal: ReturnType<typeof createAskRouting>["askRefusal"];
   asRead: (answer: Bounded<ControlResult>) => Bounded<ControlResult>;
   atLimit: ReturnType<typeof createAtLimit>;
   autoInstall: (machineId: string, agent: HubSocket) => void;
@@ -366,6 +412,7 @@ export interface HubContext {
     projectId?: string | null;
   }) => string | undefined;
   browserAsks: ReturnType<typeof createBrowserAsks>;
+  browserStream: ReturnType<typeof createBrowserStream>;
   browsers: ReturnType<typeof createBrowsers>;
   byIdNow: <P extends { instanceId?: string }>(
     envelope: Envelope<P>
@@ -417,6 +464,7 @@ export interface HubContext {
     machineId: string,
     row: Parameters<HubContext["accountToPlace"]>[1]
   ) => { accountId?: string } | { refusal: string };
+  claudeSessionsOn: ReturnType<typeof createAccountCarry>["claudeSessionsOn"];
   cloneForContinuation: (sourceId: string) => Promise<() => void>;
   closePreview: (instanceId: string) => { instanceId: string; state: "closed" };
   coldReading: (
@@ -431,6 +479,9 @@ export interface HubContext {
     instanceId: string
   ) => Promise<Unlanded | { error: string } | null>;
   commandQueues: Map<string, (queue: CommandQueue | null) => void>;
+  compactionTurnEnded: ReturnType<
+    typeof createCompaction
+  >["compactionTurnEnded"];
   completeOn: (
     account: Account,
     signinId: string,
@@ -456,6 +507,9 @@ export interface HubContext {
     request: ContinueRequest,
     askedBy: ContinuationAsker
   ) => Promise<string | undefined>;
+  continuationsWhole: ReturnType<
+    typeof createContinuations
+  >["continuationsWhole"];
   continuationTable: () => ContinuationJob[];
   createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade>;
   credentialTurns: Set<string>;
@@ -463,8 +517,10 @@ export interface HubContext {
   cutTurn: (instanceId: string, cause: string) => void;
   damagedRecords: ReturnType<typeof damagedRecordsOf>;
   db: DbShape;
+  decideCustody: ReturnType<typeof createSends>["decideCustody"];
   decisions: ReturnType<typeof createDecisions>;
   decisionsChanged: (projectId: string) => void;
+  delegateAskParent: ReturnType<typeof createAskRouting>["delegateAskParent"];
   delegatedAttempt: ({
     task,
     clean,
@@ -502,6 +558,7 @@ export interface HubContext {
     ahead: boolean
   ) => SentMessageRow;
   designSystem: ReturnType<typeof createDesignSystem>;
+  diedOnSignal: ReturnType<typeof createCutTurns>["diedOnSignal"];
   discardAsked: (
     from: string,
     id: string,
@@ -518,7 +575,10 @@ export interface HubContext {
     plan: ReturnType<DbShape["atLimit"]["compaction"]>
   ) => void;
   dropMarketplaceLink: (source: string) => boolean;
+  effortUnasked: ReturnType<typeof createLaunches>["effortUnasked"];
   embedKeyOf: (id: string) => string | undefined;
+  endLeak: ReturnType<typeof createSessionNotes>["endLeak"];
+  endPreviews: ReturnType<typeof createArtifactPages>["endPreviews"];
   endSession: (
     instanceId: string,
     intent: SessionEndIntent,
@@ -536,6 +596,7 @@ export interface HubContext {
     name: string,
     source: string
   ) => Promise<("changed" | "failed" | "same") | undefined>;
+  fileAtThreshold: ReturnType<typeof createCompaction>["fileAtThreshold"];
   find: ReturnType<typeof createFind>;
   findHears: (ids: string[]) => void;
   finishJoined: (
@@ -544,6 +605,7 @@ export interface HubContext {
     machineId: string,
     result: AccountSigninResult | ProviderSigninResult
   ) => Promise<{ error: string } | ProviderSigninResult | AccountSigninResult>;
+  finishStopDispatch: (key: string, outcome: string) => void;
   firstTellingOfLeak: (
     machineId: string,
     instanceId: string,
@@ -553,6 +615,8 @@ export interface HubContext {
   fleetChanged: (why?: string) => void;
   fleetMcp: FleetMcp;
   fleetSyncs: FleetSync;
+  flushOwedStarts: ReturnType<typeof createStartHolds>["flushOwedStarts"];
+  foldersSeen: ReturnType<typeof createArtifactPages>["foldersSeen"];
   followupState: (row: KeepAliveRow) => {
     midTurn: boolean;
     hasTurns: boolean;
@@ -583,7 +647,12 @@ export interface HubContext {
     dashboard: HubSocket,
     remember?: boolean
   ) => boolean;
+  freshAccountReports: ReturnType<
+    typeof createAccountProbes
+  >["freshAccountReports"];
   gitChangesOf: (where: SessionLocation, since: string) => Promise<GitChanges>;
+  goneWithProcess: ReturnType<typeof createCutTurns>["goneWithProcess"];
+  handAgain: ReturnType<typeof createMachineCalls>["handAgain"];
   handMoveRefusal: (row: StoredRow, account: Account) => string | undefined;
   handoffs: Map<string, { from: string; at: number }>;
   harnessConfigDelete: (
@@ -628,6 +697,7 @@ export interface HubContext {
     row: { accountId?: string | null; harness?: string | null }
   ) => LoginMove | undefined;
   homeMovedAccountOn: (machineId: string) => string | undefined;
+  homeStamps: ReturnType<typeof createAccountSignin>["homeStamps"];
   hookCopyOff: <Refused>(
     body: { id: string; machineId: string },
     set: RouteSet,
@@ -646,6 +716,8 @@ export interface HubContext {
   hubAsks: ReturnType<typeof createAsks>;
   hubAuth: ReturnType<typeof createHubAuth>;
   hubBuild: BuildInfo;
+  hubGitOrigins: () => string[];
+  hubPreviewOrigins: () => HubPreviewOrigins;
   hubRun: `${string}-${string}-${string}-${string}-${string}`;
   hubStep: (event: HandoverEvent) => HandoverCommand[];
   identities: ReturnType<typeof createSessionIdentities>;
@@ -684,6 +756,8 @@ export interface HubContext {
         installed: boolean;
       }
   >;
+  interruptedTurns: ReturnType<typeof createSends>["interruptedTurns"];
+  isHubMachine: (id: string) => Promise<boolean>;
   jevView: () => {
     route: ("typesafe" | "openrouter") | null;
     typesafe: { ends: string; setAt: number | null } | null;
@@ -696,6 +770,13 @@ export interface HubContext {
     identity: AccountIdentity
   ) => Promise<AccountJoined | { error: string }>;
   keepAliveScheduler: ReturnType<typeof createKeepAliveScheduler>;
+  keepCustody: (machineId: string, custody: SessionCustody) => void;
+  keepFleetReport: (
+    machineId: string,
+    agent: HubSocket,
+    peeked: FleetSyncReport,
+    riding: RidingChanges | undefined
+  ) => void;
   keepHookVersion: (hook: FleetHook) => void;
   keepPending: (
     accountId: string,
@@ -710,6 +791,7 @@ export interface HubContext {
   }) => void;
   keepReplacedDoc: (path: string, content: string) => void;
   keepReplacedMemory: (content: string) => void;
+  keepTasks: ReturnType<typeof createCutTurns>["keepTasks"];
   keptAsleep: (
     row: {
       continuedInto: string | null;
@@ -723,7 +805,9 @@ export interface HubContext {
   keptOn: Map<string, Set<string>>;
   keptWarm: (machineId: string, ids: string[]) => string[];
   knownProviders: () => ProviderInfo[];
+  landSessionDir: ReturnType<typeof createLimitMoves>["landSessionDir"];
   lastRequestContext: Map<string, number>;
+  lateAnswer: ReturnType<typeof createMachineCalls>["lateAnswer"];
   launchAccount: (
     machineId: string,
     row: Parameters<HubContext["accountLaunch"]>[1],
@@ -743,11 +827,14 @@ export interface HubContext {
     }
   >;
   launchInFlight: (instanceId: string) => boolean;
+  launchingOn: ReturnType<typeof createLaunches>["launchingOn"];
   launchRefusal: (instanceId: string) => string | undefined;
+  launchSettled: ReturnType<typeof createLaunches>["launchSettled"];
   launchStarted: (instanceId: string, why: string) => void;
   laws: ReturnType<typeof createLaws>;
   lead: Caw | undefined;
   leadRuns: Routines | undefined;
+  learnCheckout: ReturnType<typeof createMachineCommands>["learnCheckout"];
   leftoverWords: (workspaceId: string, from: string) => string;
   lfsMachineProject: (
     id: string,
@@ -757,12 +844,14 @@ export interface HubContext {
     | { refused: string; status: 403 | 404 };
   lifecycle: ReturnType<typeof createSessionLifecycle>;
   lifetime: HubLifetimeShape;
+  limitAnswerFailed: ReturnType<typeof createCompaction>["limitAnswerFailed"];
   limitRefused: Set<string>;
   linkMarketplace: (source: string) => MarketplaceLink;
   liveFrom: (move: LoginMove) => string[];
   livePendingSignins: () => PendingAccountSignin[];
   locateSession: (id: string) => Promise<Located>;
   locations: Map<string, SessionLocation | null>;
+  logUnroutedReply: ReturnType<typeof createMachineCalls>["logUnroutedReply"];
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
   MOVE_TICK_MS: number;
   machineCredentials: ReturnType<typeof createMachineCredentials>;
@@ -773,6 +862,7 @@ export interface HubContext {
     words?: { next?: boolean }
   ) => string;
   machineFleetItems: (machineId: string) => FleetItems;
+  machineFor: ReturnType<typeof createContinuations>["machineFor"];
   /** The unmanaged MCP server a machine has under a name, config and keys as it holds them: what an adoption takes into the fleet. */
   machineMcpConfig: (
     machineId: string,
@@ -818,6 +908,7 @@ export interface HubContext {
     store,
     storeProvider,
   }: Pick<LoginMove, "machineId" | "store" | "storeProvider">) => string;
+  moveOwedAtRefusal: ReturnType<typeof createLimitMoves>["moveOwedAtRefusal"];
   moveResults: LoginMoveResults;
   moveRowsToAccount: (
     machineId: string,
@@ -853,6 +944,8 @@ export interface HubContext {
     instanceId: string,
     message: unknown
   ) => void;
+  nameStoredSessions: (machineId: string) => void;
+  noteActivity: (instanceId: string) => void;
   noteAtLimit: (
     row: {
       derivedTitle?: string | null;
@@ -873,9 +966,18 @@ export interface HubContext {
   ) => boolean;
   noteFreshStart: (row: InstanceRow) => void;
   noteInterrupt: (instanceId: string, hold?: boolean) => void;
+  noteLimitStop: (
+    instanceId: string,
+    neutral: { atLimit?: true | undefined; is_error?: boolean | undefined }
+  ) => void;
+  noteMachineLine: ReturnType<typeof createCutTurns>["noteMachineLine"];
+  noteSessionSettings: ReturnType<typeof createLaunches>["noteSessionSettings"];
+  notesOnly: ReturnType<typeof createSends>["notesOnly"];
   noteWithdrawn: (asks: readonly Envelope[]) => void;
   noticesSeen: ReturnType<typeof createNoticesSeen>;
   notifications: ReturnType<typeof createNotifications>;
+  observeCompaction: ReturnType<typeof createCompaction>["observeCompaction"];
+  observeTurn: ReturnType<typeof createSends>["observeTurn"];
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
   onlineMachines: () => string[];
@@ -937,6 +1039,7 @@ export interface HubContext {
   presenceSaid: (request: Request) => string | null;
   previewListeners: ReturnType<typeof createPreviewListeners>;
   previewService: ReturnType<typeof createPreviewService>;
+  probeAccount: ReturnType<typeof createAccountProbes>["probeAccount"];
   processAt: Map<string, number>;
   processEvent: (instanceId: string) => boolean;
   processFailed: (
@@ -949,6 +1052,8 @@ export interface HubContext {
     row: ReturnType<DbShape["getInstancesByIds"]>[number]
   ) => string;
   processMayRun: (row: { id: string; status: string }) => boolean;
+  /** The project whose folder holds a folder on a machine (spawns.ts `projectAtFolder`). */
+  projectAtFolder: (machineId: string, cwd: string) => string | undefined;
   projectEdits: ReturnType<typeof createProjectEdits>;
   projectMemory: ReturnType<typeof createMemory>;
   projectMoved: (
@@ -956,11 +1061,13 @@ export interface HubContext {
     machines: Iterable<string>,
     folderMoved: boolean
   ) => void;
+  projectOffers: ReturnType<typeof createProjectOffers>;
   projectOut: ReturnType<typeof createProjectOut>;
   projectStarters: ReturnType<typeof createProjectStarters>;
   projectStops: ReturnType<typeof createProjectStops>;
   projectsChanged: () => void;
   projectTypes: ProjectDelegateTypes;
+  providerRetries: ReturnType<typeof createProviderRetries>;
   publishDelegateEvent: (machineId: string, event: DelegateEvent) => void;
   publishedAgents: Map<string, string>;
   publishedMetadata: Map<
@@ -994,6 +1101,7 @@ export interface HubContext {
     harness?: HarnessKind | undefined,
     instanceId?: string | undefined
   ) => Promise<Bounded<ControlResult>>;
+  readLaunchDirs: ReturnType<typeof createAccountCarry>["readLaunchDirs"];
   readMachineHookScript: (
     machineId: string,
     id: string,
@@ -1031,6 +1139,20 @@ export interface HubContext {
     requestId: string,
     result: unknown
   ) => void;
+  recordSessionAddress: (
+    agent: HubSocket,
+    machineId: string,
+    claim: SessionAddress
+  ) => void;
+  recordTurnUsage: (
+    session: Parameters<typeof turnUsageOf>[0] & {
+      harness: string;
+      machineId: string;
+    },
+    result: NeutralResultMessage,
+    keepAlive: boolean
+  ) => void;
+  recoverCompaction: ReturnType<typeof createCompaction>["recoverCompaction"];
   refusalMoved: Map<string, string>;
   refusedFailures: Map<string, { accountId: string; words: string }>;
   refusedHarness: (
@@ -1038,11 +1160,20 @@ export interface HubContext {
     harness: HarnessKind
   ) => string | undefined;
   registry: RegistryShape;
+  relaunchAtRest: (
+    machineId: string,
+    instanceId: string,
+    why: "boundary" | "compact" | "gateway",
+    second?: boolean
+  ) => Promise<void>;
   relaunchOnAccount: (
     instanceId: string,
     carry?: "limit" | "signin",
     live?: boolean
   ) => void;
+  relayingPreviews: Set<string>;
+  relayJourney: ReturnType<typeof createRelayJourney>;
+  releaseHeld: (id: string) => void;
   releaseOne: (send: SentMessageRow) => void;
   releaseOwed: (of: { instanceId: string } | { machineId: string }) => void;
   removalOf: (account: Account) => { moving: number; staying: number };
@@ -1069,11 +1200,19 @@ export interface HubContext {
     failed: boolean,
     told?: ReportTold
   ) => void;
+  resendHeld: ReturnType<typeof createMachineCalls>["resendHeld"];
   resolvedModel: (
     machineId: string,
     harness: string,
     model: string | null | undefined
   ) => string | null | undefined;
+  restarts: ReturnType<typeof hubRestarts>;
+  restore: (
+    agent: HubSocket,
+    row: InstanceRow,
+    reattachOnly?: boolean | "busy" | "inspect" | undefined
+  ) => void;
+  resumeCutTurn: ReturnType<typeof createCutTurns>["resumeCutTurn"];
   resumeSpawn: (
     agent: HubSocket,
     machineId: string,
@@ -1084,6 +1223,12 @@ export interface HubContext {
   retireSession: (machineId: string, instanceId: string) => void;
   retryFromTray: (item: WorkItemRow) => Promise<string | undefined>;
   returned: (kind: TrashKind, key: string) => Promise<unknown>;
+  rewinds: Map<string, string>;
+  ridingReported: (
+    machineId: string,
+    generation: number | null
+  ) => RidingChanges | undefined;
+  routines: ReturnType<typeof createRoutines>;
   rowsLeave: (
     accountId: string,
     into: string | null,
@@ -1166,6 +1311,7 @@ export interface HubContext {
   sessionStartOf: (where: SessionLocation) => Promise<string>;
   sessionWorkspace: (row: InstanceRow) => WorkspaceRef | undefined;
   settledContinuation: (id: string) => Promise<ContinuationRow | undefined>;
+  settleLaunchesOn: ReturnType<typeof createLaunches>["settleLaunchesOn"];
   settleMode: (
     machineId: string,
     payload: NamedSpawn,
@@ -1186,6 +1332,7 @@ export interface HubContext {
     machineId: string,
     result: ProviderSigninResult
   ) => Promise<ProviderSigninResult | { error: string }>;
+  settleRefusal: ReturnType<typeof createAskRouting>["settleRefusal"];
   settleSignin: (
     account: Account,
     machineId: string,
@@ -1226,6 +1373,8 @@ export interface HubContext {
     status: (code: 400 | 503 | 504, said: string) => Refused
   ) => Promise<{ files: SkillFile[] } | { refused: Refused }>;
   skillRow: (row: FleetSkillMeta) => FleetSkillMeta;
+  sleepFinished: ReturnType<typeof createLoginMoves>["sleepFinished"];
+  socketAddress: (ws: AuthSocket) => string | null;
   spawnFromHub: (
     machineId: string,
     asked: NamedSpawn,
@@ -1246,6 +1395,7 @@ export interface HubContext {
   speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
+  stageHeard: (frame: StageFrame) => void;
   stalledNow: () => string[];
   stallOf: (_instanceId: string) => Stall | undefined;
   startCompaction: (
@@ -1326,6 +1476,16 @@ export interface HubContext {
   stepUuids: (plan: LimitCompaction) => string[];
   stepWords: (stage: "compacting" | "filing" | "carrying") => string;
   stopCompaction: (instanceId: string) => void;
+  stopDispatches: Map<
+    string,
+    {
+      instanceId: string;
+      machineId: string;
+      requestId: string | undefined;
+      at: number;
+      timer: HubTimer;
+    }
+  >;
   stopProjectBrowsers: (projectId: string) => Promise<string | undefined>;
   storedAnswer: (id: string, ended: boolean) => Promise<string | undefined>;
   /** Recent's stored transcripts, kept off each machine's catalog (stored-recent.ts). */
@@ -1334,6 +1494,7 @@ export interface HubContext {
     where: TranscriptWhere,
     window: WindowAsk
   ) => Promise<TranscriptWindow | Extract<HistoryRead, { fault: string }>>;
+  streamRelay: ReturnType<typeof createStreamRelay>;
   streams: StreamHubShape;
   summariserRun: (
     source: ContinuationSource & { machineId: string },
@@ -1353,11 +1514,16 @@ export interface HubContext {
   TOOL_SIGNIN_COMPLETE_MS: 180000;
   tabNamed: (asked: string, machine: string | null) => Promise<TabNamed>;
   tailnetHttps: ReturnType<typeof createTailnetHttps>;
+  takeBack: ReturnType<typeof createSends>["takeBack"];
+  takeCredentialTurn: ReturnType<typeof createLimitMoves>["takeCredentialTurn"];
   takenUpBy: (
     row: { parentInstanceId?: string | null | undefined } | undefined,
     origin: NeutralOrigin
   ) => TakenUpBy | undefined;
   takeOwedMove: (row: StoredRow) => StoredRow;
+  takeSendSignal: ReturnType<typeof createSends>["takeSendSignal"];
+  takeTaken: ReturnType<typeof createSends>["takeTaken"];
+  takeUpMovesOn: ReturnType<typeof createLimitMoves>["takeUpMovesOn"];
   takeUpOwedMove: (
     instanceId: string,
     carry?: "limit" | "signin"
@@ -1367,7 +1533,9 @@ export interface HubContext {
     taskId: string | null | undefined
   ) => string[] | null;
   tasks: ReturnType<typeof createTasks>;
+  tellContainers: ReturnType<typeof createSessionNotes>["tellContainers"];
   tellEndedByMove: (row: { id: string; machineId: string }) => void;
+  tellLeak: ReturnType<typeof createSessionNotes>["tellLeak"];
   tellSession: (
     instanceId: string,
     text: string,
@@ -1389,6 +1557,8 @@ export interface HubContext {
   treeStops: ReturnType<typeof createTreeStops>;
   turnInFlight: ReturnType<typeof turnState>;
   turnOver: (instanceId: string) => void;
+  turnsWritten: ReturnType<typeof createSends>["turnsWritten"];
+  turnUnderWay: ReturnType<typeof createSends>["turnUnderWay"];
   turnWaiters: Map<
     string,
     { machineId: string; resolve: () => void; reject: (error: Error) => void }
@@ -1409,11 +1579,15 @@ export interface HubContext {
     answer: Unanswered
   ) => { code: 503 | 504; said: string };
   undoRemovedSignin: (account: Account, machineId: string) => Promise<string>;
+  unknownAccountsOf: ReturnType<
+    typeof createAccountSignin
+  >["unknownAccountsOf"];
   unlocatedWords: (id: string, machines: string[]) => string;
   unnoteAtLimit: (row: { id: string }, id: string) => void;
   unpushable: Map<string, string>;
   unstrand: (instanceId: string) => void;
   usageCounter: UsageCounter;
+  waiting: ReturnType<typeof createMachineCalls>["waiting"];
   waitingForProcess: Set<string>;
   wakeForSend: (
     agent: HubSocket,
@@ -1429,10 +1603,12 @@ export interface HubContext {
     status: string;
   }) => boolean;
   watch: FleetWatch | undefined;
+  welcomeConverge: WelcomeConverge;
   withdrawPending: (
     row: SentMessageRow,
     machineId: string
   ) => Promise<"withdrawn" | "started">;
+  withdrawUnshown: ReturnType<typeof createRelayControl>["withdrawUnshown"];
   withKeepAlive: <
     Row extends
       KeepAliveRow | ReturnType<DbShape["listBoardInstances"]>[number],
