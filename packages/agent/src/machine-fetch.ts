@@ -1,6 +1,6 @@
-import { hubRequest } from "@cawco/core/hub-request";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { machineProofHeaders, readMachineKey } from "@cawco/core/machine-key";
+import { hubClient, reached } from "./hub-client";
 
 /**
  * `fetch` to a hub as this machine: its proof rides the request once the
@@ -22,12 +22,15 @@ export const machineFetch = async (
     return fetch(url, init);
   }
   const { origin } = new URL(url);
-  const health = await fetch(`${origin}${hubRequest("GET /health").path}`, {
-    ...(init.signal ? { signal: init.signal } : {}),
-  });
-  const hubId = await (health.json() as Promise<{ hubId?: unknown }>)
-    .then((body) => (typeof body.hubId === "string" ? body.hubId : undefined))
-    .catch(() => undefined);
+  const health = reached(
+    await hubClient(origin, (target, options) =>
+      fetch(target, {
+        ...options,
+        ...(init.signal ? { signal: init.signal } : {}),
+      })
+    ).health.get()
+  );
+  const hubId = health.data?.hubId;
   // An admitted machine's request goes signed or not at all: one sent
   // without its proof is refused through a machine's SSH forward, which
   // holds every caller to paired devices (hub ssh-door.ts), and its 401
