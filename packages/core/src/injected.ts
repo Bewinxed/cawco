@@ -166,7 +166,7 @@ const outputsLine = (outputs: string[] | undefined): string =>
     : "";
 
 /**
- * What a session is told of `$TMPDIR/outputs/` (hub work-items.ts
+ * What a session is told of `$TMPDIR/outputs/` (hub landing-run.ts
  * `scratchOutputs`): copied into its project's folder at `assets` when it
  * finishes and again before its workspace goes, or, with no project, not
  * collected at all.
@@ -263,7 +263,7 @@ const copyWords = ({ path, repoRoot }: WorkspacePlace): string =>
 /**
  * How a folder workspace lands: its change set goes into the folder after
  * `finish_item`, once a conflict scan and the folder's checks pass (hub
- * work-items.ts `landFolder`); the services it touched are its report's to
+ * landing-run.ts `landFolder`); the services it touched are its report's to
  * name, and its parent's to restart.
  */
 const folderLandLine = (
@@ -431,14 +431,14 @@ export const withDashboardLine = (
  * How CawCo moved a workspace's checkout under the session that goes on in
  * it, untold until the next message handed to that session:
  * - `recut`: the workspace retired while its session slept and was cut again
- *   for it at `commit` on `branch` (hub work-items.ts `recut`), a new clone
+ *   for it at `commit` on `branch` (hub workspaces.ts `recut`), a new clone
  *   with nothing git does not track; with `carry`, its commits were in that
  *   carry as it retired and are restored on top, HEAD where it was;
  * - `landing`: the hub rebased the workspace's commits onto origin's `branch`
  *   as it landed them (hub landing.ts `onBase`), HEAD going `from` → `to`,
  *   so the tree holds every file main gained in between, its lockfile and
  *   package manifests among them. Only a move that changed the tree is one
- *   (hub work-items.ts `movedByLanding`): the stamp alone rewrites messages.
+ *   (hub landing-run.ts `movedByLanding`): the stamp alone rewrites messages.
  */
 export type CheckoutMove =
   | {
