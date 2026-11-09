@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { InstanceRow } from "@cawco/core/protocol";
   /**
    * A session's Account submenu, in its row's and its tab's menus: each
    * account of the session's provider signed in on its machine, as its dot
@@ -11,7 +12,6 @@
    */
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { IconAccounts } from "#lib/icons.js";
-  import type { InstanceRow } from "../client.svelte";
   import { hueVar, nameOf } from "./model.svelte";
   import { moveTo, movingTo, shownAccount, switchable } from "./switch.svelte";
 
