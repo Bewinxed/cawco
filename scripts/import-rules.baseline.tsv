@@ -79,14 +79,9 @@ cycle	@cawco/hub	packages/hub/src/work-items.ts	2
 cycle	@cawco/preview	packages/preview/src/overlay/ink.ts	1
 cycle	@cawco/preview	packages/preview/src/overlay/pins.ts	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/context-menu/context-menu-copy-item.svelte	1
-kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyOnAxis.svelte	1
+kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyOnAxis.svelte	3
 kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyStarts.svelte	2
 kit-reaches-up		apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card-tab-frame.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte	1
 kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-outline.ts	2
-kit-reaches-up		apps/dashboard/src/lib/components/ui/markdown/markdown.svelte	1
-reaches-in		apps/cawrier/src/index.ts	2
-reaches-in		apps/cawrier/src/pairing.ts	1
-reaches-in		apps/cawrier/src/storekit.ts	1
-reaches-in		packages/cli/src/cli.ts	1
