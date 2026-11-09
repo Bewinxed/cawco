@@ -11,7 +11,6 @@
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { VisitSchema } from "#lib/cawco/stored-shapes.js";
 import { store, stored } from "#lib/platform/storage.js";
-import { workspace } from "./workspace/workspace.svelte";
 
 const WORKING_SET_KEY = "cawco-working-set";
 const KEY = WORKING_SET_KEY;
@@ -93,9 +92,12 @@ export const workingSet = {
   },
 
   /** Notes that a conversation is on screen, keeping where a stored session
-      was last known to live so its tab can be named before the fleet answers. */
+      was last known to live so its tab can be named before the fleet answers.
+      `open`: the sessions the workspace's tabs hold open, none of which is
+      forgotten to make room. */
   visit(
     id: string,
+    open: readonly string[],
     ctx?: { machine?: string | null; cwd?: string; harness?: HarnessKind }
   ): void {
     if (!id) {
@@ -113,10 +115,10 @@ export const workingSet = {
     // is never forgotten — its name and address are what draw it — so with
     // more tabs open than the limit, the set simply holds them all.
     if (visits.length > LIMIT) {
-      const open = new Set(workspace.openIds);
+      const held = new Set(open);
       let coldest = -1;
       for (let i = 0; i < visits.length; i += 1) {
-        if (visits[i].id === id || open.has(visits[i].id)) {
+        if (visits[i].id === id || held.has(visits[i].id)) {
           continue;
         }
         if (coldest === -1 || visits[i].at < visits[coldest].at) {
