@@ -97,7 +97,7 @@ const REASON = `Sign in to the probe's site ${crypto.randomUUID().slice(0, 8)}`;
 const STALE_CREDENTIAL = "Invalid session credential";
 /** The fleet's OAuth MCP server the delegate asks the person to connect. */
 const SERVER = "ProbeSignIn";
-/** A work item's states while it runs (work-items.ts `LIVE`). */
+/** A work item's states while it runs (work-item-state.ts `LIVE`). */
 const LIVE_ITEM: ReadonlySet<string> = new Set(["starting", "running"]);
 
 interface Parked {
