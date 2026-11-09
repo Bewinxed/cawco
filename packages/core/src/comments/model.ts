@@ -71,6 +71,7 @@
 import { type DocMap, type MapDoc, PIN_MAPS } from "../doc-maps";
 import type { ArtifactChanges, ChangedItem, HeldNote } from "../doc-meta";
 import { getMeta, setMeta } from "../doc-meta";
+import { everyOf } from "../every-of";
 import { fnv1a } from "../fnv1a";
 import type { Anchor, PinnedElement } from "./anchor";
 
@@ -177,6 +178,17 @@ export const SEND_CONTROLS = {
 } as const;
 
 export type SendControl = keyof typeof SEND_CONTROLS;
+
+/** Every {@link SendControl} as a list, for the hub's schema of a Send's `control`. */
+export const SEND_CONTROL_NAMES = everyOf<SendControl>()([
+  "page-send",
+  "page-key",
+  "panel-head",
+  "panel-more",
+  "needs-you",
+  "decisions-done",
+  "answered",
+]);
 
 /** Whether `value` names a control that sends a page. */
 export const isSendControl = (value: unknown): value is SendControl =>

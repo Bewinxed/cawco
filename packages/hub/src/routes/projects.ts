@@ -83,9 +83,7 @@ export const projectRoutes = ({
           // Made with Caw: its Caw starts on. A folder that joins a project
           // leaves that project's setting as it is.
           caw: t.Optional(t.Boolean()),
-          template: t.Optional(
-            t.Union(STAGES_TEMPLATES.map((name) => t.Literal(name)))
-          ),
+          template: t.Optional(t.UnionEnum(STAGES_TEMPLATES)),
           prompt: t.Optional(t.String({ maxLength: 20_000 })),
           promptId: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
         }),
