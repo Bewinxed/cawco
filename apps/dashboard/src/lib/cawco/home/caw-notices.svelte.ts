@@ -9,9 +9,9 @@
  */
 import type { ArtifactNeedNotice } from "@cawco/core/artifact-needs";
 import { movedLogins, rebalancesUnseen } from "../accounts/model.svelte";
-import { cawco } from "../client.svelte";
 import { connect } from "../connect/installs.svelte";
 import { notices } from "../notices.svelte";
+import { needsStore } from "../stores/needs.svelte";
 import { updateNotice } from "../updates/update-notice.svelte";
 
 class CawNotices {
@@ -26,7 +26,7 @@ class CawNotices {
   /** Each artifact's notice, its parts nobody has acknowledged yet. */
   readonly artifacts = $derived<ArtifactNeedNotice[]>(
     notices.known
-      ? cawco.artifactNotices.flatMap((notice) => {
+      ? needsStore.artifactNotices.flatMap((notice) => {
           const parts = notice.parts.filter(
             (part) => !notices.seen.has(part.id)
           );

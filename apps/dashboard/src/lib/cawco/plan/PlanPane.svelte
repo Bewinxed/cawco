@@ -72,6 +72,7 @@
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { planAsked, takePlan } from "../reference-things.svelte";
+  import { plansStore } from "../stores/plans.svelte";
   import {
     holdComposerLayer,
     roomOver,
@@ -88,7 +89,7 @@
     onclose: () => void;
   } = $props();
 
-  const plan = $derived(cawco.planOf(instanceId));
+  const plan = $derived(plansStore.planOf(instanceId));
   const steps = $derived(stepsTree(plan));
   const todos = $derived(todosTree(plan));
   const todosOnly = $derived(onlyTodos(plan));
