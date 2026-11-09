@@ -62,23 +62,23 @@
     IconPaperclip,
     IconThumbnails,
   } from "#lib/icons.js";
-  import { formatAgeShort } from "#lib/utils/time.js";
-  import { searchArtifacts } from "../artifact-api";
-  import { cawco } from "../client.svelte";
-  import FindField from "../find/FindField.svelte";
-  import { excerptParts } from "../find/find-rows";
-  import { frameObserver } from "../frame-observer";
-  import { failureWords } from "../hub-read";
-  import { lightbox } from "../lightbox/lightbox-state.svelte";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import {
     crossIn,
     dur,
     motionOk,
     reveal,
     revealOut,
-  } from "../motion/curves.svelte";
-  import { scrollMotion } from "../motion/keyed.svelte";
-  import Rail from "../motion/Rail.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
+  import Rail from "#lib/platform/motion/Rail.svelte";
+  import { formatAgeShort } from "#lib/utils/time.js";
+  import { searchArtifacts } from "../artifact-api";
+  import { cawco } from "../client.svelte";
+  import FindField from "../find/FindField.svelte";
+  import { excerptParts } from "../find/find-rows";
+  import { lightbox } from "../lightbox/lightbox-state.svelte";
   import RowFault from "../RowFault.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {

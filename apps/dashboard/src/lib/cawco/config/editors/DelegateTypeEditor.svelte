@@ -6,11 +6,11 @@
   import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
   import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
   import { untrack } from "svelte";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconCpu, IconDocument, IconInfo, IconKey } from "#lib/icons.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import { page } from "$app/state";
   import {
     blankDelegateType,

@@ -2,7 +2,7 @@
   import type { Bounded } from "@cawco/core/bounded";
   import type { FsEntry } from "@cawco/core/protocol";
   import { unhandled } from "@cawco/core/unhandled";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   /** Where the picker reads a machine's folders: the fleet's socket, or an artifact tab's own. */
   export interface FolderReader {
@@ -20,18 +20,18 @@
 
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
+  import { IconArrowUp, IconCheck, IconFolder } from "#lib/icons.js";
   import {
     dur,
     easeDrawer,
     motionOk,
     reveal,
     revealOut,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
-  import { IconArrowUp, IconCheck, IconFolder } from "#lib/icons.js";
+  } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     machineId,

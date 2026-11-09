@@ -43,7 +43,6 @@
   import { MediaQuery } from "svelte/reactivity";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
   import FirstRun from "#lib/cawco/home/FirstRun.svelte";
-  import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
@@ -62,6 +61,7 @@
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
+  import { depart } from "#lib/platform/motion/share.svelte.js";
   import { page } from "$app/state";
 
   type Beat =

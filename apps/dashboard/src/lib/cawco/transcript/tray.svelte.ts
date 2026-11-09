@@ -15,8 +15,8 @@
  * entered yet" is a fact about the delegate.
  */
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { departBox } from "#lib/platform/motion/share.svelte.js";
 import { cawco, type TrayChild } from "../client.svelte";
-import { departBox } from "../motion/share.svelte";
 
 /** How a chip entered the tray: its mark flew in, it faded in, or it was simply there. */
 export type Entry = "fly" | "fade" | "none";

@@ -43,8 +43,8 @@
     crossOut,
     dur,
     motionOk,
-  } from "../motion/curves.svelte";
-  import { departBox } from "../motion/share.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { departBox } from "#lib/platform/motion/share.svelte.js";
   import Checklist, { departChecks } from "./Checklist.svelte";
   import Choice from "./Choice.svelte";
   import { connect, phone } from "./installs.svelte";

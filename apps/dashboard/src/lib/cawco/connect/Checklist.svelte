@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { INSTALL_CHECKS } from "@cawco/core/install";
   import { CHECK_WORDS } from "@cawco/core/words/install";
-  import { departBox } from "../motion/share.svelte";
+  import { departBox } from "#lib/platform/motion/share.svelte.js";
 
   /** The key a check's chip departs under, and its row in Running lands. */
   export const checkKey = (check: string): string => `connect-check:${check}`;

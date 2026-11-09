@@ -9,13 +9,13 @@
   import { commonWords } from "@cawco/core/words/common";
   import { memoryWords } from "@cawco/core/words/memory";
   import { untrack } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconDocument } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { saveAgent } from "../../fleet";
