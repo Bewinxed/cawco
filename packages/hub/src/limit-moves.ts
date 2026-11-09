@@ -71,7 +71,7 @@ export type StoredRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 type MoverRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 /** Why a session leaves its account ({@link oweMoveOff}). */
-type MoveOffWhy = "refused" | "removed" | "signed-out";
+export type MoveOffWhy = "refused" | "removed" | "signed-out";
 
 export type LimitMovesContext = Pick<
   HubContext,
