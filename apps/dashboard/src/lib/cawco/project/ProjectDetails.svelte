@@ -23,13 +23,6 @@
   import { projectWords } from "@cawco/core/words/project";
   import { projectAccountWords } from "@cawco/core/words/project-account";
   import { onMount, type Snippet } from "svelte";
-  import {
-    addProjectPlace,
-    editProject,
-    type ProjectRow,
-    readConnections,
-    removeProjectPlace,
-  } from "#lib/cawco/client.svelte.js";
   import DecidesRow from "#lib/cawco/decides/DecidesRow.svelte";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import {
@@ -45,6 +38,13 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
   import { boardStore, type Machine } from "#lib/cawco/stores/board.svelte.js";
+  import {
+    addProjectPlace,
+    editProject,
+    type ProjectRow,
+    readConnections,
+    removeProjectPlace,
+  } from "#lib/cawco/stores/projects.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
