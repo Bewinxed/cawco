@@ -1229,7 +1229,8 @@ export const createRoutines = ({
     const projectId = routine.projectId ?? refuse(409, "no project");
     const brief = await curatorBrief(projectId);
     if (brief instanceof ElysiaStatus) {
-      return refuse(brief.status, brief.response.detail);
+      // The run fails in the refusal's words: fire's catch reads them alone.
+      throw new Error(brief.response.detail);
     }
     if (brief.kind === "none") {
       settle(run.id, {

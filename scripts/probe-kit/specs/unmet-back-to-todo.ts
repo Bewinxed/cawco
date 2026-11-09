@@ -450,9 +450,12 @@ const legs = async (rig: Rig): Promise<void> => {
   });
   const { writeFolderFile } =
     await import("../../../packages/hub/src/project-folder");
-  await writeFolderFile(old, "stages.md", before, {
+  const committed = await writeFolderFile(old, "stages.md", before, {
     author: { name: "probe" },
   });
+  if (!("sha" in committed)) {
+    throw new Error(committed.response.detail);
+  }
   const { createTasks } = await import("../../../packages/hub/src/tasks");
   const engine = createTasks({
     project: (id) => rig.db.project(id),

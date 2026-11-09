@@ -17,12 +17,13 @@
  * origin has nowhere else for work to land, so its own branch is what it
  * has; a place that is no git repository yet is a folder, read as one.
  */
+
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { DbShape } from "./db";
-import { projectRoot } from "./project-folder";
+import { projectRootOf } from "./project-refusal";
 
 /** A fetch of origin's default branch and a read of it; past this the machine is not going to answer. */
 const READ_MS = 30_000;
@@ -114,7 +115,7 @@ export const projectDesign = async (
   projectId: string,
   commits = 0
 ): Promise<{ hasDesign: boolean | null; repo: Landed | undefined }> => {
-  const inFolder = existsSync(join(projectRoot(projectId), "design"));
+  const inFolder = existsSync(join(projectRootOf(projectId), "design"));
   if (inFolder && commits === 0) {
     return { hasDesign: true, repo: undefined };
   }
