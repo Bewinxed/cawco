@@ -1,6 +1,6 @@
 /**
  * A preview a decision page shows stays up while that page waits on the
- * person (hub artifacts service `servedOwed`, `keepWaitingUp`; work-items.ts
+ * person (hub artifacts service `servedOwed`, `keepWaitingUp`; workspaces.ts
  * `owedFrom`). On 2026-11-07 and 2026-11-08 the owner opened a decision page
  * and saw a blank area where its frames should be: the page's previews had
  * been put to sleep by their idle half hour while the page still waited
