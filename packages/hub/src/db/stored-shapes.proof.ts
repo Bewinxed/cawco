@@ -121,6 +121,7 @@ prove<
     Same<DesignPickOutput, DesignPickType>,
     Same<DesignProposalFileOutput, DesignProposalFileType>,
     Same<GatePassOutput, GatePassType>,
+    Same<InstallsRecordOutput, InstallsRecordType>,
     Same<ItemBlockOutput, ItemBlockType>,
     Same<MoveStateOutput, MoveStateType>,
     Same<
@@ -131,6 +132,9 @@ prove<
     Same<OAuthDiscoveryStateOutput, OAuthDiscoveryStateType>,
     Same<ContinuationSourceOutput, ContinuationSourceType>,
     Same<PreparedContinuationOutput, PreparedContinuationType>,
+    Same<ProposedFileOutput, ProposedFileType>,
+    Same<ProposalFileOutput, ProposalFileType>,
+    Same<ProposalOutput, ProposalType>,
     Same<StoredSendRefusalOutput, StoredSendRefusalType>,
     Same<TrackerCursorOutput, TrackerCursorType>,
     Same<TrackerSyncedOutput, TrackerSyncedType>,
@@ -139,9 +143,5 @@ prove<
     Same<WorkItemSubmissionOutput, WorkItemSubmissionType>,
     Same<WorkLandingOutput, WorkLandingType>,
     Same<WorkspaceFromOutput, WorkspaceFromType>,
-    Same<InstallsRecordOutput, InstallsRecordType>,
-    Same<ProposedFileOutput, ProposedFileType>,
-    Same<ProposalFileOutput, ProposalFileType>,
-    Same<ProposalOutput, ProposalType>,
   ]
 >();
