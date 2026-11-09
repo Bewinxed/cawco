@@ -1,81 +1,7 @@
-/**
- * A delegation workspace's boundary, on the machine that holds it: the one
- * place every shell command of the workspace's work items runs. What a
- * command reads and writes is the workspace's policy (`workspace-policy.ts`),
- * the same one every harness's file tools are judged by, enforced from the
- * one translation of it (`boundary-policy.ts`):
- *
- * - Linux: one @anthropic-ai/sandbox-runtime (srt) sandbox per workspace,
- *   hosted by `boundary-host.ts` in library mode. Inside it a command reads
- *   nothing in the home dir but what the policy reads back, writes only the
- *   clone, its scratch dir and the workspaces' cache (a write anywhere else,
- *   the read-denied home dir, `/tmp` and `/run` among them, fails at once
- *   with EROFS: `srtSettings` in boundary-policy.ts), sees and signals only
- *   the workspace's processes (its own pid namespace), and reaches the
- *   network only through srt's proxy, by way of the srt host's relay, which
- *   presents srt's token for every client (proxy-relay.ts): any public
- *   host, none of the owner's machines. Every host socket is out of sight.
- * - macOS: one `sandbox-exec` runner per workspace, under a Seatbelt profile
- *   written from the same policy: the home dir read-denied but for what the
- *   policy reads back, writes only where it writes. Seatbelt keeps its
- *   signals inside its own sandbox and refuses `launchctl`, and every
- *   process a runner starts answers, wherever it moves, to its workspace's
- *   and its generation's names, by which it is found and ended
- *   (boundary-policy.ts `MEMBERSHIP_PREFIX`, {@link answering}). macOS has no
- *   private pid or port space to give it, and Chromium cannot start inside
- *   srt there until srt can allow it its `mach-register` names (srt #210,
- *   PR #598). `swift`, `xcodebuild` and `log` run through shims that keep them
- *   working inside ({@link writeShims}).
- *
- * Both run the same runner ({@link runnerText}), which takes every command of the
- * workspace over a FIFO and runs it inside: one network namespace on Linux,
- * so a dev server one command starts answers the next. Commands go in
- * through one executor, `~/.cawco/workspaces/<id>/exec [--session [--cwd-out
- * FILE] | --claude] COMMAND` ({@link execScript}), that every harness runs its shell commands
- * through: claude by its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`, the
- * workspace's `claude-prefix` script, {@link claudePrefixScript}), which the
- * CLI applies after its permission rules have judged the command as the
- * model wrote it; OpenCode by its plugin's `shell` tool, pi by its bash
- * tool's operations, the hub's commands by `runHubCommand`. A workspace holds no credential of any host: its git reaches
- * its clone's origin, on any host and over any transport, through the git
- * door (hub-git.ts), which signs in on the host with the host's own. Its
- * `gh` reaches GitHub's API through the workspace's GitHub door
- * (github-door.ts), which signs in on the host: no forge's token ever
- * enters a workspace (exec.ts `commandEnv`). The hub lands a workspace's
- * commits through the same door: its `git push` is a command the workspace's
- * agent runs through this executor (`runHubCommand`). `cawco tools` reaches the hub's tools through the
- * workspace's tool door (`tool-door.ts`).
- *
- * sessiond holds the boundary and the workspace's judge, so an agent restart
- * leaves them — and every process in the boundary — running, as it leaves the
- * sessions. One started in another form (another policy, runner, executor or
- * host), or held by a retiring session keeper (a keeper handover left it
- * there, core keepers.ts), is handed over ({@link handOver}): a boundary of
- * this build's form starts beside it on the current keeper, every new command
- * runs in the new one, and the older one runs on, untouched, until nothing
- * runs in it, then closes ({@link closeIdle}). One whose work still runs
- * anything is not handed over until that ends ({@link workLeft}): the new
- * one's pid namespace and network are others, where the delegate's next
- * command would find nothing of what it left running. Every boundary and judge
- * process is found and stopped on whichever keeper holds it. A boundary runs
- * only while something holds it ({@link liveWhy}); one nothing has held for
- * holding.ts `QUIET_CLOSE_MS` closes with its judge, its clone and state left as
- * they are, and its next command starts it again ({@link closeQuietly}). A
- * machine that
- * cannot hold a boundary refuses the work: a work item never runs without
- * one.
- *
- * No command holds a key or reaches a key agent: `~/.ssh` is under the
- * home dir's deny, the executor drops every agent socket's variable
- * (`AGENT_SOCKET_ENV`), and no host socket is reachable. A workspace reaches
- * another machine only through CawCo: the landing gate's iOS build runs in a
- * gate workspace on a Mac (the hub's `runGate`).
- */
-
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { watch } from "node:fs";
 import { lstat, mkdir, readdir, rm, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { atMost } from "@cawco/core/at-most";
 import {
   type HandoverCommand,
@@ -85,10 +11,8 @@ import {
   KEEPERS_ASK_AGAIN_MS,
   type ListedWorkspace,
 } from "@cawco/core/handover";
-import { currentEndpoint } from "@cawco/core/keepers";
 import {
   workspaceClaudeTmpDir,
-  workspaceDoorDir,
   workspacePolicyFile,
   workspacesDir,
 } from "@cawco/core/paths/workspace";
@@ -96,28 +20,18 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid } from "@cawco/core/signal";
 import { readRecord } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import {
-  systemProgram,
-  trustedPath,
-  workspaceNeeds,
-} from "@cawco/core/workspace-needs";
+import { systemProgram, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { isPlace, workspacePolicy } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureGateToken } from "../browser/gate";
-import { BUN_SCRIPT_ENV } from "../bun-runtime";
 import { isGitDir } from "../git-dir";
 import { openGithubDoor } from "../github-door";
 import { openGitDoor } from "../hub-git";
 import { ensureView, layerOf, ownFolderSync, ownModules } from "../layer";
-import {
-  boundaryProcId,
-  isBoundaryOf,
-  JUDGE_FORM_LENGTH,
-  judgeProcId,
-} from "../proc-id";
+import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { hasLeftDirs, listStandIns, rewriteLeftFiles } from "../stand-ins";
-import { openToolDoor, socketPlace } from "../tool-door";
+import { openToolDoor } from "../tool-door";
 import { linkWorkspaceModules } from "../workspace-modules";
 import {
   behindGate,
@@ -138,17 +52,8 @@ import {
   claudePrefixOf,
   claudePrefixScript,
   hookScript,
-  JUDGE_SCRIPT,
-  JUDGE_SERVER,
-  type JudgeAt,
-  judgeBuildOf,
-  judgeHanded,
-  judgeScripts,
-  judging,
-  socketAddress,
-  watchedJudges,
-  whileArming,
 } from "./hook-judge";
+import { judgeFor, whileArming } from "./judge-process";
 import {
   keeperTakingOver,
   type Narrowed,
@@ -171,12 +76,7 @@ import {
   drainable,
   type Work,
 } from "./processes";
-import {
-  HOST_GONE_STATUS,
-  JUDGE_PROTOCOL_FILE,
-  JUDGE_READY,
-  judgeArgv,
-} from "./protocol";
+import { HOST_GONE_STATUS } from "./protocol";
 import { srtTmpOf } from "./runner";
 import { endMembers, sandboxes } from "./sandboxes";
 import {
@@ -194,7 +94,6 @@ import {
   gitSystemConfig,
   gitSystemConfigOf,
   type Held,
-  holding,
   keepers,
   READY,
   type Retiring,
@@ -207,7 +106,6 @@ import {
   running,
   scratchOf,
   sessiond,
-  sessiondPath,
   starting,
   stateDir,
   writeWhole,
@@ -235,132 +133,6 @@ import {
   watchParent,
 } from "./watch";
 import { keptRunning } from "./work";
-
-const judgeFor = async (
-  id: string,
-  held: Pick<Held, "exec">,
-  hook: string,
-  policy: string
-): Promise<JudgeAt> => {
-  const runtime = await bunRuntime(id);
-  const scripts = await judgeScripts();
-  const [judgeText, serverText, protocolText] = scripts;
-  const server = join(stateDir(id), JUDGE_SERVER);
-  const handed = judgeHanded(id, held.exec, hook, policy);
-  // The keeper it runs on is part of its form: after a keeper handover, the
-  // next arming starts the workspace's judge on the current keeper, beside the
-  // one a retiring keeper runs, which leaves once the hook no longer names it.
-  // So the retiring keeper is left holding nothing of the workspace.
-  const keeper = basename(await currentEndpoint(sessiondPath()));
-  // In the workspace's socket dir, not its state dir: under a deep HOME the
-  // state dir's path passes a socket's length, and the hook's
-  // `pack_sockaddr_un` would cut it to a name nothing listens on.
-  const place = workspaceDoorDir(id);
-  // Where it listens is part of its form too, as the socket is one of what
-  // it is handed: a judge is found running by its form alone, and one an
-  // earlier build started with the same scripts on the same keeper but in
-  // another place (the state dir, before be056a0e) listens where this hook
-  // would not look. Its form differs, so this build's starts at once beside
-  // it, and the hook names a judge that answers.
-  const form = createHash("sha256")
-    .update(
-      [
-        serverText,
-        judgeText,
-        protocolText,
-        ...Object.values(handed),
-        keeper,
-        place,
-      ].join("\0")
-    )
-    .digest("hex")
-    .slice(0, JUDGE_FORM_LENGTH);
-  // A judge of this form may be listening there already, so nothing is removed.
-  const socket = join(place, `judge-${form}.sock`);
-  await socketPlace(socket, "the workspace's judge");
-  const procId = judgeProcId(id, form);
-  // Written each time: OpenCode's plugin imports this build's judge from here.
-  await Promise.all([
-    writeWhole(join(stateDir(id), JUDGE_SCRIPT), judgeText, 0o644),
-    writeWhole(join(stateDir(id), JUDGE_PROTOCOL_FILE), protocolText, 0o644),
-    writeWhole(server, serverText, 0o644),
-  ]);
-  let started = judging.get(procId);
-  if (!started) {
-    started = (async () => {
-      const client = await sessiond();
-      if (await holding(procId)) {
-        return;
-      }
-      await client.spawnProc(procId, {
-        command: runtime,
-        // Its build last: what it answers when asked which it runs.
-        args: [
-          server,
-          ...judgeArgv({ socket, ...handed, build: judgeBuildOf(scripts) }),
-        ],
-        // Bun reads bunfig.toml and .env from where it starts: the state dir,
-        // which nothing inside the boundary writes.
-        cwd: stateDir(id),
-        env: {
-          ...BUN_SCRIPT_ENV,
-          PATH: trustedPath(),
-        },
-        workspace: true,
-      });
-      await ready(client, procId, JUDGE_READY, "its judge").catch(
-        (error: Error) => {
-          throw refusal(id, error.message);
-        }
-      );
-      console.info(`[workspace] ${id}: its judge (form ${form}) is running`);
-    })().finally(() => judging.delete(procId));
-    judging.set(procId, started);
-  }
-  await started;
-  await watchJudge(id, procId);
-  return { socket, address: await socketAddress(id, socket) };
-};
-
-/**
- * Starts the workspace's judge again when it exits while the workspace is
- * still held, by arming its hook again ({@link armHook}): a crashed judge
- * would refuse every call. One that left because a newer judge took over, or
- * the workspace closed, finds the current one running, or no workspace. A
- * watch lives on its sessiond connection, so a new connection watches again.
- */
-const watchJudge = async (id: string, procId: string): Promise<void> => {
-  const client = await sessiond();
-  if (watchedJudges.get(procId) === client) {
-    return;
-  }
-  watchedJudges.set(procId, client);
-  let stop = (): void => undefined;
-  stop = client.subscribe(procId, {
-    line: () => undefined,
-    exit: (code, signal, pid) => {
-      watchedJudges.delete(procId);
-      stop();
-      client.release(procId, pid);
-      // Counted as arming from its exit until it is started again, as the
-      // handover decides ({@link armStep}).
-      whileArming(id, async () => {
-        const held = await readHeld(id);
-        if (held) {
-          console.warn(
-            `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
-          );
-        }
-        armStep({ kind: "judge-exit", id, held: held !== undefined });
-        await rearming.get(id);
-      }).catch((error: unknown) => {
-        console.warn(
-          `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
-    },
-  });
-};
 
 /**
  * Follows workspace `id`'s boundary `held`, its srt host on Linux and its
