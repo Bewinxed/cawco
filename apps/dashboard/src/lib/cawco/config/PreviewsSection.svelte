@@ -19,7 +19,7 @@
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
   import { hub } from "#lib/platform/hub.js";
-  import { hubData, hubRefusal } from "#lib/platform/hub-read.js";
+  import { hubAsk, hubData, hubRefusal } from "#lib/platform/hub-read.js";
 
   const section = sectionOf("previews");
 
@@ -62,14 +62,16 @@
     saving = true;
     refused = undefined;
     try {
-      const answer = await hub.api["preview-settings"].put(
-        mode === "host" ? { mode, pattern: pattern.trim() } : { mode }
+      const answer = await hubAsk(
+        hub.api["preview-settings"].put(
+          mode === "host" ? { mode, pattern: pattern.trim() } : { mode }
+        )
       );
-      if (answer.error) {
-        refused = hubRefusal(answer).message;
+      if (!answer.ok) {
+        refused = hubRefusal(answer.refused).message;
         return;
       }
-      read(answer.data);
+      read(answer.value);
     } catch (error) {
       refused = error instanceof Error ? error.message : String(error);
     } finally {
