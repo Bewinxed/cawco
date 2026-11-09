@@ -129,6 +129,8 @@ export default {
         // scripts/check.ts, beside css-scope-check.ts
         "scripts/import-rules-check.ts",
         // scripts/check.ts, beside css-scope-check.ts
+        "scripts/swallow-cast-ratchet.ts",
+        // scripts/check.ts, beside css-scope-check.ts
         "scripts/browser-core-check.ts",
         // scripts/check.ts:555
         "scripts/style-residual-check.ts",
