@@ -184,7 +184,7 @@ import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
 import { readsWeb, type WebContext } from "./web-reads";
-import { isRoutineParent } from "./work-items";
+import { isRoutineParent } from "./work-item-state";
 
 export const AGENTS_FILE = "AGENTS.md";
 const MEMORY_DIR = "memory";
