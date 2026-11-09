@@ -3784,7 +3784,7 @@ class OpencodeHarness implements Harness<"opencode"> {
 
   /**
    * Each of the machine's own OpenCode sign-ins, as OpenCode would use it
-   * ({@link signInCheck}): one that cannot work is a fault, in the words a
+   * (`#signInCheck`): one that cannot work is a fault, in the words a
    * refused turn has; one that works clears its provider's. A provider no
    * sign-in is held for any more has none.
    */

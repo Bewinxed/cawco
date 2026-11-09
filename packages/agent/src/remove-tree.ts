@@ -10,8 +10,7 @@
  * stand-in (core workspace-policy.ts `OPENCODE_DIR`, 0555), in a clone and
  * in a workspace layer's upper, which may hold what was written there. Bun's
  * `rm` names only the top of the tree it was given for a refusal anywhere
- * below it, and removes nothing. A scratch fleet's folders hold all of
- * these, and go the same way (scripts/scratch-fleet.ts).
+ * below it, and removes nothing.
  */
 import { chmod, lstat, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";

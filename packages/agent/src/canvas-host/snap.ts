@@ -2,7 +2,7 @@
  * A pen stroke held still at its end becomes the shape it was drawn as
  * (Projects spec §5.10, slice 5a): a pen that stays within {@link HOLD_PX}
  * for `--duration-press-hold` before it lifts has its freedraw replaced by the
- * shape agent shapes.ts reads in it, on the stroke's own box, in one step of
+ * shape core shapes.ts reads in it, on the stroke's own box, in one step of
  * the canvas's history and one transaction of its doc. A stroke lifted
  * without the hold, or one that is no shape well enough, stays as drawn.
  *
