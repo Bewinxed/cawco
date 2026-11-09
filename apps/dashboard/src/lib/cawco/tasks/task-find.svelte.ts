@@ -17,6 +17,7 @@
 
 import { findTasks } from "#lib/cawco/project-tasks.js";
 import { failureWords } from "#lib/platform/hub-read.js";
+import { newestRead } from "#lib/platform/newest-read.js";
 
 /** An answer: the words it was for, and the ids of the tasks, live and archived, they found. */
 export interface Found {
@@ -44,7 +45,7 @@ export class TaskFind {
   /** The words asked for last, read again by `again`. */
   #asked = "";
   /** Reads so far: only the newest one's answer is kept. */
-  #reads = 0;
+  readonly #reads = newestRead();
   readonly #project: () => string;
 
   constructor(project: () => string, seed: FindSeed) {
@@ -54,7 +55,7 @@ export class TaskFind {
 
   /** Another project, or the page's first answer (its load's), in place of what stood. */
   reset(seed: FindSeed): void {
-    this.#reads += 1;
+    this.#reads.next();
     this.shown = seed.found;
     this.problem = seed.problem;
     this.finding = false;
@@ -69,8 +70,7 @@ export class TaskFind {
   /** Asks the hub what `q` finds; words taken out unnarrow the views at once. */
   async find(q: string): Promise<void> {
     const words = wordsOf(q);
-    this.#reads += 1;
-    const ticket = this.#reads;
+    const newest = this.#reads.next();
     this.#asked = words;
     if (!words) {
       this.shown = null;
@@ -85,7 +85,7 @@ export class TaskFind {
         findTasks(project, words),
         findTasks(project, words, true),
       ]);
-      if (ticket !== this.#reads) {
+      if (!newest()) {
         return;
       }
       this.shown = {
@@ -94,11 +94,11 @@ export class TaskFind {
       };
       this.problem = null;
     } catch (error) {
-      if (ticket === this.#reads) {
+      if (newest()) {
         this.problem = failureWords(error);
       }
     } finally {
-      if (ticket === this.#reads) {
+      if (newest()) {
         this.finding = false;
       }
     }
