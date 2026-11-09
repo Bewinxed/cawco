@@ -1,4 +1,38 @@
-import { status } from "elysia";
+import { problem, status, type ValidationErrorResponse } from "elysia";
+
+/**
+ * A refusal a route answers: its status, a stable code naming the cause, and
+ * the sentence the person or the session reads, as an RFC 9457 problem
+ * (Elysia's `problem`: `{ type, title, status, code, detail }`, sent as
+ * `application/problem+json`). Returned, never thrown: a helper that refuses
+ * returns it, each caller passes it up (`if (x instanceof ElysiaStatus)
+ * return x`), and the route answers it, so its status and body are in the
+ * route's type, the dashboard's Eden client and openapi.json. Its sentence is
+ * typed `string`, so one code is one body however its words are filled in.
+ */
+export const refusal = <const Status extends number, const Code extends string>(
+  answering: Status,
+  code: Code,
+  detail: string
+) => problem(answering, { code, detail });
+
+/**
+ * A schema's own refusal, as its `error` (`t.String({ …, error:
+ * schemaRefusal(words) })`): Elysia's validation problem, the sentence the
+ * person reads as its `detail`, where Elysia's own names only the field that
+ * failed (in production, nothing more). Elysia answers it whole, as JSON,
+ * with 422, so the route's typed 422 is what is sent.
+ */
+export const schemaRefusal =
+  (detail: string) =>
+  ({ on }: { on: string }): ValidationErrorResponse => ({
+    type: "validation",
+    code: "validation",
+    title: "Validation Error",
+    status: 422,
+    on,
+    detail,
+  });
 
 /** The statuses a refusal answers with. */
 type RefusalCode = 400 | 403 | 404 | 409;
