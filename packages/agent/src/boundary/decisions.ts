@@ -201,7 +201,7 @@ const DECISIONS_KEPT = 32;
 
 /** A boundary generation as a decision names it. */
 interface DecidedBoundary {
-  /** Its form ({@link formOf}); null when it has none. */
+  /** Its form (plan.ts `formOf`); null when it has none. */
   readonly form: string | null;
   readonly gen: string;
   /** Its srt host (Linux) or runner (macOS). */
@@ -210,21 +210,21 @@ interface DecidedBoundary {
 
 /** Why an update decision ({@link BoundaryDecision}) went as it did: each names what held then, the rest none. */
 interface UpdateReasons {
-  /** Its work's commands running, by executor pid ({@link commandsIn}). */
+  /** Its work's commands running, by executor pid (processes.ts `commandsIn`). */
   readonly commands: readonly number[];
-  /** Why its grant cannot be compared with this build's policy ({@link unknownGrant}); null when it can. */
+  /** Why its grant cannot be compared with this build's policy (narrowing.ts `unknownGrant`); null when it can. */
   readonly grant: string | null;
   /** Kept until this build's session keeper is the machine's ({@link ownKeeperOwed}). */
   readonly keeperOwed: boolean;
-  /** It holds an srt mount point where a dir stands in ({@link stubbed}): replaced whole once nothing runs in it. */
+  /** It holds an srt mount point where a dir stands in (staleness.ts `stubbed`): replaced whole once nothing runs in it. */
   readonly leftDirs: boolean;
-  /** The ports its work listens on ({@link workPorts}). */
+  /** The ports its work listens on (narrowing.ts `workPorts`). */
   readonly listening: readonly number[];
-  /** Every process of its work, by pid ({@link workProcesses}). */
+  /** Every process of its work, by pid (processes.ts `workProcesses`). */
   readonly processes: readonly number[];
 }
 
-/** Why the agent looked for a narrowed access ({@link recheckNarrowed}), or `use`: a use of the boundary ({@link ensure}). */
+/** Why the agent looked for a narrowed access (looks.ts `recheckNarrowed`), or `use`: a use of the boundary (ensure.ts `ensure`). */
 export type NarrowCause =
   "accounts" | "folder-moved" | "look" | "project" | "use";
 
@@ -235,27 +235,24 @@ export type NarrowCause =
  * deciding agent's pid (`agent`) and when, in ms since the epoch (`at`).
  *
  * - `kept`, `handed-over`, `replaced`: of a boundary not of this build's
- *   form, on a retiring keeper, or whose grant is not comparable ({@link
- *   replaceOlder}): kept as it is, handed over to one started beside it
- *   ({@link handOver}), or replaced by one once nothing ran in it ({@link
- *   restartIfIdle}), with `reasons` and the boundary that took its place
+ *   form, on a retiring keeper, or whose grant is not comparable (ensure.ts `replaceOlder`): kept as it is, handed over to one started beside it
+ *   (ensure.ts `handOver`), or replaced by one once nothing ran in it (stale-look.ts `restartIfIdle`), with `reasons` and the boundary that took its place
  *   (`to`).
  * - `older-closed`: an older generation beside the current one closed
- *   ({@link closeIdle}): nothing ran in it (`idle`), it was gone, or a newer
+ *   (stale-look.ts `closeIdle`): nothing ran in it (`idle`), it was gone, or a newer
  *   generation listens on every port its work listened on (`superseded`).
  * - `narrowed-stopped`: the generations whose access narrowed are stopped
- *   ({@link replaceNarrowed}), and the boundary that runs after (`runs`).
+ *   (ensure.ts `replaceNarrowed`), and the boundary that runs after (`runs`).
  * - `quiet-closed`: nothing held the workspace, and every generation closed
- *   ({@link closeQuietly}).
+ *   (looks.ts `closeQuietly`).
  * - `closed-for-good`: every generation closed with what still ran in its
- *   clone, the workspace going or settled ({@link stopWorkspaceBoundary}).
+ *   clone, the workspace going or settled (control.ts `stopWorkspaceBoundary`).
  * - `host-restarted`: its srt host stopped its sandbox, with everything in
  *   it, and started it again, a path it guards (`path`) changed on the host
- *   (boundary-host.ts `guard`), as the host records it ({@link
- *   recordHostRestarts}); `inner` the init of the sandbox it stopped.
+ *   (boundary-host.ts `guard`), as the host records it (watch.ts `recordHostRestarts`); `inner` the init of the sandbox it stopped.
  * - `restarted-unasked`: the boundary ended with nothing of the agent's
- *   ending it, and was started again (`to`, {@link restartUnasked}).
- * - `left-down`: it ended unasked again within {@link UNASKED_RESTART_MS}
+ *   ending it, and was started again (`to`, watch.ts `restartUnasked`).
+ * - `left-down`: it ended unasked again within watch.ts `UNASKED_RESTART_MS`
  *   of being started again, and is left down.
  */
 export type BoundaryDecision =
@@ -280,7 +277,7 @@ export type BoundaryDecision =
       readonly at: number;
       readonly cause: NarrowCause;
       readonly decision: "narrowed-stopped";
-      /** What its access lost ({@link narrowedBy}). */
+      /** What its access lost (narrowing.ts `narrowedBy`). */
       readonly narrowed: readonly string[];
       /** The boundary that runs after: a new one when the current was stopped, else the current one. */
       readonly runs: DecidedBoundary;
@@ -411,8 +408,8 @@ const gatesDown = new Map<string, Promise<void>>();
 /**
  * Runs `step` with workspace `id`'s gate up ({@link gateOf}): an executor that
  * looks at it meanwhile waits, then runs through whichever boundary is
- * current once it is down ({@link execScript}). Counted: a step inside
- * another (the start-up rewrite's ensure, {@link rearmOne}, handing a
+ * current once it is down (exec.ts `execScript`). Counted: a step inside
+ * another (the start-up rewrite's ensure, arming.ts `rearmOne`, handing a
  * boundary over) leaves it up for the outer one, and it comes down once the
  * last of them ends, never while one still runs.
  */

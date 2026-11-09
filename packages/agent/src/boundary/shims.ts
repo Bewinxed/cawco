@@ -168,7 +168,7 @@ export const writeGitShim = async (id: string, path: string): Promise<void> => {
 /** The Chromium a workspace's commands launch by name, in its read-only bin ({@link writeChromiumShim}). */
 const CHROMIUM_SHIM = "cawco-chromium";
 
-/** Workspace `id`'s {@link CHROMIUM_SHIM}, which `IMPECCABLE_BROWSER` names ({@link commandEnv}). */
+/** Workspace `id`'s {@link CHROMIUM_SHIM}, which `IMPECCABLE_BROWSER` names (exec.ts `commandEnv`). */
 export const chromiumShimOf = (id: string): string =>
   join(gitHelperDirOf(id), CHROMIUM_SHIM);
 
@@ -314,7 +314,7 @@ ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port
 
 /**
  * The gh config dir every workspace's commands run with (`GH_CONFIG_DIR`,
- * {@link commandEnv}), read-only inside: `http_unix_socket`
+ * exec.ts `commandEnv`), read-only inside: `http_unix_socket`
  * names the workspace's GitHub door, so gh sends every request there in the
  * clear (go-gh pkg/api/client_options.go `resolveOptions`: "if
  * opts.UnixDomainSocket == \"\" … cfg.Get([]string{\"http_unix_socket\"})"),

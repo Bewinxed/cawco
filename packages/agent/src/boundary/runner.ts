@@ -359,7 +359,7 @@ export const hostBwrap = (): string => systemProgram("bwrap");
  * boundary-policy.ts `readOnlyDeniesBwrap`): the host's, with each
  * read-denied dir remounted read-only. Named `bwrap`, and it execs the host's
  * in its own process, so the outer sandbox process reads as a bwrap
- * ({@link isBwrap}).
+ * (sandboxes.ts `isBwrap`).
  */
 export const bwrapLauncherOf = (id: string, gen: string): string =>
   join(generationDir(id, gen), "bwrap");
@@ -420,7 +420,7 @@ export const readHostText = async (host: string): Promise<string> => {
  * as arming writes them (gh's door config, git's system config), then the
  * executor's text for a runner at `pid` and the runner's own. Every command
  * still goes in through the same executor, its environment built by
- * {@link commandEnv}, and runs through the same runner: `bash -c <runner>
+ * exec.ts `commandEnv`, and runs through the same runner: `bash -c <runner>
  * cawco <fifo>`, its pid both of the boundary's in `place`, `guarded`
  * naming no bind. With them, what a claude session runs under (the
  * claude-prefix spec): the paths and text of its shell prefix
