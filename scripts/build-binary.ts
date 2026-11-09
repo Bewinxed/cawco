@@ -247,6 +247,9 @@ export async function prepareAssets(options: {
     // The same for the workspace judge: core and pi import it as a module, and
     // each workspace's hook and OpenCode's plugin run its copy.
     ["workspace-judge.ts", "packages/core/src/workspace-judge.ts"],
+    // The same for the boundary's protocol: the agent and the srt host import
+    // it as a module, and each workspace's judge runs its copy.
+    ["boundary-protocol.ts", "packages/agent/src/boundary/protocol.ts"],
   ];
   const [canvas, decision, fileViewer] = await Promise.all([
     // A canvas's host page, its bundle and Excalidraw's fonts (hub canvas-host.ts).
@@ -284,6 +287,8 @@ export async function prepareAssets(options: {
     ...fileViewer,
     // Run as plain Bun as each workspace's judge, never as cawco (boundary/).
     ["boundary/judge.ts", join(ROOT, "packages/agent/src/boundary-judge.ts")],
+    // What the judge imports from beside it, and the agent writes there (boundary/protocol.ts).
+    ["boundary/protocol.ts", join(WORK, "boundary-protocol.ts")],
     // Run as plain Bun by a macOS workspace's `log` shim (boundary/).
     ["boundary/log.ts", join(ROOT, "packages/agent/src/boundary-log.ts")],
     ["boundary/log-protocol.ts", join(WORK, "boundary-log-protocol.ts")],
