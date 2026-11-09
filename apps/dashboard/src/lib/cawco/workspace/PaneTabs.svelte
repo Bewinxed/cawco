@@ -92,13 +92,14 @@
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
   import { ACTIVITY_LABEL, FAILED_LABEL, UNKNOWN_LABEL } from "../activity";
-  import { cawco, isFailed, isStale } from "../client.svelte";
+  import { cawco } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { conversationHref } from "../links";
   import { markHue } from "../mark";
   import { folderOf } from "../projects";
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
+  import { boardStore, isFailed, isStale } from "../stores/board.svelte";
   import TreeMark from "../TreeMark.svelte";
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
@@ -190,7 +191,7 @@
     if (projectId) {
       return resolveProject(id, projectId);
     }
-    const row = cawco.instanceIndex.byId.get(id);
+    const row = boardStore.instanceIndex.byId.get(id);
     const ctx = contextOf(id);
     const { label, named } = sessionName(id, servedNames);
     const activity = cawco.activityOf(id);
@@ -212,7 +213,7 @@
     return {
       id,
       key: `${id}:${arrivals.get(id) ?? 0}`,
-      href: conversationHref(id, cawco.instanceIndex, {
+      href: conversationHref(id, boardStore.instanceIndex, {
         machineId: ctx?.machine,
         cwd: ctx?.cwd,
       }),
@@ -755,7 +756,7 @@
     const projectId =
       projectOfTab(here) ??
       (here && ctx?.cwd
-        ? cawco.instanceIndex.byId.get(here)?.projectId
+        ? boardStore.instanceIndex.byId.get(here)?.projectId
         : undefined);
     newSession(
       {
@@ -1536,7 +1537,7 @@
               <span>Continue in new session…</span>
             </ContextMenu.Item>
           {/if}
-          {@const row = cawco.rowOf(tab.id)}
+          {@const row = boardStore.rowOf(tab.id)}
           {#if row}
             <AccountSubmenu instance={row} />
           {/if}

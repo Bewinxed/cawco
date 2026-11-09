@@ -36,6 +36,7 @@
   import { runningWords } from "../older";
   import RowFault from "../RowFault.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import { workspace } from "../workspace/workspace.svelte";
   import {
     clock,
@@ -109,7 +110,7 @@
   );
   /** Each machine whose last listing left a harness out, with the sentences for it. */
   const leftOut = $derived(
-    (sayer ? cawco.machines : []).flatMap((machine) => {
+    (sayer ? boardStore.machines : []).flatMap((machine) => {
       const said = cawco.catalogLeftOutOf(machine.machineId);
       return said.length > 0
         ? [{ machineId: machine.machineId, words: said.join(" ") }]
@@ -216,7 +217,7 @@
             active={current === row.id}
             {context}
             fold={view.foldOf(row.id)}
-            href={conversationHref(row.id, cawco.instanceIndex)}
+            href={conversationHref(row.id, boardStore.instanceIndex)}
             instance={row}
             line={context ? "" : placeOfRow(row)}
             machineId={row.machineId}

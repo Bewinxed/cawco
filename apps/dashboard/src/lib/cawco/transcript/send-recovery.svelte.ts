@@ -17,10 +17,10 @@ import { machineLabel } from "@cawco/core/machine-names";
 import type { ModeAsk, SendRefusal } from "@cawco/core/session-messages";
 import { nameOf, signinState } from "../accounts/model.svelte";
 import { signedInHere } from "../accounts/switch.svelte";
-import { cawco } from "../client.svelte";
 import { type BoardRow, conversationHref } from "../links";
 import { permissionModeLabel } from "../permission-modes";
 import { accountsStore } from "../stores/accounts.svelte";
+import { boardStore } from "../stores/board.svelte";
 import { speakerName } from "./speaker";
 
 /** One way back, as a row action draws it. */
@@ -45,7 +45,9 @@ export interface SendRecovery {
 }
 
 const machineOf = (machineId: string): string => {
-  const machine = cawco.machines.find((one) => one.machineId === machineId);
+  const machine = boardStore.machines.find(
+    (one) => one.machineId === machineId
+  );
   return machine ? machineLabel(machine.hostname) : machineId;
 };
 
@@ -129,7 +131,7 @@ export function recoveryOf(
     case "machine-away": {
       const machine = machineOf(refusal.machineId);
       const back =
-        cawco.machines.find((one) => one.machineId === refusal.machineId)
+        boardStore.machines.find((one) => one.machineId === refusal.machineId)
           ?.status === "online";
       return back
         ? {
@@ -154,7 +156,7 @@ export function recoveryOf(
                 label: `Open ${refusal.latest.title}`,
                 href: conversationHref(
                   refusal.latest.instanceId,
-                  cawco.instanceIndex
+                  boardStore.instanceIndex
                 ),
               },
             ]
