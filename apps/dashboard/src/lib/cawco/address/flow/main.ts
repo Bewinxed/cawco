@@ -1,7 +1,8 @@
 /**
  * The preview page's entry: the shared ResizeObserver delivery first (as
- * the app's hooks.client.ts), the dashboard's stylesheet and theme, then
- * the page (vite.config.ts says how it is built).
+ * the app's hooks.client.ts), so no module read before it makes an observer
+ * that escapes it; the dashboard's stylesheet and theme, then the page
+ * (vite.config.ts says how it is built).
  */
 import "#lib/platform/frame-observer.js";
 import "../../../../app.css";
