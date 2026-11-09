@@ -705,6 +705,7 @@ import { followupStateRoutes } from "./routes/followup-state";
 import { hubInfoRoutes } from "./routes/hub-info";
 import { imageSettingRoutes } from "./routes/image-settings";
 import { instanceMediaRoutes } from "./routes/instance-media";
+import { instancePreviewRoutes } from "./routes/instance-previews";
 import { lfsRoutes } from "./routes/lfs";
 import { machinePauseRoutes } from "./routes/machines";
 import { mcpRoutes } from "./routes/mcp";
@@ -2151,6 +2152,9 @@ export const createServer = (
     forgePosts: () => forgePosts,
     cancelContinuation: () => cancelContinuation,
     continuationJob: () => continuationJob,
+    closePreview: () => closePreview,
+    outcomeOf: () => outcomeOf,
+    settledContinuation: () => settledContinuation,
   });
   const {
     anchors,
@@ -12053,60 +12057,7 @@ export const createServer = (
     modelWindowRoutes(ctx),
     continuationRoutes(ctx),
     moveRoutes(ctx),
-    new Elysia()
-      // A started continuation's report, once it has one: what the
-      // `continue_session` tool waits on. The job runs whether or not anyone
-      // waits here.
-      .get(
-        "/api/continuations/:id/outcome",
-        hidden,
-        async ({ params, request, server, status }) => {
-          // A summariser can take minutes; the wait must outlast Bun's idle cut.
-          server?.timeout(request, 0);
-          const row = await settledContinuation(params.id);
-          if (!row) {
-            return status(404, "That continuation is not running.");
-          }
-          if (row.stage === "started") {
-            return outcomeOf(row);
-          }
-          return status(
-            422,
-            row.stage === "cancelled"
-              ? CONTINUATION_CANCELLED
-              : (row.error ?? "the continuation failed")
-          );
-        }
-      )
-      // A session's Open items section, built now from its records
-      // (open-items.ts): what the `open_items` tool answers, which every
-      // harness's listing after a compaction reads.
-      .get(
-        "/api/instances/:id/open-items",
-        hidden,
-        async ({ params, query, status }) => {
-          try {
-            const cursor = Number(query.cursor ?? 0);
-            return {
-              text: await openItems.read(db.instanceIdOf(params.id), {
-                cursor: Number.isInteger(cursor) && cursor > 0 ? cursor : 0,
-                detailed: query.format === "detailed",
-              }),
-            };
-          } catch (error) {
-            return status(
-              404,
-              error instanceof Error ? error.message : String(error)
-            );
-          }
-        }
-      )
-      // The iOS app's Close (CawCoCore Previews.swift `closePreview`): the
-      // show goes for every view. The dashboard's Close is its tab's own
-      // (dashboard preview/closed-here.ts) and sends nothing.
-      .delete("/api/instances/:id/preview", ({ params }) =>
-        closePreview(params.id)
-      ),
+    instancePreviewRoutes(ctx),
     agentMediaRoutes(ctx),
     new Elysia()
       // A session with no transcript — one that never started, or whose
