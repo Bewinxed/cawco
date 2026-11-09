@@ -188,7 +188,7 @@ const lookAgainEverywhere = (): void => {
 /**
  * Records each restart of generation `held`'s sandbox its srt host recorded
  * (protocol.ts `HOST_FILES.restarts`) that workspace `id`'s decisions do not hold
- * yet, as a `host-restarted` decision ({@link BoundaryDecision}).
+ * yet, as a `host-restarted` decision (decisions.ts `BoundaryDecision`).
  */
 const recordHostRestarts = async (
   id: string,
@@ -350,7 +350,7 @@ export const watchHost = async (
         // host's gone exit does ({@link watchCloneOf}).
         const stoppedAsGone = goneStops.delete(procId);
         if (exitCode === HOST_GONE_STATUS || stoppedAsGone) {
-          // Its folder is gone: no start would hold it (lifecycle.ts `placeReady`).
+          // Its folder is gone: no start would hold it (ensure.ts `placeReady`).
           settleGonePlace({ id, path: held.path }).catch((error: unknown) => {
             console.warn(
               `[workspace] ${id}: its boundary ${held.pid} closed as its folder ${held.path} went, and the place could not be settled: ${error instanceof Error ? error.message : String(error)}`
@@ -378,9 +378,9 @@ export const watchHost = async (
  * so: its exit is then the host's gone exit's, never started again, and
  * nothing is made at the folder's path. Looked at once as the watch starts,
  * so a folder that went while no agent ran closes its boundary at the next
- * agent's start (lifecycle.ts `readWorkspaces` watches every running one then);
+ * agent's start (arming.ts `readWorkspaces` watches every running one then);
  * again for every folder once one is found gone ({@link lookAgainEverywhere});
- * and on each quiet sweep ({@link watchQuietBoundaries}), as macOS's
+ * and on each quiet sweep (looks.ts `watchQuietBoundaries`), as macOS's
  * watchers miss some deletions altogether.
  */
 export const watchCloneOf = (
@@ -441,15 +441,15 @@ export const watchCloneOf = (
  * A BOUNDARY THAT ENDS UNASKED IS STARTED AGAIN WHILE ITS RECORD STANDS, on
  * Linux and macOS alike. Its srt host or Seatbelt runner exited, and nothing
  * of the agent's ended it: no close or start of
- * the workspace's is under way ({@link closing}, {@link starting}), and its
+ * the workspace's is under way (state.ts `closing`, state.ts `starting`), and its
  * record (`boundary.json`) still names this generation, which every close
  * takes away and every replacement names anew. Its sessions' commands would
  * otherwise each be refused until the workspace's next session
  * (exec.ts `stoppedLine`): a sandbox that ended (its runner gone, an OOM
  * kill), its host or runner signalled, its host's own close. The start
  * stops what the generation before left (on macOS, what answers to its
- * name, which outlives its runner there: lifecycle.ts `stopUnvouched`). The
- * executor waits for the new one ({@link execScript}). A clone gone is refused at the start, as
+ * name, which outlives its runner there: ensure.ts `stopUnvouched`). The
+ * executor waits for the new one (exec.ts `execScript`). A clone gone is refused at the start, as
  * any start refuses it. One that ends unasked again within {@link
  * UNASKED_RESTART_MS} of its last such start is left down, said: a sandbox
  * that cannot stay up is not started in a loop, and the workspace's next
