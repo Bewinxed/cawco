@@ -11,10 +11,11 @@
 import type { Account, AccountProvider } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
-import { cawco, machineConnected, moveInstanceAccount } from "../client.svelte";
+import { moveInstanceAccount } from "../client.svelte";
 import type { BoardRow } from "../links";
 import { faultOn, pendingOn } from "../session-acts.svelte";
 import { accountsStore } from "../stores/accounts.svelte";
+import { boardStore, machineConnected } from "../stores/board.svelte";
 import { accountsOf, nameOf, signinState } from "./model.svelte";
 
 /** Session id → the account it is moving to. */
@@ -87,7 +88,7 @@ export function movingWords(instance: BoardRow): string | undefined {
   const name = account ? nameOf(account) : "another account";
   if (!machineConnected(instance.machineId)) {
     const host =
-      cawco.machines.find((one) => one.machineId === instance.machineId)
+      boardStore.machines.find((one) => one.machineId === instance.machineId)
         ?.hostname || instance.machineId;
     return `Moves to ${name} when ${host} is connected again`;
   }
@@ -160,7 +161,7 @@ const said = new Map<string, string>();
  */
 function settleAsks(): void {
   for (const [id, target] of moving) {
-    const row = cawco.instances.find((one) => one.id === id);
+    const row = boardStore.instances.find((one) => one.id === id);
     if (
       !row ||
       row.accountId === target ||
@@ -174,7 +175,7 @@ function settleAsks(): void {
 /** Each session's rows say the move it is making ({@link movingWords}), and stop once it makes none. */
 function sayMoves(): void {
   const now = new Map<string, string>();
-  for (const row of cawco.instances) {
+  for (const row of boardStore.instances) {
     const words = movingWords(row);
     if (words) {
       now.set(row.id, words);

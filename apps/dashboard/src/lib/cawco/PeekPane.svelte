@@ -61,9 +61,6 @@
   import {
     answeredOr,
     cawco,
-    isFailed,
-    isResumable,
-    isStale,
     openSession,
     type PendingPermission,
     type PermissionAnswer,
@@ -87,6 +84,12 @@
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus } from "./session-status";
   import { startFork } from "./spawn/new-session.svelte";
+  import {
+    boardStore,
+    isFailed,
+    isResumable,
+    isStale,
+  } from "./stores/board.svelte";
   import { takeOverBrowser } from "./stores/browsers.svelte";
   import { plansStore } from "./stores/plans.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
@@ -127,7 +130,9 @@
   });
 
   const session = $derived(cawco.session(target.viewId) ?? null);
-  const row = $derived(cawco.instanceIndex.byId.get(target.viewId) ?? null);
+  const row = $derived(
+    boardStore.instanceIndex.byId.get(target.viewId) ?? null
+  );
 
   const failed = $derived(row ? isFailed(row) : false);
   const sleeping = $derived(row ? isResumable(row) : false);
@@ -179,7 +184,7 @@
   const machine = $derived.by(() => {
     const machineId = session?.machineId || row?.machineId || "";
     return (
-      cawco.machines.find((entry) => entry.machineId === machineId) ?? null
+      boardStore.machines.find((entry) => entry.machineId === machineId) ?? null
     );
   });
 
@@ -220,7 +225,7 @@
       forked,
       "whether the fork started is not known"
     );
-    await goto(conversationHref(instanceId, cawco.instanceIndex));
+    await goto(conversationHref(instanceId, boardStore.instanceIndex));
   }
 
   /**

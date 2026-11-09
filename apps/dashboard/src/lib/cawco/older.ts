@@ -18,6 +18,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { cawco } from "./client.svelte";
 import type { BoardRow } from "./links";
 import { sessionStatus } from "./session-status";
+import { boardStore } from "./stores/board.svelte";
 
 /** A project lists every session that moved in the last day. */
 export const PROJECT_WINDOW = DAY_MS;
@@ -37,7 +38,7 @@ export interface Reading {
 
 /** Every row running now: the sessions. */
 export const runningIds = (): Set<string> =>
-  new Set(cawco.runningInstances.map((row) => row.id));
+  new Set(boardStore.runningInstances.map((row) => row.id));
 
 /**
  * Which of a parent's rows it lists, by id; the rest fold under its "N
