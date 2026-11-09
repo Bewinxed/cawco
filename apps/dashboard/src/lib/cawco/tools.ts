@@ -5,20 +5,10 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import type {
-  ToolPolicy,
-  ToolSigninChallenge,
-  ToolSpec,
-  ToolStatus,
-} from "@cawco/core/tools";
+import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
-import {
-  couldNot,
-  hubFetch,
-  hubJson,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { couldNot, hubRefusal, type Refused } from "#lib/platform/hub-read.js";
 import { machineControl } from "./client.svelte";
 
 /** What `GET /api/tools` answers with. */
@@ -46,11 +36,12 @@ export const policyFor = (policies: ToolPolicy[], id: string): ToolPolicy =>
 export async function setPolicy(
   id: string,
   patch: { required?: boolean; pinnedVersion?: string | null }
-): Promise<ToolPolicy> {
-  return await hubJson<ToolPolicy>(
-    hubRequest("PUT /api/tools/:id", { path: { id }, body: patch }),
-    { failure: (refused) => couldNot("save that policy", refused) }
-  );
+) {
+  const answer = await hub.api.tools({ id }).put(patch);
+  if (answer.error) {
+    throw couldNot("save that policy", answer);
+  }
+  return answer.data;
 }
 
 /**
@@ -87,25 +78,23 @@ export class ToolSigninRefusal extends Error {
   }
 }
 
-async function signinCall<T>(request: HubRequest): Promise<T> {
-  const response = await hubFetch(request);
-  if (response.status === 422) {
-    // The machine's own refusal, whole: its sentence, then the tool's
-    // screen lines one per line (core words/tools `screenOf`), which the
-    // hub's one-line refusal reading would cut to the first. No status
-    // after it: it would read as one more line of the tool's screen.
-    const said = (await response.clone().text()).trim();
-    if (said && !said.startsWith("{")) {
-      throw new ToolSigninRefusal(said, true);
+/** A tool sign-in route's refusal as the {@link ToolSigninRefusal} it throws. */
+function signinRefusal(refused: Refused): ToolSigninRefusal {
+  // Read first: a request that got no answer rejects here as it was thrown.
+  const words = hubRefusal(refused).message;
+  const { status } = refused.response;
+  const said = refused.error.value;
+  // The machine's own refusal, whole: its sentence, then the tool's screen
+  // lines one per line (core words/tools `screenOf`), which the hub's
+  // one-line refusal reading would cut to the first. No status after it: it
+  // would read as one more line of the tool's screen.
+  if (status === 422 && typeof said === "string") {
+    const whole = said.trim();
+    if (whole && !whole.startsWith("{")) {
+      return new ToolSigninRefusal(whole, true);
     }
   }
-  if (!response.ok) {
-    throw new ToolSigninRefusal(
-      (await hubRefusal(response)).message,
-      response.status === 422
-    );
-  }
-  return (await response.json()) as T;
+  return new ToolSigninRefusal(words, status === 422);
 }
 
 /**
@@ -113,25 +102,29 @@ async function signinCall<T>(request: HubRequest): Promise<T> {
  * the link the person opens in their own browser, and until when the
  * machine waits for its code. One already waiting answers its kept link.
  */
-export const beginToolSignin = (
-  machineId: string,
-  toolId: string
-): Promise<ToolSigninChallenge> =>
-  signinCall(
-    hubRequest("POST /api/machines/:machineId/tools/:toolId/signin", {
-      path: { machineId, toolId },
-    })
-  );
+export async function beginToolSignin(machineId: string, toolId: string) {
+  const answer = await hub.api
+    .machines({ machineId })
+    .tools({ toolId })
+    .signin.post();
+  if (answer.error) {
+    throw signinRefusal(answer);
+  }
+  return answer.data;
+}
 
 /** Types the pasted code into the machine's waiting sign-in: the tool's status there, its sign-in read again. */
-export const completeToolSignin = (
+export async function completeToolSignin(
   machineId: string,
   toolId: string,
   code: string
-): Promise<ToolStatus> =>
-  signinCall(
-    hubRequest("POST /api/machines/:machineId/tools/:toolId/signin/complete", {
-      path: { machineId, toolId },
-      body: { code },
-    })
-  );
+) {
+  const answer = await hub.api
+    .machines({ machineId })
+    .tools({ toolId })
+    .signin.complete.post({ code });
+  if (answer.error) {
+    throw signinRefusal(answer);
+  }
+  return answer.data;
+}

@@ -10,22 +10,25 @@
    * No hub stands behind a states file, and the panel's frame is this page's
    * own origin: its reach check and its pass are answered here, once a page.
    */
-  const standFor = globalThis.fetch;
-  globalThis.fetch = (input, init) => {
-    const { url } = new Request(input);
-    if (url.endsWith(PREVIEW_PING_PATH) || url.includes(PREVIEW_ENTER_PATH)) {
-      return Promise.resolve(new Response("ok"));
-    }
-    if (url.endsWith("/api/preview-ticket")) {
-      return Promise.resolve(Response.json({ ticket: "working-area" }));
-    }
-    // Placeholder data: what a pane would read of the hub is seeded below, so
-    // a read of it stays in flight, and what the pane already shows stands.
-    if (new URL(url).pathname.startsWith("/api/")) {
-      return new Promise<Response>(() => undefined);
-    }
-    return standFor(input, init);
-  };
+  // A proxy of the native fetch, so what else it carries (Bun types its
+  // `preconnect`) stays as it is.
+  globalThis.fetch = new Proxy(globalThis.fetch, {
+    apply: (standFor, _this, [input, init]: Parameters<typeof fetch>) => {
+      const { url } = new Request(input);
+      if (url.endsWith(PREVIEW_PING_PATH) || url.includes(PREVIEW_ENTER_PATH)) {
+        return Promise.resolve(new Response("ok"));
+      }
+      if (url.endsWith("/api/preview-ticket")) {
+        return Promise.resolve(Response.json({ ticket: "working-area" }));
+      }
+      // Placeholder data: what a pane would read of the hub is seeded below, so
+      // a read of it stays in flight, and what the pane already shows stands.
+      if (new URL(url).pathname.startsWith("/api/")) {
+        return new Promise<Response>(() => undefined);
+      }
+      return standFor(input, init);
+    },
+  });
 
   const ago = (minutes: number) =>
     new Date(Date.now() - minutes * 60_000).toISOString();
