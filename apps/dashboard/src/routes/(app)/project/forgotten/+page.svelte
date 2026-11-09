@@ -15,13 +15,13 @@
     readForgottenProjects,
   } from "#lib/cawco/client.svelte.js";
   import ForgottenPage from "#lib/cawco/forgotten/ForgottenPage.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     bringBack,
     bringBackKey,
     bringBackRefusal,
   } from "#lib/cawco/project-end.svelte.js";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   let list = $state<ForgottenProject[] | null>(null);
   let unread = $state<string | null>(null);

@@ -8,7 +8,6 @@
    * through verbatim for models the catalog has not learned yet.
    */
   import { tick } from "svelte";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import {
     Button,
@@ -18,6 +17,7 @@
   import * as Command from "#lib/components/ui/command/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconUnfold } from "#lib/icons.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
   import { covers } from "./model-catalog";
   import {
     MODEL_DEFAULT,

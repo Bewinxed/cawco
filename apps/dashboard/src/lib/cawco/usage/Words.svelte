@@ -6,7 +6,7 @@
    * New words from a new reading cross-fade in (motion/curves crossIn); the
    * minute moving on changes them in place.
    */
-  import { crossIn, motionOk } from "../motion/curves.svelte";
+  import { crossIn, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { usage } from "./forecast.svelte";
   import { type Part, plain } from "./rings";
 

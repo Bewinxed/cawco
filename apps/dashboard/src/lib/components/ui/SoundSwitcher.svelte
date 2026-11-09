@@ -1,13 +1,13 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconSound, IconSoundOff } from "#lib/icons.js";
   /**
    * Sound on or off, beside the theme: the composer's cues (the recall
    * wheel's detents, a queued message lifted and given back) are quiet until
    * the reader turns them on here (feel.svelte.ts).
    */
-  import { setSound, sound } from "#lib/cawco/feel.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconSound, IconSoundOff } from "#lib/icons.js";
+  import { setSound, sound } from "#lib/platform/feel.svelte.js";
 
   const label = $derived(sound.on ? "Turn sound off" : "Turn sound on");
 </script>

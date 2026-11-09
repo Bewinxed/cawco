@@ -7,12 +7,6 @@
     setProjectBudget,
     setProjectCap,
   } from "#lib/cawco/client.svelte.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import {
-    appear,
-    reveal,
-    revealOut,
-  } from "#lib/cawco/motion/curves.svelte.js";
   import StatTile from "#lib/cawco/StatTile.svelte";
   import { usd } from "#lib/cawco/usage.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -29,6 +23,12 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import {
+    appear,
+    reveal,
+    revealOut,
+  } from "#lib/platform/motion/curves.svelte.js";
 
   /**
    * One project's spend (fable-lead-switch.md §2): five tiles — today, this

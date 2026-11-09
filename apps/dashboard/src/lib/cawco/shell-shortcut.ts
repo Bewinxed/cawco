@@ -1,6 +1,6 @@
 import type { ShellShortcut } from "@cawco/core/shell-shortcuts";
+import { landKey } from "#lib/platform/motion/keyed.svelte.js";
 import { barGlass } from "./bar-glass.svelte";
-import { landKey } from "./motion/keyed.svelte";
 
 /**
  * The shell's shortcuts (core `SHELL_SHORTCUTS`) run from one place: the

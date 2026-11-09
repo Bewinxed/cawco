@@ -19,7 +19,7 @@ import { untrack } from "svelte";
 import {
   type FrameObserver,
   frameObserver,
-} from "#lib/cawco/frame-observer.js";
+} from "#lib/platform/frame-observer.js";
 
 /**
  * The custom properties in an inline style. On a box holding a tab they

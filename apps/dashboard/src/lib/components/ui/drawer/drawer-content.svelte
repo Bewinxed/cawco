@@ -68,14 +68,14 @@
   import { commonWords } from "@cawco/core/words/common";
   import type { ComponentProps, Snippet } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { mirror } from "#lib/cawco/page-marks.js";
-  import { visible } from "#lib/cawco/visible-viewport.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { mirror } from "#lib/platform/page-marks.js";
+  import { visible } from "#lib/platform/visible-viewport.svelte.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
   import DrawerOverlay from "./drawer-overlay.svelte";
@@ -206,7 +206,7 @@
 
   /**
    * The visible area as the sheet's --visible-top and --visible-height,
-   * from the one measurement of it (cawco/visible-viewport); app.css places
+   * from the one measurement of it (platform/visible-viewport); app.css places
    * a bottom sheet the kit marks `data-placed` on the visible area from the
    * two. They are written on the node one property at a time, never into
    * its `style` prop: a changed style attribute is written whole, so each
