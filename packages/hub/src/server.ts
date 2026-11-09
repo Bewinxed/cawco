@@ -517,7 +517,10 @@ import type {
   ToolStatus,
 } from "@cawco/core/tools";
 import { TOOL_CATALOG, toolSpec } from "@cawco/core/tools";
-import { transcriptUserText } from "@cawco/core/transcript-rules";
+import {
+  transcriptUserText,
+  withPastedText,
+} from "@cawco/core/transcript-rules";
 import type {
   TranscriptPage,
   TranscriptWhere,
@@ -7779,14 +7782,12 @@ export const createServer = (
           : []
       )
       .join("\n");
-    const pasted = attachments
-      .map((attachment) =>
-        attachment.kind === "text"
-          ? `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`
-          : ""
+    const lines = withPastedText(
+      files ? `\n\n${files}` : "",
+      attachments.flatMap((attachment) =>
+        attachment.kind === "text" ? [attachment] : []
       )
-      .join("");
-    const lines = `${files ? `\n\n${files}` : ""}${pasted}`;
+    );
     const said = message.message.content;
     return {
       ...message,
