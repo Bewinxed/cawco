@@ -88,7 +88,7 @@
    * which of them is drawing the home.
    *
    * The media query cannot run on the server, so its answer there is the
-   * `cawco-narrow` cookie this browser wrote last time (or, on a first
+   * `NARROW_PREF` cookie (platform/prefs.ts) this browser wrote last time (or, on a first
    * visit, what its headers suggest). The first client render keeps that
    * answer, so hydration keeps the page the server drew; the query's own
    * answer takes over a frame after mount (first-render.svelte.ts).
