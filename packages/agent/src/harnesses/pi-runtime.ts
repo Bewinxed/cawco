@@ -80,6 +80,7 @@ import type { McpGate } from "../mcp-gate";
 import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { piCompactsAt } from "./compaction-points";
+import { credentialControls } from "./credential-controls";
 import { accountRuntime } from "./pi-accounts";
 import { piMcpServers } from "./pi-mcp";
 import {
@@ -96,7 +97,6 @@ import {
   toBlocks,
 } from "./pi-services";
 import { PI_ASKS_NOTHING, piOpenTurns } from "./pi-sessiond";
-import { credentialControls } from "./session-ledger";
 
 type BashExec = BashOperations["exec"];
 
