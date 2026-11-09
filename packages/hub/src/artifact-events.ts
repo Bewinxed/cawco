@@ -44,7 +44,7 @@ import { externalizeImages } from "./media";
 import { handle as idHandle } from "./presenters/words";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
-import { isLive, WorkItemRefusal } from "./work-items";
+import { isLive, WorkItemRefusal } from "./work-item-state";
 
 /** A picture's number in a comments delivery's words (core comments.ts `attachedLine`). */
 const PICTURE_NUMBER = /\(picture (\d+) of this message/gu;

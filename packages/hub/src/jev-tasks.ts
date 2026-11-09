@@ -59,7 +59,7 @@ import {
   YOU_ACTOR,
   YOU_WRITING,
 } from "./tasks";
-import { isLive } from "./work-items";
+import { isLive } from "./work-item-state";
 
 /** A session as the hub's database reads it. */
 type SessionRow = ReturnType<DbShape["getInstancesByIds"]>[number];
