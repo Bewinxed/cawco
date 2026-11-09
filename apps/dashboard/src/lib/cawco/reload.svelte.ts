@@ -7,7 +7,7 @@
  * reloaded page until its ✕ (updates/update-notice.svelte.ts). Its one
  * caller is the update toast (updates/update-toast.svelte.ts): Update now,
  * or the idle reload. A page built for
- * an older wire than the hub's (`WIRE_PROTOCOL`, client.svelte.ts
+ * an older wire than the hub's (`WIRE_PROTOCOL`, hub/socket.svelte.ts
  * `olderThanHub`) goes the same way: it reads nothing more off the socket
  * while the toast stands, and the connection band says so. It used to reload
  * by itself 30 s after the last key, under whoever was reading it, and the
