@@ -11,6 +11,7 @@
     "./daemon": "./src/daemon.ts",
     "./discovery": "./src/discovery.ts",
     "./hub-client": "./src/hub-client.ts",
+    "./machine-fetch": "./src/machine-fetch.ts",
     "./awake-hold": "./src/awake-hold.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
     "./pi-mcp-list": "./src/harnesses/pi-mcp-list.ts",
