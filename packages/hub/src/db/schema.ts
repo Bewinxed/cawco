@@ -932,7 +932,7 @@ export const projectLinks = sqliteTable(
 /**
  * A project's repository on a machine: the folder the hub last cut a
  * workspace of the project from there. A landing gate step on the machine
- * (the iOS build) cuts its gate workspace from it (work-items.ts
+ * (the iOS build) cuts its gate workspace from it (gate.ts
  * `gateWorkspace`). It outlives
  * every workspace cut from it, and is no place: nothing else reads it.
  */
@@ -1317,12 +1317,12 @@ export const completedTurns = sqliteTable(
 );
 
 /**
- * A workspace's life, which is its work items' (work-items.ts `settle`):
+ * A workspace's life, which is its work items' (workspaces.ts `settle`):
  * `active` while an item there is live, or ended a moment ago and the hub
  * has not settled it, or while something holds it (a session attached, an
  * artifact showing what it serves); `held` once its item ended with work
  * that is nowhere else, which the session that started its work ends, told
- * so, by continuing it or discarding it (work-items.ts `heldNotice`), or a
+ * so, by continuing it or discarding it (workspaces.ts `heldNotice`), or a
  * workspace cut from it ends by landing that work (`vouchLanded`);
  * `archived` once its boundary and clone are gone.
  */
@@ -1395,7 +1395,7 @@ export const workspaces = sqliteTable("workspaces", {
    * by its machine from the checkout a session with no workspace works in
    * (agent stage-clone.ts) and filed on its word (core `StageCloneFrame`).
    * It has no work items; it settles once that stage sleeps
-   * (work-items.ts `settle`), and the next sheet cuts it again. Null for a
+   * (workspaces.ts `settle`), and the next sheet cuts it again. Null for a
    * delegate's.
    */
   stageFor: text("stage_for"),
@@ -1406,7 +1406,7 @@ export const workspaces = sqliteTable("workspaces", {
    * and the agent user's groups. Nothing is cut, landed, held or archived
    * for it: no machine call names its folder, its row is where its items
    * ran. Its scratch dir is its sessions' `TMPDIR` all the same (agent
-   * host-scratch.ts), settled once nothing of it is attached (work-items.ts
+   * host-scratch.ts), settled once nothing of it is attached (workspaces.ts
    * `settleHost`). Never listed among a machine's active or live workspaces.
    */
   host: integer("host", { mode: "boolean" }).notNull().default(false),
@@ -1425,7 +1425,7 @@ export const workspaces = sqliteTable("workspaces", {
    * that held it then, as its machine read it right before deleting the
    * clone (agent workspace.ts `headOnOrigin`): a retired workspace is cut
    * again there for its delegate to go on, and one with none is not cut
-   * again (work-items.ts `recuttable`). One whose item landed none retires
+   * again (workspaces.ts `recuttable`). One whose item landed none retires
    * with its commits in a carry: its head names that carry, and where its
    * HEAD built on the branch (agent workspace.ts `carriedFrom`). Null until
    * it retires.
@@ -1433,8 +1433,8 @@ export const workspaces = sqliteTable("workspaces", {
   head: storedJson(WorkspaceCutSchema)("head").$type<WorkspaceCut>(),
   /**
    * How CawCo moved its checkout (core injected.ts `CheckoutMove`: cut again,
-   * work-items.ts `recut`; rebased as it landed, `landOnBase`) while no
-   * message has been handed to a session of it since: the next one opens
+   * workspaces.ts `recut`; rebased as it landed, landing-run.ts `landOnBase`)
+   * while no message has been handed to a session of it since: the next one opens
    * with the hub's line naming the move and the install to run (core
    * injected.ts `withMovedLine`), and clears it. Null otherwise. Kept on the
    * row, so a hub restart between the move and that message still says it.
@@ -1450,7 +1450,7 @@ export const workspaces = sqliteTable("workspaces", {
   carry: text("carry"),
   /**
    * The workspace a `delegate` call's `from` cut this one from, and the
-   * commit its clone started at (work-items.ts `cutFrom`); null for one cut
+   * commit its clone started at (workspaces.ts `cutFrom`); null for one cut
    * from its repository.
    */
   cutFrom: storedJson(WorkspaceFromSchema)("cut_from"),
@@ -1493,7 +1493,7 @@ export type LandingPhase = "completing" | "gating" | "turn";
  * ending in a report. A follow-up is a new item in the same workspace, run by
  * the same session; the reader or the parent can also reopen finished work.
  * It is `done` only when its session called `finish_item` and its work
- * passed the hub's landing gate (work-items.ts `gateSteps`) and landed.
+ * passed the hub's landing gate (gate.ts `gateSteps`) and landed.
  */
 export const workItems = sqliteTable(
   "work_items",
@@ -1605,7 +1605,7 @@ export const workItems = sqliteTable(
     landingPhase: text("landing_phase").$type<LandingPhase>(),
     /**
      * The landing gate's steps that passed for it while it is live, by what
-     * each passed on (work-items.ts `passKey`: the whole tree, or the trees
+     * each passed on (gate.ts `passKey`: the whole tree, or the trees
      * of the paths a step declares), each kept as it passes: a step runs at
      * most once on one such key, a hub restart included. Null: none yet.
      */

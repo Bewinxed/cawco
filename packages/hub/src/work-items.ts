@@ -13,7 +13,7 @@
  * The hub is the one authority: `delegate` is a request to {@link start}, and
  * the frames that move a session move its item. It is `done` only when its
  * session calls `finish_item` and its work passes the hub's landing gate
- * (landing-run.ts `gateSteps`: the steps its project declares in gate.md, on the tree
+ * (gate.ts `gateSteps`: the steps its project declares in gate.md, on the tree
  * about to land; gate-file.ts) and lands. No session declares what the hub
  * runs: the session's report, quoting the output of every command
  * that proves its work, is the proof, and the parent's report is that
@@ -4708,8 +4708,8 @@ export const createWorkItems = ({
       landingRun.landingWaitOf(itemId),
 
     /**
-     * The hub's own work: a routine's run (routines.ts, {@link routineParent})
-     * or a design check's verifier (design-verify.ts, {@link verifierParent}).
+     * The hub's own work: a routine's run (routines.ts, work-item-state.ts `routineParent`)
+     * or a design check's verifier (design-verify.ts, work-item-state.ts `verifierParent`).
      * A fresh session in a new workspace cut from `parent.cwd` on
      * `parent.machineId`. It reports to no session, the project's conversation
      * included: its owner reads how it ended from {@link WorkItemDeps.itemEnded}.
@@ -5142,7 +5142,8 @@ export const createWorkItems = ({
     /**
      * How CawCo moved session `instanceId`'s workspace's checkout since a
      * message was last handed to a session of it (its row's `movedUntold`:
-     * cut again by workspaces.ts `recut`, rebased as it landed by `landOnBase`);
+     * cut again by workspaces.ts `recut`, rebased as it landed by landing-run.ts
+     * `landOnBase`);
      * taken, so only the first message handed there says so. Called as a
      * message is handed to the machine.
      */
@@ -5551,7 +5552,7 @@ export const createWorkItems = ({
      * An agent has registered: every item on its machine left landing by a
      * hub that stopped mid-run has its landing run again on the stored
      * submission ({@link landStored}), its gate from the step it was on (each
-     * pass is kept, landing-run.ts `gateOnce`); a completing one lands if its own
+     * pass is kept, gate.ts `gateOnce`); a completing one lands if its own
      * delegates ended meanwhile ({@link completeIfDrained}). An item this
      * hub is running now is left to that run. Then each `finish_item` turn
      * the stopped hub never heard end is released once the machine says the
@@ -5573,7 +5574,7 @@ export const createWorkItems = ({
           continue;
         }
         // Its gate goes on from the step it was on: what passed is kept
-        // on its row (landing-run.ts `gateOnce`).
+        // on its row (gate.ts `gateOnce`).
         const kept = [...landingRun.passesOf(item.id).values()].flat().length;
         console.log(
           `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept`
@@ -5885,7 +5886,7 @@ export const createWorkItems = ({
     heldWorkspaces: (): HeldWork[] =>
       db.heldWorkspaces().filter(workspaces.isHeld).map(workspaces.heldWork),
 
-    /** The sweep's look at the workspaces on a machine ({@link Workspaces.settleOn}). */
+    /** The sweep's look at the workspaces on a machine (workspaces.ts `settleOn`). */
     settleOn: workspaces.settleOn,
 
     /**
