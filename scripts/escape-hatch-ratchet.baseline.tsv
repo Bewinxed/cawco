@@ -421,7 +421,7 @@ catch-drops-reason	block	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/spawn/NewSessionForm.svelte	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/tab-icon/tab-icon.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/transcript/LiveRow.svelte	1
-catch-drops-reason	block	packages/agent/src/boundary.ts	1
+catch-drops-reason	block	packages/agent/src/boundary/hook-judge.ts	1
 catch-drops-reason	block	packages/agent/src/browser/gate.ts	1
 catch-drops-reason	block	packages/agent/src/canvas-host/scene.ts	1
 catch-drops-reason	block	packages/agent/src/fleet.ts	1
@@ -604,7 +604,7 @@ empty-catch		apps/dashboard/src/lib/cawco/workspace/workspace.svelte.ts	1
 empty-catch		apps/dashboard/src/routes/(app)/config/connections/+page.svelte	1
 empty-catch		packages/agent/src/activity.ts	2
 empty-catch		packages/agent/src/boundary-judge.ts	1
-empty-catch		packages/agent/src/boundary.ts	1
+empty-catch		packages/agent/src/boundary/watch.ts	1
 empty-catch		packages/agent/src/canvas-host/replica.ts	1
 empty-catch		packages/agent/src/checkout-exclude.ts	1
 empty-catch		packages/agent/src/first-session.ts	1
@@ -854,7 +854,7 @@ suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/de
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/cawco/id.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/cawco/mark.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/agent/src/boundary-host.ts	1
-suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/agent/src/boundary.ts	2
+suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/agent/src/boundary/exec.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/agent/src/bun-node-shim.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/agent/src/fleet.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/agent/src/host-scratch.ts	1
