@@ -21,20 +21,21 @@ import type { HeldProc } from "../keepers";
 import { isBoundaryOf, isJudgeOf, judgeProcId } from "../proc-id";
 import { closeToolDoor } from "../tool-door";
 import {
-  allArming,
-  armingOf,
-  armPhase,
-  ensureBoundary,
-  unasked,
-} from "./arming";
-import {
   behindGate,
   decided,
   type NarrowCause,
   ownKeeperOwed,
   recordDecision,
 } from "./decisions";
-import { ensureNow, replaceNarrowed } from "./ensure";
+import {
+  allArming,
+  armingOf,
+  armPhase,
+  ensureBoundary,
+  ensureNow,
+  replaceNarrowed,
+  unaskedCalls,
+} from "./ensure";
 import {
   type BoundaryHolders,
   commandsNow,
@@ -222,7 +223,7 @@ const recheckNow = async (
         narrowed,
         await ownKeeperOwed(),
         cause,
-        unasked
+        unaskedCalls
       ))();
     await withStart(
       id,
@@ -282,7 +283,7 @@ const inUseNow = async (): Promise<string[]> => {
  * nothing is handed over for it: a form that moved otherwise (a build, the
  * workspace's policy) is the boundary's next use's to take (ensure.ts `ensure`),
  * and one already waiting for its work to end (staleness.ts `stale`) is handed over
- * by the look that waits (stale-look.ts `handOverStale`). One started by a build
+ * by the look that waits (ensure.ts `handOverStale`). One started by a build
  * that kept no parts is its next use's too. One not in use takes the form
  * now at its next ensure.
  */
@@ -374,7 +375,7 @@ export const liveFacts = async (
  * everything in them, and its judges and doors, as nothing holds it any more:
  * its clone, state dir, scratch dir, policy, hook and executor stay. Its
  * record goes (`boundary.json`), so a judge's exit arms nothing again
- * (judge-process.ts `watchJudge`) and its executor, until the next start, says the
+ * (ensure.ts `watchJudge`) and its executor, until the next start, says the
  * boundary is not running. Its next {@link ensureBoundary} (a session's
  * spawn or wake, the hub's land or check) starts a new
  * one and arms it. The gate is up while it closes, and an executor already on
@@ -491,7 +492,7 @@ const sweepQuiet = async (): Promise<void> => {
  * another build, refuses or misjudges each one. A workspace between states
  * ({@link settling}) is looked at on the next beat; so is every workspace
  * while the start-up reading is not whole (blocked is its own named state,
- * arming.ts `ArmingBlocked`), and the start's arming is waited out first.
+ * ensure.ts `ArmingBlocked`), and the start's arming is waited out first.
  *
  * Born red, once: dad89261b^ (the start before it revived a workspace a CLI
  * runs in with no boundary), with this check laid on, a keeper holding a
@@ -584,7 +585,7 @@ const repairJudge = async (
   }
   let started = "its judge was started again";
   try {
-    await ensureNow(ref, unasked);
+    await ensureNow(ref, unaskedCalls);
     await armingOf(ref.id);
   } catch (error) {
     started = `its boundary could not be started again (${error instanceof Error ? error.message : String(error)})`;
