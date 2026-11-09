@@ -14,6 +14,8 @@
  *   (`core heavy-slots.ts`, `preview overlay/pins.ts`, `the dashboard's
  *   \`reload.svelte.ts\``): some file of that member ends in it. One under a
  *   folder the member has none of is another project's, and not read.
+ * - **line**: none of those cites a line by number (`x.ts:42`): the next
+ *   edit above the line moves it, and nothing says so.
  * - **link**: a JSDoc `@link` to a name names an identifier the code holds
  *   (this file's, the repository's, or the platform's); one to a member of
  *   an interface, class, enum or object type this module declares, a member
@@ -67,6 +69,8 @@ const URL_SCHEME = /^[a-z][\w+.-]*:/iu;
 const CALL_PARENS = /\(\)$/u;
 /** A link's name from its member: `Name.member`, `Name#member`, `Name~inner`. */
 const MEMBER_SEPARATOR = /[.#~]/u;
+/** A line number right after a file's name: `x.ts:42`, `x.ts:42:7`. */
+const LINE_NUMBER = /^\x60?:\d+(?::\d+)?/u;
 /** A JSDoc line's leading ` * `. */
 const GUTTER = /^[ \t]*\*[ \t]?/gmu;
 /** Planted mistakes and pages copied as they were, which name what they named. */
@@ -298,11 +302,22 @@ for (const file of files.filter((f) => READ.test(f) && !SKIPPED.test(f))) {
     const first = lineAt(text, comment.at);
     const where = (index: number): string =>
       `${file}:${first + words.slice(0, index).split("\n").length - 1}`;
+    /** A line of a file here, cited by number, which the next edit above it moves. */
+    const citesLine = (match: RegExpMatchArray, named: string): void => {
+      const after = words.slice((match.index ?? 0) + match[0].length);
+      const line = LINE_NUMBER.exec(after);
+      if (line) {
+        stale.push(
+          `${where(match.index ?? 0)} ${named}${line[0]}: a line number goes stale with the next edit above it; name the symbol`
+        );
+      }
+    };
     for (const match of words.matchAll(ANCHORED)) {
       const path = match[1] as string;
       if (!pathIsThere(file, path)) {
         stale.push(`${where(match.index ?? 0)} ${path}: no such file`);
       }
+      citesLine(match, path);
     }
     for (const match of words.matchAll(MEMBER_FILE)) {
       const member = match[1] ?? "";
@@ -312,6 +327,7 @@ for (const file of files.filter((f) => READ.test(f) && !SKIPPED.test(f))) {
           `${where(match.index ?? 0)} ${member} ${name}: ${member} has no such file`
         );
       }
+      citesLine(match, `${member} ${name}`);
     }
     if (!CODE.test(file)) {
       continue;
