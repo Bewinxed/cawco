@@ -1,16 +1,4 @@
 <script lang="ts">
-  /**
-   * The design graph whole on the routine form's own states file, for its
-   * design run's pages (`/dev/graph-dials`, GraphBench.stories.ts): the
-   * real DesignGraph, its sheet read off RoutineForm.stories.ts (every
-   * story, its name, its note, its width, its failure tag, the move into
-   * Hub didn't answer), and in the stage's frame a stand-in for the stage
-   * page: the routine form mounted in this page at the kept story's args
-   * and width, answering the graph's reach, laying the drawing out, and
-   * setting each dial on it (a `cssVar` on the drawing's root, an `arg`
-   * on the form) as the stage page does from `cawco:stage-dials`. Each
-   * dial's value as written is read off the drawing, as the page reads it.
-   */
   import type { CanvasSpec, SheetOnPage, Story } from "@cawco/core/stage";
   import {
     type DifferenceRead,
@@ -32,6 +20,19 @@
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
+  /**
+   * The design graph whole on the routine form's own states file, for its
+   * design run's pages (`/dev/graph-dials`, GraphBench.stories.ts): the
+   * real DesignGraph, its sheet read off RoutineForm.stories.ts (every
+   * story, its name, its note, its width, its failure tag, the move into
+   * Hub didn't answer), and in the stage's frame a stand-in for the stage
+   * page: the routine form mounted in this page at the kept story's args
+   * and width, answering the graph's reach, laying the drawing out, and
+   * setting each dial on it (a `cssVar` on the drawing's root, an `arg`
+   * on the form) as the stage page does from `cawco:stage-dials`. Each
+   * dial's value as written is read off the drawing, as the page reads it.
+   */
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import DesignGraph from "../DesignGraph.svelte";
   import {
@@ -61,7 +62,7 @@
   } = $props();
 
   /** Under 640px the panel is a phone's sheet: Close leads its head. */
-  const phone = new MediaQuery("max-width: 639px");
+  const phone = new MediaQuery(PHONE_QUERY);
   const FILE = "apps/dashboard/src/lib/cawco/routines/RoutineForm.stories.ts";
   /** Each story's doc comment, as the stage reads it off the file. */
   const NOTES: Record<string, string> = {

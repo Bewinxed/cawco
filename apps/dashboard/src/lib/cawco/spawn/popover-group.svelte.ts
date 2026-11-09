@@ -4,12 +4,14 @@
  * popover; the group renders the single open one, so moving from one trigger
  * to the next retargets that surface rather than closing it and opening another.
  */
+
 import { getContext, type Snippet, setContext, untrack } from "svelte";
 import { MediaQuery } from "svelte/reactivity";
+import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
 
-const phone = new MediaQuery("(width < 640px)");
+const phone = new MediaQuery(PHONE_QUERY);
 
 /**
  * A popover's inset from the screen's edge, the kit popover's rule: the
