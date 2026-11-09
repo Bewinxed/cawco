@@ -12,7 +12,8 @@
   "references": [
     { "path": "../packages/agent" },
     { "path": "../packages/agent/src/canvas-host" },
-    { "path": "../packages/agent/src/preview-overlay" },
+    { "path": "../packages/preview" },
+    { "path": "../packages/preview/src/overlay" },
     { "path": "../packages/auth" },
     { "path": "../packages/cli" },
     { "path": "../packages/core" },

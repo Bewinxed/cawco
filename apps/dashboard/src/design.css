@@ -280,7 +280,7 @@
 
   /* The root never scrolls (the shell's panes do), so it keeps no gutter on
      its edge: a framed preview's floor keeps one on every page that does not
-     say otherwise (core preview-proxy GUTTER_FLOOR), as the canvas host does. */
+     say otherwise (preview proxy GUTTER_FLOOR), as the canvas host does. */
   html {
     @apply antialiased font-sans;
     -webkit-tap-highlight-color: transparent;
