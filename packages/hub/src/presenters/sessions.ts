@@ -31,12 +31,8 @@ import {
 } from "../delegation-tree";
 import type { SessionList, SessionListRow } from "../session-list";
 import type { Step } from "../transcript-steps";
-import {
-  excludedNamed,
-  type HeldWork,
-  type PersonWait,
-  type QueuedDelegate,
-} from "../work-items";
+import type { PersonWait, QueuedDelegate } from "../work-items";
+import { excludedNamed, type HeldWork } from "../workspaces";
 import { ago, ahead, count, handle, lasted, lines, quote } from "./words";
 
 /** How many of a list's newest a concise answer names; the rest are counted. */
