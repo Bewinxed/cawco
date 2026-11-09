@@ -18,7 +18,7 @@ import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
 import { hubFetch } from "#lib/platform/hub-read.js";
-import { planProgress } from "./plan/PlanPane.svelte";
+import { planProgress } from "./plan";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
 import { boardStore } from "./stores/board.svelte";
