@@ -33,6 +33,8 @@
 </script>
 
 <script lang="ts">
+  import { Calendar, DayGrid, List, TimeGrid } from "@event-calendar/core";
+  import { MediaQuery } from "svelte/reactivity";
   /**
    * The calendar view: Event Calendar's week grid (PRD §5.2, MIT, Svelte 5),
    * or its month grid for a view that asks for a month (`range`), a list of
@@ -46,8 +48,7 @@
    * components layer, on the `.ec` element its palette declares them on,
    * under this host's `data-slot`.
    */
-  import { Calendar, DayGrid, List, TimeGrid } from "@event-calendar/core";
-  import { MediaQuery } from "svelte/reactivity";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 
   let {
     tasks,
@@ -72,7 +73,7 @@
     return month ? "dayGridMonth" : "timeGridWeek";
   });
 
-  const narrow = new MediaQuery("(max-width: 639px)");
+  const narrow = new MediaQuery(PHONE_QUERY);
   const HALF_HOUR = 30 * 60_000;
 
   /** A date with no time of day is a whole day's (`2026-10-08`). */
