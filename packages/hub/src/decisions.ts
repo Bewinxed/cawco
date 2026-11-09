@@ -69,7 +69,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
 import { Elysia, status, t } from "elysia";
-import type { PageHearer } from "./artifacts/service";
+import type { PageHearer } from "./artifacts/shapes";
 import type { ArtifactTaker } from "./artifacts/taker";
 import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
