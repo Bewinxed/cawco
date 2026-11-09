@@ -1,3 +1,77 @@
+/**
+ * A delegation workspace's boundary, on the machine that holds it: the one
+ * place every shell command of the workspace's work items runs. What a
+ * command reads and writes is the workspace's policy (`workspace-policy.ts`),
+ * the same one every harness's file tools are judged by, enforced from the
+ * one translation of it (`boundary-policy.ts`):
+ *
+ * - Linux: one @anthropic-ai/sandbox-runtime (srt) sandbox per workspace,
+ *   hosted by `boundary-host.ts` in library mode. Inside it a command reads
+ *   nothing in the home dir but what the policy reads back, writes only the
+ *   clone, its scratch dir and the workspaces' cache (a write anywhere else,
+ *   the read-denied home dir, `/tmp` and `/run` among them, fails at once
+ *   with EROFS: `srtSettings` in boundary-policy.ts), sees and signals only
+ *   the workspace's processes (its own pid namespace), and reaches the
+ *   network only through srt's proxy, by way of the srt host's relay, which
+ *   presents srt's token for every client (proxy-relay.ts): any public
+ *   host, none of the owner's machines. Every host socket is out of sight.
+ * - macOS: one `sandbox-exec` runner per workspace, under a Seatbelt profile
+ *   written from the same policy: the home dir read-denied but for what the
+ *   policy reads back, writes only where it writes. Seatbelt keeps its
+ *   signals inside its own sandbox and refuses `launchctl`, and every
+ *   process a runner starts answers, wherever it moves, to its workspace's
+ *   and its generation's names, by which it is found and ended
+ *   (boundary-policy.ts `MEMBERSHIP_PREFIX`, {@link answering}). macOS has no
+ *   private pid or port space to give it, and Chromium cannot start inside
+ *   srt there until srt can allow it its `mach-register` names (srt #210,
+ *   PR #598). `swift`, `xcodebuild` and `log` run through shims that keep them
+ *   working inside ({@link writeShims}).
+ *
+ * Both run the same runner ({@link runnerText}), which takes every command of the
+ * workspace over a FIFO and runs it inside: one network namespace on Linux,
+ * so a dev server one command starts answers the next. Commands go in
+ * through one executor, `~/.cawco/workspaces/<id>/exec [--session [--cwd-out
+ * FILE] | --claude] COMMAND` ({@link execScript}), that every harness runs its shell commands
+ * through: claude by its shell prefix (`CLAUDE_CODE_SHELL_PREFIX`, the
+ * workspace's `claude-prefix` script, {@link claudePrefixScript}), which the
+ * CLI applies after its permission rules have judged the command as the
+ * model wrote it; OpenCode by its plugin's `shell` tool, pi by its bash
+ * tool's operations, the hub's commands by `runHubCommand`. A workspace holds no credential of any host: its git reaches
+ * its clone's origin, on any host and over any transport, through the git
+ * door (hub-git.ts), which signs in on the host with the host's own. Its
+ * `gh` reaches GitHub's API through the workspace's GitHub door
+ * (github-door.ts), which signs in on the host: no forge's token ever
+ * enters a workspace (exec.ts `commandEnv`). The hub lands a workspace's
+ * commits through the same door: its `git push` is a command the workspace's
+ * agent runs through this executor (`runHubCommand`). `cawco tools` reaches the hub's tools through the
+ * workspace's tool door (`tool-door.ts`).
+ *
+ * sessiond holds the boundary and the workspace's judge, so an agent restart
+ * leaves them — and every process in the boundary — running, as it leaves the
+ * sessions. One started in another form (another policy, runner, executor or
+ * host), or held by a retiring session keeper (a keeper handover left it
+ * there, core keepers.ts), is handed over ({@link handOver}): a boundary of
+ * this build's form starts beside it on the current keeper, every new command
+ * runs in the new one, and the older one runs on, untouched, until nothing
+ * runs in it, then closes (stale-look.ts `closeIdle`). One whose work still runs
+ * anything is not handed over until that ends ({@link workLeft}): the new
+ * one's pid namespace and network are others, where the delegate's next
+ * command would find nothing of what it left running. Every boundary and judge
+ * process is found and stopped on whichever keeper holds it. A boundary runs
+ * only while something holds it ({@link liveWhy}); one nothing has held for
+ * holding.ts `QUIET_CLOSE_MS` closes with its judge, its clone and state left as
+ * they are, and its next command starts it again ({@link closeQuietly}). A
+ * machine that
+ * cannot hold a boundary refuses the work: a work item never runs without
+ * one.
+ *
+ * No command holds a key or reaches a key agent: `~/.ssh` is under the
+ * home dir's deny, the executor drops every agent socket's variable
+ * (`AGENT_SOCKET_ENV`), and no host socket is reachable. A workspace reaches
+ * another machine only through CawCo: the landing gate's iOS build runs in a
+ * gate workspace on a Mac (the hub's `runGate`).
+ */
+
 import { lstat, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
