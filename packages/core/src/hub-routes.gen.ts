@@ -305,6 +305,7 @@ export interface components {
       query: {
         account?: string;
         cwd: string;
+        /** @enum {string} */
         harness: "claude" | "opencode" | "pi";
         model?: string;
       };
@@ -998,6 +999,7 @@ export interface components {
     "PATCH /api/accounts/:id": {
       body: {
         atPlanLimit?: "move" | "extra-usage";
+        /** @enum {string} */
         hue?:
           "amber" | "blue" | "cyan" | "green" | "orange" | "rose" | "violet";
         label?: string | null;
@@ -1155,6 +1157,7 @@ export interface components {
         delete?: string[];
         elements?: ({
           id?: string;
+          /** @enum {string} */
           type:
             | "rectangle"
             | "ellipse"
@@ -1243,6 +1246,7 @@ export interface components {
       body: {
         account?: string | null;
         accountAtLimit?: "wait" | "move";
+        /** @enum {string} */
         lands?: "main" | "branch" | "pr" | "none";
         lfs?: {
           connection: string;
@@ -1258,6 +1262,7 @@ export interface components {
     "PATCH /api/projects/:id/caw": {
       body: {
         attemptsHearComments?: boolean;
+        /** @enum {string} */
         harness?: "claude" | "opencode" | "pi";
         hearsTasks?: boolean;
         initiated?: {
@@ -1357,6 +1362,7 @@ export interface components {
         delegateType?: (string | null) | null;
         enabled?: boolean;
         keep?: boolean;
+        /** @enum {string} */
         lands?: "main" | "branch" | "pr" | "none";
         mode?:
           | (
@@ -1381,11 +1387,13 @@ export interface components {
     };
     "POST /api/accounts": {
       body: {
+        /** @enum {string} */
         hue?:
           "amber" | "blue" | "cyan" | "green" | "orange" | "rose" | "violet";
         kind: "subscription" | "console" | "oauth" | "api_key";
         label?: string;
         provider: string;
+        /** @enum {string} */
         setupStep?:
           | "signIn"
           | "nameIt"
@@ -1428,6 +1436,7 @@ export interface components {
       body: {
         machineId: string;
         provider?: string;
+        /** @enum {string} */
         store: "claude" | "pi" | "opencode";
       };
     };
@@ -1630,12 +1639,15 @@ export interface components {
       body: {
         agent: {
           delegates: boolean;
+          /** @enum {string} */
           effort?: "low" | "medium" | "high" | "xhigh" | "max";
+          /** @enum {string} */
           harness: "claude" | "opencode" | "pi";
           instructions: string;
           model: string;
           skills: string[];
         };
+        /** @enum {string} */
         hear: "each" | "later";
         hue: number;
         job: string;
@@ -1884,6 +1896,7 @@ export interface components {
           unit?: string;
         }[];
         dir?: string;
+        /** @enum {string} */
         does?: "pick" | "judge" | "try" | "draw";
         draft?: boolean;
         edges?: {
@@ -1893,6 +1906,7 @@ export interface components {
         }[];
         elements?: ({
           id?: string;
+          /** @enum {string} */
           type:
             | "rectangle"
             | "ellipse"
@@ -1953,6 +1967,7 @@ export interface components {
     "POST /api/instances/:id/artifacts/:artifact/send": {
       body: {
         again?: string[];
+        /** @enum {string} */
         control?:
           | "page-send"
           | "page-key"
@@ -2046,6 +2061,7 @@ export interface components {
     "POST /api/instances/:id/artifacts/:artifact/shown": {
       body: {
         client: string;
+        /** @enum {string} */
         error?:
           | "server"
           | "machine"
@@ -2150,6 +2166,7 @@ export interface components {
         }[];
         note?: string;
         summarizer?: {
+          /** @enum {string} */
           harness: "claude" | "opencode" | "pi";
           model?: string;
         };
@@ -2159,10 +2176,13 @@ export interface components {
             repo: string;
           };
           cwd?: string;
+          /** @enum {string} */
           effort?: "low" | "medium" | "high" | "xhigh" | "max";
+          /** @enum {string} */
           harness: "claude" | "opencode" | "pi";
           machineId?: string;
           model?: string;
+          /** @enum {string} */
           permissionMode?:
             | "default"
             | "acceptEdits"
@@ -2196,6 +2216,7 @@ export interface components {
         model?: string;
         output_path: string;
         prompt: string;
+        /** @enum {string} */
         provider?: "chatgpt" | "antigravity" | "gemini-api";
         quality?: "auto" | "low" | "medium" | "high";
         reference_images?: string[];
@@ -2467,6 +2488,7 @@ export interface components {
         name?: string;
         prompt?: string;
         promptId?: string;
+        /** @enum {string} */
         template?:
           | "code"
           | "launch"
@@ -2573,9 +2595,12 @@ export interface components {
         prompt?: string;
         spawn: {
           account?: string;
+          /** @enum {string} */
           effort?: "low" | "medium" | "high" | "xhigh" | "max";
+          /** @enum {string} */
           harness?: "claude" | "opencode" | "pi";
           model?: string;
+          /** @enum {string} */
           permissionMode?:
             | "default"
             | "acceptEdits"
@@ -2609,6 +2634,7 @@ export interface components {
       body: {
         connection?: (string | null) | null;
         idPath?: (string | null) | null;
+        /** @enum {string} */
         provider: "github" | "stripe" | "generic";
         repo?: (string | null) | null;
         signatureHeader?: (string | null) | null;
@@ -2622,6 +2648,7 @@ export interface components {
       body: {
         connection?: (string | null) | null;
         idPath?: (string | null) | null;
+        /** @enum {string} */
         provider: "github" | "stripe" | "generic";
         repo?: (string | null) | null;
         signatureHeader?: (string | null) | null;
@@ -2651,6 +2678,7 @@ export interface components {
     };
     "POST /api/projects/:id/stages/template": {
       body: {
+        /** @enum {string} */
         template:
           | "code"
           | "launch"
@@ -2667,6 +2695,7 @@ export interface components {
     "POST /api/projects/:id/starters/outcome": {
       body: {
         outcome: "picked" | "edited";
+        /** @enum {string} */
         place: "board" | "routines" | "decisions";
         text: string;
       };
@@ -2698,6 +2727,7 @@ export interface components {
         };
         group?: string;
         labels?: string[];
+        /** @enum {string} */
         lands?: "main" | "branch" | "pr" | "none";
         links?: string[];
         outputs?: string[];
@@ -2799,6 +2829,7 @@ export interface components {
     };
     "POST /api/projects/:id/view-requests": {
       body: {
+        /** @enum {string} */
         page?: "board" | "table" | "pipeline" | "routines";
         position?: number;
         text: string;
@@ -2904,6 +2935,7 @@ export interface components {
         dailyCapUsd?: (number | null) | null;
         delegateType?: (string | null) | null;
         keep?: boolean;
+        /** @enum {string} */
         lands?: "main" | "branch" | "pr" | "none";
         mode?:
           | (
@@ -2945,6 +2977,7 @@ export interface components {
           machineId?: string;
           model?: string;
           projectId?: string;
+          /** @enum {string} */
           role?: "orchestrator" | "leaf";
         };
         timing: "turn" | "message" | "immediate";
@@ -2969,6 +3002,7 @@ export interface components {
     "POST /api/stream-relay/act": {
       body:
         | {
+            /** @enum {string} */
             act:
               | "set-up"
               | "later"
@@ -3015,6 +3049,7 @@ export interface components {
         candidates: {
           description: string;
           id: string;
+          /** @enum {string} */
           kind: "skill" | "tool" | "mcp";
           name: string;
         }[];
@@ -3039,9 +3074,11 @@ export interface components {
         fork?: boolean;
         from?: string;
         group?: string;
+        /** @enum {string} */
         harness?: "claude" | "opencode" | "pi";
         host?: boolean;
         inputs?: unknown[];
+        /** @enum {string} */
         lands?: "main" | "branch" | "pr" | "none";
         machineId?: string;
         mayStart?: string[];
@@ -3150,10 +3187,13 @@ export interface components {
       body: {
         atLimit: {
           compaction?: {
+            /** @enum {string} */
             atLimit: "native" | "summary" | "whole";
+            /** @enum {string} */
             beforeMove: "native" | "summary" | "whole";
             fileRoom?: number;
             summarizer: {
+              /** @enum {string} */
               harness: "claude" | "opencode" | "pi";
               model: string;
             };
@@ -3165,10 +3205,12 @@ export interface components {
         };
         delegates: {
           pinnedAccountId?: string;
+          /** @enum {string} */
           strategy: "pinned" | "fill-first" | "spread" | "soonest-reset";
         };
         yours: {
           pinnedAccountId?: string;
+          /** @enum {string} */
           strategy: "pinned" | "fill-first" | "spread" | "soonest-reset";
         };
       };
@@ -3179,6 +3221,7 @@ export interface components {
     "PUT /api/areas/:id/folder/file": {
       body: {
         content: string;
+        /** @enum {string} */
         encoding?: "utf8" | "base64";
         message?: string;
         path: string;
@@ -3247,12 +3290,15 @@ export interface components {
       body: {
         agent: {
           delegates: boolean;
+          /** @enum {string} */
           effort?: "low" | "medium" | "high" | "xhigh" | "max";
+          /** @enum {string} */
           harness: "claude" | "opencode" | "pi";
           instructions: string;
           model: string;
           skills: string[];
         };
+        /** @enum {string} */
         hear: "each" | "later";
         hue?: number;
         job?: string;
@@ -3264,6 +3310,7 @@ export interface components {
     "PUT /api/decides/members/:id/picture": {
       body:
         | {
+            /** @enum {string} */
             pose:
               | "ready"
               | "idle"
@@ -3300,7 +3347,9 @@ export interface components {
         connections?: string[];
         denyTools?: string[];
         description: string;
+        /** @enum {string} */
         effort?: "low" | "medium" | "high" | "xhigh" | "max";
+        /** @enum {string} */
         harness: "claude" | "opencode" | "pi";
         mayStart?: string[];
         model: string;
@@ -3420,6 +3469,7 @@ export interface components {
           delegateTypes?: string[];
           model?: string;
           projectIds?: string[];
+          /** @enum {string} */
           role?: "orchestrator" | "leaf";
         };
       };
@@ -3534,11 +3584,13 @@ export interface components {
         blocks: {
           block: string;
           hidden: boolean;
+          /** @enum {string} */
           width: "narrow" | "wide";
         }[];
       };
       path: {
         id: string;
+        /** @enum {string} */
         page: "board" | "table" | "pipeline" | "routines";
       };
     };
@@ -3566,6 +3618,7 @@ export interface components {
     "PUT /api/projects/:id/folder/file": {
       body: {
         content: string;
+        /** @enum {string} */
         encoding?: "utf8" | "base64";
         message?: string;
         path: string;
@@ -3631,6 +3684,7 @@ export interface components {
           machineId?: string;
           model?: string;
           projectId?: string;
+          /** @enum {string} */
           role?: "orchestrator" | "leaf";
         };
         timing: "turn" | "message" | "immediate";
@@ -3649,6 +3703,7 @@ export interface components {
     };
     "PUT /api/spend-settings": {
       body: {
+        /** @enum {string} */
         onCap: "pause" | "quiet" | "both";
       };
     };
