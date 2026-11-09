@@ -64,9 +64,7 @@
     type PermissionAnswer,
     permissionAnswer,
     readTranscript,
-    refreshContext,
     setPeeked,
-    showContext,
     submitCommand,
   } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
@@ -91,6 +89,7 @@
   } from "./stores/board.svelte";
   import { takeOverBrowser } from "./stores/browsers.svelte";
   import { plansStore } from "./stores/plans.svelte";
+  import { refreshContext, showContext } from "./stores/session-detail.svelte";
   import {
     type PendingPermission,
     sessionsStore,
