@@ -490,6 +490,7 @@ export interface HubContext {
     string,
     { machineId: string; since: number; reason: string }
   >;
+  homeMovedAccountOn: (machineId: string) => string | undefined;
   hookCopyOff: <Refused>(
     body: { id: string; machineId: string },
     set: RouteSet,
@@ -748,6 +749,12 @@ export interface HubContext {
     payload: NamedSpawn
   ) => Promise<NamedSpawn | { refusal: string }>;
   placedOn: (machineId: string, accountId: string) => boolean;
+  placementInput: (
+    machineId: string,
+    payload: NamedSpawn,
+    task: { projectId?: string | null; taskId?: string | null },
+    fork: { accountId: string | null } | undefined
+  ) => PlacementInput | undefined;
   planChanges: PlanChanges | undefined;
   plans: ReturnType<typeof createPlans>;
   pluginRow: (row: FleetPlugin) => FleetPlugin;
