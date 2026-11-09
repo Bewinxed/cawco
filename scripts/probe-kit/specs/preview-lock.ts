@@ -37,6 +37,7 @@
  *   bun scripts/probe-kit/run.ts preview-lock
  */
 
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import {
   type PreviewTicket,
@@ -67,7 +68,9 @@ const ask = async (
   });
   return {
     status: answer.status,
-    body: await answer.text(),
+    body: answer.ok
+      ? await answer.text()
+      : refusalWords(await answer.text(), answer.status),
     cookie: answer.headers.get("set-cookie")?.split(";")[0] ?? null,
   };
 };
