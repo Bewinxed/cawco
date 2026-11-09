@@ -6,7 +6,7 @@
  * (Bun caches it by path until the server ends). So a host started by
  * another build answers to that build's gate until it is relaunched.
  *
- * The form is the boundary's own scheme (an anchor's form, `boundary.ts`):
+ * The form is the boundary's own scheme (an anchor's form, `boundary/`):
  * the first 16 hex of a sha256 over what the thing runs. Here that is the
  * judge's source, which carries each harness's table of file tools and path
  * arguments (`workspace-judge.ts`), and for OpenCode the bridge plugin's

@@ -49,7 +49,7 @@ export interface FleetHarnessConfig extends FleetPlacement {
 /**
  * The settings keys a `claudeSettings` row may not set: `hooks`, which go
  * through the fleet's hooks (`admin_hooks_write`), and the keys CawCo sets
- * for a workspace's boundary itself (agent boundary.ts
+ * for a workspace's boundary itself (agent boundary/
  * `claudeBoundaryOptions`: `disableAllHooks`, beside its `hooks`).
  */
 export const CLAUDE_SETTINGS_REFUSED: readonly string[] = [

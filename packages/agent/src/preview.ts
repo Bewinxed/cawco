@@ -287,7 +287,7 @@ const upstreamOf = async (
   return reached === "host" ? "host" : { unix: reached };
 };
 
-/** The workspace networks the ports of the previews this process serves are in: each holds its boundary open (boundary.ts `watchQuietBoundaries`). */
+/** The workspace networks the ports of the previews this process serves are in: each holds its boundary open (boundary/looks.ts `watchQuietBoundaries`). */
 export function previewNetworks(): string[] {
   return [...previews.values()].flatMap(({ network }) =>
     network === undefined ? [] : [network]
