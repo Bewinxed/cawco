@@ -70,6 +70,7 @@
 
 import { type DocMap, type MapDoc, PIN_MAPS } from "../doc-maps";
 import type { ArtifactChanges, ChangedItem, HeldNote } from "../doc-meta";
+import { getMeta, setMeta } from "../doc-meta";
 import { fnv1a } from "../fnv1a";
 import type { Anchor, PinnedElement } from "./anchor";
 
@@ -1101,7 +1102,7 @@ export const pinHeld = (pin: Pin): boolean =>
   pin.thread.some((entry) => entry.held && !entry.sentAt);
 /** The note `doc` holds for the held comments' delivery, if one waits. */
 export const heldNoteOf = (doc: MapDoc): HeldNote | undefined => {
-  const note = doc.getMap("meta").get("heldNote") as HeldNote | undefined;
+  const note = getMeta(doc, "heldNote");
   return note && typeof note.text === "string" && note.text.trim()
     ? note
     : undefined;
@@ -1130,7 +1131,7 @@ export function sendHeld(doc: MapDoc, note: string): number | string {
       entries.set(key, entry);
     }
     if (text) {
-      doc.getMap("meta").set("heldNote", {
+      setMeta(doc, "heldNote", {
         at: new Date().toISOString(),
         text,
       } satisfies HeldNote);

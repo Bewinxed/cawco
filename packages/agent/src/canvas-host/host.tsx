@@ -9,6 +9,8 @@
  * Excalidraw's and canvas.css, is no import of this module's: Lightning CSS
  * compiles it (hub canvas-host.ts `SHEETS`), and index.html links it.
  */
+
+import { docMeta } from "@cawco/core/doc-meta";
 import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
 import { themeVariablesCss } from "@cawco/core/theme-css";
 import {
@@ -215,7 +217,7 @@ const byPos = (a: { pos: string }, b: { pos: string }) => {
  * whether it is empty.
  */
 const firstLook = (hold: CanvasHold | null) => {
-  const meta = hold?.doc.getMap("meta");
+  const meta = hold ? docMeta(hold.doc) : undefined;
   const elements = (
     hold?.doc.getArray<YMap<unknown>>("elements").toArray() ?? []
   )
