@@ -60,7 +60,8 @@ import {
   stages,
   watch,
 } from "../canvas/stage.svelte";
-import { closePreview, type SendExtras } from "../client.svelte";
+import type { SendExtras } from "../client.svelte";
+import { closePreview } from "../stores/previews.svelte";
 import type { ComposerDraft, DraftCanvas } from "./composer-draft.svelte";
 import { boxCut, type ClipBox, GrownShape, measureShape } from "./grown";
 

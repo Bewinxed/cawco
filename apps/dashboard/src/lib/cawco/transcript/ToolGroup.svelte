@@ -20,7 +20,7 @@
   import { ArtifactRefused, showArtifact } from "#lib/cawco/artifact-api.js";
   import { pinNamed } from "#lib/cawco/artifact-names.svelte.js";
   import CommentChip from "#lib/cawco/CommentChip.svelte";
-  import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
+  import { cawco } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
@@ -30,6 +30,10 @@
     previewPlace,
   } from "#lib/cawco/preview/source.js";
   import { referenceOf } from "#lib/cawco/references.js";
+  import {
+    previewsStore,
+    revealPreview,
+  } from "#lib/cawco/stores/previews.svelte.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,
@@ -414,7 +418,7 @@
    * same session is the one currently showing.
    */
   function sameArtifact(
-    preview: (typeof cawco.previews)[string] | undefined,
+    preview: (typeof previewsStore.previews)[string] | undefined,
     wanted: CalledArtifact | undefined
   ): boolean {
     return !!wanted && preview?.artifact?.id === wanted.id;
@@ -428,7 +432,7 @@
    */
   const wantsThumbnail =
     (
-      record: () => (typeof cawco.previews)[string] | undefined
+      record: () => (typeof previewsStore.previews)[string] | undefined
     ): Attachment<HTMLElement> =>
     (node) => {
       const revision = record()?.revision;
@@ -609,7 +613,7 @@
               m.metadata?.toolInput ?? undefined,
               m.metadata?.toolResult
             )}
-            {@const current = cawco.previews[m.instanceId]}
+            {@const current = previewsStore.previews[m.instanceId]}
             {@const preview = sameArtifact(current, called)
               ? current
               : undefined}
