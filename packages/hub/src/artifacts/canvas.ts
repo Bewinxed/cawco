@@ -31,7 +31,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { Map as YMap } from "yjs";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
 import { type ArtifactDocs, elementsOf } from "./docs";
-import { ArtifactRefusal } from "./service";
+import { ArtifactRefusal } from "./refusals";
 
 /**
  * A canvas's host page, served by the hub as a page is: the page with the
