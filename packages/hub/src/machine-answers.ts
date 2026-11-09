@@ -2,7 +2,7 @@ import type { Bounded } from "@cawco/core/bounded";
 import type { MachineMemorySet, SkillFile } from "@cawco/core/fleet";
 import type { FramePayload } from "@cawco/core/frames";
 import { SkillFileSchema } from "@cawco/core/stored-shapes";
-import type { ToolState, ToolStatus } from "@cawco/core/tools";
+import { isToolStatus, type ToolStatus } from "@cawco/core/tools";
 import { z } from "zod";
 import { received } from "./stored-json";
 
@@ -29,21 +29,6 @@ export type MemoryRead = { ok: true; copy: MachineMemory } | ReadRefused;
 export interface RouteSet {
   headers: Record<string, string | number | string[]>;
 }
-
-/** The states a daemon may claim for a tool; anything else is not a status. */
-const TOOL_STATES: readonly ToolState[] = [
-  "installed",
-  "missing",
-  "installing",
-  "failed",
-  "unsupported",
-];
-
-export const isToolStatus = (value: unknown): value is ToolStatus =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as ToolStatus).id === "string" &&
-  TOOL_STATES.includes((value as ToolStatus).state);
 
 /** And what the machine answered it with. */
 export const peekToolStatus = (payload: unknown): ToolStatus | undefined => {
