@@ -470,7 +470,7 @@ declare global {
   }
 }
 
-/** The overlay's bridge into the artifact's doc (preview-overlay page.ts `cawco`), when a panel shows the page. */
+/** The overlay's bridge into the artifact's doc (preview overlay/page.ts `cawco`), when a panel shows the page. */
 export interface Bridge {
   on: (
     event: "picks",
@@ -1840,7 +1840,7 @@ export function boot(options: BootOptions): void {
     dispatchEvent(new CustomEvent("cawco:hmr"));
     later();
   });
-  // The pane's mode, as the overlay hears it (preview-overlay page.ts
+  // The pane's mode, as the overlay hears it (preview overlay/page.ts
   // `mode`): in Comment mode what the page marks of its own stays quiet,
   // since the comment target's tint is the one mark.
   window.addEventListener("cawco:mode", (event) => {
