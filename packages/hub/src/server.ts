@@ -52,6 +52,7 @@ import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { sessionMayStart, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
+import { docMeta } from "@cawco/core/doc-meta";
 import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
 import type { FleetSyncReport } from "@cawco/core/fleet";
 import {
@@ -8792,14 +8793,13 @@ export const createServer = (
     instance: (id) => db.getInstancesByIds([id])[0],
     page: (artifactId) => {
       const doc = artifactDocs.doc(artifactId);
-      const meta = doc.getMap("meta");
+      const meta = docMeta(doc);
       return {
         state: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
         meta: {
-          revisedAt:
-            (meta.get("revisedAt") as string | null | undefined) ?? null,
-          sentAt: (meta.get("sentAt") as string | null | undefined) ?? null,
-          sentText: (meta.get("sentText") as string | null | undefined) ?? null,
+          revisedAt: meta.get("revisedAt") ?? null,
+          sentAt: meta.get("sentAt") ?? null,
+          sentText: meta.get("sentText") ?? null,
         },
       };
     },
