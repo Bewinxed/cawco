@@ -505,11 +505,6 @@ const NO_VIEW =
 /** A view follows the session and none said it put the artifact on screen in time. */
 const NOT_PUT_ON_SCREEN = `A dashboard is showing this session, but none put the artifact on screen within ${SHOWN_WAIT_MS / 1000} s. It stays in the session's panel.`;
 
-/** Why a `to: "parent"` create opened nothing: the parent opens it. */
-const HELD = artifactToolWords.handedToParent;
-/** Why a maker's change opened nothing: the parent had opened the artifact, so the change waits as its next version ({@link holdNext}). */
-const HELD_NEXT = artifactToolWords.heldAsNext;
-
 /** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
 const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/u;
 const PAGE_HIDDEN = /<(script|style|template|noscript)\b[\s\S]*?<\/\1\s*>/giu;
@@ -1433,7 +1428,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     if (holding && before) {
       await heldOver(making, before, holding, ready);
-      return { opened: false, started: true, why: HELD_NEXT };
+      return {
+        opened: false,
+        started: true,
+        why: artifactToolWords.heldAsNext,
+      };
     }
     const was = isHanded(row);
     const waiting = was && before?.madeBy === making.maker.id;
@@ -1450,7 +1449,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!waiting) {
       await deps.handedUp(making.owner, making.maker, row);
     }
-    return { opened: false, started: true, why: HELD };
+    return {
+      opened: false,
+      started: true,
+      why: artifactToolWords.handedToParent,
+    };
   };
 
   /**
