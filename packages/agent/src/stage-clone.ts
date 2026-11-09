@@ -18,7 +18,7 @@
  *   never a place's: its `node_modules` are its own to write;
  * - installed by the project's own package manager inside its boundary
  *   ({@link installStage}, stage-install.ts, every stage's one install
- *   path), where its bun links from the workspaces' cache (boundary.ts
+ *   path), where its bun links from the workspaces' cache (boundary/
  *   `writeBunConfig`);
  * - kept in step with the checkout ({@link syncStageClone}): a new HEAD
  *   fetched and checked out, then every path the checkout's `git status`
@@ -70,7 +70,8 @@ import { unhandled } from "@cawco/core/unhandled";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
-import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
+import { stopWorkspaceBoundary } from "./boundary/control";
+import { ensureBoundary } from "./boundary/lifecycle";
 import { expandHome } from "./fs";
 import { gitUntil } from "./git/run";
 import { removeTree } from "./remove-tree";

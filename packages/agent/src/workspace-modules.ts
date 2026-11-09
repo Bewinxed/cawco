@@ -2,7 +2,7 @@
  * A Linux workspace's `node_modules`, kept in the workspaces' cache so bun
  * hard-links what its global store cannot hold.
  *
- * With bun's global virtual store on (boundary.ts `writeBunConfig`), a
+ * With bun's global virtual store on (boundary/package-managers.ts `writeBunConfig`), a
  * package is a link into `<cache>/bun/links/` only while it is eligible:
  * "unpatched, no lifecycle scripts) *and* every dependency it links to is
  * also eligible", and since bun 1.4.4 none whose peer has an `@types`
