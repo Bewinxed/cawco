@@ -1,6 +1,6 @@
 <!--
   A transcript that cannot be caught up says so in one line over the rows the
-  reader holds (client.svelte.ts `SessionState.behind`), and goes when the
+  reader holds (stores/sessions.svelte.ts `SessionState.behind`), and goes when the
   read lands. Its machine is reconnecting (the hub heard from it moments
   ago: a hub that just restarted, a dropped connection), a wait said with no
   toast, until the hub's deadline for it passes on the clock
