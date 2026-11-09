@@ -52,7 +52,6 @@ import { unlessSame } from "#lib/platform/unless-same.js";
 import { epochOf } from "../board.svelte";
 import {
   type BlockedRequest,
-  type BoardRow,
   cawco,
   type HubState,
   isFailed,
@@ -64,6 +63,7 @@ import { machineFaults } from "../fleet-faults";
 import { harnessWords, machineBlocksOf } from "../harness-block.svelte";
 import { hubAuth } from "../hub-auth.svelte";
 import {
+  type BoardRow,
   catalogTitle,
   conversationHref,
   indexInstances,
