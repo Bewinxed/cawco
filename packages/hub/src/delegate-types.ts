@@ -28,11 +28,9 @@ export const delegateTypesRoutes = (
       {
         body: t.Object({
           description: t.String(),
-          harness: t.Union(HARNESSES.map((harness) => t.Literal(harness))),
+          harness: t.UnionEnum(HARNESSES),
           model: t.String(),
-          effort: t.Optional(
-            t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))
-          ),
+          effort: t.Optional(t.UnionEnum(EFFORT_LEVELS)),
           skills: t.Optional(t.Array(t.String())),
           denyTools: t.Optional(t.Array(t.String())),
           mayStart: t.Optional(t.Array(t.String())),
