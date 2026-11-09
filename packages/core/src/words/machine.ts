@@ -1,8 +1,6 @@
 /**
  * What a machine's menu and its keychain unlock say, on the dashboard and
- * in the app (`Words.Machine`, CawCoCore/Words.generated.swift). The probe
- * kit finds them by these same words (scripts/probe-words-check.ts refuses
- * a copy).
+ * in the app (`Words.Machine`, CawCoCore/Words.generated.swift).
  */
 export const machineWords = {
   /** A machine removed, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */

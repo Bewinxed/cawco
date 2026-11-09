@@ -1,8 +1,6 @@
 /**
  * What the hub reaches outside the fleet, and how often a project's starters
- * ask Jev: the product's own values, the one place they are written. A
- * scratch fleet's hub runs the probe kit's stand-ins in this module's place
- * (scripts/scratch-fleet-stand-ins.ts); no installed hub can.
+ * ask Jev: the product's own values, the one place they are written.
  */
 
 import { TOOL_CATALOG } from "@cawco/core/tools";
