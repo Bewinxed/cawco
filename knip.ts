@@ -135,7 +135,7 @@ export default {
         // scripts/check.ts, beside css-scope-check.ts
         "scripts/import-rules-check.ts",
         // scripts/check.ts, beside css-scope-check.ts
-        "scripts/swallow-cast-ratchet.ts",
+        "scripts/escape-hatch-ratchet.ts",
         // scripts/check.ts, beside css-scope-check.ts
         "scripts/stale-references-check.ts",
         // scripts/check.ts, beside css-scope-check.ts
