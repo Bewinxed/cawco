@@ -51,6 +51,7 @@ import {
   TRIAGE_FIELD,
 } from "./jev-placement";
 import { FolderRefusal } from "./project-folder";
+import { refusal } from "./refusal";
 import {
   hubActor,
   type TaskEvent,
@@ -776,7 +777,7 @@ export const phoneRequestRoutes = (jevTasks: JevTasks) =>
         if (error instanceof FolderRefusal) {
           return status(error.status, error.message);
         }
-        return status(502, words(error));
+        return refusal(502, "jev-folder", words(error));
       }
     }
   );

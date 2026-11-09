@@ -14,6 +14,7 @@ import { ProjectEditRefusal } from "../project-edit";
 import { FolderRefusal } from "../project-folder";
 import { placesChanged } from "../project-placements";
 import { RestoreRefusal } from "../project-trash";
+import { refusal } from "../refusal";
 import { LANDS } from "../tasks";
 
 export const projectRoutes = ({
@@ -88,16 +89,17 @@ export const projectRoutes = ({
           promptId: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
         }),
       },
-      async ({ body, status }) => {
+      async ({ body }) => {
         if ((body.machineId === undefined) !== (body.cwd === undefined)) {
-          return status(
+          return refusal(
             400,
+            "checkout-machine-folder-send",
             "A checkout is a machine and a folder: send both machineId and cwd, or neither."
           );
         }
         const name = askedProjectName(body);
         if (!name) {
-          return status(400, "A project needs a name.");
+          return refusal(400, "project-needs-name", "A project needs a name.");
         }
         // A folder that is no absolute path on its machine is refused in
         // the hub's words (db `placePathOn`).
@@ -123,7 +125,7 @@ export const projectRoutes = ({
           throw error;
         });
         if (made instanceof FolderRefusal) {
-          return status(400, made.message);
+          return refusal(400, "project-not-made", made.message);
         }
         return {
           ...projectOut(made.project),
@@ -139,9 +141,13 @@ export const projectRoutes = ({
     )
     // The project's running sessions, each top session followed by its delegates:
     // what a forget stops first (project-stops.ts).
-    .get("/api/projects/:id/running", ({ params, status }) => {
+    .get("/api/projects/:id/running", ({ params }) => {
       if (!db.project(params.id)) {
-        return status(404, "This project is no longer recorded. Refresh.");
+        return refusal(
+          404,
+          "project-no-longer-recorded",
+          "This project is no longer recorded. Refresh."
+        );
       }
       return { sessions: projectStops.running(params.id) };
     })
@@ -155,15 +161,20 @@ export const projectRoutes = ({
           instanceIds: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         if (!db.project(params.id)) {
-          return status(404, "This project is no longer recorded. Refresh.");
+          return refusal(
+            404,
+            "project-no-longer-recorded",
+            "This project is no longer recorded. Refresh."
+          );
         }
         try {
           projectStops.stop(params.id, body.instanceIds);
         } catch (error) {
-          return status(
+          return refusal(
             400,
+            "project-not-edited",
             error instanceof Error ? error.message : String(error)
           );
         }
@@ -219,7 +230,7 @@ export const projectRoutes = ({
     .get("/api/projects/forgotten", (): Promise<ForgottenProject[]> =>
       forgottenProjects.forgotten()
     )
-    .delete("/api/projects/:id", async ({ params, status, request }) => {
+    .delete("/api/projects/:id", async ({ params, request }) => {
       const asked = askerOf(request);
       const said = (outcome: string) =>
         console.log(
@@ -230,8 +241,9 @@ export const projectRoutes = ({
       const still = project ? projectStops.stillRunning(params.id) : 0;
       if (project && still > 0) {
         said(`refused running=${still}`);
-        return status(
+        return refusal(
           409,
+          "sessions-still-run",
           still === 1
             ? `1 session still runs in ${project.name}; stop it first.`
             : `${still} sessions still run in ${project.name}; stop them first.`
@@ -244,7 +256,7 @@ export const projectRoutes = ({
         : undefined;
       if (running) {
         said("refused browsers");
-        return status(409, running);
+        return refusal(409, "sessions-still-run", running);
       }
       const machines = new Set(
         db.project(params.id)?.places.map((place) => place.machineId)
@@ -387,22 +399,30 @@ export const projectRoutes = ({
           accounts: t.Union([t.Array(t.String()), t.Null()]),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         const project = db.project(params.id);
         if (!project) {
-          return status(404, `There is no project ${params.id}.`);
+          return refusal(
+            404,
+            "no-project",
+            `There is no project ${params.id}.`
+          );
         }
         const unknown = (body.accounts ?? []).filter(
           (id) => !db.accounts.get(id)
         );
         if (unknown.length > 0) {
-          return status(400, `There is no account ${unknown.join(", ")}.`);
+          return refusal(
+            400,
+            "no-account",
+            `There is no account ${unknown.join(", ")}.`
+          );
         }
         db.setProjectAccounts(project.id, body.accounts);
         return projectOut(db.project(project.id) ?? project);
       }
     )
-    .delete("/api/projects/:id/places/:placeId", ({ params, status }) => {
+    .delete("/api/projects/:id/places/:placeId", ({ params }) => {
       const leaving = db
         .project(params.id)
         ?.places.find((place) => place.id === params.placeId);
@@ -411,11 +431,16 @@ export const projectRoutes = ({
         placesChanged(leaving.machineId, params.id);
       }
       if (removed === "missing") {
-        return status(404, "No place with that id in this project.");
+        return refusal(
+          404,
+          "no-place-id-project",
+          "No place with that id in this project."
+        );
       }
       if (removed === "primary") {
-        return status(
+        return refusal(
           409,
+          "projects-folder-hub-goes",
           leaving?.kind === "hub"
             ? "This is the project's folder on the hub; it goes when the project does. Forget the project to remove it."
             : "This is the project's primary checkout. Forget the project to remove it."

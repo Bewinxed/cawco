@@ -5,6 +5,7 @@
 import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 
 /**
  * A file's bytes as an answer to a request that may ask for a range of them:
@@ -64,9 +65,9 @@ export const agentListRoutes = ({
     .get(
       "/api/agents/:machineId",
       hidden,
-      ({ params, status }) =>
+      ({ params }) =>
         machineRow(params.machineId) ??
-        status(404, machineFault(params.machineId, "unknown"))
+        refusal(404, "no-machine", machineFault(params.machineId, "unknown"))
     );
 
 export const agentMediaRoutes = ({
@@ -101,16 +102,24 @@ export const agentMediaRoutes = ({
     .get(
       "/api/agents/:machineId/media",
       { query: t.Object({ path: t.String() }) },
-      async ({ params, query, request, status }) => {
+      async ({ params, query, request }) => {
         const answer = await readMachineMedia(params.machineId, query.path);
         if (answer === "offline") {
-          return status(503, machineFault(params.machineId, "offline"));
+          return refusal(
+            503,
+            "machine-offline",
+            machineFault(params.machineId, "offline")
+          );
         }
         if (answer === "timeout") {
-          return status(504, machineFault(params.machineId, "silent"));
+          return refusal(
+            504,
+            "machine-silent",
+            machineFault(params.machineId, "silent")
+          );
         }
         if ("refused" in answer) {
-          return status(404, answer.refused);
+          return refusal(404, "agent-refused", answer.refused);
         }
         return rangedResponse(
           answer.bytes,
@@ -126,7 +135,7 @@ export const agentMediaRoutes = ({
     // One never listed (admitted, or added over SSH, whose agent never
     // proved its key) has no row, and what the hub holds for it goes all
     // the same: its key, its held connection, its SSH connection.
-    .delete("/api/agents/:machineId", ({ params, status }) => {
+    .delete("/api/agents/:machineId", ({ params }) => {
       const row = db
         .listAgents()
         .find((agent) => agent.machineId === params.machineId);
@@ -135,15 +144,20 @@ export const agentMediaRoutes = ({
           hubAuth.holdsMachine(params.machineId) ||
           sshTunnels.holds(params.machineId)
         )) {
-          return status(404, "No machine with that id on this hub.");
+          return refusal(
+            404,
+            "no-machine",
+            "No machine with that id on this hub."
+          );
         }
         hubAuth.forgetMachine(params.machineId);
         sshTunnels.forget(params.machineId);
         return { sessions: 0 };
       }
       if (registry.agent(params.machineId)) {
-        return status(
+        return refusal(
           409,
+          "online-stop-agent-first",
           `${row.hostname} is online. Stop its agent first, then remove it.`
         );
       }

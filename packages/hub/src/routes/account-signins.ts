@@ -12,6 +12,7 @@ import {
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
+import { refusal } from "../refusal";
 import { unreachable } from "../unreachable";
 
 export const accountSigninRoutes = ({
@@ -55,9 +56,9 @@ export const accountSigninRoutes = ({
     // verdict: `back` on those machines, `refused` with Claude Code's
     // words, `none` with why there was none, or `not-refused` for an
     // account no account-wide refusal holds out.
-    .post("/api/accounts/:id/refusal-check", async ({ params, status }) => {
+    .post("/api/accounts/:id/refusal-check", async ({ params }) => {
       if (!accountOf(params.id)) {
-        return status(404, `There is no account ${params.id}.`);
+        return refusal(404, "no-account", `There is no account ${params.id}.`);
       }
       return await checkRefused(params.id);
     })
@@ -69,15 +70,20 @@ export const accountSigninRoutes = ({
     // ever started by this call.
     .post(
       "/api/accounts/:id/machines/:machineId/signin",
-      async ({ params, status }) => {
+      async ({ params }) => {
         const account = accountOf(params.id);
         if (!account) {
-          return status(404, `There is no account ${params.id}.`);
+          return refusal(
+            404,
+            "no-account",
+            `There is no account ${params.id}.`
+          );
         }
         const claude = account.provider === CLAUDE_PROVIDER;
         if (!claude && account.kind !== "oauth") {
-          return status(
+          return refusal(
             400,
+            "key-account-send-key",
             `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
           );
         }
@@ -107,8 +113,9 @@ export const accountSigninRoutes = ({
           answer.kind === "unanswered" && answer.reason === "dead"
         );
         if (sent && !accountOf(params.id)) {
-          return status(
+          return refusal(
             404,
+            "signin-removed",
             await undoRemovedSignin(account, params.machineId)
           );
         }
@@ -138,12 +145,17 @@ export const accountSigninRoutes = ({
         }
         switch (answer.kind) {
           case "unanswered":
-            return status(503, awayWords(params.machineId, answer));
+            return refusal(
+              503,
+              "machine-away",
+              awayWords(params.machineId, answer)
+            );
           case "answered": {
             if (!answer.value.ok) {
               pendingSignins.delete(pendingKey(params.id, params.machineId));
-              return status(
+              return refusal(
                 422,
+                "signin-not-started",
                 answer.value.error ?? "The sign-in did not start."
               );
             }
@@ -163,16 +175,24 @@ export const accountSigninRoutes = ({
     .post(
       "/api/accounts/:id/machines/:machineId/signin/complete",
       { body: t.Object({ code: t.Optional(t.String()) }) },
-      async ({ params, body, status }) => {
+      async ({ params, body }) => {
         // The account the sign-in finishes into: its own, or the one a
         // sign-in on another machine has since joined it into.
         const account = accountOf(params.id);
         if (!account) {
-          return status(404, `There is no account ${params.id}.`);
+          return refusal(
+            404,
+            "no-account",
+            `There is no account ${params.id}.`
+          );
         }
         const claude = account.provider === CLAUDE_PROVIDER;
         if (claude && !body.code) {
-          return status(400, "Paste the code from the authorisation page.");
+          return refusal(
+            400,
+            "paste-code-authorisation-page",
+            "Paste the code from the authorisation page."
+          );
         }
         const asked = await completeOn(
           account,
@@ -182,7 +202,11 @@ export const accountSigninRoutes = ({
         );
         switch (asked.kind) {
           case "unanswered":
-            return status(503, awayWords(params.machineId, asked));
+            return refusal(
+              503,
+              "machine-away",
+              awayWords(params.machineId, asked)
+            );
           case "answered":
             break;
           default:
@@ -191,15 +215,20 @@ export const accountSigninRoutes = ({
         const answer = asked.value;
         const now = accountOf(params.id);
         if (!now) {
-          return status(
+          return refusal(
             404,
+            "signin-removed",
             await undoRemovedSignin(account, params.machineId)
           );
         }
         if (!answer.ok) {
           // The machine's login stopped: its link or code is spent.
           pendingSignins.delete(pendingKey(params.id, params.machineId));
-          return status(422, answer.error ?? "The sign-in did not finish.");
+          return refusal(
+            422,
+            "signin-not-finished",
+            answer.error ?? "The sign-in did not finish."
+          );
         }
         const result = answer.result as
           AccountSigninResult | ProviderSigninResult;
@@ -212,7 +241,9 @@ export const accountSigninRoutes = ({
           now.id === params.id
             ? await settleSignin(now, params.machineId, result)
             : await finishJoined(params.id, now, params.machineId, result);
-        return "error" in settled ? status(409, settled.error) : settled;
+        return "error" in settled
+          ? refusal(409, "signin-not-settled", settled.error)
+          : settled;
       }
     )
     // A key account's key, typed once in the dashboard: relayed to each
@@ -226,14 +257,19 @@ export const accountSigninRoutes = ({
           machineIds: t.Array(t.String(), { minItems: 1 }),
         }),
       },
-      async ({ params, body, status }) => {
+      async ({ params, body }) => {
         const account = accountOf(params.id);
         if (!account) {
-          return status(404, `There is no account ${params.id}.`);
+          return refusal(
+            404,
+            "no-account",
+            `There is no account ${params.id}.`
+          );
         }
         if (account.kind !== "api_key") {
-          return status(
+          return refusal(
             400,
+            "signs-not-key",
             `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
           );
         }

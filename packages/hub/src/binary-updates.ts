@@ -53,6 +53,7 @@ import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { hidden } from "./hidden";
+import { refusal } from "./refusal";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
 
 /** How long a discovered release is served before the host is asked again. */
@@ -301,8 +302,10 @@ export function createBinaryUpdates(options: Options) {
   // A damaged policy record: every route that needs the policy answers 409
   // with its words (`refused`), and Reset is the way out.
   const routes = new Elysia()
-    .get("/api/binary-updates/settings", ({ status }) =>
-      "damaged" in held ? status(409, refused()) : held.policy
+    .get("/api/binary-updates/settings", () =>
+      "damaged" in held
+        ? refusal(409, "update-policy-damaged", refused())
+        : held.policy
     )
     .put(
       "/api/binary-updates/settings",
@@ -312,16 +315,19 @@ export function createBinaryUpdates(options: Options) {
           autoUpdate: t.Boolean(),
         }),
       },
-      ({ body, status }) =>
-        "damaged" in held ? status(409, refused()) : adopt(body)
+      ({ body }) =>
+        "damaged" in held
+          ? refusal(409, "update-policy-damaged", refused())
+          : adopt(body)
     )
     // Reset: the one way out of a damaged policy record. A fresh record (the
     // policy a new hub starts with) written whole, every online machine told,
     // and updates on again. Refused while the record reads whole.
-    .post("/api/binary-updates/settings/reset", ({ status }) => {
+    .post("/api/binary-updates/settings/reset", () => {
       if (!("damaged" in held)) {
-        return status(
+        return refusal(
           409,
+          "update-policy-record-reads",
           "The update policy record reads whole, so there is nothing to reset."
         );
       }
@@ -331,9 +337,9 @@ export function createBinaryUpdates(options: Options) {
     .get("/api/binary-updates/machines", () => ({
       machines: Object.fromEntries(options.states()),
     }))
-    .post("/api/binary-updates/check", async ({ status }) => {
+    .post("/api/binary-updates/check", async () => {
       if ("damaged" in held) {
-        return status(409, refused());
+        return refusal(409, "update-policy-damaged", refused());
       }
       // A look of its own, begun after the ask: one a poll began earlier
       // (before a release was published, as ship's announce asks right
@@ -390,15 +396,17 @@ export function createBinaryUpdates(options: Options) {
     // the hub's own, and through it alone can they take this one.
     .get(
       "/api/binary-updates/release",
-      async ({ status }) => (await offer()) ?? status(409, refused())
+      async () =>
+        (await offer()) ?? refusal(409, "update-policy-damaged", refused())
     )
     .get(
       "/api/binary-updates/latest",
-      async ({ status }) => (await offer()) ?? status(409, refused())
+      async () =>
+        (await offer()) ?? refusal(409, "update-policy-damaged", refused())
     )
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
-      async ({ params, status }) => {
+      async ({ params }) => {
         const candidates = [await runningRelease().catch(() => undefined)];
         if (current) {
           candidates.push(current.release);
@@ -412,7 +420,11 @@ export function createBinaryUpdates(options: Options) {
           (a) => a.archive === params.archive
         );
         if (!(found && artifact)) {
-          return status(404, "This build is not one the hub offers");
+          return refusal(
+            404,
+            "build-not-one-hub",
+            "This build is not one the hub offers"
+          );
         }
         // Answered at once, never held open on the release host: a machine
         // whose fetch waited on a silent hub was cut by its own idle timer
@@ -446,8 +458,9 @@ export function createBinaryUpdates(options: Options) {
               }
             );
           case "failed":
-            return status(
+            return refusal(
               502,
+              "hub-could-not-fetch",
               `The hub could not fetch this build from its release host: ${archive.error}`
             );
           default:
