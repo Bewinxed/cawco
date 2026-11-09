@@ -1,14 +1,7 @@
-import type { Deleted } from "@cawco/core/fleet";
-import { hubRequest } from "@cawco/core/hub-request";
-import {
-  type RULE_TEMPLATES,
-  type Rule,
-  type RuleDraft,
-  type RuleRow,
-  ruleSettings,
-} from "@cawco/core/rules";
+import { type Rule, type RuleDraft, ruleSettings } from "@cawco/core/rules";
 import { routinesWords } from "@cawco/core/words/routines";
-import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { couldNotOrAway } from "#lib/platform/hub-read.js";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -21,12 +14,6 @@ import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
  */
 
 export type { Rule, RuleDraft } from "@cawco/core/rules";
-/** What `GET /api/rules` answers with. */
-export interface RulesPayload {
-  rules: RuleRow[];
-  templates: typeof RULE_TEMPLATES;
-}
-
 /**
  * One session's history with a rule, as the activity trail shows it.
  *
@@ -46,32 +33,40 @@ export interface RuleActivity {
   where: string;
 }
 
-export const loadRuleActivity = (
-  id: string
-): Promise<{ activity: RuleActivity[] }> =>
-  hubJson<{ activity: RuleActivity[] }>(
-    hubRequest("GET /api/rules/:id/activity", { path: { id } }),
-    { failure: couldNotOrAway("load what this rule has caught") }
-  );
+export const loadRuleActivity = async (id: string) => {
+  const answer = await hub.api.rules({ id }).activity.get();
+  if (answer.error) {
+    throw couldNotOrAway("load what this rule has caught")(answer);
+  }
+  return answer.data;
+};
 
 /** Create: the hub mints the id and answers with the whole rule. */
-export const createRule = (draft: RuleDraft): Promise<Rule> =>
-  hubJson<Rule>(hubRequest("POST /api/rules", { body: draft }), {
-    failure: couldNotOrAway(`save ${draft.name || "the rule"}`),
-  });
+export const createRule = async (draft: RuleDraft) => {
+  const answer = await hub.api.rules.post(draft);
+  if (answer.error) {
+    throw couldNotOrAway(`save ${draft.name || "the rule"}`)(answer);
+  }
+  return answer.data;
+};
 
 /** Edit: strictly an existing id — the hub 404s anything it never minted. */
-export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
-  hubJson<Rule>(
-    hubRequest("PUT /api/rules/:id", { path: { id }, body: draft }),
-    { failure: couldNotOrAway(`save ${draft.name || "the rule"}`) }
-  );
+export const saveRule = async (id: string, draft: RuleDraft) => {
+  const answer = await hub.api.rules({ id }).put(draft);
+  if (answer.error) {
+    throw couldNotOrAway(`save ${draft.name || "the rule"}`)(answer);
+  }
+  return answer.data;
+};
 
 /** Delete: the rule stops at once, into the hub's trash for its Undo (config/undo.ts). */
-export const removeRule = (id: string, name: string): Promise<Deleted> =>
-  hubJson<Deleted>(hubRequest("DELETE /api/rules/:id", { path: { id } }), {
-    failure: couldNotOrAway(`delete ${name}`),
-  });
+export const removeRule = async (id: string, name: string) => {
+  const answer = await hub.api.rules({ id }).delete();
+  if (answer.error) {
+    throw couldNotOrAway(`delete ${name}`)(answer);
+  }
+  return answer.data;
+};
 
 /** A blank rule, on the defaults that make the common case one field of typing. */
 export const blankRule = (): RuleDraft => ({

@@ -4,13 +4,9 @@
  * chooses to add to a prompt; the harness's tool set is never touched.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import type { SuggestCandidate } from "@cawco/core/suggest";
-import {
-  hubJson,
-  hubSend,
-  refusedOrUnreached,
-} from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubRefusal, refusedOrUnreached } from "#lib/platform/hub-read.js";
 import type { HubSeam } from "./hub-seam";
 
 export type { SuggestCandidate } from "@cawco/core/suggest";
@@ -45,26 +41,33 @@ let loaded = false;
  * Reads the setting the first time a composer needs it, through the hub
  * that composer reads (hub-seam: the network, or a states file's stand-in).
  */
-export function loadSuggestSetting(hub: HubSeam): void {
+export function loadSuggestSetting(seam: HubSeam): void {
   if (loaded) {
     return;
   }
   loaded = true;
   // A hub away or restarting answers no setting: suggestions stay off, and
   // the read says why as every failed read does.
-  hub.read<JevState>(hubRequest("GET /api/jev")).then(
-    (state) => {
+  seam.client.api.jev
+    .get()
+    .then((answer) => {
+      if (answer.error) {
+        throw refusedOrUnreached(answer);
+      }
+      const state = answer.data;
       suggestions.enabled = state.route !== null && state.suggestWhileTyping;
-    },
-    (error: unknown) => {
+    })
+    .catch((error: unknown) => {
       console.error("[cawco] /api/jev failed:", error);
-    }
-  );
+    });
 }
 
 /** Turns suggestions on or off for every composer. */
 export async function saveSuggestSetting(enabled: boolean): Promise<void> {
-  await hubSend(hubRequest("PUT /api/jev/suggest", { body: { enabled } }));
+  const answer = await hub.api.jev.suggest.put({ enabled });
+  if (answer.error) {
+    throw hubRefusal(answer);
+  }
   suggestions.enabled = enabled;
 }
 
@@ -73,12 +76,11 @@ export async function askSuggestions(
   body: { text: string; candidates: SuggestCandidate[] },
   signal: AbortSignal
 ): Promise<{ id: string; noul: number }[]> {
-  const { suggestions: ranked } = await hubJson<{
-    suggestions: { id: string; noul: number }[];
-  }>(hubRequest("POST /api/suggest", { body }), {
-    failure: refusedOrUnreached,
-    init: { signal },
-  });
+  const answer = await hub.api.suggest.post(body, { fetch: { signal } });
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  const { suggestions: ranked } = answer.data;
   return ranked;
 }
 
