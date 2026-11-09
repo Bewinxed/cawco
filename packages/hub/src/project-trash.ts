@@ -571,7 +571,7 @@ export interface DiskPlace extends PlaceNesting {
  * from it holds nothing CawCo can reach), each read against the other live
  * projects' checkouts: the one that refuses it, and those whose wider
  * folder holds it. The list of forgotten projects names the same, and a
- * live project's places carry the same reading (server.ts `projectOut`).
+ * live project's places carry the same reading (project-out.ts `createProjectOut`).
  */
 export const diskPlaces = (
   db: Pick<DbShape, "listAgents" | "listProjects" | "project">,
