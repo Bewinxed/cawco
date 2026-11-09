@@ -89,6 +89,7 @@
   import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconClose } from "#lib/icons.js";
   import { dragToDismiss } from "#lib/platform/motion/drag.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
@@ -156,7 +157,7 @@
      scrim fading with it (motion/drag.svelte.ts), through its own Close, so
      the site hears it close as it would from Close itself. A dialog with no
      Close is not put away by hand. */
-  const sheet = new MediaQuery("width < 640px");
+  const sheet = new MediaQuery(PHONE_QUERY);
   let scrim = $state<HTMLElement | null>(null);
   let close = $state<HTMLElement | null>(null);
   $effect(() => {
