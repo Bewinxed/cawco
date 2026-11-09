@@ -26,3 +26,18 @@ export const hub = hubThrough();
 
 /** Eden's client of the hub: the live one, or a states file's stand-in (hub-stand-in.ts). */
 export type HubClient = ReturnType<typeof hubThrough>;
+
+/**
+ * A route's address from this page, for a request Eden's client cannot
+ * send itself (a beacon, an upload that says how far it has gone, a read
+ * timed apart from its body): each segment of Eden's path (`~path`)
+ * encoded, a path parameter's value among them, and `query` after it.
+ */
+export function hubPath(
+  route: { "~path": string },
+  query: Record<string, string> = {}
+): string {
+  const path = route["~path"].split("/").map(encodeURIComponent).join("/");
+  const search = new URLSearchParams(query).toString();
+  return search ? `${path}?${search}` : path;
+}
