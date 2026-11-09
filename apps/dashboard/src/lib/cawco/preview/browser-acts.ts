@@ -7,17 +7,11 @@
  */
 import type { BrowserKey } from "@cawco/core/browser";
 import { hub } from "#lib/platform/hub.js";
-import {
-  failureWords,
-  type HubAnswer,
-  hubDone,
-} from "#lib/platform/hub-read.js";
+import { failureWords, hubDone } from "#lib/platform/hub-read.js";
 
-const post = async (
-  call: Promise<HubAnswer<unknown>>
-): Promise<string | null> => {
+const post = async (sent: Promise<void>): Promise<string | null> => {
   try {
-    await hubDone(call);
+    await sent;
     return null;
   } catch (error) {
     return failureWords(error);
@@ -30,21 +24,23 @@ export const takeOverFromPanel = (
   at: { instanceId: string; machineId: string; viewer?: string | null }
 ): Promise<string | null> =>
   post(
-    hub.api.browsers({ key }).takeover.post({
-      instanceId: at.instanceId,
-      machineId: at.machineId,
-      ...(at.viewer ? { viewer: at.viewer } : {}),
-    })
+    hubDone(
+      hub.api.browsers({ key }).takeover.post({
+        instanceId: at.instanceId,
+        machineId: at.machineId,
+        ...(at.viewer ? { viewer: at.viewer } : {}),
+      })
+    )
   );
 
 export const handBackFromPanel = (
   key: BrowserKey,
   machineId: string
 ): Promise<string | null> =>
-  post(hub.api.browsers({ key }).handback.post({ machineId }));
+  post(hubDone(hub.api.browsers({ key }).handback.post({ machineId })));
 
 export const startFromPanel = (
   key: BrowserKey,
   machineId: string
 ): Promise<string | null> =>
-  post(hub.api.browsers({ key }).start.post({ machineId }));
+  post(hubDone(hub.api.browsers({ key }).start.post({ machineId })));
