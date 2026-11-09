@@ -51,9 +51,9 @@
   } from "#lib/cawco/project-tasks.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import type { SendExtras } from "#lib/cawco/send-store.js";
   import { asksStore } from "#lib/cawco/stores/asks.svelte.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
-  import type { SendExtras } from "#lib/cawco/stores/commands.svelte.js";
   import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
   import type { HeldSend } from "#lib/cawco/stores/session-start.svelte.js";
   import type { PendingPermission } from "#lib/cawco/stores/sessions.svelte.js";
