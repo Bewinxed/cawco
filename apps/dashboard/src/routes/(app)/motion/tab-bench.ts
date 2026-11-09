@@ -16,7 +16,7 @@ export const benchDebug = () =>
     globalThis as unknown as {
       __cawcoDebug: {
         frame: (frame: PulseFrame) => void;
-        state: {
+        sessionsState: {
           sessions: Record<string, ReturnType<typeof blankSession>>;
         };
       };

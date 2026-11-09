@@ -158,7 +158,7 @@
     session.cwd = "/bench";
     session.messages = history(id);
     session.initialized = true;
-    debug.state.sessions[id] = session;
+    debug.sessionsState.sessions[id] = session;
     // After its session is in: the pulse is written onto it, as the socket's is.
     debug.frame({
       kind: "pulse",
@@ -192,7 +192,7 @@
     return () => {
       Reflect.deleteProperty(window, "__ht");
       for (const id of ids) {
-        delete debug.state.sessions[id];
+        delete debug.sessionsState.sessions[id];
       }
     };
   });
