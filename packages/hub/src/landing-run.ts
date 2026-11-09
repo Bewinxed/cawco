@@ -58,7 +58,7 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { shipLanded } from "./ship";
-import { LIVE } from "./work-item-state";
+import { LIVE, WAIT_ITEM_MAX_MINUTES } from "./work-item-state";
 import type { WorkspacesDeps } from "./workspaces";
 import {
   GIT_TIMEOUT_MS,
@@ -185,12 +185,6 @@ interface CheckoutHead {
   commit: string;
   tree: string;
 }
-/**
- * How long an item waits for a machine its gate needs before the hub wakes
- * it to try again (the work-items.ts `WAIT_ITEM_LIMIT` ceiling); one coming online
- * wakes it sooner, at the sweep.
- */
-const CAPABLE_WAIT_MINUTES = 120;
 /** What a landing that pushed says of a project that declares no gate. */
 const NO_CHECKS = "merged with no checks: this project declares none";
 /**
@@ -1754,11 +1748,12 @@ export const createLandingRun = (deps: LandingRunDeps) => {
     if ("refusal" in gate) {
       const refused = endLanding(item.id) ?? item;
       // No machine a due step needs is online: the item waits for one, never
-      // idle, and the sweep wakes it when one comes (work-items.ts `wakeCapable`).
+      // idle, the longest wait an item declares; the sweep wakes it sooner
+      // when one comes (work-items.ts `wakeCapable`).
       if (gate.needs && LIVE.has(refused.state)) {
         declareWait(
           refused,
-          CAPABLE_WAIT_MINUTES,
+          WAIT_ITEM_MAX_MINUTES,
           capableWaitReason(gate.needs)
         );
       }
