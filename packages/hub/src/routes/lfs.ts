@@ -2,11 +2,11 @@
  * Where a project's large files live, answered to machines holding a place of it, and the refusals it reports back.
  */
 
-import { machineCalled } from "@cawco/core/machine-names";
 import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
+import { machineName } from "../machine-name";
 
 export const lfsRoutes = ({
   caw,
@@ -89,7 +89,7 @@ export const lfsRoutes = ({
             commit: null,
             lfsRefused: body.endpoint,
           },
-          body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineCalled(machineId, db.listAgents())} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
+          body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineName(db, machineId)} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
         });
         return { ok: true };
       }
