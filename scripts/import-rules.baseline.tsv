@@ -96,6 +96,3 @@ cycle	@cawco/hub	packages/hub/src/views.ts	3
 cycle	@cawco/hub	packages/hub/src/work-items.ts	2
 cycle	@cawco/preview	packages/preview/src/overlay/ink.ts	1
 cycle	@cawco/preview	packages/preview/src/overlay/pins.ts	1
-kit-reaches-up		apps/dashboard/src/lib/components/ui/context-menu/context-menu-copy-item.svelte	1
-kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyOnAxis.svelte	3
-kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyStarts.svelte	2
