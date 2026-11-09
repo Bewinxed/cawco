@@ -11,6 +11,7 @@
   import type { PropMeta } from "@cawco/core/stage";
   import { MediaQuery } from "svelte/reactivity";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import Dials from "./Dials.svelte";
   import type { DialValues, GraphDial } from "./dials";
   import { contentCases, propDials, savedOf } from "./prop-dials";
@@ -46,7 +47,7 @@
   } = $props();
 
   /** The stage's height the card is held to half of: a 1440 desk's panel, a 390 phone's. */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   const stage = $derived(phone.current ? 700 : 820);
   const nothing = () => undefined;
   const saved = $derived(savedOf(props, args));
