@@ -9,10 +9,10 @@ import type { HubContext } from "../hub-context";
 import { FolderRefusal } from "../project-folder";
 import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
+import { WorkItemRefusal } from "../work-item-state";
 import {
   SESSION_TITLE_DESCRIPTION,
   WAIT_ITEM_LIMIT,
-  WorkItemRefusal,
   type WorkItemStart,
 } from "../work-items";
 import { harnessSchema } from "./harness-schema";
