@@ -1,6 +1,7 @@
 import { accountFaults } from "../accounts/model.svelte";
 import { cawco } from "../client.svelte";
 import { hubFaults, machineFaults, SCOPE_ANCHOR } from "../fleet-faults";
+import { accountsStore } from "../stores/accounts.svelte";
 import { attention } from "../updates/model";
 import { updates } from "../updates/updates.svelte";
 import type { ConfigSection, SectionSlug } from "./sections";
@@ -37,7 +38,7 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
       return fleet ? (fleet.memory ? 1 : 0) + fleet.memoryDocs.length : null;
     }
     case "accounts":
-      return cawco.accounts?.accounts.length ?? null;
+      return accountsStore.accounts?.accounts.length ?? null;
     case "browsers":
     case "connections":
     case "decides":
