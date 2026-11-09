@@ -115,7 +115,7 @@ import {
   originEndpoint,
   urlOrigin,
 } from "./git/lfs";
-import { type CopyRun, type Git, gitUntil, hostGit } from "./git/run";
+import { type CopyRunner, type Git, gitUntil, hostGit } from "./git/run";
 import { configEnv, useHubCredentialHelper } from "./git-credential";
 import {
   declaredLfs,
@@ -422,10 +422,9 @@ const readySource = (
  * argv run in the copy, in a directory there, with the directory its spawn
  * starts in.
  */
-interface CopyAccess {
+interface CopyAccess extends CopyRunner {
   at: (path: string) => string;
   layer: Layer;
-  run: CopyRun;
 }
 
 /**
