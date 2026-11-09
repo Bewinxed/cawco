@@ -3,7 +3,7 @@ import type { WorkItemRow } from "./db/project-work";
 /**
  * What holds a live work item right now: each reason the hub leaves it
  * alone, named, in the one order its holds are read. A guard reads the
- * holds it cares about ({@link itemHolds}) and acts on the first.
+ * holds it cares about ({@link itemHold}) and acts on the first.
  *
  * From its row:
  * - `held`: an interrupt, or a sleep past its limit, holds it (`heldAt`):
@@ -47,29 +47,32 @@ export type ItemHold =
   | "finishing"
   | "movedOn"
   | "offline"
-  | "onPerson"
-  | "sendComing";
+  | "sendComing"
+  | "onPerson";
 
-/** What the hub knows of an item now, beyond its row: each fact absent is false. */
-export type ItemFacts = Partial<
-  Record<
-    Extract<
-      ItemHold,
-      | "custody"
-      | "finishing"
-      | "movedOn"
-      | "offline"
-      | "onPerson"
-      | "paused"
-      | "sendComing"
-      | "verifying"
-    >,
-    boolean
-  >
+/** The holds read from what the hub knows now rather than from the item's row. */
+type FactHold = Extract<
+  ItemHold,
+  | "custody"
+  | "finishing"
+  | "movedOn"
+  | "offline"
+  | "onPerson"
+  | "paused"
+  | "sendComing"
+  | "verifying"
 >;
 
+/**
+ * What the hub knows of an item now, beyond its row: one read for each such
+ * hold among those asked, read only once the holds before it are not.
+ */
+type ItemFacts<T extends ItemHold> = {
+  readonly [Hold in Extract<T, FactHold>]: () => boolean;
+};
+
 /** The columns of an item its holds read. */
-export type HoldColumns = Pick<
+type HoldColumns = Pick<
   WorkItemRow,
   | "blocked"
   | "heldAt"
@@ -80,39 +83,59 @@ export type HoldColumns = Pick<
   | "waitUntil"
 >;
 
-/**
- * THE ONE READING of what holds an item: every hold of {@link ItemHold}
- * that is true of `item` and `facts`, in that order. A pure function of
- * them.
- */
-export const itemHolds = (item: HoldColumns, facts: ItemFacts): ItemHold[] => {
-  const landing = item.landingSince ? item.landingPhase : undefined;
-  const holds: [ItemHold, boolean][] = [
-    ["held", item.heldAt !== null],
-    ["stopping", item.stoppingAt !== null],
-    ["blocked", item.blocked !== null],
-    ["paused", facts.paused === true],
-    ["custody", facts.custody === true],
-    ["waiting", !!item.waitUntil],
-    ["waitResuming", !!item.waitResumeBy],
-    ["verifying", facts.verifying === true],
-    ["landing", landing !== undefined && landing !== "completing"],
-    ["completing", landing === "completing"],
-    ["finishing", facts.finishing === true],
-    ["movedOn", facts.movedOn === true],
-    ["offline", facts.offline === true],
-    ["sendComing", facts.sendComing === true],
-    ["onPerson", facts.onPerson === true],
-  ];
-  return holds.flatMap(([hold, on]) => (on ? [hold] : []));
+/** Each hold read from the item's row. */
+const ROW_HOLDS: Record<
+  Exclude<ItemHold, FactHold>,
+  (item: HoldColumns) => boolean
+> = {
+  held: (item) => item.heldAt !== null,
+  stopping: (item) => item.stoppingAt !== null,
+  blocked: (item) => item.blocked !== null,
+  waiting: (item) => !!item.waitUntil,
+  waitResuming: (item) => !!item.waitResumeBy,
+  landing: (item) => !!item.landingSince && item.landingPhase !== "completing",
+  completing: (item) =>
+    !!item.landingSince && item.landingPhase === "completing",
 };
 
-/** The first of {@link itemHolds} among `among`, or nothing. */
+/** Every hold, in the one order they are read. */
+const HOLD_ORDER: readonly ItemHold[] = [
+  "held",
+  "stopping",
+  "blocked",
+  "paused",
+  "custody",
+  "waiting",
+  "waitResuming",
+  "verifying",
+  "landing",
+  "completing",
+  "finishing",
+  "movedOn",
+  "offline",
+  "sendComing",
+  "onPerson",
+];
+
+const isRowHold = (hold: ItemHold): hold is Exclude<ItemHold, FactHold> =>
+  hold in ROW_HOLDS;
+
+/**
+ * THE ONE READING of what holds an item: the first hold among `among` that
+ * is true of `item` and `facts`, in the order of {@link ItemHold}, or
+ * nothing. Each fact a hold asked for reads must be given, and is read only
+ * when the holds before it are not.
+ */
 export const itemHold = <T extends ItemHold>(
   item: HoldColumns,
-  facts: ItemFacts,
-  among: readonly T[]
-): T | undefined =>
-  itemHolds(item, facts).find((hold): hold is T =>
-    (among as readonly ItemHold[]).includes(hold)
+  among: readonly T[],
+  facts: ItemFacts<T>
+): T | undefined => {
+  const asked: readonly ItemHold[] = among;
+  const known: Partial<Record<FactHold, () => boolean>> = facts;
+  return HOLD_ORDER.find(
+    (hold): hold is T =>
+      asked.includes(hold) &&
+      (isRowHold(hold) ? ROW_HOLDS[hold](item) : known[hold]?.() === true)
   );
+};

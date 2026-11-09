@@ -138,7 +138,7 @@ import {
 import { type HeldInput, handedInputs } from "./handed-input";
 import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
 import { byId } from "./handles";
-import { type ItemHold, itemHold, itemHolds } from "./item-holds";
+import { type ItemHold, itemHold } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { statusCommand } from "./landing";
 import {
@@ -1437,6 +1437,32 @@ const FAILED_TURN_HOLDS = TURN_HOLDS.filter(
   (hold) => hold !== "waiting" && hold !== "verifying"
 );
 
+/** What leaves a live item that has a session row as the sessions' follow finds it: its custody undecided, its landing, its session moved on. */
+const FOLLOW_HOLDS = [
+  "custody",
+  "landing",
+  "completing",
+  "movedOn",
+] as const satisfies readonly ItemHold[];
+
+/** What leaves a live item's session asleep with nothing done: every hold but a verifier's. */
+const ASLEEP_HOLDS = [
+  "held",
+  "stopping",
+  "blocked",
+  "paused",
+  "custody",
+  "waiting",
+  "waitResuming",
+  "landing",
+  "completing",
+  "finishing",
+  "movedOn",
+  "offline",
+  "sendComing",
+  "onPerson",
+] as const satisfies readonly ItemHold[];
+
 export const createWorkItems = ({
   projectReached,
   awaitsSend,
@@ -1546,13 +1572,6 @@ export const createWorkItems = ({
     }
   };
   /**
-   * Whether `item`'s landing holds its reopeners' sends: one that runs, not
-   * one completing, which waits on its own delegates and may be written to
-   * meanwhile ({@link completeIfDrained}).
-   */
-  const landingHolds = (item: WorkItemRow): boolean =>
-    !!item.landingSince && item.landingPhase !== "completing";
-  /**
    * The {@link finishingFor} hold on `item` ends if nothing keeps it: not
    * its landing, and not its session's last turn (`lastTurnAt`, stored),
    * unless `turnOver` (that turn has ended) or the item is live (a gate
@@ -1560,7 +1579,9 @@ export const createWorkItems = ({
    */
   const closeTurn = (item: WorkItemRow, turnOver: boolean): void => {
     const now = db.workItem(item.id) ?? item;
-    if (landingHolds(now)) {
+    // A landing that runs holds its reopeners' sends; one completing waits
+    // on its own delegates and may be written to ({@link completeIfDrained}).
+    if (itemHold(now, ["landing"], {})) {
       if (turnOver && now.lastTurnAt) {
         update(item.id, { lastTurnAt: null });
       }
@@ -1991,7 +2012,10 @@ export const createWorkItems = ({
    * to it.
    */
   const enforceBudget = (item: WorkItemRow): void => {
-    if (!(item.budget && LIVE.has(item.state)) || landingHolds(item)) {
+    if (
+      !(item.budget && LIVE.has(item.state)) ||
+      itemHold(item, ["landing"], {})
+    ) {
       return;
     }
     const reason = overBudget(item.budget, usedBy(item));
@@ -2083,23 +2107,15 @@ export const createWorkItems = ({
   const leftToFollow = (
     item: WorkItemRow,
     row: InstanceRow | undefined
-  ): boolean => {
-    const holds = itemHolds(item, {
-      custody: custodyPending(
-        row?.machineId ?? standIn(item).machineId,
-        item.instanceId
-      ),
-      movedOn: !!row && row.workItemId !== item.id,
-    });
-    return (
-      holds.includes("custody") ||
-      (!!row &&
-        holds.some(
-          (hold) =>
-            hold === "movedOn" || hold === "landing" || hold === "completing"
-        ))
-    );
-  };
+  ): boolean =>
+    itemHold(item, row ? FOLLOW_HOLDS : ["custody"], {
+      custody: () =>
+        custodyPending(
+          row?.machineId ?? standIn(item).machineId,
+          item.instanceId
+        ),
+      movedOn: () => !!row && row.workItemId !== item.id,
+    }) !== undefined;
 
   /** The session rows of `items`, by id. */
   const sessionRows = (
@@ -2181,15 +2197,15 @@ export const createWorkItems = ({
    */
   const leftAsleep = (item: WorkItemRow, row: InstanceRow): boolean =>
     !(row.status === "sleeping" || GONE.has(row.status)) ||
-    itemHolds(item, {
-      custody: custodyPending(row.machineId, row.id),
-      paused: pausedWorkspace(item.workspaceId) !== undefined,
-      finishing: landingRun.landingRuns(item.id),
-      movedOn: row.workItemId !== item.id,
-      offline: !online(row.machineId),
-      sendComing: awaitsSend(row.id),
-      onPerson: onPerson(row.id),
-    }).length > 0;
+    itemHold(item, ASLEEP_HOLDS, {
+      custody: () => custodyPending(row.machineId, row.id),
+      paused: () => pausedWorkspace(item.workspaceId) !== undefined,
+      finishing: () => landingRun.landingRuns(item.id),
+      movedOn: () => row.workItemId !== item.id,
+      offline: () => !online(row.machineId),
+      sendComing: () => awaitsSend(row.id),
+      onPerson: () => onPerson(row.id),
+    }) !== undefined;
 
   /**
    * THE RULE FOR WORK ASLEEP: a live item whose session has no process while
@@ -4583,11 +4599,9 @@ export const createWorkItems = ({
         `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`
       );
     }
-    const hold = itemHold(
-      item,
-      { finishing: landingRun.landingRuns(item.id) },
-      ["stopping", "landing", "finishing"]
-    );
+    const hold = itemHold(item, ["stopping", "landing", "finishing"], {
+      finishing: () => landingRun.landingRuns(item.id),
+    });
     if (hold === "stopping") {
       throw new WorkItemRefusal(409, workWords.stoppingRefused);
     }
@@ -5357,11 +5371,9 @@ export const createWorkItems = ({
       // "still open" reminder. Here before every such branch. A turn that
       // failed is no waiting turn and waits for no verifier.
       const ok = turn.error === undefined;
-      const hold = itemHold(
-        item,
-        { verifying: ok && designHeld(item.id) },
-        ok ? TURN_HOLDS : FAILED_TURN_HOLDS
-      );
+      const hold = itemHold(item, ok ? TURN_HOLDS : FAILED_TURN_HOLDS, {
+        verifying: () => ok && designHeld(item.id),
+      });
       switch (hold) {
         case "held":
         case "stopping":
@@ -5516,7 +5528,8 @@ export const createWorkItems = ({
       const item = row ? itemOf(row) : undefined;
       return (
         !!item &&
-        (landingHolds(item) || item.lastTurnAt !== null) &&
+        (itemHold(item, ["landing"], {}) !== undefined ||
+          item.lastTurnAt !== null) &&
         mayReopen(item, origin)
       );
     },
