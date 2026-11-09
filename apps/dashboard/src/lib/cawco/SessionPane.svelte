@@ -45,6 +45,7 @@
     crossOutWith,
     reveal,
   } from "#lib/platform/motion/curves.svelte.js";
+  import { newestRead } from "#lib/platform/newest-read.js";
   import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
@@ -268,15 +269,14 @@
   const beside = $derived(besideOf(viewId));
   let besideTasks = $state<TaskSummary[]>([]);
   let besideStages = $state<StagesView | null>(null);
-  let besideReads = 0;
+  const besideReads = newestRead();
   async function readBeside(projectId: string): Promise<void> {
-    besideReads += 1;
-    const ticket = besideReads;
+    const newest = besideReads.next();
     const [{ tasks }, stagesNow] = await Promise.all([
       listTasks(projectId),
       readStages(projectId),
     ]);
-    if (ticket === besideReads && beside?.projectId === projectId) {
+    if (newest() && beside?.projectId === projectId) {
       besideTasks = tasks;
       besideStages = stagesNow;
     }
