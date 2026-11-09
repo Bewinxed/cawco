@@ -1,37 +1,50 @@
 /**
  * What hangs off a session, a machine and a project, in one place: each
  * table that names one, the column that names it, and what happens to its
- * rows when the owner goes, folds, re-keys or is removed. A column with a
- * foreign key is the schema's to answer; every other that names an owner
- * is listed here, or in {@link KNOWN_UNOWNED}, which migrations:check holds
- * to the schema.
+ * rows when the owner goes, folds, re-keys or is removed. Each operation
+ * walks its rows here in this order ({@link walkOwned}): a plain one runs
+ * the statement its kind says, a `custom` one the handler its function
+ * keeps for that table, which the handler's type holds to this list. A
+ * column with a foreign key is the schema's to answer; every other that
+ * names an owner is listed here, or in {@link KNOWN_UNOWNED}, which
+ * migrations:check holds to the schema.
  */
 
 /** One column that names an owner, and what each row-moving operation does with its rows. */
 export interface OwnedRow {
   readonly column: string;
   /**
-   * dropInstances: `delete` the rows of the sessions that go, or `null`
-   * the column on what only pointed at one.
+   * dropInstances: `delete` the rows of the sessions that go, `null` the
+   * column on what only pointed at one, or `custom`.
    */
-  readonly drop?: "delete" | "null";
-  /** foldInto: `move` a former's rows onto the survivor, `once` keeps the survivor's own row, `drop` leaves its state of the moment behind. */
-  readonly fold?: "move" | "once" | "drop";
-  /** foldProject: `move` the duplicate's rows onto the kept project; `custom`: the function handles the table itself. */
+  readonly drop?: "delete" | "null" | "custom";
+  /** foldInto: `move` a former's rows onto the survivor, `once` keeps the survivor's own row, `drop` leaves its state of the moment behind, or `custom`. */
+  readonly fold?: "move" | "once" | "drop" | "custom";
+  /** foldProject: `move` the duplicate's rows onto the kept project, or `custom`. */
   readonly foldProject?: "move" | "custom";
   /** deleteMachine: the rows go with the machine. */
   readonly goesWithMachine?: true;
-  /** rekeyMachine: `move` onto the new id; `keyed`: the machine is in the row's key, so a row the new id holds keeps its place and the old one goes; `custom`: the function handles it. */
+  /** rekeyMachine: `move` onto the new id; `keyed`: the machine is in the row's key, so a row the new id holds keeps its place and the old one goes; or `custom`. */
   readonly rekey?: "move" | "keyed" | "custom";
   readonly table: string;
 }
 
 /**
  * Every column that names a session, a machine or a project and is moved
- * by hand, by table; in the order the operations walk them.
+ * by hand, by table, in the order each operation walks its own. Across
+ * tables the order is free: no trigger or key ties one table's statement
+ * to another's here, and each function runs what one table's rows need of
+ * another (the owner's own row last) outside the walk.
  */
-export const OWNED_ROWS: readonly OwnedRow[] = [
+export const OWNED_ROWS = [
   // A former session's rows, and what a session's going takes (fold order).
+  // Moved row by row by foldInto itself: its owed and envelope carry the id.
+  {
+    table: "sent_messages",
+    column: "instance_id",
+    fold: "custom",
+    drop: "delete",
+  },
   {
     table: "instances",
     column: "parent_instance_id",
@@ -67,7 +80,6 @@ export const OWNED_ROWS: readonly OwnedRow[] = [
   { table: "turn_usage", column: "instance_id", fold: "move" },
   { table: "artifacts", column: "instance_id", fold: "move" },
   { table: "artifacts", column: "made_by", fold: "move" },
-  { table: "routines", column: "made_by", fold: "move" },
   { table: "design_proposals", column: "instance_id", fold: "move" },
   { table: "asks", column: "instance_id", fold: "move" },
   { table: "session_lines", column: "instance_id", fold: "move" },
@@ -81,8 +93,13 @@ export const OWNED_ROWS: readonly OwnedRow[] = [
     fold: "once",
     drop: "delete",
   },
-  // Moved row by row by foldInto itself: its owed and envelope carry the id.
-  { table: "sent_messages", column: "instance_id", drop: "delete" },
+  // Revoked, so what its credentials grant ends with it.
+  {
+    table: "session_identities",
+    column: "instance_id",
+    fold: "custom",
+    drop: "custom",
+  },
   { table: "limit_holds", column: "instance_id", fold: "drop", drop: "delete" },
   {
     table: "limit_compactions",
@@ -94,9 +111,14 @@ export const OWNED_ROWS: readonly OwnedRow[] = [
   { table: "rule_state", column: "instance_id", fold: "drop", drop: "delete" },
   { table: "moved_from_sessions", column: "instance_id", fold: "drop" },
   { table: "limit_stops", column: "instance_id", drop: "delete" },
-  { table: "session_identities", column: "instance_id" },
   // What a machine re-joining under a new id moves (rekeyMachine order);
   // `goesWithMachine` is what deleteMachine takes with it.
+  {
+    table: "agents",
+    column: "machine_id",
+    rekey: "custom",
+    goesWithMachine: true,
+  },
   { table: "instances", column: "machine_id", rekey: "move" },
   { table: "workspaces", column: "machine_id", rekey: "move" },
   { table: "workspace_creates", column: "machine_id", rekey: "move" },
@@ -130,15 +152,15 @@ export const OWNED_ROWS: readonly OwnedRow[] = [
   { table: "machine_keys", column: "machine_id", rekey: "keyed" },
   { table: "ssh_machines", column: "machine_id", rekey: "move" },
   { table: "chosen_modes", column: "machine_id", rekey: "keyed" },
-  {
-    table: "agents",
-    column: "machine_id",
-    rekey: "custom",
-    goesWithMachine: true,
-  },
   { table: "usage_buckets", column: "machine_id", rekey: "custom" },
-  // A project folded into another (foldProject order); `custom` tables are
-  // handled in the function.
+  // A project folded into another (foldProject order).
+  { table: "project_places", column: "project_id", foldProject: "custom" },
+  { table: "project_links", column: "project_id", foldProject: "custom" },
+  {
+    table: "project_repositories",
+    column: "project_id",
+    foldProject: "custom",
+  },
   { table: "instances", column: "project_id", foldProject: "custom" },
   { table: "work_items", column: "project_id", foldProject: "custom" },
   { table: "project_notes", column: "project_id", foldProject: "move" },
@@ -147,10 +169,10 @@ export const OWNED_ROWS: readonly OwnedRow[] = [
   { table: "event_routes", column: "project_id", foldProject: "move" },
   { table: "connector_polls", column: "project_id", foldProject: "move" },
   { table: "inbound_events", column: "project_id", foldProject: "move" },
-  { table: "actions", column: "project_id", foldProject: "move" },
+  { table: "actions", column: "project_id", foldProject: "custom" },
   { table: "relays", column: "project_id", foldProject: "move" },
   { table: "moves", column: "project_id", foldProject: "move" },
-  { table: "artifacts", column: "project_id", foldProject: "move" },
+  { table: "artifacts", column: "project_id", foldProject: "custom" },
   { table: "fleet_watch_notices", column: "project_id", foldProject: "move" },
   { table: "instances", column: "delegate_type_project", foldProject: "move" },
   { table: "fleet_hooks", column: "project_id", foldProject: "move" },
@@ -158,16 +180,8 @@ export const OWNED_ROWS: readonly OwnedRow[] = [
   { table: "mcp_servers", column: "project_id", foldProject: "move" },
   { table: "skills", column: "project_id", foldProject: "move" },
   { table: "project_offers", column: "project_id", foldProject: "move" },
-  { table: "project_places", column: "project_id", foldProject: "custom" },
-  { table: "project_links", column: "project_id", foldProject: "custom" },
-  {
-    table: "project_repositories",
-    column: "project_id",
-    foldProject: "custom",
-  },
   { table: "connection_projects", column: "project_id", foldProject: "custom" },
   { table: "github_pollers", column: "project_id", foldProject: "custom" },
-  { table: "github_poll_cursors", column: "project_id", foldProject: "custom" },
   {
     table: "fleet_memory_doc_projects",
     column: "project_id",
@@ -175,7 +189,65 @@ export const OWNED_ROWS: readonly OwnedRow[] = [
   },
   { table: "queued_task_starts", column: "project_id", foldProject: "custom" },
   { table: "queued_work_items", column: "project_id", foldProject: "custom" },
-];
+] as const satisfies readonly OwnedRow[];
+
+type Owned = (typeof OWNED_ROWS)[number];
+
+/** An operation the registry drives, by the field that says what it does. */
+export type OwnedOp = "drop" | "fold" | "foldProject" | "rekey";
+
+/** The rows `op` walks. */
+type RowsOf<O extends OwnedOp> = Extract<Owned, { readonly [K in O]: unknown }>;
+
+/** The tables whose rows `op` leaves to its function's own code. */
+export type HandledBy<O extends OwnedOp> = Extract<
+  Owned,
+  { readonly [K in O]: "custom" }
+>["table"];
+
+/** A row `op` runs one statement for: its table, its column and what the statement does. */
+export type PlainRow<O extends OwnedOp> = Exclude<
+  RowsOf<O>,
+  { readonly [K in O]: "custom" }
+>;
+
+/**
+ * Runs `op` over its rows, in the registry's order: a `custom` row by its
+ * table's handler in `handlers`, every other by `plain`. `handlers` names
+ * each `custom` table of `op`, and no other: the type's to hold.
+ */
+export const walkOwned = <O extends OwnedOp>(
+  op: O,
+  handlers: { readonly [T in HandledBy<O>]: () => void },
+  plain: (row: PlainRow<O>) => void
+): void => {
+  for (const row of OWNED_ROWS) {
+    const how: unknown = (row as OwnedRow)[op];
+    if (how === "custom") {
+      handlers[row.table as HandledBy<O>]();
+    } else if (how !== undefined) {
+      plain(row as PlainRow<O>);
+    }
+  }
+};
+
+/** The rows deleteMachine takes with the machine. */
+export const GO_WITH_MACHINE = OWNED_ROWS.filter(
+  (row): row is Extract<Owned, { goesWithMachine: true }> =>
+    "goesWithMachine" in row
+);
+
+/**
+ * The columns of `table` a fold moves onto the survivor: what else hands a
+ * session's rows to another reads them here.
+ */
+export const foldMovedColumns = (table: string): readonly string[] =>
+  OWNED_ROWS.filter(
+    (row) =>
+      row.table === table &&
+      "fold" in row &&
+      (row.fold === "move" || row.fold === "once")
+  ).map((row) => row.column);
 
 /**
  * Columns that name a session, machine or project, have no foreign key and
@@ -207,18 +279,3 @@ export const KNOWN_UNOWNED: readonly string[] = [
   "routine_runs.instance_id",
   "tree_stops.instance_id",
 ];
-
-/** One column's owned rows. */
-const rowsOf = (want: (row: OwnedRow) => unknown): readonly OwnedRow[] =>
-  OWNED_ROWS.filter(want);
-
-export const FOLD_MOVED = rowsOf(
-  (row) => row.fold === "move" || row.fold === "once"
-);
-export const FOLD_DROPPED = rowsOf((row) => row.fold === "drop");
-export const MACHINE_MOVED = rowsOf(
-  (row) => row.rekey === "move" || row.rekey === "keyed"
-);
-export const GO_WITH_MACHINE = rowsOf((row) => row.goesWithMachine);
-export const PROJECT_MOVED = rowsOf((row) => row.foldProject === "move");
-export const SESSION_GOES = rowsOf((row) => row.drop === "delete");
