@@ -1265,23 +1265,19 @@ const refused = (error: unknown): Response => {
 
 const ACT_BODY = t.Union([
   t.Object({
-    act: t.Union(
-      (
-        [
-          "set-up",
-          "later",
-          "skip-name",
-          "add-name",
-          "retry",
-          "start-again",
-          "check-again",
-          "done-for-now",
-          "start",
-          "stop",
-          "remove",
-        ] as const
-      ).map((one) => t.Literal(one))
-    ),
+    act: t.UnionEnum([
+      "set-up",
+      "later",
+      "skip-name",
+      "add-name",
+      "retry",
+      "start-again",
+      "check-again",
+      "done-for-now",
+      "start",
+      "stop",
+      "remove",
+    ] as const),
   }),
   t.Object({
     act: t.Literal("add-record"),
