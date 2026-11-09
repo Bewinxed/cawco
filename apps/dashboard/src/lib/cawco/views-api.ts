@@ -8,8 +8,8 @@
 import type { ViewToolName } from "@cawco/core/views";
 import { hub, hubPath } from "#lib/platform/hub.js";
 import {
+  answerOf,
   hubData,
-  refusedOf,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 
@@ -53,8 +53,5 @@ export const viewTool = async (
       body: JSON.stringify(args),
     }
   );
-  if (!response.ok) {
-    throw refusedOrUnreached(await refusedOf(response));
-  }
-  return await response.json();
+  return await hubData(answerOf(response), refusedOrUnreached);
 };
