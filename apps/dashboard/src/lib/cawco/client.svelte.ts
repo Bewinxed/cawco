@@ -4,35 +4,19 @@
  * changes its stream carries (NEW.md §6).
  */
 
-import type { ProjectAtLimit } from "@cawco/core/accounts";
-
 import {
   type Activity,
   sessionChain,
   waitingOnYou,
 } from "@cawco/core/activity";
-import type { OnCap, ProjectCap } from "@cawco/core/areas";
 
 import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 
-import { PRESENCE_HEADER } from "@cawco/core/browser-gate";
-import type { ConnectionView } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
-import type { AvailableCommand } from "@cawco/core/fleet";
 
-import type {
-  ForgottenProject,
-  ProjectRestored,
-} from "@cawco/core/forgotten-project";
-import type {
-  BrowserAskFrame,
-  ConnectAskFrame,
-  FleetFetchFrame,
-  FramePayload,
-  ProjectStopFrame,
-} from "@cawco/core/frames";
+import type { FramePayload } from "@cawco/core/frames";
 import type {
   HarnessCapabilities,
   MachineHarnessReport,
@@ -41,32 +25,18 @@ import type {
   EffortLevel,
   HarnessKind,
   PermissionMode,
-  SessionEffort,
 } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
-import type { LandsMode } from "@cawco/core/injected";
 
-import type { PermissionPresentation } from "@cawco/core/permission-presentation";
-import type { PlaceProject } from "@cawco/core/place-nesting";
-
-import type {
-  CawInitiated,
-  CawStart,
-  ProjectConversationView,
-  ProjectSpend,
-} from "@cawco/core/project-conversation";
-import { capHolds } from "@cawco/core/project-conversation";
 import type {
   ControlPayload,
   DelegateEvent,
   DelegateSummary,
   Envelope,
-  FsPayload,
   InstanceRow,
   NamedSpawn,
   SendPayload,
-  SessionTooling,
   SpawnPayload,
   StopRequest,
   WorkItemSummary,
@@ -78,9 +48,7 @@ import { relaunchOf } from "@cawco/core/relaunch";
 import { CONTROL_SUPPORTED_COMMANDS } from "@cawco/core/session/controls";
 import type {
   McpServerStatus,
-  NeutralStatus,
   PermissionResult,
-  PermissionUpdate,
   SendRecord,
   SupportedCommands,
 } from "@cawco/core/session-messages";
@@ -89,7 +57,6 @@ import type { CommandKind, SessionStreamFrame } from "@cawco/core/stream";
 
 import { HOUR_MS } from "@cawco/core/time";
 import type {
-  ToolGlance,
   TranscriptBlock,
   TranscriptBranch,
   TranscriptEvent,
@@ -100,17 +67,14 @@ import type {
 } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import type { UsageLimitsResponse } from "@cawco/core/usage/types";
-import type { StagesTemplate } from "@cawco/core/views";
+
 import { accountsWords } from "@cawco/core/words/accounts";
 
-import { machineWords } from "@cawco/core/words/machine";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
 
-import { projectWords } from "@cawco/core/words/project";
-import { projectEndWords } from "@cawco/core/words/project-ends";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { workWords } from "@cawco/core/words/work";
-import type { WorkspaceHolding } from "@cawco/core/workspace/controls";
+
 import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import {
@@ -123,21 +87,18 @@ import {
   type HubFailure,
   hubFailure,
   hubFetch,
-  hubJson,
   hubRefusal,
   machineAway,
   failureWords as messageOf,
   refusalClause,
-  refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 
-import { activityOf, sessionActivity } from "./activity";
+import { sessionActivity } from "./activity";
 
-import type { PulseReading } from "./board.svelte";
 import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { type DelegateRecord, delegateRecord } from "./delegate-record";
@@ -146,7 +107,6 @@ import { heardFrame, heardSince, readLeaves } from "./heard";
 import { askMachine, didntAnswer } from "./hub/control";
 import {
   type BoardFrame,
-  type FrameKind,
   type FrameOf,
   hubOnly,
   onFrame,
@@ -166,18 +126,15 @@ import {
   openHub,
   rereadHub,
   send,
-  sendIfOpen,
   settle,
   socketOpen,
   standingBench,
   standSocket,
   takeHubRestart,
-  waitForHub,
   wireHub,
 } from "./hub/socket.svelte";
 import { takeAuthFrame } from "./hub-auth.svelte";
 import {
-  type BoardRow,
   instanceForSession,
   resolveSessionTitle,
   transcriptUrl,
@@ -191,12 +148,7 @@ import { type CommandRefusal, refusals } from "./refusals.svelte";
 import { noteChange } from "./repeated-keys";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
 import { checkServedBuild } from "./served-build.svelte";
-import {
-  answeredCommands,
-  availableCommands,
-  type CommandState,
-  detailsOf,
-} from "./slash-commands";
+import { answeredCommands, detailsOf } from "./slash-commands";
 import { readAccounts } from "./stores/accounts.svelte";
 import {
   adoptRows,
@@ -217,8 +169,21 @@ import {
 } from "./stores/board.svelte";
 import { takeBrowsers } from "./stores/browsers.svelte";
 import { loadCatalog, refreshCatalogs } from "./stores/catalog.svelte";
-import { ahead, minute } from "./stores/clock.svelte";
+import { ahead } from "./stores/clock.svelte";
 import { takeBoardContinuations } from "./stores/continuations.svelte";
+import {
+  commandRecord,
+  latestCommandFor,
+  plugLedger,
+  sendFailureNotices,
+  streamHost,
+  streamState,
+} from "./stores/ledger.svelte";
+import {
+  fleetFetchListeners,
+  machineControl,
+  takeFleetFetch,
+} from "./stores/machines";
 import { takeFleetMcp } from "./stores/mcp-servers.svelte";
 import { takeBoardMoves, takeMoves } from "./stores/moves.svelte";
 import {
@@ -238,8 +203,33 @@ import {
   takePreview,
   takePreviewSettings,
 } from "./stores/previews.svelte";
+import {
+  keepProjects,
+  type ProjectRow,
+  projectsLeave,
+  projectsState,
+  rereadProjects,
+  takeProjectCap,
+  takeProjectStop,
+} from "./stores/projects.svelte";
 import { keepRelayJourney, readRelayJourney } from "./stores/relay.svelte";
-import { equal, patchRows, reconcileRows } from "./stores/same";
+import { equal, patchRows } from "./stores/same";
+import {
+  applyPulse,
+  type BlockedRequest,
+  blankSession,
+  type ContextUsage,
+  clearTurnPhase,
+  hydrate,
+  type PendingPermission,
+  type ReadFault,
+  type SessionState,
+  session,
+  sessionsState,
+  TOUCH_KINDS,
+  touchSession,
+  trackWorking,
+} from "./stores/sessions.svelte";
 import { readTailnetHttps, takeTailnet } from "./stores/tailnet.svelte";
 import {
   forgetStarters,
@@ -254,22 +244,15 @@ import {
   takeUsage,
   usageState,
 } from "./stores/usage.svelte";
-import type {
-  CommandRecord,
-  SettleStage,
-  StreamEffects,
-  StreamHost,
-} from "./stream";
+import type { CommandRecord, SettleStage, StreamEffects } from "./stream";
 import {
   adoptPage,
   beginRead,
-  createStreamState,
   disarmCommandSweep,
   failLocally,
   following,
   forgetUnwatched,
   handleStreamMessage,
-  latestCommand,
   noteDisconnect,
   resumeHeld,
   resumePendingSends,
@@ -292,355 +275,6 @@ import { speakerName } from "./transcript/speaker";
 import type { Message } from "./types";
 import { updates } from "./updates/updates.svelte";
 import { contextOf, workspace } from "./workspace/workspace.svelte";
-
-/**
- * Where a project's files are (place): a checkout on a machine, a
- * delegate's workspace while it lives or is held, or the project's folder on
- * the hub.
- */
-export interface ProjectPlace {
-  createdAt: string;
-  id: string;
-  /** The project's primary checkout: exactly one once it has any. */
-  isPrimary: boolean;
-  /** A `hub` place is the project's folder on the hub (machine `hub`, path `projects/<id>`). */
-  kind: "checkout" | "hub";
-  machineId: string;
-  path: string;
-  projectId: string;
-  /** A checkout's live projects whose checkout holds it: a delete with its files takes their files there too (core place-nesting.ts). */
-  within: PlaceProject[];
-}
-
-/**
- * A project the hub knows about (`GET /api/projects`). `places` holds every
- * place, its primary checkout first, then its folder on the hub; read the
- * primary with `checkoutOf` (projects.ts).
- */
-export interface ProjectRow {
-  /** The account its sessions start on when a start names none (hub project-edit.ts); null: the fleet's routing. */
-  account: string | null;
-  /** What its sessions on {@link account} do at that account's limit. */
-  accountAtLimit: ProjectAtLimit;
-  /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
-  cap?: ProjectCap | null;
-  /** The harness its Caw runs on. */
-  cawHarness: HarnessKind;
-  /** The model its Caw runs; null: its harness's default. */
-  cawModel: string | null;
-  /**
-   * Its Caw's session, once the hub has started one; null before and after
-   * one is retired. Read again on `projects.changed`, which the hub sends as
-   * it changes (caw.ts `setLead`).
-   */
-  conversationInstanceId: string | null;
-  createdAt: string;
-  /** Its events reach its conversation (made with Caw: on). */
-  eventsOn: boolean;
-  id: string;
-  /** Where its attempts land when their task says nothing. */
-  lands: LandsMode;
-  /** The connection that signs in to {@link lfsUrl}; null with it. */
-  lfsConnection: string | null;
-  /** Where its large files live, an LFS endpoint; null: each repository's origin's own LFS. */
-  lfsUrl: string | null;
-  /** Its links, one per repository, `host/owner/repo`, oldest first. */
-  links: string[];
-  name: string;
-  places: ProjectPlace[];
-  /** Its primary checkout's id; null while it has none (a New project before its place is picked). */
-  primaryPlaceId: string | null;
-  /** Review before done: only you move a task to done, and landed work waits in review. */
-  review: boolean;
-}
-
-export interface PendingPermission {
-  /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
-  browserAsk?: BrowserAskFrame;
-  /** A connect ask's server, reason, sign-in address and access (core `ConnectAskFrame`): its card offers Connect and Not now. */
-  connectAsk?: ConnectAskFrame;
-  /**
-   * When this device last heard the hub park it, in the order it hears
-   * things ({@link askHeard}): a read of `/api/pending` asked for before
-   * then cannot know of it, so it cannot unpark it.
-   */
-  heard: number;
-  input: Record<string, unknown>;
-  instanceId: string;
-  /**
-   * The session whose pane draws the ask when it is not its own (a memory
-   * curator run's proposal, parked under its own id on machine "hub").
-   */
-  originInstanceId?: string;
-  /** What the ask says, as the hub read it parking it: the same words on every surface. */
-  presentation: PermissionPresentation;
-  /**
-   * When the hub first parked the ask, ms epoch: one clock for every device,
-   * so the wait each shows and the order it lists asks in agree.
-   */
-  raisedAt?: number;
-  requestId: string;
-  /** Set when the hub routed the ask to its parent rather than to the user. */
-  routedTo?: "parent";
-  suggestions?: PermissionUpdate[];
-  toolName: string;
-  /**
-   * The call the ask gates, as its message's `toolCallId`: while the ask is
-   * parked on the composer, that call has no row in the transcript.
-   */
-  toolUseId?: string;
-}
-
-/** A permission parked anywhere in the fleet, with the context to act on it. */
-export interface BlockedRequest {
-  cwd: string;
-  hostname: string;
-  instanceId: string;
-  machineId: string;
-  request: PendingPermission;
-  /**
-   * The hub cannot reach the session's machine (its row reads `unknown`):
-   * the ask still stands, but answering it waits for the machine.
-   */
-  stale: boolean;
-}
-
-/** Everything one session view needs — live or browsed from storage. */
-/**
- * What the session's own context window looks like right now — the SDK's
- * `getContextUsage`, which is what Claude Code's `/context` reads. Categories
- * come through in the SDK's order and carry its colours; the dashboard shows
- * the numbers, not a second opinion about them.
- */
-export interface ContextUsage {
-  categories: { name: string; tokens: number; color: string }[];
-  maxTokens: number;
-  percentage: number;
-  /** When this reading was taken, so a stale one can say so instead of lying. */
-  readAt: number;
-  totalTokens: number;
-}
-
-/**
- * Why a transcript read ended with nothing to show. `offline` is the fleet's
- * own state — the machine the hub named is not connected — where `failed` is
- * a fault in the read; the pane says a different sentence for each, and reads
- * again when that machine is back.
- */
-export type ReadFault =
-  | {
-      machineId: string;
-      message: string;
-      reason: "offline";
-      /**
-       * The hub heard from the machine moments ago: its agent is on its way
-       * back (the hub restarted, or the machine's connection dropped), and
-       * the read comes once it is. Until this moment (epoch ms), when the
-       * hub stops reading it so, the machine is said to be reconnecting
-       * ({@link reconnectingNow}); past it, offline, on the clock alone. A
-       * wait, not a fault: said in place, never as a toast. `message` is
-       * the offline sentence; {@link faultMessage} says the one for now.
-       */
-      reconnectingUntil?: number;
-    }
-  | { message: string; reason: "failed" };
-
-export interface SessionState {
-  /**
-   * Why the last read again over the rows held failed. The rows stay where
-   * the reader has them, and the read is made again on the next event that
-   * can answer it: the machine online again, the socket back, the backoff
-   * after a read the hub failed (`READ_AGAIN_MS`), a retry.
-   */
-  behind: ReadFault | null;
-  /**
-   * The main transcript as the hub built it, oldest first: every block it has
-   * sent this view, sends drawn in their place. What is on screen,
-   * {@link messages}, is these with this tab's own rows ({@link place}).
-   */
-  blocks: Message[];
-  /** A turn is in flight (sent, no `result` yet). */
-  busy: boolean;
-  /** What this session offers behind `/` — see {@link commandsOf}. */
-  commands: CommandState;
-  /** A `supportedCommands` call is out; the names from `init` are the menu meanwhile. */
-  commandsPending: boolean;
-  /** The last context reading, `null` until one has been asked for. */
-  context: ContextUsage | null;
-  /** Why the last `getContextUsage` call was refused; null once one answers. */
-  contextError: string | null;
-  /** A `getContextUsage` call is out; the meter keeps its last number meanwhile. */
-  contextPending: boolean;
-  /**
-   * The session a continuation took this one's work item on in, by its id
-   * and title, as its newest page said (core `TranscriptPage.continuedTo`):
-   * what its pane reads on its first paint and when the board no longer
-   * lists its row. Null on every other.
-   */
-  continuedTo: { instanceId: string; title: string } | null;
-  /** The main loop's tool in flight, cleared by its result or the turn's end. */
-  currentTool: ToolGlance | null;
-  /**
-   * Where the page older than {@link blocks} begins: the `before` the hub
-   * named, or null once the conversation's start is in hand.
-   */
-  cursor: string | null;
-  cwd: string;
-  /**
-   * How hard that model thinks: what the session actually sends, as its agent
-   * read it back and the hub wrote it on the row — a level, or `none` when it
-   * sends no effort. `null` until the first reading lands.
-   */
-  effort: SessionEffort | null;
-  /**
-   * Which harness owns {@link sessionId} — what a resume and a catalog read
-   * route on. Null until its row, its spawn or its stored listing names it.
-   */
-  harness: HarnessKind | null;
-  /** An older page of the transcript is being read: one at a time (see {@link readOlderPage}). */
-  hydrating: boolean;
-  /** The `system.init` banner is re-emitted every turn; render it once. */
-  initialized: boolean;
-  /** The id this view lives at: a spawned instance, or the SDK session browsed. */
-  instanceId: string;
-  lastActivityAt: Date | null;
-  /**
-   * What the last compaction did, from the `compact_boundary` the SDK emits when
-   * one finishes. Kept on the session rather than only in the transcript so the
-   * dock can say it happened without the reader scrolling to find the line.
-   */
-  lastCompaction: {
-    at: number;
-    preTokens: number;
-    trigger: "manual" | "auto";
-    result?: "success" | "failed";
-    error?: string;
-  } | null;
-  /**
-   * The last turn came back an error — the SDK's `is_error`, not a reading of
-   * what it said. Paired with the machine's auth state, this is what tells a
-   * "cannot answer" apart from an answer nobody liked.
-   */
-  lastTurnFailed: boolean;
-  /** The newest page of the transcript is being fetched. */
-  loading: boolean;
-  /**
-   * This tab's own sends the hub has not taken: on their way, or never
-   * arrived. Each gives way to its block the moment the hub has it, as the
-   * same row.
-   */
-  local: Message[];
-  machineId: string;
-  /** The session's MCP servers (`mcpServerStatus`), null until asked; [] when the ask failed or found none. */
-  mcp: McpServerStatus[] | null;
-  mcpPending: boolean;
-  /**
-   * What is on screen: {@link blocks} with this tab's failure lines among
-   * them, then {@link queued}, then {@link local}. Only {@link place} writes it.
-   */
-  messages: Message[];
-  /** Which model answers the next turn, learnt and corrected the same way. */
-  model: string | null;
-  /**
-   * Failures this tab saw, each after the block that was last when it saw
-   * it (null: before everything).
-   */
-  notes: { after: string | null; message: Message }[];
-  /**
-   * Why the last read of an older page failed, until it is asked for again.
-   * Apart from {@link readFault}: the rows already read stay on screen, and
-   * {@link cursor} stays where it was, so asking again asks for the same page.
-   */
-  olderFault: ReadFault | null;
-  /**
-   * Which content block the main loop has open right now, from the partials —
-   * `null` between blocks and outside a turn. This is the only evidence of what
-   * the session is doing while it does it, and the tail says nothing the
-   * partials have not shown.
-   */
-  openBlock: "thinking" | "text" | "tool" | null;
-  pending: PendingPermission[];
-  /**
-   * How the session answers tool permissions: named by every `system.init`,
-   * moved optimistically by a switch and corrected by the init the next turn
-   * opens with. `null` until something has said — see {@link adoptSettings}.
-   */
-  permissionMode: PermissionMode | null;
-  /** The sends the session has not read yet, oldest first, as the hub placed them. */
-  queued: Message[];
-  /**
-   * How the last transcript read ended, when it ended with nothing on screen.
-   * Every read path sets this on a terminal failure and clears it when a read
-   * starts, so a pane always has something to show for an empty transcript: a
-   * hover-peek's backfill that timed out used to fail into `console.error`
-   * and leave the pane on its loading state for the life of the tab.
-   */
-  readFault: ReadFault | null;
-  /**
-   * How many newest pages this view has taken. An older page is asked for
-   * under one of them, and its answer is dropped when another has landed
-   * since: it belongs to the transcript that read replaced.
-   */
-  reads: number;
-  /** The hub's record of every send this view has heard of, by uuid. */
-  records: Record<string, SendRecord>;
-  /** Started again in place for a mode it could not switch into; ends at the next init. */
-  relaunching: boolean;
-  /**
-   * How many times what this session shows has changed: bumped whenever
-   * {@link messages} moves, a row on it takes the hub's word in place, or a
-   * branch is opened or replaced. A reader that folds the rows (the
-   * transcript's build) depends on this and on the live tail alone, never on
-   * every field of every row: tracking each one made every build of a long
-   * transcript register, and later compare, a dependency per field per row.
-   */
-  rev: number;
-  /** A spin-off (NEW.md §1) — kept visually apart until it is kept or discarded. */
-  scratch: boolean;
-  /**
-   * The session's own word on what it is doing: `compacting` while it rewrites
-   * its context — the only live signal, since the boundary frame lands after
-   * the work — `requesting` while it waits on the model.
-   */
-  sdkStatus: NeutralStatus;
-  /** The SDK session behind this view, once one is known. */
-  sessionId: string | null;
-  /** Partial assistant text, between `stream_event`s and the final message. */
-  streaming: string;
-  /** Subagent branches, keyed by the Task `tool_use_id` that spawned them. */
-  subagents: Record<string, SubagentState>;
-  /** The SDK signed the thinking block: it is wrapping up, not still going. */
-  thinkingClosing: boolean;
-  /**
-   * When the open thinking block started, epoch ms. Measured at
-   * `content_block_start`, consumed when the settled thinking message lands —
-   * the one clock that survives "thinking then a tool call in one frame",
-   * where both mapped messages share a timestamp and adjacency measures 0.
-   */
-  thinkingSince: number | null;
-  /**
-   * What the open thinking block has reasoned so far. Left standing when the
-   * block closes — the trace stays readable until the transcript's own thinking
-   * message supersedes it — and `''` for a redacted block, which streams
-   * nothing and is still thinking.
-   */
-  thinkingStream: string;
-  /**
-   * The MCP servers and tools the session's newest `init` announced — the `/`
-   * palette's servers and tools. Said by the newest page's facts (the hub's
-   * row's, when the transcript read holds no `init`) and replaced by every
-   * live `init` after that.
-   */
-  tooling: SessionTooling;
-  /**
-   * When this stretch of work began, epoch ms, or `null` while the session is
-   * idle. Stamped by the local send before a single frame has come back — the
-   * wait for the first one is exactly the silence the transcript's presence line
-   * exists to fill — and left alone for the rest of the turn, so a permission
-   * answered halfway through does not restart the clock.
-   */
-  workingSince: number | null;
-}
 
 /**
  * What each hub row's session needs from you ({@link activityNow}), held
@@ -791,16 +425,6 @@ const sessionChild = (row: InstanceRow): TrayChild => {
   };
 };
 
-const projectsState = $state({
-  projects: [] as ProjectRow[],
-  /** `/api/projects` has answered this page once: an empty list then means none (home FirstRun). */
-  projectsRead: false,
-});
-
-const sessionsState = $state({
-  sessions: {} as Record<string, SessionState>,
-});
-
 const delegatesState = $state({
   /**
    * What the hub summed up of each delegate whose card came on screen, keyed
@@ -888,86 +512,6 @@ function standHub(answer: BenchHub): void {
   // What the bench stood in is the fleet as read, live and stored alike.
   boardState.fleetRead = true;
   boardState.liveRead = true;
-}
-
-/**
- * A session with nothing in it, and nothing registered anywhere.
- *
- * The store is a module singleton, so on the server it is shared by every
- * request — writing one reader's conversation into it would hand it to the
- * next. So the server never touches the store: `SessionPane` builds one of
- * these from its `load` data instead, renders the page out of it, and drops it
- * the moment the real store session has the conversation.
- */
-export function blankSession(instanceId: string): SessionState {
-  return {
-    instanceId,
-    machineId: "",
-    cwd: "",
-    sessionId: null,
-    harness: null,
-    blocks: [],
-    queued: [],
-    rev: 0,
-    cursor: null,
-    continuedTo: null,
-    records: {},
-    local: [],
-    notes: [],
-    messages: [],
-    subagents: {},
-    pending: [],
-    streaming: "",
-    openBlock: null,
-    thinkingStream: "",
-    thinkingClosing: false,
-    thinkingSince: null,
-    busy: false,
-    workingSince: null,
-    currentTool: null,
-    lastActivityAt: null,
-    loading: false,
-    hydrating: false,
-    readFault: null,
-    behind: null,
-    olderFault: null,
-    reads: 0,
-    initialized: false,
-    permissionMode: null,
-    model: null,
-    effort: null,
-    relaunching: false,
-    scratch: false,
-    context: null,
-    contextPending: false,
-    contextError: null,
-    commands: { names: [], skills: [], detailed: null, at: 0 },
-    commandsPending: false,
-    tooling: { servers: [], tools: [] },
-    mcp: null,
-    mcpPending: false,
-    lastTurnFailed: false,
-    sdkStatus: null,
-    lastCompaction: null,
-  };
-}
-
-function session(instanceId: string): SessionState {
-  const existing = sessionsState.sessions[instanceId];
-  if (existing) {
-    return existing;
-  }
-
-  const created: SessionState = blankSession(instanceId);
-  sessionsState.sessions[instanceId] = created;
-  // Read it back: the literal above is the raw target, and `$state` writes land
-  // on the proxy's signals, never on it. Handing out the raw object would give
-  // callers a view the UI stops tracking the moment it first renders one.
-  const target = sessionsState.sessions[instanceId];
-  // A session this browser never opened — a permission replayed from `/api/pending`
-  // is the usual way — still has to name its machine on the fleet view.
-  hydrate(target);
-  return target;
 }
 
 /**
@@ -1671,85 +1215,6 @@ function prependTranscriptPage(
   place(target);
 }
 
-/** Fills in what the registry knows about a session this browser did not spawn. */
-/**
- * The daemon's now-state, written onto the session it describes.
- *
- * The running tool is otherwise learnt from the turn's own frames — a tool
- * starting, its result, the turn ending — which is a complete account only
- * for a subscriber who was there for all of them. One that joined while a
- * tool was running has seen none, and would hold the session as idle until
- * the next delta. `busy` is the pulse's alone once one has come
- * (`applyTail`): the hub's tail reaches this tab on the session's stream,
- * the pulse on the broadcast, and their order across the two is no one's
- * to promise.
- */
-function applyPulse(target: SessionState, pulse: PulseReading): void {
-  target.busy = pulse.busy;
-  if (!equal(target.currentTool, pulse.currentTool)) {
-    target.currentTool = pulse.currentTool;
-  }
-}
-
-function hydrate(target: SessionState): void {
-  const pulse = pulseOf(target.instanceId);
-  if (pulse) {
-    applyPulse(target, pulse);
-  }
-  const known = instanceIndex.byId.get(target.instanceId);
-  if (!known) {
-    return;
-  }
-  adoptSettings(target, known);
-  // The row is the authority on the key, whatever the view holds: a key that
-  // arrives after the view opened — the usual case on a reload right after a
-  // hub restart — has to reach the store, or the next resume goes out without.
-  if (known.sessionId) {
-    target.sessionId = known.sessionId;
-  }
-  if (target.machineId) {
-    return;
-  }
-  target.machineId = known.machineId;
-  target.cwd = known.cwd;
-  target.harness = known.harness;
-  target.scratch = known.kind === "scratch";
-}
-
-/**
- * Seeds the permission mode and model this view shows from what the hub stored.
- *
- * Precedence, highest first: the newest `system.init` — the session's own word,
- * re-emitted every turn, so it also corrects a setting changed by something that
- * is not this dashboard; then a switch this browser made and the daemon
- * confirmed, until that next init; then this row, which is all a view has before
- * the session's first turn; then the default the header falls back to. The row
- * therefore only ever fills a blank: it can be older than what the session has
- * since said, and a broadcast must not walk a live value back to it.
- */
-function adoptSettings(target: SessionState, row: BoardRow): void {
-  // Only a spawn, a confirmed switch or an init ever wrote the column, so its
-  // word on a mode is the SDK's — which is wider than the picker's four.
-  if (target.permissionMode === null && row.permissionMode) {
-    target.permissionMode = row.permissionMode as PermissionMode;
-  }
-  if (target.model === null && row.model) {
-    target.model = row.model;
-  }
-  // Effort on the row is the agent's reading of what the session sends — its
-  // own word, so it replaces what this view held rather than filling a blank.
-  // Held back only while a switch made here is still on its way, whose
-  // reading follows it.
-  const switching = latestCommandFor(target.instanceId, "set-effort");
-  if (
-    row.effort &&
-    switching?.stage !== "submitted" &&
-    switching?.stage !== "accepted"
-  ) {
-    target.effort = row.effort;
-  }
-}
-
 /**
  * Writes back a setting the session has confirmed, so the next cold load starts
  * from what it is running rather than from what this browser once asked for.
@@ -2283,32 +1748,6 @@ function hearDelegateEvent(event: DelegateEvent): void {
   }
 }
 
-/**
- * Keeps {@link SessionState.workingSince} in step with what the session is
- * doing. Anything that can change {@link activityOf} calls this: the clock
- * starts at the first sign of work and stops only where the session goes idle,
- * so a turn that is merely blocked or waiting on a tool keeps counting.
- */
-function trackWorking(target: SessionState): void {
-  if (activityOf(target) === "idle") {
-    target.workingSince = null;
-  } else {
-    target.workingSince ??= Date.now();
-  }
-}
-
-/**
- * Forgets the live turn phase. Called wherever the partials that painted it
- * stop being the truth: the turn ended, the process behind it was replaced, or
- * a stored transcript has taken the transcript's place.
- */
-function clearTurnPhase(target: SessionState): void {
-  target.openBlock = null;
-  target.thinkingStream = "";
-  target.thinkingClosing = false;
-  target.thinkingSince = null;
-}
-
 function takePermissionSettled(frame: FrameOf<"permission_settled">): void {
   // The hub's word that the ask is over, whoever settled it: the card goes,
   // and a read already on its way cannot bring it back.
@@ -2449,28 +1888,6 @@ function takeWorkItem(frame: FrameOf<"work_item">): void {
   }
 }
 
-function takeProjectCap(frame: FrameOf<"project.cap">): void {
-  heardFrame(`project.cap:${frame.projectId}`);
-  const project = projectsState.projects.find(
-    (row) => row.id === frame.projectId
-  );
-  if (project) {
-    project.cap = frame.cap;
-  }
-}
-
-function takeProjectStop(frame: FrameOf<"project.stop">): void {
-  for (const listener of projectStopListeners) {
-    listener(frame);
-  }
-}
-
-function takeFleetFetch(frame: FrameOf<"fleet.fetch">): void {
-  for (const listener of fleetFetchListeners) {
-    listener.heard(frame);
-  }
-}
-
 function takePulseFrame(frame: FrameOf<"pulse">): void {
   const previous = pulses.get(frame.instanceId);
   if (previous && previous.at > frame.pulse.at) {
@@ -2587,28 +2004,6 @@ function takePermissionRequest(frame: FrameOf<"permission_request">): void {
   target.lastActivityAt = new Date();
 }
 
-/** The kinds of a session's frame that say no more than that it moved. */
-const TOUCH_KINDS = [
-  "asleep",
-  "frame",
-  "held_send",
-  "recovery_unavailable",
-  "rejected",
-  "scratch_worktree",
-  "send",
-  "session_address",
-  "stopped",
-  "taken_send",
-] as const satisfies readonly FrameKind[];
-type TouchKind = (typeof TOUCH_KINDS)[number];
-
-/** A session's frame that says no more than that it moved: its session is held, its activity stamped. */
-function touchSession(frame: FrameOf<TouchKind>): void {
-  const target = session(frame.instanceId);
-  trackWorking(target);
-  target.lastActivityAt = new Date();
-}
-
 /** Every kind of frame the socket delivers, routed to what takes it. */
 routeFrames([
   onFrame("fleet_mcp", takeFleetMcp),
@@ -2713,61 +2108,6 @@ wireHub({
   ],
   reread: refresh,
 });
-
-/* ------------------------------------------------------------------ *
- * The Ledger Protocol binding
- *
- * `stream.ts` holds the decisions — sequence tracking, gaps, backlog
- * validation, command stages — because a `.svelte.ts` module cannot be
- * imported by this repo's tests. What is left here is the thin binding: the
- * runes state it mutates, the socket it speaks through, and the two existing
- * paths it reaches back into (frame apply, history re-read).
- * ------------------------------------------------------------------ */
-
-/**
- * The stream half of the store. A plain object under `$state`, so a cursor
- * moving or a command changing stage is something the UI can read reactively.
- */
-const streamState = $state(createStreamState());
-
-/** What the ledger reaches back into: the stores' frame apply, follows, re-reads and failure word. */
-type LedgerPorts = Required<
-  Pick<StreamHost, "applyFrame" | "follows" | "rereadHistory" | "noteFailure">
->;
-
-let ledgerPorts: LedgerPorts = {
-  applyFrame: () => undefined,
-  follows: () => false,
-  rereadHistory: () => undefined,
-  noteFailure: () => undefined,
-};
-
-/** The stores, plugged into the ledger's ports. */
-function plugLedger(ports: LedgerPorts): void {
-  ledgerPorts = ports;
-}
-
-const streamHost: StreamHost = {
-  applyFrame: (sessionId, frame) => ledgerPorts.applyFrame(sessionId, frame),
-  follows: (sessionId) => ledgerPorts.follows(sessionId),
-  rereadHistory: (sessionId, cause) =>
-    ledgerPorts.rereadHistory(sessionId, cause),
-  sendToHub: sendIfOpen,
-  now: () => Date.now(),
-  warn: (message, detail) => console.warn(`[cawco] ${message}`, detail),
-  /**
-   * The ledger's own clock. The ack timeout used to be enforced only by the
-   * traffic sweep below, which meant a message whose frame was swallowed was
-   * called off when some unrelated frame happened to arrive — and on a quiet
-   * tab, or one whose socket had gone silent, never. That is the exact shape
-   * of a permanent ghost: the operator's words on screen, at "sending…",
-   * indefinitely. A real timer settles them whether or not anything arrives.
-   */
-  setTimer: (delayMs, run) => setTimeout(run, delayMs) as unknown as number,
-  clearTimer: (handle) =>
-    clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
-  noteFailure: (record) => ledgerPorts.noteFailure(record),
-};
 
 plugLedger({
   // A session's own changes arrive only here, sequenced: what the hub's builder
@@ -3181,13 +2521,6 @@ function sweepOnTraffic(): void {
   pruneOutbox();
 }
 
-/** Re-exported so a component reads one import for a command and its stages. */
-
-/** One command's record, by the id {@link submitCommand} returned. */
-export function commandRecord(commandId: string): CommandRecord | null {
-  return streamState.commands[commandId] ?? null;
-}
-
 /**
  * The last answer sent to each parked ask, by the ask's request id: any
  * surface showing the ask (its session's card, its Needs row) reads that
@@ -3213,17 +2546,6 @@ const answeredWhileOurs = new Map<string, Message>();
 function answeredHere(requestId: string): boolean {
   const record = answerFor(requestId);
   return record !== null && record.stage !== "failed";
-}
-
-/**
- * The newest command of one kind on one session — what a control reads to say
- * whether what was just asked for has been taken, applied, or refused.
- */
-export function latestCommandFor(
-  instanceId: string,
-  kind: CommandKind
-): CommandRecord | null {
-  return latestCommand(streamState, instanceId, kind);
 }
 
 /** What each command kind carries, in the shape the caller already has to hand. */
@@ -3978,22 +3300,6 @@ export function pendingRestore(
 /** Consumed exactly once by the pane that took it. */
 export function clearRestore(instanceId: string): void {
   restoreSlots[instanceId] = null;
-}
-
-/* ---- the spoken half: what a screen reader is told -------------------- */
-
-/**
- * The last send failure per session, as a sentence.
- *
- * The transcript is virtualized, so a state flip inside a row is not reliably
- * announced; the pane owns one live region instead and this is what it reads.
- * Only failures are announced — acceptance is the norm, and narrating the norm
- * is how a live region becomes noise nobody hears the exception through.
- */
-const sendFailureNotices = $state<Record<string, string>>({});
-
-export function sendFailureNotice(instanceId: string): string {
-  return sendFailureNotices[instanceId] ?? "";
 }
 
 function announceSendFailure(record: CommandRecord): void {
@@ -5017,95 +4323,6 @@ export async function renameInstance(
 }
 
 /**
- * The person's own edit of a project: its name, its Review before done,
- * where its work lands, or where its large files live
- * (`PATCH /api/projects/:id`). The answer lands in the
- * projects at once; the hub's `projects.changed` brings it to every other
- * dashboard and the app. Throws the refusal, in the hub's words.
- */
-export async function editProject(
-  projectId: string,
-  change: {
-    /** The account its sessions start on, by id; null: the fleet's routing. */
-    account?: string | null;
-    /** What its sessions on that account do at its limit. */
-    accountAtLimit?: ProjectAtLimit;
-    lands?: LandsMode;
-    /** Where its large files live, and the connection that signs in there; null: each origin's own LFS. */
-    lfs?: { connection: string; url: string } | null;
-    name?: string;
-    review?: boolean;
-  }
-): Promise<ProjectRow> {
-  const asked = projectsLeave();
-  const response = await hubFetch(
-    hubRequest("PATCH /api/projects/:id", {
-      path: { id: projectId },
-      body: change,
-    })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notChangedThen);
-  }
-  const row = (await response.json()) as ProjectRow;
-  keepProject(row, asked);
-  return row;
-}
-
-/** A project as the hub just answered it to the request `asked`, in the projects at once. */
-function keepProject(row: ProjectRow, asked: ProjectsAsked): void {
-  keepProjects(
-    projectsState.projects.map((each) => (each.id === row.id ? row : each)),
-    asked
-  );
-}
-
-/**
- * Another checkout of the project's repository, named by hand: a machine
- * and an absolute folder on it (`POST /api/projects/:id/places`). Throws
- * the refusal in the hub's words; the project as it stands lands at once.
- */
-export async function addProjectPlace(
-  projectId: string,
-  machineId: string,
-  path: string
-): Promise<ProjectRow> {
-  const asked = projectsLeave();
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/places", {
-      path: { id: projectId },
-      body: { machineId, path },
-    })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.placeNotAddedThen);
-  }
-  const row = (await response.json()) as ProjectRow;
-  keepProject(row, asked);
-  return row;
-}
-
-/**
- * A place the project no longer counts (`DELETE /api/projects/:id/places/:placeId`).
- * Its folder stays on disk. The hub refuses the primary checkout and the
- * project's folder on the hub (409), in its words, thrown here.
- */
-export async function removeProjectPlace(
-  projectId: string,
-  placeId: string
-): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("DELETE /api/projects/:id/places/:placeId", {
-      path: { id: projectId, placeId },
-    })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.placeNotRemovedThen);
-  }
-  await readProjects();
-}
-
-/**
  * Promotes a spin-off to mainline work: the UI stops setting it apart, and
  * the tag that kept its transcript out of the machine's catalog comes off, so
  * the session joins the history it was being hidden from. `unanswered` when
@@ -5149,670 +4366,6 @@ function settleStopped(instanceId: string): void {
   // Its parked asks leave on the hub's word (`permission_settled`): the hub
   // settles a stopped process's asks, and keeps a relaunch's own.
   trackWorking(target);
-}
-
-/**
- * A control call about the machine rather than a session — the SDK's module-level
- * session functions. The reply is correlated by `requestId`, which the hub routes
- * back to this socket alone.
- */
-export async function machineControl<T>(
-  machineId: string,
-  method: string,
-  args: unknown[] = [],
-  replyTimeoutMs = CONTROL_TIMEOUT_MS,
-  harness?: HarnessKind
-): Promise<Bounded<T>> {
-  await waitForHub();
-  const requestId = newId();
-  const payload: ControlPayload = {
-    requestId,
-    method,
-    args,
-    ...(harness && { harness }),
-  };
-  return askMachine<T>(machineId, requestId, replyTimeoutMs, () =>
-    send({ verb: "control", machineId, requestId, payload })
-  );
-}
-
-/**
- * The `fs` verb (NEW.md §6): a machine's files, for the docs rail and the light
- * markdown editing on top of it. Answered by `requestId` like a control call.
- */
-export async function machineFs<T>(
-  machineId: string,
-  op: FsPayload["op"],
-  path: string,
-  content?: string,
-  /** `path` is relative to this root, as the machine places it (`FsPayload.root`). */
-  root?: FsPayload["root"]
-): Promise<Bounded<T>> {
-  await waitForHub();
-  const requestId = newId();
-  const payload: FsPayload = {
-    requestId,
-    op,
-    path,
-    content,
-    ...(root ? { root } : {}),
-  };
-  return askMachine<T>(machineId, requestId, CONTROL_TIMEOUT_MS, () =>
-    send({ verb: "fs", machineId, requestId, payload })
-  );
-}
-
-/**
- * New project (`POST /api/projects`), made with Caw: its one place is its
- * folder on the hub until setup picks its checkout. `template` is the card
- * tapped, kept as tapped and written by nothing until the setup page is
- * sent; it carries no name (it holds the placeholder until Caw names it).
- * `prompt` starts its conversation, its first message (as the send
- * `promptId`), which sets it up. The hub answers once the project is made,
- * Caw's start carrying on: its page shows him starting and why he couldn't
- * (CawLead `starting`, `problem`). The hub's refusal is its own words.
- */
-export async function createProject(project: {
-  template?: StagesTemplate;
-  prompt: string;
-  promptId: string;
-}): Promise<ProjectRow & { place: ProjectPlace }> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects", { body: { ...project, caw: true } })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notMadeThen);
-  }
-  const created = (await response.json()) as ProjectRow & {
-    place: ProjectPlace;
-  };
-  await rereadHub();
-  return created;
-}
-
-/**
- * A project from a folder on a machine (New Session's project chip): that
- * checkout its primary. A checkout of a repository a project already has
- * joins that project as a place instead; `place` is the folder asked about.
- */
-export async function projectAtFolder(project: {
-  name: string;
-  cwd: string;
-  machineId: string;
-}): Promise<ProjectRow & { place: ProjectPlace; placeAdded: boolean }> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects", { body: project })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notSavedThen);
-  }
-  const created = (await response.json()) as ProjectRow & {
-    place: ProjectPlace;
-    placeAdded: boolean;
-  };
-  await rereadHub();
-  return created;
-}
-
-// --- a project's conversation and views -------------------------------------
-
-/** A project's conversation: on or off, its harness, its session, why it cannot start, its spend. */
-export const cawOf = (projectId: string): Promise<ProjectConversationView> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/caw", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
-  );
-
-/** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
-export const configureCaw = async (
-  projectId: string,
-  change: {
-    harness?: HarnessKind;
-    /** Turning him off with what he started still running: the ids that stop; the rest finish. */
-    initiated?: CawInitiated;
-    model?: string | null;
-    on?: boolean;
-  }
-): Promise<ProjectConversationView> => {
-  const view = await hubJson<ProjectConversationView>(
-    hubRequest("PATCH /api/projects/:id/caw", {
-      path: { id: projectId },
-      body: change,
-    }),
-    { failure: refusedOrUnreached }
-  );
-  // The hub's answer is where he stands: the project's row says so now,
-  // before the `projects.changed` it sent brings the row read again.
-  const row = projectsState.projects.find(
-    (project) => project.id === projectId
-  );
-  if (row) {
-    row.eventsOn = view.on;
-    row.cawHarness = view.harness;
-    row.cawModel = view.model;
-    row.conversationInstanceId = view.instanceId;
-  }
-  return view;
-};
-
-/**
- * Session `instanceId`, started in his panel, is the project's conversation
- * now (hub caw.ts `name`): the one the project's row names, which his panel
- * shows and his events reach. The answer's name stands on the row at once.
- */
-/**
- * How the person's start of a project's conversation goes, as the hub says
- * every start of it goes (hub caw.ts `startOf`): where, on the project's
- * harness and model, in which mode; refused, in words, while no machine is
- * online.
- */
-export const conversationStart = (projectId: string): Promise<CawStart> =>
-  hubJson<CawStart>(
-    hubRequest("POST /api/projects/:id/caw/place", {
-      path: { id: projectId },
-    }),
-    { failure: refusedOrUnreached }
-  );
-
-export const nameConversation = async (
-  projectId: string,
-  instanceId: string
-): Promise<ProjectConversationView> => {
-  const view = await hubJson<ProjectConversationView>(
-    hubRequest("POST /api/projects/:id/caw/conversation", {
-      path: { id: projectId },
-      body: { instanceId },
-    }),
-    { failure: refusedOrUnreached }
-  );
-  const row = projectsState.projects.find(
-    (project) => project.id === projectId
-  );
-  if (row) {
-    row.conversationInstanceId = view.instanceId;
-  }
-  return view;
-};
-
-/**
- * What a routine's notice reads of it (hub routines.ts `RoutineView`): kept
- * or not, on or off.
- */
-export interface RoutineState {
-  enabled: boolean;
-  id: string;
-  keep: boolean;
-  /** Null for a fleet routine. */
-  projectId: string | null;
-}
-
-/** A routine as it stands now. */
-export const readRoutine = (routineId: string): Promise<RoutineState> =>
-  hubJson(hubRequest("GET /api/routines/:id", { path: { id: routineId } }), {
-    failure: refusedOrUnreached,
-  });
-
-/** The fleet's connections, never their keys (`GET /api/connections`). */
-export const readConnections = async (): Promise<ConnectionView[]> =>
-  (
-    await hubJson<{ connections: ConnectionView[] }>(
-      hubRequest("GET /api/connections"),
-      { failure: refusedOrUnreached }
-    )
-  ).connections;
-
-/** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
-export const changeRoutine = (
-  routineId: string,
-  change: { enabled?: boolean; keep?: boolean }
-): Promise<RoutineState> =>
-  hubJson(
-    hubRequest("PATCH /api/routines/:id", {
-      path: { id: routineId },
-      body: change,
-    }),
-    { failure: refusedOrUnreached }
-  );
-
-/** "Ask Caw for a view": your words to the project's conversation, which drafts it; the session they went to. */
-export const requestView = (
-  projectId: string,
-  text: string
-): Promise<{ instanceId: string }> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/view-requests", {
-      path: { id: projectId },
-      body: { text },
-    }),
-    { failure: refusedOrUnreached }
-  );
-
-/** What a project has spent: today, this month, its conversations' share, each attempt. */
-export const projectSpend = (projectId: string): Promise<ProjectSpend> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/spend", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
-  );
-
-/** Sets what an attempt at the project's tasks may spend; null clears it. */
-/**
- * Sets the project's spend cap — dollars a day or a month, or none — and what
- * reaching it does, its own or (null) the fleet's.
- */
-export const setProjectCap = (
-  projectId: string,
-  change: {
-    onCap: OnCap | null;
-    period: "day" | "month" | null;
-    usd: number | null;
-  }
-): Promise<{ cap: ProjectCap | null }> =>
-  hubJson(
-    hubRequest("PUT /api/projects/:id/cap", {
-      path: { id: projectId },
-      body: change,
-    }),
-    { failure: refusedOrUnreached }
-  );
-
-/** What reaching a project's cap does where the project sets nothing. */
-export const spendSettings = (): Promise<{ onCap: OnCap }> =>
-  hubJson(hubRequest("GET /api/spend-settings"), {
-    failure: refusedOrUnreached,
-  });
-
-export const setSpendSettings = (onCap: OnCap): Promise<{ onCap: OnCap }> =>
-  hubJson(hubRequest("PUT /api/spend-settings", { body: { onCap } }), {
-    failure: refusedOrUnreached,
-  });
-
-export const setProjectBudget = (
-  projectId: string,
-  budget: ProjectSpend["budget"]
-): Promise<unknown> =>
-  hubJson(
-    hubRequest("PATCH /api/projects/:id/dispatch", {
-      path: { id: projectId },
-      body: { budget },
-    }),
-    { failure: refusedOrUnreached }
-  );
-
-/**
- * Forgets a project: it waits in the hub's trash to be brought back
- * (`restoreProject`). The hub refuses while any of its sessions still runs
- * (409, saying how many); that answer is thrown as it is. The board's list
- * keeps the project until `readProjects`: the tray first takes the reader
- * off the project's page, so the page never stands on a project the list no
- * longer has.
- */
-export async function forgetProject(id: string): Promise<void> {
-  // Its tab's presence, which the hub's journal names the forget by.
-  const response = await hubFetch(
-    hubRequest("DELETE /api/projects/:id", { path: { id } }),
-    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notForgottenThen);
-  }
-}
-
-/**
- * Deletes a project for good, live or forgotten (hub project-delete.ts);
- * `fromDisk`: its checkouts on every machine and its sessions' transcripts
- * too. A refusal (a session running, a machine away, a place shared) is
- * thrown in the hub's words.
- */
-export async function deleteProjectForGood(
-  id: string,
-  fromDisk: boolean
-): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/delete", {
-      path: { id },
-      body: { fromDisk },
-    }),
-    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectEndWords.notDeletedThen);
-  }
-}
-
-/** A refusal that asking again the same way can't change (a conflict, an entry gone): no Try again. */
-export class StandingRefusal extends Error {}
-
-/** Every forgotten project the hub can bring back, newest first. */
-export async function readForgottenProjects(): Promise<ForgottenProject[]> {
-  const response = await hubFetch(hubRequest("GET /api/projects/forgotten"));
-  if (!response.ok) {
-    throw await hubRefusal(response, projectEndWords.unreadThen);
-  }
-  return (await response.json()) as ForgottenProject[];
-}
-
-/**
- * Brings a forgotten project back as it was (hub project-trash.ts): the
- * entry forgotten at `forgottenAt` (else its newest), and `name` for one forgotten before the
- * hub kept names. The projects are read again, so the rail has it.
- */
-export async function restoreProject(
-  id: string,
-  asked: { forgottenAt?: number; name?: string }
-): Promise<ProjectRestored> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/restore", { path: { id }, body: asked }),
-    { headers: { [PRESENCE_HEADER]: presenceClientId() } }
-  );
-  if (!response.ok) {
-    const refused = await hubRefusal(
-      response,
-      projectEndWords.notBroughtBackThen
-    );
-    // A conflict or a gone entry stands until something else changes: asking
-    // again the same way can't bring it back.
-    throw response.status === 409 || response.status === 404
-      ? new StandingRefusal(refused.message)
-      : refused;
-  }
-  const restored = (await response.json()) as ProjectRestored;
-  await readProjects();
-  return restored;
-}
-
-/** Reads the projects again, as the hub has them now. */
-export async function readProjects(): Promise<void> {
-  const asked = projectsLeave();
-  const projects = await load<ProjectRow[]>(hubRequest("GET /api/projects"));
-  if (projects) {
-    keepProjects(projects, asked);
-  }
-}
-
-/** A request whose answer writes the projects: when it left, among frames and among those requests. */
-interface ProjectsAsked {
-  mark: number;
-  ticket: number;
-}
-/** Requests that write the projects, as they left, and the newest whose answer was kept. */
-let projectsAsked = 0;
-let projectsKept = 0;
-const projectsLeave = (): ProjectsAsked => {
-  projectsAsked += 1;
-  return { mark: readLeaves(), ticket: projectsAsked };
-};
-
-/**
- * The projects as a request `asked` answered them. An answer to a request
- * that left before the one last kept is dropped: every change of a project
- * says `projects.changed`, so a read follows any change it missed. Each
- * project's cap is the `project.cap` frame's when one came for it since the
- * request left: the hub tells a cap only when it moves, so an older one put
- * back would stand.
- */
-function keepProjects(projects: ProjectRow[], asked: ProjectsAsked): void {
-  if (asked.ticket < projectsKept) {
-    return;
-  }
-  projectsKept = asked.ticket;
-  const held = new Map(projectsState.projects.map((row) => [row.id, row]));
-  const answered = projects.map((row) => {
-    const kept = held.get(row.id);
-    return kept && heardSince(`project.cap:${row.id}`, asked.mark)
-      ? { ...row, cap: kept.cap }
-      : row;
-  });
-  projectsState.projects = reconcileRows(
-    projectsState.projects,
-    answered,
-    (row) => row.id
-  );
-  projectsState.projectsRead = true;
-}
-
-/**
- * The hub said the projects changed (`projects.changed`: a place came or
- * went): one read at a time, and one more after it for whatever a burst of
- * workspaces opening said meanwhile.
- */
-let projectsReading: Promise<void> | null = null;
-let projectsAgain = false;
-function rereadProjects(): void {
-  if (projectsReading) {
-    projectsAgain = true;
-    return;
-  }
-  projectsReading = readProjects()
-    .catch(() => undefined)
-    .finally(() => {
-      projectsReading = null;
-      if (projectsAgain) {
-        projectsAgain = false;
-        rereadProjects();
-      }
-    });
-}
-
-/** One running session of a project, in tree order (parents first). */
-export interface RunningSession {
-  cwd: string;
-  id: string;
-  machineId: string;
-  /** Its machine is not connected: it stops when its machine is back. */
-  offline: boolean;
-  /** The nearest running session it is a delegate of; null for a top session. */
-  parentId: string | null;
-  title: string | null;
-}
-
-/** A project's running sessions as the hub lists them: what a forget stops first. */
-export async function projectRunning(id: string): Promise<RunningSession[]> {
-  const response = await hubFetch(
-    hubRequest("GET /api/projects/:id/running", { path: { id } })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.sessionsNotListedThen);
-  }
-  return ((await response.json()) as { sessions: RunningSession[] }).sessions;
-}
-
-/** Who hears `fleet.fetch` frames, and is told when the socket that carries them drops. */
-interface FleetFetchListener {
-  dropped: () => void;
-  heard: (frame: FleetFetchFrame) => void;
-}
-
-const fleetFetchListeners = new Set<FleetFetchListener>();
-
-/**
- * Hears each `fleet.fetch` frame: a skill or plugin fetch at the hub began
- * or landed, with its row whole. `dropped` runs when the socket closes, as a
- * fetch that lands meanwhile is never heard. Returns the unsubscribe.
- */
-export function onFleetFetch(listener: FleetFetchListener): () => void {
-  fleetFetchListeners.add(listener);
-  return () => fleetFetchListeners.delete(listener);
-}
-
-const projectStopListeners = new Set<(frame: ProjectStopFrame) => void>();
-
-/**
- * Hears each `project.stop` frame: a session a forget asked to stop has
- * stopped (its machine confirmed), or could not be. Returns the unsubscribe.
- */
-export function onProjectStop(
-  listener: (frame: ProjectStopFrame) => void
-): () => void {
-  projectStopListeners.add(listener);
-  return () => projectStopListeners.delete(listener);
-}
-
-/**
- * Stops the named sessions of a project in one request. Each one's outcome
- * arrives later, by `onProjectStop`, as its machine confirms the end.
- */
-export async function stopProjectSessions(
-  id: string,
-  instanceIds: string[]
-): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("POST /api/projects/:id/stop", {
-      path: { id },
-      body: { instanceIds },
-    })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, projectWords.sessionsNotStoppedThen);
-  }
-}
-
-/**
- * Forgets an offline machine: its row, its projects and its session rows. The
- * hub refuses a machine that is online, and says why; that answer is thrown
- * as it is, for the confirm dialog to show under its question.
- */
-export async function removeMachine(machineId: string): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("DELETE /api/agents/:machineId", { path: { machineId } })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, machineWords.notRemovedThen);
-  }
-  await rereadHub();
-}
-
-/**
- * Pauses a machine until `until` (hub machine-pause.ts): its turns stop and
- * nothing starts there until then; or, with `until` null, ends its pause
- * now. The hub's refusal is thrown in its words.
- */
-export async function pauseMachine(
-  machineId: string,
-  until: Date | null
-): Promise<void> {
-  const path = { machineId };
-  const response = await hubFetch(
-    until
-      ? hubRequest("POST /api/machines/:machineId/pause", {
-          path,
-          body: { until: until.toISOString() },
-        })
-      : hubRequest("POST /api/machines/:machineId/resume", { path })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, machineWords.pauseNotChangedThen);
-  }
-  await rereadHub();
-}
-
-/**
- * Deletes a session's transcript on its machine — the one way a transcript is
- * deleted, from a stored row or a sleeping one. The hub sees the delete go
- * past and, once the machine confirms it, drops every row that named it; the
- * catalog is read again here so the stored list agrees.
- */
-export async function deleteTranscript(
-  machineId: string,
-  sessionId: string,
-  dir: string | undefined,
-  harness: HarnessKind | undefined
-): Promise<Bounded<void>> {
-  const deleted = await machineControl<void>(
-    machineId,
-    "deleteSession",
-    [sessionId, { dir }],
-    undefined,
-    harness
-  );
-  await loadCatalog(machineId);
-  return deleted;
-}
-
-/**
- * Removes a session that never started: no transcript, no process. The hub
- * refuses any other kind and says why; that answer is thrown as it is, for
- * the confirm dialog to show under its question.
- */
-/** What a held workspace's clone holds that is nowhere else, as its machine read it once its boundary was closed (hub workspaces.ts `HeldWork`). */
-export interface WorkspaceHeld extends WorkspaceHolding {
-  /** In words: "2 commits on no remote, 3 changed files, 1 stash". */
-  holds: string;
-  machine: string;
-  path: string;
-  /** The clone's size on disk, in words. */
-  size: string;
-}
-
-/** Reads what a held workspace holds that is nowhere else (`GET /api/workspaces/:id/held`); the hub's refusal (one not held) is the error. */
-export async function workspaceHeld(
-  workspaceId: string
-): Promise<WorkspaceHeld> {
-  const response = await hubFetch(
-    hubRequest("GET /api/workspaces/:id/held", { path: { id: workspaceId } })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.heldUnreadThen);
-  }
-  return (await response.json()) as WorkspaceHeld;
-}
-
-/**
- * What a workspace serves that still waits on the person, each by its id
- * and title (`GET /api/workspaces/:id/waiting`): what its archive's confirm
- * names, as confirming archives it anyway. None when the read fails: the
- * hub refuses an archive it wasn't told was confirmed, in its own words.
- */
-export async function workspaceWaiting(
-  workspaceId: string
-): Promise<{ id: string; title: string }[]> {
-  const response = await hubFetch(
-    hubRequest("GET /api/workspaces/:id/waiting", { path: { id: workspaceId } })
-  ).catch(() => null);
-  if (!response?.ok) {
-    return [];
-  }
-  return (
-    (await response.json()) as { waiting: { id: string; title: string }[] }
-  ).waiting;
-}
-
-/**
- * Archives a workspace through the hub (`POST /api/workspaces/:id/archive`):
- * its machine kills the boundary with everything in it and deletes the
- * clone and its records, a damaged one among them. The hub's refusal (a live
- * item there, or work in the clone that is nowhere else, which holds it) is
- * the error. `discard` lets that work go: its machine saves its unlanded
- * commits, changes and stashes to a carry first. Files git ignores go with
- * the clone. `anyway`: the person confirmed it knowing what still waits on
- * him there ({@link workspaceWaiting}), which the hub otherwise refuses.
- */
-export async function archiveWorkspace(
-  workspaceId: string,
-  {
-    discard = false,
-    anyway = false,
-  }: { discard?: boolean; anyway?: boolean } = {}
-): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("POST /api/workspaces/:id/archive", {
-      path: { id: workspaceId },
-      body: { discard, anyway },
-    })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.notArchivedThen);
-  }
-  await rereadHub();
-}
-
-export async function removeSession(instanceId: string): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("DELETE /api/instances/:id", { path: { id: instanceId } })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.sessionNotRemovedThen);
-  }
-  await rereadHub();
 }
 
 /**
@@ -7250,29 +5803,6 @@ const sameAsk = (a: BlockedRequest, b: BlockedRequest | undefined): boolean =>
   a.stale === b.stale;
 
 export const cawco = {
-  get projects() {
-    return projectsState.projects;
-  },
-  /** The projects have been read once: an empty list is a fleet with none. */
-  get projectsRead() {
-    return projectsState.projectsRead;
-  },
-  project: (id: string): ProjectRow | null =>
-    projectsState.projects.find((project) => project.id === id) ?? null,
-  /** The project's spend cap while it holds the project back now; null otherwise. */
-  capHolding: (id: string): ProjectCap | null => {
-    const cap =
-      projectsState.projects.find((project) => project.id === id)?.cap ?? null;
-    return capHolds(cap, minute.now) ? cap : null;
-  },
-  /** The projects whose spend cap holds them back now. */
-  get capped(): ProjectRow[] {
-    return projectsState.projects.filter((project) =>
-      capHolds(project.cap, minute.now)
-    );
-  },
-  session: (instanceId: string): SessionState | null =>
-    sessionsState.sessions[instanceId] ?? null,
   /**
    * What one delegate's card draws of its exchange with its parent, once
    * {@link readDelegate} asked for it. Empty for a delegate whose traffic
@@ -7340,49 +5870,6 @@ export const cawco = {
       return target.currentTool;
     }
     return pulseOf(instanceId)?.currentTool ?? null;
-  },
-  /**
-   * The ledger stats the fleet table shows per session — turns, context %.
-   * Only populated for a session this browser has state for (subscribed / a turn
-   * has closed); `null` otherwise, which the table renders as an em dash.
-   */
-  statsOf: (
-    instanceId: string
-  ): {
-    turns: number | null;
-    contextPct: number | null;
-    totalTokens: number | null;
-    maxTokens: number | null;
-  } => {
-    const t = sessionsState.sessions[instanceId];
-    if (!t) {
-      return {
-        turns: null,
-        contextPct: null,
-        totalTokens: null,
-        maxTokens: null,
-      };
-    }
-    const turns = t.messages.filter((m) => m.type === "assistant").length;
-    return {
-      turns: turns > 0 ? turns : null,
-      contextPct: t.context?.percentage ?? null,
-      totalTokens: t.context?.totalTokens ?? null,
-      maxTokens: t.context?.maxTokens ?? null,
-    };
-  },
-  /** What a session offers behind `/`, grouped the way the palette lists it. */
-  /**
-   * The MCP servers and tools the session's newest `init` announced: the hub's
-   * stored copy, read as the view opened, then each live `init` — so a reload
-   * or a hub restart keeps them. Empty for a harness whose `init` carries
-   * neither, and for a view not opened yet.
-   */
-  toolingOf: (instanceId: string): SessionTooling =>
-    sessionsState.sessions[instanceId]?.tooling ?? { servers: [], tools: [] },
-  commandsOf: (instanceId: string): AvailableCommand[] => {
-    const target = sessionsState.sessions[instanceId];
-    return target ? availableCommands(target.commands) : [];
   },
   get blocked(): BlockedRequest[] {
     return blocked;
