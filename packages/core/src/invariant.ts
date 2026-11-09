@@ -51,17 +51,17 @@ export const LAWS = {
   "register-spawned-nothing":
     "An agent's first register is sent before any harness probe has started.",
   /**
-   * At the agent, on boundary.ts's beat (`judgesAnswer`): a workspace a
+   * At the agent, on boundary/'s beat (`judgesAnswer`): a workspace a
    * session's process runs in has a judge its hook names, of this build,
    * answering, whatever became of that session's attach (dad89261b).
    *
    * Not an `invariant()`: what it finds broken is one workspace's judge,
-   * which the agent repairs there (boundary.ts `repairJudge`: the judge
+   * which the agent repairs there (boundary/looks.ts `repairJudge`: the judge
    * started again, else what uses the workspace ended) and stays up. Its exit
    * cut every other workspace's call off, and its start revived the same
    * state, which the next close broke again (obelisk, 2026-10-18).
    *
-   * Born red: boundary.ts `judgesAnswer` records its line.
+   * Born red: boundary/looks.ts `judgesAnswer` records its line.
    */
   "live-workspace-judge-answers":
     "Every workspace a session's process runs in has a judge of this build answering its hook.",
