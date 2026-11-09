@@ -6,7 +6,7 @@
  *
  * Drives the real module in-process, loaded at an address of its own
  * (`?bridge-spec`), so a stand-in another spec of the run swapped in for it
- * (preview-burst's) is never the one read. Only its boundary.ts is swapped,
+ * (preview-burst's) is never the one read. Only its boundary/ is swapped,
  * by a runtime Bun plugin, for `workspaceNetworks` naming a network namespace this
  * spec starts with bwrap (a user and network namespace, as a boundary's), a
  * server listening in it: the bridge's own setsid, setpriv, nsenter and relay
@@ -37,7 +37,8 @@ const BRIDGE_FILE = join(
   "../../../packages/agent/src/preview-bridge.ts"
 );
 const OWN_BRIDGE = /packages\/agent\/src\/preview-bridge\.ts\?bridge-spec$/u;
-const OWN_BOUNDARY = /packages\/agent\/src\/boundary\.ts\?bridge-spec$/u;
+const OWN_BOUNDARY =
+  /packages\/agent\/src\/boundary\/sandboxes\.ts\?bridge-spec$/u;
 const STOPPED = "was stopped while its way into the workspace opened";
 
 const bridgeAlive = async (socket: string): Promise<string> =>
@@ -84,11 +85,11 @@ const run = async (kit: Kit) => {
     return;
   }
 
-  // Only boundary.ts is swapped: the bridge's code is the module's own.
+  // Only boundary/sandboxes.ts is swapped: the bridge's code is the module's own.
   const networks = [{ inner }];
   (globalThis as { __probeNetworks?: unknown }).__probeNetworks = networks;
   // The bridge's own code, at an address of this spec's own (`?bridge-spec`),
-  // its boundary.ts swapped at one too: a module this process loaded before
+  // its boundary/sandboxes.ts swapped at one too: a module this process loaded before
   // (a spec run ahead of this one in the same run: preview-burst swaps the
   // bridge itself for a stand-in) is never the one read here.
   Bun.plugin({
@@ -96,8 +97,8 @@ const run = async (kit: Kit) => {
     setup(build) {
       build.onLoad({ filter: OWN_BRIDGE }, async () => ({
         contents: (await readFile(BRIDGE_FILE, "utf8")).replace(
-          'from "./boundary";',
-          `from "./boundary.ts${OWN}";`
+          'from "./boundary/sandboxes";',
+          `from "./boundary/sandboxes.ts${OWN}";`
         ),
         loader: "ts",
       }));

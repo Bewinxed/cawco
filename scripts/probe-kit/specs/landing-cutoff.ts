@@ -113,7 +113,7 @@ const SLEEP: Partial<Record<Tag, string[]>> = {
 /** How long a sandbox's processes get to be gone once it was ended. */
 const GONE_MS = 10_000;
 /**
- * The agent's decisions that end a boundary on purpose (boundary.ts
+ * The agent's decisions that end a boundary on purpose (boundary/
  * `BoundaryDecision`): closed quiet, an older one closed, or closed for good
  * as the workspace is archived or kept with its boundary closed.
  */
@@ -408,7 +408,7 @@ interface Boundary {
 
 /**
  * Workspace `id`'s current boundary as its files name it: its srt host's
- * pid and generation (`boundary.json`, agent boundary.ts `readHeld`), and
+ * pid and generation (`boundary.json`, agent boundary/state.ts `readHeld`), and
  * its sandbox's outer bwrap and init (the generation's `sandbox` file,
  * boundary-host.ts `placeFile`). Undefined while it has none.
  */
@@ -715,7 +715,7 @@ const run = async (kit: Kit) => {
         : undefined;
       /**
        * The init of each sandbox workspace `id` runs now: the second word of
-       * each generation's `sandbox` file (agent boundary.ts `generationDir`,
+       * each generation's `sandbox` file (agent boundary/state.ts `generationDir`,
        * boundary-host.ts `placeFile`).
        */
       const innersOf = async (id: string): Promise<string[]> => {
@@ -753,7 +753,7 @@ const run = async (kit: Kit) => {
       /**
        * Each restart of the workspace's sandbox its srt host made for a
        * guarded path changed on the host, as the agent records it
-       * (`host-restarted`, agent boundary.ts `BoundaryDecision`), by the
+       * (`host-restarted`, agent boundary/decisions.ts `BoundaryDecision`), by the
        * host's own time. Kept as each is read: an archive takes the
        * workspace's state dir, its decisions with it.
        */
