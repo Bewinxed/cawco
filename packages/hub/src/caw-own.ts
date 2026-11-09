@@ -2,7 +2,7 @@ import type { DbShape } from "./db";
 import { isHubParent } from "./work-items";
 
 type ProjectRow = NonNullable<ReturnType<DbShape["project"]>>;
-type Row = ReturnType<DbShape["getInstancesByIds"]>[number];
+export type Row = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 /** Whether `root`, the top of a delegation chain, is `project`'s conversation. */
 const isLead = (root: Row, project: ProjectRow): boolean =>
