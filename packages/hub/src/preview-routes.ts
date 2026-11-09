@@ -17,12 +17,9 @@ import type { ArtifactSocket } from "./artifacts/sync";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import { projectOrigin } from "./db/previews";
 import { hidden } from "./hidden";
-import {
-  type PreviewListenerDeps,
-  type PreviewListeners,
-  PreviewRefusal,
-} from "./preview";
+import type { PreviewListenerDeps, PreviewListeners } from "./preview";
 import { mintTicket, presentedPasses } from "./preview-access";
+import { PreviewRefusal } from "./preview-hosts";
 
 /** A panel asked for an artifact its session doesn't see. */
 const NO_SUCH_ARTIFACT = "This session has no such artifact.";
