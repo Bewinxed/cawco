@@ -39,6 +39,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconArrowUpRight } from "#lib/icons.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { floor } from "#lib/platform/visible-viewport.svelte.js";
@@ -124,7 +125,7 @@
   const Glyph = $derived(ARTIFACT_GLYPH[page?.kind ?? "page"]);
 
   /** A phone: under 640px, the product's phone line; its thread is the bottom sheet. */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** A mouse: resting on the chip opens it too. */
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
 

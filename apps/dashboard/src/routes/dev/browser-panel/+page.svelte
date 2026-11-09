@@ -1,4 +1,17 @@
 <script lang="ts">
+  import type { ListedBrowser } from "@cawco/core/browser";
+  import { browserWords } from "@cawco/core/words/browser";
+  import { MediaQuery } from "svelte/reactivity";
+  import { z } from "zod";
+  import BrowserAddress from "#lib/cawco/preview/BrowserAddress.svelte";
+  import BrowserView from "#lib/cawco/preview/BrowserView.svelte";
+  import { browserHead } from "#lib/cawco/preview/browser-head.js";
+  import { HEAD_PRIORITY } from "#lib/cawco/side/head.js";
+  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   /**
    * A browser artifact in the artifact panel, for judging it at its widths:
    * the panel's card and floating head (SideSurface) with a browser's head
@@ -21,24 +34,12 @@
    * container runtime: the local browser's line under the stream),
    * `long` (an origin longer than the address holds).
    */
-  import type { ListedBrowser } from "@cawco/core/browser";
-  import { browserWords } from "@cawco/core/words/browser";
-  import { MediaQuery } from "svelte/reactivity";
-  import { z } from "zod";
-  import BrowserAddress from "#lib/cawco/preview/BrowserAddress.svelte";
-  import BrowserView from "#lib/cawco/preview/BrowserView.svelte";
-  import { browserHead } from "#lib/cawco/preview/browser-head.js";
-  import { HEAD_PRIORITY } from "#lib/cawco/side/head.js";
-  import SideSurface from "#lib/cawco/side/SideSurface.svelte";
-  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconExternalLinear } from "#lib/icons.js";
   import { page } from "$app/state";
 
   const asked = page.url.searchParams.get("state") ?? "live";
-  const phone = new MediaQuery("max-width: 639px");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The stream is drawn: there is a page to take over. */
   let viewing = $state(false);
 
