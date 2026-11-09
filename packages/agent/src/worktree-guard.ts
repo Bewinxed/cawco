@@ -12,7 +12,7 @@
  * they would (hub-command.ts `movedCommand`); a session's go through
  * {@link gitShim}: the same for Claude Code, OpenCode and pi, whose shell
  * commands all run through the workspace's executor, which puts the
- * workspace's read-only bin first on PATH (boundary.ts `execScript`).
+ * workspace's read-only bin first on PATH (boundary/exec.ts `execScript`).
  */
 import { realpath } from "node:fs/promises";
 import { relative } from "node:path";

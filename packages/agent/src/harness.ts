@@ -85,7 +85,7 @@ export interface HarnessContext {
    * inside (`./boundary`). Absent on every other session, which runs its
    * commands as it always has.
    */
-  readonly boundary?: import("./boundary").Boundary;
+  readonly boundary?: import("./boundary/state").Boundary;
   /**
    * The door its browser tool (the fleet's chrome-devtools) is launched
    * through (browser/door.ts): its workspace's, else its own. Made when
