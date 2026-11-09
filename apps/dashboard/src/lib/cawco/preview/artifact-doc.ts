@@ -45,7 +45,7 @@ import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { hub } from "#lib/platform/hub.js";
-import { hubRefusal } from "#lib/platform/hub-read.js";
+import { hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { openPageWrites } from "./open-pages";
 
 /**
@@ -209,13 +209,13 @@ async function postSend(
   body: Pick<SendBody, "again" | "control" | "pins" | "writes">,
   again: string
 ): Promise<void> {
-  const answer = await hub.api
-    .instances({ id: instanceId })
-    .artifacts({ artifact: artifactId })
-    .send.post(body);
-  if (answer.error) {
-    throw hubRefusal(answer, again);
-  }
+  await hubDone(
+    hub.api
+      .instances({ id: instanceId })
+      .artifacts({ artifact: artifactId })
+      .send.post(body),
+    (refused) => hubRefusal(refused, again)
+  );
 }
 
 /**
