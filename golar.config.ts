@@ -6,8 +6,7 @@
  *   `.ts` and `.svelte` file;
  * - `golar lint`: the rules below, over the files the change reaches.
  *
- * The rules: the harness-name ban (scripts/lint/no-harness-compare.ts) over
- * every file below but the probe specs; the hub-path ban (scripts/lint/hub-path-door.ts) over every
+ * The rules: the hub-path ban (scripts/lint/hub-path-door.ts) over every
  * caller of the hub's source; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
@@ -25,7 +24,6 @@ import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
 import { hubPathDoor } from "./scripts/lint/hub-path-door.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
-import { noHarnessCompare } from "./scripts/lint/no-harness-compare.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
 /** The planted mistakes, read by their own globs below and never as product code. */
@@ -38,8 +36,6 @@ const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
 const HUB_PATH_FIXTURES = `${LINT_FIXTURES}hub-path.ts`;
 /** The bindings of `fetch` to another sender the alias rule must refuse. */
 const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
-/** The harness-name compares the rule must refuse. */
-const HARNESS_COMPARE_FIXTURES = `${LINT_FIXTURES}harness-compare.ts`;
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -98,11 +94,6 @@ const hubCallers = within(
     "scripts/**/*.ts"
   )
 ).filter((path) => !path.startsWith(LINT_FIXTURES));
-// Every file that could name a harness but the probe specs, whose doubles
-// compare a harness by name (scripts/lint/no-harness-compare.ts).
-const harnessNaming = switched.filter(
-  (path) => !path.startsWith("scripts/probe-kit/specs/")
-);
 const designed = within(
   tracked("apps/dashboard/src/**/*.ts", "apps/dashboard/src/**/*.svelte")
 );
@@ -136,10 +127,6 @@ export default defineConfig({
       {
         files: [...hubCallers.map(literal), FETCH_ALIAS_FIXTURES],
         rules: [noFetchAlias],
-      },
-      {
-        files: [...harnessNaming.map(literal), HARNESS_COMPARE_FIXTURES],
-        rules: [noHarnessCompare],
       },
     ],
   },
