@@ -26,7 +26,7 @@
  * waits and asks again (core binary-distribution.ts `archiveAnswered`,
  * read by the agent's download, binary-update.ts). The spec's machine
  * downloads as the agent does: core's resumable download, its machine
- * proof (core machine-key.ts `machineFetch`), every answer read through
+ * proof (agent machine-fetch.ts `machineFetch`), every answer read through
  * `archiveAnswered`.
  *
  * (a) Through the forward, with the key the add wrote, the machine reads
@@ -219,7 +219,7 @@ async function run(kit: Kit): Promise<void> {
     writeFileSync(
       ask,
       `import { archiveAnswered } from ${JSON.stringify(join(ROOT, "packages/core/src/binary-distribution.ts"))};
-import { machineFetch } from ${JSON.stringify(join(ROOT, "packages/core/src/machine-key.ts"))};
+import { machineFetch } from ${JSON.stringify(join(ROOT, "packages/agent/src/machine-fetch.ts"))};
 import { downloadResumably } from ${JSON.stringify(join(ROOT, "packages/core/src/resumable-download.ts"))};
 const [hub, url, partial, size] = process.argv.slice(2);
 const settings = await machineFetch(\`\${hub}/api/binary-updates/settings\`);
