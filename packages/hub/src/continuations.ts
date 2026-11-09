@@ -1606,21 +1606,21 @@ export const createContinuations = (ctx: ContinuationsContext) => {
   };
 
   return {
-    SETTLED,
-    advanceContinuation,
-    cancelContinuation,
+    prepareContinuation,
     cloneForContinuation,
-    continuationJob,
     continuationRefusal,
+    inFlightFor,
+    SETTLED,
+    continuationJob,
     continuationTable,
     continuationsWhole,
-    forgetContinuationLater,
-    heldJobs,
-    inFlightFor,
     machineFor,
-    outcomeOf,
-    prepareContinuation,
-    settledContinuation,
+    forgetContinuationLater,
     startContinuation,
+    advanceContinuation,
+    heldJobs,
+    cancelContinuation,
+    settledContinuation,
+    outcomeOf,
   };
 };
