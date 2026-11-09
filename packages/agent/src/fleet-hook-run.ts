@@ -7,7 +7,7 @@
  * its exit and output read as Claude Code reads them (core `hookVerdict`).
  * In a workspace each runs inside the boundary, through the shell prefix
  * every shell-form hook of its Claude Code sessions runs through
- * (boundary.ts `claudePrefixScript`), whose stdin reaches the command.
+ * (boundary/hook-judge.ts `claudePrefixScript`), whose stdin reaches the command.
  * CawCo's OpenCode plugin runs the same steps in its own source
  * (opencode-plugin.ts), which loads no module of the agent's.
  */
@@ -23,7 +23,7 @@ import {
 } from "@cawco/core/hooks";
 import { sessionEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import type { Boundary } from "./boundary";
+import type { Boundary } from "./boundary/state";
 import type { SetHook } from "./fleet-harness-set";
 import { commandLineOf } from "./fleet-hook-guard";
 

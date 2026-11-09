@@ -621,7 +621,7 @@ export default defineConfig(({ command }) => {
     /**
      * vaul-svelte imports bits-ui and never declares it
      * (huntabyte/vaul-svelte#130). Installed into bun's global store (a
-     * CawCo workspace's bun install, agent boundary.ts `writeBunConfig`), it
+     * CawCo workspace's bun install, agent boundary/package-managers.ts `writeBunConfig`), it
      * resolves from its real path in the cache, which has no node_modules of
      * ours above it: "Rolldown failed to resolve import "bits-ui" from
      * "…/links/vaul-svelte@1.0.0-next.7+…/dist/components/drawer/index.js"".

@@ -66,7 +66,7 @@ import {
   stripFrontmatter,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { type Boundary, boundaryCommand } from "../boundary";
+import { type Boundary, boundaryCommand } from "../boundary/state";
 import type { BrowserDoor } from "../browser/door";
 import {
   callDelegationTool,
