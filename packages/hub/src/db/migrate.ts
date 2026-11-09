@@ -16,18 +16,7 @@ import { z } from "zod";
 import type { DbCore } from "./core";
 import { dropGraphPlaces } from "./drop-graph-places";
 import { mergeProjectPages } from "./merge-project-pages";
-import {
-  ARTIFACT_TITLES,
-  FILE_HASHES,
-  GRAPH_PLACES_TAG,
-  PICKED_TAKEN_BACK,
-  PROJECT_PAGES_TAG,
-  SETTLED_NAMES,
-  SKILL_PLUGIN_VERSIONS,
-  SPLIT_CONTINUATIONS,
-  SSH_MACHINES_HUB,
-  TAG_MARKERS,
-} from "./migration-names";
+import { FILE_HASHES } from "./migration-names";
 import { rehashStoredFilesOnce } from "./rehash-stored-files";
 import { dataMigrations } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
@@ -53,16 +42,15 @@ const Journal = z.object({
   entries: z.array(z.object({ tag: z.string(), when: z.number() })),
 });
 
-/** A migration's tag in drizzle's journal, a step's place in the SQL's order. */
-type MigrationTag =
-  "0275_project_pages_outlive_sessions" | "0317_drop_graph_places";
-
 /** Where a step's work runs. */
 type Step =
-  /** Beside the migrator, on the connection, with foreign keys off: before `before` applies. */
+  /**
+   * Beside the migrator, on the connection, with foreign keys off: before
+   * the migration tagged `before` in drizzle's journal applies.
+   */
   | {
       name: string;
-      before: MigrationTag;
+      before: string;
       run: (client: Database, when: number) => void;
       at: "migrator";
     }
@@ -79,15 +67,19 @@ type Step =
       after: "latest";
       run: (db: BunSQLiteDatabase) => void;
       at: "opened";
-    }
-  /** By the hub as it starts, once what it reads exists (recorded in `data_migrations`), after the last migration. */
-  | { name: string; after: "latest"; at: "hub"; where: string };
+    };
 
-/** In the order they run on one hub's start. */
-const MIGRATION_STEPS: readonly Step[] = [
+/**
+ * In the order they run on one hub's start: the `migrator` steps in their
+ * tags' journal order, then `open`, then `opened`. migrations:check holds
+ * each tag to the journal and the list to that order. A once-step the hub
+ * runs itself as it starts keeps its `data_migrations` name in
+ * migration-names.ts, beside the others.
+ */
+export const MIGRATION_STEPS: readonly Step[] = [
   {
     name: "merge-project-pages",
-    before: PROJECT_PAGES_TAG,
+    before: "0275_project_pages_outlive_sessions",
     at: "migrator",
     run: (client, when) => {
       mergeProjectPages(client, when);
@@ -95,7 +87,7 @@ const MIGRATION_STEPS: readonly Step[] = [
   },
   {
     name: "drop-graph-places",
-    before: GRAPH_PLACES_TAG,
+    before: "0317_drop_graph_places",
     at: "migrator",
     run: (client, when) => {
       dropGraphPlaces(client, when);
@@ -126,48 +118,6 @@ const MIGRATION_STEPS: readonly Step[] = [
       rehashStoredFilesOnce(db, FILE_HASHES);
     },
   },
-  {
-    name: SPLIT_CONTINUATIONS,
-    after: "latest",
-    at: "hub",
-    where: "server.ts `repairSplitContinuations`",
-  },
-  {
-    name: TAG_MARKERS,
-    after: "latest",
-    at: "hub",
-    where: "server.ts `keepSendsAtStart`",
-  },
-  {
-    name: SETTLED_NAMES,
-    after: "latest",
-    at: "hub",
-    where: "settled-names.ts `nameSettledOnce`",
-  },
-  {
-    name: PICKED_TAKEN_BACK,
-    after: "latest",
-    at: "hub",
-    where: "settling.ts `takeBackPickedOnce`",
-  },
-  {
-    name: ARTIFACT_TITLES,
-    after: "latest",
-    at: "hub",
-    where: "artifact-titles.ts `titleUntitledOnce`",
-  },
-  {
-    name: SKILL_PLUGIN_VERSIONS,
-    after: "latest",
-    at: "hub",
-    where: "server.ts boot, db `versionStoredOnce`",
-  },
-  {
-    name: SSH_MACHINES_HUB,
-    after: "latest",
-    at: "hub",
-    where: "db `sshMachines.claim`",
-  },
 ];
 
 /** Each migration's `when` by its tag, as the journal keeps it. */
@@ -179,7 +129,7 @@ const journalWhens = (): Map<string, number> => {
 };
 
 /** The step's `when`, its place in the journal: refused for a tag no migration holds (migrations-check checks every one). */
-const whenOf = (whens: Map<string, number>, tag: MigrationTag): number => {
+const whenOf = (whens: Map<string, number>, tag: string): number => {
   const when = whens.get(tag);
   if (when === undefined) {
     throw new Error(`no migration tagged ${tag} in drizzle's journal`);
