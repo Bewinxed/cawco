@@ -28,10 +28,14 @@
   import { accountsWords as words } from "@cawco/core/words/accounts";
   import { SvelteMap } from "svelte/reactivity";
   import { z } from "zod";
-  import { cawco, signOutOn } from "#lib/cawco/client.svelte.js";
+
   import RowMenu from "#lib/cawco/config/RowMenu.svelte";
   import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
   import NsPopoverGroup from "#lib/cawco/spawn/NsPopoverGroup.svelte";
+  import {
+    accountsStore,
+    signOutOn,
+  } from "#lib/cawco/stores/accounts.svelte.js";
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
@@ -70,7 +74,7 @@
   let { account }: { account: Account } = $props();
 
   const machines = $derived(machinesFor(account.provider));
-  const signins = $derived(cawco.accounts?.signins ?? []);
+  const signins = $derived(accountsStore.accounts?.signins ?? []);
   const claude = $derived(account.provider === "anthropic");
   const key = $derived(account.kind === "api_key");
   /** A row's one action: a key is sent, any other account signs in. */
