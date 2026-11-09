@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import type { Starter } from "#lib/cawco/project-tasks.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconChatAdd } from "#lib/icons.js";
+  import { crossIn } from "#lib/platform/motion/curves.svelte.js";
   /**
    * The hero of Caw's panel before a conversation starts (ProjectConversation):
    * "What's next for {project}?", the line when he is off, and the board's

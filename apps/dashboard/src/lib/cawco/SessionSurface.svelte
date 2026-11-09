@@ -35,7 +35,6 @@
     type ServerTail,
     syncSubscriptions,
   } from "#lib/cawco/client.svelte.js";
-  import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import FirstRunHere from "#lib/cawco/home/FirstRunHere.svelte";
   import { firstRunSteps } from "#lib/cawco/home/first-run.svelte.js";
@@ -48,13 +47,6 @@
   import PeekSheet from "#lib/cawco/home/PeekSheet.svelte";
   import { instanceForSession } from "#lib/cawco/links.js";
   import MachinesEmpty from "#lib/cawco/MachinesEmpty.svelte";
-  import {
-    crossIn,
-    crossOut,
-    dur,
-    ease,
-    motionOk,
-  } from "#lib/cawco/motion/curves.svelte.js";
   import { presenceWorkspace } from "#lib/cawco/presence.js";
   import { fullSize } from "#lib/cawco/workspace/full-size.svelte.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
@@ -73,6 +65,14 @@
   } from "#lib/cawco/workspace/tabs.js";
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { firstRender } from "#lib/platform/first-render.svelte.js";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    ease,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { browser } from "$app/env";
   import { afterNavigate } from "$app/navigation";
   import { page } from "$app/state";

@@ -39,7 +39,7 @@ import type { FsEntry } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
-import { awayOf, couldNot, hubCall, hubFetch } from "#lib/cawco/hub-read.js";
+import { awayOf, couldNot, hubCall, hubFetch } from "#lib/platform/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 

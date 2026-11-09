@@ -78,15 +78,9 @@
   import { MediaQuery } from "svelte/reactivity";
   import { z } from "zod";
   import {
-    failureClause,
-    failureWords,
-    hubFetch,
-  } from "#lib/cawco/hub-read.js";
-  import {
     ComposeTargetSchema,
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
-  import { track } from "#lib/cawco/track.js";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -117,9 +111,33 @@
     IconUndock,
     IconUndockLinear,
   } from "#lib/icons.js";
+  import {
+    failureClause,
+    failureWords,
+    hubFetch,
+  } from "#lib/platform/hub-read.js";
+  import { track } from "#lib/platform/track.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
+  import { frameObserver, frameSize } from "../../platform/frame-observer";
+  import {
+    appear,
+    dur,
+    numberOf,
+    revealOn,
+  } from "../../platform/motion/curves.svelte";
+  import { landKey } from "../../platform/motion/keyed.svelte";
+  import { settleAway } from "../../platform/motion/rest";
+  import { closeInto } from "../../platform/motion/share.svelte";
+  import {
+    readJson,
+    store,
+    stored,
+    unstore,
+    writeJson,
+  } from "../../platform/storage";
+  import { floor as visibleFloor } from "../../platform/visible-viewport.svelte";
   import AskHere from "../AskHere.svelte";
   import {
     artifactShown,
@@ -144,7 +162,6 @@
   } from "../canvas/stage.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
-  import { frameObserver, frameSize } from "../frame-observer";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import type { GraphHead } from "../graph/graph-head";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
@@ -154,10 +171,6 @@
     markdownFleetAbove,
     provideMarkdownFleet,
   } from "../markdown-fleet";
-  import { appear, dur, numberOf, revealOn } from "../motion/curves.svelte";
-  import { landKey } from "../motion/keyed.svelte";
-  import { settleAway } from "../motion/rest.js";
-  import { closeInto } from "../motion/share.svelte";
   import { pageVisible } from "../page-visible.svelte";
   import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
@@ -165,9 +178,7 @@
   import { runShellShortcut } from "../shell-shortcut";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
-  import { readJson, store, stored, unstore, writeJson } from "../storage";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
-  import { floor as visibleFloor } from "../visible-viewport.svelte";
   import { afterPaint, warm } from "../workspace/warm.svelte";
   import {
     type ArtifactDoc,

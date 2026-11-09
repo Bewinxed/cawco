@@ -81,9 +81,6 @@
   import type { ClipKind } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -98,6 +95,9 @@
     IconReset,
     IconZoomOut,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { browser } from "$app/env";
   import ChoiceList, { toChosen } from "./ChoiceList.svelte";
   import ClipBar from "./ClipBar.svelte";
