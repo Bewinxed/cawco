@@ -15,9 +15,9 @@ import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { hubRequest } from "@cawco/core/hub-request";
 import { hubFetch } from "#lib/platform/hub-read.js";
-import { cawco } from "../client.svelte";
 import { devDebug } from "../dev-debug";
 import { accountsStore, followAccounts } from "../stores/accounts.svelte";
+import { boardStore } from "../stores/board.svelte";
 import { usageStore } from "../stores/usage.svelte";
 import { speakingReading } from "../usage";
 import {
@@ -106,7 +106,7 @@ const claude = $derived.by((): ClaudeRings | null => {
     forecast,
     // The live rows, which are all an account's rings count: the board's
     // two thousand, filtered once per account, ran on every row's change.
-    instances: cawco.runningInstances,
+    instances: boardStore.runningInstances,
     now: state.now,
     routing: view.routing.find((one) => one.provider === forecast.provider),
   });
@@ -125,7 +125,7 @@ const openCode = $derived.by((): RingAccount | null => {
   }
   return openCodeRing(
     reading,
-    cawco.runningInstances.filter(
+    boardStore.runningInstances.filter(
       (row) =>
         traitsOf(row.harness).providerLimit === "go" &&
         (row.status === "running" || row.status === "starting")
