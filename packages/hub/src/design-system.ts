@@ -83,6 +83,7 @@ import {
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
 import { isLive } from "./work-item-state";
+import { isHostFolder } from "./workspaces";
 
 const DESIGN_DIR = "design";
 /** The most files one `design_write` takes. */
@@ -1262,7 +1263,9 @@ export const createDesignSystem = (deps: {
     // repository is read and written on the host, as anyone's checkout is.
     const mine = workspaceOfSession(actor.id);
     const workspace =
-      mine && !mine.ended && !mine.workspace.host ? mine.workspace : undefined;
+      mine && !mine.ended && !isHostFolder(mine.workspace)
+        ? mine.workspace
+        : undefined;
     const top = await deps.run(
       actor.machineId,
       actor.cwd,
@@ -1490,7 +1493,11 @@ export const createDesignSystem = (deps: {
     // A host-scope item's folder is the machine's own, not a clone: an
     // approval writes there whether or not the item still runs.
     const own = workspaceOfSession(row.instanceId);
-    if (!own?.ended || own.workspace.host || own.workspace.path !== row.root) {
+    if (
+      !own?.ended ||
+      isHostFolder(own.workspace) ||
+      own.workspace.path !== row.root
+    ) {
       return;
     }
     return {
