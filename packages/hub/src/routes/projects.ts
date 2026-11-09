@@ -5,17 +5,16 @@
 import type { ForgottenProject } from "@cawco/core/forgotten-project";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { projectOrigin } from "../db/previews";
 import type { HubContext } from "../hub-context";
 import { PlaceRefusal } from "../place-refusal";
 import { DeleteRefusal } from "../project-delete";
-import { ProjectEditRefusal } from "../project-edit";
 import { FolderRefusal } from "../project-folder";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
 import { RestoreRefusal } from "../project-trash";
-import { refusal } from "../refusal";
+import { refusal, schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
 
 export const projectRoutes = ({
@@ -189,41 +188,47 @@ export const projectRoutes = ({
     .patch(
       "/api/projects/:id",
       {
-        body: t.Object({
-          name: t.Optional(t.String({ maxLength: 2000 })),
-          review: t.Optional(t.Boolean()),
-          lands: t.Optional(LANDS),
-          // The account its sessions start on, by id, nickname or email;
-          // null: the fleet's routing.
-          account: t.Optional(
-            t.Union([t.String({ maxLength: 320 }), t.Null()])
-          ),
-          // What its sessions on that account do at its limit.
-          accountAtLimit: t.Optional(
-            t.Union([t.Literal("wait"), t.Literal("move")])
-          ),
-          // Where its large files live; null: each origin's own LFS.
-          lfs: t.Optional(
-            t.Union([
-              t.Object({
-                url: t.String({ maxLength: 2000 }),
-                connection: t.String({ maxLength: 200 }),
-              }),
-              t.Null(),
-            ])
-          ),
-        }),
+        body: t.Object(
+          {
+            name: t.Optional(t.String({ maxLength: 2000 })),
+            review: t.Optional(t.Boolean()),
+            lands: t.Optional(LANDS),
+            // The account its sessions start on, by id, nickname or email;
+            // null: the fleet's routing.
+            account: t.Optional(
+              t.Union([t.String({ maxLength: 320 }), t.Null()])
+            ),
+            // What its sessions on that account do at its limit.
+            accountAtLimit: t.Optional(
+              t.Union([t.Literal("wait"), t.Literal("move")])
+            ),
+            // Where its large files live; null: each origin's own LFS.
+            lfs: t.Optional(
+              t.Union([
+                t.Object({
+                  url: t.String({ maxLength: 2000 }),
+                  connection: t.String({ maxLength: 200 }),
+                }),
+                t.Null(),
+              ])
+            ),
+          },
+          {
+            // Something to change: an empty edit names nothing.
+            minProperties: 1,
+            error: schemaRefusal(
+              "Name what changes: the project's name, whether it reviews before done, where its work lands, where its large files live, the account its sessions start on, or what they do at its limit."
+            ),
+          }
+        ),
       },
       async ({ params, body }) => {
-        try {
-          const { project } = await projectEdits.edit(params.id, body);
-          return { ...projectOut(project), cap: caps.capOf(project) };
-        } catch (error) {
-          if (error instanceof ProjectEditRefusal) {
-            return refusal(error.status, "project-edit-refused", error.message);
-          }
-          throw error;
+        const edited = await projectEdits.edit(params.id, body);
+        if (edited instanceof ElysiaStatus) {
+          return edited;
         }
+        const { project } = edited;
+        return { ...projectOut(project), cap: caps.capOf(project) };
       }
     )
     // Every project forgotten that the trash can bring back, newest
