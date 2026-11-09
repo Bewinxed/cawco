@@ -210,11 +210,6 @@ import {
 } from "@cawco/core/fleet";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
 import { maskInspection, maskMcpServer } from "@cawco/core/fleet-secrets";
-import type {
-  FleetWatchNotice,
-  FleetWatchSettings,
-} from "@cawco/core/fleet-watch";
-import { FLEET_WATCH_LIMITS } from "@cawco/core/fleet-watch";
 import {
   CONTROL_FORGE_POST,
   type ForgeVerdict,
@@ -1078,6 +1073,7 @@ import { fileRoutes } from "./routes/files";
 import { findRoutes } from "./routes/find";
 import { fleetRoutes } from "./routes/fleet";
 import { fleetMcpRoutes } from "./routes/fleet-mcp";
+import { fleetWatchRoutes } from "./routes/fleet-watch";
 import { followupStateRoutes } from "./routes/followup-state";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
@@ -34015,33 +34011,8 @@ export const createServer = (
       }),
     modelAccessRoutes(ctx),
     imageSettingRoutes(ctx),
+    fleetWatchRoutes(ctx),
     new Elysia()
-      // ── fleet watch (fleet-watch.ts) ──────────────────────────────────────
-      // Its switch, and its limits and Jev as facts: Settings shows them.
-      .get("/api/fleet-watch", (): FleetWatchSettings => ({
-        on: db.fleetWatchOn(),
-        jev: jevAccess(db) !== undefined,
-        limits: FLEET_WATCH_LIMITS,
-      }))
-      .put(
-        "/api/fleet-watch",
-        { body: t.Object({ on: t.Boolean() }) },
-        ({ body }): FleetWatchSettings => {
-          db.setFleetWatchOn(body.on);
-          watch?.switched(body.on);
-          console.log(`[fleet-watch] turned ${body.on ? "on" : "off"}`);
-          return {
-            on: body.on,
-            jev: jevAccess(db) !== undefined,
-            limits: FLEET_WATCH_LIMITS,
-          };
-        }
-      )
-      // Its open needs-you notices, as a dashboard that connects reads them;
-      // each change after arrives as a `fleet_watch.notices` frame.
-      .get("/api/fleet-watch/notices", (): { notices: FleetWatchNotice[] } => ({
-        notices: db.watchNotices(),
-      }))
       // A marketplace source read: what it calls itself, for the link form to
       // show before anything is linked, and what it offers, which is what
       // Browse lists for a linked one — read by the hub from the source, the
