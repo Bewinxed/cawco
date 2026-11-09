@@ -104,7 +104,7 @@ import { sheetWords } from "@cawco/core/words/sheet";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
-import { ensureBoundary } from "./boundary/lifecycle";
+import { ensureBoundary } from "./boundary/arming";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { agentServerStarted } from "./boundary/work";
 import { excludeFromCheckout } from "./checkout-exclude";
