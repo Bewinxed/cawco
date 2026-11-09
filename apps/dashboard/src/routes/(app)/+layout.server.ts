@@ -11,11 +11,11 @@ import type {
   StoredRecent,
 } from "@cawco/core/protocol";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-import { type ServedBoard, servedBoardOf } from "#lib/cawco/first-paint.js";
-import type { Area } from "#lib/cawco/home/areas.svelte.js";
+import { servedBoardOf } from "#lib/cawco/first-paint.js";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
 import { KEPT, type Pref, prefCookie } from "#lib/cawco/prefs.js";
+import type { Area, ServedBoard } from "#lib/cawco/served-board.js";
 import { routedToParent } from "#lib/cawco/transcript/present.js";
 import {
   isSessionTab,
@@ -219,7 +219,7 @@ export const load: LayoutServerLoad = async ({
     lands ? readWaits(fetch) : null,
   ]);
   const auth = authRead.ok ? authRead.value : null;
-  const board: ServedBoard | null =
+  const board: ServedBoard<ProjectRow> | null =
     rowsRead.ok &&
     pulsesRead.ok &&
     machinesRead.ok &&
