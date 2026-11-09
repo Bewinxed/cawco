@@ -34,6 +34,7 @@ import {
   type Held,
   roOf,
   stateDir,
+  type UnaskedCalls,
   writeWhole,
 } from "./state";
 import { watchHost } from "./watch";
@@ -51,13 +52,15 @@ import { watchHost } from "./watch";
  */
 export const armHook = (
   id: string,
-  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">
-): Promise<Held> => whileArming(id, () => armHookNow(id, held));
+  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">,
+  unasked: UnaskedCalls
+): Promise<Held> => whileArming(id, () => armHookNow(id, held, unasked));
 
 /** {@link armHook}'s writes and starts, counted as {@link arming}. */
 const armHookNow = async (
   id: string,
-  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">
+  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">,
+  unasked: UnaskedCalls
 ): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
   const prefix = claudePrefixOf(id);
@@ -71,7 +74,7 @@ const armHookNow = async (
     `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
     0o644
   );
-  const judge = await judgeFor(id, held, hook, policy);
+  const judge = await judgeFor(id, held, hook, policy, unasked);
   await writeWhole(hook, hookScript(id, hook, judge), 0o755);
   const runtime = await bunRuntime(id);
   if (process.platform === "darwin") {
@@ -98,7 +101,7 @@ const armHookNow = async (
   await openToolDoor(id);
   await openGitDoor({ id, path: held.path });
   await openGithubDoor(id);
-  await watchHost(id, held);
+  await watchHost(id, held, unasked);
   const armed: Held = { ...held, claudeTmp, hook, policy, prefix };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
