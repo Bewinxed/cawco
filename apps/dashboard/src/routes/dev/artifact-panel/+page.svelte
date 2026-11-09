@@ -1,6 +1,5 @@
 <script lang="ts">
   import { type Pin, pinHeld } from "@cawco/core/comments/model";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { commentWords } from "@cawco/core/words/comments";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -90,6 +89,7 @@
     IconRefreshLinear,
   } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
+  import { hub, hubPath } from "#lib/platform/hub.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { page } from "$app/state";
   import { ARTIFACTS, HELD, LONG, PINS } from "./records";
@@ -109,17 +109,15 @@
   );
   // The artifacts menu reads the session's artifacts from the hub and asks it
   // to show one: answered here from the records, the one asked for shown.
-  const hubFetch = window.fetch.bind(window);
-  const listed = hubRequest("GET /api/instances/:id/artifacts", {
-    path: { id: INSTANCE },
-  }).path;
+  const pageFetch = window.fetch.bind(window);
+  const listed = hubPath(hub.api.instances({ id: INSTANCE }).artifacts);
   const answered = (
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1]
   ): Promise<Response> => {
     const path = String(input);
     if (!path.startsWith(listed)) {
-      return hubFetch(input, init);
+      return pageFetch(input, init);
     }
     const show = path.match(SHOW_PATH);
     if (show?.[1]) {

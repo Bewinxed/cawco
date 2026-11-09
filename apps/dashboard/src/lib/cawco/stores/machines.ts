@@ -7,13 +7,12 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { FleetFetchFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { ControlPayload, FsPayload } from "@cawco/core/protocol";
 import { machineWords } from "@cawco/core/words/machine";
 import { sidebarWords } from "@cawco/core/words/sidebar";
-import type { WorkspaceHolding } from "@cawco/core/workspace/controls";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubData, hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { askMachine } from "../hub/control";
 import type { FrameOf } from "../hub/frames";
@@ -101,12 +100,9 @@ export function onFleetFetch(listener: FleetFetchListener): () => void {
  * as it is, for the confirm dialog to show under its question.
  */
 export async function removeMachine(machineId: string): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("DELETE /api/agents/:machineId", { path: { machineId } })
+  await hubDone(hub.api.agents({ machineId }).delete(), (refused) =>
+    hubRefusal(refused, machineWords.notRemovedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, machineWords.notRemovedThen);
-  }
   await rereadHub();
 }
 
@@ -119,18 +115,13 @@ export async function pauseMachine(
   machineId: string,
   until: Date | null
 ): Promise<void> {
-  const path = { machineId };
-  const response = await hubFetch(
+  const machine = hub.api.machines({ machineId });
+  await hubDone(
     until
-      ? hubRequest("POST /api/machines/:machineId/pause", {
-          path,
-          body: { until: until.toISOString() },
-        })
-      : hubRequest("POST /api/machines/:machineId/resume", { path })
+      ? machine.pause.post({ until: until.toISOString() })
+      : machine.resume.post(),
+    (refused) => hubRefusal(refused, machineWords.pauseNotChangedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, machineWords.pauseNotChangedThen);
-  }
   await rereadHub();
 }
 
@@ -162,28 +153,15 @@ export async function deleteTranscript(
  * refuses any other kind and says why; that answer is thrown as it is, for
  * the confirm dialog to show under its question.
  */
-/** What a held workspace's clone holds that is nowhere else, as its machine read it once its boundary was closed (hub workspaces.ts `HeldWork`). */
-export interface WorkspaceHeld extends WorkspaceHolding {
-  /** In words: "2 commits on no remote, 3 changed files, 1 stash". */
-  holds: string;
-  machine: string;
-  path: string;
-  /** The clone's size on disk, in words. */
-  size: string;
-}
-
-/** Reads what a held workspace holds that is nowhere else (`GET /api/workspaces/:id/held`); the hub's refusal (one not held) is the error. */
-export async function workspaceHeld(
-  workspaceId: string
-): Promise<WorkspaceHeld> {
-  const response = await hubFetch(
-    hubRequest("GET /api/workspaces/:id/held", { path: { id: workspaceId } })
+/**
+ * Reads what a held workspace's clone holds that is nowhere else, as its
+ * machine read it once its boundary was closed (hub workspaces.ts
+ * `HeldWork`); the hub's refusal (one not held) is the error.
+ */
+export const workspaceHeld = (workspaceId: string) =>
+  hubData(hub.api.workspaces({ id: workspaceId }).held.get(), (refused) =>
+    hubRefusal(refused, sidebarWords.heldUnreadThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.heldUnreadThen);
-  }
-  return (await response.json()) as WorkspaceHeld;
-}
 
 /**
  * What a workspace serves that still waits on the person, each by its id
@@ -191,18 +169,11 @@ export async function workspaceHeld(
  * names, as confirming archives it anyway. None when the read fails: the
  * hub refuses an archive it wasn't told was confirmed, in its own words.
  */
-export async function workspaceWaiting(
-  workspaceId: string
-): Promise<{ id: string; title: string }[]> {
-  const response = await hubFetch(
-    hubRequest("GET /api/workspaces/:id/waiting", { path: { id: workspaceId } })
+export async function workspaceWaiting(workspaceId: string) {
+  const read = await hubData(
+    hub.api.workspaces({ id: workspaceId }).waiting.get()
   ).catch(() => null);
-  if (!response?.ok) {
-    return [];
-  }
-  return (
-    (await response.json()) as { waiting: { id: string; title: string }[] }
-  ).waiting;
+  return read?.waiting ?? [];
 }
 
 /**
@@ -222,25 +193,17 @@ export async function archiveWorkspace(
     anyway = false,
   }: { discard?: boolean; anyway?: boolean } = {}
 ): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("POST /api/workspaces/:id/archive", {
-      path: { id: workspaceId },
-      body: { discard, anyway },
-    })
+  await hubDone(
+    hub.api.workspaces({ id: workspaceId }).archive.post({ discard, anyway }),
+    (refused) => hubRefusal(refused, sidebarWords.notArchivedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.notArchivedThen);
-  }
   await rereadHub();
 }
 
 export async function removeSession(instanceId: string): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("DELETE /api/instances/:id", { path: { id: instanceId } })
+  await hubDone(hub.api.instances({ id: instanceId }).delete(), (refused) =>
+    hubRefusal(refused, sidebarWords.sessionNotRemovedThen)
   );
-  if (!response.ok) {
-    throw await hubRefusal(response, sidebarWords.sessionNotRemovedThen);
-  }
   await rereadHub();
 }
 

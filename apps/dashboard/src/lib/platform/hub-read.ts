@@ -95,7 +95,7 @@ export interface Refused {
  * request sent by `fetch` itself (a stream, a file, one of the dashboard's
  * own routes): its text, as JSON when it is.
  */
-async function refusedOf(response: Response): Promise<Refused> {
+export async function refusedOf(response: Response): Promise<Refused> {
   const text = await response.text();
   return {
     error: { status: response.status, value: textValue(text) },
@@ -117,16 +117,23 @@ function textValue(text: string): unknown {
 }
 
 /**
+ * Whether `refused` is a request that got no answer at all: Eden hands back
+ * what `fetch` rejected with as its value, with no answer beside it.
+ */
+export const unanswered = (refused: Refused): boolean =>
+  refused.error.value instanceof Error;
+
+/**
  * The answer of `refused`. A request that got no answer at all rejects here
  * with what `fetch` threw (a `TypeError` with the browser's words, an
  * abort's `AbortError`), as it rejected before Eden: every reader of a
  * refusal goes through this first.
  */
-function refusedAnswer({ error, response }: Refused): Response {
-  if (error.value instanceof Error) {
-    throw error.value;
+function refusedAnswer(refused: Refused): Response {
+  if (unanswered(refused)) {
+    throw refused.error.value;
   }
-  return response;
+  return refused.response;
 }
 
 /**
@@ -286,7 +293,7 @@ export async function hubSend(
  * An answer as Eden's client hands one back (hub.ts): answered, its `data`;
  * refused, its `error` and the answer itself ({@link Refused}).
  */
-type Answer<T> =
+export type HubAnswer<T> =
   | { data: T; error: null; response: Response; status: number }
   | {
       data: null;
@@ -325,8 +332,10 @@ const NO_CONTENT = 204;
  * `call` as it settles, a body that says it is JSON and doesn't parse (Eden
  * rejects with the parser's `SyntaxError`) thrown as the hub not answering.
  */
-const settled = <T>(call: Promise<Answer<T>>): Promise<Answer<T>> =>
-  call.catch((error: unknown) => {
+const settled = <T>(
+  call: Promise<HubAnswer<T>> | HubAnswer<T>
+): Promise<HubAnswer<T>> =>
+  Promise.resolve(call).catch((error: unknown) => {
     if (error instanceof SyntaxError) {
       throw new Error(`${noAnswer(OK)}.`, { cause: error });
     }
@@ -340,7 +349,7 @@ const settled = <T>(call: Promise<Answer<T>>): Promise<Answer<T>> =>
  * as its text, is the hub not answering ({@link noAnswer}). A 204 says it
  * has no body, and is answered as Eden reads it.
  */
-function bodyOf<T>(answer: Extract<Answer<T>, { error: null }>): T {
+function bodyOf<T>(answer: Extract<HubAnswer<T>, { error: null }>): T {
   const kind = answer.response.headers.get("content-type") ?? "";
   if (
     typeof answer.data === "string" &&
@@ -357,10 +366,11 @@ function bodyOf<T>(answer: Extract<Answer<T>, { error: null }>): T {
  * through Eden (hub.ts): refused, `refusal`'s error is thrown, the hub's
  * refusal in its own words ({@link hubRefusal}) unless the caller words it
  * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`);
- * answered, its body ({@link bodyOf}).
+ * answered, its body ({@link bodyOf}). `call` may be an answer already
+ * awaited, for a caller that reads one status of it as no refusal first.
  */
 export async function hubData<T>(
-  call: Promise<Answer<T>>,
+  call: Promise<HubAnswer<T>> | HubAnswer<T>,
   refusal: Refusal = hubRefusal
 ): Promise<T> {
   const answer = await settled(call);
@@ -376,7 +386,7 @@ export async function hubData<T>(
  * to be JSON.
  */
 export async function hubDone(
-  call: Promise<Answer<unknown>>,
+  call: Promise<HubAnswer<unknown>>,
   refusal: Refusal = hubRefusal
 ): Promise<void> {
   const answer = await call.catch((error: unknown) => {
@@ -389,6 +399,36 @@ export async function hubDone(
   if (answer?.error) {
     throw refusalOf(answer, refusal);
   }
+}
+
+/**
+ * A request whose answer is neither read nor said (a beat, an ack): it
+ * rejects only when it got no answer at all, with what `fetch` threw.
+ */
+export async function hubReached(
+  call: Promise<HubAnswer<unknown>>
+): Promise<void> {
+  const answer = await call;
+  if (answer.error && unanswered(answer)) {
+    throw answer.error.value;
+  }
+}
+
+/**
+ * A load's read of the hub, as it shows one: refused, why ({@link
+ * hubFailure}); answered, its body ({@link bodyOf}).
+ */
+export async function hubRead<T>(
+  call: Promise<HubAnswer<T>>
+): Promise<HubRead<T>> {
+  const answer = await settled(call);
+  if (answer.error) {
+    return {
+      ok: false,
+      ...hubFailure({ error: answer.error, response: answer.response }),
+    };
+  }
+  return { ok: true, value: bodyOf(answer) };
 }
 
 /**
