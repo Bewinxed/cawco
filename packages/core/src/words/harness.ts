@@ -1,3 +1,7 @@
+import type { HarnessKind } from "../harness/kinds";
+import { accountsWords } from "./accounts";
+import { andList } from "./helpers";
+
 /**
  * What a harness's process says on its session's row when it does not start
  * or stops on its own: a mode it is not offered, an exit in its own words.
@@ -7,6 +11,12 @@
  * so it is not written into it (scripts/words-swift.ts).
  */
 export const harnessWords = {
+  /** Keep-alive asked of a session whose harness is none of `kept`, those whose prompt cache the hub times. */
+  keepAliveIsFor: (kept: readonly HarnessKind[]) =>
+    `Keep-alive is for ${andList(kept.map((kind) => accountsWords.harnesses[kind]))} sessions`,
+  /** Keep-alive asked of a `harness` session mid-turn, or waiting on a question. */
+  keepAliveNotIdle: (harness: HarnessKind) =>
+    `Keep-alive requires an idle ${accountsWords.harnesses[harness]} session.`,
   /** A mode named that CawCo offers no harness ({@link PERMISSION_MODES}). */
   modeNotOffered: (mode: string, offered: readonly string[]) =>
     `CawCo offers no "${mode}" permission mode; it offers ${offered.join(", ")}.`,
