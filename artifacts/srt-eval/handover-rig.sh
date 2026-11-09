@@ -1,5 +1,5 @@
 #!/bin/bash
-# The boundary handover, proved on a rig (packages/agent/src/boundary.ts
+# The boundary handover, proved on a rig (packages/agent/src/boundary/
 # `rearmHooks`, `handOver`, `closeIdle`):
 #
 #   bash artifacts/srt-eval/handover-rig.sh
