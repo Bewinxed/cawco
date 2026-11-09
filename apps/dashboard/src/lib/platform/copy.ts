@@ -1,7 +1,7 @@
 /**
  * What a control does when it copies something: the toast says what was
- * copied, and the answer tells the control (components/ui/context-menu
- * CopyItem, a copy button) whether to show its check. A copy the browser
+ * copied, and the answer tells the control (cawco/ContextMenuCopyItem, a
+ * copy button) whether to show its check. A copy the browser
  * refuses is never a toast (DESIGN.md, The Work Outlives Its Surface
  * Rule): the control says {@link copyRefused} on its own line (RowFault),
  * with Try again and the text itself under Show details to copy by hand.
