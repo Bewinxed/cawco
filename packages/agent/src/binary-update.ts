@@ -94,7 +94,7 @@ import {
   withEachKeeper,
   withKeepers,
 } from "./keepers";
-import { runBinaryPins } from "./pin-record";
+import { pinsBackFor, runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import {
   KeeperKept,
@@ -2068,18 +2068,15 @@ export class BinaryUpdater {
  * this build. Never throws: it runs on the way out of a failure, which it
  * adds its own to, as the words it answers.
  */
-async function putBackPins(version: string): Promise<string | undefined> {
-  try {
-    const said = await runBinaryPins(runtimeVersion, version);
-    if (said) {
-      console.info(`[update] ${version} did not go on: ${said} went back`);
-    }
-    return undefined;
-  } catch (error) {
-    const said = `what went on for ${version} did not go back: ${error instanceof Error ? error.message : String(error)}`;
-    console.error(`[update] ${said}`);
-    return said;
-  }
+function putBackPins(version: string): Promise<string | undefined> {
+  return pinsBackFor(version, runtimeVersion, {
+    back: (what) => {
+      console.info(`[update] ${version} did not go on: ${what} went back`);
+    },
+    failed: (sentence) => {
+      console.error(`[update] ${sentence}`);
+    },
+  });
 }
 
 /**
