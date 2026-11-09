@@ -2,6 +2,7 @@ import { harnessNamed } from "@cawco/core/harness/kinds";
 import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";
+import { clampRail } from "#lib/cawco/rail.js";
 import {
   isSessionTab,
   projectOfTab,
@@ -13,36 +14,18 @@ import {
   parseContexts,
   parseWorkspace,
 } from "#lib/cawco/workspace/tree.js";
+import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
+import { type HubRead, readHub } from "#lib/platform/hub-read.js";
 import {
   FOLD_BOXES_PREF,
-  parseFoldBoxes,
-} from "#lib/components/ui/fluid-tabs/fold-memory.js";
-import { type HubRead, readHub } from "#lib/platform/hub-read.js";
-import { type Pref, prefCookie } from "#lib/platform/prefs.js";
+  NARROW_PREF,
+  type Pref,
+  prefCookie,
+  RAIL_PREF,
+  WORKSPACE_CTX_PREF,
+  WORKSPACE_PREF,
+} from "#lib/platform/prefs.js";
 import type { LayoutServerLoad } from "./$types";
-
-/**
- * The sidebar rail's width is this browser's preference, not the fleet's. It is
- * read here from a cookie so the server renders the resolved width into the
- * first paint — before this, the width lived only in localStorage, so SSR drew
- * the default and the rail visibly jumped once the client read the real value
- * on mount. The bounds mirror Shell.svelte's clamp. No cookie is null: the
- * shell then draws the `c-sidebar-w` token, the default's one source.
- */
-const RAIL_KEY = "cawco-rail-width";
-const RAIL_MIN = 216;
-const RAIL_MAX = 520;
-
-/**
- * The server's copy of the workspace localStorage keeps (workspace.svelte.ts,
- * Persistence): the whole tree or none, never a part. The first client render
- * draws from what this load gives it, so hydration keeps what was served.
- * Read with the tree's own module (workspace/tree.ts), which the server
- * imports without the client store and its module-level `$state`.
- */
-const WORKSPACE_KEY = "cawco-workspace";
-/** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
-const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
 
 /**
  * Whether this browser is a phone, for the session surface's first paint.
@@ -54,7 +37,6 @@ const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
  * Macintosh UA. The first client render draws this answer too, and the query
  * takes over a frame later (lib/cawco/first-render.svelte.ts).
  */
-const NARROW_KEY = "cawco-narrow";
 const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/iu;
 
 function narrowOf(cookie: string | undefined, headers: Headers): boolean {
@@ -80,7 +62,7 @@ export const load: LayoutServerLoad = async ({
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: first-paint reconciliation of the workspace cookie against the URL — one pass, not split in this pass
 }) => {
   const pref = (name: Pref) => cookies.get(prefCookie(name, url));
-  const narrow = narrowOf(pref(NARROW_KEY), request.headers);
+  const narrow = narrowOf(pref(NARROW_PREF), request.headers);
   // Who this browser is to the hub (hub-auth.svelte.ts): one that must pair
   // is shown the pairing screen from the first paint, and a paired one the
   // app. Its cookie is SameSite=Lax, so it rides a link from another site
@@ -97,19 +79,17 @@ export const load: LayoutServerLoad = async ({
     machinesRead.ok && Array.isArray(machinesRead.value)
       ? machinesRead.value.length
       : null;
-  const stored = Number(pref(RAIL_KEY));
+  const stored = Number(pref(RAIL_PREF));
   const railWidth =
-    Number.isFinite(stored) && stored > 0
-      ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
-      : null;
+    Number.isFinite(stored) && stored > 0 ? clampRail(stored) : null;
 
   // Each folder tab's box as last measured, so its shape is drawn true from
   // the first paint (fluid-tabs/fold-memory.ts).
   const foldBoxes = parseFoldBoxes(pref(FOLD_BOXES_PREF));
 
-  let workspace = parseWorkspace(pref(WORKSPACE_KEY));
+  let workspace = parseWorkspace(pref(WORKSPACE_PREF));
   if (workspace) {
-    workspace.ctx = parseContexts(pref(WORKSPACE_CTX_KEY));
+    workspace.ctx = parseContexts(pref(WORKSPACE_CTX_PREF));
   }
 
   // Untrack URL access: a switch between conversations is a shallow pushState
