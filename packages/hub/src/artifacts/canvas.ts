@@ -17,7 +17,6 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
-  CANVAS_WROTE_AT,
   type CanvasEntry,
   type CanvasRequestKind,
   type CanvasRequestPayload,
@@ -25,6 +24,7 @@ import {
   keptOnRemake,
   NO_SCREEN,
 } from "@cawco/core/canvas";
+import { docMeta, setMeta } from "@cawco/core/doc-meta";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
@@ -96,7 +96,7 @@ export const screenJoined = async (
   });
 
 /**
- * The agent's write changed the scene now ({@link CANVAS_WROTE_AT}): the
+ * The agent's write changed the scene now (`meta.wroteAt`): the
  * picture is owed until a screen posts one after it. Stamped by the hub's
  * service only when the write changed what the canvas shows (its
  * `sceneWritten`), as a screen posts no new picture for a scene that looks
@@ -104,7 +104,7 @@ export const screenJoined = async (
  */
 export const stampWrote = (docs: ArtifactDocs, artifactId: string): void =>
   docs.transact(artifactId, "hub", (doc) =>
-    doc.getMap("meta").set(CANVAS_WROTE_AT, new Date().toISOString())
+    setMeta(doc, "wroteAt", new Date().toISOString())
   );
 
 /**
@@ -116,9 +116,9 @@ export const pictureShowsWrite = (
   docs: ArtifactDocs,
   artifactId: string
 ): boolean => {
-  const meta = docs.doc(artifactId).getMap("meta");
-  const wrote = meta.get(CANVAS_WROTE_AT) as string | undefined;
-  const at = meta.get("pictureAt") as string | null | undefined;
+  const meta = docMeta(docs.doc(artifactId));
+  const wrote = meta.get("wroteAt");
+  const at = meta.get("pictureAt");
   if (!wrote) {
     return true;
   }
@@ -140,8 +140,8 @@ export const pictureOfWrite = async (
   if (pictureShowsWrite(docs, artifactId)) {
     return true;
   }
-  const meta = docs.doc(artifactId).getMap("meta");
-  const wrote = Date.parse(meta.get(CANVAS_WROTE_AT) as string);
+  const meta = docMeta(docs.doc(artifactId));
+  const wrote = Date.parse(meta.get("wroteAt") as string);
   const left = wrote + CANVAS_LIMITS.screenHoldMs - Date.now();
   if (left <= 0) {
     return false;
