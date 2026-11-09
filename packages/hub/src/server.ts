@@ -538,7 +538,6 @@ import { createProjectEdits } from "./project-edit";
 import {
   changeFolderFiles,
   YOU as FOLDER_YOU,
-  FolderRefusal,
   folderFileNames,
   guardFolderFile,
   listFolder,
@@ -554,6 +553,7 @@ import {
   onPlacesChanged,
   placesChanged,
 } from "./project-placements";
+import { ProjectRefusal, projectRefusalOf } from "./project-refusal";
 import {
   createProjectSettings,
   type ProjectSettings,
@@ -8532,7 +8532,13 @@ export const createServer = (
     // A brief a session wrote waits for the fleet's guidance, as a delegate's does.
     briefing: (request) => workItems.briefing(request),
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
-    context: (projectId, task) => projectMemory.contextFor(projectId, task),
+    context: async (projectId, task) => {
+      const context = await projectMemory.contextFor(projectId, task);
+      if (context instanceof ElysiaStatus) {
+        throw projectRefusalOf(context);
+      }
+      return context;
+    },
     // Its design system, read in the attempt's clone inside its boundary.
     designSection: (clone) =>
       designSection(
@@ -8606,13 +8612,22 @@ export const createServer = (
         .toSorted((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
     changed: decisionsChanged,
     commit: async (projectId, change, message) => {
-      await changeFolderFiles(projectId, change, {
+      const changed = await changeFolderFiles(projectId, change, {
         author: FOLDER_YOU,
         message,
       });
+      if (changed instanceof ElysiaStatus) {
+        throw projectRefusalOf(changed);
+      }
     },
     folderText,
-    folderNames: (projectId, path) => folderFileNames(projectId, path),
+    folderNames: async (projectId, path) => {
+      const names = await folderFileNames(projectId, path);
+      if (names instanceof ElysiaStatus) {
+        throw projectRefusalOf(names);
+      }
+      return names;
+    },
     instance: (id) => db.getInstancesByIds([id])[0],
     page: (artifactId) => {
       const doc = artifactDocs.doc(artifactId);
@@ -8836,7 +8851,13 @@ export const createServer = (
   // and every person's Continue carries (open-items.ts).
   const openItems = createOpenItems({
     db,
-    inbox: inboxNotes,
+    inbox: async (projectId) => {
+      const notes = await inboxNotes(projectId);
+      if (notes instanceof ElysiaStatus) {
+        throw projectRefusalOf(notes);
+      }
+      return notes;
+    },
     plan: (instanceId) => plans.read(instanceId),
     questions: (instanceId) => artifacts.questions(instanceId),
     tasks,
@@ -9617,6 +9638,17 @@ export const createServer = (
   // Areas (areas.ts): every reader of a project's settings reads them in
   // effect with its row, so a change here reaches each at once; what is
   // told of it is told here.
+  /** A project's Who decides table in effect (decides-file.ts), a refused read of its decides.md thrown on. */
+  const decidesOf = async (project: { areaId: string | null; id: string }) => {
+    const table = await decidesTable(
+      { projectId: project.id, areaId: project.areaId },
+      db.decides.fleet()
+    );
+    if (table instanceof ElysiaStatus) {
+      throw projectRefusalOf(table);
+    }
+    return table;
+  };
   const projectAreas = createAreas({
     accountMoved: conversationToAccount,
     changed: () => {
@@ -9626,17 +9658,13 @@ export const createServer = (
       fleetChanged("an area changed");
     },
     db,
-    folderSources: async (project) => ({
-      decides: Object.values(
-        (
-          await decidesTable(
-            { projectId: project.id, areaId: project.areaId },
-            db.decides.fleet()
-          )
-        ).from
-      ),
-      types: projectTypes.typesFor(project.id).map((type) => type.source),
-    }),
+    folderSources: async (project) => {
+      const table = await decidesOf(project);
+      return {
+        decides: Object.values(table.from),
+        types: projectTypes.typesFor(project.id).map((type) => type.source),
+      };
+    },
   });
   const projectEdits = createProjectEdits({
     accounts: () => db.accounts.list(),
@@ -9668,10 +9696,7 @@ export const createServer = (
       names: () => db.areas.list().map((area) => area.name),
     },
     inEffect: async (project) => {
-      const table = await decidesTable(
-        { projectId: project.id, areaId: project.areaId },
-        db.decides.fleet()
-      );
+      const table = await decidesOf(project);
       return {
         decides: Object.entries(table.routes).map(([kind, member]) => ({
           kind,
@@ -9770,7 +9795,17 @@ export const createServer = (
   // that no longer applies closes then.
   onFolderCommits((projectId, { written, deleted }) => {
     const paths = new Set([...written, ...deleted]);
-    detach(
+    /** `work` detached, a refusal it answers logged as a failure is. */
+    const reread = (work: Promise<Refused | undefined>, what: string) =>
+      detach(
+        work.then((refused) => {
+          if (refused) {
+            console.warn(`[${what}] failed: ${refused.response.detail}`);
+          }
+        }),
+        what
+      );
+    reread(
       projectMemory.folderCommitted(projectId, paths),
       "memory proposals on the files a commit changed"
     );
@@ -9778,7 +9813,7 @@ export const createServer = (
       designSystem.folderCommitted(projectId, paths),
       "design proposals on the files a commit changed"
     );
-    detach(
+    reread(
       views.folderCommitted(projectId, paths),
       "drafts of the kept views a commit changed"
     );
@@ -9918,21 +9953,20 @@ export const createServer = (
     // file or a folder. (Names read of a file are none, not a refusal: a walk
     // that took a refusal for a file took every file for an empty folder.)
     folderFiles: async (projectId, dir) => {
-      const listed = await listFolder(projectId, dir, true).catch(
-        (error: unknown) => {
-          if (error instanceof FolderRefusal && error.status === 404) {
-            return null;
-          }
-          throw error;
+      const listed = await listFolder(projectId, dir, true);
+      if (listed instanceof ElysiaStatus) {
+        if (listed.status === 404) {
+          return [];
         }
-      );
-      if (listed?.truncated) {
-        throw new FolderRefusal(
+        throw projectRefusalOf(listed);
+      }
+      if (listed.truncated) {
+        throw new ProjectRefusal(
           413,
           `${dir}/ holds more entries than one listing reads; hand its files by path`
         );
       }
-      return (listed?.entries ?? []).flatMap((entry) =>
+      return listed.entries.flatMap((entry) =>
         entry.kind === "file" ? [entry.path] : []
       );
     },

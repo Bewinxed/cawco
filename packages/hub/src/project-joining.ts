@@ -2,13 +2,19 @@ import { posix } from "node:path";
 import { detach } from "@cawco/core/detach";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { projectWords } from "@cawco/core/words/project";
+import { ElysiaStatus } from "elysia";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { HubContext } from "./hub-context";
 import { onAccountMachines } from "./placement";
-import { FolderRefusal, listFolder, projectRoot } from "./project-folder";
+import { listFolder } from "./project-folder";
 import type { ProjectAsk, ProjectMade } from "./project-making";
 import { placesChanged } from "./project-placements";
+import {
+  ProjectRefusal,
+  projectRefusalOf,
+  projectRootOf,
+} from "./project-refusal";
 import { NOTHING_READ, readCheckout } from "./projects";
 import type { WorkAsk, WorkPlace } from "./work-place";
 import { workPlace } from "./work-place";
@@ -54,8 +60,11 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     const hubMachine = machines.find((id) => id === own);
     if (hubMachine) {
       // Made and committed on first use, as every read of it does.
-      await listFolder(projectId);
-      return { machineId: hubMachine, cwd: projectRoot(projectId) };
+      const made = await listFolder(projectId);
+      if (made instanceof ElysiaStatus) {
+        throw projectRefusalOf(made);
+      }
+      return { machineId: hubMachine, cwd: projectRootOf(projectId) };
     }
     const [machineId] = machines;
     if (!machineId) {
@@ -87,7 +96,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     workPlace(
       project,
       {
-        hubFolder: projectRoot,
+        hubFolder: projectRootOf,
         hubMachine: ctx.ownMachineIdRead,
         machines: ctx.db.listAgents(),
         online: (machineId) => Boolean(ctx.registry.agent(machineId)),
@@ -113,7 +122,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
   const folderReadable = (machineId: string | undefined): void => {
     const paused = machineId && ctx.machinePause.words(machineId);
     if (paused) {
-      throw new FolderRefusal(
+      throw new ProjectRefusal(
         409,
         `${paused}, so its folder is not read until then. Add it after the pause, or resume the machine first.`
       );
@@ -194,7 +203,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
       path: ctx.askedMachinePath(
         asked.checkout.machineId,
         asked.checkout.cwd,
-        (message, cause) => new FolderRefusal(400, message, { cause })
+        (message, cause) => new ProjectRefusal(400, message, { cause })
       ),
     };
     folderReadable(checkout?.machineId);

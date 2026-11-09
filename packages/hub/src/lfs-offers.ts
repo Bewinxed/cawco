@@ -24,7 +24,7 @@ import {
 import { Elysia } from "elysia";
 import type { DbShape } from "./db";
 import type { LfsOfferRow } from "./db/lfs-offers";
-import { FolderRefusal, folderAttempt } from "./project-folder";
+import { ProjectRefusal, projectAttempt } from "./project-refusal";
 
 const MB = 1024 * 1024;
 
@@ -55,14 +55,14 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
   const answerable = (id: string): LfsOfferRow => {
     const row = db.lfsOffers.of(id);
     if (!row) {
-      throw new FolderRefusal(404, "This offer of Git LFS is not recorded.");
+      throw new ProjectRefusal(404, "This offer of Git LFS is not recorded.");
     }
     return row;
   };
 
   const track = async (row: LfsOfferRow): Promise<LfsOfferState> => {
     if (!db.project(row.projectId)) {
-      throw new FolderRefusal(
+      throw new ProjectRefusal(
         409,
         "This offer's project is gone, so nothing was tracked."
       );
@@ -72,7 +72,7 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
       row.root,
       row.rows,
     ]).catch((error: unknown) => {
-      throw new FolderRefusal(
+      throw new ProjectRefusal(
         409,
         error instanceof Error ? error.message : String(error),
         { cause: error }
@@ -130,11 +130,11 @@ export type LfsOffers = ReturnType<typeof createLfsOffers>;
 export const lfsOfferRoutes = (offers: LfsOffers) =>
   new Elysia()
     .get("/api/lfs-offers/:id", ({ params }) =>
-      folderAttempt(() => offers.state(params.id))
+      projectAttempt(() => offers.state(params.id))
     )
     .post("/api/lfs-offers/:id/dismiss", ({ params }) =>
-      folderAttempt(() => offers.dismiss(params.id))
+      projectAttempt(() => offers.dismiss(params.id))
     )
     .post("/api/lfs-offers/:id/track", ({ params }) =>
-      folderAttempt(() => offers.track(params.id))
+      projectAttempt(() => offers.track(params.id))
     );
