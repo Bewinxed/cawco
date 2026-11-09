@@ -9,7 +9,7 @@
 
 import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core/move";
 import { hub } from "#lib/platform/hub.js";
-import { type HubAnswer, hubData } from "#lib/platform/hub-read.js";
+import { hubData } from "#lib/platform/hub-read.js";
 import { heardMove, movesStore } from "./stores/moves.svelte";
 
 /**
@@ -49,15 +49,15 @@ export async function startMove(
  * from the hub's answer on, not from its next frame.
  */
 export const cancelMove = (id: string): Promise<MoveJob> =>
-  moveAct(hub.api.moves({ id }).delete());
+  moveAct(hubData(hub.api.moves({ id }).delete()));
 
 /** Retry: a failed job runs the step it failed at again, and on from there. */
 export const retryMove = (id: string): Promise<MoveJob> =>
-  moveAct(hub.api.moves({ id }).retry.post());
+  moveAct(hubData(hub.api.moves({ id }).retry.post()));
 
 /** One act on a job: the job as the hub answers it, heard at once. */
-async function moveAct(call: Promise<HubAnswer<MoveJob>>): Promise<MoveJob> {
-  const job = await hubData(call);
+async function moveAct(answered: Promise<MoveJob>): Promise<MoveJob> {
+  const job = await answered;
   heardMove(job);
   return job;
 }
