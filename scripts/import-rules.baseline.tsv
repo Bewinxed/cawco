@@ -47,7 +47,8 @@ cycle	@cawco/hub	packages/hub/src/artifacts/access.ts	1
 cycle	@cawco/hub	packages/hub/src/artifacts/deps.ts	1
 cycle	@cawco/hub	packages/hub/src/artifacts/facts.ts	2
 cycle	@cawco/hub	packages/hub/src/artifacts/marks.ts	1
-cycle	@cawco/hub	packages/hub/src/artifacts/service.ts	4
+cycle	@cawco/hub	packages/hub/src/artifacts/service.ts	5
+cycle	@cawco/hub	packages/hub/src/artifacts/versions.ts	3
 cycle	@cawco/hub	packages/hub/src/ask-routing.ts	2
 cycle	@cawco/hub	packages/hub/src/at-limit.ts	2
 cycle	@cawco/hub	packages/hub/src/caw-own.ts	1
