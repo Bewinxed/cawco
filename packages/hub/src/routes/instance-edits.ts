@@ -1,10 +1,16 @@
 import { detach } from "@cawco/core/detach";
-import { traitsOf } from "@cawco/core/harness/traits";
+import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type { SessionAttachments } from "@cawco/core/protocol";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
+import { harnessWords } from "@cawco/core/words/harness";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { attachmentsOfPages } from "../session-attachments";
+
+/** Why keep-alive is refused a session: its harness's prompt cache is one nothing times. */
+const keepAliveRefused = harnessWords.keepAliveIsFor(
+  harnessesWith((traits) => traits.promptCacheMaxMs !== null)
+);
 
 export const instanceEditRoutes = ({
   applyPermissionMode,
@@ -162,9 +168,9 @@ export const instanceEditRoutes = ({
         }
         if (
           body.keepAlive !== undefined &&
-          !traitsOf(current.harness).keepAlive
+          traitsOf(current.harness).promptCacheMaxMs === null
         ) {
-          return status(409, "Keep-alive is for Claude sessions");
+          return status(409, keepAliveRefused);
         }
         if (body.keepAlive !== undefined) {
           db.updateKeepAlive(params.id, {
