@@ -177,7 +177,7 @@ const HANDOVER_LINE =
 /** The host's line for a sandbox that ended unasked (agent boundary-host.ts), as the agent says it: the workspace, its boundary, the sandbox, its status. */
 const UNASKED_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) says: cawco: the sandbox (\d+) ended with status (\d+)/u;
-/** The agent's line for a boundary's exit (agent boundary/watch.ts `watchHost`): the workspace, its boundary, how it exited. */
+/** The agent's line for a boundary's exit (agent boundary/ensure.ts `watchHost`): the workspace, its boundary, how it exited. */
 const EXIT_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(\S+\) exited, (status \S+|killed by \S+)/u;
 
