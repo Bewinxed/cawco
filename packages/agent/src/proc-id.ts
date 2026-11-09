@@ -30,7 +30,7 @@ export const isJudgeOf = (procId: string, workspace: string): boolean =>
   procId.startsWith(`${JUDGE_PREFIX}${workspace}-`);
 
 /**
- * A workspace's boundary of one generation (boundary/start.ts `start`): an older
+ * A workspace's boundary of one generation (boundary/ensure.ts `start`): an older
  * one runs on beside the current one until nothing runs in it.
  */
 export const boundaryProcId = (workspace: string, generation: string) =>
