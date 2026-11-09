@@ -26,6 +26,7 @@
  * - **Remove** stops the container and forgets the record; credentials
  *   already minted lapse at their TTL.
  */
+
 import { createHmac, randomBytes } from "node:crypto";
 import type { Bounded } from "@cawco/core/bounded";
 import type { BrowserRelay } from "@cawco/core/browser";
@@ -59,6 +60,7 @@ import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
+import { StatusRefusal } from "./refusal";
 import { received } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
@@ -147,13 +149,7 @@ export interface StreamRelayDeps {
 }
 
 /** A refusal the routes answer with its status and the sentence. */
-export class RelayRefusal extends Error {
-  readonly status: 400 | 404 | 409 | 503;
-  constructor(status: 400 | 404 | 409 | 503, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+export class RelayRefusal extends StatusRefusal<400 | 404 | 409 | 503> {}
 
 /**
  * Where a machine's relay would be reached: its candidate row, or undefined
