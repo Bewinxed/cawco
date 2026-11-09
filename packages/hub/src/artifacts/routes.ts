@@ -36,15 +36,14 @@ import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 import type { StateAsk } from "./component";
 import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
-import {
-  ArtifactRefusal,
-  type Artifacts,
-  type CanvasChange,
-  type PageChange,
-  type SheetChange,
-  type SkeletonElement,
-  THUMBNAIL_BYTES,
-} from "./service";
+import { ArtifactRefusal } from "./refusals";
+import { type Artifacts, THUMBNAIL_BYTES } from "./service";
+import type {
+  CanvasChange,
+  PageChange,
+  SheetChange,
+  SkeletonElement,
+} from "./shapes";
 import { PNG_SIGNATURE } from "./sync";
 import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
 

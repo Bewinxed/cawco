@@ -1,4 +1,4 @@
-import { ArtifactRefusal } from "./artifacts/service";
+import { ArtifactRefusal } from "./artifacts/refusals";
 
 /**
  * Why a place was not added, or a name not taken: the route's status and
