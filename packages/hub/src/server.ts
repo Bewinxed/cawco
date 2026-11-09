@@ -7664,21 +7664,50 @@ export const createServer = (
     // What a session hands by name (handed-inputs.ts), made further down;
     // nothing starts an item before the hub is up.
     resolveHanded: (caller, input) => handedInputs.resolve(caller, input),
-    stageRuns: stageHold,
-    // What a workspace serves that waits on the person refuses its archive
-    // or discard (workspaces.ts `waitingFrom`); the artifacts service is
-    // made above.
-    waitingOnPerson: (served) => artifacts.waitingOnPerson(served),
-    // What it serves that its retirement still waits on (workspaces.ts
-    // `owedFrom`); released as the person answers the page that showed it.
-    servedOwed: (served) => artifacts.servedOwed(served),
-    makingFrom: (id) => artifacts.makingFrom(id),
+    // What workspaces read of the hub (workspaces.ts `WorkspacesHub`).
+    forWorkspaces: {
+      stageRuns: stageHold,
+      // What a workspace serves that waits on the person refuses its archive
+      // or discard (workspaces.ts `waitingFrom`); the artifacts service is
+      // made above.
+      waitingOnPerson: (served) => artifacts.waitingOnPerson(served),
+      // What it serves that its retirement still waits on (workspaces.ts
+      // `owedFrom`); released as the person answers the page that showed it.
+      servedOwed: (served) => artifacts.servedOwed(served),
+      makingFrom: (id) => artifacts.makingFrom(id),
+      // A send that wakes its session holds its finished item's workspace.
+      sendWakes: (instanceId) => {
+        const [row] = db.getInstancesByIds([instanceId]);
+        return (
+          !!row &&
+          db.sendsIn(instanceId, ["pending"]).some((send) => {
+            const body = send.body as SentMessage | null;
+            return (
+              !isKeepAlive(send.body) &&
+              !!body?.origin &&
+              startsTurnIn(row, body)
+            );
+          })
+        );
+      },
+      launchesOn: nextLaunchOn,
+      workspaceChanged: (workspace) => publishInstances(workspace.machineId),
+    },
+    // What a landing and its gate read of the hub (landing-run.ts `LandingsHub`).
+    forLandings: {
+      hubMachineId: () => ownMachineIdRead,
+      machineFree: (machineId) => machinePause.free(machineId),
+      // What a pull request an attempt opens links back to and is titled by.
+      sessionUrl: (instanceId) =>
+        `${dashboardUrl(registry)}/session/${instanceId}`,
+      taskTitle: (projectId, taskId) =>
+        db.taskIndex(projectId).find((row) => row.id === taskId)?.title,
+    },
     startHeld: startHeldWords,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.
     designHold: (item, submission) => designVerify.hold(item, submission),
     designHeld: (itemId) => designVerify.held(itemId),
-    hubMachineId: () => ownMachineIdRead,
     lifetime,
     modelRefusal,
     online: (machineId) => Boolean(registry.agent(machineId)),
@@ -7726,7 +7755,6 @@ export const createServer = (
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
     stalled: (instanceId) => stallOfPort.now()(instanceId)?.words,
-    machineFree: (machineId) => machinePause.free(machineId),
     // The sweep's wake of work asleep asks the same gate every sender does,
     // and leaves a session to the send already on its way to it.
     inputRefusal,
@@ -7735,19 +7763,6 @@ export const createServer = (
     // the machine holds its rows from now on, for each clone of it cut there.
     projectReached: (machineId) =>
       fleetSyncs.changed("a project's first work item there", { machineId }),
-    // A send that wakes its session holds its finished item's workspace.
-    sendWakes: (instanceId) => {
-      const [row] = db.getInstancesByIds([instanceId]);
-      return (
-        !!row &&
-        db.sendsIn(instanceId, ["pending"]).some((send) => {
-          const body = send.body as SentMessage | null;
-          return (
-            !isKeepAlive(send.body) && !!body?.origin && startsTurnIn(row, body)
-          );
-        })
-      );
-    },
     // A held item's notice in Needs you: fleet watch keeps them, made once
     // the hub is up (`watch`), before any sweep runs.
     tellYou: (row, title, body) => watchPort.now()?.tellYou(row, title, body),
@@ -7792,7 +7807,6 @@ export const createServer = (
     // A session's project's catalog: its own types shadow the fleet's.
     types: (projectId?: string | null) => projectTypes.typesFor(projectId),
     placeAhead: placeItem,
-    launchesOn: nextLaunchOn,
     // A `delegate` call's session (a routine's run and a design check's
     // verifier among them); Caw's, when he made the call.
     spawn: (machineId, payload, workItemId, fallbackMode, placed) =>
@@ -7807,11 +7821,6 @@ export const createServer = (
     // A send's record: what became of the words.
     send: (envelope) =>
       deliverSend(envelope) ?? { reason: null, state: "pending" },
-    // What a pull request an attempt opens links back to and is titled by.
-    sessionUrl: (instanceId) =>
-      `${dashboardUrl(registry)}/session/${instanceId}`,
-    taskTitle: (projectId, taskId) =>
-      db.taskIndex(projectId).find((row) => row.id === taskId)?.title,
     // The plan ↔ to-do link: the task's to-dos, ticked and proposed as the hub.
     todos: {
       read: async (projectId, taskId) =>
@@ -7843,7 +7852,6 @@ export const createServer = (
     // waits at the hub, and goes once that turn is over.
     reclaimUnread,
     finishOver: (instanceId) => releaseOwed({ instanceId }),
-    workspaceChanged: (workspace) => publishInstances(workspace.machineId),
   });
   // A stop walks a session's tree (tree-stops.ts): each session's end asked
   // once nothing under it is left, its item's final state once its machine
