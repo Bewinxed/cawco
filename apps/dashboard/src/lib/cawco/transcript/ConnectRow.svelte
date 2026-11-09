@@ -18,15 +18,16 @@
    */
   import { accessWords } from "@cawco/core/words/connect-lines";
   import { IconChevronRight, IconKey, IconNeutral } from "#lib/icons.js";
-  import { cawco } from "../client.svelte";
+  import { mcpServersStore } from "../stores/mcp-servers.svelte";
 
   let { answer }: { answer: ConnectAnswer } = $props();
 
   /** The sign-in it made has since ended without the person. */
   const lapsed = $derived(
     answer.outcome === "connected" &&
-      !!(cawco.fleetMcp ?? []).find((one) => one.name === answer.server)?.auth
-        ?.ended
+      !!(mcpServersStore.fleetMcp ?? []).find(
+        (one) => one.name === answer.server
+      )?.auth?.ended
   );
   const kind = $derived(lapsed ? "expired" : answer.outcome);
 
