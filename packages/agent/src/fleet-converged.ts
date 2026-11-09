@@ -128,7 +128,7 @@ export const keepConverged = (converged: FleetConverged): Promise<void> => {
  * stood as the boundary started, so a bound dir in a harness's own home is
  * named by whether any item that makes it is held (skills, vendored
  * plugins); CawCo's own (the hook scripts', the MCP installs') are made
- * before any boundary starts (boundary.ts `planFor`) and name nothing. A
+ * before any boundary starts (boundary/plan.ts `planFor`) and name nothing. A
  * project's rows sit inside the clone the boundary binds and name nothing
  * here. A memory document, a project's hook or skill, or an MCP server
  * moves no form.

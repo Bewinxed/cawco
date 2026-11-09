@@ -13,7 +13,7 @@
  *   so the sandbox's bind on it, and its deny, stay ({@link rewriteLeftFiles}).
  *   One where a dir stands in cannot become a dir without an unlink, which
  *   would drop that deny: its boundary is replaced once nothing runs in it
- *   ({@link hasLeftDirs}, `restartStubbed` in boundary.ts), and the new host
+ *   ({@link hasLeftDirs}, `restartStubbed` in boundary/), and the new host
  *   makes the dir.
  * - When the workspace closes, each stand-in still exactly as it was made goes
  *   once no mount namespace holds it ({@link removeStandIns}).
@@ -25,7 +25,7 @@
  * A path git tracks is the project's own and is never touched.
  *
  * Stand-ins are made only inside a clone that is there, a repository (the
- * host's `goneReason`, boundary.ts `placeReady`). A folder at a clone's path
+ * host's `goneReason`, boundary/lifecycle.ts `placeReady`). A folder at a clone's path
  * whose `.git` is no repository and that holds nothing but what CawCo wrote
  * there (stand-ins as made, mount points a sandbox left, git-lfs's format
  * marker, a project's skills as placed) is a husk: a clone deleted under a
