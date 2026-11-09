@@ -1,7 +1,7 @@
 /**
- * The browser-safe half of `paths.ts`, which owns every Claude Code dir: the
+ * The browser-safe half of `paths/claude.ts`, which owns every Claude Code dir: the
  * names a dashboard, a hub message or a shell script needs, with no
- * `node:fs` behind them. `paths.ts` builds every real path on a machine from
+ * `node:fs` behind them. `paths/claude.ts` builds every real path on a machine from
  * these, and nothing else spells Claude Code's dir name
  * (`bun run claude-paths:check`).
  */
