@@ -136,6 +136,7 @@ import {
   sessiond,
   startEnded,
   startUnderWay,
+  type UnaskedCalls,
   writeWhole,
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
@@ -146,7 +147,10 @@ import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
  * ({@link closeQuietly}), and this one starts the boundary again. Each ensure
  * is a use: the workspace's quiet time counts from it ({@link liveAt}).
  */
-export const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
+export const ensureNow = (
+  ref: WorkspaceRef,
+  unasked: UnaskedCalls
+): Promise<Boundary> => {
   sawHeld(ref.id, Date.now());
   const pending = startUnderWay(ref.id);
   if (pending) {
@@ -154,7 +158,7 @@ export const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
   }
   const started = (async () => {
     await closeUnderWay(ref.id);
-    return await ensure(ref);
+    return await ensure(ref, unasked);
   })().finally(() => {
     startEnded(ref.id);
     sawHeld(ref.id, Date.now());
@@ -236,7 +240,10 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
   }
 };
 
-const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
+const ensure = async (
+  ref: WorkspaceRef,
+  unasked: UnaskedCalls
+): Promise<Boundary> => {
   if (process.platform !== "linux" && process.platform !== "darwin") {
     throw refusal(
       ref.id,
@@ -264,7 +271,7 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   const holder = held ? await running(ref.id, held) : undefined;
   if (!(held && holder)) {
     await stopUnvouched(ref.id, held);
-    return start(client, ref);
+    return start(client, ref, unasked);
   }
   // Access is never kept past its removal: a generation that grants what the
   // workspace's policy no longer does is stopped now with what runs in it,
@@ -278,7 +285,8 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
       held,
       narrowed,
       owed,
-      "use"
+      "use",
+      unasked
     );
     if (narrowed.current.length > 0) {
       return runs;
@@ -300,12 +308,12 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     held.form !== (await formOf(ref)) ||
     holder.epoch !== client.epoch
   ) {
-    return replaceOlder(client, ref, held, owed, unknown);
+    return replaceOlder(client, ref, held, owed, unknown, unasked);
   }
   forgetStale(ref.id);
   // Written again each time: one an earlier agent started may have no hook
   // yet, or one that reaches cawco another way.
-  return armHook(ref.id, held);
+  return armHook(ref.id, held, unasked);
 };
 
 const replaceOlder = async (
@@ -313,7 +321,8 @@ const replaceOlder = async (
   ref: WorkspaceRef,
   held: Held,
   owed: boolean,
-  grant: string | undefined
+  grant: string | undefined,
+  unasked: UnaskedCalls
 ): Promise<Boundary> => {
   if (owed) {
     // The keeper the endpoint names now retires as soon as this build's
@@ -331,8 +340,8 @@ const replaceOlder = async (
         to: null,
       });
     }
-    replaceSoon(ref);
-    return armHook(ref.id, held);
+    replaceSoon(ref, unasked);
+    return armHook(ref.id, held, unasked);
   }
   if (process.platform === "linux" && (await hasLeftDirs(ref.path))) {
     // A boundary started beside it would bind the same mount point and
@@ -346,8 +355,8 @@ const replaceOlder = async (
         to: null,
       });
     }
-    restartWhenIdle(ref);
-    return armHook(ref.id, held);
+    restartWhenIdle(ref, unasked);
+    return armHook(ref.id, held, unasked);
   }
   // Every command after a handover runs in the new sandbox: its own pid
   // namespace, where nothing the work left running in this one can be seen
@@ -367,13 +376,13 @@ const replaceOlder = async (
   const found = await workLeft(ref.id, held);
   const tried = found
     ? { kept: found }
-    : await handOverWhenIdle(client, ref, held, grant);
+    : await handOverWhenIdle(client, ref, held, grant, unasked);
   if ("fresh" in tried) {
     forgetStale(ref.id);
     return tried.fresh;
   }
   const work = tried.kept;
-  replaceSoon(ref);
+  replaceSoon(ref, unasked);
   if (keptRunningOf(ref.id)?.said !== work.words) {
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work.words}, and handed over once that ends${await formMoveWords(ref, held)}`
@@ -391,7 +400,7 @@ const replaceOlder = async (
     });
   }
   markKeptRunning(ref.id, { said: work.words, commands: work.commands });
-  return armHook(ref.id, held);
+  return armHook(ref.id, held, unasked);
 };
 
 /**
@@ -455,13 +464,14 @@ const handOverWhenIdle = (
   client: SessiondClient,
   ref: WorkspaceRef,
   held: Held,
-  grant: string | undefined
+  grant: string | undefined,
+  unasked: UnaskedCalls
 ): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
   behindGate(ref.id, async () => {
     const work = await workLeft(ref.id, held);
     return work
       ? { kept: work }
-      : { fresh: await handOver(client, ref, held, grant) };
+      : { fresh: await handOver(client, ref, held, grant, unasked) };
   });
 
 /**
@@ -483,7 +493,8 @@ export const replaceNarrowed = async (
   held: Held,
   narrowed: Narrowed,
   owed: boolean,
-  cause: NarrowCause
+  cause: NarrowCause,
+  unasked: UnaskedCalls
 ): Promise<Boundary> =>
   behindGate(ref.id, async () => {
     const stopping: Held[] = [
@@ -509,9 +520,9 @@ export const replaceNarrowed = async (
       narrowed.current.length > 0
         ? await (async () => {
             forgetStale(ref.id);
-            return start(await keeperTakingOver(client, owed), ref);
+            return start(await keeperTakingOver(client, owed), ref, unasked);
           })()
-        : await armHook(ref.id, held);
+        : await armHook(ref.id, held, unasked);
     const line = await tellStopped(ref.id, narrowedCause(why), stopped);
     console.info(
       `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${line ?? `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
@@ -541,16 +552,19 @@ const handOver = async (
   client: SessiondClient,
   ref: WorkspaceRef,
   old: Held,
-  grant: string | undefined
+  grant: string | undefined,
+  unasked: UnaskedCalls
 ): Promise<Boundary> => {
   const record = retiringFileOf(ref.id, old);
   const kept: Retiring = old;
   const moved = await formMoveWords(ref, old);
   await writeWhole(record, `${JSON.stringify(kept)}\n`, 0o644);
-  const fresh = await start(client, ref).catch(async (error: unknown) => {
-    await rm(record, { force: true });
-    throw error;
-  });
+  const fresh = await start(client, ref, unasked).catch(
+    async (error: unknown) => {
+      await rm(record, { force: true });
+      throw error;
+    }
+  );
   console.info(
     `[workspace] ${ref.id}: its boundary ${old.pid} (form ${old.form ?? "none"}) is handed over to ${fresh.pid}; it closes once nothing runs in it${moved}`
   );
@@ -560,7 +574,7 @@ const handOver = async (
     reasons: reasonsOf({ grant: grant ?? null }),
     to: decided(fresh),
   });
-  closeWhenIdle(ref.id);
+  closeWhenIdle(ref.id, unasked);
   return fresh;
 };
 
