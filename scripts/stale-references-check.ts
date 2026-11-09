@@ -12,15 +12,15 @@
  *   any member). A `.js` names its `.ts` as an import does.
  * - **member file**: a file named after its member, the house's short form
  *   (`core heavy-slots.ts`, `preview overlay/pins.ts`, `the dashboard's
- *   \`reload.svelte.ts\``): some file of that member ends in it. One under a
- *   folder the member has none of is another project's, and not read.
+ *   \`reload.svelte.ts\``): some file of that member ends in it.
  * - **line**: none of those cites a line by number (`x.ts:42`): the next
  *   edit above the line moves it, and nothing says so.
- * - **link**: a JSDoc `@link` to a name names an identifier the code holds
- *   (this file's, the repository's, or the platform's); one to a member of
- *   an interface, class, enum or object type this module declares, a member
- *   it has; and one to `import("<module>").Name`, a name that module
- *   declares.
+ * - **link**: a JSDoc `@link` to a name names one this module can see or
+ *   the repository exports: what the file declares or imports, an export of a
+ *   module here, a member of a declared type, or the platform's. One to a
+ *   member of an interface, class, enum or object type this module declares
+ *   names a member it has, and one to `import("<module>").Name` a name that
+ *   module declares.
  *
  * A path anchored nowhere (`src/x.ts`, `lib/modem.js`, `.claude/settings.json`)
  * can name another project's file, a build's output or a scratch repo's, so
@@ -111,36 +111,64 @@ const pathIsThere = (file: string, path: string): boolean => {
 
 /**
  * Whether some file of `member` is `path` or ends in it (`proxy.ts`,
- * `preview/proxy.ts`). A path whose first folder the member has none of is
- * read as another project's (`core config/discovery.ts`, OpenCode's), and
- * passes.
+ * `preview/proxy.ts`). Another project's file is written from its repository
+ * (`anomalyco/opencode/packages/core/…`), never as a member's.
  */
-const inMember = (member: string, path: string): boolean => {
-  const own = files.filter((file) =>
-    file.startsWith(`${members.get(member)}/`)
-  );
-  const slash = path.indexOf("/");
-  if (
-    slash >= 0 &&
-    !own.some((file) => file.includes(`/${path.slice(0, slash + 1)}`))
-  ) {
-    return true;
-  }
-  return own.some((file) => file.endsWith(`/${path}`));
-};
+const inMember = (member: string, path: string): boolean =>
+  files
+    .filter((file) => file.startsWith(`${members.get(member)}/`))
+    .some((file) => file.endsWith(`/${path}`));
 
-/** Every identifier in a syntax tree. */
-const identifiers = (source: ts.SourceFile): Set<string> => {
+/** A member's name as its declaration spells it (`#field` keeps its `#`). */
+const memberNameOf = (name: ts.PropertyName | undefined): string | undefined =>
+  name &&
+  (ts.isIdentifier(name) ||
+    ts.isPrivateIdentifier(name) ||
+    ts.isStringLiteral(name))
+    ? name.text
+    : undefined;
+
+/** Every name a file declares, or binds with an import, at any depth. */
+const declaredIn = (source: ts.SourceFile): Set<string> => {
   const found = new Set<string>();
   const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) {
-      found.add(node.text);
+    if (
+      ts.isVariableDeclaration(node) ||
+      ts.isFunctionDeclaration(node) ||
+      ts.isClassDeclaration(node) ||
+      ts.isInterfaceDeclaration(node) ||
+      ts.isTypeAliasDeclaration(node) ||
+      ts.isEnumDeclaration(node) ||
+      ts.isEnumMember(node) ||
+      ts.isModuleDeclaration(node) ||
+      ts.isParameter(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isMethodSignature(node) ||
+      ts.isPropertySignature(node) ||
+      ts.isPropertyDeclaration(node) ||
+      ts.isPropertyAssignment(node) ||
+      ts.isBindingElement(node) ||
+      ts.isImportSpecifier(node) ||
+      ts.isImportClause(node) ||
+      ts.isNamespaceImport(node) ||
+      ts.isExportSpecifier(node)
+    ) {
+      const { name } = node;
+      if (name && (ts.isIdentifier(name) || ts.isPrivateIdentifier(name))) {
+        found.add(name.text);
+      }
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
   return found;
 };
+
+const isExported = (statement: ts.Statement): boolean =>
+  ts.canHaveModifiers(statement) &&
+  (ts.getModifiers(statement) ?? []).some(
+    (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword
+  );
 
 /** The names a module declares at its top. */
 const declared = (source: ts.SourceFile): Set<string> => {
@@ -176,6 +204,60 @@ const declared = (source: ts.SourceFile): Set<string> => {
   return found;
 };
 
+/** The names one statement exports. */
+const exportedBy = (statement: ts.Statement): string[] => {
+  if (ts.isVariableStatement(statement) && isExported(statement)) {
+    return statement.declarationList.declarations.flatMap((item) =>
+      ts.isIdentifier(item.name) ? item.name.text : []
+    );
+  }
+  if (
+    (ts.isFunctionDeclaration(statement) ||
+      ts.isClassDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      ts.isEnumDeclaration(statement)) &&
+    statement.name &&
+    isExported(statement)
+  ) {
+    return [statement.name.text];
+  }
+  if (
+    ts.isExportDeclaration(statement) &&
+    statement.exportClause &&
+    ts.isNamedExports(statement.exportClause)
+  ) {
+    return statement.exportClause.elements.map((item) => item.name.text);
+  }
+  return [];
+};
+
+/** The members a statement's declared type has. */
+const membersBy = (statement: ts.Statement): string[] => {
+  if (
+    ts.isInterfaceDeclaration(statement) ||
+    ts.isClassDeclaration(statement)
+  ) {
+    return statement.members.flatMap((item) => memberNameOf(item.name) ?? []);
+  }
+  if (
+    ts.isTypeAliasDeclaration(statement) &&
+    ts.isTypeLiteralNode(statement.type)
+  ) {
+    return statement.type.members.flatMap(
+      (item) => memberNameOf(item.name) ?? []
+    );
+  }
+  return [];
+};
+
+/** What a module exports by name, and the members of the types it declares. */
+const exportedAndMembers = (source: ts.SourceFile): string[] =>
+  source.statements.flatMap((statement) => [
+    ...exportedBy(statement),
+    ...membersBy(statement),
+  ]);
+
 const code = files.filter((file) => CODE.test(file) && !SKIPPED.test(file));
 const sources = new Map(
   code.map((file) => [
@@ -183,39 +265,31 @@ const sources = new Map(
     parsed(file, readFileSync(join(ROOT, file), "utf8")),
   ])
 );
-const everywhere = new Set<string>();
 const own = new Map<string, Set<string>>();
+/** What the repository exports by name, and the members of its declared types. */
+const exportedNames = new Set<string>();
 for (const [file, source] of sources) {
-  const names = identifiers(source);
-  own.set(file, names);
-  for (const name of names) {
-    everywhere.add(name);
+  own.set(file, declaredIn(source));
+  for (const name of exportedAndMembers(source)) {
+    exportedNames.add(name);
   }
 }
 /** The platform's names: TypeScript's libraries, Node's and Bun's types. */
-for (const dir of [
-  "typescript/lib",
-  "@types/node",
-  ".bun/node_modules/bun-types",
+const platform = new Set<string>();
+const bunTypes = dirname(Bun.resolveSync("@types/bun/package.json", ROOT));
+for (const at of [
+  dirname(ts.getDefaultLibFilePath({})),
+  dirname(Bun.resolveSync("@types/node/package.json", ROOT)),
+  dirname(Bun.resolveSync("bun-types/package.json", bunTypes)),
 ]) {
-  const at = join(ROOT, "node_modules", dir);
   for (const name of readdirSync(at).filter((n) => n.endsWith(".d.ts"))) {
     for (const match of readFileSync(join(at, name), "utf8").matchAll(
       /\b(?:interface|class|type|var|const|function|namespace|enum|let|module)\s+([A-Za-z_$][\w$]*)/gu
     )) {
-      everywhere.add(match[1] as string);
+      platform.add(match[1] as string);
     }
   }
 }
-
-/** A member's name as its declaration spells it (`#field` keeps its `#`). */
-const memberName = (name: ts.PropertyName | undefined): string | undefined =>
-  name &&
-  (ts.isIdentifier(name) ||
-    ts.isPrivateIdentifier(name) ||
-    ts.isStringLiteral(name))
-    ? name.text
-    : undefined;
 
 /**
  * The members of `name` when this module declares it as an interface or a
@@ -235,12 +309,12 @@ const membersOf = (
       !statement.heritageClauses?.length
     ) {
       return new Set(
-        statement.members.flatMap((item) => memberName(item.name) ?? [])
+        statement.members.flatMap((item) => memberNameOf(item.name) ?? [])
       );
     }
     if (ts.isEnumDeclaration(statement) && statement.name.text === name) {
       return new Set(
-        statement.members.flatMap((item) => memberName(item.name) ?? [])
+        statement.members.flatMap((item) => memberNameOf(item.name) ?? [])
       );
     }
     if (
@@ -249,7 +323,7 @@ const membersOf = (
       ts.isTypeLiteralNode(statement.type)
     ) {
       return new Set(
-        statement.type.members.flatMap((item) => memberName(item.name) ?? [])
+        statement.type.members.flatMap((item) => memberNameOf(item.name) ?? [])
       );
     }
   }
@@ -280,8 +354,12 @@ const staleLink = (file: string, target: string): string | undefined => {
   if (!head) {
     return;
   }
-  if (!(own.get(file)?.has(head) || everywhere.has(head))) {
-    return `no ${head} in the code`;
+  if (!(
+    own.get(file)?.has(head) ||
+    exportedNames.has(head) ||
+    platform.has(head)
+  )) {
+    return `no ${head} here, nor exported anywhere; link what this module can see, or write it in backticks`;
   }
   const declaredMembers = member
     ? membersOf(sources.get(file), head)
