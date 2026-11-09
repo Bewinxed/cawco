@@ -74,6 +74,7 @@ import {
 import { ROUTINE_TOOLS, type Routines } from "./routines";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
+import type { WorkItemCalls } from "./work-item-calls";
 import { isVerifierParent } from "./work-item-state";
 
 type ToolFactory = typeof handoffTools;
@@ -277,6 +278,8 @@ export function createDelegationMcp(options: {
   tools?: ToolFactory;
   /** Project tasks, for the `task_*` and `todo_write` tools; without it they are not offered. */
   tasks?: Tasks;
+  /** The work-item calls a session's tools make directly (work-item-calls.ts). */
+  workItemCalls: WorkItemCalls;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
   /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
@@ -1031,6 +1034,7 @@ export function createDelegationMcp(options: {
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),
       started: startedBy(actor, name, cut),
+      work: options.workItemCalls,
     };
     const entry = tools(viewOf(actor)).find((tool) => tool.name === name);
     if (!entry) {
