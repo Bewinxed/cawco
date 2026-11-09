@@ -91,6 +91,12 @@ import { writeStateFileSync } from "@cawco/core/state-file";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { z } from "zod";
+import {
+  HOST_ENV,
+  HOST_FILES,
+  HOST_GONE_STATUS,
+  hostArgsOf,
+} from "./boundary/protocol";
 import { isGitDirSync } from "./git-dir";
 import { mountedAnywhere, mountPointsOf } from "./mount-table";
 import {
@@ -207,21 +213,15 @@ const ask: SandboxAskCallback = ({ host }) => {
   return Promise.resolve(allowed);
 };
 
-const [
-  settingsFile,
-  runnerFile,
-  fifo,
-  clone,
-  readyLine,
-  deniesFile,
-  ...places
-] = process.argv.slice(2);
-if (!(settingsFile && runnerFile && fifo && clone && readyLine && deniesFile)) {
+const handed = hostArgsOf(process.argv.slice(2));
+if (!handed) {
   console.error(
     "usage: boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES [PLACE...]"
   );
   process.exit(64);
 }
+const { settingsFile, runnerFile, fifo, clone, readyLine, deniesFile, places } =
+  handed;
 
 /**
  * Makes each PLACE the host lacks, owner-only (0700, as a runtime dir is),
@@ -249,16 +249,16 @@ const denies: CloneDeny[] = z
   .array(CloneDenySchema)
   .parse(JSON.parse(readFileSync(deniesFile, "utf8")));
 /** `<state>/sandbox`: `OUTER INNER IDLE...`, the running sandbox's pids, which the executor and the agent read. */
-const placeFile = join(process.cwd(), "sandbox");
+const placeFile = join(process.cwd(), HOST_FILES.sandbox);
 /** `<state>/guarded`: the running sandbox's protected binds, which the executor checks before every command. */
-const guardedFile = join(process.cwd(), "guarded");
+const guardedFile = join(process.cwd(), HOST_FILES.guarded);
 /**
  * `<state>/restarts.json`: each restart of the sandbox for a guarded path
  * changed on the host, `{at, path, inner}`, oldest first, written before the
- * line saying it, which the agent records it from (boundary/
+ * line saying it, which the agent records it from (boundary/watch.ts
  * `recordHostRestarts`).
  */
-const restartsFile = join(process.cwd(), "restarts.json");
+const restartsFile = join(process.cwd(), HOST_FILES.restarts);
 const restarts: { at: number; inner: number | null; path: string }[] = [];
 const lstatOf = (path: string): Stats | undefined => {
   try {
@@ -275,7 +275,7 @@ const lstatOf = (path: string): Stats | undefined => {
  * folder that is no repository (`CAWCO_FOLDER`, agent layer.ts).
  */
 const plainFolder =
-  process.env.CAWCO_PLACE === "1" || process.env.CAWCO_FOLDER === "1";
+  process.env[HOST_ENV.place] === "1" || process.env[HOST_ENV.folder] === "1";
 
 /**
  * Why the folder this boundary holds is no longer there to hold, when it is
@@ -297,7 +297,7 @@ const goneReason = (): string | undefined => {
 };
 
 /** Ends this boundary without a sandbox: the folder it holds is gone ({@link goneReason}). */
-const GONE_STATUS = 66;
+const GONE_STATUS = HOST_GONE_STATUS;
 
 const refuseGone = (reason: string): never => {
   // On stdout, as a line: the agent names a boundary that did not start by
@@ -316,7 +316,7 @@ if (goneAtStart) {
 // makes a mount point for each that is absent. A place is a
 // person's own folder, never written into, so there srt starts in the place's
 // scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
-process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
+process.chdir(process.env[HOST_ENV.sandboxCwd] || clone);
 
 /**
  * What this boundary exits with when srt refuses to build its sandbox,
@@ -516,7 +516,7 @@ const markLfs = (): void => {
  * `makeStandIns`), and its folder is no repository for git-lfs to mark.
  */
 const standIn = (): void => {
-  if (process.env.CAWCO_FOLDER === "1") {
+  if (process.env[HOST_ENV.folder] === "1") {
     return;
   }
   markLfs();
@@ -634,7 +634,7 @@ const inherited = [
   "LANG",
   "CAWCO_WORKSPACE",
   // A place: nothing a command starts outlives it (boundary/runner.ts `LAUNCH`).
-  "CAWCO_PLACE",
+  HOST_ENV.place,
 ];
 const runnerEnv = {
   // The dirs of the agent's PATH no session can change, which this host was
