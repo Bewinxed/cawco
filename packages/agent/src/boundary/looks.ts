@@ -82,7 +82,7 @@ import {
   writeWhole,
 } from "./state";
 import { cleanGeneration, endUsers, stopBoundary } from "./stop";
-import { cloneLooks, hubLive } from "./watch";
+import { hubLiveNow, lookAtEveryFolder } from "./watch";
 
 /**
  * Keeps `project` as the project workspace `id`'s work belongs to
@@ -344,16 +344,21 @@ let holders: BoundaryHolders | undefined;
 export const liveFacts = async (
   procs: readonly HeldProc[]
 ): Promise<LiveFacts | undefined> => {
-  if (!(hubLive && holders)) {
+  if (!(hubLiveNow() && holders)) {
     return;
   }
-  return {
-    commands: await commandsNow(),
-    hub: hubLive,
-    previews: new Set(holders.previews()),
-    procs,
-    sessions: new Set(holders.sessions()),
-  };
+  const commands = await commandsNow();
+  // The hub's newest word, read after the wait. Said once, it is never unsaid.
+  const hub = hubLiveNow();
+  return (
+    hub && {
+      commands,
+      hub,
+      previews: new Set(holders.previews()),
+      procs,
+      sessions: new Set(holders.sessions()),
+    }
+  );
 };
 
 /**
@@ -623,10 +628,8 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
     }
     looking = true;
     // Each macOS boundary's folder looked at too: a deletion its watchers
-    // missed closes its boundary within a sweep (lifecycle.ts `watchCloneOf`).
-    for (const look of [...cloneLooks.values()]) {
-      look();
-    }
+    // missed closes its boundary within a sweep ({@link watchCloneOf}).
+    lookAtEveryFolder();
     sweepQuiet()
       .then(async () =>
         judgesAnswer((await keepers.held()).filter((proc) => proc.alive))
