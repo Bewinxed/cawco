@@ -1,9 +1,9 @@
 /**
  * What a delegate starts in its workspace and leaks, the delegate is told
  * while its item is live, and nothing is stopped (agent leak-watch.ts on a
- * workspace's boundary, boundary.ts `sandboxOf`); once its item has ended,
+ * workspace's boundary, boundary/sandboxes.ts `sandboxOf`); once its item has ended,
  * what it left running there ends (hub workspaces.ts `endLeftWork`, agent
- * boundary.ts `endSessionWork`) and its parent is told of no leftover (hub
+ * boundary/work.ts `endSessionWork`) and its parent is told of no leftover (hub
  * session-notes.ts `tellLeak`). leak-notice proves the watcher for a session's own
  * processes; this is the boundary's half. On a scratch fleet (real hub,
  * agent and sessiond; Claude Code against the mock model), boundaries
@@ -80,7 +80,7 @@ import type { Kit, KitFleet, Spec } from "../kit";
 const THRESHOLD_GIB = 0.25;
 const MEMORY_WAIT_MS = 180_000;
 const LEFT_WAIT_MS = 90_000;
-/** How soon after its item's end what the delegate left running is gone: the hub's settle, then its machine's SIGTERM, grace and SIGKILL (agent boundary.ts `WORK_GRACE_MS`). */
+/** How soon after its item's end what the delegate left running is gone: the hub's settle, then its machine's SIGTERM, grace and SIGKILL (agent boundary/processes.ts `WORK_GRACE_MS`). */
 const ENDED_WAIT_MS = 15_000;
 const TAG = "PROBE-LEAK-WS";
 const LEAKER = "leak-probe-W";

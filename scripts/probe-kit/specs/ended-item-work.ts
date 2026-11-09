@@ -1,7 +1,7 @@
 /**
  * A workspace whose items have all ended runs nothing but what a landing
  * runs or an artifact shows (hub workspaces.ts `endLeftWork`, agent
- * boundary.ts `endSessionWork`, `agentServerStarted`, stage.ts `start`; hub
+ * boundary/work.ts `endSessionWork`, `agentServerStarted`, stage.ts `start`; hub
  * session-notes.ts `tellLeak`). On a scratch fleet (real hub, agent and sessiond;
  * Claude Code against the mock model), boundaries included: it delegates,
  * so it runs on the host, outside every workspace, on Linux and on macOS.
