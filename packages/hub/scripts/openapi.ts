@@ -253,11 +253,29 @@ for (const [name, file] of socket.declaredIn) {
 // The generator reports every property initializer it reads; none is news.
 const { warn } = console;
 console.warn = () => undefined;
+/**
+ * Elysia's published type for the body it answers a failed validation with:
+ * the 422 bodies the routes' types spell out are written as this one
+ * component, described as Elysia describes it.
+ */
+const VALIDATION_BODY = "ValidationErrorResponse";
 const { definitions = {} } = generator.getSchemaForSymbols([
   ...ids,
   ...socket.frames,
+  VALIDATION_BODY,
 ]) as { definitions?: Record<string, Schema> };
 console.warn = warn;
+const validationBody = generator
+  .getSymbols(VALIDATION_BODY)
+  .map(({ symbol }) => symbol.declarations?.[0]?.getSourceFile().fileName);
+if (
+  validationBody.length !== 1 ||
+  !validationBody[0]?.includes("/node_modules/elysia/")
+) {
+  throw new Error(
+    `${VALIDATION_BODY} names ${validationBody.length} types (${validationBody.join(", ")}); openapi.ts reads Elysia's one`
+  );
+}
 
 // Frame kinds are mutually exclusive already: required literal `kind` values.
 // Emit the existing discriminant with named references, so Swift names cases
@@ -387,14 +405,28 @@ const isText = (schema: Schema): boolean => {
   );
 };
 
-/** What the document says of Elysia's 422 body; production sends none of `detail`, `found`, `expected` and `errors`. */
-const VALIDATION_WORDS =
-  "Request validation problem. Diagnostic fields are development-only.";
-
-/** Elysia's 422 body (`ValidationErrorResponse`), by the literal it carries. */
+/**
+ * Elysia's 422 body, by the literal it carries. A route's type spells it out
+ * (Elysia's own `ValidationProblem`, kept equal to the exported
+ * {@link VALIDATION_BODY}); one that no longer reads as that type fails here.
+ */
 const isValidationProblem = (schema: Schema): boolean => {
   const kind = (schema.properties as Record<string, Schema> | undefined)?.type;
-  return Array.isArray(kind?.enum) && kind.enum[0] === "validation";
+  if (!(Array.isArray(kind?.enum) && kind.enum[0] === "validation")) {
+    return false;
+  }
+  // Each type's own comment aside: the spelled-out copy's is written for
+  // Elysia's maintainers.
+  const { description: _, ...published } = toDocument(
+    definitions[VALIDATION_BODY]
+  ) as Schema;
+  const { description: __, ...spelled } = schema;
+  if (JSON.stringify(published) !== JSON.stringify(spelled)) {
+    throw new Error(
+      `A route's 422 body is no longer Elysia's ${VALIDATION_BODY}:\n${JSON.stringify(spelled)}\n${JSON.stringify(published)}`
+    );
+  }
+  return true;
 };
 
 /**
@@ -462,23 +494,14 @@ for (const { op, method, path } of operations) {
       const body = rest.length === 1 ? rest[0] : { ...schema, anyOf: rest };
       // Elysia answers a failed validation with its own problem document; the
       // generator writes Elysia's type out wherever it meets it, so it is
-      // known by its `type: "validation"` and kept as one component.
+      // known by its `type: "validation"` and written as Elysia's component.
       const validation = isValidationProblem(body);
       // An anonymous body is named by its operation; a named type is its own.
       let name: string | undefined;
       if (validation) {
-        name = "ValidationErrorResponse";
+        name = VALIDATION_BODY;
       } else if (!body.$ref) {
         name = `${op.operationId}${status}`;
-      }
-      if (validation) {
-        // Its description is ours: the comment on Elysia's type is written
-        // for Elysia's own maintainers.
-        components.ValidationErrorResponse = {
-          ...body,
-          description: VALIDATION_WORDS,
-        };
-      } else if (name) {
         components[name] = body;
       }
       const ref = name ? `${COMPONENT}${name}` : (body.$ref as string);
