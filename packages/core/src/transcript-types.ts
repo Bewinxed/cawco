@@ -83,7 +83,7 @@ export interface BlockMetadata {
     | import("./attachments").ShownFile
   >;
   compactError?: string;
-  /** {@link compactError} typed, as its harness typed the error ({@link import("./harness").CompactionFailure}). */
+  /** {@link compactError} typed, as its harness typed the error ({@link import("./session-messages").CompactionFailure}). */
   compactFailure?: import("./session-messages").CompactionFailure;
   /**
    * A compaction boundary read back from a harness that stores how it ended
@@ -92,7 +92,7 @@ export interface BlockMetadata {
   compactResult?: "success" | "failed";
   /**
    * A send that is the message a session went on from in a fresh
-   * conversation (origin {@link import("./harness").CONTINUATION_ORIGIN}):
+   * conversation (origin {@link import("./harness/kinds").CONTINUATION_ORIGIN}):
    * drawn folded under the `continued` line before it, never as a turn.
    */
   continuation?: true;
