@@ -10,9 +10,9 @@
    * measures a real viewport and not a zero one.
    */
   import { onMount, untrack } from "svelte";
-  import type { ServerTail } from "../client.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
+  import type { ServerTail } from "../stores/transcript-reads.svelte";
   import { dock, shownPanes, slots } from "./dock.svelte";
   import { contextOf, workspace } from "./workspace.svelte";
 
