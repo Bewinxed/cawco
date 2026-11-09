@@ -439,6 +439,8 @@ export const HUB_TAKE_MEASURE = "cawco hub messages";
 /**
  * Everything the stream protocol can put on the dashboard socket.
  * @public Read by name by packages/hub/scripts/wire-compat.ts.
+ *
+ * @socketFrame fromHub
  */
 export type StreamServerMessage =
   | StreamBacklog
@@ -448,6 +450,7 @@ export type StreamServerMessage =
   | StreamHeartbeat
   | PlanSnapshot
   | PlanDelta;
+/** @socketFrame toHub */
 export type StreamClientMessage =
   | StreamSubscribe
   | StreamUnsubscribe
