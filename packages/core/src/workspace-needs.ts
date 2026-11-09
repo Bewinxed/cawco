@@ -43,8 +43,9 @@
  * {@link workspaceNeeds}: the machine's capability report carries it to the
  * hub and the machine's row (`workspace`, agent capabilities.ts), and a
  * delegate is refused by it before anything of its workspace starts (agent
- * workspace.ts `createWorkspace`, before its folder is read), and a
- * boundary before its walls go up (boundary.ts `ensure`). It is read fresh each time: a few lookups, so a program
+ * workspace.ts `createWorkspace`, the folder read before a cut, daemon.ts
+ * `CONTROL_REPO_ROOT`), and a boundary before its walls go up (boundary/
+ * `ensure`). It is read fresh each time: a few lookups, so a program
  * installed a second ago counts at once.
  */
 import {
