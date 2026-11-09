@@ -12,14 +12,21 @@
 
 import type {
   Account,
+  AccountIdentity,
+  AccountJoined,
   AccountKind,
   AccountMove,
   AccountProvider,
+  AccountSigninResult,
   CompactStage,
   EndedBy,
+  HomeStore,
   PendingAccountSignin,
   ProviderInfo,
+  ProviderSigninChallenge,
+  ProviderSigninResult,
   RebalanceNotice,
+  RefusalVerdict,
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { ArchiveView } from "@cawco/core/archive";
@@ -40,11 +47,7 @@ import type {
   SkillFile,
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
-import type {
-  ControlResultFrame,
-  FramePayload,
-  PreviewFrame,
-} from "@cawco/core/frames";
+import type { FramePayload, PreviewFrame } from "@cawco/core/frames";
 import type {
   HandoverCommand,
   HandoverEvent,
@@ -198,7 +201,7 @@ import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SkillFolderReader } from "./skills";
 import type { SshTunnels } from "./ssh-tunnels";
-import type { StreamHubShape } from "./stream";
+import type { ControlResultFrame, StreamHubShape } from "./stream";
 import type { createTailnetHttps } from "./tailnet-https";
 import type { createTasks } from "./tasks";
 import type { createToolCallKeys } from "./tool-call-keys";
@@ -325,6 +328,11 @@ export interface HubContext {
     status: (code: 503 | 504, said: string) => Answer
   ) => Answer;
   awayError: (machineId: string) => MachineAway;
+  awayStatus: (
+    set: RouteSet,
+    machineId: string,
+    words?: string
+  ) => { code: 503; said: string };
   awayWords: (machineId: string, answer: Unanswered) => string;
   binaryUpdateStates: Map<string, BinaryUpdateState>;
   boardBase: Map<string, BoardInstanceRow>;
@@ -379,6 +387,7 @@ export interface HubContext {
     row: Row,
     change: Parameters<DbShape["updateSend"]>[1]
   ) => Row;
+  checkRefused: (accountId: string) => Promise<RefusalVerdict>;
   checkSources: () => Promise<void>;
   claimAccount: (
     machineId: string,
@@ -397,6 +406,12 @@ export interface HubContext {
     instanceId: string
   ) => Promise<Unlanded | { error: string } | null>;
   commandQueues: Map<string, (queue: CommandQueue | null) => void>;
+  completeOn: (
+    account: Account,
+    signinId: string,
+    machineId: string,
+    code: string | undefined
+  ) => Promise<Bounded<ControlResultFrame>>;
   connectAsks: ReturnType<typeof createConnectAsks>;
   connections: ReturnType<typeof createConnections>;
   contact: ReturnType<typeof createMachineContact>;
@@ -493,6 +508,12 @@ export interface HubContext {
   ) => Promise<("changed" | "failed" | "same") | undefined>;
   find: ReturnType<typeof createFind>;
   findHears: (ids: string[]) => void;
+  finishJoined: (
+    signinId: string,
+    into: Account,
+    machineId: string,
+    result: AccountSigninResult | ProviderSigninResult
+  ) => Promise<{ error: string } | ProviderSigninResult | AccountSigninResult>;
   firstTellingOfLeak: (
     machineId: string,
     instanceId: string,
@@ -555,6 +576,19 @@ export interface HubContext {
   heldSessions: Map<
     string,
     { machineId: string; since: number; reason: string }
+  >;
+  homeCredentialOf: (
+    machineId: string,
+    store: HomeStore,
+    storeProvider: string | undefined
+  ) => Promise<
+    | {
+        identity: AccountIdentity;
+        kind: AccountKind;
+        provider: AccountProvider;
+        storeProvider: string;
+      }
+    | { error: string; status: 409 | 422 | 503 }
   >;
   homeLoginMoveOf: (
     machineId: string,
@@ -622,7 +656,18 @@ export interface HubContext {
     typesafe: { ends: string; setAt: number | null } | null;
     suggestWhileTyping: boolean;
   };
+  joinOn: (
+    fromId: string,
+    existing: Account,
+    machineId: string,
+    identity: AccountIdentity
+  ) => Promise<AccountJoined | { error: string }>;
   keepHookVersion: (hook: FleetHook) => void;
+  keepPending: (
+    accountId: string,
+    machineId: string,
+    challenge: ProviderSigninChallenge
+  ) => void;
   keepPrompt: (parked: Envelope) => boolean;
   keepRemovedMemory: (row: {
     path?: string;
@@ -807,6 +852,8 @@ export interface HubContext {
     string,
     { machineId: string; newest?: string | undefined; toolId: string }
   >;
+  pendingKey: (accountId: string, machineId: string) => string;
+  pendingSignins: Map<string, PendingAccountSignin>;
   pendingToolSignins: Map<string, ToolSigninChallenge>;
   piDefaultFor: (
     machineId: string,
@@ -1067,6 +1114,18 @@ export interface HubContext {
     decided?: () => void,
     refusal?: StoredSendRefusal
   ) => void;
+  settleProviderSignin: (
+    account: Account,
+    machineId: string,
+    result: ProviderSigninResult
+  ) => Promise<ProviderSigninResult | { error: string }>;
+  settleSignin: (
+    account: Account,
+    machineId: string,
+    result: AccountSigninResult | ProviderSigninResult
+  ) =>
+    | Promise<ProviderSigninResult | { error: string }>
+    | Promise<AccountSigninResult | { error: string }>;
   sharedProblem: (
     name: string,
     config: Record<string, unknown>,
@@ -1152,6 +1211,25 @@ export interface HubContext {
     machineId: string
   ) =>
     { kind: "build" | "paused" | "update" | "away"; words: string } | undefined;
+  startMove: (
+    machineId: string,
+    store: HomeStore,
+    found: {
+      identity: AccountIdentity;
+      kind: AccountKind;
+      provider: AccountProvider;
+      storeProvider: string;
+    }
+  ) => Promise<
+    | { error: string; status: 409 }
+    | {
+        accountId: string;
+        email: string;
+        provider: AccountProvider;
+        store: HomeStore;
+        waitingFor: number;
+      }
+  >;
   startsFreed: (_machineId: string) => void;
   startsOnHomeLogin: (machineId: string, payload: SpawnPayload) => boolean;
   startsTurnIn: (
@@ -1239,6 +1317,7 @@ export interface HubContext {
     machineId: string,
     answer: Unanswered
   ) => { code: 503 | 504; said: string };
+  undoRemovedSignin: (account: Account, machineId: string) => Promise<string>;
   unlocatedWords: (id: string, machines: string[]) => string;
   unnoteAtLimit: (row: { id: string }, id: string) => void;
   unpushable: Map<string, string>;
