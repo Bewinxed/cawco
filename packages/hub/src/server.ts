@@ -703,14 +703,13 @@ import {
   receiveFrame,
   sendFrame as writeFrame,
 } from "./wire-socket";
+import { isLive, WorkItemRefusal } from "./work-item-state";
 import {
   blockWords,
   createWorkItems,
-  isLive,
   mayStartRefusal,
   outputsFolder,
   type Unlanded,
-  WorkItemRefusal,
   type WorkItemRequest,
 } from "./work-items";
 import { createWorkspaceRetire } from "./workspace-retire";
