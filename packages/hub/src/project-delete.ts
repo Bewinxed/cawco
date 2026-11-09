@@ -48,9 +48,11 @@ import {
   type RemoveFolder,
   type WorkspaceArchive,
 } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";
 import { deleteProjectFolder } from "./project-folder";
+import { projectRefusalOf } from "./project-refusal";
 import {
   type DiskPlace,
   diskPlaces,
@@ -302,6 +304,30 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     return removed;
   };
 
+  /** Project `id`'s rows (`live`: it has them), its workspaces' records, its folder and its trash, gone from the hub. */
+  const forgetOnHub = async (
+    id: string,
+    live: boolean,
+    plan: ReturnType<typeof planOf>
+  ) => {
+    const rows = live
+      ? (db.forgetProject(id, () => undefined)?.tables ?? []).reduce(
+          (sum, one) => sum + one.rows.length,
+          0
+        )
+      : 0;
+    db.projectWork.drop(
+      id,
+      plan.workspaces.map((one) => one.id)
+    );
+    const folder = await deleteProjectFolder(id);
+    if (folder instanceof ElysiaStatus) {
+      throw projectRefusalOf(folder);
+    }
+    const trash = await purgeTrash(id);
+    return { folder, rows, trash };
+  };
+
   return {
     /** Deletes project `id` for good, live or in the trash (`fromDisk`: its places and transcripts too). Throws a {@link DeleteRefusal}. */
     async delete(
@@ -352,21 +378,10 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
       }
       const removed = await removeOnMachines(name, plan, fromDisk);
       // The hub's own, once nothing of it stands on a machine.
-      const rows = live
-        ? (db.forgetProject(id, () => undefined)?.tables ?? []).reduce(
-            (sum, one) => sum + one.rows.length,
-            0
-          )
-        : 0;
-      db.projectWork.drop(
-        id,
-        plan.workspaces.map((one) => one.id)
-      );
-      const folder = await deleteProjectFolder(id);
-      const trash = await purgeTrash(id);
+      const hub = await forgetOnHub(id, Boolean(live), plan);
       return {
         fromDisk,
-        hub: { folder, rows, trash },
+        hub,
         id,
         machines: Object.fromEntries(
           [...removed].map(([machineId, counts]) => [

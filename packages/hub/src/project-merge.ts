@@ -19,17 +19,19 @@
  * removed. Run once at hub start and whenever a project gains a link;
  * with nothing to fold it does nothing.
  */
+
 import { join } from "node:path";
+import { ElysiaStatus } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import {
   hasProjectFolder,
   listFolder,
-  projectRoot,
   readFolderFile,
   writeFolderFiles,
 } from "./project-folder";
+import { projectRefusalOf, projectRootOf } from "./project-refusal";
 import { trashFoldedFolder } from "./project-trash";
 import { fileTaskNumber, TaskDoc } from "./task-file";
 import { CHANGES, TRAILERS } from "./task-history";
@@ -132,10 +134,17 @@ const readWhole = async (
     }
   | undefined
 > => {
-  if (!(await hasProjectFolder(dup.id))) {
+  const has = await hasProjectFolder(dup.id);
+  if (has instanceof ElysiaStatus) {
+    throw projectRefusalOf(has);
+  }
+  if (!has) {
     return { tasks: [], others: [] };
   }
   const listing = await listFolder(dup.id, "", true);
+  if (listing instanceof ElysiaStatus) {
+    throw projectRefusalOf(listing);
+  }
   if (listing.truncated) {
     return undefined;
   }
@@ -147,10 +156,13 @@ const readWhole = async (
           entry.path.startsWith("tasks/") &&
           fileTaskNumber(entry.path) !== undefined
       )
-      .map(async (entry) => ({
-        path: entry.path,
-        content: (await readFolderFile(dup.id, entry.path)).content,
-      }))
+      .map(async (entry) => {
+        const file = await readFolderFile(dup.id, entry.path);
+        if (file instanceof ElysiaStatus) {
+          throw projectRefusalOf(file);
+        }
+        return { path: entry.path, content: file.content };
+      })
   );
   const taken = new Set(tasks.map((task) => task.path));
   const others = await Promise.all(
@@ -158,7 +170,7 @@ const readWhole = async (
       .filter((entry) => !taken.has(entry.path))
       .map(async (entry) => ({
         path: entry.path,
-        bytes: await Bun.file(join(projectRoot(dup.id), entry.path)).bytes(),
+        bytes: await Bun.file(join(projectRootOf(dup.id), entry.path)).bytes(),
       }))
   );
   return { tasks, others };
@@ -170,11 +182,15 @@ const copyOthers = async (
   dup: ProjectRow,
   others: { bytes: Uint8Array; path: string }[]
 ): Promise<void> => {
-  const kept = (await hasProjectFolder(keep.id))
-    ? new Set(
-        (await listFolder(keep.id, "", true)).entries.map((entry) => entry.path)
-      )
-    : new Set<string>();
+  const has = await hasProjectFolder(keep.id);
+  if (has instanceof ElysiaStatus) {
+    throw projectRefusalOf(has);
+  }
+  const listed = has ? await listFolder(keep.id, "", true) : undefined;
+  if (listed instanceof ElysiaStatus) {
+    throw projectRefusalOf(listed);
+  }
+  const kept = new Set(listed?.entries.map((entry) => entry.path));
   // The kept project's stages stand, its stages.md or, without one, the
   // template it runs on: the duplicate's never replaces them.
   const both = others.filter(
@@ -187,7 +203,7 @@ const copyOthers = async (
   }
   const missing = others.filter((file) => !both.includes(file));
   if (missing.length > 0) {
-    await writeFolderFiles(
+    const written = await writeFolderFiles(
       keep.id,
       missing.map((file) => ({ path: file.path, content: file.bytes })),
       {
@@ -204,6 +220,9 @@ const copyOthers = async (
         ].join("\n"),
       }
     );
+    if (written instanceof ElysiaStatus) {
+      throw projectRefusalOf(written);
+    }
   }
 };
 

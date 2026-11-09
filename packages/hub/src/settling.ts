@@ -1,3 +1,4 @@
+import { ElysiaStatus } from "elysia";
 import { PICKED_TAKEN_BACK } from "./db/migration-names";
 /**
  * Who decides, at the hub (PRD §5.8, core decides.ts): each card a session
@@ -53,6 +54,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable, SettleRefusal } from "./decides-file";
 import { sessionLabel } from "./labels";
+import { projectRefusalOf } from "./project-refusal";
 import {
   SESSION_TITLE_MAX,
   type WorkItemRequest,
@@ -284,6 +286,9 @@ export const createSettling = (deps: SettlingDeps) => {
       },
       fleet
     );
+    if (table instanceof ElysiaStatus) {
+      throw projectRefusalOf(table);
+    }
     const id = card.kind ? table.routes[card.kind] : undefined;
     return {
       member: (id && memberOf(fleet, id)) || BUILT_IN.you,
