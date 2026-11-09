@@ -58,7 +58,7 @@ import {
  * ({@link closeBoundary}), so nothing lists, arms or starts it again. Its
  * folder was the person's; with it gone the place holds nothing of anyone's.
  * A session that asks for it again is refused, naming the folder
- * (lifecycle.ts `placeReady`). A delegate's clone is left to its archive. Answers
+ * (ensure.ts `placeReady`). A delegate's clone is left to its archive. Answers
  * whether it was settled.
  */
 export const settleGonePlace = async (ref: WorkspaceRef): Promise<boolean> => {
@@ -182,7 +182,7 @@ const signalHeld = async (
 
 /**
  * Ends what still uses workspace `ref` from outside its boundary, as law
- * `live-workspace-judge-answers` counts it ({@link inUse}): every session
+ * `live-workspace-judge-answers` counts it (holding.ts `inUse`): every session
  * process a keeper holds in its clone ({@link attachedProcs}) and every
  * executor on its way in ({@link executors}), each SIGKILLed, then waited for
  * up to {@link STOP_TIMEOUT_MS}. Two callers:
@@ -240,7 +240,7 @@ export const endUsers = async (
   return { ended: found.words, left: left.words };
 };
 
-/** {@link stopWorkspaceBoundary}'s stop itself, inside its hold. */
+/** control.ts `stopWorkspaceBoundary`'s stop itself, inside its hold. */
 export const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   forgetStale(ref.id);
   forgetRetiring(ref.id);
@@ -287,7 +287,7 @@ export const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
 };
 
 /**
- * {@link stopWorkspaceBoundary}, then the rest of the workspace on this
+ * control.ts `stopWorkspaceBoundary`, then the rest of the workspace on this
  * machine but its clone: on Linux, once its sandboxes are gone, the deny
  * stand-ins in its clone go (`stand-ins.ts`). Then its state and its scratch
  * dir go, and on Linux srt's temp dirs with the sockets srt leaves there
