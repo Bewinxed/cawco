@@ -32,11 +32,13 @@ import { ensureNow, replaceNarrowed } from "./ensure";
 import {
   type BoundaryHolders,
   commandsNow,
+  forgetHeld,
+  heldSince,
   inUse,
   type LiveFacts,
-  liveAt,
   liveWhy,
   recentlyHeld,
+  sawHeld,
 } from "./holding";
 import {
   JUDGE_SOCKET,
@@ -386,7 +388,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
   }
   await behindGate(id, async () => {
     if (executors(await commandLines(), id).length > 0) {
-      liveAt.set(id, Date.now());
+      sawHeld(id, Date.now());
       return;
     }
     forgetStale(id);
@@ -415,7 +417,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     await Promise.all(
       judges.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
     );
-    liveAt.delete(id);
+    forgetHeld(id);
     console.info(
       `[workspace] ${id}: nothing holds it (no session attached, no live work item, no preview, no command) and ${why}, so its boundary ${boundaries.map((boundary) => boundary.pid).join(", ")} and its ${judges.length} judge(s) are closed; its clone and state stay, and its next command starts it again`
     );
@@ -450,12 +452,12 @@ const sweepQuiet = async (): Promise<void> => {
   for (const id of ids) {
     const held = await readHeld(id).catch(() => undefined);
     if (!held || liveWhy(id, held.path, facts)) {
-      liveAt.set(id, now);
+      sawHeld(id, now);
       continue;
     }
-    const since = liveAt.get(id);
+    const since = heldSince(id);
     if (since === undefined) {
-      liveAt.set(id, now);
+      sawHeld(id, now);
       continue;
     }
     if (!(recentlyHeld(id) || isStarting(id))) {
