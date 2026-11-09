@@ -37,6 +37,7 @@
  * Nothing in the trash is erased: a restore moves its folder back and drops
  * its record, whose rows are live again.
  */
+
 import { mkdirSync, rmSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -68,6 +69,7 @@ import {
   trashProjectFolder,
   untrashProjectFolder,
 } from "./project-folder";
+import { StatusRefusal } from "./refusal";
 import { readStages } from "./stages";
 import {
   ARCHIVE_DIR,
@@ -610,13 +612,7 @@ export const purgeTrash = async (id: string): Promise<number> => {
 };
 
 /** A restore the hub turns down: its status, and the words the caller reads. */
-export class RestoreRefusal extends Error {
-  readonly status: 400 | 404 | 409 | 422;
-  constructor(status: 400 | 404 | 409 | 422, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+export class RestoreRefusal extends StatusRefusal<400 | 404 | 409 | 422> {}
 
 /**
  * A folded duplicate's folder set aside (project-merge.ts), with a record

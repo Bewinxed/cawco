@@ -99,6 +99,7 @@ import {
   sessionTicketScope,
 } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
+import { StatusRefusal } from "./refusal";
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
@@ -1113,17 +1114,7 @@ const atTheLock = (
 };
 
 /** The fleet's preview mode could not be taken: why, in one sentence. */
-export class PreviewRefusal extends Error {
-  readonly status: 409 | 422 | 503;
-  constructor(
-    status: 409 | 422 | 503,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = status;
-  }
-}
+export class PreviewRefusal extends StatusRefusal<409 | 422 | 503> {}
 
 /** An origin whose session or project the hub no longer holds: let go, and said, never kept. */
 const ownerGone = (key: string): PreviewRefusal =>
