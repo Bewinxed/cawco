@@ -25,7 +25,7 @@
  *    origin.
  * 9. No canvas page load logs "Yjs was already imported", and no console
  *    message is an error: the page runs one Yjs, the canvas host's own (the
- *    overlay keeps its doc in a worker, preview-overlay doc-worker.ts).
+ *    overlay keeps its doc in a worker, preview overlay/doc-worker.ts).
  * 10. The page's binding holds the canvas host's replica of the doc
  *     (`window.cawcoCanvasDoc`, canvas-host replica.ts) and its scene doc
  *     is of the same Yjs (one `Doc` constructor on the page); the overlay

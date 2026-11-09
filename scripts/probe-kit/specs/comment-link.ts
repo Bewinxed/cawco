@@ -207,7 +207,7 @@ const linksOf = (frame: Page | Frame): Promise<Recorded> =>
     (window as unknown as { probeLinks: () => Recorded }).probeLinks()
   );
 
-/** The overlay's link to the hub now (preview-overlay artifact.ts `Link`). */
+/** The overlay's link to the hub now (preview overlay/artifact.ts `Link`). */
 const overlayLink = (frame: Frame): Promise<string> =>
   frame.evaluate(() => {
     let state = "none";
