@@ -7,7 +7,8 @@ import type { Envelope, SendPayload } from "@cawco/core/protocol";
 export const sessionWord = (
   row: { id: string; machineId: string },
   content: string,
-  origin: SendPayload["message"]["origin"]
+  origin: SendPayload["message"]["origin"],
+  more: { shouldQuery?: false } = {}
 ): Envelope<SendPayload> => ({
   verb: "send",
   machineId: row.machineId,
@@ -20,6 +21,7 @@ export const sessionWord = (
       message: { role: "user", content },
       parent_tool_use_id: null,
       origin,
+      ...more,
     },
   },
 });
