@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import { z } from "zod";
+  import { projectsStore } from "../stores/projects.svelte";
   import { ParkedPopover } from "./parked-popover.svelte";
 
   /**
@@ -67,7 +68,7 @@
   import { IconPlus } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import { cawco } from "../client.svelte";
+
   import {
     normalizeSkillSource,
     pickSkill,
@@ -108,7 +109,7 @@
   let sending = $state(false);
 
   const project = $derived(
-    cawco.projects.find((each) => each.id === held.projectId)
+    projectsStore.projects.find((each) => each.id === held.projectId)
   );
   /** The row this popover's fetch went on in, as the hub says it stands. */
   const asked = $derived(
@@ -269,7 +270,7 @@
           }}
           options={[
             { value: "", label: words.everyMachine },
-            ...cawco.projects.map((each) => ({
+            ...projectsStore.projects.map((each) => ({
               value: each.id,
               label: each.name,
             })),

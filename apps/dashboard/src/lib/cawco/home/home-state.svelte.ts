@@ -50,7 +50,7 @@ import {
 import { heldOrder } from "#lib/platform/motion/held-order.svelte.js";
 import { unlessSame } from "#lib/platform/unless-same.js";
 import { epochOf } from "../board.svelte";
-import { type BlockedRequest, cawco, type ProjectRow } from "../client.svelte";
+import { cawco } from "../client.svelte";
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence, machineSync, syncNotice } from "../convergence";
 import { machineFaults } from "../fleet-faults";
@@ -84,7 +84,9 @@ import { catalogStore } from "../stores/catalog.svelte";
 import { mcpServersStore } from "../stores/mcp-servers.svelte";
 import { movesStore } from "../stores/moves.svelte";
 import { needsStore } from "../stores/needs.svelte";
+import { type ProjectRow, projectsStore } from "../stores/projects.svelte";
 import { relayStore } from "../stores/relay.svelte";
+import type { BlockedRequest } from "../stores/sessions.svelte";
 import { tailnetStore } from "../stores/tailnet.svelte";
 import { tickersStore } from "../stores/tickers.svelte";
 import { rooted, standsAlone, tree } from "../tree";
@@ -713,7 +715,10 @@ const WORKSPACE_ID = /-[0-9a-f]{8}$/u;
  */
 function projectOf(machineId: string, cwd: string | null | undefined): string {
   const folder = cwd ?? "";
-  const project = projectHolding(cawco.projects, { machineId, cwd: folder });
+  const project = projectHolding(projectsStore.projects, {
+    machineId,
+    cwd: folder,
+  });
   return (
     project?.name ??
     (folder.split("/").filter(Boolean).pop() ?? "").replace(WORKSPACE_ID, "")
@@ -728,7 +733,7 @@ function projectOf(machineId: string, cwd: string | null | undefined): string {
 function rowProject(row: BoardRow): ProjectRow | undefined {
   const top = topsIn(boardStore.instanceIndex.byId)(row);
   return top.projectId
-    ? cawco.projects.find((project) => project.id === top.projectId)
+    ? projectsStore.projects.find((project) => project.id === top.projectId)
     : undefined;
 }
 
@@ -760,7 +765,10 @@ function projectAt(
   cwd: string | null | undefined
 ): ProjectMarking | null {
   const folder = cwd ?? "";
-  const project = projectHolding(cawco.projects, { machineId, cwd: folder });
+  const project = projectHolding(projectsStore.projects, {
+    machineId,
+    cwd: folder,
+  });
   if (project) {
     return { name: project.name, hue: markHue(folderOf(project)) };
   }
@@ -1224,7 +1232,7 @@ class Home {
           this.#waitingRead.clear();
           return;
         }
-        for (const project of cawco.projects) {
+        for (const project of projectsStore.projects) {
           const changes = tickersStore.tasksChangedOf(project.id);
           if (this.#waitingRead.get(project.id) === changes) {
             continue;
@@ -1328,7 +1336,7 @@ class Home {
         stale: item.stale,
       };
     });
-    const caps: NeedsItem[] = cawco.capped.flatMap((project) =>
+    const caps: NeedsItem[] = projectsStore.capped.flatMap((project) =>
       project.cap
         ? [
             {
@@ -1344,7 +1352,9 @@ class Home {
         : []
     );
     const actions: NeedsItem[] = needsStore.actions.map((action) => {
-      const project = cawco.projects.find((one) => one.id === action.projectId);
+      const project = projectsStore.projects.find(
+        (one) => one.id === action.projectId
+      );
       const at = `/project/${encodeURIComponent(action.projectId)}`;
       return {
         kind: "action",
@@ -1495,19 +1505,21 @@ class Home {
         href: `?${INSTALL_PARAM}=${encodeURIComponent(one.id)}`,
         raisedAt: one.endedAt ?? one.startedAt,
       }));
-    const waitingTasks: NeedsItem[] = cawco.projects.flatMap((project) =>
-      (this.#waiting[project.id] ?? []).map((task) => ({
-        kind: "task" as const,
-        key: `task:${project.id}:${task.id}`,
-        taskId: task.id,
-        title: task.title,
-        reason: task.kind === "you" ? ("review" as const) : ("failed" as const),
-        stage: stageLabel(task.stage),
-        place: project.name,
-        project: { name: project.name, hue: markHue(folderOf(project)) },
-        href: `/project/${encodeURIComponent(project.id)}?task=${encodeURIComponent(task.id)}`,
-        raisedAt: task.updatedAt,
-      }))
+    const waitingTasks: NeedsItem[] = projectsStore.projects.flatMap(
+      (project) =>
+        (this.#waiting[project.id] ?? []).map((task) => ({
+          kind: "task" as const,
+          key: `task:${project.id}:${task.id}`,
+          taskId: task.id,
+          title: task.title,
+          reason:
+            task.kind === "you" ? ("review" as const) : ("failed" as const),
+          stage: stageLabel(task.stage),
+          place: project.name,
+          project: { name: project.name, hue: markHue(folderOf(project)) },
+          href: `/project/${encodeURIComponent(project.id)}?task=${encodeURIComponent(task.id)}`,
+          raisedAt: task.updatedAt,
+        }))
     );
     // The artifacts waiting on you, each under its session as an ask is;
     // one put away with Not now waits in Files until it is raised again.
