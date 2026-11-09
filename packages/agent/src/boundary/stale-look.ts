@@ -41,7 +41,7 @@ import {
   type Boundary,
   type Held,
   isStarting,
-  keepers,
+  procsHeld,
   readHeld,
   readRetiring,
   retiringFileOf,
@@ -150,7 +150,7 @@ const restartStubbed = async (unasked: UnaskedCalls): Promise<void> => {
     try {
       const held = await readHeld(ref.id);
       // On every keeper: the current one, and a retiring one still running one.
-      const alive = (await keepers.held())
+      const alive = (await procsHeld())
         .filter((proc) => proc.alive && isBoundaryOf(proc.procId, ref.id))
         .map((proc) => proc.procId);
       if (!held || alive.length === 0 || !(await hasLeftDirs(ref.path))) {
