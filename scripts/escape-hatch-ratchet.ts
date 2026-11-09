@@ -12,13 +12,17 @@
  *   `() => dir`) says what the failure becomes, and is not counted.
  * - **empty-catch**: a `catch` block with no statement in it (a comment
  *   alone is none).
- * - **as-any**: a value asserted to `any` (`x as any`, `<any>x`).
  * - **as-unknown-as**: a value asserted through `unknown` to another type
  *   (`x as unknown as T`), which TypeScript accepts whatever the two types.
+ *   Found by the Grit plugin scripts/lint/as-unknown-as.grit; only the count
+ *   per file is this ratchet's.
  * - **suppression**: a comment that silences a check where it stands
  *   (`biome-ignore`, `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`,
  *   `eslint-disable`, `oxlint-disable`, `svelte-ignore`), in code, a
  *   component's markup or a stylesheet.
+ *
+ * Biome's noExplicitAny holds `any` itself, at every site, and has no per-file
+ * count for what is left; here is what a file may hold of the rest.
  *
  * Generated modules are left out: what they hold is their generator's.
  *
@@ -26,9 +30,11 @@
  *   bun scripts/escape-hatch-ratchet.ts --write-baseline  starts a kind the baseline does not hold
  *   bun scripts/escape-hatch-ratchet.ts --list <kind>     each place of one kind
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
+import { biomeLint, type Diagnostic } from "./lib/biome-run";
 import { commentsOf, parsed } from "./lib/parse-source";
 import { type Found, holdRatchet } from "./lib/ratchet";
 import { ROOT, repoFiles } from "./lib/repo-files";
@@ -37,7 +43,6 @@ const KINDS = {
   "catch-drops-reason":
     "a rejection handler reads its reason: handle it, or let it fail",
   "empty-catch": "a catch block does something with what it caught",
-  "as-any": "no assertion to any: type the value",
   "as-unknown-as":
     "no assertion through unknown: parse the value (a schema) or type it",
   suppression:
@@ -57,14 +62,6 @@ const SCOPE = /^(?:apps\/(?:dashboard|cawrier)|packages|scripts|site)\//u;
 /** Planted mistakes, pages copied as they were, and generated modules. */
 const SKIPPED =
   /\/fixtures\/|\.gen\.ts$|\/stored-shapes(?:\.proof)?\.ts$|\/tokens\/tokens\.ts$/u;
-
-const unwrap = (node: ts.Expression): ts.Expression =>
-  ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node;
-
-const isAssertion = (
-  node: ts.Node
-): node is ts.AsExpression | ts.TypeAssertion =>
-  ts.isAsExpression(node) || ts.isTypeAssertionExpression(node);
 
 /** Whether `name` is read anywhere in `body`. */
 const reads = (body: ts.Node, name: string): boolean => {
@@ -200,10 +197,7 @@ const rejectionHandler = (
  * The kind `node` is, when it is one, with what the ratchet counts of it:
  * read off the occurrence alone, so a rename around it changes nothing.
  */
-const kindOf = (
-  node: ts.Node,
-  source: ts.SourceFile
-): { kind: Kind; shape: string } | undefined => {
+const kindOf = (node: ts.Node): { kind: Kind; shape: string } | undefined => {
   if (ts.isCallExpression(node)) {
     const handler = rejectionHandler(node);
     return dropsReason(handler)
@@ -216,25 +210,14 @@ const kindOf = (
   if (ts.isCatchClause(node) && node.block.statements.length === 0) {
     return { kind: "empty-catch", shape: "" };
   }
-  if (isAssertion(node)) {
-    if (node.type.kind === ts.SyntaxKind.AnyKeyword) {
-      return { kind: "as-any", shape: "" };
-    }
-    const inner = unwrap(node.expression);
-    if (
-      isAssertion(inner) &&
-      inner.type.kind === ts.SyntaxKind.UnknownKeyword
-    ) {
-      return { kind: "as-unknown-as", shape: node.type.getText(source) };
-    }
-  }
 };
 
 const found: Found[] = [];
 
-for (const file of repoFiles().filter(
+const read = repoFiles().filter(
   (path) => READ.test(path) && SCOPE.test(path) && !SKIPPED.test(path)
-)) {
+);
+for (const file of read) {
   const text = readFileSync(join(ROOT, file), "utf8");
   for (const comment of commentsOf(file, text)) {
     if (DIRECTIVE.test(comment.text)) {
@@ -251,7 +234,7 @@ for (const file of repoFiles().filter(
   }
   const source = parsed(file, text);
   const visit = (node: ts.Node): void => {
-    const counted = kindOf(node, source);
+    const counted = kindOf(node);
     if (counted) {
       // A call's place is its `.catch` or `.then`, not the chain's start.
       const at =
@@ -271,6 +254,61 @@ for (const file of repoFiles().filter(
   };
   visit(source);
 }
+
+/** The text of a diagnostic's span. */
+const spanText = (text: string, d: Diagnostic): string => {
+  const lines = text.split("\n");
+  const { start, end } = d.location;
+  const taken = lines.slice(start.line - 1, end.line);
+  taken[taken.length - 1] = taken.at(-1)?.slice(0, end.column - 1) ?? "";
+  taken[0] = taken[0]?.slice(start.column - 1) ?? "";
+  return taken.join("\n");
+};
+
+/** Each `as unknown as` in the code the ratchet reads, off the Grit plugin that finds it. */
+const castsThroughUnknown = async (paths: string[]): Promise<void> => {
+  const scratch = join(
+    process.env.TMPDIR ?? tmpdir(),
+    `as-unknown-as-${process.pid}`
+  );
+  mkdirSync(scratch, { recursive: true });
+  const config = Bun.JSONC.parse(
+    await Bun.file(join(ROOT, "biome.jsonc")).text()
+  ) as Record<string, unknown>;
+  writeFileSync(
+    join(scratch, "biome.json"),
+    JSON.stringify({
+      root: true,
+      vcs: { enabled: false },
+      files: { ignoreUnknown: true, includes: ["**"], maxSize: 2_097_152 },
+      plugins: [join(ROOT, "scripts/lint/as-unknown-as.grit")],
+      linter: { rules: { preset: "none" } },
+      assist: { enabled: false },
+      css: config.css,
+      html: config.html,
+      javascript: config.javascript,
+    })
+  );
+  const result = await biomeLint([`--config-path=${scratch}`, ...paths], ROOT);
+  rmSync(scratch, { recursive: true, force: true });
+  if ("failed" in result) {
+    throw new Error(
+      `escape-hatch-ratchet: as-unknown-as.grit did not run:\n${result.failed}`
+    );
+  }
+  for (const d of result.diagnostics.filter(
+    (one) => one.category === "plugin"
+  )) {
+    found.push({
+      rule: "as-unknown-as",
+      file: d.location.path,
+      line: d.location.start.line,
+      shape: spanText(readFileSync(join(ROOT, d.location.path), "utf8"), d),
+    });
+  }
+};
+
+await castsThroughUnknown(read.filter((path) => CODE.test(path)));
 
 const listed = process.argv.indexOf("--list");
 if (listed >= 0) {
