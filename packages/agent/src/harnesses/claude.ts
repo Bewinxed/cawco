@@ -149,6 +149,7 @@ import {
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { resumeCursor } from "@cawco/core/stream";
 import { HOUR_MS } from "@cawco/core/time";
+import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
@@ -960,13 +961,6 @@ function withExtras(
 
   const typed =
     typeof message.message.content === "string" ? message.message.content : "";
-  const pasted = (attachments ?? [])
-    .map(
-      ({ name, content: body }) =>
-        `\n\n<pasted-text name="${name}">\n${body}\n</pasted-text>`
-    )
-    .join("");
-
   const content: ContentBlock[] = [
     ...(images ?? []).map(({ mediaType, data }) => ({
       type: "image" as const,
@@ -976,7 +970,7 @@ function withExtras(
         data,
       },
     })),
-    { type: "text" as const, text: typed + pasted },
+    { type: "text" as const, text: withPastedText(typed, attachments ?? []) },
   ];
 
   return { ...message, message: { ...message.message, content } };
