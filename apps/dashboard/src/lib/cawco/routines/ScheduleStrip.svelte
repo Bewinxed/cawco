@@ -54,9 +54,9 @@
    */
   import { DAY_MS, HOUR_MS } from "@cawco/core/time";
   import { untrack } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { barPlace } from "#lib/cawco/usage/bar-place.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     runs,

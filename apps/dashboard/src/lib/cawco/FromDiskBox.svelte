@@ -13,7 +13,7 @@
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import { unfold } from "./motion/fold.svelte";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     checked,

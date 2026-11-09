@@ -24,7 +24,6 @@
   import { blocksWords as words } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
   import type { Component, Snippet } from "svelte";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { BarMore } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -33,6 +32,7 @@
     IconEyeClosed,
     IconWindow,
   } from "#lib/icons.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import {
     type BlockDragState,
     dragHead,

@@ -17,10 +17,10 @@
    * and the outcome once signed in, never the page's body.
    */
   import { accountsWords } from "@cawco/core/words/accounts";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import { quotedScreen } from "../signin-screen";
   import Check from "./Check.svelte";
   import type { PasteSignin } from "./signin.svelte";

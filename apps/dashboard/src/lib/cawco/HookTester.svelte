@@ -5,14 +5,14 @@
     hookMatcherKind,
     hookMatches,
   } from "@cawco/core/hooks";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import {
     chipsVariants,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   /**
    * The part of the editor that tells the truth about a matcher.
