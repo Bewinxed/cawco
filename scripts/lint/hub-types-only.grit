@@ -1,0 +1,12 @@
+language js
+
+// The dashboard and the agent take the hub's types alone (its routes, for
+// their Eden clients: packages/hub/src/app.ts), never its code: a value
+// imported from the hub would put the server in a browser's bundle or the
+// agent's binary. `import type` is erased in the build.
+`import $clause from $source` as $hit where {
+  $source <: r"[\"']@cawco/hub(?:/.*)?[\"']",
+  not $hit <: `import type $_ from $_`,
+  $filename <: or { includes "apps/dashboard/", includes "packages/agent/" },
+  register_diagnostic(span=$hit, message="Import the hub's types alone here (`import type`): its code never goes in the dashboard's bundle or the agent.")
+}
