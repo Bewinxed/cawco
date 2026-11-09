@@ -31,6 +31,7 @@ import {
   watchSilence,
 } from "@cawco/core/doc-link";
 import type { ArtifactChanges } from "@cawco/core/doc-meta";
+import { docMeta, getMeta } from "@cawco/core/doc-meta";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { StageState, StageUnreached } from "@cawco/core/stage";
 import {
@@ -172,11 +173,11 @@ const downWhy = (code: number | null): string =>
 const SILENT_WHY = `The link to the hub stopped answering. ${KEEPS_TRYING}`;
 
 const viewOf = (doc: Doc): ArtifactView => {
-  const meta = doc.getMap("meta");
+  const meta = docMeta(doc);
   const gone = goneOf(doc);
   // One its tombstone names is deleted, though a merge wrote it a moment ago.
   const pins = [...readPins(doc).values()].filter((pin) => !gone.has(pin.id));
-  const changes = (meta.get("changes") as ArtifactChanges | undefined) ?? null;
+  const changes = meta.get("changes") ?? null;
   return {
     activity: activityOf(doc).toJSON() as Record<string, ActivityLine[]>,
     changes,
@@ -184,13 +185,13 @@ const viewOf = (doc: Doc): ArtifactView => {
       changes ? (seenOf(doc).get(String(changes.revision)) ?? []) : []
     ),
     choices: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
-    pageHash: (meta.get("pageHash") as string | undefined) ?? null,
-    sentAt: (meta.get("sentAt") as string | undefined) ?? null,
+    pageHash: meta.get("pageHash") ?? null,
+    sentAt: meta.get("sentAt") ?? null,
     ownSend: meta.get("ownSend") === true,
     pins: pins.sort((a, b) => a.number - b.number),
-    revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
-    stage: (meta.get("stage") as StageState | undefined) ?? null,
-    unreached: (meta.get("unreached") as StageUnreached | undefined) ?? null,
+    revisedAt: meta.get("revisedAt") ?? null,
+    stage: meta.get("stage") ?? null,
+    unreached: meta.get("unreached") ?? null,
     tuned:
       (tunedEntryOf(doc.getMap(TUNED_MAP).toJSON())?.value as
         TunedRecord[] | undefined) ?? [],
@@ -499,7 +500,7 @@ export function joinArtifact(
     seeChanges: (revision, anchors) => seeChanges(doc, revision, anchors),
     delete: (pin) => deletePin(doc, pin),
     keep: (key, value) => {
-      const pageHash = doc.getMap("meta").get("pageHash");
+      const pageHash = getMeta(doc, "pageHash");
       if (typeof pageHash !== "string") {
         return "The page has not loaded yet, so nothing was kept.";
       }
@@ -518,7 +519,7 @@ export function joinArtifact(
       return null;
     },
     keepTuned: (records) => {
-      const pageHash = doc.getMap("meta").get("pageHash");
+      const pageHash = getMeta(doc, "pageHash");
       if (typeof pageHash !== "string") {
         return "The page has not loaded yet, so nothing was kept.";
       }
