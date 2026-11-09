@@ -9,12 +9,10 @@ import {
   or,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { SSH_MACHINES_HUB } from "./migration-names";
 import { dataMigrations, sshMachines } from "./schema";
 
 export type SshMachineRow = Omit<typeof sshMachines.$inferSelect, "hubId">;
-
-/** The one-time claim of rows made before each row named its hub ({@link SshMachinesDb.claim}). */
-const CLAIM = "ssh_machines_hub";
 
 /**
  * The rows ssh-tunnels.ts keeps that this hub holds (`hub_id`, its id): a
@@ -74,7 +72,7 @@ export const sshMachinesDb = (
           tx
             .select()
             .from(dataMigrations)
-            .where(eq(dataMigrations.name, CLAIM))
+            .where(eq(dataMigrations.name, SSH_MACHINES_HUB))
             .get()
         ) {
           return 0;
@@ -87,7 +85,9 @@ export const sshMachinesDb = (
               .returning({ id: sshMachines.id })
               .all().length
           : 0;
-        tx.insert(dataMigrations).values({ name: CLAIM, at: new Date() }).run();
+        tx.insert(dataMigrations)
+          .values({ name: SSH_MACHINES_HUB, at: new Date() })
+          .run();
         return claimed;
       }),
     joined: () =>
