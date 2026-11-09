@@ -251,33 +251,82 @@ export const foldMovedColumns = (table: string): readonly string[] =>
 
 /**
  * Columns that name a session, machine or project, have no foreign key and
- * nothing moves or drops: their rows outlive their owner today. Adding a
- * key is the owner's to decide (the schema's change); until then the check
- * holds this list to the schema so a new one is a decision.
+ * nothing moves or drops, each with why its rows stand without their owner.
+ * Adding a key or a cleanup is the owner's to decide (the schema's change);
+ * until then the check holds this list to the schema, so a new one is a
+ * decision with its reason written here.
  */
-export const KNOWN_UNOWNED: readonly string[] = [
-  "account_leaves.machine_id",
-  "browsers.project_id",
-  "capability_calls.instance_id",
-  "card_settlings.instance_id",
-  "continuations.source_instance_id",
-  "continuations.summariser_instance_id",
-  "continuations.target_instance_id",
-  "design_checks.project_id",
-  "design_offers.project_id",
-  "design_proposals.machine_id",
-  "design_proposals.project_id",
-  "instance_aliases.instance_id",
-  "lfs_offers.machine_id",
-  "lfs_offers.project_id",
-  "lfs_refusals.project_id",
-  "plan_changes.instance_id",
-  "presence_clients.machine_id",
-  "presence_devices.machine_id",
-  "purged_sessions.machine_id",
-  "queued_work_items.queued_instance_id",
-  "removed_machines.machine_id",
-  "routine_runs.instance_id",
-  "tree_stops.instance_id",
-  "trim_offers.project_id",
-];
+export const KNOWN_UNOWNED: Readonly<Record<string, string>> = {
+  "account_leaves.machine_id":
+    "A removed account's store the machine still holds, until that machine signs it out (server.ts `leaveAccounts`); a machine removed first leaves its row standing.",
+  "actions.proposed_by":
+    "The session that proposed the action: the action's record of who asked, read after that session goes.",
+  "browsers.project_id":
+    "A `project:` browser's project, as its machine's last `browsers` frame said: the row is that frame's, rewritten by the next one, not the project's.",
+  "capability_calls.instance_id":
+    "The session whose skill, tool and MCP server calls a day's row counts: the counts stand after that session goes, read for the starting sets, and old days are pruned (capability-calls.ts).",
+  "card_settlings.asked_by":
+    "The session that wrote the card: the settling ledger's record of who asked, kept after it goes.",
+  "card_settlings.instance_id":
+    "The member's session that settles the card: the settling ledger's record of where it went, kept after it goes.",
+  "connector_polls.created_by":
+    "`owner`, or the id of the session that made the poll: who made it, as its log lines say, kept after that session goes.",
+  "continuations.source_instance_id":
+    "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
+  "continuations.summariser_instance_id":
+    "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
+  "continuations.target_instance_id":
+    "A continuation job's session: the job is kept only minutes after it settles, then deleted (db/continuations.ts).",
+  "design_checks.project_id":
+    "A design check round's project: its rounds outlive a deleted project.",
+  "design_checks.requester_id":
+    "The session that asked a chat round, told its verdict: the round's record stays after that session goes.",
+  "design_offers.project_id":
+    "Caw's one design-system offer per project: it outlives a deleted project.",
+  "design_proposals.machine_id":
+    "Where an agent's proposed design change is written: the proposal is deleted once answered, and stands until then whatever its machine does.",
+  "design_proposals.project_id":
+    "The project an agent's proposed design change is for: the proposal is deleted once answered, and stands until then.",
+  "event_routes.created_by":
+    "`owner`, or the id of the session that made the route: who made it, as its log lines say, kept after that session goes.",
+  "instance_aliases.id":
+    "A former id of a session a fold took in: the alias is the record that the id now names `instance_id`, so it outlives the former row by design.",
+  "instance_aliases.instance_id":
+    "The session a former id now names: an alias of a session that went resolves to an id no row holds.",
+  "instances.forked_from":
+    "The session this one was forked from: its lineage, kept after that session goes.",
+  "lfs_offers.machine_id":
+    "The machine of the place an LFS offer was made for: the offer's record outlives a removed machine.",
+  "lfs_offers.project_id":
+    "The project an LFS offer was made for: the offer's record outlives a deleted project.",
+  "lfs_refusals.project_id":
+    "The project told an LFS endpoint refused, so it is told once: the record outlives a deleted project.",
+  "plan_changes.instance_id":
+    "The session whose plan the person changed: the changes outlive the session.",
+  "presence_clients.machine_id":
+    "The machine a presence client is or runs on: the row is the device's last word, dropped once the device is silent a day.",
+  "presence_devices.machine_id":
+    "A machine the person opted in to presence: the opt-in outlives a removed machine.",
+  "purged_sessions.machine_id":
+    "A purge's machine: by design no key, so a machine removed later leaves its purges standing for find to leave out.",
+  "queued_work_items.queued_instance_id":
+    "The id a queued delegate's session will take, minted before any row holds it: there is no session to own it yet.",
+  "relays.created_by":
+    "`owner`, or the id of the session whose ask the owner approved: who made the relay, kept after that session goes.",
+  "removed_machines.machine_id":
+    "A machine the person removed: the row is the record that it went, read by rows that still name it.",
+  "routine_runs.instance_id":
+    "A conversation run's session: the run's record outlives the session.",
+  "routines.created_by":
+    "`owner`, or the id of the session that made the routine: who made it, kept after that session goes.",
+  "routines.made_in_instance":
+    "The session whose `routine_create` made the routine: kept after that session goes, and a fold does not move it, so a folded former's id stays here.",
+  "trim_offers.project_id":
+    "Caw's offer to trim a project's starting set, kept so it is offered once: it outlives a deleted project (unused-trim.ts).",
+  "tree_stops.instance_id":
+    "The session a delegation tree's stop ends: the row stands until that session's end is confirmed, then goes (tree-stops.ts).",
+  "tree_stops.parent_id":
+    "The session above one in a stop's walk: the row stands until the stop is done, then goes (tree-stops.ts).",
+  "tree_stops.root_id":
+    "The session a tree's stop was asked of: the row stands until the stop is done, then goes (tree-stops.ts).",
+};
