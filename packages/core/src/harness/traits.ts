@@ -251,3 +251,11 @@ export type KeeperHarnessKind = {
     ? K
     : never;
 }[HarnessKind];
+
+/** Whether `kind`'s sessions are a keeper's children. */
+const isKeeperHarness = (kind: HarnessKind): kind is KeeperHarnessKind =>
+  HARNESS_TRAITS[kind].custody === "keeper";
+
+/** Every kind whose sessions are a keeper's children, in {@link HARNESSES} order. */
+export const KEEPER_HARNESSES: readonly KeeperHarnessKind[] =
+  HARNESSES.filter(isKeeperHarness);
