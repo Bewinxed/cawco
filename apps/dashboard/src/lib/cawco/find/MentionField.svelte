@@ -39,12 +39,12 @@
    */
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
-  import { track } from "#lib/cawco/track.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconPause as Idle, IconServerAlt as Machine } from "#lib/icons.js";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import { cn } from "#lib/utils.js";
   import { copyChips } from "../chip-copy";
-  import { CURVE, dur, motionOk } from "../motion/curves.svelte.js";
   import type SkillChip from "../SkillChip.svelte";
   import { type Skill, skillWords } from "../skill-chips";
   import type { FindResult } from "./find-client";

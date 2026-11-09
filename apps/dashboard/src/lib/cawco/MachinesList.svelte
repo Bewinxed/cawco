@@ -30,6 +30,8 @@
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { barGlass } from "./bar-glass.svelte";
   import { cawco, type Machine } from "./client.svelte";
   import InstallRow from "./connect/InstallRow.svelte";
@@ -39,11 +41,9 @@
   import { signInsWaiting } from "./fleet-faults";
   import { home } from "./home/home-state.svelte";
   import { answerMachine, hubAuth } from "./hub-auth.svelte";
-  import { failureWords } from "./hub-read";
   import ItemFaults from "./ItemFaults.svelte";
   import MachineMenu from "./MachineMenu.svelte";
   import { pausedWords } from "./machine-pause";
-  import { reflow } from "./motion/rows.svelte";
   import RowFault from "./RowFault.svelte";
   import SignInWaits from "./SignInWaits.svelte";
   import { cellFor } from "./updates/model";

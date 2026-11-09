@@ -5,7 +5,7 @@
    * in front, and goes to it. A preview is an origin of its own, so the
    * storage it writes is the preview's, never the dashboard's. The layout
    * goes to localStorage, the workspace's source, and to the server's copy
-   * (lib/cawco/prefs.ts) before the page moves on, so the server draws the
+   * (lib/platform/prefs.ts) before the page moves on, so the server draws the
    * strip from the first paint.
    *
    * Opened with no ids, it says what to pass and takes them by hand (DESIGN.md,
@@ -15,11 +15,11 @@
    */
   import { onMount } from "svelte";
   import { leaveThePage } from "#lib/cawco/leaving.js";
-  import { store } from "#lib/cawco/storage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconWindow } from "#lib/icons.js";
+  import { store } from "#lib/platform/storage.js";
   import { page } from "$app/state";
 
   const KEY = "cawco-workspace";

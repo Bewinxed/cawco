@@ -26,13 +26,13 @@ import { type ToolSpec, type ToolStatus, toolRuns } from "@cawco/core/tools";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 import {
   cawco,
   didntAnswer,
   type Machine,
   relaunchSession,
 } from "./client.svelte";
-import { failureWords } from "./hub-read";
 import { TabDraft } from "./tab-draft.svelte";
 import { installTool } from "./tools";
 import { TRY_AGAIN } from "./unanswered";

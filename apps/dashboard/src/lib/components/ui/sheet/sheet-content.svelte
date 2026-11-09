@@ -27,14 +27,14 @@
   import { commonWords } from "@cawco/core/words/common";
   import { Dialog as SheetPrimitive } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
-  import { mirror } from "#lib/cawco/page-marks.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { dragToDismiss } from "#lib/platform/motion/drag.svelte.js";
+  import { mirror } from "#lib/platform/page-marks.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { closer } from "./sheet.svelte";
   import SheetFrame from "./sheet-frame.svelte";
