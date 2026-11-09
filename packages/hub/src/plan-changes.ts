@@ -38,7 +38,7 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -50,7 +50,8 @@ import {
   stepLines,
   type WrittenStep,
 } from "./plans";
-import { FolderRefusal, refused } from "./project-folder";
+import { folderAttempt } from "./project-folder";
+import { type Refused, refusal } from "./refusal";
 
 /** What became of a message to a session about its plan's changes. */
 export type PlanTold =
@@ -107,10 +108,14 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   /** Each receiver's deliveries, one at a time and in order. */
   const queues = new Map<string, Promise<unknown>>();
 
-  const rowOf = (instanceId: string): InstanceRow => {
+  const rowOf = (instanceId: string) => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
-      throw new FolderRefusal(404, "No session with that id on this hub.");
+      return refusal(
+        404,
+        "plan-session-unknown",
+        "No session with that id on this hub."
+      );
     }
     return row;
   };
@@ -220,13 +225,22 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     }
   };
 
-  /** Runs `work` for `key` after whatever runs for it already. */
-  const inOrder = (key: string, work: () => Promise<void>): Promise<void> => {
+  /** Runs `work` for `key` after whatever runs for it already; what it refused or threw goes to the hub's log. */
+  const inOrder = (
+    key: string,
+    work: () => Promise<Refused | undefined>
+  ): Promise<void> => {
+    const logged = (said: string) =>
+      console.warn(`[plan-changes] ${key}: ${said}`);
     const next = (queues.get(key) ?? Promise.resolve()).then(work, work);
-    const tail = next.catch((error: unknown) =>
-      console.warn(
-        `[plan-changes] ${key}: ${error instanceof Error ? error.message : String(error)}`
-      )
+    const tail = next.then(
+      (refused) => {
+        if (refused) {
+          logged(refused.response.detail);
+        }
+      },
+      (error: unknown) =>
+        logged(error instanceof Error ? error.message : String(error))
     );
     queues.set(key, tail);
     detach(
@@ -276,9 +290,14 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         case "refused":
           db.closePlanChanges(ids, { undelivered: told.reason });
           break;
-        case "ended":
-          await goOn(rowOf(to.instanceId), told.reason, text, ids);
+        case "ended": {
+          const ended = rowOf(to.instanceId);
+          if (ended instanceof ElysiaStatus) {
+            return ended;
+          }
+          await goOn(ended, told.reason, text, ids);
           break;
+        }
         default:
           unhandled("outcome", told);
       }
@@ -338,11 +357,17 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
      * The person's change to `instanceId`'s plan: applied and kept, then
      * told by the rules above. Answers the plan as it now stands.
      */
-    async edit(instanceId: string, edit: PlanEdit): Promise<SessionPlan> {
+    async edit(instanceId: string, edit: PlanEdit) {
       const row = rowOf(instanceId);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       const to = receiverOf(row);
       const own = to.kind === "session" && to.instanceId === row.id;
-      await plans.edit(row, edit, to, !own);
+      const change = await plans.edit(row, edit, to, !own);
+      if (change instanceof ElysiaStatus) {
+        return change;
+      }
       const key = receiverKey(to);
       const running = sessionOfReceiver(to);
       if (running && deps.busy(running)) {
@@ -350,7 +375,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       } else if (PLAN_WAKING_EDITS.has(edit.kind)) {
         arm(key);
       }
-      return plans.read(instanceId);
+      return await plans.read(instanceId);
     },
 
     /**
@@ -360,10 +385,16 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     async written(
       row: InstanceRow,
       written: { steps?: WrittenStep[]; spec?: string }
-    ): Promise<SessionPlan & { personChanged?: string }> {
+    ) {
       const plan = await plans.write(row, written);
+      if (plan instanceof ElysiaStatus) {
+        return plan;
+      }
       const heard = foldInto(row.id);
-      return heard ? { ...plan, personChanged: heard } : plan;
+      const answered: SessionPlan & { personChanged?: string } = heard
+        ? { ...plan, personChanged: heard }
+        : plan;
+      return answered;
     },
 
     /**
@@ -382,8 +413,12 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
           if (rows.length === 0) {
             return;
           }
+          const ended = rowOf(instanceId);
+          if (ended instanceof ElysiaStatus) {
+            return ended;
+          }
           await goOn(
-            rowOf(instanceId),
+            ended,
             reason,
             message(receiverOfKey(key), rows),
             rows.map((row) => row.id)
@@ -444,11 +479,6 @@ export const planChangeRoutes = (changes: PlanChanges) =>
   new Elysia().post(
     "/api/instances/:id/plan/edits",
     { params: t.Object({ id: t.String() }), body: PLAN_EDIT_SCHEMA },
-    async ({ params, body }) => {
-      try {
-        return await changes.edit(params.id, body as PlanEdit);
-      } catch (error) {
-        return refused(error);
-      }
-    }
+    ({ params, body }) =>
+      folderAttempt(() => changes.edit(params.id, body as PlanEdit))
   );

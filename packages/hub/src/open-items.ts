@@ -42,6 +42,7 @@ import type { QuestionAnswer } from "./artifacts/questions";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { Note } from "./memory";
+import type { Refused } from "./refusal";
 import type { Tasks } from "./tasks";
 
 /**
@@ -355,8 +356,8 @@ export interface OpenItemsDeps {
   db: Pick<DbShape, "asks" | "getInstancesByIds" | "workItem">;
   /** A project's memory inbox, oldest first (memory.ts `inboxNotes`). */
   inbox: (projectId: string) => Promise<Note[]>;
-  /** A session's plan as its followers hold it (plans.ts `read`). */
-  plan: (instanceId: string) => Promise<SessionPlan>;
+  /** A session's plan as its followers hold it (plans.ts `read`), or its refusal. */
+  plan: (instanceId: string) => Promise<SessionPlan | Refused>;
   /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`). */
   questions: (instanceId: string) => AskedOf[];
   tasks: Pick<Tasks, "get" | "list">;
@@ -405,6 +406,9 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     }
     const projectId = projectOf(deps, row);
     const plan = await deps.plan(instanceId);
+    if (!("steps" in plan)) {
+      throw new Error(plan.response.detail);
+    }
     const asks = deps.db.asks.openOf(instanceId).map(askLink);
     const questions = deps.questions(instanceId);
     if (!projectId) {
