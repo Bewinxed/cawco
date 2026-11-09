@@ -9,6 +9,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
+import { isServiceId } from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
@@ -25,12 +26,7 @@ import { z } from "zod";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { OwnerApprovalError, ownerFetch } from "./owner";
 import { pairingOff } from "./pairing";
-import {
-  isServiceAction,
-  isServiceId,
-  SERVICE_ACTIONS,
-  service,
-} from "./service";
+import { isServiceAction, SERVICE_ACTIONS, service } from "./service";
 import { callTool, listTools, sessionOf, toolDoor } from "./tools";
 
 /** Reported by `--version`; keep in sync with package.json. */
