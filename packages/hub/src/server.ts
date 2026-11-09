@@ -845,7 +845,7 @@ import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
-import { sessionWord } from "./session-word";
+import { sessionControl, sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { applySetupPicks, isSetupPage } from "./setup";
@@ -7876,18 +7876,10 @@ export const createServer = (
       await awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
         const agent = registry.agent(row.machineId);
         return agent
-          ? sendAnswerable(agent, {
-              verb: "control",
-              machineId: row.machineId,
-              instanceId: row.id,
-              requestId,
-              payload: {
-                instanceId: row.id,
-                requestId,
-                method: CONTROL_CONTEXT_USAGE,
-                args: [],
-              },
-            } satisfies Envelope<ControlPayload>)
+          ? sendAnswerable(
+              agent,
+              sessionControl(row, requestId, CONTROL_CONTEXT_USAGE, [])
+            )
           : undefined;
       })
     );
