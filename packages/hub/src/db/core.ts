@@ -1,6 +1,3 @@
-import { idList } from "./id-list";
-import { walkOwned } from "./owned-rows";
-import { singleton } from "./singleton";
 /**
  * What the domain stores share: the connection and the closures more than
  * one of them calls. `db/index.ts` builds it once and hands it to each.
@@ -11,6 +8,8 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { type AreasDb, areasDb } from "./areas";
 import { type ArtifactEvents, artifactEvents, projectPage } from "./artifacts";
 import type { TakeChanges } from "./board-log";
+import { idList } from "./id-list";
+import { walkOwned } from "./owned-rows";
 import {
   artifacts,
   fleetDeniedTools,
@@ -19,6 +18,7 @@ import {
   supervisorConfig,
 } from "./schema";
 import { type Revocations, revocations } from "./session-identity";
+import { singleton } from "./singleton";
 import { type TaskLinksDb, taskLinksDb } from "./task-links";
 import type { Tx } from "./tx";
 
