@@ -9,22 +9,20 @@ import { unhandled } from "@cawco/core/unhandled";
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
+import { hubClient, reached } from "@cawco/agent/hub-client";
 import { isServiceId } from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { hubCredentialSocket } from "@cawco/core/paths/hub";
 import { CAWCO_HUB_PORT } from "@cawco/core/ports";
 import type { AgentRow } from "@cawco/core/protocol";
 import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
-import { AgentRowSchema } from "@cawco/core/stored-shapes";
 import { secondsOf } from "@cawco/core/time";
 import { pinnedTools } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
-import { z } from "zod";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
-import { OwnerApprovalError, ownerFetch } from "./owner";
+import { OwnerApprovalError, ownerFetch, ownerResponse } from "./owner";
 import { pairingOff } from "./pairing";
 import { isServiceAction, SERVICE_ACTIONS, service } from "./service";
 import { callTool, listTools, sessionOf, toolDoor } from "./tools";
@@ -419,40 +417,49 @@ const status = async (args: Args): Promise<number> => {
 
   // The fleet's list is the person's (hub hub-auth.ts): a hub that requires
   // paired devices asks the person to approve this run (owner.ts).
-  const asked = await ownerFetch(
-    ...hubAt(hub.httpUrl, hubRequest("GET /api/agents")),
-    "cawco status",
-    STATUS_ANSWER_MS
-  ).catch((error: unknown) => {
+  const answer = await hubClient(hub.httpUrl, async (url, init) => {
+    const asked = await ownerFetch(url, init, "cawco status", STATUS_ANSWER_MS);
+    switch (asked.kind) {
+      case "unanswered":
+        throw new StatusUnanswered(secondsOf(asked.after));
+      case "answered":
+        return ownerResponse(asked.value);
+      default:
+        unhandled("read", asked);
+    }
+  }).api.agents.get();
+  try {
+    reached(answer);
+  } catch (error) {
     // The person's no is said as it is; a hub that could not be reached, below.
     if (error instanceof OwnerApprovalError) {
       throw error;
     }
-    return error instanceof Error ? error.message : String(error);
-  });
-  if (typeof asked === "string") {
-    console.error(`\ncawco: ${hub.httpUrl} could not be reached: ${asked}`);
+    console.error(
+      error instanceof StatusUnanswered
+        ? `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${error.seconds}s`
+        : `\ncawco: ${hub.httpUrl} could not be reached: ${error instanceof Error ? error.message : String(error)}`
+    );
     return 1;
   }
-  switch (asked.kind) {
-    case "unanswered":
-      console.error(
-        `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${secondsOf(asked.after)}s`
-      );
-      return 1;
-    case "answered":
-      if (!asked.value.ok) {
-        console.error(
-          `\ncawco: ${hub.httpUrl} answered /api/agents with HTTP ${asked.value.status}`
-        );
-        return 1;
-      }
-      printFleet(z.array(AgentRowSchema).parse(JSON.parse(asked.value.said)));
-      return 0;
-    default:
-      unhandled("read", asked);
+  if (answer.error) {
+    console.error(
+      `\ncawco: ${hub.httpUrl} answered /api/agents with HTTP ${answer.status}`
+    );
+    return 1;
   }
+  printFleet(answer.data);
+  return 0;
 };
+
+/** `cawco status` got no answer within its bound. */
+class StatusUnanswered extends Error {
+  readonly seconds: number;
+  constructor(seconds: number) {
+    super("no answer");
+    this.seconds = seconds;
+  }
+}
 
 /**
  * Starts the daemon at once: whether a Claude account is signed in here is

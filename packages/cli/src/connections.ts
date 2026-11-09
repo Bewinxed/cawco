@@ -11,11 +11,11 @@
  * as the CLI's other hub calls are. What is printed is the name, the key's
  * length and the connection's state; never the key.
  */
+
+import { refusalText, unwrap } from "@cawco/agent/hub-client";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONNECTION_NAME } from "@cawco/core/delegate-types";
-import { hubRequest } from "@cawco/core/hub-request";
-import { ConnectionViewSchema } from "@cawco/core/stored-shapes";
-import { ownerAsk } from "./owner";
+import { ownerClient } from "./owner";
 
 export class ConnectionKeyError extends Error {}
 
@@ -117,25 +117,22 @@ export const setConnectionKey = async (
   if (!key) {
     throw new ConnectionKeyError("no key was given; nothing was sent");
   }
-  const response = await ownerAsk(
-    hub,
-    hubRequest("PUT /api/connections/:name/key", {
-      path: { name },
-      body: { key },
-    }),
-    `cawco connections ${name}`,
-    90_000,
-    ConnectionKeyError,
-    (seconds) =>
-      `${hub} did not answer within ${seconds}s, so whether it took the key for ${name} is not known. Run this again to set it.`
+  const view = unwrap(
+    await ownerClient(
+      hub,
+      `cawco connections ${name}`,
+      90_000,
+      ConnectionKeyError,
+      (seconds) =>
+        `${hub} did not answer within ${seconds}s, so whether it took the key for ${name} is not known. Run this again to set it.`
+    )
+      .api.connections({ name })
+      .key.put({ key }),
+    (refusal) =>
+      new ConnectionKeyError(
+        `${hub} refused the key for ${name} (${refusal.status}): ${refusalText(refusal).slice(0, 300)}`
+      )
   );
-  const { said } = response;
-  if (!response.ok) {
-    throw new ConnectionKeyError(
-      `${hub} refused the key for ${name} (${response.status}): ${said.slice(0, 300)}`
-    );
-  }
-  const view = ConnectionViewSchema.parse(JSON.parse(said));
   return {
     lines: [
       `Key set for ${name} (${key.length} characters)`,
