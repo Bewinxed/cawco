@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Portal } from "bits-ui";
-  import type { Snippet } from "svelte";
-  import { tick, untrack } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { Drawer as Vaul } from "vaul-svelte";
   import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
@@ -20,9 +19,10 @@
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { land, waiting } from "#lib/platform/motion/share.svelte.js";
   import { visible as visibleArea } from "#lib/platform/visible-viewport.svelte.js";
-  import { cawco } from "../client.svelte";
+
   import { closePeeks } from "../HoverPanel.svelte";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
+  import { previewsStore } from "../stores/previews.svelte";
 
   let {
     instanceId,
@@ -604,7 +604,7 @@
     return holdStyle(node, { "--initial-transform": initial ?? null });
   });
   $effect(() => {
-    const request = cawco.previewRequests[instanceId];
+    const request = previewsStore.previewRequests[instanceId];
     if (request !== undefined && placed) {
       untrack(() => {
         snap = values[restStop()];
