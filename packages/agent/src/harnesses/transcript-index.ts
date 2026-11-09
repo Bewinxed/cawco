@@ -68,7 +68,10 @@ const SWEEP_MS = 60 * 1000;
  * however far the read had got: a transcript deleted while it is read reads
  * as one never found.
  */
-export function readUnlessGone<T>(read: () => Promise<T>, gone: T): Promise<T> {
+export function transcriptOrGone<T>(
+  read: () => Promise<T>,
+  gone: T
+): Promise<T> {
   return read().catch(unlessGone(gone));
 }
 
