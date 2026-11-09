@@ -53,7 +53,7 @@
  * there, core keepers.ts), is handed over ({@link handOver}): a boundary of
  * this build's form starts beside it on the current keeper, every new command
  * runs in the new one, and the older one runs on, untouched, until nothing
- * runs in it, then closes (stale-look.ts `closeIdle`). One whose work still runs
+ * runs in it, then closes ({@link closeIdle}). One whose work still runs
  * anything is not handed over until that ends ({@link workLeft}): the new
  * one's pid namespace and network are others, where the delegate's next
  * command would find nothing of what it left running. Every boundary and judge
@@ -72,78 +72,157 @@
  * gate workspace on a Mac (the hub's `runGate`).
  */
 
-import { lstat, rm, stat } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { lstat, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { atMost } from "@cawco/core/at-most";
+import {
+  type HandoverCommand,
+  type HandoverEvent,
+  type HandoverState,
+  step as handoverStep,
+  initialHandover,
+  KEEPERS_ASK_AGAIN_MS,
+  type ListedWorkspace,
+} from "@cawco/core/handover";
+import {
+  workspaceClaudeTmpDir,
+  workspacePolicyFile,
+  workspacesDir,
+} from "@cawco/core/paths/workspace";
+import { hostEnvironment } from "@cawco/core/session-env";
+import { listedPid } from "@cawco/core/signal";
+import { readRecord } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { workspaceNeeds } from "@cawco/core/workspace-needs";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { systemProgram, workspaceNeeds } from "@cawco/core/workspace-needs";
+import { isPlace, workspacePolicy } from "@cawco/core/workspace-policy";
+import { z } from "zod";
 import { ensureGateToken } from "../browser/gate";
 import { isGitDir } from "../git-dir";
-import { ensureView, layerOf, ownModules } from "../layer";
+import { openGithubDoor } from "../github-door";
+import { openGitDoor } from "../hub-git";
+import { ensureView, layerOf, ownFolderSync, ownModules } from "../layer";
 import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
-import { hasLeftDirs } from "../stand-ins";
-import { armHook } from "./arm";
+import { hasLeftDirs, listStandIns, rewriteLeftFiles } from "../stand-ins";
+import { openToolDoor } from "../tool-door";
+import { linkWorkspaceModules } from "../workspace-modules";
 import {
   behindGate,
   decided,
+  keepSpills,
   type NarrowCause,
   nestedSeatbelt,
   ownKeeperOwed,
+  readDecisions,
   reasonsOf,
   recordDecision,
+  viewOfBoundary,
 } from "./decisions";
-import { sawHeld } from "./holding";
+import { execScript, gateOf, ready } from "./exec";
+import { attachedIn, commandsNow, inUse, sawHeld } from "./holding";
+import {
+  bunRuntime,
+  claudePrefixOf,
+  claudePrefixScript,
+  hookScript,
+  socketAddress,
+} from "./hook-judge";
+import { judgeFor, whileArming } from "./judge-process";
 import {
   keeperTakingOver,
   type Narrowed,
   narrowedCause,
   narrowedGenerations,
+  supersededPorts,
   tellStopped,
   unknownGrant,
   type WorkProcess,
   workIn,
   workLeft,
 } from "./narrowing";
-import { formMoveWords, formOf, REASONS_SAID } from "./plan";
-import type { Work } from "./processes";
-import { endMembers } from "./sandboxes";
+import { makeDirs, ownInodes } from "./package-managers";
+import { type Seen, snapshot } from "./place-guard";
+import { formMoveWords, formOf, planOf, REASONS_SAID } from "./plan";
 import {
-  closeWhenIdle,
+  busyOld,
+  commandsEnded,
+  commandsIn,
+  drainable,
+  type Work,
+} from "./processes";
+import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
+import { srtTmpOf } from "./runner";
+import { endMembers, sandboxes } from "./sandboxes";
+import {
+  writeChromiumShim,
+  writeGitShim,
+  writeGuardedGhConfig,
+  writeShims,
+} from "./shims";
+import {
   forgetRetiring,
   forgetStale,
   forgetStubbed,
   isStale,
   isStubbed,
   keptRunningOf,
+  lookEvery,
   markKeptRunning,
-  replaceSoon,
-  restartWhenIdle,
+  markRetiring,
+  markStale,
+  markStubbed,
+  noteStubbedCommands,
+  retiringNow,
+  staleNow,
+  stubbedNow,
 } from "./staleness";
-import { start } from "./start";
 import {
   type Boundary,
   closeUnderWay,
+  fifoOf,
+  generationDir,
+  gitSystemConfig,
+  gitSystemConfigOf,
   type Held,
   heldProc,
+  isClosing,
+  isStarting,
   procsHeld,
+  READY,
   type Retiring,
   readHeld,
+  readPlace,
   readRetiring,
   refusal,
   retiringFileOf,
+  roOf,
   running,
+  scratchOf,
   sessiond,
   startUnderWay,
+  stateDir,
   type UnaskedCalls,
   withStart,
   writeWhole,
 } from "./state";
-import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
+import {
+  cleanGeneration,
+  settleGonePlace,
+  stopBoundary,
+  stopGeneration,
+} from "./stop";
+import {
+  endKeepingListed,
+  keepListed,
+  stoppedAsGone,
+  unwatchCloneOf,
+  watchCloneOf,
+} from "./watch";
 
 /**
- * arming.ts `ensureBoundary` with the hook already armed: the start-up rewrite's
- * own hand-over (arming.ts `rearmOne`). A quiet close under way finishes first
+ * {@link ensureBoundary} with the hook already armed: the start-up rewrite's
+ * own hand-over ({@link rearmOne}). A quiet close under way finishes first
  * (looks.ts `closeQuietly`), and this one starts the boundary again. Each ensure
  * is a use: the workspace's quiet time counts from it (holding.ts `liveAt`).
  */
@@ -169,7 +248,7 @@ export const ensureNow = (
  * Refuses a boundary for a workspace whose folder is not there to hold
  * (`why`), and closes each of its boundaries still running, on every keeper,
  * with everything in them: nothing runs in a path that is gone, and a
- * handover of one (stale-look.ts `handOverStale`) or a restart (stale-look.ts `restartStubbed`) is never tried again. Its records stay for its archive.
+ * handover of one ({@link handOverStale}) or a restart ({@link restartStubbed}) is never tried again. Its records stay for its archive.
  */
 const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
   forgetStale(ref.id);
@@ -325,7 +404,7 @@ const replaceOlder = async (
     // The keeper the endpoint names now retires as soon as this build's
     // takes the endpoint: the boundary runs on as it is, armed, and is
     // handed over once, at the first look after this build's keeper is
-    // the machine's (stale-look.ts `handOverStale`).
+    // the machine's ({@link handOverStale}).
     if (!isStale(ref.id)) {
       console.info(
         `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is handed over once this build's session keeper is the machine's`
@@ -473,7 +552,7 @@ const handOverWhenIdle = (
 /**
  * Stops every generation of workspace `ref` whose access the workspace's
  * policy has narrowed since it started (`narrowed`, narrowing.ts `narrowing`), now,
- * as stale-look.ts `restartIfIdle` stops one: the gate goes up, each is stopped with
+ * as {@link restartIfIdle} stops one: the gate goes up, each is stopped with
  * everything in it, and, when the current one `held` was, a boundary of the
  * policy as it stands starts, on the keeper taking over when one is owed the
  * endpoint ({@link keeperTakingOver}). What their work still ran is said,
@@ -540,7 +619,7 @@ export const replaceNarrowed = async (
  * holds ({@link handOverWhenIdle}): an executor on its way in waits and then
  * runs through the new one. The older one is recorded before the new one
  * replaces its record, so no agent loses it, and runs on untouched with every
- * process in it; it closes once nothing runs in it (stale-look.ts `closeIdle`). Said
+ * process in it; it closes once nothing runs in it ({@link closeIdle}). Said
  * in the log and recorded ({@link recordDecision}), with `grant`, why its
  * grant was not comparable, if that is why.
  */
@@ -576,3 +655,1154 @@ const handOver = async (
 
 /** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
 const saidUnknown = new Map<string, number>();
+
+/**
+ * A workspace's hook armed: its judge, hook, shims, executor and doors written
+ * in this build's form for the boundary it names, and the record of them.
+ */
+
+/**
+ * Starts the workspace's judge in this build's form and writes its hook for
+ * `held` to ask it, its executor in this build's form for the boundary `held`
+ * names, and the record of them, and serves its tool door. An executor only
+ * hands commands in, so it is current from the next command on, whatever form
+ * the boundary is. A running CLI reads its hook at every call, so it asks
+ * the new judge from the next call on. On macOS also its shims. The
+ * workspace's policy is written again too, as this machine stands now
+ * (`workspacePolicy`): every harness reads it at each file tool call, so a
+ * store, toolchain or account added since is in it from the next call on.
+ */
+export const armHook = (
+  id: string,
+  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">,
+  unasked: UnaskedCalls
+): Promise<Held> => whileArming(id, () => armHookNow(id, held, unasked));
+
+/** {@link armHook}'s writes and starts, counted as judge-process.ts `arming`. */
+const armHookNow = async (
+  id: string,
+  held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix">,
+  unasked: UnaskedCalls
+): Promise<Held> => {
+  const hook = join(stateDir(id), "hook");
+  const prefix = claudePrefixOf(id);
+  const policy = workspacePolicyFile(id);
+  // The CLI makes its own `claude-<uid>` in it, 0700, and refuses a root it
+  // does not own; inside the boundary it is read only, as the rest of `ro`.
+  const claudeTmp = workspaceClaudeTmpDir(id);
+  await mkdir(claudeTmp, { recursive: true, mode: 0o700 });
+  await writeWhole(
+    policy,
+    `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
+    0o644
+  );
+  const { procId, socket } = await judgeFor(id, held, hook, policy);
+  await watchJudge(id, procId, unasked);
+  const judge = { socket, address: await socketAddress(id, socket) };
+  await writeWhole(hook, hookScript(id, hook, judge), 0o755);
+  const runtime = await bunRuntime(id);
+  if (process.platform === "darwin") {
+    await writeShims(id, runtime);
+  }
+  await writeGuardedGhConfig(id);
+  await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id), 0o644);
+  await writeGitShim(id, held.path);
+  await writeChromiumShim(id);
+  // The copy of gh's token an earlier build's executor kept beside the
+  // workspace: nothing reads it now, and a token is kept nowhere it is not used.
+  await rm(join(stateDir(id), "gh-token"), { force: true });
+  // The repository rule an earlier build wrote for the workspace's doors:
+  // nothing reads it now.
+  await rm(join(roOf(id), "upstream.json"), { force: true });
+  // Its host's pid as the keeper listed it at its start, and matched to
+  // the keeper's list again before any boundary on record is armed.
+  await writeWhole(
+    held.exec,
+    execScript(id, { ...held, pid: listedPid(held.pid) }),
+    0o755
+  );
+  await writeWhole(prefix, claudePrefixScript(id, held.exec), 0o755);
+  await openToolDoor(id);
+  await openGitDoor({ id, path: held.path });
+  await openGithubDoor(id);
+  await watchHost(id, held, unasked);
+  const armed: Held = { ...held, claudeTmp, hook, policy, prefix };
+  await writeWhole(
+    join(stateDir(id), "boundary.json"),
+    `${JSON.stringify(armed)}\n`,
+    0o644
+  );
+  return armed;
+};
+
+/**
+ * A boundary of a new generation, started under sessiond from its files to its
+ * record, or stopped and cleaned away when it does not start.
+ */
+
+/**
+ * Starts a boundary of a new generation for the workspace under sessiond and
+ * writes its executor, which then runs every command through it. One that
+ * fails to start is stopped and its files go, so a start tried again leaves
+ * nothing of the last behind.
+ */
+export const start = async (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  unasked: UnaskedCalls
+): Promise<Held> => {
+  const gen = randomBytes(4).toString("hex");
+  await makeDirs(ref.id);
+  await linkWorkspaceModules(ref).catch((error: unknown) => {
+    console.warn(
+      `[workspace] ${ref.id}: its node_modules could not be linked into the workspaces' cache, so bun copies what its global store cannot hold: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  await mkdir(join(stateDir(ref.id), "boundaries"), { recursive: true });
+  // Its generation's dir is made here and nowhere else, and only by this
+  // start: one already there is another start's, whose files this one
+  // neither uses nor cleans away as it fails.
+  const made = await mkdir(generationDir(ref.id, gen)).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "EEXIST") {
+        return false;
+      }
+      throw error;
+    }
+  );
+  if (!made) {
+    throw refusal(
+      ref.id,
+      `its boundary generation ${gen} is already another start's`
+    );
+  }
+  try {
+    return await launch(client, ref, gen, unasked);
+  } catch (error) {
+    await stopBoundary(ref.id, { gen });
+    await cleanGeneration(ref.id, { gen });
+    throw error;
+  }
+};
+
+/** {@link start}'s generation `gen`, from its files to its record. */
+const launch = async (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  gen: string,
+  unasked: UnaskedCalls
+): Promise<Held> => {
+  const linux = process.platform === "linux";
+  // A place is a person's own folder, and so is the folder a Linux view
+  // overlays (layer.ts): nothing of the boundary's is written into it from
+  // here (no copied inodes, no stand-ins, no exclude lines). The srt host
+  // makes the view's stand-ins inside it, into its upper.
+  const own = !isPlace(ref.id) && ownFolderSync(ref.id, ref.path);
+  const procId = boundaryProcId(ref.id, gen);
+  if (linux) {
+    // Only with no sandbox of the workspace running: a handover starts this
+    // one beside an older one whose work runs on in the same clone.
+    const split =
+      own && (await sandboxes(ref.id)).length === 0
+        ? await ownInodes(ref.path)
+        : 0;
+    if (split > 0) {
+      console.info(
+        `[workspace] ${ref.id}: ${split} file(s) in its clone shared an inode with a file outside it, and each now has its own`
+      );
+    }
+    const srtTmp = srtTmpOf(ref.id, gen);
+    await rm(srtTmp, { recursive: true, force: true });
+    await mkdir(srtTmp, { recursive: true, mode: 0o700 });
+  }
+  // Linux: the host makes each missing deny path in a clone before the
+  // sandbox starts.
+  if (own) {
+    await listStandIns(ref, linux);
+  }
+  // Every spill folder its policy binds is there as srt and bwrap look.
+  await keepSpills(ref.id);
+  const plan = await planOf(ref, gen);
+  for (const [path, content, mode] of plan.files) {
+    await writeWhole(path, content, mode ?? 0o644);
+  }
+  const fifo = fifoOf(ref.id, gen);
+  const made = await Bun.$`${systemProgram("mkfifo")} ${fifo}`
+    .env(hostEnvironment())
+    .quiet()
+    .nothrow();
+  if (made.exitCode !== 0) {
+    throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
+  }
+  await client.spawnProc(procId, {
+    ...(await viewOfBoundary(ref, plan.spec)),
+    workspace: true,
+  });
+  const readyAt = await ready(client, procId, READY, "the boundary").catch(
+    (error: Error) => {
+      throw refusal(ref.id, error.message);
+    }
+  );
+  const proc = (await client.list()).procs.find(
+    (candidate) => candidate.procId === procId
+  );
+  if (!proc?.alive) {
+    throw refusal(ref.id, "the boundary exited right after it started");
+  }
+  // The host names its sandbox before it passes the ready line on.
+  if (linux && !(await readPlace(ref.id, gen))) {
+    throw refusal(
+      ref.id,
+      "its sandbox's processes could not be found as it started"
+    );
+  }
+  const held: Omit<Held, "claudeTmp" | "hook" | "policy" | "prefix"> = {
+    exec: join(stateDir(ref.id), "exec"),
+    gen,
+    pid: proc.pid,
+    scratch: scratchOf(ref.id),
+    path: ref.path,
+    form: plan.form,
+    parts: plan.parts,
+  };
+  if (linux && own && (await hasLeftDirs(ref.path))) {
+    // Its host left a mount point where a dir stands in: an older boundary
+    // beside it held one there (staleness.ts `stubbed`).
+    restartWhenIdle(ref, unasked);
+  }
+  // Followed from its ready line on, before armHook would follow it from now.
+  await watchHost(ref.id, held, unasked, readyAt);
+  // armHook writes the executor.
+  return armHook(ref.id, held, unasked);
+};
+
+/**
+ * Following a boundary's srt host or runner and a workspace's judge, each exit
+ * answered: the moves out of watch.ts and judge-process.ts.
+ */
+
+/** Each boundary's srt host or Seatbelt runner followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
+const watchedHosts = new Map<string, SessiondClient>();
+
+/**
+ * Records each restart of generation `held`'s sandbox its srt host recorded
+ * (protocol.ts `HOST_FILES.restarts`) that workspace `id`'s decisions do not hold
+ * yet, as a `host-restarted` decision (decisions.ts `BoundaryDecision`).
+ */
+const recordHostRestarts = async (
+  id: string,
+  held: Pick<Held, "form" | "gen" | "pid">
+): Promise<void> => {
+  const text = await readFile(
+    join(generationDir(id, held.gen), HOST_FILES.restarts),
+    "utf8"
+  ).catch(() => "[]");
+  let restarts: unknown;
+  try {
+    restarts = JSON.parse(text);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(restarts)) {
+    return;
+  }
+  const known = new Set(
+    (await readDecisions(id)).flatMap((one) =>
+      one.decision === "host-restarted" && one.gen === held.gen
+        ? [one.hostAt]
+        : []
+    )
+  );
+  for (const one of restarts as ({
+    at?: unknown;
+    inner?: unknown;
+    path?: unknown;
+  } | null)[]) {
+    if (!one || typeof one.at !== "number" || known.has(one.at)) {
+      continue;
+    }
+    known.add(one.at);
+    await recordDecision(id, {
+      ...decided(held),
+      decision: "host-restarted",
+      hostAt: one.at,
+      inner: typeof one.inner === "number" ? one.inner : null,
+      path: typeof one.path === "string" ? one.path : "",
+    });
+  }
+};
+
+/** How soon after one unasked start a second is not made ({@link restartUnasked}). Ours: a minute is longer than any start, and short enough that a later crash is started again. */
+const UNASKED_RESTART_MS = 60_000;
+
+/** When each workspace's boundary was last started again unasked ({@link restartUnasked}). */
+const unaskedAt = new Map<string, number>();
+
+/**
+ * Follows workspace `id`'s boundary `held`, its srt host on Linux and its
+ * Seatbelt runner on macOS, on whichever keeper holds it. Says in the
+ * agent's log each line it says after it is ready: on Linux above all a
+ * sandbox the host starts again because a guarded path changed on the host,
+ * which ends everything in the workspace (`boundary-host.ts`). Its stderr
+ * the keeper drains unread, so these lines are the one record of it.
+ * From `afterSeq` (its ready line, so nothing is missed between the start and
+ * this), or from now for a boundary an earlier agent started. A watch lives
+ * on its keeper connection, so a new connection watches again. A host that
+ * exits unasked has its boundary started again ({@link restartUnasked}).
+ */
+const watchHost = async (
+  id: string,
+  held: Pick<Held, "gen" | "path" | "pid">,
+  unasked: UnaskedCalls,
+  afterSeq?: number
+): Promise<void> => {
+  const procId = boundaryProcId(id, held.gen);
+  const proc = await heldProc(procId);
+  if (!proc || watchedHosts.get(procId) === proc.client) {
+    return;
+  }
+  const { client } = proc;
+  watchedHosts.set(procId, client);
+  watchCloneOf(id, held);
+  keepListed(id, held);
+  let stop = (): void => undefined;
+  stop = client.subscribe(
+    procId,
+    {
+      line: (event) => {
+        const text = event.data.trim();
+        if (text && text !== READY) {
+          console.info(
+            `[workspace] ${id}: its boundary ${held.pid} says: ${text}`
+          );
+          // Each restart the host says it records first (its `restarts`
+          // file); the agent's record of it follows, from that record.
+          recordHostRestarts(id, held).catch((error: unknown) => {
+            console.warn(
+              `[workspace] ${id}: its boundary ${held.pid}'s restarts could not be recorded: ${error instanceof Error ? error.message : String(error)}`
+            );
+          });
+        }
+      },
+      exit: (exitCode, signal, pid) => {
+        // Whatever ended it, the agent's own close or the host's own exit
+        // (its sandbox ended, an OOM kill): the one record of the latter.
+        console.info(
+          `[workspace] ${id}: its boundary ${held.pid} (${procId}) exited, ${signal ? `killed by ${signal}` : `status ${exitCode ?? "unknown"}`}`
+        );
+        if (watchedHosts.get(procId) === client) {
+          watchedHosts.delete(procId);
+        }
+        stop();
+        unwatchCloneOf(procId);
+        endKeepingListed(procId);
+        client.release(procId, pid);
+        // A macOS boundary the agent stopped as its folder went exits as the
+        // host's gone exit does ({@link watchCloneOf}).
+        if (exitCode === HOST_GONE_STATUS || stoppedAsGone(procId)) {
+          // Its folder is gone: no start would hold it ({@link placeReady}).
+          settleGonePlace({ id, path: held.path }).catch((error: unknown) => {
+            console.warn(
+              `[workspace] ${id}: its boundary ${held.pid} closed as its folder ${held.path} went, and the place could not be settled: ${error instanceof Error ? error.message : String(error)}`
+            );
+          });
+          return;
+        }
+        restartUnasked(id, held, unasked).catch((error: unknown) => {
+          console.warn(
+            `[workspace] ${id}: its boundary ${held.pid} ended unasked and could not be started again: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+      },
+    },
+    afterSeq
+  );
+};
+
+/**
+ * A BOUNDARY THAT ENDS UNASKED IS STARTED AGAIN WHILE ITS RECORD STANDS, on
+ * Linux and macOS alike. Its srt host or Seatbelt runner exited, and nothing
+ * of the agent's ended it: no close or start of
+ * the workspace's is under way (state.ts `closing`, state.ts `starting`), and its
+ * record (`boundary.json`) still names this generation, which every close
+ * takes away and every replacement names anew. Its sessions' commands would
+ * otherwise each be refused until the workspace's next session
+ * (exec.ts `stoppedLine`): a sandbox that ended (its runner gone, an OOM
+ * kill), its host or runner signalled, its host's own close. The start
+ * stops what the generation before left (on macOS, what answers to its
+ * name, which outlives its runner there: {@link stopUnvouched}). The
+ * executor waits for the new one (exec.ts `execScript`). A clone gone is refused at the start, as
+ * any start refuses it. One that ends unasked again within {@link
+ * UNASKED_RESTART_MS} of its last such start is left down, said: a sandbox
+ * that cannot stay up is not started in a loop, and the workspace's next
+ * session starts it.
+ */
+const restartUnasked = async (
+  id: string,
+  held: Pick<Held, "gen" | "path" | "pid">,
+  unasked: UnaskedCalls
+): Promise<void> => {
+  if (isClosing(id) || isStarting(id)) {
+    return;
+  }
+  const now = await readHeld(id).catch(() => undefined);
+  if (now?.gen !== held.gen) {
+    return;
+  }
+  const last = unaskedAt.get(id);
+  if (last !== undefined && Date.now() - last < UNASKED_RESTART_MS) {
+    console.warn(
+      `[workspace] ${id}: its boundary ${held.pid} ended unasked again within ${UNASKED_RESTART_MS / 1000}s of being started again, so it is left down; the workspace's next session starts it`
+    );
+    await recordDecision(id, {
+      ...decided({ form: now?.form, gen: held.gen, pid: held.pid }),
+      decision: "left-down",
+    });
+    return;
+  }
+  unaskedAt.set(id, Date.now());
+  console.info(
+    `[workspace] ${id}: its boundary ${held.pid} ended unasked while its record stands, so it starts again`
+  );
+  const fresh = await unasked.ensureAgain({ id, path: held.path });
+  console.info(
+    `[workspace] ${id}: its boundary ${held.pid} is started again as ${fresh.pid}`
+  );
+  const record = await readHeld(id).catch(() => undefined);
+  await recordDecision(id, {
+    ...decided({ form: now?.form, gen: held.gen, pid: held.pid }),
+    decision: "restarted-unasked",
+    to: decided({
+      form: record?.form,
+      gen: record?.gen ?? "",
+      pid: fresh.pid,
+    }),
+  });
+};
+
+/** The judges whose exit this agent watches, by their sessiond id, each with the connection it watches on. */
+const watchedJudges = new Map<string, SessiondClient>();
+
+/**
+ * Starts the workspace's judge again when it exits while the workspace is
+ * still held, by arming its hook again ({@link armHook}): a crashed judge
+ * would refuse every call. One that left because a newer judge took over, or
+ * the workspace closed, finds the current one running, or no workspace. A
+ * watch lives on its sessiond connection, so a new connection watches again.
+ */
+const watchJudge = async (
+  id: string,
+  procId: string,
+  unasked: UnaskedCalls
+): Promise<void> => {
+  const client = await sessiond();
+  if (watchedJudges.get(procId) === client) {
+    return;
+  }
+  watchedJudges.set(procId, client);
+  let stop = (): void => undefined;
+  stop = client.subscribe(procId, {
+    line: () => undefined,
+    exit: (code, signal, pid) => {
+      watchedJudges.delete(procId);
+      stop();
+      client.release(procId, pid);
+      // Counted as arming from its exit until it is started again, as the
+      // handover decides ({@link armStep}).
+      whileArming(id, async () => {
+        const held = await readHeld(id);
+        if (held) {
+          console.warn(
+            `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
+          );
+        }
+        await unasked.judgeExited(id, held !== undefined);
+      }).catch((error: unknown) => {
+        console.warn(
+          `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    },
+  });
+};
+
+/**
+ * The look at the older boundaries and the timer that starts it: staleness.ts
+ * keeps the sets it reads and the timer's handle.
+ */
+
+/** Replaces workspace `ref`'s boundary once nothing runs in it (staleness.ts `stubbed`). */
+const restartWhenIdle = (ref: WorkspaceRef, unasked: UnaskedCalls): void => {
+  markStubbed(ref);
+  lookSoon(unasked);
+};
+
+/** The look at the older boundaries under way ({@link lookAtStale}): one at a time. */
+let staleLook: Promise<void> | undefined;
+
+/** The look at the older boundaries under way, if any. */
+export const lookUnderWay = (): Promise<void> | undefined => staleLook;
+
+/** A look at the older boundaries: the one under way, or one begun now. Never throws: what fails is said. */
+export const lookOnce = (unasked: UnaskedCalls): Promise<void> => {
+  staleLook ??= sayingWhatFails(unasked).finally(() => {
+    staleLook = undefined;
+  });
+  return staleLook;
+};
+
+/** One look at the older boundaries, what fails said: an `async` function, so nothing it runs can throw past the timer that called it. */
+const sayingWhatFails = async (unasked: UnaskedCalls): Promise<void> => {
+  try {
+    await unasked.lookAtOlder();
+  } catch (error) {
+    console.warn(
+      `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+
+/** Looks at the older boundaries each staleness.ts `STALE_LOOK_MS` while there are any (`unasked.lookAtOlder`). */
+const lookSoon = (unasked: UnaskedCalls): void =>
+  lookEvery(() => {
+    if (!staleLook) {
+      lookOnce(unasked);
+    }
+  });
+
+/** Hands workspace `ref`'s boundary, of an older form, over at the next look. */
+export const replaceSoon = (ref: WorkspaceRef, unasked: UnaskedCalls): void => {
+  markStale(ref);
+  lookSoon(unasked);
+};
+
+/** Closes workspace `id`'s older boundaries as nothing runs in each any more. */
+export const closeWhenIdle = (id: string, unasked: UnaskedCalls): void => {
+  markRetiring(id);
+  lookSoon(unasked);
+};
+
+/**
+ * The look at the older boundaries, each few seconds while there are any: each
+ * boundary of an older form handed over, each older one nothing runs in closed,
+ * and each one holding an srt mount point replaced once idle.
+ */
+
+/**
+ * Closes every older boundary of workspace `id` that nothing runs in any
+ * more, that is no longer running, or whose work a newer generation took
+ * over ({@link supersededPorts}), with every process in it, and cleans its
+ * files; one that still runs something of its own is left as it is. Answers
+ * whether any is left.
+ */
+const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
+  const now = process.platform === "linux" ? await sandboxes(id) : [];
+  let left = false;
+  for (const old of await readRetiring(id)) {
+    const alive = Boolean(await running(id, old));
+    let closed = alive
+      ? "has nothing left running in it and is closed"
+      : "is gone";
+    let why: "gone" | "idle" | "superseded" = alive ? "idle" : "gone";
+    let taken: readonly number[] = [];
+    if (alive && (await busyOld(seen, id, old))) {
+      // A command still running there keeps it, whatever its work listens
+      // on and whoever listens there since ({@link commandsIn}).
+      const ports =
+        (await commandsIn(seen, id, old.gen)).length > 0
+          ? undefined
+          : await supersededPorts(seen, old, now);
+      if (!ports) {
+        left = true;
+        continue;
+      }
+      // What still runs there is the delegate's: it is said to it.
+      const line = await tellStopped(
+        id,
+        `a newer boundary of this workspace listens on every port its older one's work listened on (${ports.join(", ")}), so the older one was closed`,
+        await workIn(id, old)
+      );
+      closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})${line ? `; said to the delegate: ${line}` : ""}`;
+      why = "superseded";
+      taken = ports;
+    }
+    await stopBoundary(id, old);
+    await cleanGeneration(id, old);
+    await rm(retiringFileOf(id, old), { force: true });
+    console.info(
+      `[workspace] ${id}: its older boundary ${old.pid} (form ${old.form ?? "none"}) ${closed}`
+    );
+    await recordDecision(id, {
+      ...decided(old),
+      decision: "older-closed",
+      ports: taken,
+      why,
+    });
+  }
+  return left;
+};
+
+/**
+ * Each staleness.ts `STALE_LOOK_MS`: hands over every running boundary of an older
+ * form ({@link ensureBoundary}), then closes every older boundary nothing
+ * runs in any more ({@link closeIdle}), reading the processes once for all
+ * of them, after the handovers. A workspace leaves the first set once its
+ * boundary is handed over, current, or no longer running, and the second
+ * once no older boundary of it is left.
+ */
+const lookAtStale = async (unasked: UnaskedCalls): Promise<void> => {
+  await handOverStale(unasked);
+  if (retiringNow().length > 0) {
+    await closeRetiring();
+  }
+  if (stubbedNow().length > 0) {
+    await restartStubbed(unasked);
+  }
+};
+
+/**
+ * Replaces each staleness.ts `stubbed` workspace's boundary when nothing runs in it:
+ * no older boundary beside it, no command past its gate, nothing in its
+ * sandbox but what was there when its runner was ready. As a look at a kept
+ * boundary does ({@link handOverStale}): one idle, or running commands alone,
+ * each new since the look before, has the gate put up first; those past it
+ * are let end ({@link commandsEnded}), the next ones wait at it, and it is
+ * read and replaced under the same gate ({@link restartIfIdle}), each
+ * waiting command then running through the new one. A session's commands a
+ * second apart would leave a look with the gate down little moment between
+ * them. A command seen at the look before runs long and is waited for with
+ * the gate down; so are a listener and a process a command left. A workspace
+ * with no boundary running, or no such mount point left, is forgotten: its
+ * next start makes the stand-in. Not while this build's keeper is owed the
+ * machine's endpoint ({@link ownKeeperOwed}): the new one starts on the
+ * keeper that stays.
+ */
+const restartStubbed = async (unasked: UnaskedCalls): Promise<void> => {
+  if (await ownKeeperOwed()) {
+    return;
+  }
+  for (const entry of stubbedNow()) {
+    const { ref } = entry;
+    try {
+      const held = await readHeld(ref.id);
+      // On every keeper: the current one, and a retiring one still running one.
+      const alive = (await procsHeld())
+        .filter((proc) => proc.alive && isBoundaryOf(proc.procId, ref.id))
+        .map((proc) => proc.procId);
+      if (!held || alive.length === 0 || !(await hasLeftDirs(ref.path))) {
+        forgetStubbed(ref.id);
+        continue;
+      }
+      if (
+        alive.some((procId) => procId !== boundaryProcId(ref.id, held.gen)) ||
+        isStarting(ref.id)
+      ) {
+        // An older boundary closes first, once idle ({@link closeIdle}).
+        continue;
+      }
+      const work = await workLeft(ref.id, held);
+      if (work && !drainable(work, entry.commands)) {
+        noteStubbedCommands(entry, work.commands);
+        continue;
+      }
+      // The wait is outside `starting`: an ensure under way meanwhile, a
+      // tool call's from a command past the gate, never waits on it.
+      await behindGate(ref.id, async () => {
+        const past = await commandsEnded(ref.id, held.gen);
+        if (past.length > 0) {
+          noteStubbedCommands(entry, past);
+          return;
+        }
+        // Read again: what waited may have replaced it meanwhile.
+        const now = await readHeld(ref.id);
+        if (isStarting(ref.id) || now?.gen !== held.gen) {
+          return;
+        }
+        const restart = restartIfIdle(ref, now, unasked);
+        // An ensure meanwhile gets the boundary that runs once it settles.
+        const runs = restart.then((settled) =>
+          "fresh" in settled ? settled.fresh : now
+        );
+        // Its failure is said below; an ensure awaiting it gets it too.
+        runs.catch(() => undefined);
+        const tried = await withStart(ref.id, runs, restart);
+        if ("kept" in tried) {
+          noteStubbedCommands(entry, tried.kept.commands);
+        }
+      });
+    } catch (error) {
+      console.warn(
+        `[workspace] ${ref.id}: its boundary could not be started again around its harness config yet: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+};
+
+/**
+ * {@link restartStubbed}'s one workspace, behind the gate: its work read once
+ * ({@link workLeft}: the commands past the gate, never one waiting at it, and
+ * what its sandbox runs), and with none left a new boundary on the current
+ * keeper, the one before stopped on whichever keeper runs it. Answers the new
+ * boundary, or the work that keeps this one.
+ */
+const restartIfIdle = (
+  ref: WorkspaceRef,
+  held: Held,
+  unasked: UnaskedCalls
+): Promise<{ readonly fresh: Boundary } | { readonly kept: Work }> =>
+  behindGate(ref.id, async () => {
+    const work = await workLeft(ref.id, held);
+    if (work) {
+      return { kept: work };
+    }
+    const stuck = await stopGeneration(ref.id, held);
+    if (stuck) {
+      throw new Error(stuck);
+    }
+    const fresh = await start(await sessiond(), ref, unasked);
+    forgetStubbed(ref.id);
+    console.info(
+      `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
+    );
+    await recordDecision(ref.id, {
+      ...decided(held),
+      decision: "replaced",
+      reasons: reasonsOf({ leftDirs: true }),
+      to: decided(fresh),
+    });
+    return { fresh };
+  });
+
+/**
+ * Hands over each staleness.ts `stale` boundary that still runs. Not while this
+ * build's keeper is owed the machine's endpoint ({@link ownKeeperOwed}): each
+ * waits for it, so its one handover lands on the keeper that stays.
+ */
+const handOverStale = async (unasked: UnaskedCalls): Promise<void> => {
+  if (staleNow().length === 0 || (await ownKeeperOwed())) {
+    return;
+  }
+  for (const ref of staleNow()) {
+    if (isStarting(ref.id)) {
+      continue;
+    }
+    try {
+      const held = await readHeld(ref.id);
+      if (!(held && (await running(ref.id, held)))) {
+        forgetStale(ref.id);
+        continue;
+      }
+      // One kept while its work runs ({@link replaceOlder}) is only looked
+      // at, not ensured: an ensure is a use, and its quiet time must run.
+      // A narrowing meanwhile is the narrowing look's (looks.ts `recheckNarrowed`).
+      const kept = keptRunningOf(ref.id);
+      if (!kept) {
+        await unasked.ensureAgain(ref);
+        continue;
+      }
+      const work = await workLeft(ref.id, held);
+      if (work && !drainable(work, kept.commands)) {
+        markKeptRunning(ref.id, { ...kept, commands: work.commands });
+        continue;
+      }
+      // Idle, or its commands alone, each new since the look before: a
+      // session's, a second apart, leave a look little moment between them,
+      // and one starting while the ensure reads it again kept it (nightly
+      // f4b526231, 2026-10-21: kept "while its work runs a command" for 60 s
+      // after its listener stopped). So the gate goes up first: those past
+      // it are let end, the next ones wait at it, and the ensure reads it
+      // and hands it over under the same gate ({@link handOverWhenIdle}).
+      // An ensure under way meanwhile, a tool call's, never waits on it.
+      await behindGate(ref.id, async () => {
+        const past = await commandsEnded(ref.id, held.gen);
+        if (past.length > 0) {
+          markKeptRunning(ref.id, { ...kept, commands: past });
+          return;
+        }
+        await unasked.ensureAgain(ref);
+      });
+    } catch (error) {
+      console.warn(
+        `[workspace] ${ref.id}: its older boundary could not be handed over yet: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+};
+
+const closeRetiring = async (): Promise<void> => {
+  const seen = await snapshot();
+  for (const id of retiringNow()) {
+    if (isStarting(id)) {
+      continue;
+    }
+    try {
+      if (!(await closeIdle(seen, id))) {
+        forgetRetiring(id);
+      }
+    } catch (error) {
+      console.warn(
+        `[workspace] ${id}: its older boundary could not be closed yet: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+};
+
+/**
+ * This agent's arming of its workspaces, as the handover decides it: the
+ * start-up reading, each workspace armed now or when a session there needs it,
+ * and the wait of whatever must not run before its workspace is.
+ */
+
+/**
+ * Writes one workspace's hook and its script again, in this build's form,
+ * and serves its tool door: whether it was armed. A running boundary of an
+ * older form is handed over here, behind the gate, and its handover arms the
+ * new one ({@link handOver}); while this build's keeper is still owed the
+ * machine's endpoint (an update's agent starts before its keeper does), it is
+ * armed as it is and handed over once that keeper is the machine's (decisions.ts `ownKeeperOwed`); one whose handover fails is armed as it is and tried again
+ * at each look ({@link replaceSoon}). An older boundary an
+ * earlier agent left running beside the current one is closed once nothing
+ * runs in it ({@link closeWhenIdle}). Never throws: what fails is said.
+ */
+const rearmOne = async (id: string): Promise<boolean> => {
+  const said = (what: string) => (error: unknown) => {
+    console.warn(
+      `[workspace] ${id}: ${what}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  };
+  if ((await readRetiring(id)).length > 0) {
+    closeWhenIdle(id, unaskedCalls);
+  }
+  const held = await readHeld(id).catch(
+    said("its boundary hook could not be written again")
+  );
+  if (!held) {
+    return false;
+  }
+  // A gate an agent left as it died names no process this one waits for.
+  await rm(gateOf(id), { force: true });
+  const ref = { id, path: held.path };
+  // A person's own folder gets no stand-ins, and nothing is listed in its
+  // exclude; nor does the folder a Linux view overlays (layer.ts), whose
+  // stand-ins are in its upper: only a folder of the workspace's own does.
+  const own = !isPlace(id) && ownFolderSync(id, ref.path);
+  if (own && process.platform === "linux") {
+    // Before anything is armed: each mount point a running sandbox left
+    // where a file stands in holds that file's stand-in now, in place; one
+    // where a dir stands in goes with its boundary, once nothing runs in it
+    // (`stand-ins.ts`).
+    const dirsLeft = await rewriteLeftFiles(ref).catch((error: unknown) => {
+      said("the mount points its sandbox left could not be rewritten")(error);
+      return false;
+    });
+    if (dirsLeft) {
+      restartWhenIdle(ref, unaskedCalls);
+    }
+  }
+  // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
+  // an earlier build wrote there go, and a user's own files show again.
+  if (own) {
+    await listStandIns(ref, false).catch(
+      said("its clone's stand-ins could not be listed in its info/exclude")
+    );
+  }
+  const form = await formOf(ref).catch(
+    said("its boundary's form could not be checked")
+  );
+  // An older form, or a grant this build cannot compare with its policy
+  // (narrowing.ts `compareGrant`): ensured now, so it is handed over once idle.
+  const outdated =
+    form !== undefined &&
+    (held.form !== form ||
+      (await unknownGrant(ref, held).catch(() => undefined)) !== undefined);
+  if (outdated && (await running(id, held))) {
+    // Handed over now, behind the gate: a command waits at the gate and runs
+    // through the new boundary rather than through one of another form.
+    try {
+      await behindGate(id, () => ensureNow(ref, unaskedCalls));
+      return true;
+    } catch (error) {
+      said("its older boundary could not be handed over yet")(error);
+      replaceSoon(ref, unaskedCalls);
+    }
+  }
+  try {
+    await armHook(id, held, unaskedCalls);
+    return true;
+  } catch (error) {
+    said("its boundary hook could not be written again")(error);
+    return false;
+  }
+};
+
+/**
+ * How many workspaces are armed at once at start-up. Our call: each is a few
+ * small writes and a keeper round trip or two, and a machine holds hundreds
+ * of workspace folders; one at a time took 78 s for 421 on obelisk
+ * (2026-10-10), against the update's 180 s window to register.
+ */
+const REARM_CONCURRENCY = 16;
+
+/**
+ * THIS AGENT'S ARMING, AS THE HANDOVER DECIDES IT (core handover.ts): the
+ * start-up reading of its workspaces, and which of them are armed now,
+ * started again, or left until a session there needs them. This module only
+ * reads the workspaces and the keepers, arms, and runs what the reducer says.
+ */
+let armState = initialHandover();
+
+/** Each workspace's arming under way or done, by id ({@link hookArmed}). */
+const rearming = new Map<string, Promise<void>>();
+
+/** Settled each time the start-up reading moves, for a gate waiting on it. */
+let readingMoved = Promise.withResolvers<void>();
+
+/** The workspaces the last whole reading found, with the clone each runs in. */
+let readRefs = new Map<string, WorkspaceRef>();
+
+const armLimit = atMost(REARM_CONCURRENCY);
+
+/**
+ * A SESSION START IN A WORKSPACE IS REFUSED BY NAME WHILE THE AGENT'S
+ * START-UP READING IS NOT WHOLE: until it is, no workspace is known armed or
+ * not, and a keeper that could not be read is never read as holding nothing.
+ * Its reading is tried again every {@link KEEPERS_ASK_AGAIN_MS}, and the
+ * refusal lasts until one is whole.
+ */
+class ArmingBlocked extends Error {
+  readonly workspace: string;
+  constructor(workspace: string, why: string) {
+    super(
+      `Sessions in this workspace can't start yet: this machine's workspaces could not be read at its start (${why}). Nothing was changed; they're read again every ${KEEPERS_ASK_AGAIN_MS / 1000} s, and a start goes once a reading is whole.`
+    );
+    this.name = "ArmingBlocked";
+    this.workspace = workspace;
+  }
+}
+
+/** Where the start-up reading stands now. */
+export const armPhase = (): HandoverState["arming"] => armState.arming;
+
+/** Each workspace's arming as the last whole reading left it. */
+export const armedWorkspaces = (): HandoverState["workspaces"] =>
+  armState.workspaces;
+
+/** Workspace `id`'s arming under way or done, if any ({@link hookArmed}). */
+export const armingOf = (id: string): Promise<void> | undefined =>
+  rearming.get(id);
+
+/** Every workspace's arming under way or done, now. */
+export const allArming = (): Promise<void>[] => [...rearming.values()];
+
+/** Settles the next time the start-up reading moves. */
+export const nextReading = (): Promise<void> => readingMoved.promise;
+
+/** One step of the arming, its commands run in order. */
+export const armStep = (event: HandoverEvent): void => {
+  const before = armState.arming;
+  const stepped = handoverStep(armState, event);
+  armState = stepped.state;
+  for (const command of stepped.commands) {
+    obeyArming(command);
+  }
+  if (armState.arming !== before) {
+    readingMoved.resolve();
+    readingMoved = Promise.withResolvers<void>();
+  }
+};
+
+const obeyArming = (command: HandoverCommand): void => {
+  switch (command.kind) {
+    case "arm-read":
+      readWorkspaces().then(
+        ({ listed, refs }) => {
+          readRefs = refs;
+          armStep({ kind: "arm-listed", workspaces: listed });
+        },
+        (error: unknown) =>
+          armStep({
+            kind: "arm-unread",
+            why: error instanceof Error ? error.message : String(error),
+            now: Date.now(),
+          })
+      );
+      return;
+    case "arm":
+      rearming.set(command.id, armOne(command.id, command.how));
+      return;
+    case "say":
+      console.warn(command.words);
+      return;
+    case "wake": {
+      const { at } = command;
+      setTimeout(
+        () => armStep({ kind: "tick", now: Math.max(Date.now(), at) }),
+        Math.max(0, at - Date.now())
+      );
+      return;
+    }
+    case "announce":
+    case "arm-listed":
+    case "custody-complete":
+    case "fail-owed":
+    case "hold":
+    case "park":
+    case "publish":
+    case "read-keeper":
+    case "register-lapsed":
+    case "register":
+    case "release-owed":
+    case "send-verdict":
+    case "settle":
+    case "start":
+      return;
+  }
+};
+
+/**
+ * Arms one workspace as the handover says: its hook rewritten in this
+ * build's form ({@link rearmOne}), its boundary started again where a
+ * session's process runs with none, or its judge started again after it
+ * exited ({@link armHook}). What fails is said here and by the arming
+ * itself; the workspace is armed as far as it went.
+ */
+const armOne = async (
+  id: string,
+  how: "hook" | "revive" | "judge"
+): Promise<void> => {
+  try {
+    if (how === "hook") {
+      await armLimit(() => rearmOne(id));
+    } else if (how === "judge") {
+      const held = await readHeld(id);
+      if (held) {
+        await armHook(id, held, unaskedCalls);
+      }
+    } else {
+      const ref = readRefs.get(id);
+      if (ref) {
+        await armLimit(() => ensureNow(ref, unaskedCalls));
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[workspace] ${id}: ${
+        how === "revive"
+          ? "a session's process runs in it with no boundary, and its boundary could not be started again"
+          : "its judge could not be started again"
+      }: ${error instanceof Error ? error.message : String(error)}`
+    );
+  } finally {
+    armStep({ kind: "armed", id });
+  }
+};
+
+/**
+ * Waits until workspace `id`'s hook is in this build's form, arming it now
+ * when the start left it for later. Every session there waits on it before
+ * it is adopted or launched (`#adoptClaimed`, {@link ensureBoundary}), and
+ * on its own workspace's alone. While the start-up reading is blocked it
+ * refuses by name ({@link ArmingBlocked}).
+ */
+export const hookArmed = async (id: string): Promise<void> => {
+  for (;;) {
+    const phase = armState.arming;
+    if (phase.kind === "blocked") {
+      throw new ArmingBlocked(id, phase.why);
+    }
+    if (phase.kind !== "listing") {
+      break;
+    }
+    await readingMoved.promise;
+  }
+  armStep({ kind: "arm-need", id });
+  await rearming.get(id);
+};
+
+/**
+ * One reading of the workspaces for the handover's arming: each one's
+ * boundary running on some keeper, whether a session's process or a command
+ * is in it, and, where none runs, whether a session's process runs in its
+ * clone. Throws when the folders or the keepers cannot be read whole: a
+ * keeper that could not be read makes the reading unknown (keepers.ts
+ * `notKnown`), never a keeper read as holding nothing.
+ *
+ * EVERY WORKSPACE A SESSION'S PROCESS RUNS IN HAS ITS JUDGE, WHATEVER BECAME
+ * OF THAT SESSION'S ATTACH: one whose boundary no keeper runs, with a clone a
+ * keeper still holds a Claude Code or pi process in ({@link attachedIn}), has
+ * a hook naming a judge that is gone, which refuses every call the process
+ * makes (b895ec57, 2026-10-16: closed as quiet while its session's attach
+ * had failed, its process still running on the keeper before the update). A
+ * place has no clone record, and is armed as its session starts.
+ */
+const readWorkspaces = async (): Promise<{
+  listed: ListedWorkspace[];
+  refs: Map<string, WorkspaceRef>;
+}> => {
+  const ids = await readdir(workspacesDir()).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return [] as string[];
+      }
+      throw error;
+    }
+  );
+  const live = (await procsHeld()).filter((proc) => proc.alive);
+  const commands = await commandsNow();
+  const listed: ListedWorkspace[] = [];
+  const refs = new Map<string, WorkspaceRef>();
+  for (const id of ids) {
+    if (live.some((proc) => isBoundaryOf(proc.procId, id))) {
+      const held = await readHeld(id).catch(() => undefined);
+      if (held) {
+        // Its folder watched whether or not it is armed now: a folder
+        // deleted under an idle boundary closes it too (macOS).
+        watchCloneOf(id, held);
+      }
+      listed.push({
+        id,
+        boundary: true,
+        inUse: held !== undefined && inUse(id, held.path, live, commands),
+        cli: false,
+      });
+      continue;
+    }
+    const created = isPlace(id)
+      ? undefined
+      : await readRecord(
+          join(stateDir(id), "create.json"),
+          z.object({ path: z.string().optional() })
+        ).catch(() => undefined);
+    const cli =
+      created?.path !== undefined &&
+      attachedIn(id, created.path, live, commands);
+    if (cli && created?.path) {
+      refs.set(id, { id, path: created.path });
+    }
+    listed.push({ id, boundary: false, inUse: false, cli });
+  }
+  return { listed, refs };
+};
+
+/**
+ * The workspace's boundary, running: the one already held, or a new one
+ * (after a reboot or a sessiond restart), once the workspace's hook is in
+ * this build's form ({@link hookArmed}): every spawn, restore, wake and
+ * command in a workspace comes through here. Throws — with the reason — when
+ * this machine cannot hold one.
+ */
+export const ensureBoundary = async (ref: WorkspaceRef): Promise<Boundary> => {
+  await hookArmed(ref.id);
+  return ensureNow(ref, unaskedCalls);
+};
+
+/** What everything below this file needs to reach back up it ({@link UnaskedCalls}): a value, not a late hand-over, so nothing can ask before it is here. */
+export const unaskedCalls: UnaskedCalls = {
+  ensureAgain: ensureBoundary,
+  judgeExited: (id, held) => {
+    armStep({ kind: "judge-exit", id, held });
+    return rearming.get(id);
+  },
+  lookAtOlder: () => lookAtStale(unaskedCalls),
+};
