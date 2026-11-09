@@ -90,6 +90,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconAlert,
     IconArchive,
@@ -1563,7 +1564,7 @@
       : null;
   });
   /** A phone's screen (DESIGN.md's phone line). */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The rail is the well's foot sheet on a phone; elsewhere a card hung from the head's glass, at every pane width. */
   const railSheet = $derived(sheet || phone.current);
   /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
