@@ -7,7 +7,7 @@
  * hub trusts its network again at once.
  *
  * While the hub runs, only the hub writes its database (hub db/wal.ts): the
- * command leaves a request beside the database (core paths.ts
+ * command leaves a request beside the database (core paths/hub.ts
  * `pairingOffRequestPath`, a 0600 file of the user's own) and waits for the
  * hub's answer (hub pairing-requests.ts). With no hub running, it takes the
  * hub's lock (core db-lock.ts), as the update helper's restore does, and

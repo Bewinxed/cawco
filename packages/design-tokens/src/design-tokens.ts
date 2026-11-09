@@ -1,8 +1,7 @@
 /**
  * The one tokens.css generator: a W3C Design Tokens (DTCG 2025.10) token
- * system in, a stylesheet of custom properties out. CawCo builds its own
- * dashboard with it (`apps/dashboard/scripts/build-tokens.ts`, `bun run
- * tokens`) and every project's `design/tokens.css` (design-system.ts).
+ * system in, a stylesheet of custom properties out. It builds every
+ * project's `design/tokens.css` (design-system.ts).
  *
  * The system is a resolver document and the token files it names
  * (dtcg-resolver.ts); every value is a DTCG value (dtcg-values.ts). Style
@@ -65,7 +64,7 @@ export interface TokensCssOptions {
   include?: (token: TransformedToken) => boolean;
   /** The cascade layer the custom properties sit in. */
   layer: string;
-  /** Where a component imports the typed module from, as its import line writes it (`#lib/tokens/tokens.js`): said under its header. */
+  /** Where a component imports the typed module from, as its import line writes it: said under its header. */
   typesFrom: string;
   /** What the import line's path depends on, when it is not the same from every file. */
   typesFromNote?: string;

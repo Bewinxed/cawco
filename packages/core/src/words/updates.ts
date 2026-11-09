@@ -3,8 +3,7 @@
  * panel say: a build that is ready, an install refused, a check for new
  * builds refused, and a machine's update waiting on its hub, which is no
  * failure. The dashboard renders them from here, the agent answers an
- * Install now with them, and the probe kit finds them by these same words
- * (scripts/probe-words-check.ts refuses a copy).
+ * Install now with them.
  *
  * `bun run words` writes these into the app as `Words.Updates`
  * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
