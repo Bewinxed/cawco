@@ -3,10 +3,9 @@
 Fast, incremental parser and BM25 search index for agent-session transcripts.
 
 - **Claude Code** — session JSONL under `~/.claude/projects/**` (including `subagents/agent-*.jsonl`)
-- **OpenCode** — `~/.local/share/opencode/opencode.db` (`message`/`part` tables)
 - **pi** — session JSONL under `~/.pi/agent/sessions/**`
 
-All three harnesses normalize into one document shape and feed one search index.
+Both harnesses normalize into one document shape and feed one search index. OpenCode's database is read by the agent (`packages/agent/src/harnesses/opencode-docs.ts`) into the same shape, through `index.indexDocs`.
 
 ## Measured performance
 
@@ -62,21 +61,12 @@ const hits = index.search("websocket reconnect", { limit: 10 });
 // hits: [{ sessionId, role, timestamp, score, snippet, ... }]
 ```
 
-```ts
-import { readOpenCodeDocs, defaultOpenCodePath } from "@cawco/jsonl-parser/opencode"; // Bun only
-
-const { docs, watermark } = readOpenCodeDocs(defaultOpenCodePath());
-index.indexDocs(docs);
-// next time: readOpenCodeDocs(path, { since: watermark })
-```
-
 ## Layout
 
 | Export | Runtime | Contents |
 |---|---|---|
 | `@cawco/jsonl-parser` | neutral | typed records, byte scanner, lazy parse, text extraction, checkpoints, worker fan-out |
 | `@cawco/jsonl-parser/fts5` | Bun | SQLite FTS5 BM25 index (`porter unicode61`, external-content table, trigger-synced) |
-| `@cawco/jsonl-parser/opencode` | Bun | OpenCode sqlite adapter with `time_updated` watermark |
 
 ## Design notes
 
