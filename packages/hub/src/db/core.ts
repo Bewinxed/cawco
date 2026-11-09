@@ -1,9 +1,10 @@
+import { singleton } from "./singleton";
 /**
  * What the domain stores share: the connection and the closures more than
  * one of them calls. `db/index.ts` builds it once and hands it to each.
  */
 
-import { and, eq, inArray, not, or, sql } from "drizzle-orm";
+import { and, inArray, not, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { type AreasDb, areasDb } from "./areas";
 import { type ArtifactEvents, artifactEvents, projectPage } from "./artifacts";
@@ -19,15 +20,13 @@ import {
   limitHolds,
   limitStops,
   ruleState,
+  SUPERVISOR_CONFIG_ID,
   sentMessages,
   supervisorConfig,
 } from "./schema";
 import { type Revocations, revocations } from "./session-identity";
 import { type TaskLinksDb, taskLinksDb } from "./task-links";
 import type { Tx } from "./tx";
-
-/** The one row the fleet's choices ever take — same precedent as `MEMORY_ID`. */
-export const SUPERVISOR_CONFIG_ID = "supervisor";
 
 export interface DbCore extends ArtifactEvents, Revocations {
   /** The areas and which project sits in which (db/areas.ts). */
@@ -65,11 +64,7 @@ export const dbCore = (
 
   /** The fleet's choices row, which drizzle 0032 writes on every hub. */
   const supervisorChoices = (): typeof supervisorConfig.$inferSelect => {
-    const row = db
-      .select()
-      .from(supervisorConfig)
-      .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-      .get();
+    const row = singleton(db, supervisorConfig, SUPERVISOR_CONFIG_ID);
     if (!row) {
       throw new Error(
         `supervisor_config has no '${SUPERVISOR_CONFIG_ID}' row: drizzle 0032 writes it, so this database did not migrate`
