@@ -15,9 +15,6 @@
   import LawsBroken from "#lib/cawco/LawsBroken.svelte";
   import { provideMarkdownFleet } from "#lib/cawco/markdown-fleet.js";
   import { liveMarkdown } from "#lib/cawco/markdown-live.js";
-  import { restWhenHidden } from "#lib/cawco/motion/rest.js";
-  import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
-  import { departAll } from "#lib/cawco/motion/share.svelte.js";
   import PairingScreen from "#lib/cawco/PairingScreen.svelte";
   import { startPresence } from "#lib/cawco/presence.js";
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
@@ -29,6 +26,9 @@
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { restWhenHidden } from "#lib/platform/motion/rest.js";
+  import { leaving, plan, route } from "#lib/platform/motion/route.svelte.js";
+  import { departAll } from "#lib/platform/motion/share.svelte.js";
   import { enableLongPressMenus } from "#lib/utils/longpress.js";
   import { onNavigate } from "$app/navigation";
   import type { LayoutServerData } from "./$types";

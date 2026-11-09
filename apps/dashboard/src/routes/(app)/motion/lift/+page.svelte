@@ -26,8 +26,8 @@
     lifting,
     pinned,
     pinnedAtBox,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { pageOut, route } from "#lib/cawco/motion/route.svelte.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { pageOut, route } from "#lib/platform/motion/route.svelte.js";
 
   const fade = (): TransitionConfig => ({
     duration: dur("--dur-control"),

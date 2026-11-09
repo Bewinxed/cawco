@@ -7,9 +7,6 @@
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
@@ -24,6 +21,9 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconChevronRight, IconDownload, IconMonitor } from "#lib/icons.js";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
 
   /**
    * The builds the fleet runs and when machines install them. The channel is

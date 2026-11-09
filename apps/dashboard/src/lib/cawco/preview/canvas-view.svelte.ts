@@ -7,7 +7,7 @@
  * design graph's view card. One per pane, read by both of its controls:
  * the head's own button and More's submenu.
  */
-import { store, stored } from "../storage";
+import { store, stored } from "#lib/platform/storage.js";
 
 /**
  * Built where a derived builds it (PreviewPane `canvasView`), once per

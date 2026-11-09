@@ -18,13 +18,13 @@
   import type { Install } from "@cawco/core/install";
   import { connectWords } from "@cawco/core/words/connect";
   import { causeLine } from "@cawco/core/words/install";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose, IconStopLinear } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import { failureWords } from "../hub-read";
   import { connect, parkedAt, phone } from "./installs.svelte";
   import { currentRow } from "./steps";
   import { stopQuestion, titleOf } from "./words";

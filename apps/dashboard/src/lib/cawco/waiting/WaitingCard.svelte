@@ -19,7 +19,7 @@
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { IconClose } from "#lib/icons.js";
-  import { popOut } from "../motion/pop.svelte";
+  import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import RowFault from "../RowFault.svelte";
   import {
     holdComposerLayer,

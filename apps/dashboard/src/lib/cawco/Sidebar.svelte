@@ -43,6 +43,18 @@
     IconSettings,
     IconSort,
   } from "#lib/icons.js";
+  import {
+    type BranchOptions,
+    branch,
+    nestFrom,
+  } from "#lib/platform/motion/branch.svelte.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
+  import {
+    heldOrder,
+    holdWhileInside,
+  } from "#lib/platform/motion/held-order.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
+  import { stored } from "#lib/platform/storage.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
   import {
@@ -64,10 +76,6 @@
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";
-  import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
-  import { echoBeat } from "./motion/echo.svelte";
-  import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
-  import { reflow } from "./motion/rows.svelte";
   import OlderRows, { olderOut } from "./OlderRows.svelte";
   import {
     DELEGATE_WINDOW,
@@ -88,7 +96,6 @@
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { sameRow } from "./same-row";
   import { newSession } from "./spawn/new-session.svelte";
-  import { stored } from "./storage";
   import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { projectTab, tabOfPath } from "./workspace/tabs";

@@ -6,7 +6,7 @@
    */
   import { regionFaultWords } from "@cawco/core/words/region-fault";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
-  import { unfold } from "../motion/fold.svelte";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     id,
