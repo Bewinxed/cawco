@@ -408,7 +408,7 @@ const keeperChildren = async (endpoint: string): Promise<number[]> => {
 /**
  * Before a session keeper's unit is stopped or restarted, unless `force`: it
  * goes only while it holds nothing but the keeper and the process trees of
- * the children the keeper lists (keeper-job.ts `foreignIn`). Anything
+ * the children the keeper lists (agent service-manager/keeper-job.ts `foreignIn`). Anything
  * else there was started by someone else, and the stop is refused, naming
  * each process. Every other unit stops as it is.
  */
