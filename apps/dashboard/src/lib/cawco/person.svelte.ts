@@ -1,33 +1,7 @@
-/**
- * The person's presence as this dashboard holds it (hub notifications.ts):
- * here, on which chat, or away, the machines that can count toward it, and
- * what this browser lets the presence model use. The presence menu (rail
- * footer, PresenceMenu.svelte) and Needs you's onboarding row read it.
- *
- * - Appear away, the away clock and each machine's opt-in are the hub's: a
- *   press asks the hub, and the view changes when it answers (its `person`
- *   frame, or the answer itself), so a reload or another screen shows the
- *   same.
- * - A desk alert (`desk_alert`) names one tab, the one the person uses: that
- *   tab shows it as a desktop notification, the item's real words, a click
- *   opening the place it names (a decision card) or the session it is
- *   about, and answers the hub it did.
- * - Nothing reports before the person's yes ({@link deskAsks}): on a
- *   computer whose CawCo agent can read its desktop (the hub ties the
- *   browser to its machine by the address it asks from, `thisMachine`), the
- *   yes turns that agent's report on; else, where the browser has Idle
- *   Detection, the yes asks it; else the step says this browser can't.
- *   Notifications are asked while still to answer. A no is kept. On a
- *   phone the onboarding row asks for notifications alone ({@link rowAsks});
- *   the presence menu still offers this browser's report there.
- */
-
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type {
   DeskAck,
   DeskAckHow,
   DeskAlertFrame,
-  PersonRead,
   PersonView,
 } from "@cawco/core/notifications";
 import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
@@ -36,9 +10,9 @@ import { MediaQuery } from "svelte/reactivity";
 import { hub } from "#lib/platform/hub.js";
 import {
   failureWords,
+  type HubAnswer,
   hubData,
-  hubFetch,
-  hubJson,
+  hubReached,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { store, stored } from "#lib/platform/storage.js";
@@ -130,12 +104,12 @@ export async function readPerson(): Promise<void> {
   // already reads it.
   const [permissions, read] = await Promise.all([
     deskPermissions(),
-    hubJson<PersonRead>(hubRequest("GET /api/person"), {
-      failure: refusedOrUnreached,
-    }).catch((error: unknown) => {
-      console.error("[cawco] /api/person failed:", error);
-      return null;
-    }),
+    hubData(hub.api.person.get(), refusedOrUnreached).catch(
+      (error: unknown) => {
+        console.error("[cawco] /api/person failed:", error);
+        return null;
+      }
+    ),
   ]);
   if (read) {
     const { thisMachine, ...view } = read;
@@ -146,13 +120,14 @@ export async function readPerson(): Promise<void> {
 }
 
 /** Runs one press against the hub: its answer is the view, its refusal said in words. */
-async function press(key: string, request: HubRequest): Promise<void> {
+async function press(
+  key: string,
+  call: Promise<HubAnswer<PersonView>>
+): Promise<void> {
   state.pending = key;
   state.refusal = null;
   try {
-    takePerson(
-      await hubJson<PersonView>(request, { failure: refusedOrUnreached })
-    );
+    takePerson(await hubData(call, refusedOrUnreached));
   } catch (error) {
     state.refusal = {
       blocked: false,
@@ -166,27 +141,18 @@ async function press(key: string, request: HubRequest): Promise<void> {
 
 /** Appear away on or off: agents go quiet and the phone gets pushes while it is on. */
 export const setAppearAway = (on: boolean): Promise<void> =>
-  press("away", hubRequest("POST /api/person/away", { body: { on } }));
+  press("away", hub.api.person.away.post({ on }));
 
 /** The away clock, ms: how long without input on any device before the person is away. */
 export const setAwayAfter = (awayAfterMs: number): Promise<void> =>
-  press(
-    "clock",
-    hubRequest("POST /api/person/away-clock", { body: { awayAfterMs } })
-  );
+  press("clock", hub.api.person["away-clock"].post({ awayAfterMs }));
 
 /** Whether a machine's desktop counts toward whether the person is here. */
 export const setMachineCounts = (
   machineId: string,
   counts: boolean
 ): Promise<void> =>
-  press(
-    machineId,
-    hubRequest("POST /api/person/devices/:machineId", {
-      path: { machineId },
-      body: { counts },
-    })
-  );
+  press(machineId, hub.api.person.devices({ machineId }).post({ counts }));
 
 /** How long the row's tick stands before it leaves. */
 const TICK_MS = 2400;
@@ -418,9 +384,9 @@ export const onPhone = (): boolean => phoneQuery.current;
 /** This tab's answer to a desk alert it was named for: the hub sends the item on when none comes. */
 const answerDesk = (collapseId: string, how: DeskAckHow): void => {
   const ack: DeskAck = { clientId: presenceClientId(), collapseId, how };
-  hubFetch(hubRequest("POST /api/presence/desk-ack", { body: ack }), {
-    keepalive: true,
-  }).catch((error: unknown) => {
+  hubReached(
+    hub.api.presence["desk-ack"].post(ack, { fetch: { keepalive: true } })
+  ).catch((error: unknown) => {
     // Unanswered, the hub sends it to the next place itself.
     console.warn("[cawco] desk alert not answered:", error);
   });

@@ -14,8 +14,8 @@
  * faults.ts), so `artifact_read` says them.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
+import { hub } from "#lib/platform/hub.js";
 
 const WINDOW_MS = 60_000;
 const FIRST_FRAME = /^\s*at\s|@/u;
@@ -150,24 +150,25 @@ export function reportError(
     seen.set(key, now);
     windowCount += 1;
     total += 1;
-    const request = hubRequest("POST /api/dashboard-errors", {
-      body: {
-        message,
-        stack,
-        path: path.slice(0, 1000),
-        sessionId:
-          SESSION_PATH.exec(location.pathname)?.[1]?.slice(0, 256) ?? null,
-        version: sink.version.slice(0, 128),
-        userAgent: navigator.userAgent.slice(0, 512),
-      },
-    });
+    const body = {
+      message,
+      stack,
+      path: path.slice(0, 1000),
+      sessionId:
+        SESSION_PATH.exec(location.pathname)?.[1]?.slice(0, 256) ?? null,
+      version: sink.version.slice(0, 128),
+      userAgent: navigator.userAgent.slice(0, 512),
+    };
     // keepalive also delivers while navigating away.
-    fetch(sink.to === "preview" ? PREVIEW_ERRORS_PATH : request.path, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      keepalive: true,
-    }).catch(() => undefined);
+    (sink.to === "preview"
+      ? fetch(PREVIEW_ERRORS_PATH, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          keepalive: true,
+        })
+      : hub.api["dashboard-errors"].post(body, { fetch: { keepalive: true } })
+    ).catch(() => undefined);
   } catch {
     // A malformed thrown value or unavailable transport must not alter the app.
   }

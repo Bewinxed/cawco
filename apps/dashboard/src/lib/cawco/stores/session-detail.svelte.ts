@@ -8,7 +8,6 @@
 import type { Bounded } from "@cawco/core/bounded";
 import type { HarnessCapabilities } from "@cawco/core/harness";
 import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { ControlPayload } from "@cawco/core/protocol";
 import { CONTROL_SUPPORTED_COMMANDS } from "@cawco/core/session/controls";
 import type {
@@ -20,7 +19,8 @@ import { machineFaultWords } from "@cawco/core/words/machine-names";
 import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
-import { hubFetch, failureWords as messageOf } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubDone, failureWords as messageOf } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { askMachine, didntAnswer } from "../hub/control";
 import { send } from "../hub/socket.svelte";
@@ -69,15 +69,10 @@ export async function persistSettings(
   }
 
   try {
-    const response = await hubFetch(
-      hubRequest("PATCH /api/instances/:id", {
-        path: { id: instanceId },
-        body: patch,
-      })
+    await hubDone(
+      hub.api.instances({ id: instanceId }).patch(patch),
+      ({ response }) => new Error(`${response.status} ${response.statusText}`)
     );
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
   } catch (error) {
     // The session is already answering this way; only the row is behind, and
     // the next init will try again — nothing the reader needs to act on.
