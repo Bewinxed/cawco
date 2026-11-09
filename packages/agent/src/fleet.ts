@@ -3298,7 +3298,7 @@ const configApart = (
  * what its sessions read (fleet-place-set.ts), and the sidecar the records
  * of what was written, for a later converge to take back; no file every
  * session reads moves. `mcpKeys`: the folder's MCP copies its file took
- * (session.ts `placeClone`), recorded as handed. Answers what each copy came to, under
+ * (fleet-converger.ts `placeClone`), recorded as handed. Answers what each copy came to, under
  * `<key>@<place id>`.
  */
 export const placeFolder = (
@@ -3685,7 +3685,7 @@ export const syncFleetConfig = (
 
 /**
  * Every `claude` on this machine with its version, read now: a probe, run on
- * the machine's health tick (session.ts `#healthTick`), never by a converge.
+ * the machine's health tick (fleet-converger.ts `#healthTick`), never by a converge.
  */
 export const probeToolchain = (): Promise<FleetToolchain> =>
   machineToolchain(true);
