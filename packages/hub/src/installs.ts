@@ -66,6 +66,7 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { until } from "@cawco/core/until";
 import { InstallsRecordSchema } from "./db/stored-shapes";
 import type { InstallsRecord } from "./db/stored-types";
 import {
@@ -817,10 +818,10 @@ export const createInstalls = (deps: InstallsDeps) => {
   ): Promise<void> => {
     const { install } = entry;
     if (entry.exitCode === 0 && install.machineId) {
-      const deadline = Date.now() + INSTALL_GRACE_MS;
-      while (!machineOf(install.machineId)?.online && Date.now() < deadline) {
-        await Bun.sleep(500);
-      }
+      await until(() => machineOf(install.machineId)?.online, {
+        deadline: Date.now() + INSTALL_GRACE_MS,
+        every: 500,
+      });
       if (machineOf(install.machineId)?.online) {
         await Promise.race([ready(entry, install.machineId), run.halt]);
         return;
