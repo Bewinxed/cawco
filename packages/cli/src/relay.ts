@@ -31,7 +31,7 @@ import {
 import { RelayViewSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
-import { ownerClient } from "./owner";
+import { ownerCall } from "./owner";
 import { callTool, toolDoor } from "./tools";
 
 class RelayError extends Error {}
@@ -73,16 +73,15 @@ const call = async <A extends HubAnswer>(
     throw new RelayError("no hub found");
   }
   return unwrap(
-    await request(
-      ownerClient(
-        hub,
-        "cawco relay",
-        // Opening a relay waits on Tailscale and on GitHub's ping.
-        180_000,
-        RelayError,
-        (seconds) =>
-          `${hub} did not answer ${what} within ${seconds}s, so what it did is not known`
-      )
+    await ownerCall(
+      hub,
+      "cawco relay",
+      // Opening a relay waits on Tailscale and on GitHub's ping.
+      180_000,
+      RelayError,
+      (seconds) =>
+        `${hub} did not answer ${what} within ${seconds}s, so what it did is not known`,
+      request
     ),
     (refusal) =>
       new RelayError(`${refusal.status}: ${refusalText(refusal).slice(0, 500)}`)
