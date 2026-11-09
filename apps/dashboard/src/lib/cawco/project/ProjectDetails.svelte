@@ -1,4 +1,58 @@
 <script lang="ts">
+  import {
+    accountNameAmong,
+    PROJECT_AT_LIMIT,
+    type ProjectAtLimit,
+  } from "@cawco/core/accounts";
+  import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
+  import { hubRequest } from "@cawco/core/hub-request";
+  import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+  import { machineLabel } from "@cawco/core/machine-names";
+  import type { DeclaredStep, ProjectGate } from "@cawco/core/project-gate";
+  import {
+    type GithubProjectChoice,
+    type IssueTracker,
+    statusOptionFor,
+    TRACKER_NAMES,
+    type Tracker,
+    type TrackerBindingView,
+    type TrackerTarget,
+    type TrackerView,
+  } from "@cawco/core/trackers";
+  import { lfsWords } from "@cawco/core/words/lfs";
+  import { projectWords } from "@cawco/core/words/project";
+  import { projectAccountWords } from "@cawco/core/words/project-account";
+  import { onMount, type Snippet } from "svelte";
+  import {
+    addProjectPlace,
+    cawco,
+    editProject,
+    type Machine,
+    type ProjectRow,
+    readConnections,
+    removeProjectPlace,
+  } from "#lib/cawco/client.svelte.js";
+  import DecidesRow from "#lib/cawco/decides/DecidesRow.svelte";
+  import OsMark from "#lib/cawco/OsMark.svelte";
+  import {
+    folderFileHref,
+    githubProjects,
+    readGate,
+    readStages,
+    readTracker,
+    setTracker,
+    syncTracker,
+    trackerTargets,
+  } from "#lib/cawco/project-tasks.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { IconChevronDown, IconPlus } from "#lib/icons.js";
   /**
    * The project's details, changed where they are shown (DESIGN.md, The Stay
    * In Context Rule; project-details-wireframe.md): a tray that unfolds under
@@ -50,61 +104,10 @@
    * `projects.changed` brings to every open dashboard.
    */
   import {
-    accountNameAmong,
-    PROJECT_AT_LIMIT,
-    type ProjectAtLimit,
-  } from "@cawco/core/accounts";
-  import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
-  import { hubRequest } from "@cawco/core/hub-request";
-  import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
-  import { machineLabel } from "@cawco/core/machine-names";
-  import type { DeclaredStep, ProjectGate } from "@cawco/core/project-gate";
-  import {
-    type GithubProjectChoice,
-    type IssueTracker,
-    statusOptionFor,
-    TRACKER_NAMES,
-    type Tracker,
-    type TrackerBindingView,
-    type TrackerTarget,
-    type TrackerView,
-  } from "@cawco/core/trackers";
-  import { lfsWords } from "@cawco/core/words/lfs";
-  import { projectWords } from "@cawco/core/words/project";
-  import { projectAccountWords } from "@cawco/core/words/project-account";
-  import { onMount, type Snippet } from "svelte";
-  import {
-    addProjectPlace,
-    cawco,
-    editProject,
-    type Machine,
-    type ProjectRow,
-    readConnections,
-    removeProjectPlace,
-  } from "#lib/cawco/client.svelte.js";
-  import DecidesRow from "#lib/cawco/decides/DecidesRow.svelte";
-  import OsMark from "#lib/cawco/OsMark.svelte";
-  import {
-    folderFileHref,
-    githubProjects,
-    readGate,
-    readStages,
-    readTracker,
-    send,
-    setTracker,
-    syncTracker,
-    trackerTargets,
-  } from "#lib/cawco/project-tasks.js";
-  import RowFault from "#lib/cawco/RowFault.svelte";
-  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
-  import { Switch } from "#lib/components/ui/switch/index.js";
-  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
-  import { IconChevronDown, IconPlus } from "#lib/icons.js";
-  import { failureWords } from "#lib/platform/hub-read.js";
+    failureWords,
+    hubJson,
+    refusedOrUnreached,
+  } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import CawLeadSwitch from "./CawLeadSwitch.svelte";
@@ -453,8 +456,9 @@
     picking = next;
     usable = null;
     try {
-      const { connections } = await send<{ connections: ConnectionView[] }>(
-        hubRequest("GET /api/connections")
+      const { connections } = await hubJson<{ connections: ConnectionView[] }>(
+        hubRequest("GET /api/connections"),
+        { failure: refusedOrUnreached }
       );
       usable = connections.filter(
         (each) =>
