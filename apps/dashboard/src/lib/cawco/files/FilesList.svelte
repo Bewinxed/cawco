@@ -81,6 +81,7 @@
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import RowFault from "../RowFault.svelte";
   import { needsStore } from "../stores/needs.svelte";
+  import { previewsStore } from "../stores/previews.svelte";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
     type ArtifactCard,
@@ -139,7 +140,7 @@
 
   /** The artifact on show in the session's panel: its card wears the selection pill. */
   const chosen = $derived.by(() => {
-    const preview = cawco.previews[instanceId];
+    const preview = previewsStore.previews[instanceId];
     return preview?.state === "open" ? preview.artifact.id : null;
   });
 
