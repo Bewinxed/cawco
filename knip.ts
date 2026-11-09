@@ -136,6 +136,7 @@ export default {
         "scripts/style-greps.ts",
         // scripts/check.ts:558
         "scripts/tool-answer-check.ts",
+        "scripts/route-families-check.ts",
         // scripts/check.ts:559
         "scripts/icon-imports-check.ts",
         // scripts/check.ts:560
