@@ -3,6 +3,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   machineKeys,
   ownerDevices,
+  PAIRING_ID,
   pairingSettings,
   previewPasses,
 } from "./schema";
@@ -43,7 +44,7 @@ export const hubAuthDb = (db: BunSQLiteDatabase): HubAuthDb => {
   const pairing = db
     .select({ required: pairingSettings.required })
     .from(pairingSettings)
-    .where(eq(pairingSettings.id, "pairing"))
+    .where(eq(pairingSettings.id, PAIRING_ID))
     .prepare();
   return {
     devices: () =>
@@ -91,7 +92,7 @@ export const hubAuthDb = (db: BunSQLiteDatabase): HubAuthDb => {
     setPairingRequired: (required) => {
       db.transaction((tx) => {
         tx.insert(pairingSettings)
-          .values({ id: "pairing", required, changedAt: new Date() })
+          .values({ id: PAIRING_ID, required, changedAt: new Date() })
           .onConflictDoUpdate({
             target: pairingSettings.id,
             set: { required, changedAt: new Date() },

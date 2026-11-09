@@ -27,11 +27,13 @@ import type { DelegateTypesShape } from "../delegate-types";
 import {
   artifacts,
   cardSettlings,
+  DECIDES_ID,
   decidesKinds,
   decidesMembers,
   decidesSettings,
   turnUsage,
 } from "./schema";
+import { singleton } from "./singleton";
 
 export type CardSettlingRow = typeof cardSettlings.$inferSelect;
 type MemberRow = typeof decidesMembers.$inferSelect;
@@ -43,9 +45,6 @@ type SettingsRow = typeof decidesSettings.$inferSelect;
  */
 export const holds = (row: CardSettlingRow): boolean =>
   row.settledAt === null && row.takenBackAt === null;
-
-/** The one {@link decidesSettings} row's key. */
-const DECIDES_ID = "decides";
 
 /** What the person changed of the built-in members. */
 export interface BuiltInChange {
@@ -184,11 +183,7 @@ export const decidesDb = (
   }
 
   const settings = (): SettingsRow | undefined =>
-    db
-      .select()
-      .from(decidesSettings)
-      .where(eq(decidesSettings.id, DECIDES_ID))
-      .get();
+    singleton(db, decidesSettings, DECIDES_ID);
 
   /** Writes `set` into the one settings row, made when missing. */
   const writeSettings = (set: Partial<Omit<SettingsRow, "id">>): void => {
