@@ -13092,7 +13092,7 @@ export const createServer = (
                 // same, its word `unauthenticated` (no account can run on
                 // it; the machine's own word stays): the refusal is the report, and
                 // the dashboard puts it, with its fix, where Claude would
-                // start (dashboard claude-block.svelte.ts).
+                // start.
                 const filed = reported.flatMap((report): HarnessReport[] => {
                   const auth =
                     report.auth ??
