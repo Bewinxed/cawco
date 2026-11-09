@@ -58,6 +58,7 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
+import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { type ProjectRows, ProjectRowsSchema } from "./db/forget";
@@ -69,6 +70,7 @@ import {
   trashProjectFolder,
   untrashProjectFolder,
 } from "./project-folder";
+import { projectRefusalOf, projectRootOf } from "./project-refusal";
 import { StatusRefusal } from "./refusal";
 import { readStages } from "./stages";
 import {
@@ -145,14 +147,8 @@ interface Entry {
 }
 
 /** Whether `id` is a project id the folder rules take. */
-const isProjectId = (id: string): boolean => {
-  try {
-    projectRoot(id);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const isProjectId = (id: string): boolean =>
+  !(projectRoot(id) instanceof ElysiaStatus);
 
 /** Every entry the trash holds, newest first; none when there is no trash. */
 const entries = async (): Promise<Entry[]> => {
@@ -320,10 +316,18 @@ const mergesOf = async (
 ): Promise<Merge[]> => {
   const merges: Merge[] = [];
   for (const project of projects) {
-    if (!(await hasProjectFolder(project.id))) {
+    const has = await hasProjectFolder(project.id);
+    if (has instanceof ElysiaStatus) {
+      throw projectRefusalOf(has);
+    }
+    if (!has) {
       continue;
     }
-    for (const commit of await folderCommitsCarrying(project.id, MERGE_LINE)) {
+    const commits = await folderCommitsCarrying(project.id, MERGE_LINE);
+    if (commits instanceof ElysiaStatus) {
+      throw projectRefusalOf(commits);
+    }
+    for (const commit of commits) {
       const slugs = commit.paths.flatMap((path) => fileTaskSlug(path) ?? []);
       if (slugs.length > 0) {
         merges.push({ id: project.id, name: project.name, slugs });
@@ -636,7 +640,11 @@ export const trashFoldedFolder = async (
     } satisfies EntryRecord),
     RECORD_WRITE
   );
-  return await trashProjectFolder(id, entry);
+  const folder = await trashProjectFolder(id, entry);
+  if (folder instanceof ElysiaStatus) {
+    throw projectRefusalOf(folder);
+  }
+  return folder;
 };
 
 /** A forget as it went. */
@@ -701,19 +709,28 @@ export const projectTrash = (
   };
   /** A folder standing where the entry's goes back to, refused in words. */
   const refuseFolder = async (entry: Entry, name: string): Promise<void> => {
-    const root = projectRoot(entry.id);
+    const root = projectRootOf(entry.id);
     if (entry.folder && (await stat(root).catch(() => undefined))) {
       throw new RestoreRefusal(409, projectTrashWords.folderTaken(name, root));
     }
   };
   /** Moves the entry's folder back, runs `put`, and moves it out again when `put` throws. */
   const withFolder = async <T>(entry: Entry, put: () => T): Promise<T> => {
-    await untrashProjectFolder(entry.id, entry.folder ? entry.entry : null);
+    const back = await untrashProjectFolder(
+      entry.id,
+      entry.folder ? entry.entry : null
+    );
+    if (back instanceof ElysiaStatus) {
+      throw projectRefusalOf(back);
+    }
     try {
       return put();
     } catch (error) {
       if (entry.folder) {
-        await trashProjectFolder(entry.id, entry.entry);
+        const out = await trashProjectFolder(entry.id, entry.entry);
+        if (out instanceof ElysiaStatus) {
+          throw projectRefusalOf(out);
+        }
       }
       throw error;
     }
@@ -771,7 +788,7 @@ export const projectTrash = (
       name,
       // Its one place: its folder on the hub, which a new row makes.
       brought: {
-        ...folderBrings(await taskFiles(projectRoot(id)), null),
+        ...folderBrings(await taskFiles(projectRootOf(id)), null),
         places: 1,
       },
       left: {},
@@ -934,13 +951,17 @@ export const projectTrash = (
       }
       // The project is gone either way; a folder that could not be moved
       // stays where it was, and the hub says so in its log.
-      const folder = await trashProjectFolder(id, entry).catch(
-        (error: unknown): undefined => {
-          console.warn(
-            `[hub] project ${id}'s folder was not moved to the trash: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
+      const notMoved = (why: string): undefined => {
+        console.warn(
+          `[hub] project ${id}'s folder was not moved to the trash: ${why}`
+        );
+      };
+      const moved = await trashProjectFolder(id, entry).catch(
+        (error: unknown): undefined =>
+          notMoved(error instanceof Error ? error.message : String(error))
       );
+      const folder =
+        moved instanceof ElysiaStatus ? notMoved(moved.response.detail) : moved;
       return {
         browsers: browsers.length,
         entry,

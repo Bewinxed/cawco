@@ -111,13 +111,13 @@ import { typeFileProblem } from "./project-delegate-types";
 import {
   FOLDER_CONTENT_LIMIT,
   FOLDER_ENCODINGS,
-  FolderRefusal,
   folderContent,
   folderPath,
   listFolder,
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
+import { ProjectRefusal } from "./project-refusal";
 import {
   type Refused,
   refusal,
@@ -441,12 +441,12 @@ const STAGES_FILE = "stages.md";
 /** A project's delegate types: a write there is a proposal the person approves (memory.ts `proposeType`). */
 const DELEGATES_DIR = "delegates/";
 
-/** A folder call, its refusal as the sentence Caw reads. */
-const folderCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
+/** A call into the tasks, which still throw their refusals, a refusal as the sentence Caw reads. */
+const tasksCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
   try {
     return await call();
   } catch (error) {
-    if (error instanceof FolderRefusal) {
+    if (error instanceof ProjectRefusal) {
       throw new Error(error.message, { cause: error });
     }
     throw error;
@@ -1207,7 +1207,7 @@ export const createCaw = ({
 
   /** The views' refusal of project `projectId`; none when it keeps no view `name`, which is refused (a change keeps the view's place, so it is drafted without a page). */
   const keptAlready = async (projectId: string, name: string) => {
-    const kept = await folderCall(() => views.kept(projectId));
+    const kept = await views.kept(projectId);
     if (kept instanceof ElysiaStatus) {
       return kept;
     }
@@ -1244,8 +1244,12 @@ export const createCaw = ({
     if (unplaced) {
       return unplaced;
     }
-    const drafted = await folderCall(() =>
-      views.draft(projectId, input.name, input.source, { name: by }, session)
+    const drafted = await views.draft(
+      projectId,
+      input.name,
+      input.source,
+      { name: by },
+      session
     );
     if (drafted instanceof ElysiaStatus) {
       return drafted;
@@ -1278,18 +1282,6 @@ export const createCaw = ({
     };
   };
 
-  /** A folder's refusal (a view the project does not keep) as Caw's, with its sentence. */
-  const refusedBy = (error: unknown): never => {
-    if (error instanceof FolderRefusal) {
-      const code = error.status;
-      return refuse(
-        code === 400 || code === 404 || code === 409 ? code : 400,
-        error.message
-      );
-    }
-    throw error;
-  };
-
   const bodyOf = (body: string): string =>
     body.trim() || refuse(400, "A message needs words.");
 
@@ -1304,7 +1296,7 @@ export const createCaw = ({
     change: readonly SetupPart[]
   ): Promise<SetupFacts> => {
     const project = projectOf(projectId);
-    const stages = await folderCall(() => stagesFileOf(projectId));
+    const stages = await tasksCall(() => stagesFileOf(projectId));
     const tasks: Record<string, string[]> = {};
     for (const indexed of db.taskIndex(projectId)) {
       tasks[indexed.stage] = [
@@ -1643,9 +1635,14 @@ export const createCaw = ({
       raw: string
     ): Promise<{ instanceId: string }> {
       const words = bodyOf(raw);
-      const kept = await views.view(projectId, name).catch(refusedBy);
+      const kept = await views.view(projectId, name);
       if (kept instanceof ElysiaStatus) {
-        return refuse(kept.status, kept.response.detail);
+        // The views' refusal (a view the project does not keep) as Caw's, with its sentence.
+        const code = kept.status;
+        return refuse(
+          code === 400 || code === 404 || code === 409 ? code : 400,
+          kept.response.detail
+        );
       }
       const told = await tellYours(projectId, {
         by: "you",
@@ -1821,6 +1818,21 @@ export const createCaw = ({
         }
         return actor;
       };
+      /** `body` committed at `rel` in the project's folder as the session calling (`folder_write`). */
+      const committed = async (
+        projectId: string,
+        rel: string,
+        body: string | Uint8Array
+      ) => {
+        const written = await writeFolderFile(projectId, rel, body, {
+          author: { name: boardTitle(me()) },
+        });
+        if (written instanceof ElysiaStatus) {
+          return written;
+        }
+        folderChanged(projectId);
+        return { ok: true, path: rel, sha: written.sha };
+      };
       return [
         tool(
           "folder_read",
@@ -1828,18 +1840,12 @@ export const createCaw = ({
           { path: z.string().optional() },
           async ({ path }) => {
             const projectId = ours();
-            return await folderCall(() =>
-              readFolderFile(projectId, path ?? "").catch((error: unknown) => {
-                // No path, or a folder: its listing.
-                if (
-                  error instanceof FolderRefusal &&
-                  (error.status === 400 || error.status === 409)
-                ) {
-                  return listFolder(projectId, path ?? "");
-                }
-                throw error;
-              })
-            );
+            const file = await readFolderFile(projectId, path ?? "");
+            // No path, or a folder: its listing.
+            return file instanceof ElysiaStatus &&
+              (file.status === 400 || file.status === 409)
+              ? await listFolder(projectId, path ?? "")
+              : file;
           },
           folderReadWords
         ),
@@ -1853,7 +1859,10 @@ export const createCaw = ({
           },
           async ({ path, content, encoding }) => {
             const projectId = ours();
-            const rel = await folderCall(() => folderPath(path));
+            const rel = folderPath(path);
+            if (rel instanceof ElysiaStatus) {
+              return rel;
+            }
             // The setup page sent is the person's approval of AGENTS.md and
             // the delegate types its writer writes from it.
             const approved = setupsSent.get(projectId) === me().id;
@@ -1861,9 +1870,10 @@ export const createCaw = ({
             if (theirs) {
               throw new Error(`${rel} was not written: ${theirs}`);
             }
-            const body = await folderCall(() =>
-              folderContent(content, encoding)
-            );
+            const body = folderContent(content, encoding);
+            if (body instanceof ElysiaStatus) {
+              return body;
+            }
             if (rel.startsWith(DELEGATES_DIR)) {
               const type = typeText(rel, body, approved);
               if (!approved) {
@@ -1873,13 +1883,7 @@ export const createCaw = ({
             if (rel === STAGES_FILE) {
               stagesRead(body);
             }
-            const written = await folderCall(() =>
-              writeFolderFile(projectId, rel, body, {
-                author: { name: boardTitle(me()) },
-              })
-            );
-            folderChanged(projectId);
-            return { ok: true, path: rel, sha: written.sha };
+            return await committed(projectId, rel, body);
           },
           folderWrittenWords
         ),
@@ -1919,7 +1923,7 @@ export const createCaw = ({
           },
           async ({ tool: name, args }) => {
             const projectId = ours();
-            return await folderCall(() =>
+            return await tasksCall(() =>
               views.query(projectId, name, args ?? {})
             );
           },
