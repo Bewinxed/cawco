@@ -3,8 +3,7 @@
  * spelled here once, and every component that says it, and every feature's
  * words that carry it under their own name (configureWords.tryAgain,
  * mcpWords.save, …, which the app reads through Words.generated.swift),
- * takes it from here. The probe kit finds them by these same words
- * (scripts/probe-words-check.ts refuses a copy).
+ * takes it from here.
  */
 export const commonWords = {
   /** Asks again for what failed to be read or done. */

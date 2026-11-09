@@ -1283,7 +1283,7 @@ export class OpencodeSession implements HarnessSession {
         // OpenCode's own move to the background (`POST
         // /api/session/:id/background`) tells the model "User requested that
         // active blocking work be moved to the background" (OpenCode 2.0.29,
-        // and its dev branch's packages/core/src/session.ts `background`), so
+        // and its dev branch's anomalyco/opencode/packages/core/src/session.ts `background`), so
         // CawCo never asks it.
         break;
       case "session.inbox.delivered": {
