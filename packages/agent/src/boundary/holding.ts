@@ -10,7 +10,14 @@ import type { HeldProc } from "../keepers";
 import { inView, overlaySync, ownFolderSync } from "../layer";
 import { sessionOfProc } from "../proc-id";
 import { executors } from "./processes";
-import { closing, starting, stateDir } from "./state";
+import {
+  closeEnded,
+  closeUnderWay,
+  isStarting,
+  markClosing,
+  startUnderWay,
+  stateDir,
+} from "./state";
 
 /**
  * How long a workspace's boundary runs on with nothing holding it
@@ -45,19 +52,17 @@ export const closedWhile = async <T>(
   id: string,
   close: () => Promise<T>
 ): Promise<T> => {
-  const before = [starting.get(id), closing.get(id)];
+  const before = [startUnderWay(id), closeUnderWay(id)];
   const work = Promise.allSettled(before).then(close);
   const held = work.then(
     () => undefined,
     () => undefined
   );
-  closing.set(id, held);
+  markClosing(id, held);
   try {
     return await work;
   } finally {
-    if (closing.get(id) === held) {
-      closing.delete(id);
-    }
+    closeEnded(id, held);
   }
 };
 
@@ -171,7 +176,7 @@ export const liveWhy = (
   path: string,
   facts: LiveFacts
 ): string | undefined => {
-  if (starting.has(id)) {
+  if (isStarting(id)) {
     return "its boundary is starting";
   }
   if (
