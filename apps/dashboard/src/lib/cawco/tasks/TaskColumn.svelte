@@ -1,4 +1,14 @@
 <script lang="ts">
+  import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
+  import { setupPageWords } from "@cawco/core/words/onboarding";
+  import { type Snippet, tick } from "svelte";
+  import type { Attachment } from "svelte/attachments";
+  import { MediaQuery } from "svelte/reactivity";
+  import type { TaskSummary } from "#lib/cawco/project-tasks.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   /**
    * One stage's column: its name and count, a quiet word for its kind under
    * them, and its cards in order. The board draws one per stage and takes
@@ -13,16 +23,7 @@
    * setup draft it was (`data-share="stage:<name>"`, SetupDraft) when the
    * draft is set up: one object, never two (motion/share).
    */
-  import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
-  import { setupPageWords } from "@cawco/core/words/onboarding";
-  import { type Snippet, tick } from "svelte";
-  import type { Attachment } from "svelte/attachments";
-  import { MediaQuery } from "svelte/reactivity";
-  import type { TaskSummary } from "#lib/cawco/project-tasks.js";
-  import RowFault from "#lib/cawco/RowFault.svelte";
-  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconNeedsYou } from "#lib/icons.js";
   import {
     reflow,
@@ -115,7 +116,7 @@
    * desk the column scrolls its own, under the house edge fade (DESIGN.md:
    * hidden content has a fade that draws).
    */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The quiet word under the name: the stage's kind, or what the column holds. */
   const kindWord = $derived.by(() => {
     if (kind) {
