@@ -14,7 +14,7 @@ import { stagedData } from "./stage-data";
 
 const debug = () =>
   globalThis.__cawcoDebug as {
-    state: { usageLimitsRead: boolean };
+    usageState: { usageLimitsRead: boolean };
     usage: { staged: StagedUsage | null };
   };
 
@@ -45,8 +45,8 @@ export function stageUsage(n: number, stop: string | null = null) {
       shown.map((ring) => ring.hue)
     ),
   };
-  readBefore ??= debug().state.usageLimitsRead;
-  debug().state.usageLimitsRead = true;
+  readBefore ??= debug().usageState.usageLimitsRead;
+  debug().usageState.usageLimitsRead = true;
 }
 
 /** What the client said of the limits before the bench stood its own in. */
@@ -55,6 +55,6 @@ let readBefore: boolean | undefined;
 /** Hands the usage store back to the hub's forecast. */
 export function unstageUsage() {
   debug().usage.staged = null;
-  debug().state.usageLimitsRead = readBefore ?? false;
+  debug().usageState.usageLimitsRead = readBefore ?? false;
   readBefore = undefined;
 }
