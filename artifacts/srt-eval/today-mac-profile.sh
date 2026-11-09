@@ -1,7 +1,7 @@
 #!/bin/bash
 # Prototype (macOS): today's workspace Seatbelt profile, rebuilt rule for rule
-# from packages/agent/src/boundary.ts profileOf (lines 960-1017) and cachesOf
-# (142-165), for a scratch clone, so the escape checks can be run under it.
+# from what is now boundary-policy.ts `seatbeltProfile` (packages/agent/src/, as
+# it stood when this was written), for a scratch clone, so the escape checks can be run under it.
 #   today-mac-profile.sh CLONE SCRATCH > profile.sb
 #   sandbox-exec -f profile.sb /bin/bash -c '...'
 set -eu
