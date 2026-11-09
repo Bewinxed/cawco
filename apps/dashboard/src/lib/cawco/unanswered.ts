@@ -1,7 +1,7 @@
 import { secondsOf } from "@cawco/core/time";
 /**
  * What the person reads when a read of a machine got no answer in time: the
- * fleet store's (client.svelte.ts `didntAnswer`) and an artifact tab's, one
+ * fleet store's (hub/control.ts `didntAnswer`) and an artifact tab's, one
  * sentence for both.
  *
  * A machine the hub holds a live link to is online, and a read it was slow
