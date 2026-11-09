@@ -815,7 +815,7 @@ async function pastTheLimit(
   kit: Kit,
   call: (n: string, name: string, input: object) => Promise<string>
 ): Promise<void> {
-  // The hub's own wait on a render (server.ts `onStage`) is past the limit; the render answers inside it.
+  // The hub's own wait on a render (artifact-events.ts `onStage`) is past the limit; the render answers inside it.
   const within = STAGE_RENDER_MS + 15_000;
   const [first, second] = SLOW;
   let since = Date.now();
@@ -2239,7 +2239,7 @@ const run = async (kit: Kit) => {
         entry.includes(MISSING_TAIL),
       short(missing)
     );
-    // 5c. The canvas open on its own origin (hub server.ts `frameAddress`), its section failed; the file written, it draws there by itself.
+    // 5c. The canvas open on its own origin (hub artifact-pages.ts `frameAddress`), its section failed; the file written, it draws there by itself.
     const { port } = (await (
       await fetchHub(
         fetch,
@@ -2360,7 +2360,7 @@ const run = async (kit: Kit) => {
       short(read)
     );
 
-    // 5. The sheet on its own origin (hub server.ts `frameAddress`), and the session's edit reaching it.
+    // 5. The sheet on its own origin (hub artifact-pages.ts `frameAddress`), and the session's edit reaching it.
     const { port } = (await (
       await fetchHub(
         fetch,
