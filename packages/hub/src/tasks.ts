@@ -4875,11 +4875,11 @@ const KIND = t.Union([
   t.Literal("dropped"),
 ]);
 /** Every template `/api/stage-templates` lists is one a project may take. */
-const TEMPLATE = t.Union(STAGES_TEMPLATES.map((name) => t.Literal(name)));
+const TEMPLATE = t.UnionEnum(STAGES_TEMPLATES);
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
-export const LANDS = t.Union(LANDS_MODES.map((mode) => t.Literal(mode)));
+export const LANDS = t.UnionEnum(LANDS_MODES);
 /** A permission mode CawCo offers (core `PERMISSION_MODES`), as a route takes it. */
-export const MODE = t.Union(PERMISSION_MODES.map((mode) => t.Literal(mode)));
+export const MODE = t.UnionEnum(PERMISSION_MODES);
 /** What a work item may spend (`WorkBudget`): dollars, turns, minutes. */
 export const BUDGET = t.Object({
   usd: t.Optional(t.Number()),
