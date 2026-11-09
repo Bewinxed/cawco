@@ -75,6 +75,8 @@ export type LaunchGrant =
  * Every message on every hop. `payload` is whatever the verb carries — a neutral
  * message, a harness option object, a control call — passed through. The hub
  * routes on the envelope fields and peeks only what harness.ts names.
+ *
+ * @socketFrame toHub
  */
 export interface Envelope<T = unknown> {
   instanceId?: string;
@@ -92,6 +94,8 @@ export interface Envelope<T = unknown> {
  * functions do not survive the wire. `resume` is the harness-neutral way to
  * re-open or fork a stored session; `persistSession: false` asks for a session
  * that is never stored (a spin-off's transcript).
+ *
+ * @socketFrame toHub
  */
 export interface SpawnPayload {
   /**
@@ -351,7 +355,11 @@ export const repoPath = (repo: string): string =>
     .replace(SCP_LIKE_HOST, "")
     .replace(DOT_GIT_SUFFIX, "");
 
-/** `send`: one turn of input for a live session's prompt stream. */
+/**
+ * `send`: one turn of input for a live session's prompt stream.
+ *
+ * @socketFrame toHub
+ */
 export interface SendPayload {
   /**
    * Text the user pasted rather than typed, kept out of `message` so the agent
@@ -598,7 +606,11 @@ export type StopRequest = Pick<
   "discard" | "from" | "instanceId" | "requestId"
 >;
 
-/** `stop`: interrupt and close a live session, as the hub sends it to its machine. */
+/**
+ * `stop`: interrupt and close a live session, as the hub sends it to its machine.
+ *
+ * @socketFrame toHub
+ */
 export interface StopPayload {
   /** Addresses claimed by other rows; only unclaimed server runners make a legacy read ambiguous. */
   claimedSessionIds?: string[];
@@ -643,6 +655,8 @@ export interface StopPayload {
  * whichever harness owns the id (`harness`, or merged across all when listing)
  * — or a machine feature (`installTool`, the fleet controls). With
  * no `instanceId` and no `harness`, `listSessions` merges every harness.
+ *
+ * @socketFrame toHub
  */
 export interface ControlPayload {
   args?: unknown[];
@@ -662,6 +676,8 @@ export interface ControlPayload {
  * with an {@link FsMedia} — the one binary the tunnel carries, so a picture or
  * video an agent pointed at can be looked at without the agent spending tokens
  * on it.
+ *
+ * @socketFrame toHub
  */
 export interface FsPayload {
   /** `write` only: the text the file is replaced with. */
@@ -684,13 +700,21 @@ export interface FsPayload {
  */
 export const MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 
-/** What an `fs media` read answers with: the file's bytes, base64, and what they are (a picture or a video). */
+/**
+ * What an `fs media` read answers with: the file's bytes, base64, and what they are (a picture or a video).
+ *
+ * @socketFrame fromHub
+ */
 export interface FsMedia {
   base64: string;
   mediaType: string;
 }
 
-/** One dirent of an `fs list`. `size` is 0 for a directory. */
+/**
+ * One dirent of an `fs list`. `size` is 0 for a directory.
+ *
+ * @socketFrame fromHub
+ */
 export interface FsEntry {
   kind: "dir" | "file";
   name: string;
@@ -834,6 +858,8 @@ export interface BuildInfo {
 /**
  * What an {@link UPDATE_CAWCO} run did. Every field is what actually
  * happened, not what was asked for.
+ *
+ * @socketFrame fromHub
  */
 export interface UpdateReport {
   built: boolean;
