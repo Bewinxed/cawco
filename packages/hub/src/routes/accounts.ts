@@ -195,7 +195,7 @@ export const accountRoutes = ({
         .signins()
         .filter((one) => one.accountId === account.id);
       // A machine where a process still runs in the account's store keeps
-      // it until none does ({@link leaveAccounts}): signed out under a
+      // it until none does (`leaveAccounts`): signed out under a
       // turn, the turn would lose its credential and its transcript.
       const leavesOn = [
         ...new Set(
@@ -261,7 +261,7 @@ export const accountRoutes = ({
           return status(404, `${named} is not signed in on ${machine}.`);
         }
         // A process there still running in its store keeps the store
-        // until none does ({@link leaveAccounts}), as an account's
+        // until none does (`leaveAccounts`), as an account's
         // removal does: signed out under a turn, the turn would lose its
         // credential and its transcript.
         const leaves = db

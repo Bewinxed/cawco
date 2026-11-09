@@ -118,7 +118,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
    * session, and why, without placing it: a launch already placed holds its
    * account ({@link heldClaim}); one that ran from the machine's own login,
    * which has moved into an account since, runs on that account
-   * ({@link repinMovedFrom}); any other is placed. Nothing when placement
+   * (`repinMovedFrom`); any other is placed. Nothing when placement
    * finds none. Only a launch acts on it ({@link claimAccount}).
    */
   const accountToPlace = (
@@ -297,7 +297,7 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
   /**
    * The credentials moving out of a machine's own stores into CawCo now
    * (pi's and OpenCode's each when its machine connects,
-   * {@link adoptHomeCredentials}; any by `POST /api/accounts/move-login`),
+   * `adoptHomeCredentials`; any by `POST /api/accounts/move-login`),
    * with the account each moves into,
    * kept in the database (`login_moves`) so a hub restart carries each on.
    * While one is, the sessions that run from it ({@link movingFor}) go on
