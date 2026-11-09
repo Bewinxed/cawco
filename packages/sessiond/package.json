@@ -4,17 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    },
     "./main": {
       "types": "./src/main.ts",
       "default": "./src/main.ts"
     }
   },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
   "scripts": {
     "fmt": "bun ../../scripts/fmt.ts .",
     "start": "bun src/main.ts"

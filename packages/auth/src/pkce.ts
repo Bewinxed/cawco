@@ -1,5 +1,9 @@
 /**
- * PKCE (RFC 7636) verifier and S256 challenge.
+ * PKCE (RFC 7636) verifier and S256 challenge, for the OAuth flows the hub
+ * drives (OpenRouter).
+ *
+ * Claude account sign-in is not here: it runs through Claude Code's own
+ * `claude auth login` on the machine that uses it.
  */
 
 import { createHash, randomBytes } from "node:crypto";
