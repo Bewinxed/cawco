@@ -31,7 +31,7 @@ export const leakWords = {
    * An ended delegate's process climbing in memory, told to the session that
    * delegated it. What an ended delegate left running is never told: its
    * workspace's settle ends it, or keeps it for an artifact that shows it
-   * (hub work-items.ts `settle`).
+   * (hub workspaces.ts `settle`).
    */
   delegateLeft: (
     title: string,
