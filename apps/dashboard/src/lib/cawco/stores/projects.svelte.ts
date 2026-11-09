@@ -155,7 +155,7 @@ export async function editProject(
     })
   );
   if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notChangedThen);
+    throw hubRefusal(await refusedOf(response), projectWords.notChangedThen);
   }
   const row = (await response.json()) as ProjectRow;
   keepProject(row, asked);
@@ -188,7 +188,7 @@ export async function addProjectPlace(
     })
   );
   if (!response.ok) {
-    throw await hubRefusal(response, projectWords.placeNotAddedThen);
+    throw hubRefusal(await refusedOf(response), projectWords.placeNotAddedThen);
   }
   const row = (await response.json()) as ProjectRow;
   keepProject(row, asked);
@@ -230,7 +230,7 @@ export async function createProject(project: {
     hubRequest("POST /api/projects", { body: { ...project, caw: true } })
   );
   if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notMadeThen);
+    throw hubRefusal(await refusedOf(response), projectWords.notMadeThen);
   }
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
@@ -253,7 +253,7 @@ export async function projectAtFolder(project: {
     hubRequest("POST /api/projects", { body: project })
   );
   if (!response.ok) {
-    throw await hubRefusal(response, projectWords.notSavedThen);
+    throw hubRefusal(await refusedOf(response), projectWords.notSavedThen);
   }
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
