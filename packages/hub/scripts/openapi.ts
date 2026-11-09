@@ -1616,7 +1616,11 @@ const inOneOrder = (value: unknown): unknown => {
   }
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => {
-      if (key === "schemas" && typeof item === "object" && item !== null) {
+      if (
+        (key === "schemas" || key === "mapping") &&
+        typeof item === "object" &&
+        item !== null
+      ) {
         return [
           key,
           inOneOrder(
