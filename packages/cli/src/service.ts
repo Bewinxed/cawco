@@ -6,6 +6,7 @@ import {
   type HubAnswer,
   type HubClient,
   type HubData,
+  HubNotAnswering,
   hubClient,
   hubPath,
   refusalText,
@@ -469,9 +470,25 @@ const askedHub = <A extends HubAnswer>(
             `${url}: ${refusalText({ status: 0, value: answer.error.value })}`
           );
     }
-    return answer.error === null
-      ? { ok: true, value: dataOf(answer) }
-      : { ok: false, status: answer.status, said: `HTTP ${answer.status}` };
+    if (answer.error !== null) {
+      return {
+        ok: false,
+        status: answer.status,
+        said: `HTTP ${answer.status}`,
+      };
+    }
+    try {
+      return { ok: true, value: dataOf(answer) };
+    } catch (error) {
+      if (error instanceof HubNotAnswering) {
+        return {
+          ok: false,
+          status: answer.status,
+          said: `HTTP ${answer.status} with a body that is not JSON`,
+        };
+      }
+      throw error;
+    }
   });
 
 /** The HTTP status `url` answers with, its body left unread. */
