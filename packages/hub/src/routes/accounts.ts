@@ -10,6 +10,7 @@ import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 import { unreachable } from "../unreachable";
 
 const accountHue = t.UnionEnum(ACCOUNT_HUES);
@@ -130,9 +131,11 @@ export const accountRoutes = ({
           setupStep: t.Optional(accountSetupStep),
         }),
       },
-      ({ body, status }) => {
-        const refusal = accountKindRefusal(body.provider, body.kind);
-        return refusal ? status(400, refusal) : db.accounts.create(body);
+      ({ body }) => {
+        const why = accountKindRefusal(body.provider, body.kind);
+        return why
+          ? refusal(400, "account-kind", why)
+          : db.accounts.create(body);
       }
     )
     .patch(
@@ -156,36 +159,37 @@ export const accountRoutes = ({
           setupStep: t.Optional(t.Union([accountSetupStep, t.Null()])),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         const account = accountOf(params.id);
         return (
           (account && db.accounts.patch(account.id, body)) ??
-          status(404, `There is no account ${params.id}.`)
+          refusal(404, "no-account", `There is no account ${params.id}.`)
         );
       }
     )
     // What removing the account does with the sessions on it, for its
     // confirm to say: how many move to another account, how many have
     // none to go to.
-    .get("/api/accounts/:id/removal", ({ params, status }) => {
+    .get("/api/accounts/:id/removal", ({ params }) => {
       const account = accountOf(params.id);
       if (!account) {
-        return status(404, `There is no account ${params.id}.`);
+        return refusal(404, "no-account", `There is no account ${params.id}.`);
       }
       return removalOf(account);
     })
-    .delete("/api/accounts/:id", async ({ params, status }) => {
+    .delete("/api/accounts/:id", async ({ params }) => {
       const account = accountOf(params.id);
       if (!account) {
-        return status(404, `There is no account ${params.id}.`);
+        return refusal(404, "no-account", `There is no account ${params.id}.`);
       }
       const named = accountNameAmong(account, db.accounts.list());
       // An id a join removed names the account it became, which is not the
       // one the screen asking made: removing that is never done by its old
       // id.
       if (account.id !== params.id) {
-        return status(
+        return refusal(
           409,
+          "accounts-sign-was-already",
           `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in ${configurePage("accounts")}.`
         );
       }
@@ -216,8 +220,9 @@ export const accountRoutes = ({
           .filter((machineId) => !leavesOn.includes(machineId))
       );
       if (failed.length > 0 || silent.length > 0) {
-        return status(
+        return refusal(
           409,
+          "not-signed-out",
           [
             failed.length > 0
               ? `${failed.join(", ")} did not sign ${named} out.`
@@ -240,65 +245,69 @@ export const accountRoutes = ({
     // one, the account and its other machines left as they are. Every
     // session on it there moves off it as a removal's do ({@link
     // signOutMachine}).
-    .delete(
-      "/api/accounts/:id/machines/:machineId",
-      async ({ params, status }) => {
-        const account = accountOf(params.id);
-        if (!account) {
-          return status(404, `There is no account ${params.id}.`);
-        }
-        const machine = machineName(params.machineId);
-        const named = accountNameAmong(account, db.accounts.list());
-        const signin = db.accounts
-          .signins()
-          .find(
-            (one) =>
-              one.accountId === account.id && one.machineId === params.machineId
-          );
-        if (!signin) {
-          return status(404, `${named} is not signed in on ${machine}.`);
-        }
-        // A process there still running in its store keeps the store
-        // until none does (`leaveAccounts`), as an account's
-        // removal does: signed out under a turn, the turn would lose its
-        // credential and its transcript.
-        const leaves = db
-          .instancesOnAccount(account.id)
-          .some(
-            (row) => row.machineId === params.machineId && processMayRun(row)
-          );
-        if (leaves) {
-          return {
-            ok: true,
-            ...signOutMachine(account, named, params.machineId, true),
-          };
-        }
-        const answer = await forgetOn(account, params.machineId);
-        switch (answer.kind) {
-          case "unanswered":
-            return answer.reason === "dead"
-              ? status(
-                  409,
-                  `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
-                )
-              : status(
-                  409,
-                  `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
-                );
-          case "answered":
-            if (!answer.value.ok) {
-              return status(
-                409,
-                `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
-              );
-            }
-            break;
-          default:
-            throw unreachable(answer);
-        }
+    .delete("/api/accounts/:id/machines/:machineId", async ({ params }) => {
+      const account = accountOf(params.id);
+      if (!account) {
+        return refusal(404, "no-account", `There is no account ${params.id}.`);
+      }
+      const machine = machineName(params.machineId);
+      const named = accountNameAmong(account, db.accounts.list());
+      const signin = db.accounts
+        .signins()
+        .find(
+          (one) =>
+            one.accountId === account.id && one.machineId === params.machineId
+        );
+      if (!signin) {
+        return refusal(
+          404,
+          "not-signed-in",
+          `${named} is not signed in on ${machine}.`
+        );
+      }
+      // A process there still running in its store keeps the store
+      // until none does (`leaveAccounts`), as an account's
+      // removal does: signed out under a turn, the turn would lose its
+      // credential and its transcript.
+      const leaves = db
+        .instancesOnAccount(account.id)
+        .some(
+          (row) => row.machineId === params.machineId && processMayRun(row)
+        );
+      if (leaves) {
         return {
           ok: true,
-          ...signOutMachine(account, named, params.machineId, false),
+          ...signOutMachine(account, named, params.machineId, true),
         };
       }
-    );
+      const answer = await forgetOn(account, params.machineId);
+      switch (answer.kind) {
+        case "unanswered":
+          return answer.reason === "dead"
+            ? refusal(
+                409,
+                "offline-so-was-not",
+                `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
+              )
+            : refusal(
+                409,
+                "did-not-answer-within",
+                `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
+              );
+        case "answered":
+          if (!answer.value.ok) {
+            return refusal(
+              409,
+              "did-not-sign-out",
+              `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
+            );
+          }
+          break;
+        default:
+          throw unreachable(answer);
+      }
+      return {
+        ok: true,
+        ...signOutMachine(account, named, params.machineId, false),
+      };
+    });

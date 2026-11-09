@@ -25,6 +25,7 @@ import {
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
+import { refusal } from "./refusal";
 
 /**
  * Ids kept, newest last. An event's notice is over once a newer one of its
@@ -79,10 +80,11 @@ export function createNoticesSeen(options: {
             ids: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
           }),
         },
-        ({ body, status }) => {
+        ({ body }) => {
           if ("damaged" in record) {
-            return status(
+            return refusal(
               409,
+              "damaged-hub-record-words",
               damagedHubRecordWords("notices", record.damaged)
             );
           }
@@ -99,10 +101,11 @@ export function createNoticesSeen(options: {
       // Reset: the one way out of a damaged record. A fresh, empty record
       // written whole, and notices on again. Refused while the record reads
       // whole: it would only forget what the person acknowledged.
-      .post("/api/notices/reset", ({ status }) => {
+      .post("/api/notices/reset", () => {
         if (!("damaged" in record)) {
-          return status(
+          return refusal(
             409,
+            "notices-record-reads-whole",
             "The notices record reads whole, so there is nothing to reset."
           );
         }

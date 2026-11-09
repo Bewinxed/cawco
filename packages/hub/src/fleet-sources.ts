@@ -5,7 +5,6 @@ import type {
   FleetPlugin,
   FleetSkillMeta,
   FleetVersioned,
-  MachineHookScript,
   MarketplaceLink,
   MarketplaceRead,
 } from "@cawco/core/fleet";
@@ -13,8 +12,6 @@ import {
   isLoopbackSource,
   machinePlatform,
   mcpRunsOn,
-  READ_HOOK_SCRIPT,
-  READ_MEMORY_FILE,
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import { fleetItemsOf } from "@cawco/core/fleet-items";
@@ -38,13 +35,7 @@ import { refreshOf, skillVersion } from "./fleet-versions";
 import type { HubContext } from "./hub-context";
 import { hubHttpUrl } from "./hub-self";
 import type { FetchedCopy } from "./hub-shapes";
-import type {
-  ControlResult,
-  MachineMemory,
-  MemoryRead,
-  ReadRefused,
-  RouteSet,
-} from "./machine-answers";
+import type { ControlResult } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { ResolvedPlugin } from "./plugins";
 import {
@@ -79,36 +70,6 @@ export const tookOf = (answer: Bounded<ControlResult>): FleetMcpTook => {
 /** How often the hub reads every skill's and plugin's source for an update. */
 export const UPDATE_CHECK_MS = 6 * HOUR_MS;
 
-/** The answer, read off the wire: a malformed set is no set. */
-const peekMemoryFile = (result: unknown): MachineMemory => {
-  if (typeof result !== "object" || result === null) {
-    return null;
-  }
-  const { content, hash, docs } = result as {
-    content?: unknown;
-    hash?: unknown;
-    docs?: unknown;
-  };
-  if (
-    typeof content !== "string" ||
-    typeof hash !== "string" ||
-    !Array.isArray(docs)
-  ) {
-    return null;
-  }
-  const read = docs.flatMap((doc: unknown) => {
-    if (typeof doc !== "object" || doc === null) {
-      return [];
-    }
-    const { path, content: text, hash: of } = doc as Record<string, unknown>;
-    return typeof path === "string" &&
-      typeof text === "string" &&
-      typeof of === "string"
-      ? [{ path, content: text, hash: of }]
-      : [];
-  });
-  return { content, hash, docs: read };
-};
 /**
  * What a skill fetch came to for the machines: the fleet's copy changed
  * (they were told), stayed as it was, or the fetch failed.
@@ -134,7 +95,6 @@ export type FleetSourcesContext = Pick<
   | "sendAnswerable"
   | "sendFrame"
   | "toolsMayHaveChanged"
-  | "unansweredStatus"
 >;
 
 export const createFleetSources = (ctx: FleetSourcesContext) => {
@@ -321,70 +281,6 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
       );
     }
   };
-
-  /**
-   * One machine's own user CLAUDE.md, whoever wrote it. A peek is this alone,
-   * adopting is this and a store, and an overwrite is this so the copy it is
-   * about to destroy is kept before it goes. `set`: the asking route's, which
-   * names the machine when it is away ({@link awayStatus}).
-   */
-  /** A file a machine's agent reads for `method`, or why it could not be read. */
-  const readOffMachine = async <Copy>(
-    machineId: string,
-    method: string,
-    args: unknown[],
-    set: RouteSet,
-    copyOf: (result: unknown) => Copy,
-    failed: string
-  ): Promise<{ ok: true; copy: Copy } | ReadRefused> => {
-    const answer = await ctx.readAgent(
-      machineId,
-      method,
-      args,
-      READ_TIMEOUT_MS
-    );
-    switch (answer.kind) {
-      case "unanswered":
-        return { ok: false, ...ctx.unansweredStatus(set, machineId, answer) };
-      case "answered":
-        return answer.value.ok
-          ? { ok: true, copy: copyOf(answer.value.result) }
-          : { ok: false, code: 500, said: answer.value.error ?? failed };
-      default:
-        throw unreachable(answer);
-    }
-  };
-
-  const readMachineMemory = (
-    machineId: string,
-    set: RouteSet
-  ): Promise<MemoryRead> =>
-    readOffMachine(
-      machineId,
-      READ_MEMORY_FILE,
-      [],
-      set,
-      peekMemoryFile,
-      "the machine could not read its memory"
-    );
-
-  /**
-   * One fleet hook's script as one machine has it on disk. A compare is this
-   * alone; adopting is this and a store. `set` as {@link readMachineMemory}'s.
-   */
-  const readMachineHookScript = (
-    machineId: string,
-    id: string,
-    set: RouteSet
-  ): Promise<{ ok: true; copy: MachineHookScript | null } | ReadRefused> =>
-    readOffMachine(
-      machineId,
-      READ_HOOK_SCRIPT,
-      [id],
-      set,
-      (result) => result as MachineHookScript | null,
-      "the machine could not read the hook's script"
-    );
 
   /** The version about to be replaced, kept — a save is not a way to lose one. */
   const keepReplacedMemory = (content: string): void => {
@@ -1330,8 +1226,6 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     machineFleetItems,
     refreshSessions,
     sendMcpChanges,
-    readMachineMemory,
-    readMachineHookScript,
     keepReplacedMemory,
     keepReplacedDoc,
     keepRemovedMemory,
