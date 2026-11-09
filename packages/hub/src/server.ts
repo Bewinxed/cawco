@@ -8069,7 +8069,10 @@ export const createServer = (
   const blocks = createBlocks({
     db,
     projectName: (id) => db.project(id)?.name,
-    keptViews: (id) => views.kept(id),
+    keptViews: async (id) => {
+      const kept = await views.kept(id);
+      return kept instanceof ElysiaStatus ? undefined : kept;
+    },
     changed: (projectId) =>
       registry.broadcast({
         verb: "frames",
