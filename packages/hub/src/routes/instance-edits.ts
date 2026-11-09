@@ -5,6 +5,7 @@ import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { harnessWords } from "@cawco/core/words/harness";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { instanceTimes } from "../instance-out";
 import type { MachineReadsContext } from "../machine-reads";
 import { awayStatus } from "../machine-reads";
 import { refusal } from "../refusal";
@@ -215,7 +216,8 @@ export const instanceEditRoutes = (
           publishInstances(row.machineId);
           // The stored toggle re-arms through the scheduler's one path.
           detach(keepAliveScheduler.wake(), "keepalive wake");
-          return withKeepAlive([row])[0];
+          const [answered] = withKeepAlive([row]);
+          return answered && { ...answered, ...instanceTimes(answered) };
         }
       )
   );
