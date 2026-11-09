@@ -15,11 +15,15 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { unhandled } from "@cawco/core/unhandled";
 import type { UsageSummaryRow } from "@cawco/core/usage/types";
 import { accountsWords } from "@cawco/core/words/accounts";
-import { type ContextRead, cawco, refreshContext } from "./client.svelte";
+import { cawco } from "./client.svelte";
 import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
 import { boardStore, isFailed } from "./stores/board.svelte";
 import { catalogStore } from "./stores/catalog.svelte";
+import {
+  type ContextRead,
+  refreshContext,
+} from "./stores/session-detail.svelte";
 import { sessionsStore } from "./stores/sessions.svelte";
 
 const HARNESS: Record<string, string> = accountsWords.harnesses;
