@@ -7557,8 +7557,7 @@ const rowDress = (screen: Page, number: number) =>
  * reference, their pills on one baseline; a picture alone sending; the
  * pill's tail turning at the page's edges; the rail beside the page, its
  * rows dressed part by part, the thumb strip, search, sort and the toggle's
- * count; a thread from a row standing in the well. The phone after it
- * ({@link phoneRailChecks}).
+ * count; a thread from a row standing in the well. The phone after it.
  */
 const listChecks = async (on: On) => {
   const made = await on.call(CREATE, {
