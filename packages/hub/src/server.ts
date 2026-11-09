@@ -799,7 +799,7 @@ import {
   noteTailnetDashboard,
   secureDashboardUrl,
 } from "./dashboard-url";
-import type { DbShape, MachineLineKind } from "./db";
+import type { DbShape } from "./db";
 import type { AccountLeave, LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
@@ -819,7 +819,11 @@ import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
-import type { PriorConversation, TrashKind } from "./db/schema";
+import type {
+  MachineLineKind,
+  PriorConversation,
+  TrashKind,
+} from "./db/schema";
 import { MEMORY_ID } from "./db/schema";
 import type { SentMessageRow } from "./db/sends";
 import { TURN_UNRECORDED } from "./db/sends";
