@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { hubRequest } from "@cawco/core/hub-request";
   /**
    * Previews: how every session's preview is reached, fleet-wide (hub
    * preview.ts). Each preview is an origin of its own, never the
@@ -19,7 +18,8 @@
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
-  import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+  import { hub } from "#lib/platform/hub.js";
+  import { hubRefusal } from "#lib/platform/hub-read.js";
 
   const section = sectionOf("previews");
 
@@ -37,12 +37,13 @@
   };
 
   onMount(() => {
-    hubFetch(hubRequest("GET /api/preview-settings"))
-      .then(async (answer) => {
-        if (!answer.ok) {
-          throw await hubRefusal(answer);
+    hub.api["preview-settings"]
+      .get()
+      .then((answer) => {
+        if (answer.error) {
+          throw hubRefusal(answer);
         }
-        read((await answer.json()) as PreviewSettings);
+        read(answer.data);
       })
       .catch((error: unknown) => {
         problem = `Could not read how previews are reached — ${error instanceof Error ? error.message : String(error)}.`;
@@ -67,16 +68,14 @@
     saving = true;
     refused = undefined;
     try {
-      const answer = await hubFetch(
-        hubRequest("PUT /api/preview-settings", {
-          body: mode === "host" ? { mode, pattern: pattern.trim() } : { mode },
-        })
+      const answer = await hub.api["preview-settings"].put(
+        mode === "host" ? { mode, pattern: pattern.trim() } : { mode }
       );
-      if (!answer.ok) {
-        refused = (await hubRefusal(answer)).message;
+      if (answer.error) {
+        refused = hubRefusal(answer).message;
         return;
       }
-      read((await answer.json()) as PreviewSettings);
+      read(answer.data);
     } catch (error) {
       refused = error instanceof Error ? error.message : String(error);
     } finally {
