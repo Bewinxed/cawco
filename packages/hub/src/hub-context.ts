@@ -22,6 +22,7 @@ import type {
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { ArchiveView } from "@cawco/core/archive";
 import type { AskAnswer } from "@cawco/core/asks";
+import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type { Bounded } from "@cawco/core/bounded";
 import type {
   FleetAgent,
@@ -233,6 +234,7 @@ export interface HubContext {
     | { answer: FleetAgent; status: 409 }
     | { answer: string; status: 404 }
     | undefined;
+  agentProtocols: Map<string, { min: number; max: number } | undefined>;
   anchors: Map<string, string>;
   announceMcp: () => void;
   announceSkill: (name: string, source: string) => void;
@@ -277,6 +279,7 @@ export interface HubContext {
   ) => Answer;
   awayError: (machineId: string) => MachineAway;
   awayWords: (machineId: string, answer: Unanswered) => string;
+  binaryUpdateStates: Map<string, BinaryUpdateState>;
   bounded: (payload: SpawnPayload, knownRow?: InstanceRow) => NamedSpawn;
   boundProblem: ({
     projectId,
@@ -577,6 +580,15 @@ export interface HubContext {
     | { accountId?: string; homeLoginMove?: { accountId: string } }
     | { refusal: string; cause?: SendRefusal };
   launchClaims: Map<string, { accountId: string; at: number }>;
+  launches: Map<
+    string,
+    {
+      readonly machineId: string;
+      readonly generation: string;
+      readonly at: number;
+      readonly replaces: boolean;
+    }
+  >;
   launchInFlight: (instanceId: string) => boolean;
   launchRefusal: (instanceId: string) => string | undefined;
   launchStarted: (instanceId: string, why: string) => void;
@@ -749,6 +761,12 @@ export interface HubContext {
   previewService: ReturnType<typeof createPreviewService>;
   processAt: Map<string, number>;
   processEvent: (instanceId: string) => boolean;
+  processFailed: (
+    machineId: string,
+    instanceId: string,
+    reason: string,
+    kind?: LastErrorKind
+  ) => void;
   processGeneration: (
     row: ReturnType<DbShape["getInstancesByIds"]>[number]
   ) => string;
@@ -967,6 +985,7 @@ export interface HubContext {
       | "startingSet"
     >
   ) => Promise<void>;
+  speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
   startCompaction: (
@@ -1015,6 +1034,7 @@ export interface HubContext {
       "delegateType" | "projectId" | "resume" | "skills"
     >
   ) => Pick<Parameters<DbShape["openInstance"]>[0], "startingSet">;
+  startsFreed: (_machineId: string) => void;
   startsOnHomeLogin: (machineId: string, payload: SpawnPayload) => boolean;
   startsTurnIn: (
     row: { status: string; parentInstanceId?: string | null | undefined },
