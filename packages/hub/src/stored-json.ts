@@ -251,8 +251,7 @@ export const received = <S extends z.ZodType>(
 /**
  * `value`, parsed by `schema`: the checked value, or {@link StoredShapeError}
  * naming `place`. The one check a stored JSON value passes, by a column
- * ({@link storedJson}) and by the stored-shape check over a whole database
- * (scripts/stored-json-check.ts). A write is refused a key its schema would
+ * ({@link storedJson}). A write is refused a key its schema would
  * drop ({@link droppedKeys}), as it is a value of the wrong shape: on
  * 2026-11-04 a report's `notice` had been dropped from every write for
  * nine days, the type it was stored by never declaring it. A read keeps
