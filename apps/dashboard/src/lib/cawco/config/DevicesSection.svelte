@@ -34,7 +34,8 @@
   import {
     failureClause,
     failureWords,
-    hubRefusal,
+    hubData,
+    hubDone,
   } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -58,11 +59,8 @@
   async function read() {
     try {
       await readAuth();
-      const answer = await hub.api.devices.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      ({ devices, current } = answer.data as {
+      const answer = await hubData(hub.api.devices.get());
+      ({ devices, current } = answer as {
         current: string | null;
         devices: OwnerDevice[];
       });
@@ -79,11 +77,8 @@
 
   async function readFind() {
     try {
-      const answer = await hub.api.find.settings.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      ({ hideSecrets } = answer.data);
+      const answer = await hubData(hub.api.find.settings.get());
+      ({ hideSecrets } = answer);
     } catch (error) {
       findProblem = findSecretWords.unread(failureClause(error));
     }
@@ -93,13 +88,12 @@
     findSaving = true;
     findProblem = null;
     try {
-      const answer = await hub.api.find.settings.put({
-        hideSecrets: next,
-      } satisfies FindSettings);
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      ({ hideSecrets } = answer.data);
+      const answer = await hubData(
+        hub.api.find.settings.put({
+          hideSecrets: next,
+        } satisfies FindSettings)
+      );
+      ({ hideSecrets } = answer);
     } catch (error) {
       findProblem = failureWords(error);
     } finally {
@@ -138,12 +132,9 @@
   }
 
   async function remove(device: OwnerDevice) {
-    await act(`device:${device.id}`, async () => {
-      const answer = await hub.api.devices({ id: device.id }).delete();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-    });
+    await act(`device:${device.id}`, () =>
+      hubDone(hub.api.devices({ id: device.id }).delete())
+    );
   }
 
   const KINDS: Record<OwnerDevice["kind"], string> = {
