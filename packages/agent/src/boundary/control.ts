@@ -11,11 +11,12 @@ import { recordAgentState } from "../agent-state";
 import { boundaryProcId, isBoundaryOf, isJudgeOf } from "../proc-id";
 import { armHook } from "./arm";
 import {
-  armState,
+  armedWorkspaces,
+  armingOf,
+  armPhase,
   armStep,
   ensureBoundary,
-  readingMoved,
-  rearming,
+  nextReading,
 } from "./arming";
 import { addAccount, addSpill, behindGate } from "./decisions";
 import { closedWhile, liveWhy, recentlyHeld } from "./holding";
@@ -102,15 +103,15 @@ export const settleGonePlaces = async (): Promise<void> => {
 export const rearmHooks = async (): Promise<void> => {
   const started = Date.now();
   armStep({ kind: "arm-start" });
-  while (armState.arming.kind !== "listed") {
-    await readingMoved.promise;
+  while (armPhase().kind !== "listed") {
+    await nextReading();
   }
   // Read once, as listed: a session launched meanwhile arms its workspace
   // on its need, out of `later`, and that workspace is still this pass's.
-  const listed = Object.entries(armState.workspaces);
+  const listed = Object.entries(armedWorkspaces());
   const now = listed.flatMap(([id, arm]) => (arm.kind === "later" ? [] : [id]));
   const later = listed.length - now.length;
-  await Promise.all(now.map((id) => rearming.get(id)));
+  await Promise.all(now.map((id) => armingOf(id)));
   const retired = await closeLeftRetiring(listed.map(([id]) => id));
   const ms = Date.now() - started;
   console.info(
