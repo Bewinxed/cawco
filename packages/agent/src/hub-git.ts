@@ -16,7 +16,7 @@
  *   (`workspaceDoorDir`).
  * - On the host the agent takes the door's connection and runs git's own
  *   HTTP helper (`git remote-http <remote> <url>`) in the clone with this
- *   machine's credential, env-only (move.ts {@link hubGitEnv}), after the
+ *   machine's credential, env-only (git/hub-remote.ts {@link hubGitEnv}), after the
  *   clone's own config passed `repositoryConfigProblem` and only for the
  *   clone's own `origin`. Before a push reaches it, the push's large files
  *   go to the hub's LFS ({@link pushOriginLfs}); after a fetch, the large
@@ -72,6 +72,17 @@ import { unhandled } from "@cawco/core/unhandled";
 import { gitDoorWords } from "@cawco/core/words/git-door";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { hubGitLogin, withoutCredential } from "./git/hub-credential";
+import { hubGitEnv, isHubRemote } from "./git/hub-remote";
+import {
+  type DeclaredLfs,
+  declaredPins,
+  LFS_FILTERS,
+  lfsEndpointOf,
+  lfsPins,
+  originEndpoint,
+  urlOrigin,
+} from "./git/lfs";
 import { hubOrigins } from "./git-credential";
 import { hostGh } from "./host-gh";
 import {
@@ -88,19 +99,6 @@ import {
   overlaySync,
   viewRunning,
 } from "./layer";
-import {
-  type DeclaredLfs,
-  declaredPins,
-  hubGitEnv,
-  hubGitLogin,
-  isHubRemote,
-  LFS_FILTERS,
-  lfsEndpointOf,
-  lfsPins,
-  originEndpoint,
-  urlOrigin,
-  withoutCredential,
-} from "./move";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
 import { cloneHolding } from "./workspace-records";
@@ -543,7 +541,7 @@ const authorizationOf = (answer: string): string | undefined => {
  *
  * The login goes to git as an `Authorization` header for the repository's
  * own URL (`http.<url>.extraHeader`, matched on whole path segments), env-only
- * as the hub's is (move.ts `hubGitEnv`); git-lfs sends it too for the
+ * as the hub's is (git/hub-remote.ts `hubGitEnv`); git-lfs sends it too for the
  * repository's own LFS (`<url>/info/lfs`, lfshttp/client.go `ExtraHeadersFor`).
  * A request carrying it asks no helper: git fills a credential only after a
  * 401, and git-lfs takes an existing `Authorization` as ready ("Existing
@@ -1005,7 +1003,7 @@ const hostGitEnv = async (): Promise<Record<string, string>> => {
 /**
  * {@link hostGitEnv} for the clone's own origin `origin` outside the hub,
  * with git-lfs held to one endpoint whatever the repository's committed
- * `.lfsconfig` names (move.ts {@link lfsPins}): the project's `declared`
+ * `.lfsconfig` names (git/lfs.ts {@link lfsPins}): the project's `declared`
  * one with its connection's credential ({@link declaredPins}), else the
  * origin's own LFS, its access `basic` where the host signs in there (gh for
  * github.com, or the host's own helpers, host-lfs.ts `hostSigns`). An ssh
@@ -1583,7 +1581,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
 
 /**
  * The hub's own remote: git's http helper on the host with this machine's
- * hub credential, piped both ways (move.ts `hubGitEnv`). A push or fetch
+ * hub credential, piped both ways (git/hub-remote.ts `hubGitEnv`). A push or fetch
  * whose refs mark large files moves them with the hub's LFS, or the
  * project's declared LFS with its connection's credential ({@link LfsSide}).
  */
