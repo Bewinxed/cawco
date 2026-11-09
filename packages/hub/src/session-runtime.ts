@@ -41,7 +41,7 @@ export const createSessionRuntime = () => {
   /**
    * Sessions whose turn in flight died on their account's credential and
    * whose end is the at-limit controller's to answer, not a failed turn to
-   * hand back ({@link takeCredentialTurn}): a refusal it moves the session
+   * hand back (`takeCredentialTurn`): a refusal it moves the session
    * off.
    */
   const credentialTurns = new Set<string>();
