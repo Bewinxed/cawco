@@ -8,11 +8,42 @@ import type { FrameSink } from "./session";
 export interface LiveHost {
   /** Whether a reattach has claimed the session's child and is deciding or attaching it. */
   adopting: (instanceId: string) => boolean;
+  /** What the supervisor holds of a process that is gone, forgotten as the session is dropped. */
+  forget: (instanceId: string) => void;
   /** Whether the hub's keep-alive is pinging the session now: its pings are no pulse. */
   keptAlive: (instanceId: string) => boolean;
   /** A frame to the hub. */
   sink: FrameSink;
 }
+
+/**
+ * Why a session stops being carried here, and what that asks of
+ * {@link LiveSessions.drop}. Each drop takes the session out of the table
+ * and forgets its pulse, its busy mark, its activity and what the
+ * supervisor held of its process; the reasons differ in two ways only:
+ *
+ * - `ended`: this daemon is ending that process itself (its exit found by
+ *   a carry, a move's stop, a relaunch, a credential not proved after an
+ *   attach, a refusal for good), so it is marked ending as it is dropped,
+ *   and its closing, on whatever signal, is that end's to say
+ *   ({@link LiveSessions.ending}). A sleep and a stop mark it themselves
+ *   before they stop it; a process gone on its own (`died`, `closed`), one
+ *   whose input its keeper refused, and a detach mark nothing.
+ * - `stopping`: a stop of a process that waits for the turn it interrupts.
+ *   Its pulse is forgotten at once, but it stays in the table, listed on
+ *   every beat, until `listedWhile` (its stop) settles: a beat that no
+ *   longer listed it meanwhile had the hub settle it as ended.
+ */
+export type Drop =
+  | {
+      why: "carried" | "exited" | "refused" | "relaunched" | "unverified";
+      ended: HarnessSession;
+    }
+  | {
+      why:
+        "closed" | "detached" | "died" | "input-refused" | "slept" | "stopped";
+    }
+  | { why: "stopping"; listedWhile: () => Promise<void> };
 
 /** At most one pulse per instance per this long, unless busy/blocked moves. */
 const PULSE_THROTTLE_MS = 1000;
@@ -24,7 +55,17 @@ export class LiveSessions {
     this.#host = host;
   }
 
-  readonly sessions = new Map<string, HarnessSession>();
+  readonly #table = new Map<string, HarnessSession>();
+
+  /** Each session carried here, by instance id: only {@link carry} adds one, and only {@link drop} takes one out. */
+  get sessions(): ReadonlyMap<string, HarnessSession> {
+    return this.#table;
+  }
+
+  /** `session` is the process this agent carries for `instanceId` from now. */
+  carry(instanceId: string, session: HarnessSession): void {
+    this.#table.set(instanceId, session);
+  }
   /**
    * When each carried session was last seen doing, or holding, anything: the
    * moment its rest is counted from (session.ts `IDLE_SLEEP_MS`). Moved by every
@@ -202,5 +243,46 @@ export class LiveSessions {
       running.delete(change.taskId);
       this.emitPulse(instanceId, false);
     }
+  }
+
+  /**
+   * THE ONE WAY A SESSION STOPS BEING CARRIED ({@link Drop}): out of the
+   * table, its pulse, its busy mark and its activity forgotten, and what the
+   * supervisor held of its process with them.
+   */
+  drop(
+    instanceId: string,
+    how: Extract<Drop, { why: "stopping" }>
+  ): Promise<void>;
+  drop(instanceId: string, how: Exclude<Drop, { why: "stopping" }>): void;
+  drop(instanceId: string, how: Drop): Promise<void> | undefined {
+    if (how.why === "stopping") {
+      this.#forget(instanceId);
+      return how.listedWhile().then(() => {
+        this.#table.delete(instanceId);
+      });
+    }
+    this.#table.delete(instanceId);
+    this.#forget(instanceId);
+    if ("ended" in how) {
+      this.ending.add(how.ended);
+    }
+    return undefined;
+  }
+
+  /** Every trace of a session's pulse, and what the supervisor held of its process. */
+  #forget(instanceId: string): void {
+    this.busy.delete(instanceId);
+    this.activeAt.delete(instanceId);
+    this.pulseTool.delete(instanceId);
+    this.pulseBlocked.delete(instanceId);
+    this.pulseSubagents.delete(instanceId);
+    this.pulseAt.delete(instanceId);
+    const timer = this.pulseTimers.get(instanceId);
+    if (timer) {
+      clearTimeout(timer);
+    }
+    this.pulseTimers.delete(instanceId);
+    this.#host.forget(instanceId);
   }
 }
