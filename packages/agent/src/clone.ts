@@ -14,7 +14,7 @@
  * kinds of workspace (core harness.ts `WorkspaceKind`).
  */
 import { rm } from "node:fs/promises";
-import { fetchDefaultBranch, git } from "./host-git";
+import { fetchDefaultBranch, git } from "./git/run";
 
 /** Workspace creation supplies its aggregate git deadline through this runner. */
 type GitRunner = typeof git;
