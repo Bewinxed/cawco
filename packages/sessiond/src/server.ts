@@ -59,6 +59,7 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "@cawco/core/signal";
+import { until } from "@cawco/core/until";
 import { notAliveReason } from "@cawco/core/words/sessiond";
 import { workWords } from "@cawco/core/words/work";
 import { systemProgram } from "@cawco/core/workspace-needs";
@@ -1211,10 +1212,10 @@ export class SessiondServer {
         /* already gone */
       }
     }
-    const deadline = Date.now() + graceMs;
-    while (Date.now() < deadline && alive.some((proc) => proc.alive)) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
+    await until(() => !alive.some((proc) => proc.alive), {
+      deadline: Date.now() + graceMs,
+      every: 25,
+    });
     // The grace is spent: the sweeps still waiting on theirs end here too.
     for (const timer of this.#sweeps) {
       clearTimeout(timer);
