@@ -82,7 +82,6 @@ as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NativeClass	apps/dashboard/src/lib/cawco/frame-observer.ts	1
 as-unknown-as	NeutralAssistantMessage	packages/hub/src/sends.ts	1
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
-as-unknown-as	NeutralMessage	packages/agent/src/session.ts	7
 as-unknown-as	Node[]	packages/agent/src/stage-host/story-file.ts	1
 as-unknown-as	number	apps/dashboard/src/lib/cawco/client.svelte.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
