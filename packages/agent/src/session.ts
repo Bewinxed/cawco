@@ -84,7 +84,7 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { traitsOf } from "@cawco/core/harness/traits";
+import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
@@ -186,6 +186,7 @@ import {
 import { getToolGlance } from "@cawco/core/transcript-rules";
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
+import { harnessWords } from "@cawco/core/words/harness";
 import {
   limitSentence,
   roomHeldSentence,
@@ -3987,7 +3988,10 @@ export class SessionSupervisor {
     message: NeutralMessage,
     keepAlive: boolean
   ): void {
-    if (!traitsOf(harness).keepAlive || message.type !== "result") {
+    if (
+      traitsOf(harness).promptCacheMaxMs === null ||
+      message.type !== "result"
+    ) {
       return;
     }
     const usage = promptCacheUsage(message);
@@ -5068,14 +5072,20 @@ export class SessionSupervisor {
           "Keep-alive refused: the last keep-alive missed the prompt cache; a real turn must refresh it."
         );
       }
+      if (traitsOf(session.harness).promptCacheMaxMs === null) {
+        throw new Error(
+          `${harnessWords.keepAliveIsFor(
+            harnessesWith((traits) => traits.promptCacheMaxMs !== null)
+          )}.`
+        );
+      }
       if (
-        !traitsOf(session.harness).keepAlive ||
         this.#busy.has(instanceId) ||
         [...this.#openAsks.values()].some(
           (ask) => "instanceId" in ask && ask.instanceId === instanceId
         )
       ) {
-        throw new Error("Keep-alive requires an idle Claude session.");
+        throw new Error(harnessWords.keepAliveNotIdle(session.harness));
       }
       this.#keepAlive.set(instanceId, message.uuid);
     } else {
