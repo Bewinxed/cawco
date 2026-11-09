@@ -40,6 +40,7 @@ import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
 import { FolderRefusal, refused } from "./project-folder";
 import { normaliseRemote } from "./projects";
+import type { Refused } from "./refusal";
 import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */
@@ -66,9 +67,9 @@ export interface ProjectOffersDeps {
   online: (machineId: string) => boolean;
   /**
    * The session's plan steps as its plan panel reads them (plans.ts):
-   * CawCo's list.
+   * CawCo's list; or its refusal.
    */
-  planSteps: (instanceId: string) => Promise<PlanStep[]>;
+  planSteps: (instanceId: string) => Promise<PlanStep[] | Refused>;
   /** To every dashboard: the session's standing offer, or null once answered. */
   publish: (row: InstanceShape, offer: ProjectOfferSummary | null) => void;
   run: (
@@ -163,9 +164,12 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
 
   /** The session's open plan steps, in plan order; none when its plan cannot be read now. */
   const openSteps = async (id: string): Promise<PlanStep[]> =>
-    (await deps.planSteps(id).catch(() => [])).filter(
-      (step) => step.status !== "completed"
-    );
+    (
+      await deps.planSteps(id).then(
+        (steps) => (Array.isArray(steps) ? steps : []),
+        () => []
+      )
+    ).filter((step) => step.status !== "completed");
 
   /** Files a plan's open steps as proposed tasks, in plan order; the ones the project refused, with why. */
   const filePlan = async (
