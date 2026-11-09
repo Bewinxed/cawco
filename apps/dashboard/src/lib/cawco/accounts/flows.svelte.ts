@@ -15,7 +15,8 @@
  */
 import type { PendingAccountSignin } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
-import { cawco, takeAccounts } from "../client.svelte";
+import { accountsStore, takeAccounts } from "../stores/accounts.svelte";
+
 import { DeviceFlow } from "./device.svelte";
 import { SigninFlow } from "./signin.svelte";
 
@@ -39,7 +40,7 @@ export const pendingOf = (
 ): PendingAccountSignin | undefined =>
   accountId === null
     ? undefined
-    : cawco.accounts?.pending?.find(
+    : accountsStore.accounts?.pending?.find(
         (one) => one.accountId === accountId && one.machineId === machineId
       );
 
