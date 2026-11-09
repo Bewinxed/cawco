@@ -67,7 +67,10 @@ no-restricted-imports/packages/core/src/Planted.svelte:3:10 no-restricted-import
 no-restricted-imports/packages/hub/src/reach.ts:3:8 no-restricted-imports
 no-restricted-imports/packages/hub/src/reach.ts:4:8 no-restricted-imports
 no-restricted-imports/packages/hub/src/reach.ts:5:8 no-restricted-imports
+no-restricted-imports/packages/hub/src/reach.ts:6:8 no-restricted-imports
+no-restricted-imports/packages/hub/src/reach.ts:7:8 no-restricted-imports
 no-restricted-imports/packages/hub/src/Reach.svelte:2:10 no-restricted-imports
+no-restricted-imports/packages/hub/src/Reach.svelte:3:10 no-restricted-imports
 no-restricted-imports/apps/dashboard/src/lib/components/ui/card/planted.ts:3:8 no-restricted-imports
 no-restricted-imports/apps/dashboard/src/lib/components/ui/card/planted.ts:4:8 no-restricted-imports
 no-restricted-imports/apps/dashboard/src/lib/components/ui/card/planted.ts:5:8 no-restricted-imports
