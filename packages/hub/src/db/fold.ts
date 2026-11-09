@@ -1,5 +1,5 @@
 import { idList } from "./id-list";
-import { FOLD_DROPPED, FOLD_MOVED } from "./owned-rows";
+import { walkOwned } from "./owned-rows";
 /** Folding sessions into one: every kind of row a session owns moved onto the survivor. */
 
 import { CONTINUATION_ORIGIN } from "@cawco/core/harness/kinds";
@@ -205,33 +205,38 @@ export const foldDb = (core: DbCore): FoldDb => {
           .run();
       }
     }
-    tx.run(
-      sql`UPDATE ${sentMessages} SET instance_id = ${survivorId},
+    walkOwned(
+      "fold",
+      {
+        sent_messages: () =>
+          tx.run(
+            sql`UPDATE ${sentMessages} SET instance_id = ${survivorId},
         owed = CASE WHEN owed IS NULL THEN NULL ELSE json_set(owed, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) END,
         envelope = CASE WHEN envelope IS NULL THEN NULL ELSE json_set(envelope, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) END
         WHERE instance_id IN (${idList(gone)})`
-    );
-    for (const { table, column, fold } of FOLD_MOVED) {
-      const name = sql.identifier(table);
-      const by = sql.identifier(column);
-      // A session nested under one of the former rows is the session's;
-      // the former rows themselves go below.
-      const besides =
-        table === "instances" ? sql` AND id NOT IN (${idList(ids)})` : sql``;
-      tx.run(
-        sql`UPDATE OR IGNORE ${name} SET ${by} = ${survivorId} WHERE ${by} IN (${idList(gone)})${besides}`
-      );
-      if (fold === "once") {
-        tx.run(sql`DELETE FROM ${name} WHERE ${by} IN (${idList(gone)})`);
+          ),
+        // Its identity too: the session it is now holds its own.
+        session_identities: () => revokeIdentities(tx, gone),
+      },
+      ({ table, column, fold }) => {
+        const name = sql.identifier(table);
+        const by = sql.identifier(column);
+        if (fold === "drop") {
+          tx.run(sql`DELETE FROM ${name} WHERE ${by} IN (${idList(gone)})`);
+          return;
+        }
+        // A session nested under one of the former rows is the session's;
+        // the former rows themselves go below.
+        const besides =
+          table === "instances" ? sql` AND id NOT IN (${idList(ids)})` : sql``;
+        tx.run(
+          sql`UPDATE OR IGNORE ${name} SET ${by} = ${survivorId} WHERE ${by} IN (${idList(gone)})${besides}`
+        );
+        if (fold === "once") {
+          tx.run(sql`DELETE FROM ${name} WHERE ${by} IN (${idList(gone)})`);
+        }
       }
-    }
-    // Its identity too: the session it is now holds its own.
-    revokeIdentities(tx, gone);
-    for (const { table, column } of FOLD_DROPPED) {
-      tx.run(
-        sql`DELETE FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} IN (${idList(gone)})`
-      );
-    }
+    );
     // The session as it began: its parent, its work and its place, its
     // toolset, and its name — but the owner's, which nothing replaces.
     const first = <K extends keyof typeof survivor>(key: K) =>
