@@ -538,7 +538,7 @@ import {
   projectDelegateTypesRoutes,
 } from "./project-delegate-types";
 import { projectDelete } from "./project-delete";
-import { createProjectEdits, ProjectEditRefusal } from "./project-edit";
+import { createProjectEdits } from "./project-edit";
 import {
   changeFolderFiles,
   YOU as FOLDER_YOU,
@@ -567,7 +567,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
-import { refusal } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl, peekAnswer } from "./relay-control";
@@ -2437,7 +2437,10 @@ export const createServer = (
    */
   const ownApprovedRuns: Record<
     string,
-    (input: Record<string, unknown>, asker: InstanceRow) => Promise<string>
+    (
+      input: Record<string, unknown>,
+      asker: InstanceRow
+    ) => Promise<string | Refused>
   > = {
     // A relay's opening asks as an admin write does (relay.ts).
     relay_create: async (input) => {
@@ -8313,8 +8316,10 @@ export const createServer = (
       online: () => onlineMachines().map(machineName),
     },
     // Caw's project_name: the rename the project head's details tray makes.
-    rename: async (projectId, name) =>
-      (await projectEdits.edit(projectId, { name })).project.name,
+    rename: async (projectId, name) => {
+      const edited = await projectEdits.edit(projectId, { name });
+      return edited instanceof ElysiaStatus ? edited : edited.project.name;
+    },
     projectsChanged,
     // A project note, a line in its conversation's transcript as it lands.
     noted: (instanceId, note) => noteProject(instanceId, note),
@@ -9622,12 +9627,12 @@ export const createServer = (
     projectId: string,
     change: Parameters<typeof projectEdits.edit>[1]
   ): Promise<void> => {
-    await projectEdits.edit(projectId, change).catch((error) => {
-      throw error instanceof ProjectEditRefusal
-        ? new PlaceRefusal(error.status, error.message)
-        : error;
-    });
+    const edited = await projectEdits.edit(projectId, change);
+    if (edited instanceof ElysiaStatus) {
+      throw new PlaceRefusal(edited.status, edited.response.detail);
+    }
   };
+
   // Caw's own project settings, applied through the settings' own paths, or
   // asked about as an admin write is (project-settings.ts).
   const settings = createProjectSettings({
