@@ -359,6 +359,10 @@ export interface HubContext {
     laterSince: number | undefined
   ) => Promise<{ kept: Kept } | { ended?: MoveEnded | undefined }>;
   caw: ReturnType<typeof createCaw>;
+  changeSend: <Row extends SentMessageRow>(
+    row: Row,
+    change: Parameters<DbShape["updateSend"]>[1]
+  ) => Row;
   checkSources: () => Promise<void>;
   claimAccount: (
     machineId: string,
@@ -473,6 +477,11 @@ export interface HubContext {
   ) => Promise<("changed" | "failed" | "same") | undefined>;
   find: ReturnType<typeof createFind>;
   findHears: (ids: string[]) => void;
+  firstTellingOfLeak: (
+    machineId: string,
+    instanceId: string,
+    said: { uuid?: unknown; content?: unknown }
+  ) => { row: PublicInstanceRow; uuid: string; content: string } | undefined;
   firstTurnOf: (transcript: unknown[]) => string | undefined;
   fleetChanged: (why?: string) => void;
   fleetMcp: FleetMcp;
@@ -1202,6 +1211,17 @@ export interface HubContext {
   ) => string[] | null;
   tasks: ReturnType<typeof createTasks>;
   tellEndedByMove: (row: { id: string; machineId: string }) => void;
+  tellSession: (
+    instanceId: string,
+    text: string,
+    arg2: {
+      line?: string;
+      live?: "running" | "ended";
+      name: string;
+      quiet?: boolean;
+      uuid?: string;
+    }
+  ) => void;
   tickLeaves: () => void;
   tickMoves: () => void;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
