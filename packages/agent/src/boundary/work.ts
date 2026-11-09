@@ -220,7 +220,7 @@ const workOf = async (
 /**
  * Every process of the work of each delegation workspace on this machine,
  * or of the workspaces `only` names, the boundary's own reading of it
- * ({@link busyOld}): on Linux everything that descends from a generation's
+ * (processes.ts `busyOld`): on Linux everything that descends from a generation's
  * sandbox init and was not there when its runner was ready ({@link inTree}),
  * and every executor on its way into one ({@link executors}), which runs on
  * the host as its session's shell's child; on macOS everything that answers
