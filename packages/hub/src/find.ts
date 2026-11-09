@@ -85,6 +85,7 @@ import {
   taskEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
+import { StatusRefusal } from "./refusal";
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -1599,11 +1600,9 @@ const reportsWaiting = (
   });
 
 /** A find refused for what was asked: its status, and the sentence that says why. */
-export class FindRefusal extends Error {
-  readonly status: 400 | 404;
+export class FindRefusal extends StatusRefusal<400 | 404> {
   constructor(message: string, refusal: 400 | 404 = 400) {
-    super(message);
-    this.status = refusal;
+    super(refusal, message);
   }
 }
 

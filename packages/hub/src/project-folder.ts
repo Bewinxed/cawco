@@ -25,6 +25,7 @@
  * never written to any config) and without the machine's global or system git
  * config, so an operator's signing key, hooks or aliases never reach it.
  */
+
 import type { Stats } from "node:fs";
 import {
   lstat,
@@ -50,6 +51,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { resolveReal } from "@cawco/core/workspace-judge";
 import { Elysia, status, t } from "elysia";
+import { StatusRefusal } from "./refusal";
 
 /**
  * Where every project's folder lives: `projects/` beside the database, by
@@ -180,17 +182,7 @@ export type FolderRefusalStatus =
   400 | 403 | 404 | 409 | 413 | 415 | 422 | 500 | 503 | 504;
 
 /** A folder request the hub turns down, with the status and the words the caller reads. */
-export class FolderRefusal extends Error {
-  readonly status: FolderRefusalStatus;
-  constructor(
-    code: FolderRefusalStatus,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = code;
-  }
-}
+export class FolderRefusal extends StatusRefusal<FolderRefusalStatus> {}
 
 /** An exclusive write refused: a file in its folder already holds its place (FolderWriteOptions.exclusive). */
 export class FolderTaken extends FolderRefusal {
