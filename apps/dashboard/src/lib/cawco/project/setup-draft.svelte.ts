@@ -13,6 +13,7 @@
  * The program is read again whenever the page changes (its `updatedAt` in
  * the project's decisions list), so stages he adds as he drafts appear.
  */
+
 import spec from "@cawco/core/decisions-spec";
 import {
   createParser,
@@ -34,6 +35,7 @@ import {
 } from "#lib/cawco/project/setup-stage.js";
 import { folderRawHref } from "#lib/cawco/project-tasks.js";
 import { failureWords } from "#lib/platform/hub-read.js";
+import { newestRead } from "#lib/platform/newest-read.js";
 
 /** The setup page, as the project's decisions list names it. */
 export interface SetupPageRow {
@@ -131,7 +133,7 @@ export class SetupDraftSource {
 
   #doc: ArtifactDoc | null = null;
   #joined: string | null = null;
-  #read = 0;
+  readonly #read = newestRead();
 
   /** The draft as the person sees it: what they kept over what he drafted. */
   get aim(): string {
@@ -182,8 +184,7 @@ export class SetupDraftSource {
         }
       );
     }
-    this.#read += 1;
-    const ticket = this.#read;
+    const newest = this.#read.next();
     try {
       const response = await fetch(folderRawHref(projectId, PROGRAM));
       // No program: a page from before the Setup, built as HTML alone.
@@ -194,14 +195,14 @@ export class SetupDraftSource {
         );
       }
       const read = missing ? null : setupIn(await response.text());
-      if (ticket === this.#read) {
+      if (newest()) {
         this.drafted = read?.drafted ?? null;
         this.cards = read?.cards ?? [];
         this.stale = read === null;
         this.problem = null;
       }
     } catch (error) {
-      if (ticket === this.#read) {
+      if (newest()) {
         this.problem = failureWords(error);
       }
     }
