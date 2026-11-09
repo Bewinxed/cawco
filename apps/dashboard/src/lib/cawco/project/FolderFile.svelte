@@ -19,9 +19,9 @@
   import { deliverableKind } from "@cawco/core/deliverables";
   import { hubRequest } from "@cawco/core/hub-request";
   import { filesWords } from "@cawco/core/words/files";
+  import Markdown from "#lib/cawco/Markdown.svelte";
   import { fileName } from "#lib/components/features/diff-language.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
-  import Markdown from "#lib/components/ui/markdown/markdown.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     failureWords,
