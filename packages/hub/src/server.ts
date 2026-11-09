@@ -1118,6 +1118,7 @@ import {
 import { createRepoPublish } from "./repo-publish";
 import { makesRoutines, talksWithPerson } from "./roles";
 import { bearerOf } from "./routes/bearer";
+import { delegationRoutes } from "./routes/delegation";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
 import { mcpRoutes } from "./routes/mcp";
@@ -1181,7 +1182,7 @@ import {
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
-import { createToolCallKeys, toolResultRefused } from "./tool-call-keys";
+import { createToolCallKeys } from "./tool-call-keys";
 import { releaseTarget, ToolReleases, updatesOwed } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
 import type { HubLine } from "./transcript";
@@ -33039,22 +33040,8 @@ export const createServer = (
   // above), where one more plugin does not.
   const hubRoutes = new Elysia().use([
     mcpRoutes(ctx),
+    delegationRoutes(ctx),
     new Elysia()
-      .get(
-        "/api/delegation/tools",
-        {
-          ...hidden,
-          query: t.Object({
-            instanceId: t.Optional(t.String()),
-            // pi's host listing its own session's tools: remembered, so the
-            // session hears when its list changes.
-            lister: t.Optional(t.Literal("pi")),
-          }),
-        },
-        ({ query, status }) =>
-          delegationMcp.list(query.instanceId, query.lister !== undefined) ??
-          status(404, `No session ${query.instanceId} on this hub.`)
-      )
       // Preparation only: enforcement is a separate cutover after every live row ACKs.
       .get(
         "/api/session-identities",
@@ -33215,77 +33202,6 @@ export const createServer = (
           }
           return await Promise.all(
             body.instanceIds.map(installSessionIdentity)
-          );
-        }
-      )
-      .post(
-        "/api/delegation/call/:instanceId",
-        { ...hidden, body: t.Any() },
-        ({ params, body, request, server, status }) => {
-          // The caller is its credential's session; the path only says which
-          // one it claims to be, and must agree.
-          const authorization = request.headers.get("authorization");
-          const identity = identities.resolve(authorization);
-          if (!identity) {
-            return status(
-              401,
-              authorization === null
-                ? "A CawCo tool call needs its session credential"
-                : "Invalid session credential"
-            );
-          }
-          if (identity.instanceId !== params.instanceId) {
-            return status(
-              403,
-              "Session credential does not belong to the named instanceId"
-            );
-          }
-          if (
-            typeof body !== "object" ||
-            body === null ||
-            Array.isArray(body) ||
-            typeof (body as { name?: unknown }).name !== "string" ||
-            !(body as { name: string }).name.trim() ||
-            ("arguments" in body &&
-              (typeof body.arguments !== "object" ||
-                body.arguments === null ||
-                Array.isArray(body.arguments)))
-          ) {
-            return status(
-              400,
-              "delegation call needs a non-empty tool name and object arguments"
-            );
-          }
-          const input = body as {
-            name: string;
-            arguments?: Record<string, unknown>;
-            /** The harness's own key for the call (pi's toolCallId, call-keys.ts). */
-            callKey?: unknown;
-          };
-          if (
-            input.name === "generate_image" ||
-            input.name === "continue_session" ||
-            input.name === "delegate" ||
-            input.name === "finish_item"
-          ) {
-            server?.timeout(request, 0);
-          }
-          return toolCallKeys.once(
-            request,
-            async () =>
-              Response.json(
-                await delegationMcp.call(
-                  params.instanceId,
-                  input.name,
-                  input.arguments ?? {},
-                  authorization ?? undefined,
-                  undefined,
-                  typeof input.callKey === "string" && input.callKey
-                    ? input.callKey
-                    : undefined
-                )
-              ),
-            toolResultRefused
           );
         }
       ),
