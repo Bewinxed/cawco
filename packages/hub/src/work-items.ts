@@ -146,6 +146,7 @@ import {
   createLandingRun,
   fenced,
   findingsBlock,
+  LANDING_ENDED,
   MIB,
   reportLine,
 } from "./landing-run";
@@ -2128,8 +2129,7 @@ export const createWorkItems = ({
       const ended = finish(item, {
         state: "failed",
         error: SESSION_GONE,
-        landingSince: null,
-        submission: null,
+        ...LANDING_ENDED,
       });
       const failed = ended.state === "failed";
       console.log(`[work-items] ${item.id}: ${SESSION_GONE}`);
@@ -4729,8 +4729,7 @@ export const createWorkItems = ({
       finish(item, {
         state: "cancelled",
         stoppedBy: { kind: "hub", why },
-        landingSince: null,
-        submission: null,
+        ...LANDING_ENDED,
       });
       end(item.instanceId).catch((error: unknown) =>
         console.warn(
@@ -5468,8 +5467,7 @@ export const createWorkItems = ({
           state: "failed",
           error,
           headline: request.headline,
-          landingSince: null,
-          submission: null,
+          ...LANDING_ENDED,
         });
         const failed = ended.state === "failed";
         report(
@@ -5679,8 +5677,7 @@ export const createWorkItems = ({
       update(item.id, {
         stoppingAt: new Date(),
         stoppedBy: by,
-        landingSince: null,
-        submission: null,
+        ...LANDING_ENDED,
       });
       console.log(
         `[work-items] ${item.id}: stopping; held until its machine confirms its session ended`
@@ -5708,8 +5705,7 @@ export const createWorkItems = ({
           state: "cancelled",
           stoppedBy: item.stoppedBy ?? by,
           stoppingAt: null,
-          landingSince: null,
-          submission: null,
+          ...LANDING_ENDED,
         },
         { stopped: true }
       );
@@ -6088,8 +6084,7 @@ export const createWorkItems = ({
         stoppedBy: { kind: "person" },
         dismissedAt,
         ...said,
-        landingSince: null,
-        submission: null,
+        ...LANDING_ENDED,
       });
       console.log(`[work-items] ${item.id}: dismissed while live; cancelled`);
       end(item.instanceId).catch((error: unknown) =>
