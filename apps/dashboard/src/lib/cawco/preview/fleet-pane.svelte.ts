@@ -7,12 +7,13 @@
 import type { FsEntry } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
-import { cawco, machineFs } from "../client.svelte";
+import { cawco } from "../client.svelte";
 import { didntAnswer } from "../hub/control";
 import { conversationHref } from "../links";
 import { boardStore } from "../stores/board.svelte";
 import { browsersStore } from "../stores/browsers.svelte";
 import { catalogStore } from "../stores/catalog.svelte";
+import { machineFs } from "../stores/machines";
 import { closePreview, previewsStore } from "../stores/previews.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";

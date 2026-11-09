@@ -48,8 +48,9 @@ import { route } from "#lib/platform/motion/route.svelte.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import { cawco } from "./client.svelte";
+import { offerBringBack } from "./project-end.svelte";
 import {
-  cawco,
   cawOf,
   configureCaw,
   deleteProjectForGood,
@@ -58,8 +59,7 @@ import {
   type RunningSession,
   readProjects,
   stopProjectSessions,
-} from "./client.svelte";
-import { offerBringBack } from "./project-end.svelte";
+} from "./stores/projects.svelte";
 
 /** Where a tray stands. */
 type StopPhase =
