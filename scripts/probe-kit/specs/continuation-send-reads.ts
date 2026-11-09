@@ -1,7 +1,7 @@
 /**
  * A send never reads a continuation job's prepared transcript and prompt:
  * the reads every send and every board publish make of the job table
- * (server.ts `heldAtLimit` → `moveJobOf`, `continuationTable`) select a
+ * (sends.ts `heldAtLimit` → `moveJobOf`, `continuationTable`) select a
  * job's session, stage and ids only (hub db `continuationSlips`).
  *
  * 2026-11-04, obelisk's hub: every `deliverToSession` read every job whole,
@@ -18,7 +18,7 @@
  *
  * (a) The scene stands: the job is open and its `prepared` that large.
  * (b) {@link SENDS} sends to the new session (the source never runs again:
- *     server.ts `retireContinued`) are each read by it, and
+ *     continuations.ts `retireContinued`) are each read by it, and
  *     `/api/continuations` answers with the job open.
  * (c) The hub's log never names `continuations.prepared` meanwhile: no read
  *     of it was made.

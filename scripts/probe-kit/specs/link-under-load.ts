@@ -2,7 +2,7 @@
  * A machine's link to the hub stays up while it makes workspaces and their
  * items finish under load, and a link that does drop loses no request (agent
  * daemon.ts, the link's deadline; core wire.ts, the outbox's lanes and stall
- * clock; hub work-items.ts `handIn`, server.ts `resendHeld`; agent
+ * clock; hub work-items.ts `handIn`, machine-calls.ts `resendHeld`; agent
  * request-record.ts). On a scratch fleet (real hub, two machines' agents and
  * sessionds; Claude Code against the mock model). This spec delegates, so
  * its fleet cuts workspaces: it runs on the host, outside every boundary.
@@ -68,7 +68,7 @@ const DROPS = ["hub link silent", "fell behind", "not reading"];
 const AWAY = ["whether it ran is not known", "Completion is unknown"];
 /** What a hub's read that missed its deadline says. */
 const LATE = ["did not answer within", "didn't answer within"];
-/** What the hub says as it sends held requests again (server.ts `resendHeld`). */
+/** What the hub says as it sends held requests again (machine-calls.ts `resendHeld`). */
 const RESENT = "request(s) held for it sent again under their own ids";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });

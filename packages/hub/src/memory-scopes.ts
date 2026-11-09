@@ -2,7 +2,7 @@
  * Which of the fleet's scoped memory documents a session launches with
  * (core fleet.ts `MemoryScope`): by its role, the delegate type it started
  * as, its model and its project. The hub picks them as it grants a launch
- * (server.ts `grantLaunch`), so every launch, restore and relaunch carries
+ * (launches.ts `grantLaunch`), so every launch, restore and relaunch carries
  * what the fleet says now; the harness puts them in the session's own
  * instructions, which a compaction keeps. A document scoped to projects
  * alone is placed in the projects' folders instead (project-placements.ts),

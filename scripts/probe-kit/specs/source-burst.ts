@@ -29,10 +29,10 @@
  *    link it was handed on: the relay drops the frame and cuts the link
  *    (link-under-load lane 11 on 2026-10-20, whose brief went 143 ms before
  *    the cut and was never read). Once the machine is back, the hub hands it
- *    again (hub server.ts `handAgain`), and the session reads it once.
+ *    again (hub machine-calls.ts `handAgain`), and the session reads it once.
  * 5. A person starts a session on the second machine 1 s into a 3 s cut of
  *    its link: the hub keeps the start for the machine's register (hub
- *    server.ts `startHold`, `flushOwedStarts`), and once the machine is back
+ *    start-holds.ts `startHold`, `flushOwedStarts`), and once the machine is back
  *    there is one row for it and one session. On 2026-10-20 such a start was
  *    answered "offline" and made no row (leg 3's, sent as leg 2's cut ended;
  *    leg 3 starts there still).
