@@ -93,10 +93,7 @@ export async function readProjectPage(
         fetch,
         hubRequest("GET /api/projects/:id/tasks", { path })
       ),
-      readHub<StagesView>(
-        fetch,
-        hubRequest("GET /api/projects/:id/stages", { path })
-      ),
+      hubRead(hubThrough(fetch).api.projects(path).stages.get()),
       words ? finding(false) : null,
       words ? finding(true) : null,
     ]);
