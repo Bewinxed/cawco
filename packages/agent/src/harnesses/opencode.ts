@@ -247,8 +247,8 @@ const OPENCODE_SIDECAR = join(OPENCODE_DIR, "cawco-fleet.json");
  * The fleet's MCP servers for OpenCode, by name, in 2.0's
  * `mcp.servers.<name>` shape: read into each server's launch config
  * ({@link OpencodeHarness.#launchConfig}), never by OpenCode itself (a
- * config dir's files it reads are `opencode.json` and `opencode.jsonc`, core
- * config/discovery.ts `names`, v2.0.29). Why not `opencode.json`:
+ * config dir's files it reads are `opencode.json` and `opencode.jsonc`,
+ * anomalyco/opencode/packages/core/src/config/discovery.ts `names`, v2.0.29). Why not `opencode.json`:
  * {@link syncOpencodeMcp}.
  */
 const OPENCODE_FLEET_MCP = join(OPENCODE_DIR, "cawco-fleet-mcp.json");
@@ -5350,7 +5350,7 @@ export class OpencodeHarness implements Harness<"opencode"> {
    * A held session taken back from the server generation running it, or
    * opened on its account's server when none runs its turn. Each attempt is
    * {@link #reattachOnce} on a round of its own, its every request bounded by
-   * {@link RECOVERY_TIMEOUT_MS}. A server that answers for the session with an
+   * `RECOVERY_TIMEOUT_MS`. A server that answers for the session with an
    * error refuses it at once. One out of reach, or one that does not answer
    * in time ({@link ReattachUnanswered}), is tried again after
    * {@link RECOVERY_RETRY_FIRST_MS}, doubling to {@link RECOVERY_RETRY_MAX_MS},
