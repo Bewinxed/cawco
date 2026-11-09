@@ -688,7 +688,7 @@ import {
 } from "./config";
 import { createConnectAsks, type FleetMcpTook } from "./connect-asks";
 import { connectionRoutes, createConnections } from "./connections";
-import { finishedAnswer } from "./continuation";
+import { finishedAnswer } from "./continuation-words";
 import {
   CONTINUATION_CANCELLED,
   createContinuations,
