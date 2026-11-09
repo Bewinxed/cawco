@@ -400,7 +400,7 @@ export const workItemRoutes = ({
       const item = workItems.item(params.id);
       return item ?? status(404, `no work item ${params.id}`);
     })
-    // What the item's workspace holds on no remote now (work-items.ts
+    // What the item's workspace holds on no remote now (workspaces.ts
     // `unlandedOf`), or why it could not be read: what `stop_delegate`
     // answers its caller about the hold its stop leaves.
     .get("/api/work-items/:id/unlanded", hidden, async ({ params, status }) => {
