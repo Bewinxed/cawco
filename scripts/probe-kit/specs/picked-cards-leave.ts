@@ -422,9 +422,12 @@ const seed = async (
     auth: "unknown",
   });
   db.createProject({ id: PROJECT, name: "Probe office", remote: null });
-  await writeFolderFile(PROJECT, "decides.md", DECIDES, {
+  const committed = await writeFolderFile(PROJECT, "decides.md", DECIDES, {
     author: { name: "probe" },
   });
+  if (!("sha" in committed)) {
+    throw new Error(committed.response.detail);
+  }
   const open = (title: string): string => {
     const id = crypto.randomUUID();
     db.openInstance({

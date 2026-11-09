@@ -448,7 +448,6 @@ catch-drops-reason	CallExpression	packages/agent/src/keepers.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/provider-accounts.ts	1
 catch-drops-reason	CallExpression	packages/agent/src/session-containers.ts	1
 catch-drops-reason	CallExpression	packages/hub/src/git-remote.ts	1
-catch-drops-reason	CallExpression	packages/hub/src/tasks.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/changes.ts	1
 catch-drops-reason	CallExpression	packages/preview/src/overlay/pins.ts	2
 catch-drops-reason	CallExpression	packages/preview/src/overlay/radial.ts	2
@@ -564,7 +563,7 @@ catch-drops-reason	empty	packages/hub/src/tailnet-door.ts	1
 catch-drops-reason	empty	packages/sessiond/src/cgroup.ts	2
 catch-drops-reason	empty	packages/sessiond/src/server.ts	1
 catch-drops-reason	empty	scripts/scratch-fleet-leash.ts	1
-catch-drops-reason	noop	packages/hub/src/project-folder.ts	10
+catch-drops-reason	noop	packages/hub/src/project-folder.ts	8
 catch-drops-reason	ParenthesizedExpression	scripts/probe-kit/specs/comment-delivery.ts	1
 catch-drops-reason	ParenthesizedExpression	scripts/probe-kit/specs/comment-link.ts	1
 catch-drops-reason	ParenthesizedExpression	scripts/probe-kit/specs/context-filing.ts	2

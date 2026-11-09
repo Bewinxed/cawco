@@ -25,6 +25,7 @@ import type { WorkInFlight } from "@cawco/core/session/controls";
 import { CONTROL_WORK_IN_FLIGHT } from "@cawco/core/session/controls";
 import { ContinuationReadSchema } from "@cawco/core/stored-shapes";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
+import { ElysiaStatus } from "elysia";
 import {
   asksOpening,
   gitSection,
@@ -1304,7 +1305,13 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     // session it went on in from here, across restarts, and its card is
     // drawn there.
     detach(
-      ctx.projectMemory.folded(from, to),
+      ctx.projectMemory.folded(from, to).then((done) => {
+        if (done instanceof ElysiaStatus) {
+          console.warn(
+            `[memory proposals of a folded session] failed: ${done.response.detail}`
+          );
+        }
+      }),
       "memory proposals of a folded session"
     );
     ctx.designSystem.folded(to);

@@ -57,7 +57,7 @@ import {
 import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { CLOSED_STAGE_KINDS, type StageKind } from "@cawco/core/views";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import { designShaped } from "./design-offers";
@@ -67,7 +67,12 @@ import { projectDesign } from "./landed";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { AGENTS_FILE, fileOr } from "./memory";
 import { KNOWLEDGE_DIR } from "./memory-facts";
-import { FolderRefusal, listFolder, refused } from "./project-folder";
+import { listFolder } from "./project-folder";
+import {
+  ProjectRefusal,
+  projectRefusalOf,
+  projectRefused,
+} from "./project-refusal";
 import {
   boundStarterInputs,
   STARTER_OFTEN,
@@ -154,17 +159,16 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     dir: string,
     recursive: boolean
   ): Promise<string[]> => {
-    try {
-      const listing = await listFolder(projectId, dir, recursive);
-      return listing.entries
-        .filter((entry) => entry.kind === "file")
-        .map((entry) => entry.path);
-    } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
+    const listing = await listFolder(projectId, dir, recursive);
+    if (listing instanceof ElysiaStatus) {
+      if (listing.status === 404) {
         return [];
       }
-      throw error;
+      throw projectRefusalOf(listing);
     }
+    return listing.entries
+      .filter((entry) => entry.kind === "file")
+      .map((entry) => entry.path);
   };
 
   /**
@@ -242,7 +246,12 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     const [{ tasks: all }, agents, knowledge, drafts, landed] =
       await Promise.all([
         tasks.list(projectId),
-        fileOr(projectId, AGENTS_FILE),
+        fileOr(projectId, AGENTS_FILE).then((text) => {
+          if (text instanceof ElysiaStatus) {
+            throw projectRefusalOf(text);
+          }
+          return text;
+        }),
         filesIn(projectId, KNOWLEDGE_DIR, true),
         filesIn(projectId, DRAFTS_DIR, false),
         projectDesign(deps, projectId, COMMITS_READ),
@@ -496,7 +505,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     ): { ok: true } {
       const stored = db.starters.set(projectId, place);
       if (!stored?.starters.some((starter) => starter.text === text)) {
-        throw new FolderRefusal(
+        throw new ProjectRefusal(
           404,
           "That starter is not one this project offers there now."
         );
@@ -525,7 +534,7 @@ export const starterRoutes = (starters: ProjectStarters) =>
       try {
         return starters.record(params.id, body.place, body.text, body.outcome);
       } catch (error) {
-        return refused(error);
+        return projectRefused(error);
       }
     }
   );
