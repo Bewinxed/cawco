@@ -1504,7 +1504,7 @@
     width var(--duration-toggle) var(--ease-out),
     height var(--duration-toggle) var(--ease-out),
     opacity var(--duration-ghost) var(--ease-out);
-  /* A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit; these folds are each driven on WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other element takes this. */
+  /* A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit, so no other element takes this. */
   --transition-fold-fade:
     opacity var(--duration-exit) var(--ease-out),
     filter var(--duration-exit) var(--ease-out);

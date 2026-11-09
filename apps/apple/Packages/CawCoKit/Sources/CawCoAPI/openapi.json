@@ -43298,7 +43298,7 @@
             "type": "string"
           },
           "root": {
-            "description": "`claude-home`: `path` is under the machine's user layer, Claude Code's\nown dir (`~/.claude`), as the machine itself places it (core paths.ts\n`claudeHome`): no caller has to know a machine's home to reach it.",
+            "description": "`claude-home`: `path` is under the machine's user layer, Claude Code's\nown dir (`~/.claude`), as the machine itself places it (core paths/claude.ts\n`claudeHome`): no caller has to know a machine's home to reach it.",
             "const": "claude-home",
             "type": "string"
           }
@@ -46862,7 +46862,7 @@
             "description": "`container-runtime` only: what the runtime forwards to the browser's media port. Short of `udp+tcp`, `reason` says how to get both."
           },
           "missing": {
-            "description": "`workspace` only: each tool a delegate's workspace needs that the\nmachine lacks (agent workspace-needs.ts). While it is not empty the\nmachine refuses every delegate before anything starts, in `reason`'s\nwords, and `installCommand` installs them all.",
+            "description": "`workspace` only: each tool a delegate's workspace needs that the\nmachine lacks (core workspace-needs.ts). While it is not empty the\nmachine refuses every delegate before anything starts, in `reason`'s\nwords, and `installCommand` installs them all.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WorkspaceTool"
@@ -56965,7 +56965,7 @@
             ]
           },
           "hostScratch": {
-            "description": "A host-scope work item's session (hub work-items.ts `startHost`): the id\nof its host workspace, whose scratch dir (core paths.ts\n`workspaceScratchDir`) the machine makes, `outputs/` in it, and gives its\ncommands as `TMPDIR`, though they run on the host with no boundary.\nWhat it leaves in `$TMPDIR/outputs/` the hub copies into its project's\nfolder (core harness.ts `CONTROL_HOST_OUTPUTS`). Set on each\nspawn of such a session, as {@link workspace} is on a bounded one's, and\non no other.",
+            "description": "A host-scope work item's session (hub work-items.ts `startHost`): the id\nof its host workspace, whose scratch dir (core paths/workspace.ts\n`workspaceScratchDir`) the machine makes, `outputs/` in it, and gives its\ncommands as `TMPDIR`, though they run on the host with no boundary.\nWhat it leaves in `$TMPDIR/outputs/` the hub copies into its project's\nfolder (core harness.ts `CONTROL_HOST_OUTPUTS`). Set on each\nspawn of such a session, as {@link workspace} is on a bounded one's, and\non no other.",
             "type": "string"
           },
           "ingested": {
