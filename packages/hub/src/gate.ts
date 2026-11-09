@@ -1,4 +1,5 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
+import { machineCalled } from "@cawco/core/machine-names";
 import { isMachinePath, type MachinePath } from "@cawco/core/machine-path";
 import type { DeclaredStep, RunsOnCapability } from "@cawco/core/project-gate";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -222,10 +223,10 @@ export interface GateDeps extends Pick<
   WorkspacesDeps,
   "call" | "command" | "db"
 > {
-  readonly landingStops: Map<string, AbortController>;
+  /** What item `itemId`'s end aborts while this hub runs its landing (landing-run.ts `landingStops`); nothing when it runs none. */
+  readonly landingStop: (itemId: string) => AbortSignal | undefined;
   /** Resolves once `machineId`'s pause is over; at once when it is not paused. */
   readonly machineFree: (machineId: string) => Promise<void>;
-  readonly machineName: (machineId: string) => string;
   /**
    * "Omars-MacBook-Pro is paused until 00:57" while the owner has paused
    * `machineId` (machine-pause.ts); undefined when it is not paused.
@@ -254,15 +255,17 @@ export const createGate = ({
   call,
   command,
   db,
-  landingStops,
+  landingStop,
   machineFree,
-  machineName,
   machinePaused,
   online,
   runIn,
   update,
   workspaces,
 }: GateDeps) => {
+  /** A machine as a gate step's line names it: its hostname as the fleet shows it. */
+  const machineName = (machineId: string): string =>
+    machineCalled(machineId, db.listAgents());
   /**
    * The gate commands that passed for a live item, by what they passed on
    * ({@link passKey}: the whole tree, or the trees of the paths a step
@@ -370,8 +373,8 @@ export const createGate = ({
     /** What a step waits for, as the item's status says it ({@link GateHow}). */
     const queued = (words: string | null): void =>
       how.say(words, current?.name);
-    /** The item's end, which cancels every step running ({@link landingStops}). */
-    const stop = landingStops.get(item.id)?.signal;
+    /** The item's end, which cancels every step running ({@link GateDeps.landingStop}). */
+    const stop = landingStop(item.id);
     /**
      * How a step's commands run: a pause that cancels one hands it back
      * here; in the turn, one that would wait throws {@link WouldWait}; the
