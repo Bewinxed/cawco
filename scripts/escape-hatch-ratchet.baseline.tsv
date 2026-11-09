@@ -292,6 +292,7 @@ as-unknown-as	ArtifactsDb	scripts/probe-kit/specs/web/page-faults.ts	1
 as-unknown-as	AskRecord	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
 as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
 as-unknown-as	Buffer	packages/agent/src/browser/relay.ts	1
+as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
 as-unknown-as	CanvasOnPage	packages/agent/src/stage-render.ts	1
 as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/decides/preview/SetupFixture.svelte	1
 as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
