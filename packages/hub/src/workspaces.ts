@@ -166,13 +166,64 @@ export const ownCopy = (workspace: WorkspaceRow): boolean =>
   workspace.path !== workspace.repoRoot;
 
 /**
+ * What a workspace is, one member per lifecycle, read from its row:
+ * - `clone`: a delegate's clone of a repository, landed by git.
+ * - `folderOverlay`: a delegate's view of any other folder, landed by its
+ *   change set (agent layer.ts).
+ * - `hostFolder`: a host-scope delegate's own folder on the host
+ *   (schema.ts `workspaces.host`): no clone, no boundary, nothing landed,
+ *   held or archived; its scratch dir settles alone ({@link settleHost}).
+ * - `gateClone`: the clone a merge check's step runs in on another machine,
+ *   for workspace `checksFor`: no work item, archived with that one.
+ * - `stageClone`: the clone a place's stage runs in (core
+ *   `StageCloneFrame`): no work item, settled once that stage sleeps.
+ *
+ * The columns never name two of these at once: each is filed by its own
+ * path ({@link openWorkspace}, `startHost`, {@link fileStage}).
+ */
+export type Workspace =
+  | { kind: "clone"; row: WorkspaceRow }
+  | { kind: "folderOverlay"; row: WorkspaceRow }
+  | { kind: "hostFolder"; row: WorkspaceRow }
+  | { kind: "gateClone"; row: WorkspaceRow; checksFor: string }
+  | { kind: "stageClone"; row: WorkspaceRow; place: string };
+
+/** The member of {@link Workspace} `row` is. */
+export const workspaceOf = (row: WorkspaceRow): Workspace => {
+  if (row.host) {
+    return { kind: "hostFolder", row };
+  }
+  if (row.checksFor) {
+    return { kind: "gateClone", row, checksFor: row.checksFor };
+  }
+  if (row.stageFor) {
+    return { kind: "stageClone", row, place: row.stageFor };
+  }
+  return row.kind === "folder"
+    ? { kind: "folderOverlay", row }
+    : { kind: "clone", row };
+};
+
+/** Whether `row` is a host-scope delegate's folder: no clone and no boundary. */
+export const isHostFolder = (row: WorkspaceRow): boolean =>
+  workspaceOf(row).kind === "hostFolder";
+
+/** Whether `row` is a delegate's view of a folder, landed by its change set. */
+export const isFolderOverlay = (row: WorkspaceRow): boolean =>
+  workspaceOf(row).kind === "folderOverlay";
+
+/** Whether `row` is a gate clone: it takes no work item. */
+export const isGateClone = (row: WorkspaceRow): boolean =>
+  workspaceOf(row).kind === "gateClone";
+
+/**
  * A workspace as its machine is told about it: a clone and its boundary. A
  * host-scope row (schema.ts `workspaces.host`) is the host's own folder,
  * which no machine call may treat as a clone (an archive deletes one), so
  * naming one throws.
  */
 export const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
-  if (workspace.host) {
+  if (isHostFolder(workspace)) {
     throw new Error(
       `workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}: no clone and no boundary to act on`
     );
@@ -190,7 +241,6 @@ export const SPACES = /\s+/u;
 export const landingKey = (item: Pick<WorkItemRow, "id" | "taskId">): string =>
   item.taskId ?? item.id.slice(0, 8);
 
-/** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
 /**
  * Where an item's outputs land in its project's folder: `assets/tsk-12/`
  * for an attempt at a task, `assets/<item>/` for a work item of none.
@@ -234,6 +284,26 @@ export const scratchOutputsOf = (stdout: string): ScratchOutput[] =>
 
 /** Why an archive on purpose is refused, in the words its caller reads (`workspace`'s handle, each waiting artifact by its link). */
 type WaitingWords = (ws: string, links: readonly string[]) => string;
+
+/**
+ * One thing that holds a workspace whose items have all ended ({@link
+ * createWorkspaces} `holdsOf`), and its words: a place's stage that runs
+ * (a stage clone's only hold), an item's landing that still runs, a
+ * session attached there, a message on its way to one, a continuation
+ * under way, an artifact showing what it serves, a project's folder inside
+ * it.
+ */
+export interface WorkspaceHold {
+  kind:
+    | "attached"
+    | "continuation"
+    | "landing"
+    | "place"
+    | "send"
+    | "served"
+    | "stage";
+  words: string;
+}
 
 /** What one {@link settle} came to. */
 export type Settled =
@@ -308,7 +378,7 @@ export interface WorkspacesDeps {
   /**
    * Whether a send pending for the session may start a turn in it (server.ts
    * `startsTurnIn`): it wakes the session in its workspace, which holds the
-   * workspace ({@link holdOn}). One kept for a stopped session no such send
+   * workspace ({@link holdsOf}). One kept for a stopped session no such send
    * has woken holds nothing.
    */
   readonly sendWakes: (instanceId: string) => boolean;
@@ -524,7 +594,7 @@ export const createWorkspaces = ({
    * an item of no project has no folder to copy into.
    */
   const keepScratchOutputs = async (workspace: WorkspaceRow): Promise<void> => {
-    if (workspace.checksFor) {
+    if (isGateClone(workspace)) {
       return;
     }
     const item = db.workItemsIn(workspace.id).find((one) => one.projectId);
@@ -533,7 +603,7 @@ export const createWorkspaces = ({
     }
     const folder = outputsFolder(item);
     try {
-      const read = workspace.host
+      const read = isHostFolder(workspace)
         ? await hostOutputsRead(workspace)
         : ((await call(workspace.machineId, CONTROL_WORKSPACE_OUTPUTS, [
             refOf(workspace),
@@ -693,36 +763,10 @@ export const createWorkspaces = ({
   ]);
   /** Sessions whose kept sends wait for their workspace's turn and cut (work-items.ts `recutFor`): one wait each. */
   const recutWaits = new Set<string>();
-  /** Items whose session's continuation is being prepared, by count: their workspace is held ({@link holdOn}). */
+  /** Items whose session's continuation is being prepared, by count: their workspace is held ({@link holdsOf}). */
   const continuing = new Map<string, number>();
   /** A continuation's stages before it settles: its job still reads or starts in the clone. */
   const CONTINUING = new Set(["filing", "summarising", "starting"]);
-  /**
-   * What the sessions of a workspace's ended items hold it by ({@link holdOn}):
-   * a process that may still run there, a message on its way to one, or a
-   * continuation of one being prepared or under way.
-   */
-  const sessionsHold = (items: readonly WorkItemRow[]): string | undefined => {
-    const sessions = new Set(items.map((item) => item.instanceId));
-    const rows = db.getInstancesByIds([...sessions]);
-    const attached = rows.find((row) => ATTACHED.has(row.status));
-    if (attached) {
-      return `its session ${attached.id} is ${attached.status === "stopping" ? "stopping" : "attached"}`;
-    }
-    const awaited = rows.find((row) => sendWakes(row.id));
-    if (awaited) {
-      return `a message to its session ${awaited.id} is on its way`;
-    }
-    const prepared = items.find((item) => continuing.has(item.id));
-    const job = db
-      .continuationSlips()
-      .find(
-        (row) => CONTINUING.has(row.stage) && sessions.has(row.sourceInstanceId)
-      );
-    if (prepared || job) {
-      return `a continuation of its session ${job?.sourceInstanceId ?? prepared?.instanceId} is under way`;
-    }
-  };
   /**
    * A workspace's own folders, which go with it: its copy ({@link ownCopy})
    * and its scratch dir (its commands' `TMPDIR`). A Linux view's path is the
@@ -774,7 +818,7 @@ export const createWorkspaces = ({
    * What a workspace serves and still owes ({@link owedFrom}), in words, or
    * nothing. On 2026-10-15 a workspace was retired while it served the
    * owner's two open previews. Retirement waits for every one ({@link
-   * holdOn}); an archive or discard on purpose refuses only on those
+   * holdsOf}); an archive or discard on purpose refuses only on those
    * waiting on the person ({@link waitingFrom}), and ends the served
    * servers of the rest, whose rows stay, reading as a server that isn't
    * running.
@@ -845,36 +889,91 @@ export const createWorkspaces = ({
     }
   };
   /**
-   * What holds a workspace whose items have all ended, in words, or nothing:
-   * the landing of one of its items still running (its run settles the
-   * workspace again as it ends, work-items.ts `settleLanding`), a session of its
-   * items whose process may still run there (one asleep, stopped or failed
-   * has none), a message on its way that wakes one of those sessions there,
-   * a continuation of one of them being prepared or under way (it reads the
-   * clone and its new session starts there, taking the item on:
-   * {@link sessionsHold}), an artifact previewing it ({@link previewedBy}),
-   * or a project's folder inside it ({@link placesIn}). On
-   * 2026-10-17 one was retired between the check that its clone was there
-   * and a continuation's read of it (attach-continue, "could not read git …
-   * ENOENT"). A hold defers
-   * retirement until it goes, never cancels it.
+   * EVERYTHING THAT HOLDS A WORKSPACE WHOSE ITEMS HAVE ALL ENDED, in the
+   * order its words are told; none when nothing does. A hold defers its
+   * retirement until it goes, never cancels it. What holds depends on what
+   * the workspace is ({@link Workspace}):
+   * - a stage clone: its place's stage while it runs, and nothing else;
+   * - any other: the landing of one of its items still running (its run
+   *   settles the workspace again as it ends, landing-run.ts `settleLanding`), a
+   *   session of its items whose process may still run there (one asleep,
+   *   stopped or failed has none), a message on its way that wakes one of
+   *   those sessions there, a continuation of one of them being prepared or
+   *   under way (it reads the clone and its new session starts there,
+   *   taking the item on);
+   * - and, but for a host-scope folder, which has no clone: an artifact
+   *   previewing it ({@link previewedBy}), or a project's folder inside it
+   *   ({@link placesIn}).
+   *
+   * On 2026-10-17 one was retired between the check that its clone was
+   * there and a continuation's read of it (attach-continue, "could not read
+   * git … ENOENT").
    */
-  const holdOn = (
+  const holdsOf = (
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
-  ): string | undefined => {
+  ): WorkspaceHold[] => {
+    const member = workspaceOf(workspace);
+    if (member.kind === "stageClone") {
+      const stage = stageRuns?.(member.place);
+      return stage ? [{ kind: "stage", words: stage }] : [];
+    }
+    const holds = itemHolds(items);
+    if (member.kind === "hostFolder") {
+      return holds;
+    }
+    const served = previewedBy(workspace);
+    if (served) {
+      holds.push({ kind: "served", words: served });
+    }
+    const place = placesIn(workspace);
+    if (place) {
+      holds.push({ kind: "place", words: place });
+    }
+    return holds;
+  };
+  /** What a workspace's ended items hold it by ({@link holdsOf}): an item's landing, then its sessions'. */
+  const itemHolds = (items: readonly WorkItemRow[]): WorkspaceHold[] => {
+    const holds: WorkspaceHold[] = [];
     // A stopped item's landing runs on in the clone until its next turn or
     // push ends it (landing.ts `stopped`): closing the clone under it would
     // cut its commands off mid-rebase.
     const landing = items.find((item) => finishing.has(item.id));
     if (landing) {
-      return `the landing of its item ${landing.id} still runs`;
+      holds.push({
+        kind: "landing",
+        words: `the landing of its item ${landing.id} still runs`,
+      });
     }
-    const held = sessionsHold(items);
-    if (held) {
-      return held;
+    const sessions = new Set(items.map((item) => item.instanceId));
+    const rows = db.getInstancesByIds([...sessions]);
+    const attached = rows.find((row) => ATTACHED.has(row.status));
+    if (attached) {
+      holds.push({
+        kind: "attached",
+        words: `its session ${attached.id} is ${attached.status === "stopping" ? "stopping" : "attached"}`,
+      });
     }
-    return previewedBy(workspace) ?? placesIn(workspace);
+    const awaited = rows.find((row) => sendWakes(row.id));
+    if (awaited) {
+      holds.push({
+        kind: "send",
+        words: `a message to its session ${awaited.id} is on its way`,
+      });
+    }
+    const prepared = items.find((item) => continuing.has(item.id));
+    const job = db
+      .continuationSlips()
+      .find(
+        (row) => CONTINUING.has(row.stage) && sessions.has(row.sourceInstanceId)
+      );
+    if (prepared || job) {
+      holds.push({
+        kind: "continuation",
+        words: `a continuation of its session ${job?.sourceInstanceId ?? prepared?.instanceId} is under way`,
+      });
+    }
+    return holds;
   };
   /**
    * A place's stage clone filed as its machine says it is cut and in step
@@ -934,16 +1033,8 @@ export const createWorkspaces = ({
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
   ): boolean =>
-    (items.length > 0 || Boolean(workspace.stageFor)) &&
+    (items.length > 0 || workspaceOf(workspace).kind === "stageClone") &&
     !items.some((item) => LIVE.has(item.state));
-  /** What holds a settlable workspace, in words: a stage clone's place's stage that runs, any other's {@link holdOn}. */
-  const holdOf = (
-    workspace: WorkspaceRow,
-    items: readonly WorkItemRow[]
-  ): string | undefined =>
-    workspace.stageFor
-      ? stageRuns?.(workspace.stageFor)
-      : holdOn(workspace, items);
   /**
    * Each workspace's settle failures in a row ({@link settle}): how many,
    * when the sweep may try it again ({@link settleBackoffMs}), and whether
@@ -1122,7 +1213,7 @@ export const createWorkspaces = ({
   /**
    * A WORKSPACE WHOSE ITEMS HAVE ALL ENDED RUNS NOTHING BUT WHAT A LANDING
    * RUNS OR AN ARTIFACT SHOWS. Settled while an awake session of its items is
-   * all that holds it (`hold`, {@link sessionsHold}), its machine ends what
+   * all that holds it (`holds`, {@link holdsOf}), its machine ends what
    * those sessions left running in its boundary (core
    * {@link CONTROL_WORKSPACE_WORK_END}: agent boundary.ts `endSessionWork`,
    * as an interrupt and a stop do), once per set of ended items; the
@@ -1140,29 +1231,14 @@ export const createWorkspaces = ({
   const endLeftWork = (
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[],
-    hold: string
+    holds: readonly WorkspaceHold[]
   ): void => {
-    if (
-      workspace.stageFor ||
-      items.some((item) => finishing.has(item.id)) ||
-      previewedBy(workspace) ||
-      placesIn(workspace)
-    ) {
+    const [first] = holds;
+    if (!first || holds.some((each) => each.kind !== "attached")) {
       return;
     }
+    const hold = first.words;
     const sessions = new Set(items.map((item) => item.instanceId));
-    if (
-      [...sessions].some((id) => sendWakes(id)) ||
-      items.some((item) => continuing.has(item.id)) ||
-      db
-        .continuationSlips()
-        .some(
-          (row) =>
-            CONTINUING.has(row.stage) && sessions.has(row.sourceInstanceId)
-        )
-    ) {
-      return;
-    }
     const awake = db
       .getInstancesByIds([...sessions])
       .filter((row) => row.status === "running")
@@ -1205,7 +1281,7 @@ export const createWorkspaces = ({
   /**
    * THE end of a workspace's life (schema.ts `WorkspaceState`). An active
    * delegate's workspace whose items have all ended is closed on its machine
-   * ({@link closeWorkspace}, a `keep`) once nothing holds it ({@link holdOn}):
+   * ({@link closeWorkspace}, a `keep`) once nothing holds it ({@link holdsOf}):
    * archived when its clone holds nothing that is nowhere else, held with
    * what it holds otherwise. A hold defers it to the event that ends the hold
    * (its session asleep or ended, the artifact gone), or the sweep's next
@@ -1217,20 +1293,25 @@ export const createWorkspaces = ({
    */
   const settle = async (id: string): Promise<Settled> => {
     const [workspace] = db.workspacesNamed(id);
-    if (workspace?.state !== "active" || workspace.checksFor) {
+    if (workspace?.state !== "active") {
+      return { kind: "none" };
+    }
+    const member = workspaceOf(workspace);
+    if (member.kind === "gateClone") {
       return { kind: "none" };
     }
     const items = db.workItemsIn(workspace.id);
-    if (workspace.host) {
+    if (member.kind === "hostFolder") {
       return await settleHost(workspace, items);
     }
     if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
-    const hold = holdOf(workspace, items);
+    const holds = holdsOf(workspace, items);
+    const [hold] = holds;
     if (hold) {
-      endLeftWork(workspace, items, hold);
-      return { kind: "deferred", hold };
+      endLeftWork(workspace, items, holds);
+      return { kind: "deferred", hold: hold.words };
     }
     try {
       return await closeSettled(workspace, items);
@@ -1245,7 +1326,7 @@ export const createWorkspaces = ({
    * nothing of it closes but its scratch dir (agent host-scratch.ts). Once
    * its items have all ended and nothing holds it (a landing that still
    * runs, a session attached or about to be woken, a continuation under
-   * way: {@link sessionsHold}), what is in its `$TMPDIR/outputs/` is kept in
+   * way: {@link holdsOf}), what is in its `$TMPDIR/outputs/` is kept in
    * its project's folder ({@link keepScratchOutputs}) and its machine
    * removes the scratch dir; a later spawn of its session makes it again.
    * Its row stays active: it is where its items ran.
@@ -1257,12 +1338,9 @@ export const createWorkspaces = ({
     if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
-    const landing = items.find((item) => finishing.has(item.id));
-    const hold = landing
-      ? `the landing of its item ${landing.id} still runs`
-      : sessionsHold(items);
+    const [hold] = holdsOf(workspace, items);
     if (hold) {
-      return { kind: "deferred", hold };
+      return { kind: "deferred", hold: hold.words };
     }
     // A machine away keeps the dir until the session's next event settles
     // it again: no sweep reads a host-scope row.
@@ -1358,7 +1436,7 @@ export const createWorkspaces = ({
    * it (work-items.ts `vouchLanded`): held, it is closed again with those left out
    * ({@link landedFrom}), and retires when they were all it held; active, its
    * settle reads it the same way. A held one that something still holds
-   * ({@link holdOn}: an artifact showing what it serves among them) is not
+   * ({@link holdsOf}: an artifact showing what it serves among them) is not
    * closed again: it stays held, as every retirement waits for that hold,
    * until it is discarded.
    */
@@ -1376,7 +1454,8 @@ export const createWorkspaces = ({
       if (now?.state !== "held") {
         return;
       }
-      const hold = holdOn(now, db.workItemsIn(now.id));
+      const [held] = holdsOf(now, db.workItemsIn(now.id));
+      const hold = held?.words;
       if (hold) {
         console.log(
           `[workspaces] ${now.id} on ${machineName(now.machineId)}: its commits landed through the workspace cut from it, and it stays held: ${hold}`
@@ -1419,8 +1498,8 @@ export const createWorkspaces = ({
       if (
         !workspace ||
         workspace.state === "archived" ||
-        workspace.checksFor ||
-        workspace.host
+        isGateClone(workspace) ||
+        isHostFolder(workspace)
       ) {
         return;
       }
@@ -1429,7 +1508,7 @@ export const createWorkspaces = ({
         return { workspaceId: id, changed: dirty + stashes, dirty, ahead };
       }
       // A folder's unlanded work is its change set (agent layer.ts).
-      if (workspace.kind === "folder") {
+      if (workspaceOf(workspace).kind === "folderOverlay") {
         const changes = (await call(
           workspace.machineId,
           CONTROL_WORKSPACE_CHANGES,
@@ -1490,13 +1569,14 @@ export const createWorkspaces = ({
         `Workspace ${handle(workspace.id)} is already archived.`
       );
     }
-    if (workspace.host) {
+    const member = workspaceOf(workspace);
+    if (member.kind === "hostFolder") {
       throw new WorkItemRefusal(
         409,
         `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`
       );
     }
-    if (workspace.checksFor) {
+    if (member.kind === "gateClone") {
       return closeWorkspace(workspace, "check");
     }
     const live = db
@@ -1573,10 +1653,11 @@ export const createWorkspaces = ({
    * is not: any other commit could leave its commits behind.
    */
   const recuttable = (workspace: WorkspaceRow): boolean => {
-    if (workspace.state !== "archived" || workspace.checksFor) {
+    const member = workspaceOf(workspace);
+    if (workspace.state !== "archived" || member.kind === "gateClone") {
       return false;
     }
-    if (workspace.kind === "folder") {
+    if (member.kind === "folderOverlay") {
       return workspace.carry === null;
     }
     return (
@@ -1589,7 +1670,7 @@ export const createWorkspaces = ({
     if (workspace.carry) {
       return `its workspace ${handle(workspace.id)} was discarded: its unlanded work is in the carry ${workspace.carry} on ${machineName(workspace.machineId)}, and its clone is gone.`;
     }
-    if (workspace.checksFor) {
+    if (isGateClone(workspace)) {
       return `its workspace ${handle(workspace.id)} is archived: its clone and boundary are gone.`;
     }
     const taker = db
@@ -1696,7 +1777,7 @@ export const createWorkspaces = ({
         : pending;
     }
     const { head } = workspace;
-    if (!head && workspace.kind !== "folder") {
+    if (!head && workspaceOf(workspace).kind !== "folderOverlay") {
       return Promise.reject(
         new Error(
           `workspace ${handle(workspace.id)}: ${archivedWords(workspace)}`
@@ -1758,7 +1839,7 @@ export const createWorkspaces = ({
    * on it as it stands then (undefined when there is no such row), in the
    * same step. So no settle retires it between the cut, what is written into
    * its scratch dir, and what holds it after: a send on its way to its
-   * session ({@link sessionsHold}), or an item filed live. A send `work`
+   * session ({@link holdsOf}), or an item filed live. A send `work`
    * makes waits on no settle ({@link turnMayRetire}). `cut` says whether it
    * was cut again here. Why: on 2026-11-05 a handoff's input was written
    * into a clone cut again outside its turn, with nothing holding it until
@@ -1842,16 +1923,17 @@ export const createWorkspaces = ({
         `Not continued: ${archivedWords(workspace)} Delegate without workspace to start a new one.`
       );
     }
-    if (workspace.host) {
+    const member = workspaceOf(workspace);
+    if (member.kind === "hostFolder") {
       throw new WorkItemRefusal(
         409,
         `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`
       );
     }
-    if (workspace.checksFor) {
+    if (member.kind === "gateClone") {
       throw new WorkItemRefusal(
         409,
-        `Workspace ${handle(workspace.id)} runs the iOS build of the merge checks for workspace ${handle(workspace.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(workspace.checksFor)}, or without workspace to start a new one.`
+        `Workspace ${handle(workspace.id)} runs the iOS build of the merge checks for workspace ${handle(member.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(member.checksFor)}, or without workspace to start a new one.`
       );
     }
     const items = db.workItemsIn(workspace.id);
@@ -1873,7 +1955,11 @@ export const createWorkspaces = ({
    */
   const boundaryUp = async (needle: string): Promise<void> => {
     const [workspace] = db.workspacesNamed(needle.trim());
-    if (!workspace || workspace.state === "archived" || workspace.host) {
+    if (
+      !workspace ||
+      workspace.state === "archived" ||
+      isHostFolder(workspace)
+    ) {
       return;
     }
     const boundaryPid = (await call(
@@ -2053,14 +2139,18 @@ export const createWorkspaces = ({
     ) {
       return true;
     }
-    const projectOf = (workspace: WorkspaceRow): boolean =>
-      db
-        .workItemsIn(workspace.checksFor ?? workspace.id)
+    const projectOf = (workspace: WorkspaceRow): boolean => {
+      const member = workspaceOf(workspace);
+      return db
+        .workItemsIn(
+          member.kind === "gateClone" ? member.checksFor : workspace.id
+        )
         .some((item) => item.projectId === projectId);
+    };
     return [
       ...db.activeWorkspacesOn(machineId),
       ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
-    ].some((workspace) => !workspace.host && projectOf(workspace));
+    ].some((workspace) => !isHostFolder(workspace) && projectOf(workspace));
   };
   /**
    * Records the repository a new workspace of the project was cut from, on
@@ -2107,11 +2197,16 @@ export const createWorkspaces = ({
         `Workspace ${handle(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`
       );
     }
-    if (source.state === "archived" || source.checksFor || source.host) {
+    const member = workspaceOf(source);
+    if (
+      source.state === "archived" ||
+      member.kind === "gateClone" ||
+      member.kind === "hostFolder"
+    ) {
       let why = "it is archived, its clone gone";
-      if (source.host) {
+      if (member.kind === "hostFolder") {
         why = "it is a host-scope delegate's folder, not a clone";
-      } else if (source.checksFor) {
+      } else if (member.kind === "gateClone") {
         why = "it runs the iOS build of the merge checks";
       }
       throw new WorkItemRefusal(
