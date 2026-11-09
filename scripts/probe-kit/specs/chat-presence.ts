@@ -36,7 +36,7 @@
  *    takes its next step; a turn's closing words answer him, and the same call
  *    then ends its turn at the call.
  *
- * Input inside a frame (agent preview-overlay page.ts, `PAGE_TOUCHED_MESSAGE`):
+ * Input inside a frame (preview overlay/page.ts, `PAGE_TOUCHED_MESSAGE`):
  * 15. a touch inside a decision page, with no input anywhere else, brings the
  *    person back from away, and a later one moves their last input on;
  * 16. the same inside a preview in the panel, on a tab that had no input;

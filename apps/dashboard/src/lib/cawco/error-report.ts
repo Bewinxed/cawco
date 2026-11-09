@@ -10,7 +10,7 @@
  * dashboard's `handleError`, the OpenUI renderer's throws). The dashboard's
  * reporter also catches its window's uncaught errors and rejections; a
  * decision page's are the preview overlay's, which reports every page's to
- * the same path with its artifact and revision (agent preview-overlay
+ * the same path with its artifact and revision (preview overlay/
  * faults.ts), so `artifact_read` says them.
  */
 
