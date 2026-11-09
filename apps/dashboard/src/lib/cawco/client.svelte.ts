@@ -295,7 +295,7 @@ type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
  * and it being off is the ordinary case, not the exotic one. It holds from
  * {@link OUTAGE_GRACE} after the socket went until the hub is back, through
  * every retry in between: the deadline the first close sets
- * (`state.outageAt`), read against the clock ({@link ahead}).
+ * (`connectionState.outageAt`), read against the clock ({@link ahead}).
  */
 export type HubState = "connected" | "connecting" | "unreachable";
 
@@ -1029,22 +1029,7 @@ const listedById = $derived(
 );
 const staleInstances = $derived.by(keepsLast(() => instances.filter(isStale)));
 
-const state = $state({
-  fleetMcp: null as import("@cawco/core/fleet").FleetMcpServer[] | null,
-  previews: {} as Record<
-    string,
-    Extract<FramePayload, { kind: "preview" }> & {
-      title?: string;
-      path?: string;
-      /** The page's capture in each scheme (PageThumb draws the reader's). */
-      thumbnail?: import("./preview/wire").PageThumbnail;
-      /** The revision the thumbnail was taken of. */
-      thumbnailRevision?: string;
-      /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
-      thumbnailWanted?: boolean;
-    }
-  >,
-  previewRequests: {} as Record<string, number>,
+const connectionState = $state({
   status: "disconnected" as ConnectionStatus,
   /**
    * Whether an attempt has actually FAILED — the socket errored, or closed
@@ -1075,6 +1060,9 @@ const state = $state({
   older: false,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
+});
+
+const boardState = $state({
   /** The board's snapshot and the first read of the projects after it are in. */
   fleetRead: false,
   machines: [] as Machine[],
@@ -1084,6 +1072,41 @@ const state = $state({
    * this field simply never sends it, and the comparison has nothing to say).
    */
   hubBuild: undefined as BuildInfo | undefined,
+  /**
+   * The socket's first full `instances` frame has landed: the hub's own
+   * now-state (pulses) for every session is in, so "nothing is working" can
+   * be believed. The REST read alone cannot say what is mid-turn.
+   */
+  liveRead: false,
+});
+
+const fleetMcpState = $state({
+  fleetMcp: null as import("@cawco/core/fleet").FleetMcpServer[] | null,
+});
+
+const previewsState = $state({
+  previews: {} as Record<
+    string,
+    Extract<FramePayload, { kind: "preview" }> & {
+      title?: string;
+      path?: string;
+      /** The page's capture in each scheme (PageThumb draws the reader's). */
+      thumbnail?: import("./preview/wire").PageThumbnail;
+      /** The revision the thumbnail was taken of. */
+      thumbnailRevision?: string;
+      /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
+      thumbnailWanted?: boolean;
+    }
+  >,
+  previewRequests: {} as Record<string, number>,
+  /**
+   * The fleet's preview mode, from the board: a switch moves every preview
+   * origin, so a page loaded on its own (decisions PageFrame) loads again.
+   */
+  previewSettings: null as PreviewSettings | null,
+});
+
+const continuationsState = $state({
   /**
    * The continuations the hub is carrying, as it publishes them: what the
    * Continue dialog follows, and what opens the new session of one this tab
@@ -1096,32 +1119,29 @@ const state = $state({
    * id is that session's.
    */
   formerIds: {} as Record<string, string>,
-  /**
-   * The fleet's preview mode, from the board: a switch moves every preview
-   * origin, so a page loaded on its own (decisions PageFrame) loads again.
-   */
-  previewSettings: null as PreviewSettings | null,
+});
+
+const movesState = $state({
   /**
    * The project moves the hub is carrying (core move.ts), whole: handed on
    * connect in the `instances` frame, then replaced by each `moves` frame.
    */
   moves: [] as MoveJob[],
+});
+
+const projectsState = $state({
   projects: [] as ProjectRow[],
   /** `/api/projects` has answered this page once: an empty list then means none (home FirstRun). */
   projectsRead: false,
+});
+
+const tickersState = $state({
   /**
    * How many times each project's tasks have changed since this page
    * connected, by project id (`tasks.changed` frames): what shows its tasks
    * reads them again when it moves.
    */
   tasksChanged: {} as Record<string, number>,
-  /**
-   * How many times a session closed one of its questions to the person
-   * since this page connected (`questions.moved` frames): a session's
-   * list of what it asked him (waiting/questions.svelte.ts) reads again
-   * when it moves, as it does on each `artifact.needs` frame.
-   */
-  questionsMoved: 0,
   /**
    * How many `tasks.changed` frames have named each task, by
    * `projectId/taskId`, and how many named none, by project id: an open
@@ -1147,52 +1167,22 @@ const state = $state({
    * `<place>:<project id>`: newer than the set its stages read carried.
    */
   starters: {} as Record<string, ProjectStarter[]>,
-  sessions: {} as Record<string, SessionState>,
+});
+
+const needsState = $state({
   /**
-   * The socket's first full `instances` frame has landed: the hub's own
-   * now-state (pulses) for every session is in, so "nothing is working" can
-   * be believed. The REST read alone cannot say what is mid-turn.
+   * How many times a session closed one of its questions to the person
+   * since this page connected (`questions.moved` frames): a session's
+   * list of what it asked him (waiting/questions.svelte.ts) reads again
+   * when it moves, as it does on each `artifact.needs` frame.
    */
-  liveRead: false,
-  /**
-   * What the hub summed up of each delegate whose card came on screen, keyed
-   * by the delegate ({@link readDelegate}). Kept apart from the session it
-   * belongs to because the reader of this traffic is the *parent*: a
-   * delegate card renders its child's exchange, not its own.
-   */
-  delegateRead: {} as Record<string, DelegateSummary>,
-  /**
-   * The delegate events pushed while this page stood, keyed by the delegate
-   * they are about, in id order; those a later read already counts are
-   * dropped as it lands.
-   */
-  delegateHeard: {} as Record<string, DelegateEvent[]>,
-  /**
-   * Every work item a parent's delegate tray has been told of, by item id:
-   * read when the parent's view opens, then kept by `work_item` frames.
-   */
-  workItems: {} as Record<string, WorkItemSummary>,
-  /**
-   * "Make this a project" offers standing on plain sessions, by session id:
-   * read on connect, then kept by `project_offer` frames.
-   */
-  projectOffers: {} as Record<string, ProjectOfferSummary>,
-  /**
-   * An offer this tab answered by joining a project that already was: the
-   * card stays where the offer stood, saying what it joined, until put away.
-   */
-  projectJoins: {} as Record<string, ProjectOfferAccepted>,
+  questionsMoved: 0,
   /**
    * Approved actions waiting on the operator (proposed, or failed or of
    * unknown outcome until put away): read on connect, then kept whole by
    * `actions` frames.
    */
   actions: [] as ApprovedActionView[],
-  /**
-   * Each followed session's plan (plan.ts): its steps, its spec, an
-   * attempt's to-dos, as the hub's `plan.snapshot` and `plan.delta` keep it.
-   */
-  plans: {} as Record<string, HeldPlan>,
   /**
    * Fleet watch's needs-you notices (core `FleetWatchNotice`), oldest first:
    * read as the dashboard connects, then kept whole by the hub's
@@ -1211,12 +1201,67 @@ const state = $state({
    * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
    */
   lawsBroken: [] as LawBroken[],
+});
+
+const sessionsState = $state({
+  sessions: {} as Record<string, SessionState>,
+});
+
+const delegatesState = $state({
+  /**
+   * What the hub summed up of each delegate whose card came on screen, keyed
+   * by the delegate ({@link readDelegate}). Kept apart from the session it
+   * belongs to because the reader of this traffic is the *parent*: a
+   * delegate card renders its child's exchange, not its own.
+   */
+  delegateRead: {} as Record<string, DelegateSummary>,
+  /**
+   * The delegate events pushed while this page stood, keyed by the delegate
+   * they are about, in id order; those a later read already counts are
+   * dropped as it lands.
+   */
+  delegateHeard: {} as Record<string, DelegateEvent[]>,
+});
+
+const workItemsState = $state({
+  /**
+   * Every work item a parent's delegate tray has been told of, by item id:
+   * read when the parent's view opens, then kept by `work_item` frames.
+   */
+  workItems: {} as Record<string, WorkItemSummary>,
+});
+
+const offersState = $state({
+  /**
+   * "Make this a project" offers standing on plain sessions, by session id:
+   * read on connect, then kept by `project_offer` frames.
+   */
+  projectOffers: {} as Record<string, ProjectOfferSummary>,
+  /**
+   * An offer this tab answered by joining a project that already was: the
+   * card stays where the offer stood, saying what it joined, until put away.
+   */
+  projectJoins: {} as Record<string, ProjectOfferAccepted>,
+});
+
+const plansState = $state({
+  /**
+   * Each followed session's plan (plan.ts): its steps, its spec, an
+   * attempt's to-dos, as the hub's `plan.snapshot` and `plan.delta` keep it.
+   */
+  plans: {} as Record<string, HeldPlan>,
+});
+
+const browsersState = $state({
   /**
    * Every machine's browsers as the hub lists them: the `browser_list`
    * frame the socket opens with, then each one on a change; undefined until
    * the first.
    */
   browsers: undefined as ListedBrowser[] | undefined,
+});
+
+const tailnetState = $state({
   /**
    * HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`, then
    * each `tailnet.https` frame): Needs you shows its step while one needs
@@ -1225,6 +1270,9 @@ const state = $state({
   tailnetHttps: undefined as TailnetHttps | undefined,
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
   tailnetTicked: false,
+});
+
+const relayState = $state({
   /**
    * The stream relay's journey (`GET /api/stream-relay`, then each
    * `stream_relay.journey` frame): Needs you shows its row while it asks,
@@ -1235,6 +1283,9 @@ const state = $state({
   relayDomain: null as string | null,
   /** It went live and was proven from outside while this page stood: the row ticks until the next open. */
   relayTicked: false,
+});
+
+const usageState = $state({
   /**
    * Each Claude account's own limits, by account id — folded in from the
    * `kind: 'usage'` frame so the pill updates live rather than polling
@@ -1245,6 +1296,16 @@ const state = $state({
   openCodeGoLimits: {} as Record<string, OpenCodeGoLimits>,
   /** The hub's limit readings have been read once, so an empty map means none, not not-yet. */
   usageLimitsRead: false,
+  /**
+   * The fleet's spend as the hub reckons it (`/api/usage/spend`, then every
+   * `kind: 'usage'` frame); null until it lands.
+   */
+  spend: null as UsageSpend | null,
+  /** The last read of `/api/usage/spend` failed and no frame has answered since. */
+  spendFailed: false,
+});
+
+const accountsState = $state({
   /**
    * The hub's accounts (`/api/accounts`): who they are, where each is signed
    * in, and each one's model catalog. Read on connect and after every
@@ -1257,13 +1318,6 @@ const state = $state({
    * accounts; null until read.
    */
   accountProviders: null as ProviderChoice[] | null,
-  /**
-   * The fleet's spend as the hub reckons it (`/api/usage/spend`, then every
-   * `kind: 'usage'` frame); null until it lands.
-   */
-  spend: null as UsageSpend | null,
-  /** The last read of `/api/usage/spend` failed and no frame has answered since. */
-  spendFailed: false,
 });
 
 interface Waiter {
@@ -1318,7 +1372,12 @@ const pageReads = new Map<
 // `Pulse`s, which no bench can write into `state`).
 if (import.meta.env.DEV) {
   devDebug({
-    state,
+    connectionState,
+    projectsState,
+    sessionsState,
+    plansState,
+    workItemsState,
+    usageState,
     inflight,
     adoptInstances,
     frame: takeFrame,
@@ -1345,12 +1404,12 @@ function standHub(answer: BenchHub): void {
   benchHub = answer;
   globalThis.__cawcoDisposing = true;
   teardown();
-  state.status = "connected";
-  state.failed = false;
-  state.outageAt = null;
+  connectionState.status = "connected";
+  connectionState.failed = false;
+  connectionState.outageAt = null;
   // What the bench stood in is the fleet as read, live and stored alike.
-  state.fleetRead = true;
-  state.liveRead = true;
+  boardState.fleetRead = true;
+  boardState.liveRead = true;
 }
 
 /** The bench is gone: the page reaches for the real hub again (dev only). */
@@ -1491,17 +1550,17 @@ export function blankSession(instanceId: string): SessionState {
 }
 
 function session(instanceId: string): SessionState {
-  const existing = state.sessions[instanceId];
+  const existing = sessionsState.sessions[instanceId];
   if (existing) {
     return existing;
   }
 
   const created: SessionState = blankSession(instanceId);
-  state.sessions[instanceId] = created;
+  sessionsState.sessions[instanceId] = created;
   // Read it back: the literal above is the raw target, and `$state` writes land
   // on the proxy's signals, never on it. Handing out the raw object would give
   // callers a view the UI stops tracking the moment it first renders one.
-  const target = state.sessions[instanceId];
+  const target = sessionsState.sessions[instanceId];
   // A session this browser never opened — a permission replayed from `/api/pending`
   // is the usual way — still has to name its machine on the fleet view.
   hydrate(target);
@@ -2243,7 +2302,7 @@ function prependTranscriptPage(
  */
 function pulseOf(instanceId: string): PulseReading | undefined {
   const held = heldPulse(instanceId);
-  if (held || state.liveRead) {
+  if (held || boardState.liveRead) {
     return held;
   }
   return (servedPage.data as { pulses?: Record<string, SessionPulse> })
@@ -2513,14 +2572,15 @@ async function loadDelegates(
   for (const summary of summaries) {
     // A reconnect's read can land before the one it replaced: the newer stays.
     if (
-      (state.delegateRead[summary.instanceId]?.through ?? 0) > summary.through
+      (delegatesState.delegateRead[summary.instanceId]?.through ?? 0) >
+      summary.through
     ) {
       continue;
     }
-    state.delegateRead[summary.instanceId] = summary;
-    const heard = state.delegateHeard[summary.instanceId];
+    delegatesState.delegateRead[summary.instanceId] = summary;
+    const heard = delegatesState.delegateHeard[summary.instanceId];
     if (heard) {
-      state.delegateHeard[summary.instanceId] = heard.filter(
+      delegatesState.delegateHeard[summary.instanceId] = heard.filter(
         (event) => event.id > summary.through
       );
     }
@@ -2564,7 +2624,7 @@ async function loadWorkItems(instanceId: string): Promise<void> {
 /** A work item as a read that left at `mark` answered it, unless a frame for it came since. */
 function keepWorkItem(item: WorkItemSummary, mark: number): void {
   if (!heardSince(`work_item:${item.id}`, mark)) {
-    state.workItems[item.id] = item;
+    workItemsState.workItems[item.id] = item;
   }
 }
 
@@ -2634,7 +2694,7 @@ function adoptInstances(rows: InstanceRow[]): void {
     next,
     hubRows.filter((row) => !present.has(row.id)).map((row) => row.id)
   );
-  for (const target of Object.values(state.sessions)) {
+  for (const target of Object.values(sessionsState.sessions)) {
     hydrate(target);
   }
 }
@@ -2704,7 +2764,7 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
     removed
   );
   for (const row of upserts) {
-    const held = state.sessions[row.id];
+    const held = sessionsState.sessions[row.id];
     if (held) {
       hydrate(held);
     }
@@ -2723,20 +2783,20 @@ function adoptUsageLimits(
   for (const machine of readings.openCodeGo) {
     openCodeGo[machine.machineId] = machine.plan;
   }
-  if (!equal(state.usageLimits, claude)) {
-    state.usageLimits = claude;
+  if (!equal(usageState.usageLimits, claude)) {
+    usageState.usageLimits = claude;
   }
-  if (!equal(state.openCodeGoLimits, openCodeGo)) {
-    state.openCodeGoLimits = openCodeGo;
+  if (!equal(usageState.openCodeGoLimits, openCodeGo)) {
+    usageState.openCodeGoLimits = openCodeGo;
   }
-  state.usageLimitsRead = true;
+  usageState.usageLimitsRead = true;
 }
 
 function adoptSpend(spend: UsageSpend): void {
-  if (!equal(state.spend, spend)) {
-    state.spend = spend;
+  if (!equal(usageState.spend, spend)) {
+    usageState.spend = spend;
   }
-  state.spendFailed = false;
+  usageState.spendFailed = false;
 }
 
 /**
@@ -2754,8 +2814,8 @@ export async function readSpend(): Promise<void> {
   if (spend) {
     adoptSpend(spend);
   } else {
-    state.spend = null;
-    state.spendFailed = true;
+    usageState.spend = null;
+    usageState.spendFailed = true;
   }
 }
 
@@ -2823,12 +2883,12 @@ async function readAccounts(): Promise<void> {
   if (ticket !== accountsReads) {
     return;
   }
-  if (view && !equal(state.accounts, view)) {
-    state.accounts = view;
+  if (view && !equal(accountsState.accounts, view)) {
+    accountsState.accounts = view;
     accountsTaker?.(view);
   }
-  if (providers && !equal(state.accountProviders, providers)) {
-    state.accountProviders = providers;
+  if (providers && !equal(accountsState.accountProviders, providers)) {
+    accountsState.accountProviders = providers;
   }
 }
 
@@ -3049,19 +3109,20 @@ export function followContinuations(
  * `moves` frame carrying it is still on its way. The frame replaces it.
  */
 export function heardMove(job: MoveJob): void {
-  const at = state.moves.findIndex((one) => one.id === job.id);
-  const held = state.moves[at];
+  const at = movesState.moves.findIndex((one) => one.id === job.id);
+  const held = movesState.moves[at];
   if (held && Date.parse(held.updatedAt) > Date.parse(job.updatedAt)) {
     return;
   }
-  state.moves = at === -1 ? [...state.moves, job] : state.moves.with(at, job);
+  movesState.moves =
+    at === -1 ? [...movesState.moves, job] : movesState.moves.with(at, job);
 }
 
 function adoptContinuations(table: ContinuationJob[]): void {
-  if (equal(state.continuations, table)) {
+  if (equal(continuationsState.continuations, table)) {
     return;
   }
-  state.continuations = table;
+  continuationsState.continuations = table;
   continuationFollower?.(table);
 }
 
@@ -3102,7 +3163,7 @@ function adoptPending(
   const parked = new Set(pending.map((envelope) => envelope.requestId));
   const stands = (p: PendingPermission): boolean =>
     parked.has(p.requestId) || p.heard > readFrom;
-  for (const target of Object.values(state.sessions)) {
+  for (const target of Object.values(sessionsState.sessions)) {
     if (!target.pending.every(stands)) {
       target.pending = target.pending.filter(stands);
       trackWorking(target);
@@ -3186,7 +3247,7 @@ async function refresh(): Promise<boolean> {
     adoptPending(pending, readFrom);
   }
   if (projects) {
-    state.fleetRead = true;
+    boardState.fleetRead = true;
     return true;
   }
   return false;
@@ -3238,7 +3299,7 @@ function readFleet(delay = 1000): void {
 
 /** Every online machine's stored sessions — the sidebar's contents on arrival. */
 function refreshCatalogs(): void {
-  for (const machine of state.machines) {
+  for (const machine of boardState.machines) {
     if (machine.status === "online") {
       detach(loadCatalog(machine.machineId), "loadCatalog");
     }
@@ -3255,16 +3316,20 @@ function refreshCatalogs(): void {
  * (`cawco.catalogsRead`) then waits on catalogs nobody ever asked for.
  */
 function adoptMachines(incoming: Machine[]): void {
-  const next = reconcileRows(state.machines, incoming, (row) => row.machineId);
-  if (next === state.machines) {
+  const next = reconcileRows(
+    boardState.machines,
+    incoming,
+    (row) => row.machineId
+  );
+  if (next === boardState.machines) {
     return;
   }
   const wasOnline = new Set(
-    state.machines
+    boardState.machines
       .filter((machine) => machine.status === "online")
       .map((machine) => machine.machineId)
   );
-  state.machines = next;
+  boardState.machines = next;
   // A transcript whose read found its machine offline is read again once the
   // hub says it is online: across a hub restart this tab may never have seen
   // it go, so it is every online machine, not a change of one.
@@ -3274,7 +3339,7 @@ function adoptMachines(incoming: Machine[]): void {
     }
   }
   // Before the first read the connect-time `refreshCatalogs` asks them all.
-  if (!state.fleetRead) {
+  if (!boardState.fleetRead) {
     return;
   }
   for (const machine of next) {
@@ -3291,7 +3356,7 @@ function adoptMachines(incoming: Machine[]): void {
  */
 function readBehind(machineId: string): void {
   for (const id of subscriptionIds()) {
-    const held = state.sessions[id];
+    const held = sessionsState.sessions[id];
     const fault = held?.readFault ?? held?.behind;
     if (
       held &&
@@ -3329,14 +3394,16 @@ function settle(
  * already counts, is dropped ({@link delegateRecord} folds the rest).
  */
 function hearDelegateEvent(event: DelegateEvent): void {
-  if (event.id <= (state.delegateRead[event.instanceId]?.through ?? 0)) {
+  if (
+    event.id <= (delegatesState.delegateRead[event.instanceId]?.through ?? 0)
+  ) {
     return;
   }
   // Written, then read back: a `$state` write lands on the proxy and never on
   // the literal, so filing into the literal would put the row where the UI
   // cannot see it.
-  state.delegateHeard[event.instanceId] ??= [];
-  const list = state.delegateHeard[event.instanceId];
+  delegatesState.delegateHeard[event.instanceId] ??= [];
+  const list = delegatesState.delegateHeard[event.instanceId];
   if (list.some((row) => row.id === event.id)) {
     return;
   }
@@ -3375,8 +3442,8 @@ function clearTurnPhase(target: SessionState): void {
 }
 
 function takeFleetMcp(frame: FrameOf<"fleet_mcp">): void {
-  if (!equal(state.fleetMcp, frame.servers)) {
-    state.fleetMcp = frame.servers;
+  if (!equal(fleetMcpState.fleetMcp, frame.servers)) {
+    fleetMcpState.fleetMcp = frame.servers;
   }
 }
 
@@ -3384,7 +3451,7 @@ function takePermissionSettled(frame: FrameOf<"permission_settled">): void {
   // The hub's word that the ask is over, whoever settled it: the card goes,
   // and a read already on its way cannot bring it back.
   hearSettled(frame.requestId);
-  const target = state.sessions[frame.instanceId];
+  const target = sessionsState.sessions[frame.instanceId];
   const parked = target?.pending.find((p) => p.requestId === frame.requestId);
   if (target && parked) {
     target.pending = target.pending.filter(
@@ -3423,21 +3490,21 @@ function takePermissionSettled(frame: FrameOf<"permission_settled">): void {
 
 function takePreview(frame: FrameOf<"preview">): void {
   heardFrame(`preview:${frame.instanceId}`);
-  const previous = state.previews[frame.instanceId];
+  const previous = previewsState.previews[frame.instanceId];
   const sameRevision = previous?.revision === frame.revision;
   const next = {
     ...(sameRevision ? previous : {}),
     ...frame,
   };
   if (!equal(previous, next)) {
-    state.previews[frame.instanceId] = next;
+    previewsState.previews[frame.instanceId] = next;
   }
   // A show: one opened, or moved on, after the page's first read of the
   // fleet. What that read finds open was open before the page came, and is
   // no show to bring forward (ProjectConversation's Preview, ProjectPage's
   // Decisions, SideSheet's snap all follow `previewRequests`).
   if (
-    state.liveRead &&
+    boardState.liveRead &&
     frame.state === "open" &&
     (previous?.state !== "open" || !sameRevision)
   ) {
@@ -3466,10 +3533,10 @@ function takeBoardPreviews(frame: BoardFrame): void {
     return;
   }
   const current = new Set(frame.previews.map((preview) => preview.instanceId));
-  for (const [id, preview] of Object.entries(state.previews)) {
+  for (const [id, preview] of Object.entries(previewsState.previews)) {
     if (!current.has(id) && preview.state !== "closed") {
       heardFrame(`preview:${id}`);
-      state.previews[id] = { ...preview, state: "closed" };
+      previewsState.previews[id] = { ...preview, state: "closed" };
     }
   }
   for (const preview of frame.previews) {
@@ -3487,7 +3554,7 @@ function takeBoardMachines(frame: BoardFrame): void {
   } else if (frame.agents || frame.removedAgents) {
     adoptMachines(
       patchRows(
-        state.machines,
+        boardState.machines,
         frame.agents ?? [],
         frame.removedAgents ?? [],
         (row) => row.machineId
@@ -3503,15 +3570,18 @@ function takeBoardContinuations(frame: BoardFrame): void {
   }
   // Whole whenever it moved: a session folded into its continuation
   // leaves its tab on the session it is now (SessionSurface).
-  if (frame.formerIds && !equal(state.formerIds, frame.formerIds)) {
-    state.formerIds = frame.formerIds;
+  if (
+    frame.formerIds &&
+    !equal(continuationsState.formerIds, frame.formerIds)
+  ) {
+    continuationsState.formerIds = frame.formerIds;
   }
 }
 
 /** The project moves, handed whole with every snapshot. */
 function takeBoardMoves(frame: BoardFrame): void {
   if (frame.kind === "instances") {
-    state.moves = frame.moves;
+    movesState.moves = frame.moves;
   }
 }
 
@@ -3519,9 +3589,9 @@ function takeBoardMoves(frame: BoardFrame): void {
 function takePreviewSettings(frame: BoardFrame): void {
   if (
     frame.previewSettings &&
-    !equal(state.previewSettings, frame.previewSettings)
+    !equal(previewsState.previewSettings, frame.previewSettings)
   ) {
-    state.previewSettings = frame.previewSettings;
+    previewsState.previewSettings = frame.previewSettings;
   }
 }
 
@@ -3541,7 +3611,7 @@ function takeBoardNotices(frame: BoardFrame): void {
 function takeBoardRows(frame: BoardFrame): void {
   if (frame.kind === "instances") {
     adoptInstances(frame.instances);
-    state.liveRead = true;
+    boardState.liveRead = true;
   } else {
     patchInstances(frame.upserts, frame.removed);
   }
@@ -3575,13 +3645,13 @@ function takeBoardPulses(frame: BoardFrame): void {
     }
   }
   for (const [id, pulse] of pulses) {
-    const held = state.sessions[id];
+    const held = sessionsState.sessions[id];
     if (held) {
       applyPulse(held, pulse);
     }
   }
-  if (!equal(state.hubBuild, frame.hubBuild)) {
-    state.hubBuild = frame.hubBuild;
+  if (!equal(boardState.hubBuild, frame.hubBuild)) {
+    boardState.hubBuild = frame.hubBuild;
   }
 }
 
@@ -3596,14 +3666,16 @@ function takeUsage(frame: FrameOf<"usage">): void {
 
 function takeWorkItem(frame: FrameOf<"work_item">): void {
   heardFrame(`work_item:${frame.item.id}`);
-  if (!equal(state.workItems[frame.item.id], frame.item)) {
-    state.workItems[frame.item.id] = frame.item;
+  if (!equal(workItemsState.workItems[frame.item.id], frame.item)) {
+    workItemsState.workItems[frame.item.id] = frame.item;
   }
 }
 
 function takeProjectCap(frame: FrameOf<"project.cap">): void {
   heardFrame(`project.cap:${frame.projectId}`);
-  const project = state.projects.find((row) => row.id === frame.projectId);
+  const project = projectsState.projects.find(
+    (row) => row.id === frame.projectId
+  );
   if (project) {
     project.cap = frame.cap;
   }
@@ -3611,25 +3683,25 @@ function takeProjectCap(frame: FrameOf<"project.cap">): void {
 
 function takeActions(frame: FrameOf<"actions">): void {
   heardFrame("actions");
-  state.actions = frame.actions;
+  needsState.actions = frame.actions;
 }
 
 function takeWatchNotices(frame: FrameOf<"fleet_watch.notices">): void {
   heardFrame("fleet_watch.notices");
-  state.watchNotices = frame.notices;
+  needsState.watchNotices = frame.notices;
 }
 
 function takeArtifactNeeds(frame: FrameOf<"artifact.needs">): void {
-  state.artifactNeeds = frame.needs;
-  state.artifactNotices = frame.notices;
+  needsState.artifactNeeds = frame.needs;
+  needsState.artifactNotices = frame.notices;
 }
 
 function takeLawsBroken(frame: FrameOf<"laws.broken">): void {
-  state.lawsBroken = frame.broken;
+  needsState.lawsBroken = frame.broken;
 }
 
 function takeHubRestart(frame: FrameOf<"hub.restart">): void {
-  state.restart = frame.restart
+  connectionState.restart = frame.restart
     ? {
         until: Date.now() + frame.restart.withinMs,
         version: frame.restart.version,
@@ -3645,19 +3717,20 @@ function takeProjectStop(frame: FrameOf<"project.stop">): void {
 
 // A browser changed (a take-over, its state, its page's origin): every view of one follows.
 function takeBrowsers(frame: FrameOf<"browser_list">): void {
-  state.browsers = frame.browsers;
+  browsersState.browsers = frame.browsers;
 }
 
 // HTTPS on the tailnet name changed: Needs you's step moves on, or ticks.
 function takeTailnet(frame: FrameOf<"tailnet.https">): void {
   heardFrame("tailnet.https");
   const ticked =
-    state.tailnetHttps?.state === "needs" && frame.tailnet.state === "serving";
-  state.tailnetHttps = frame.tailnet;
-  state.tailnetTicked = ticked;
+    tailnetState.tailnetHttps?.state === "needs" &&
+    frame.tailnet.state === "serving";
+  tailnetState.tailnetHttps = frame.tailnet;
+  tailnetState.tailnetTicked = ticked;
   if (ticked) {
     setTimeout(() => {
-      state.tailnetTicked = false;
+      tailnetState.tailnetTicked = false;
     }, TAILNET_TICK_MS);
   }
 }
@@ -3669,41 +3742,42 @@ function takeFleetFetch(frame: FrameOf<"fleet.fetch">): void {
 }
 
 function takeQuestionsMoved(): void {
-  state.questionsMoved += 1;
+  needsState.questionsMoved += 1;
 }
 
 function takeTasksChanged(frame: FrameOf<"tasks.changed">): void {
-  state.tasksChanged[frame.projectId] =
-    (state.tasksChanged[frame.projectId] ?? 0) + 1;
+  tickersState.tasksChanged[frame.projectId] =
+    (tickersState.tasksChanged[frame.projectId] ?? 0) + 1;
   if (frame.taskId) {
     const named = `${frame.projectId}/${frame.taskId}`;
-    state.taskChanged[named] = (state.taskChanged[named] ?? 0) + 1;
+    tickersState.taskChanged[named] =
+      (tickersState.taskChanged[named] ?? 0) + 1;
   } else {
-    state.tasksChangedUnnamed[frame.projectId] =
-      (state.tasksChangedUnnamed[frame.projectId] ?? 0) + 1;
+    tickersState.tasksChangedUnnamed[frame.projectId] =
+      (tickersState.tasksChangedUnnamed[frame.projectId] ?? 0) + 1;
   }
 }
 
 function takeDecisionsChanged(frame: FrameOf<"decisions.changed">): void {
-  state.decisionsChanged[frame.projectId] =
-    (state.decisionsChanged[frame.projectId] ?? 0) + 1;
+  tickersState.decisionsChanged[frame.projectId] =
+    (tickersState.decisionsChanged[frame.projectId] ?? 0) + 1;
 }
 
 function takeBlocksChanged(frame: FrameOf<"blocks.changed">): void {
-  state.blocksChanged[frame.projectId] =
-    (state.blocksChanged[frame.projectId] ?? 0) + 1;
+  tickersState.blocksChanged[frame.projectId] =
+    (tickersState.blocksChanged[frame.projectId] ?? 0) + 1;
 }
 
 function takeStarters(frame: FrameOf<"starters.changed">): void {
-  state.starters[`${frame.place}:${frame.projectId}`] = frame.starters;
+  tickersState.starters[`${frame.place}:${frame.projectId}`] = frame.starters;
 }
 
 function takeProjectOffer(frame: FrameOf<"project_offer">): void {
   heardFrame(`project_offer:${frame.instanceId}`);
   if (frame.offer) {
-    state.projectOffers[frame.instanceId] = frame.offer;
+    offersState.projectOffers[frame.instanceId] = frame.offer;
   } else {
-    delete state.projectOffers[frame.instanceId];
+    delete offersState.projectOffers[frame.instanceId];
   }
 }
 
@@ -3717,7 +3791,7 @@ function takePulseFrame(frame: FrameOf<"pulse">): void {
   // by field: a pulse inside a turn moves its row's time and tool, and
   // wakes no list that files the session by its activity.
   takePulse(frame.instanceId, frame.pulse);
-  const held = state.sessions[frame.instanceId];
+  const held = sessionsState.sessions[frame.instanceId];
   if (held) {
     applyPulse(held, frame.pulse);
   }
@@ -3772,7 +3846,7 @@ function takeControlResult(frame: FrameOf<"control_result">): void {
 
 /** Every project move, whole, on each change (and `heardMove` between). */
 function takeMoves(frame: FrameOf<"moves">): void {
-  state.moves = frame.moves;
+  movesState.moves = frame.moves;
 }
 
 /**
@@ -3785,7 +3859,7 @@ function takePermissionRequest(frame: FrameOf<"permission_request">): void {
   // An ask is parked in one session: one the hub parked again under
   // another (its session folded into the one it went on in) leaves
   // the session it stood in.
-  for (const other of Object.values(state.sessions)) {
+  for (const other of Object.values(sessionsState.sessions)) {
     if (
       other !== target &&
       other.pending.some((p) => p.requestId === frame.requestId)
@@ -4243,7 +4317,7 @@ function clearCommandFaults(instanceId: string): void {
  * failed send, which draws no row of its own until the hub takes it.
  */
 function markUnreached(record: CommandRecord): void {
-  const target = state.sessions[record.sessionId];
+  const target = sessionsState.sessions[record.sessionId];
   const row = target?.local.find((message) => message.id === record.commandId);
   if (!(target && row)) {
     return;
@@ -4292,7 +4366,7 @@ function rememberAnswerSurface(
       answers.delete(asked);
     }
   }
-  const origin = state.sessions[instanceId]?.pending.find(
+  const origin = sessionsState.sessions[instanceId]?.pending.find(
     (parked) => parked.requestId === requestId
   )?.originInstanceId;
   answerSurfaces.set(commandId, {
@@ -4332,7 +4406,7 @@ function answerCardStillParked(record: CommandRecord): boolean {
     return false;
   }
   return (
-    state.sessions[surface.instanceId]?.pending.some(
+    sessionsState.sessions[surface.instanceId]?.pending.some(
       (parked) =>
         parked.requestId === surface.requestId && !routedToParent(parked)
     ) ?? false
@@ -4776,7 +4850,7 @@ function pruneOutbox(): void {
 
 /** Removes the row a send that never reached the hub left behind. */
 function dropSendEcho(instanceId: string, commandId: string): void {
-  const target = state.sessions[instanceId];
+  const target = sessionsState.sessions[instanceId];
   if (!target) {
     return;
   }
@@ -4987,7 +5061,7 @@ function restoreComposer(
 export function canWithdraw(message: Message): boolean {
   return (
     message.state === "pending" &&
-    traitsOf(state.sessions[message.instanceId]?.harness).queuesSends
+    traitsOf(sessionsState.sessions[message.instanceId]?.harness).queuesSends
   );
 }
 
@@ -5102,7 +5176,7 @@ export function userTurnActions(message: Message): {
   fork: boolean;
   retry: boolean;
 } {
-  const target = state.sessions[message.instanceId];
+  const target = sessionsState.sessions[message.instanceId];
   if (!target || message.type !== "user") {
     return { edit: null, fork: false, retry: false };
   }
@@ -5182,7 +5256,7 @@ function announceSendFailure(record: CommandRecord): void {
   // are small, but "small and unbounded" is still unbounded on a board a
   // reader leaves open for a week.
   for (const held of Object.keys(sendFailureNotices)) {
-    if (held !== record.sessionId && !state.sessions[held]) {
+    if (held !== record.sessionId && !sessionsState.sessions[held]) {
       delete sendFailureNotices[held];
     }
   }
@@ -5456,7 +5530,7 @@ export function syncSubscriptions(): void {
  * is left to the read again that failure scheduled.
  */
 function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
-  if (state.status !== "connected") {
+  if (connectionState.status !== "connected") {
     return;
   }
   const fresh = cause === "reconnect" && connections > 1;
@@ -5468,7 +5542,7 @@ function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
     ) {
       continue;
     }
-    const held = state.sessions[id];
+    const held = sessionsState.sessions[id];
     // A read that failed before the first board already waits on what can
     // answer it (`readFailed`: the backoff, the machine's deadline, or the
     // board listing its machine online), and a 404 is the hub's answer.
@@ -5538,14 +5612,16 @@ function send(envelope: Envelope): void {
  *
  * `WS_RECONNECT_MAX_ATTEMPTS` now only decides when to stop growing the delay.
  *
- * An update the hub announced (`state.restart`) is a hub known to be on its
+ * An update the hub announced (`connectionState.restart`) is a hub known to be on its
  * way back: until its deadline every try is `WS_RECONNECT_BASE_DELAY` apart,
  * so the page hears it back within a second, not up to a whole capped delay
  * after.
  */
 function scheduleReconnect(): void {
   const attempt = globalThis.__cawcoReconnectAttempts;
-  const updating = state.restart !== null && state.restart.until > Date.now();
+  const updating =
+    connectionState.restart !== null &&
+    connectionState.restart.until > Date.now();
   const delay = updating
     ? WS_RECONNECT_BASE_DELAY
     : Math.min(
@@ -5553,7 +5629,7 @@ function scheduleReconnect(): void {
           2 ** Math.min(attempt, WS_RECONNECT_MAX_ATTEMPTS),
         WS_RECONNECT_MAX_DELAY
       );
-  state.retryAt = Date.now() + delay;
+  connectionState.retryAt = Date.now() + delay;
   globalThis.__cawcoReconnectTimeout = setTimeout(() => {
     globalThis.__cawcoReconnectAttempts += 1;
     connect();
@@ -5578,7 +5654,7 @@ export function reconnectNow(): void {
     clearTimeout(globalThis.__cawcoReconnectTimeout);
   }
   globalThis.__cawcoReconnectAttempts = 0;
-  state.retryAt = null;
+  connectionState.retryAt = null;
   connect();
 }
 
@@ -5606,7 +5682,7 @@ function connect(): void {
   }
   globalThis.__cawcoDisposing = false;
   teardown();
-  state.status = "connecting";
+  connectionState.status = "connecting";
 
   // The page names the wire it was built for, so the hub sends a page on an
   // older one the snapshot that reloads it and no delta it would misread.
@@ -5660,15 +5736,15 @@ let socketRun: string | null = null;
 
 /** The hub answered on the socket `connect` opened: everything a connection is owed. */
 function hubReached(): void {
-  state.status = "connected";
-  state.retryAt = null;
+  connectionState.status = "connected";
+  connectionState.retryAt = null;
   presenceAgain();
   // A set heard before the socket went may have been replaced while it was
   // away: the stages each page reads again on a connection carry the newer.
-  state.starters = {};
-  state.failed = false;
-  state.outageAt = null;
-  state.restart = null;
+  tickersState.starters = {};
+  connectionState.failed = false;
+  connectionState.outageAt = null;
+  connectionState.restart = null;
   globalThis.__cawcoReconnectAttempts = 0;
   readFleet();
   detach(readInstalls(), "readInstalls");
@@ -5695,20 +5771,20 @@ function hubReached(): void {
  * person has seen it, never under them. It asks again which build the
  * dashboard runs on each snapshot until it serves another, as the hub may
  * restart into the new wire before the dashboard serves its build. The check used to sit at the end of the board handler, after
- * the frame was applied: the first change-only delta left `state.machines`
+ * the frame was applied: the first change-only delta left `boardState.machines`
  * undefined, and every later board frame threw on it before the check ran,
  * so those tabs never reloaded.
  */
 function olderThanHub(message: unknown): boolean {
   const { payload } = message as { payload?: FramePayload };
   if (payload?.kind !== "instances") {
-    return state.older;
+    return connectionState.older;
   }
-  state.older = payload.protocol > WIRE_PROTOCOL;
-  if (state.older && newerBuild() === null) {
+  connectionState.older = payload.protocol > WIRE_PROTOCOL;
+  if (connectionState.older && newerBuild() === null) {
     detach(checkServedBuild(), "checkServedBuild");
   }
-  return state.older;
+  return connectionState.older;
 }
 
 /**
@@ -5737,8 +5813,8 @@ function bind(socket: WebSocket): void {
   socket.onerror = () => {
     // Always followed by `onclose`, which schedules the retry — this only
     // records that the last attempt failed, never that trying has stopped.
-    state.status = "error";
-    state.failed = true;
+    connectionState.status = "error";
+    connectionState.failed = true;
   };
 }
 
@@ -5868,7 +5944,7 @@ function takeMessage(message: unknown): void {
   // the numbering this socket's streams count in, read before the
   // connection's follows are.
   const board = (message as { payload?: FramePayload }).payload;
-  if (state.status !== "connected" && board?.kind === "instances") {
+  if (connectionState.status !== "connected" && board?.kind === "instances") {
     socketRun = board.hubRun;
     hubReached();
   }
@@ -5882,7 +5958,7 @@ function takeMessage(message: unknown): void {
     return;
   }
   if (
-    handlePlanMessage(state.plans, message, (instanceId) =>
+    handlePlanMessage(plansState.plans, message, (instanceId) =>
       streamHost.sendToHub({ type: "plan.resync", instanceId })
     )
   ) {
@@ -5910,14 +5986,14 @@ function socketClosed(): void {
   // What the socket said before it closed is taken before its close is.
   takeHeld();
   stopHeartbeat();
-  state.status = "disconnected";
+  connectionState.status = "disconnected";
   // A socket that closed is an attempt that is over, one way or the other.
-  state.failed = true;
+  connectionState.failed = true;
   cancelFleetRead();
   // An announced update is the hub on its way back until its deadline.
-  state.outageAt ??=
-    state.restart && state.restart.until > Date.now()
-      ? state.restart.until
+  connectionState.outageAt ??=
+    connectionState.restart && connectionState.restart.until > Date.now()
+      ? connectionState.restart.until
       : Date.now() + OUTAGE_GRACE;
   abandonInflight("The connection to the hub dropped before that finished.");
   for (const listener of fleetFetchListeners) {
@@ -6075,7 +6151,7 @@ if (typeof window !== "undefined" && !globalThis.__cawcoWakeBound) {
  */
 async function waitForHub(timeoutMs = 5000): Promise<void> {
   ensureConnected();
-  const reached = () => state.status === "connected";
+  const reached = () => connectionState.status === "connected";
   if (reached()) {
     return;
   }
@@ -6153,12 +6229,12 @@ async function reportOf(
 ): Promise<MachineHarnessReport | undefined> {
   await whenTrue(
     () =>
-      state.fleetRead &&
-      state.machines.find((row) => row.machineId === machineId)?.harnesses !==
-        undefined,
+      boardState.fleetRead &&
+      boardState.machines.find((row) => row.machineId === machineId)
+        ?.harnesses !== undefined,
     CONTROL_TIMEOUT_MS
   );
-  return state.machines
+  return boardState.machines
     .find((row) => row.machineId === machineId)
     ?.harnesses?.find((entry) => entry.harness === harness);
 }
@@ -6440,7 +6516,7 @@ export function withdrawFirstPrompt(
   for (const drawn of [commandId, ...held.map((one) => one.commandId)]) {
     dropSendEcho(instanceId, drawn);
   }
-  const target = state.sessions[instanceId];
+  const target = sessionsState.sessions[instanceId];
   if (target) {
     target.busy = false;
   }
@@ -6602,14 +6678,14 @@ function resumeKeyFor(instanceId: string): string | null {
   if (row) {
     return row.sessionId ?? null;
   }
-  return state.sessions[instanceId]?.sessionId ?? null;
+  return sessionsState.sessions[instanceId]?.sessionId ?? null;
 }
 
 /** The harness a session's conversation is one of: its row's, else its view's; a throw while neither has said. */
 function harnessOfSession(instanceId: string): HarnessKind {
   const harness =
     instanceIndex.byId.get(instanceId)?.harness ??
-    state.sessions[instanceId]?.harness;
+    sessionsState.sessions[instanceId]?.harness;
   if (!harness) {
     throw new Error(
       "This session has not said what runs it yet. Try again in a moment."
@@ -6668,7 +6744,7 @@ export async function discardSession(
         // Gone on the machine's word, not before: a refused discard, or one
         // nobody answered, leaves the session as it was.
         settleStopped(instanceId);
-        delete state.sessions[instanceId];
+        delete sessionsState.sessions[instanceId];
         return discarded;
       case "unanswered":
         return discarded;
@@ -6760,7 +6836,7 @@ export async function editProject(
 /** A project as the hub just answered it to the request `asked`, in the projects at once. */
 function keepProject(row: ProjectRow, asked: ProjectsAsked): void {
   keepProjects(
-    state.projects.map((each) => (each.id === row.id ? row : each)),
+    projectsState.projects.map((each) => (each.id === row.id ? row : each)),
     asked
   );
 }
@@ -6863,8 +6939,8 @@ function settleStopped(instanceId: string): void {
  * card of it pressed; never for what was open as the page came.
  */
 export function revealPreview(instanceId: string): void {
-  state.previewRequests[instanceId] =
-    (state.previewRequests[instanceId] ?? 0) + 1;
+  previewsState.previewRequests[instanceId] =
+    (previewsState.previewRequests[instanceId] ?? 0) + 1;
 }
 
 /**
@@ -6875,9 +6951,9 @@ export function revealPreview(instanceId: string): void {
 export async function closePreview(instanceId: string): Promise<void> {
   const mark = readLeaves();
   await deletePreview(instanceId);
-  const previous = state.previews[instanceId];
+  const previous = previewsState.previews[instanceId];
   if (previous && !heardSince(`preview:${instanceId}`, mark)) {
-    state.previews[instanceId] = { ...previous, state: "closed" };
+    previewsState.previews[instanceId] = { ...previous, state: "closed" };
   }
 }
 
@@ -6998,11 +7074,11 @@ async function readProjectOffers(): Promise<void> {
   }
   const framed = (instanceId: string) =>
     heardSince(`project_offer:${instanceId}`, mark);
-  state.projectOffers = Object.fromEntries([
+  offersState.projectOffers = Object.fromEntries([
     ...offers
       .filter((offer) => !framed(offer.instanceId))
       .map((offer) => [offer.instanceId, offer] as const),
-    ...Object.entries(state.projectOffers).filter(([instanceId]) =>
+    ...Object.entries(offersState.projectOffers).filter(([instanceId]) =>
       framed(instanceId)
     ),
   ]);
@@ -7016,19 +7092,19 @@ async function readTailnetHttps(): Promise<void> {
   const mark = readLeaves();
   const read = await load<TailnetHttps>(hubRequest("GET /api/tailnet-https"));
   if (read && !heardSince("tailnet.https", mark)) {
-    state.tailnetHttps = read;
+    tailnetState.tailnetHttps = read;
   }
 }
 
 /** The journey as the hub has it now (none older than the one held), and whether it ticked while this page stood (asking, then done). */
 function keepRelayJourney(journey: RelayJourneyView): void {
-  const before = state.relayJourney;
+  const before = relayState.relayJourney;
   if (before && journey.revision < before.revision) {
     return;
   }
-  state.relayJourney = journey;
+  relayState.relayJourney = journey;
   if (before?.asks && !journey.asks && journey.done) {
-    state.relayTicked = true;
+    relayState.relayTicked = true;
   }
 }
 
@@ -7037,7 +7113,7 @@ export async function readRelayJourney(): Promise<void> {
   const read = await hubJson<RelayAnswer>(hubRequest("GET /api/stream-relay"), {
     failure: refusedOrUnreached,
   });
-  state.relayDomain = read.domain;
+  relayState.relayDomain = read.domain;
   keepRelayJourney(read.journey);
 }
 
@@ -7047,7 +7123,7 @@ export async function actOnRelay(act: RelayAct): Promise<void> {
     hubRequest("POST /api/stream-relay/act", { body: act }),
     { failure: refusedOrUnreached }
   );
-  state.relayDomain = answered.domain;
+  relayState.relayDomain = answered.domain;
   keepRelayJourney(answered.journey);
 }
 
@@ -7076,7 +7152,7 @@ async function readWatchNotices(): Promise<void> {
     hubRequest("GET /api/fleet-watch/notices")
   );
   if (read && !heardSince("fleet_watch.notices", mark)) {
-    state.watchNotices = read.notices;
+    needsState.watchNotices = read.notices;
   }
 }
 
@@ -7087,7 +7163,7 @@ async function readWaitingActions(): Promise<void> {
     hubRequest("GET /api/actions/waiting")
   );
   if (read && !heardSince("actions", mark)) {
-    state.actions = read.actions;
+    needsState.actions = read.actions;
   }
 }
 
@@ -7144,7 +7220,7 @@ export async function answerProjectOffer(
   }
   const offerGone = () => {
     if (!heardSince(`project_offer:${instanceId}`, mark)) {
-      delete state.projectOffers[instanceId];
+      delete offersState.projectOffers[instanceId];
     }
   };
   if (answer === "dismiss") {
@@ -7154,7 +7230,7 @@ export async function answerProjectOffer(
   const accepted = (await response.json()) as ProjectOfferAccepted;
   if (!accepted.conversation) {
     // In the same change as the offer leaving: its card turns, never blinks.
-    state.projectJoins[instanceId] = accepted;
+    offersState.projectJoins[instanceId] = accepted;
   }
   offerGone();
   await refresh();
@@ -7163,7 +7239,7 @@ export async function answerProjectOffer(
 
 /** Puts away the card that said what an offer joined. */
 export function dismissProjectJoin(instanceId: string): void {
-  delete state.projectJoins[instanceId];
+  delete offersState.projectJoins[instanceId];
 }
 
 // --- a project's conversation and views -------------------------------------
@@ -7195,7 +7271,9 @@ export const configureCaw = async (
   );
   // The hub's answer is where he stands: the project's row says so now,
   // before the `projects.changed` it sent brings the row read again.
-  const row = state.projects.find((project) => project.id === projectId);
+  const row = projectsState.projects.find(
+    (project) => project.id === projectId
+  );
   if (row) {
     row.eventsOn = view.on;
     row.cawHarness = view.harness;
@@ -7235,7 +7313,9 @@ export const nameConversation = async (
     }),
     { failure: refusedOrUnreached }
   );
-  const row = state.projects.find((project) => project.id === projectId);
+  const row = projectsState.projects.find(
+    (project) => project.id === projectId
+  );
   if (row) {
     row.conversationInstanceId = view.instanceId;
   }
@@ -7508,15 +7588,19 @@ function keepProjects(projects: ProjectRow[], asked: ProjectsAsked): void {
     return;
   }
   projectsKept = asked.ticket;
-  const held = new Map(state.projects.map((row) => [row.id, row]));
+  const held = new Map(projectsState.projects.map((row) => [row.id, row]));
   const answered = projects.map((row) => {
     const kept = held.get(row.id);
     return kept && heardSince(`project.cap:${row.id}`, asked.mark)
       ? { ...row, cap: kept.cap }
       : row;
   });
-  state.projects = reconcileRows(state.projects, answered, (row) => row.id);
-  state.projectsRead = true;
+  projectsState.projects = reconcileRows(
+    projectsState.projects,
+    answered,
+    (row) => row.id
+  );
+  projectsState.projectsRead = true;
 }
 
 /**
@@ -7775,8 +7859,8 @@ export async function removeSession(instanceId: string): Promise<void> {
  */
 export function machineConnected(machineId: string): boolean {
   return (
-    state.status === "connected" &&
-    state.machines.some(
+    connectionState.status === "connected" &&
+    boardState.machines.some(
       (machine) =>
         machine.machineId === machineId && machine.status === "online"
     )
@@ -8020,7 +8104,7 @@ export type TranscriptOutcome =
 
 /** Puts a session back to "nothing has been said about the read" — Try again's first move. */
 export function clearReadFault(instanceId: string): void {
-  const held = state.sessions[instanceId];
+  const held = sessionsState.sessions[instanceId];
   if (held) {
     held.readFault = null;
   }
@@ -8051,7 +8135,7 @@ export function keepServedAway(viewId: string, fault: ReadFault): void {
 export function keepServedPage(viewId: string, page: TranscriptPage): boolean {
   const target = session(viewId);
   const run = page.hubRun ?? null;
-  const connected = state.status === "connected";
+  const connected = connectionState.status === "connected";
   if (
     target.reads > 0 ||
     target.blocks.length > 0 ||
@@ -8126,7 +8210,7 @@ function awayFault(
 
 /** A machine as the fleet list names it (its label), else its id. */
 function machineName(machineId: string): string {
-  const hostname = state.machines.find(
+  const hostname = boardState.machines.find(
     (row) => row.machineId === machineId
   )?.hostname;
   return hostname ? machineLabel(hostname) : machineId;
@@ -8285,7 +8369,7 @@ export type StoredWait = { on: "board" } | { machine: Machine; on: "machine" };
 export function storedReadWaits(viewId: string): StoredWait | null {
   // Read first, so a reader that runs before the first board runs again
   // when the board's machines land.
-  const { machines } = state;
+  const { machines } = boardState;
   if (instanceIndex.byId.has(viewId)) {
     return null;
   }
@@ -8441,7 +8525,7 @@ function readFailed(
   }
   const listedOnline =
     fault.reason === "offline" &&
-    state.machines.some(
+    boardState.machines.some(
       (machine) =>
         machine.machineId === fault.machineId && machine.status === "online"
     );
@@ -8471,7 +8555,7 @@ function readAtDeadline(viewId: string, deadline: number): void {
     setTimeout(
       () => {
         deadlineReads.delete(viewId);
-        const held = state.sessions[viewId];
+        const held = sessionsState.sessions[viewId];
         const fault = held?.behind ?? held?.readFault;
         if (
           held &&
@@ -8502,7 +8586,7 @@ function readAgainLater(viewId: string): void {
   failed.count += 1;
   failed.timer = setTimeout(() => {
     failed.timer = undefined;
-    const held = state.sessions[viewId];
+    const held = sessionsState.sessions[viewId];
     if (
       held &&
       !held.loading &&
@@ -8589,7 +8673,7 @@ async function readNewestPage(
     // between the read and the socket's board) resumes nothing here: it is
     // read again of the hub that answers now.
     const run = answer.page.hubRun ?? null;
-    if (state.status === "connected" && run !== socketRun) {
+    if (connectionState.status === "connected" && run !== socketRun) {
       return await readNewestPage(target, "otherRun", cancel);
     }
     target.readFault = null;
@@ -8605,7 +8689,7 @@ async function readNewestPage(
     adoptPage(streamState, streamHost, viewId, {
       seq: answer.page.seq ?? 0,
       run,
-      connected: state.status === "connected",
+      connected: connectionState.status === "connected",
     });
     trackWorking(target);
     console.info(
@@ -8670,7 +8754,7 @@ export function readOlderPage(viewId: string): Promise<void> {
   if (inFlight) {
     return inFlight;
   }
-  const target = state.sessions[viewId];
+  const target = sessionsState.sessions[viewId];
   const cursor = target?.cursor;
   if (!(target && cursor) || target.loading) {
     return Promise.resolve();
@@ -9342,7 +9426,7 @@ export async function takeOverBrowser(
  * acknowledged id, before the hub's frame says so).
  */
 const artifactNeedsOpen = $derived(
-  state.artifactNeeds.filter(
+  needsState.artifactNeeds.filter(
     (need) => !(need.parked || notices.seen.has(need.notNow))
   )
 );
@@ -9354,7 +9438,7 @@ const artifactNeedsOpen = $derived(
  */
 const itemParents = $derived(
   new Map(
-    Object.values(state.workItems).map((item) => [
+    Object.values(workItemsState.workItems).map((item) => [
       item.instanceId,
       item.parentInstanceId,
     ])
@@ -9379,7 +9463,7 @@ function parentOf(instanceId: string): string | null {
  */
 const waiting = $derived.by((): ReadonlySet<string> => {
   const now = waitingOnYou({
-    asks: Object.values(state.sessions).flatMap((target) =>
+    asks: Object.values(sessionsState.sessions).flatMap((target) =>
       target.pending.map((request) => ({
         instanceId: target.instanceId,
         routedTo: request.routedTo,
@@ -9406,7 +9490,7 @@ function activityNow(instanceId: string): Activity {
     waiting: waiting.has(instanceId),
     moving: row?.status === "moving",
     runningDelegates: row?.runningDelegates ?? 0,
-    session: state.sessions[instanceId],
+    session: sessionsState.sessions[instanceId],
     subscribed: isSubscribed(instanceId),
     pulse: pulseOf(instanceId)?.activity,
   });
@@ -9420,7 +9504,7 @@ function activityNow(instanceId: string): Activity {
  */
 const blocked = $derived.by((): BlockedRequest[] => {
   const rows: BlockedRequest[] = [];
-  for (const target of Object.values(state.sessions)) {
+  for (const target of Object.values(sessionsState.sessions)) {
     if (target.pending.length === 0) {
       continue;
     }
@@ -9431,7 +9515,7 @@ const blocked = $derived.by((): BlockedRequest[] => {
     // cannot reach (`unknown`) is marked stale. Across a reconnect the asks
     // hold as last read until the hub's read replaces them (`adoptPending`).
     const row = rowsById.get(target.instanceId);
-    const machine = state.machines.find(
+    const machine = boardState.machines.find(
       (one) => one.machineId === target.machineId
     );
     for (const request of target.pending) {
@@ -9474,21 +9558,21 @@ const sameAsk = (a: BlockedRequest, b: BlockedRequest | undefined): boolean =>
 
 export const cawco = {
   get fleetMcp() {
-    return state.fleetMcp;
+    return fleetMcpState.fleetMcp;
   },
   /** The board's snapshot and the first read of the projects after it are in. */
   get fleetRead() {
-    return state.fleetRead;
+    return boardState.fleetRead;
   },
   /** The socket's first full snapshot, pulses included, is in. */
   get liveRead() {
-    return state.liveRead;
+    return boardState.liveRead;
   },
   /** Every online machine's stored sessions have been read, or failed to be. */
   get catalogsRead() {
     return (
-      state.fleetRead &&
-      state.machines
+      boardState.fleetRead &&
+      boardState.machines
         .filter((machine) => machine.status === "online")
         .every((machine) => catalogsTried[machine.machineId])
     );
@@ -9497,14 +9581,14 @@ export const cawco = {
   catalogRead: (machineId: string): boolean =>
     catalogsTried[machineId] === true,
   get status() {
-    return state.status;
+    return connectionState.status;
   },
   /** {@link HubState} — the socket's state as something worth saying out loud. */
   get hub(): HubState {
-    if (state.status === "connected") {
+    if (connectionState.status === "connected") {
       return "connected";
     }
-    return state.outageAt !== null && !ahead(state.outageAt)
+    return connectionState.outageAt !== null && !ahead(connectionState.outageAt)
       ? "unreachable"
       : "connecting";
   },
@@ -9515,7 +9599,9 @@ export const cawco = {
    * hub is unreachable like any other).
    */
   get restart(): { until: number; version: string | null } | null {
-    return state.restart && ahead(state.restart.until) ? state.restart : null;
+    return connectionState.restart && ahead(connectionState.restart.until)
+      ? connectionState.restart
+      : null;
   },
   /**
    * Whether the last attempt to reach the hub came back empty-handed. What
@@ -9523,68 +9609,68 @@ export const cawco = {
    * the banner is only ever true of the second.
    */
   get connectFailed() {
-    return state.failed;
+    return connectionState.failed;
   },
   get retryAt() {
-    return state.retryAt;
+    return connectionState.retryAt;
   },
   /** This page was built for an older wire than the hub's and has stopped reading it: the connection band says so, and the update toast takes it to the new build. */
   get olderWire(): boolean {
-    return state.older;
+    return connectionState.older;
   },
   /** The continuations the hub is carrying, settled ones for a few minutes after. */
   get continuations(): ContinuationJob[] {
-    return state.continuations;
+    return continuationsState.continuations;
   },
   /** Former id → the id its session has now (the hub's fold of older continuations). */
   get formerIds(): Record<string, string> {
-    return state.formerIds;
+    return continuationsState.formerIds;
   },
   /** The fleet's preview mode, as the board last carried it; null before the first board. */
   get previewSettings(): PreviewSettings | null {
-    return state.previewSettings;
+    return previewsState.previewSettings;
   },
   /** The project moves the hub is carrying, settled ones for a few minutes after (move.svelte.ts). */
   get moves(): MoveJob[] {
-    return state.moves;
+    return movesState.moves;
   },
   get machines() {
-    return state.machines;
+    return boardState.machines;
   },
   /** What the hub is running; `undefined` until its first frame. */
   get hubBuild() {
-    return state.hubBuild;
+    return boardState.hubBuild;
   },
   get onlineMachines() {
-    return state.machines.filter((machine) => machine.status === "online");
+    return boardState.machines.filter((machine) => machine.status === "online");
   },
   /** Every Claude account's own limits, by account id. */
   get claudeLimits(): Readonly<Record<string, ClaudeLimits>> {
-    return state.usageLimits;
+    return usageState.usageLimits;
   },
   /** Every machine's OpenCode Go windows, by machineId. */
   get openCodeGoLimits(): Readonly<Record<string, OpenCodeGoLimits>> {
-    return state.openCodeGoLimits;
+    return usageState.openCodeGoLimits;
   },
   /** The hub's accounts, their sign-ins and catalogs; null until read. */
   get accounts(): AccountsView | null {
-    return state.accounts;
+    return accountsState.accounts;
   },
   /** The account picker's rows, every provider the fleet knows; null until read. */
   get accountProviders(): ProviderChoice[] | null {
-    return state.accountProviders;
+    return accountsState.accountProviders;
   },
   /** The hub's limit readings have landed at least once. */
   get usageLimitsRead() {
-    return state.usageLimitsRead;
+    return usageState.usageLimitsRead;
   },
   /** The fleet's spend, the hub's one figure; null until it is read. */
   get spend(): UsageSpend | null {
-    return state.spend;
+    return usageState.spend;
   },
   /** The hub could not be asked for spend, and no frame has brought it since. */
   get spendFailed() {
-    return state.spendFailed;
+    return usageState.spendFailed;
   },
   get instances() {
     return instances;
@@ -9601,10 +9687,10 @@ export const cawco = {
     return instanceIndex;
   },
   get previews() {
-    return state.previews;
+    return previewsState.previews;
   },
   get previewRequests() {
-    return state.previewRequests;
+    return previewsState.previewRequests;
   },
   get runningInstances() {
     return runningInstances;
@@ -9634,29 +9720,29 @@ export const cawco = {
   hasStored: (machineId: string): boolean =>
     (catalog[machineId] ?? []).some(listedInHistory),
   get projects() {
-    return state.projects;
+    return projectsState.projects;
   },
   /** The projects have been read once: an empty list is a fleet with none. */
   get projectsRead() {
-    return state.projectsRead;
+    return projectsState.projectsRead;
   },
   project: (id: string): ProjectRow | null =>
-    state.projects.find((project) => project.id === id) ?? null,
+    projectsState.projects.find((project) => project.id === id) ?? null,
   /** The project's spend cap while it holds the project back now; null otherwise. */
   capHolding: (id: string): ProjectCap | null => {
     const cap =
-      state.projects.find((project) => project.id === id)?.cap ?? null;
+      projectsState.projects.find((project) => project.id === id)?.cap ?? null;
     return capHolds(cap, minute.now) ? cap : null;
   },
   /** The projects whose spend cap holds them back now. */
   get capped(): ProjectRow[] {
-    return state.projects.filter((project) =>
+    return projectsState.projects.filter((project) =>
       capHolds(project.cap, minute.now)
     );
   },
   /** Approved actions waiting on you: proposed, or failed or unknown until put away. */
   get actions(): ApprovedActionView[] {
-    return state.actions;
+    return needsState.actions;
   },
   /** The minute, for what reads a clock (ages, resets). */
   get now(): number {
@@ -9669,22 +9755,22 @@ export const cawco = {
    * withdrawal). An effect that calls it runs again on each.
    */
   questionsMoved: (): readonly [ArtifactNeed[], number] => [
-    state.artifactNeeds,
-    state.questionsMoved,
+    needsState.artifactNeeds,
+    needsState.questionsMoved,
   ],
   /** A count that moves each time the project's tasks change (`tasks.changed`). */
   tasksChangedOf: (projectId: string): number =>
-    state.tasksChanged[projectId] ?? 0,
+    tickersState.tasksChanged[projectId] ?? 0,
   /** A count that moves each time a `tasks.changed` frame names the task, or names none of the project's. */
   taskChangedOf: (projectId: string, taskId: string): number =>
-    (state.taskChanged[`${projectId}/${taskId}`] ?? 0) +
-    (state.tasksChangedUnnamed[projectId] ?? 0),
+    (tickersState.taskChanged[`${projectId}/${taskId}`] ?? 0) +
+    (tickersState.tasksChangedUnnamed[projectId] ?? 0),
   /** A count that moves each time the project's decision pages change (`decisions.changed`). */
   decisionsChangedOf: (projectId: string): number =>
-    state.decisionsChanged[projectId] ?? 0,
+    tickersState.decisionsChanged[projectId] ?? 0,
   /** A count that moves each time the project's arrangement of blocks changes (`blocks.changed`). */
   blocksChangedOf: (projectId: string): number =>
-    state.blocksChanged[projectId] ?? 0,
+    tickersState.blocksChanged[projectId] ?? 0,
   /**
    * The project's starters for a place: the set the hub last sent while
    * this page was connected, else `read`, the set its stages read carried.
@@ -9693,9 +9779,10 @@ export const cawco = {
     projectId: string,
     where: StarterPlace,
     read: ProjectStarter[] | undefined
-  ): ProjectStarter[] => state.starters[`${where}:${projectId}`] ?? read ?? [],
+  ): ProjectStarter[] =>
+    tickersState.starters[`${where}:${projectId}`] ?? read ?? [],
   session: (instanceId: string): SessionState | null =>
-    state.sessions[instanceId] ?? null,
+    sessionsState.sessions[instanceId] ?? null,
   /**
    * What one delegate's card draws of its exchange with its parent, once
    * {@link readDelegate} asked for it. Empty for a delegate whose traffic
@@ -9704,8 +9791,8 @@ export const cawco = {
    */
   delegateOf: (instanceId: string): DelegateRecord =>
     delegateRecord(
-      state.delegateRead[instanceId],
-      state.delegateHeard[instanceId] ?? []
+      delegatesState.delegateRead[instanceId],
+      delegatesState.delegateHeard[instanceId] ?? []
     ),
   /**
    * What a session's tray lists, oldest first: the work items it delegated,
@@ -9715,14 +9802,14 @@ export const cawco = {
    */
   trayOf: (instanceId: string): TrayChild[] =>
     [
-      ...Object.values(state.workItems)
+      ...Object.values(workItemsState.workItems)
         .filter((item) => item.parentInstanceId === instanceId)
         .map(itemChild),
       ...(startedBy.get(instanceId) ?? []).map(sessionChild),
     ].sort((a, b) => a.createdAt - b.createdAt),
   /** A delegate's or a started session's tray entry, by its instance id. */
   trayChildFor: (instanceId: string): TrayChild | undefined => {
-    const item = Object.values(state.workItems).find(
+    const item = Object.values(workItemsState.workItems).find(
       (each) => each.instanceId === instanceId
     );
     if (item) {
@@ -9733,25 +9820,25 @@ export const cawco = {
   },
   /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */
   planOf: (instanceId: string): SessionPlan | undefined =>
-    state.plans[instanceId]?.plan,
+    plansState.plans[instanceId]?.plan,
   /** The "make this a project" offer standing on a session, if one does. */
   projectOfferOf: (instanceId: string): ProjectOfferSummary | undefined =>
-    state.projectOffers[instanceId],
+    offersState.projectOffers[instanceId],
   /** The project an offer on this session joined, while its card stands. */
   projectJoinOf: (instanceId: string): ProjectOfferAccepted | undefined =>
-    state.projectJoins[instanceId],
+    offersState.projectJoins[instanceId],
   /** The work item a delegate session runs, when its parent's tray was told of it. */
   workItemFor: (instanceId: string): WorkItemSummary | undefined =>
-    Object.values(state.workItems).find(
+    Object.values(workItemsState.workItems).find(
       (item) => item.instanceId === instanceId
     ),
   /** Fleet watch's needs-you notices, oldest first. */
   get watchNotices(): FleetWatchNotice[] {
-    return state.watchNotices;
+    return needsState.watchNotices;
   },
   /** The artifacts waiting on the person, longest wait first. */
   get artifactNeeds(): ArtifactNeed[] {
-    return state.artifactNeeds;
+    return needsState.artifactNeeds;
   },
   /** Needs you's artifacts, less the ones put away with Not now: what Needs you lists, and a session's mark reads. */
   get artifactNeedsOpen(): ArtifactNeed[] {
@@ -9759,35 +9846,35 @@ export const cawco = {
   },
   /** The artifacts' notices, newest first. */
   get artifactNotices(): ArtifactNeedNotice[] {
-    return state.artifactNotices;
+    return needsState.artifactNotices;
   },
   /** Every system law the hub caught broken since it started. */
   get lawsBroken(): LawBroken[] {
-    return state.lawsBroken;
+    return needsState.lawsBroken;
   },
   /** Every machine's browsers as the hub last told them; undefined until its first frame. */
   get browsers(): ListedBrowser[] | undefined {
-    return state.browsers;
+    return browsersState.browsers;
   },
   /** HTTPS on the hub machine's tailnet name; undefined until read. */
   get tailnetHttps(): TailnetHttps | undefined {
-    return state.tailnetHttps;
+    return tailnetState.tailnetHttps;
   },
   /** Its step was taken while this page stood, a moment ago: the row ticks. */
   get tailnetTicked(): boolean {
-    return state.tailnetTicked;
+    return tailnetState.tailnetTicked;
   },
   /** The stream relay's journey, as the hub has it; undefined until read. */
   get relayJourney(): RelayJourneyView | undefined {
-    return state.relayJourney;
+    return relayState.relayJourney;
   },
   /** The domain this page reached CawCo through, as the hub saw it; null by IP, the tailnet or a name of the hub's. */
   get relayDomain(): string | null {
-    return state.relayDomain;
+    return relayState.relayDomain;
   },
   /** The relay went live and was proven from outside while this page stood: its row ticks. */
   get relayTicked(): boolean {
-    return state.relayTicked;
+    return relayState.relayTicked;
   },
   /**
    * What a session needs from you — `idle` for one nothing has been heard
@@ -9803,7 +9890,7 @@ export const cawco = {
    * daemon's pulse.
    */
   busyOf: (instanceId: string): boolean => {
-    const target = state.sessions[instanceId];
+    const target = sessionsState.sessions[instanceId];
     if (target && isSubscribed(instanceId)) {
       return target.busy;
     }
@@ -9812,7 +9899,7 @@ export const cawco = {
   currentToolOf: (
     instanceId: string
   ): { name: string; glance: string } | null => {
-    const target = state.sessions[instanceId];
+    const target = sessionsState.sessions[instanceId];
     if (target && isSubscribed(instanceId)) {
       return target.currentTool;
     }
@@ -9840,7 +9927,7 @@ export const cawco = {
     totalTokens: number | null;
     maxTokens: number | null;
   } => {
-    const t = state.sessions[instanceId];
+    const t = sessionsState.sessions[instanceId];
     if (!t) {
       return {
         turns: null,
@@ -9865,9 +9952,9 @@ export const cawco = {
    * neither, and for a view not opened yet.
    */
   toolingOf: (instanceId: string): SessionTooling =>
-    state.sessions[instanceId]?.tooling ?? { servers: [], tools: [] },
+    sessionsState.sessions[instanceId]?.tooling ?? { servers: [], tools: [] },
   commandsOf: (instanceId: string): AvailableCommand[] => {
-    const target = state.sessions[instanceId];
+    const target = sessionsState.sessions[instanceId];
     return target ? availableCommands(target.commands) : [];
   },
   get blocked(): BlockedRequest[] {
