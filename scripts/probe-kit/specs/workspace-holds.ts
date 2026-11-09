@@ -2,7 +2,7 @@
  * A workspace is held only when it holds work that exists nowhere else and
  * that someone still has to decide about; everything else retires on its own
  * when its item ends, and every process started from it ends with it (hub
- * work-items.ts `settle`, `carriesOff`, `closeWorkspace`, `recut`; agent
+ * workspaces.ts `settle`, `carriesOff`, `closeWorkspace`, `recut`; agent
  * workspace.ts `closeClone`, `refreshBase`, `endLeftInside`; core
  * own-commits.ts; delegation-actions.ts `stoppedHoldWords`). On 2026-10-23
  * 24 workspaces, about 50 GB, were held and settled by hand. On a scratch

@@ -13,7 +13,7 @@
  *   `$TMPDIR/outputs/`, a subfolder's at its path, at `assets/<item>/…` of
  *   the project's folder, each holding what it wrote.
  * - o3. Its session stopped, the hub settles its row: the scratch dir is
- *   gone from the machine (hub work-items.ts `settleHost`).
+ *   gone from the machine (hub workspaces.ts `settleHost`).
  *
  *   bun scripts/probe-kit/run.ts host-hands-back
  */
