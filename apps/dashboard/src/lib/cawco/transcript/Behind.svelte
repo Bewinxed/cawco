@@ -30,7 +30,8 @@
   import { commonWords } from "@cawco/core/words/common";
   import { Button } from "#lib/components/ui/button/index.js";
   import { rise } from "#lib/platform/motion/curves.svelte.js";
-  import { cawco, type ReadFault, reconnectingNow } from "../client.svelte";
+  import { type ReadFault, reconnectingNow } from "../client.svelte";
+  import { boardStore } from "../stores/board.svelte";
 
   let {
     fault,
@@ -47,7 +48,7 @@
     if (fault.reason !== "offline") {
       return "";
     }
-    const row = cawco.machines.find(
+    const row = boardStore.machines.find(
       (listed) => listed.machineId === fault.machineId
     );
     return row ? machineLabel(row.hostname) : fault.machineId;
