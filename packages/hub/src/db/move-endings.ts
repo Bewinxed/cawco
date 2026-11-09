@@ -6,7 +6,7 @@ import { moveEndings } from "./schema";
 /**
  * What a move ended with a session's process (core `MoveEnded`: its
  * background tasks and wake-ups), kept from the machine's answer until the
- * session is told on its new account (server.ts `tellEndedByMove`), so a hub
+ * session is told on its new account (account-carry.ts `tellEndedByMove`), so a hub
  * restart in between never loses it. One per session: a later move's
  * replaces it; telling it takes it.
  */

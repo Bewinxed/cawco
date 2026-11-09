@@ -114,7 +114,7 @@ export const CONTROL_RESTLESS = "restless";
  * would lose, and no resume brings back (a background command, a one-time
  * wake-up), answered {@link WorkInFlight}, or null when it holds none or has
  * no process. What a continuation that ends the process waits for (hub
- * server.ts `waitStep`), as an account move waits (`waitForLater`).
+ * continuations.ts `waitStep`), as an account move waits (`waitForLater`).
  */
 export const CONTROL_WORK_IN_FLIGHT = "workInFlight";
 
