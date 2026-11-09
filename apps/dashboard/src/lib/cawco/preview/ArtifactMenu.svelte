@@ -1,4 +1,16 @@
 <script lang="ts">
+  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
+  import type { ArtifactSummary } from "@cawco/core/protocol";
+  import { artifactWords } from "@cawco/core/words/artifacts";
+  import { type Component, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
+  import { MediaQuery, SvelteSet } from "svelte/reactivity";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+  } from "#lib/components/ui/bar-glass/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   /**
    * The artifact panel's title control (the artifact panel's surface brief,
    * The head): the shown artifact's title, the HIG's bar title (Headline:
@@ -32,18 +44,7 @@
    * after the menu closed goes to `onrefused`, which the pane says on its
    * own failure line.
    */
-  import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-  import type { ArtifactSummary } from "@cawco/core/protocol";
-  import { artifactWords } from "@cawco/core/words/artifacts";
-  import { type Component, untrack } from "svelte";
-  import type { Attachment } from "svelte/attachments";
-  import { MediaQuery, SvelteSet } from "svelte/reactivity";
-  import {
-    BarGlass,
-    BarItem,
-    BarMenu,
-  } from "#lib/components/ui/bar-glass/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconArtifactCanvas,
     IconArtifactPage,
@@ -101,7 +102,7 @@
   };
 
   /** Under the phone line the title takes two lines, centred as a box: its optical trim's padding would show a third. */
-  const phone = new MediaQuery("(width < 640px)");
+  const phone = new MediaQuery(PHONE_QUERY);
   /** The phone's two lines cut the title: its chevron stands beside the box, since one inline after the last word is cut with it. */
   let clamped = $state(false);
   /** The box's width when the two lines first cut the title. */
