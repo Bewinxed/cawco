@@ -1,5 +1,5 @@
 /** Every {@link TaskHistoryKind}. */
-export const TASK_HISTORY_KINDS = [
+const TASK_HISTORY_KINDS = [
   "created",
   "moved",
   "changed",
