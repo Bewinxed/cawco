@@ -65,6 +65,23 @@ export interface StepOutcome {
   /** Where a step on another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
   where?: string;
 }
+
+/**
+ * The outcome of a step that ran no command, `passed` as given and why in
+ * `why`: unrun after an earlier failure, nothing to run, or a pass carried over.
+ */
+const notRun = (
+  step: GateStep,
+  why: Pick<StepOutcome, "nothing" | "skipped" | "unrun">,
+  passed: boolean
+): StepOutcome => ({
+  step,
+  ...why,
+  passed,
+  exitCode: 0,
+  durationMs: 0,
+  result: { exitCode: 0, stdout: "", stderr: "" },
+});
 /** Every path the steps declare as their inputs (`on:`), read once per look at the workspace. */
 const inputPathsOf = (steps: readonly GateStep[]): string[] => [
   ...new Set(steps.flatMap((step) => step.inputs ?? [])),
@@ -509,14 +526,9 @@ export const createGate = ({
       for (const step of steps) {
         current = step;
         if (stopped) {
-          outcomes.push({
-            step,
-            unrun: `${stopped.name} failed first`,
-            passed: false,
-            exitCode: 0,
-            durationMs: 0,
-            result: { exitCode: 0, stdout: "", stderr: "" },
-          });
+          outcomes.push(
+            notRun(step, { unrun: `${stopped.name} failed first` }, false)
+          );
           continue;
         }
         const limit = (step.timeoutSec ?? GATE_TIMEOUT_SEC) * 1000;
@@ -671,26 +683,12 @@ export const createGate = ({
       declared: gate.declared,
       outcomes: steps.map((step, at) => {
         if (step.nothing) {
-          return {
-            step,
-            nothing: step.nothing,
-            passed: true,
-            exitCode: 0,
-            durationMs: 0,
-            result: { exitCode: 0, stdout: "", stderr: "" },
-          };
+          return notRun(step, { nothing: step.nothing }, true);
         }
         const skipped = prior[at];
         return skipped === undefined
           ? (ran.shift() as StepOutcome)
-          : {
-              step,
-              skipped,
-              passed: true,
-              exitCode: 0,
-              durationMs: 0,
-              result: { exitCode: 0, stdout: "", stderr: "" },
-            };
+          : notRun(step, { skipped }, true);
       }),
     };
   };
