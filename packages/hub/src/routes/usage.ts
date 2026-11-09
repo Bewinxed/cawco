@@ -27,12 +27,14 @@ export const usageRoutes = ({
         }),
       },
       ({ query }) =>
-        db.accounts.history({
-          accountId: query.accountId,
-          kind: query.kind,
-          since: query.since,
-          until: query.until,
-        })
+        db.accounts
+          .history({
+            accountId: query.accountId,
+            kind: query.kind,
+            since: query.since,
+            until: query.until,
+          })
+          .map((row) => ({ ...row, fetchedAt: row.fetchedAt.toISOString() }))
     )
     .get(
       "/api/usage/summary",
