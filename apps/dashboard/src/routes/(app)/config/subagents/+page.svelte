@@ -4,7 +4,6 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { unhandled } from "@cawco/core/unhandled";
   import { configureWords } from "@cawco/core/words/configure";
-  import { didntAnswer } from "#lib/cawco/client.svelte.js";
   import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
   import { deleteAgent } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -19,6 +18,7 @@
     pushAgents,
     saveAgent,
   } from "#lib/cawco/fleet.js";
+  import { didntAnswer } from "#lib/cawco/hub/control.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
