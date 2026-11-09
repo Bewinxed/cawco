@@ -1039,9 +1039,11 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   ): void => {
     const from = row.accountId ? ctx.db.accounts.get(row.accountId) : undefined;
     if (
-      !from ||
-      traitsOf(row.harness).accountModel !== "dir" ||
-      !LIMITED_PROVIDERS.includes(from.provider) ||
+      !(
+        from &&
+        traitsOf(row.harness).accountDir &&
+        LIMITED_PROVIDERS.includes(from.provider)
+      ) ||
       row.forkedFrom !== null ||
       ctx.owedMoves.has(row.id) ||
       ctx.db.atLimit.hold(row.id) ||
@@ -1643,7 +1645,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
         oweMoveOff(row.id, account.id, why)
       ) {
         moving += 1;
-      } else if (traitsOf(row.harness).accountModel === "dir") {
+      } else if (traitsOf(row.harness).accountDir) {
         // Its next send is refused for want of an account (placement's
         // `noAccountRefusal`): its line says it stopped, and why.
         strandedIds.push(row.id);
