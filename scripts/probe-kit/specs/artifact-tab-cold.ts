@@ -45,7 +45,7 @@
  *    dashboard is showing this session", which the show's answer says), and
  *    the shown wait of a third show whose view answered LATE_ACK_MS late.
  *
- * 4. the run's first component canvas (the hub building its host, core
+ * 4. the run's first component canvas (the hub building its host, hub
  *    canvas-host.ts on host-build.ts's thread): its tab mounts and reloads
  *    within the same budgets, draws Excalidraw, and the hub answers every
  *    read within HUB_STALL_MS. On the hub's own thread its build held reads
