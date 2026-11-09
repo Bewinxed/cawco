@@ -24,13 +24,20 @@ import {
 import type { BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
 import type { TaskFind } from "#lib/cawco/tasks/task-find.svelte.js";
 import { clearPicks, selection } from "#lib/cawco/tasks/task-select.svelte.js";
+import { taskShare } from "#lib/cawco/tasks/task-share.js";
 import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
-import { viewsOf, viewTool } from "#lib/cawco/views-api.js";
+import {
+  discardView,
+  keepView,
+  viewsOf,
+  viewTool,
+} from "#lib/cawco/views-api.js";
 import {
   failureSentence,
   type HubRead,
   failureWords as message,
 } from "#lib/platform/hub-read.js";
+import { departShared } from "#lib/platform/motion/share.svelte.js";
 import { newestRead } from "#lib/platform/newest-read.js";
 import type { ProjectPageData } from "./project-page-data";
 
@@ -102,13 +109,11 @@ export class ProjectBoard {
 
   readonly #project: () => string;
   readonly #find: TaskFind;
-  readonly #lift: (id: string, source?: HTMLElement) => void;
 
   constructor({
     project,
     seed,
     find,
-    lift,
   }: {
     /** The project the page is. */
     project: () => string;
@@ -116,12 +121,9 @@ export class ProjectBoard {
     seed: ProjectPageData | null;
     /** What the hub found for the filter's words, which moves with the tasks. */
     find: TaskFind;
-    /** The card for a task takes off from where it is drawn, to land in its new column. */
-    lift: (id: string, source?: HTMLElement) => void;
   }) {
     this.#project = project;
     this.#find = find;
-    this.#lift = lift;
     this.list = seed?.tasks.ok ? seed.tasks.value : null;
     this.listProblem = seed ? refusal(seed.tasks) : null;
     this.stages = seed?.stages.ok ? seed.stages.value : null;
@@ -175,6 +177,23 @@ export class ProjectBoard {
   }
 
   // --- the hub's writes ---------------------------------------------------------
+
+  /** Keep: the draft becomes a kept view where it stands in the list. */
+  async keepView(name: string) {
+    const kept = await keepView(this.#project(), name);
+    this.views = this.views.map((view) => (view.name === name ? kept : view));
+  }
+
+  /**
+   * Discard: the draft goes from the list. `leave` runs once the hub has
+   * discarded it and before it goes, so the page turns from its tab while
+   * the tab still stands.
+   */
+  async discardView(name: string, leave: () => void) {
+    await discardView(this.#project(), name);
+    leave();
+    this.views = this.views.filter((view) => view.name !== name);
+  }
 
   async refresh() {
     const id = this.#project();
@@ -300,14 +319,14 @@ export class ProjectBoard {
     source?: HTMLElement,
     reason?: string
   ): Promise<TaskView> {
-    this.#lift(id, source);
+    departShared(taskShare(id), source);
     this.moving = { ...this.moving, [id]: stage };
     try {
       const task = await moveTask(this.#project(), id, stage, reason);
       this.patch(task);
       return task;
     } catch (error) {
-      this.#lift(id);
+      departShared(taskShare(id));
       throw error;
     } finally {
       const { [id]: _, ...rest } = this.moving;
