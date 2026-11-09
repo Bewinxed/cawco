@@ -86,12 +86,6 @@
   import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
   import { stopWords } from "../accounts/switch.svelte";
-  import {
-    faultMessage,
-    readOlderPage,
-    readTranscript,
-    reconnectingNow,
-  } from "../client.svelte";
   import { devNote } from "../dev-debug";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
@@ -101,6 +95,12 @@
   import { provideSessionHere } from "../session-here";
   import { boardStore } from "../stores/board.svelte";
   import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
+  import {
+    faultMessage,
+    readOlderPage,
+    readTranscript,
+    reconnectingNow,
+  } from "../stores/transcript-reads.svelte";
   import type { Message } from "../types";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
