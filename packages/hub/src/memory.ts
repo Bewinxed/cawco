@@ -165,8 +165,6 @@ import { typeFileProblem } from "./project-delegate-types";
 import {
   changeFolderFiles,
   type FolderAuthor,
-  FolderRefusal,
-  folderAttempt,
   folderBlame,
   folderFileNames,
   folderHistory,
@@ -176,7 +174,7 @@ import {
   writeFolderFile,
   YOU,
 } from "./project-folder";
-import { type Applies, appliesNow } from "./proposal-base";
+import { appliesNow } from "./proposal-base";
 import { refusal } from "./refusal";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
@@ -720,79 +718,78 @@ const saysAlready = (known: string, text: string): boolean => {
 // --- the folder -----------------------------------------------------------------------
 
 /** A text file of the folder, or "" when it is not there. */
-export const fileOr = async (
-  projectId: string,
-  path: string
-): Promise<string> => {
-  try {
-    return (await readFolderFile(projectId, path)).content;
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
-      return "";
-    }
-    throw error;
+export const fileOr = async (projectId: string, path: string) => {
+  const file = await readFolderFile(projectId, path);
+  if (file instanceof ElysiaStatus) {
+    return file.status === 404 ? "" : file;
   }
+  return file.content;
 };
 
 /** Every file under `knowledge/`, by path, with its words. */
-const knowledgeOf = async (
-  projectId: string
-): Promise<{ content: string; path: string }[]> => {
-  let listing: Awaited<ReturnType<typeof listFolder>>;
-  try {
-    listing = await listFolder(projectId, KNOWLEDGE_DIR, true);
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
-      return [];
-    }
-    throw error;
+const knowledgeOf = async (projectId: string) => {
+  const listing = await listFolder(projectId, KNOWLEDGE_DIR, true);
+  if (listing instanceof ElysiaStatus) {
+    return listing.status === 404 ? [] : listing;
   }
   const files = listing.entries.filter((entry) => entry.kind === "file");
   const read = await Promise.all(
-    files.map(async (entry) => {
-      try {
-        return {
-          path: entry.path,
-          content: (await readFolderFile(projectId, entry.path)).content,
-        };
-      } catch (error) {
-        // A binary file (an image of the brand kit) is not read as words.
-        if (
-          error instanceof FolderRefusal &&
-          [413, 415].includes(error.status)
-        ) {
-          return;
-        }
-        throw error;
-      }
-    })
+    files.map((entry) => readFolderFile(projectId, entry.path))
   );
-  return read.filter((file) => file !== undefined);
+  const knowledge: { content: string; path: string }[] = [];
+  for (const file of read) {
+    if (file instanceof ElysiaStatus) {
+      // A binary file (an image of the brand kit) is not read as words.
+      if (file.status === 413 || file.status === 415) {
+        continue;
+      }
+      return file;
+    }
+    knowledge.push({ path: file.path, content: file.content });
+  }
+  return knowledge;
 };
 
 /** What AGENTS.md and `knowledge/` say, together: what a duplicate repeats. */
-const knownOf = async (projectId: string): Promise<string> =>
-  [
-    await fileOr(projectId, AGENTS_FILE),
-    ...(await knowledgeOf(projectId)).map((file) => file.content),
-  ].join("\n\n");
+const knownOf = async (projectId: string) => {
+  const agents = await fileOr(projectId, AGENTS_FILE);
+  if (agents instanceof ElysiaStatus) {
+    return agents;
+  }
+  const knowledge = await knowledgeOf(projectId);
+  if (knowledge instanceof ElysiaStatus) {
+    return knowledge;
+  }
+  return [agents, ...knowledge.map((file) => file.content)].join("\n\n");
+};
 
 /** The notes still in a project's inbox, oldest first: what its sessions noted and the curator has not sorted. */
-export const inboxNotes = (projectId: string): Promise<Note[]> =>
-  notesIn(projectId, INBOX_DIR);
+export const inboxNotes = (projectId: string) => notesIn(projectId, INBOX_DIR);
 
 /** The notes in one of memory/'s folders, oldest first. */
-const notesIn = async (projectId: string, dir: string): Promise<Note[]> => {
-  const names = (await folderFileNames(projectId, dir))
-    .filter((name) => name.endsWith(".md"))
-    .sort();
+const notesIn = async (projectId: string, dir: string) => {
+  const all = await folderFileNames(projectId, dir);
+  if (all instanceof ElysiaStatus) {
+    return all;
+  }
+  const names = all.filter((name) => name.endsWith(".md")).sort();
   const read = await Promise.all(
     names.map(async (name) => {
       const path = `${dir}/${name}`;
-      return parseNote(path, await fileOr(projectId, path));
+      const text = await fileOr(projectId, path);
+      return text instanceof ElysiaStatus ? text : parseNote(path, text);
     })
   );
-  return read.filter((note) => note !== undefined);
+  const notes: Note[] = [];
+  for (const one of read) {
+    if (one instanceof ElysiaStatus) {
+      return one;
+    }
+    if (one !== undefined) {
+      notes.push(one);
+    }
+  }
+  return notes;
 };
 
 /** Whether a kept proposal file reads as one (its files whole). */
@@ -811,24 +808,29 @@ const wholeProposal = (parsed: Proposal): boolean =>
 const pathsOf = (proposal: Proposal): string =>
   proposal.files.map((file) => file.path).join(", ");
 
-const proposalsOf = async (projectId: string): Promise<Proposal[]> => {
-  const names = (await folderFileNames(projectId, PROPOSALS_DIR))
-    .filter((name) => name.endsWith(".json"))
-    .sort();
+const proposalsOf = async (projectId: string) => {
+  const all = await folderFileNames(projectId, PROPOSALS_DIR);
+  if (all instanceof ElysiaStatus) {
+    return all;
+  }
+  const names = all.filter((name) => name.endsWith(".json")).sort();
   const read = await Promise.all(
     names.map(async (name) => {
       try {
         const path = `${PROPOSALS_DIR}/${name}`;
-        const parsed = parseRecord(
-          path,
-          await fileOr(projectId, path),
-          ProposalSchema
-        );
-        if (wholeProposal(parsed)) {
+        const text = await fileOr(projectId, path);
+        // A file the folder refuses to read does not read as a proposal.
+        const parsed =
+          text instanceof ElysiaStatus
+            ? undefined
+            : parseRecord(path, text, ProposalSchema);
+        if (parsed && wholeProposal(parsed)) {
           return parsed;
         }
         console.warn(
-          `[memory] ${projectId}: ${PROPOSALS_DIR}/${name} names no files whole; it is not parked`
+          parsed
+            ? `[memory] ${projectId}: ${PROPOSALS_DIR}/${name} names no files whole; it is not parked`
+            : `[memory] ${projectId}: ${PROPOSALS_DIR}/${name} does not read as a proposal`
         );
       } catch {
         console.warn(
@@ -837,7 +839,10 @@ const proposalsOf = async (projectId: string): Promise<Proposal[]> => {
       }
     })
   );
-  return read.filter((proposal) => proposal !== undefined);
+  const proposals: Proposal[] = read.filter(
+    (proposal) => proposal !== undefined
+  );
+  return proposals;
 };
 
 /** A note's path once archived. */
@@ -907,15 +912,9 @@ const candidate = (note: Note, cited: ReadonlySet<string>): boolean =>
  * `knowledge/`; refused with the reason otherwise.
  */
 const proposable = (raw: string) => {
-  let rel: string;
-  try {
-    rel = folderPath(raw);
-  } catch (error) {
-    return refusal(
-      400,
-      "memory-path-unfit",
-      error instanceof Error ? error.message : String(error)
-    );
+  const rel = folderPath(raw);
+  if (rel instanceof ElysiaStatus) {
+    return refusal(400, "memory-path-unfit", rel.response.detail);
   }
   if (rel === AGENTS_FILE) {
     return rel;
@@ -1803,13 +1802,22 @@ export const createMemory = ({
   // --- notes -----------------------------------------------------------------------
 
   /** Candidates waiting in the inbox: what the curator's mark counts. */
-  const candidates = async (projectId: string): Promise<Note[]> => {
-    const cited = new Set(
-      (await proposalsOf(projectId)).flatMap((proposal) => proposal.notes)
-    );
-    return (await notesIn(projectId, INBOX_DIR)).filter((each) =>
-      candidate(each, cited)
-    );
+  const candidates = async (projectId: string) => {
+    const read = await inboxCited(projectId);
+    return read instanceof ElysiaStatus
+      ? read
+      : read.inbox.filter((each) => candidate(each, read.cited));
+  };
+
+  /** The notes in the inbox, and the ones an open proposal cites. */
+  const inboxCited = async (projectId: string) => {
+    const proposals = await proposalsOf(projectId);
+    if (proposals instanceof ElysiaStatus) {
+      return proposals;
+    }
+    const cited = new Set(proposals.flatMap((proposal) => proposal.notes));
+    const inbox = await notesIn(projectId, INBOX_DIR);
+    return inbox instanceof ElysiaStatus ? inbox : { inbox, cited };
   };
 
   /**
@@ -1817,20 +1825,24 @@ export const createMemory = ({
    * project's git: every secret redacted (secret-filter.ts), the note marked
    * `secret`; a duplicate said so.
    */
-  const byRules = async (
-    projectId: string,
-    words: string
-  ): Promise<{ text: string; verdict: Verdict | null }> => {
+  const byRules = async (projectId: string, words: string) => {
     const redacted = await redactSecrets(words);
     if (redacted !== words) {
-      return { text: redacted, verdict: "secret" };
+      const secret: { text: string; verdict: Verdict | null } = {
+        text: redacted,
+        verdict: "secret",
+      };
+      return secret;
     }
-    return {
+    const known = await knownOf(projectId);
+    if (known instanceof ElysiaStatus) {
+      return known;
+    }
+    const ruled: { text: string; verdict: Verdict | null } = {
       text: words,
-      verdict: saysAlready(await knownOf(projectId), words)
-        ? "duplicate"
-        : null,
+      verdict: saysAlready(known, words) ? "duplicate" : null,
     };
+    return ruled;
   };
 
   /** The project whose inbox a session's note goes to, or the refusal: a session in no project, or a project the hub does not keep. */
@@ -1861,40 +1873,21 @@ export const createMemory = ({
     if (held instanceof ElysiaStatus) {
       return held;
     }
-    const { text, verdict } = await byRules(projectId, words);
-    const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
-    const made: Note = {
-      id: idAt("n", at),
-      path: "",
-      author: boardTitle(actor),
-      session: actor.id,
-      role: roleOf(actor),
-      source: sourceOf(actor),
-      task: item?.taskId ?? null,
-      time: at.toISOString(),
-      since: held,
-      taint: taintOf(actor),
-      verdict,
-      by: verdict ? "rules" : null,
-      outcome: null,
-      text,
-    };
-    made.path = `${INBOX_DIR}/${made.id}.md`;
-    const written = await writeFolderFile(
-      projectId,
-      made.path,
-      renderNote(made),
-      {
-        author: { name: made.author },
-        message: `memory: a note from ${made.author}${made.taint.length > 0 ? ` (${made.taint.join(", ")})` : ""}`,
-      }
-    );
-    folderChanged(projectId);
-    console.log(
-      `[memory] ${projectId}: ${made.id} from ${actor.id} (${made.source}${made.taint.length > 0 ? `, taint ${made.taint.join("+")}` : ""}${verdict ? `, ${verdict}` : ""}) at ${written.sha.slice(0, 9)}`
-    );
+    const ruled = await byRules(projectId, words);
+    if (ruled instanceof ElysiaStatus) {
+      return ruled;
+    }
+    const made = noteOf(actor, at, held, ruled);
+    const written = await writeNote(projectId, made, actor.id);
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
     curator().ensure(projectId);
-    if ((await candidates(projectId)).length > INBOX_MARK) {
+    const waiting = await candidates(projectId);
+    if (waiting instanceof ElysiaStatus) {
+      return waiting;
+    }
+    if (waiting.length > INBOX_MARK) {
       curator().inboxPassed(projectId);
     }
     return {
@@ -1902,8 +1895,57 @@ export const createMemory = ({
       path: made.path,
       sha: written.sha,
       taint: made.taint,
-      verdict,
+      verdict: made.verdict,
     };
+  };
+
+  /** `actor`'s note made `at`, true since `since`, in the words and with the verdict the rules gave it. */
+  const noteOf = (
+    actor: InstanceRow,
+    at: Date,
+    since: string | null,
+    { text, verdict }: { text: string; verdict: Verdict | null }
+  ): Note => {
+    const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
+    const id = idAt("n", at);
+    return {
+      id,
+      path: `${INBOX_DIR}/${id}.md`,
+      author: boardTitle(actor),
+      session: actor.id,
+      role: roleOf(actor),
+      source: sourceOf(actor),
+      task: item?.taskId ?? null,
+      time: at.toISOString(),
+      since,
+      taint: taintOf(actor),
+      verdict,
+      by: verdict ? "rules" : null,
+      outcome: null,
+      text,
+    };
+  };
+
+  /** Note `made` from session `from` into the inbox, one commit by its author; said in the log. */
+  const writeNote = async (projectId: string, made: Note, from: string) => {
+    const tainted = made.taint.length > 0;
+    const written = await writeFolderFile(
+      projectId,
+      made.path,
+      renderNote(made),
+      {
+        author: { name: made.author },
+        message: `memory: a note from ${made.author}${tainted ? ` (${made.taint.join(", ")})` : ""}`,
+      }
+    );
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
+    folderChanged(projectId);
+    console.log(
+      `[memory] ${projectId}: ${made.id} from ${from} (${made.source}${tainted ? `, taint ${made.taint.join("+")}` : ""}${made.verdict ? `, ${made.verdict}` : ""}) at ${written.sha.slice(0, 9)}`
+    );
+    return written;
   };
 
   /** Moves notes to the archive with what came of them, in one commit. */
@@ -1912,7 +1954,7 @@ export const createMemory = ({
     settled: Settled[],
     message: string,
     author: FolderAuthor
-  ): Promise<string | undefined> => {
+  ) => {
     if (settled.length === 0) {
       return;
     }
@@ -1924,6 +1966,9 @@ export const createMemory = ({
       },
       { author, message }
     );
+    if (done instanceof ElysiaStatus) {
+      return done;
+    }
     folderChanged(projectId);
     return done.sha;
   };
@@ -1942,11 +1987,12 @@ export const createMemory = ({
     project: ProjectRow,
     unsorted: Note[],
     pairs: Pair[]
-  ): Promise<{
-    sorts: Map<Pair, JevChoiceAnswer<Sort>>;
-    verdicts: Map<string, Verdict>;
-  }> => {
-    const known = excerpt(await fileOr(project.id, AGENTS_FILE), JEV_KNOWN);
+  ) => {
+    const agents = await fileOr(project.id, AGENTS_FILE);
+    if (agents instanceof ElysiaStatus) {
+      return agents;
+    }
+    const known = excerpt(agents, JEV_KNOWN);
     const questions: Record<string, JevQuestion> = {};
     for (const each of unsorted) {
       questions[each.id] = {
@@ -2044,8 +2090,12 @@ export const createMemory = ({
   // --- the curator's run -----------------------------------------------------------------
 
   /** Every fact file of a project, read; an unreadable line in one is logged by its file and line. */
-  const factFilesOf = async (projectId: string): Promise<FactFile[]> => {
-    const files = (await knowledgeOf(projectId))
+  const factFilesOf = async (projectId: string) => {
+    const knowledge = await knowledgeOf(projectId);
+    if (knowledge instanceof ElysiaStatus) {
+      return knowledge;
+    }
+    const files: FactFile[] = knowledge
       .filter((file) => isFactFile(file.path))
       .map((file) => parseFactFile(file.path, file.content));
     logUnread(projectId, files);
@@ -2085,7 +2135,7 @@ export const createMemory = ({
     related: Map<string, FactLine[]>,
     sortOf: (note: Note, fact: FactLine) => JevChoiceAnswer<Sort> | undefined,
     files: FactFile[]
-  ): Promise<Set<string>> => {
+  ) => {
     const edits = new Map<
       string,
       {
@@ -2136,12 +2186,37 @@ export const createMemory = ({
       edits.set(fact.path, at);
       taken.add(each.id);
     }
-    const [head] = (await folderHistory(project.id, "", 1)).commits;
+    const proposed = await proposeSorts(project, edits);
+    return proposed instanceof ElysiaStatus ? proposed : taken;
+  };
+
+  /** Each file's edits Jev's clear sorts make ({@link prefill}), kept as one proposal by Jev on the folder's head. */
+  const proposeSorts = async (
+    project: ProjectRow,
+    edits: Map<
+      string,
+      {
+        archived: string[];
+        before: string;
+        content: string;
+        notes: string[];
+        said: string[];
+      }
+    >
+  ) => {
+    const history = await folderHistory(project.id, "", 1);
+    if (history instanceof ElysiaStatus) {
+      return history;
+    }
+    const [head] = history.commits;
     const today = dayOf(new Date());
     for (const [path, edit] of edits) {
       const at = new Date();
       const archiveNow = await fileOr(project.id, archivePath(path));
-      await keep(
+      if (archiveNow instanceof ElysiaStatus) {
+        return archiveNow;
+      }
+      const kept = await keep(
         {
           id: idAt("p", at),
           projectId: project.id,
@@ -2175,8 +2250,10 @@ export const createMemory = ({
         },
         project
       );
+      if (kept instanceof ElysiaStatus) {
+        return kept;
+      }
     }
-    return taken;
   };
 
   /**
@@ -2188,10 +2265,14 @@ export const createMemory = ({
     files: ProposalFile[],
     why: string,
     kind?: Proposal["kind"]
-  ): Promise<void> => {
-    const [head] = (await folderHistory(project.id, "", 1)).commits;
+  ) => {
+    const history = await folderHistory(project.id, "", 1);
+    if (history instanceof ElysiaStatus) {
+      return history;
+    }
+    const [head] = history.commits;
     const at = new Date();
-    await keep(
+    return await keep(
       {
         id: idAt("p", at),
         projectId: project.id,
@@ -2220,7 +2301,7 @@ export const createMemory = ({
     project: ProjectRow,
     files: FactFile[],
     touched: ReadonlySet<string>
-  ): Promise<number> => {
+  ) => {
     let made = 0;
     const declined = (file: FactFile): boolean =>
       db.memoryFacts.declinedRewrite(project.id, file.path) ===
@@ -2229,11 +2310,14 @@ export const createMemory = ({
       (each) => isProse(each) && !touched.has(each.path) && !declined(each)
     )) {
       const written = await folderBlame(project.id, file.path);
+      if (written instanceof ElysiaStatus) {
+        return written;
+      }
       const content = factsFromProse(file.path, file.content, (line) =>
         dayOf(written.lines.get(line) ?? written.mtime)
       );
       const claims = parseFactFile(file.path, content).facts.length;
-      await proposeAsHub(
+      const proposed = await proposeAsHub(
         project,
         [
           {
@@ -2245,6 +2329,9 @@ export const createMemory = ({
         `${file.path} is prose from before fact lines: its ${claims} claim${claims === 1 ? "" : "s"} as fact lines, word for word`,
         "rewrite"
       );
+      if (proposed instanceof ElysiaStatus) {
+        return proposed;
+      }
       made += 1;
     }
     return made;
@@ -2261,7 +2348,7 @@ export const createMemory = ({
     project: ProjectRow,
     files: FactFile[],
     touched: Set<string>
-  ): Promise<number> => {
+  ) => {
     const today = dayOf(new Date());
     let made = 0;
     for (const file of files.filter((each) => !touched.has(each.path))) {
@@ -2273,7 +2360,7 @@ export const createMemory = ({
       if (retired.length === 0) {
         continue;
       }
-      await proposeAsHub(
+      const proposed = await proposeAsHub(
         project,
         [
           {
@@ -2284,6 +2371,9 @@ export const createMemory = ({
         ],
         `${retired.length} line${retired.length === 1 ? "" : "s"} of ${file.path} reached ${retired.length === 1 ? "its" : "their"} \`until\` and move${retired.length === 1 ? "s" : ""} under Formerly`
       );
+      if (proposed instanceof ElysiaStatus) {
+        return proposed;
+      }
       touched.add(file.path);
       made += 1;
     }
@@ -2299,7 +2389,7 @@ export const createMemory = ({
     project: ProjectRow,
     files: FactFile[],
     touched: ReadonlySet<string>
-  ): Promise<number> => {
+  ) => {
     const uses = db.memoryFacts.factUses(project.id);
     const today = dayOf(new Date());
     let made = 0;
@@ -2315,7 +2405,10 @@ export const createMemory = ({
       }
       const into = archivePath(file.path);
       const now = await fileOr(project.id, into);
-      await proposeAsHub(
+      if (now instanceof ElysiaStatus) {
+        return now;
+      }
+      const proposed = await proposeAsHub(
         project,
         [
           {
@@ -2337,6 +2430,9 @@ export const createMemory = ({
         `${unused.length} line${unused.length === 1 ? "" : "s"} of ${file.path} unused for ${MEMORY_ARCHIVE_DAYS} days move to ${into}`,
         "archive"
       );
+      if (proposed instanceof ElysiaStatus) {
+        return proposed;
+      }
       made += 1;
     }
     return made;
@@ -2351,7 +2447,7 @@ export const createMemory = ({
     projectId: string,
     sorted: { settled: Settled[]; waiting: Note[] },
     verdicts: Map<string, Verdict> | undefined
-  ): Promise<Note[]> => {
+  ) => {
     const settled = [...sorted.settled];
     const marked: Note[] = [];
     for (const each of sorted.waiting.filter((one) => one.verdict === null)) {
@@ -2363,7 +2459,7 @@ export const createMemory = ({
       }
     }
     if (settled.length > 0 || marked.length > 0) {
-      await changeFolderFiles(
+      const changed = await changeFolderFiles(
         projectId,
         {
           writes: [
@@ -2380,6 +2476,9 @@ export const createMemory = ({
           message: `memory: sort the inbox (${settled.length} archived, ${marked.length} lasting)`,
         }
       );
+      if (changed instanceof ElysiaStatus) {
+        return changed;
+      }
       folderChanged(projectId);
     }
     const going = new Set(settled.map(({ note: each }) => each.id));
@@ -2399,28 +2498,118 @@ export const createMemory = ({
    * `none` when nothing is left for it; Jev on but failing throws its words,
    * and the run fails with them.
    */
+  /** The inbox as the rules sort it ({@link sortByRules}), and the fact files it is paired with. */
+  const sortedInbox = async (projectId: string) => {
+    const read = await inboxCited(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const known = await knownOf(projectId);
+    if (known instanceof ElysiaStatus) {
+      return known;
+    }
+    const factFiles = await factFilesOf(projectId);
+    if (factFiles instanceof ElysiaStatus) {
+      return factFiles;
+    }
+    return { sorted: sortByRules(read.inbox, read.cited, known), factFiles };
+  };
+
+  /**
+   * The hub's own proposals as a curator run starts: prose rewritten as
+   * fact lines, lines past their `until` retired, unused lines archived;
+   * each on a fact file no open proposal touches. Answers the files open
+   * proposals touch then.
+   */
+  const proposeAsRun = async (project: ProjectRow, factFiles: FactFile[]) => {
+    const proposals = await proposalsOf(project.id);
+    if (proposals instanceof ElysiaStatus) {
+      return proposals;
+    }
+    const touched = new Set(
+      proposals.flatMap((proposal) => proposal.files.map((file) => file.path))
+    );
+    const converted = await proposeConversions(project, factFiles, touched);
+    if (converted instanceof ElysiaStatus) {
+      return converted;
+    }
+    const retired = await proposeRetirements(project, factFiles, touched);
+    if (retired instanceof ElysiaStatus) {
+      return retired;
+    }
+    const moved = await proposeArchives(project, factFiles, touched);
+    return moved instanceof ElysiaStatus ? moved : touched;
+  };
+
+  /** Jev's sorts of the notes and pairs grep made ({@link jevSorts}); none with nothing to ask, or while Jev is off, which the log says ({@link offLines}). */
+  const jevOn = async (project: ProjectRow, paired: Paired) => {
+    const key = jevAccess(db);
+    if (!key) {
+      offLines(project.id, paired);
+      return;
+    }
+    return paired.unsorted.length > 0 || paired.pairs.length > 0
+      ? await jevSorts(key, project, paired.unsorted, paired.pairs)
+      : undefined;
+  };
+
+  /**
+   * The inbox sorted ({@link settleInbox}), then Jev's clear sorts proposed
+   * ({@link prefill}): the notes left for the curator, and those Jev's
+   * sorts took.
+   */
+  const settleAndPrefill = async (
+    project: ProjectRow,
+    sorted: { settled: Settled[]; waiting: Note[] },
+    factFiles: FactFile[],
+    {
+      jev,
+      related,
+      sortOf,
+    }: {
+      jev:
+        | {
+            sorts: Map<Pair, JevChoiceAnswer<Sort>>;
+            verdicts: Map<string, Verdict>;
+          }
+        | undefined;
+      related: Map<string, FactLine[]>;
+      sortOf: (note: Note, fact: FactLine) => JevChoiceAnswer<Sort> | undefined;
+    }
+  ) => {
+    const kept = await settleInbox(project.id, sorted, jev?.verdicts);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    const taken = jev
+      ? await prefill(
+          project,
+          kept.filter((each) => each.verdict === "lasting"),
+          related,
+          sortOf,
+          factFiles
+        )
+      : new Set<string>();
+    if (taken instanceof ElysiaStatus) {
+      return taken;
+    }
+    return { left: kept.filter((each) => !taken.has(each.id)), taken };
+  };
+
   const curatorBrief = async (projectId: string) => {
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    const cited = new Set(
-      (await proposalsOf(projectId)).flatMap((proposal) => proposal.notes)
-    );
-    const sorted = sortByRules(
-      await notesIn(projectId, INBOX_DIR),
-      cited,
-      await knownOf(projectId)
-    );
-    const factFiles = await factFilesOf(projectId);
+    const read = await sortedInbox(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { sorted, factFiles } = read;
     const paired = pairUp(sorted.waiting, factFiles);
-    const key = jevAccess(db);
-    const jev =
-      key && (paired.unsorted.length > 0 || paired.pairs.length > 0)
-        ? await jevSorts(key, project, paired.unsorted, paired.pairs)
-        : undefined;
-    if (!key) {
-      offLines(projectId, paired);
+    const jev = await jevOn(project, paired);
+    if (jev instanceof ElysiaStatus) {
+      return jev;
     }
     // By the note's id: settleInbox hands back a copy of each note Jev
     // marks lasting, not the object the pair holds.
@@ -2430,25 +2619,19 @@ export const createMemory = ({
           (pair) => pair.note.id === asked.id && pair.fact === line
         ) as Pair
       );
-    const kept = await settleInbox(projectId, sorted, jev?.verdicts);
-    const taken = jev
-      ? await prefill(
-          project,
-          kept.filter((each) => each.verdict === "lasting"),
-          paired.related,
-          sortOf,
-          factFiles
-        )
-      : new Set<string>();
-    const left = kept.filter((each) => !taken.has(each.id));
-    const touched = new Set(
-      (await proposalsOf(projectId)).flatMap((proposal) =>
-        proposal.files.map((file) => file.path)
-      )
-    );
-    await proposeConversions(project, factFiles, touched);
-    await proposeRetirements(project, factFiles, touched);
-    await proposeArchives(project, factFiles, touched);
+    const settled = await settleAndPrefill(project, sorted, factFiles, {
+      jev,
+      related: paired.related,
+      sortOf,
+    });
+    if (settled instanceof ElysiaStatus) {
+      return settled;
+    }
+    const { left, taken } = settled;
+    const touched = await proposeAsRun(project, factFiles);
+    if (touched instanceof ElysiaStatus) {
+      return touched;
+    }
     const fold = factFiles.filter(
       (file) =>
         file.content.length > MEMORY_FILE_CHARS &&
@@ -2466,10 +2649,14 @@ export const createMemory = ({
       };
       return none;
     }
+    const agents = await fileOr(project.id, AGENTS_FILE);
+    if (agents instanceof ElysiaStatus) {
+      return agents;
+    }
     const run: { kind: "run"; text: string } = {
       kind: "run",
       text: briefText(project, {
-        agents: await fileOr(project.id, AGENTS_FILE),
+        agents,
         files: factFiles,
         fold,
         jev: jev !== undefined,
@@ -2638,9 +2825,11 @@ export const createMemory = ({
     if (notes.length === 0) {
       return notes;
     }
-    const waiting = new Set(
-      (await candidates(projectId)).map((each) => each.id)
-    );
+    const inbox = await candidates(projectId);
+    if (inbox instanceof ElysiaStatus) {
+      return inbox;
+    }
+    const waiting = new Set(inbox.map((each) => each.id));
     const missing = notes.filter((id) => !waiting.has(id));
     if (missing.length > 0) {
       return refusal(
@@ -2653,8 +2842,12 @@ export const createMemory = ({
   };
 
   /** How many fact files the project holds now, prose aside: what a reshape's floor counts. */
-  const standingFiles = async (projectId: string): Promise<number> =>
-    (await factFilesOf(projectId)).filter((file) => !isProse(file)).length;
+  const standingFiles = async (projectId: string) => {
+    const files = await factFilesOf(projectId);
+    return files instanceof ElysiaStatus
+      ? files
+      : files.filter((file) => !isProse(file)).length;
+  };
 
   /**
    * The files a proposal changes, each as it stands and as proposed: each
@@ -2662,6 +2855,26 @@ export const createMemory = ({
    * (`checkFacts`, as an agent's) and stamped with their uses; the curator's
    * leaves AGENTS.md's `## Notes` as they are.
    */
+  /** Each of `asked`'s files (at `paths`, in its order) as it stands now and as asked. */
+  const filesNow = async (
+    projectId: string,
+    paths: string[],
+    asked: { content: string; path: string }[]
+  ) => {
+    const read = await Promise.all(
+      paths.map((path) => fileOr(projectId, path))
+    );
+    const files: ProposalFile[] = [];
+    for (const [index, path] of paths.entries()) {
+      const before = read[index] ?? "";
+      if (before instanceof ElysiaStatus) {
+        return before;
+      }
+      files.push({ path, before, content: asked[index]?.content ?? "" });
+    }
+    return files;
+  };
+
   const proposedFiles = async (
     projectId: string,
     paths: string[],
@@ -2677,16 +2890,10 @@ export const createMemory = ({
         `${twice} is named twice; give each file once.`
       );
     }
-    const files: ProposalFile[] = await Promise.all(
-      asked.map(async (file, index) => {
-        const path = paths[index] as string;
-        return {
-          path,
-          before: await fileOr(projectId, path),
-          content: file.content,
-        };
-      })
-    );
+    const files = await filesNow(projectId, paths, asked);
+    if (files instanceof ElysiaStatus) {
+      return files;
+    }
     if (files.every((file) => file.before === file.content)) {
       return refusal(
         409,
@@ -2694,9 +2901,13 @@ export const createMemory = ({
         `${paths.join(", ")} already ${paths.length === 1 ? "says" : "say"} exactly that; nothing to change.`
       );
     }
+    const standing = await standingFiles(projectId);
+    if (standing instanceof ElysiaStatus) {
+      return standing;
+    }
     const unfit =
       (curatorRun ? checkPersonsNotes(files) : undefined) ??
-      checkFacts(files, notes, "agent", await standingFiles(projectId));
+      checkFacts(files, notes, "agent", standing);
     if (unfit) {
       return unfit;
     }
@@ -2751,6 +2962,20 @@ export const createMemory = ({
    * `ask`, and the curator's, are kept as a file, then parked for the person
    * where they were made.
    */
+  /** A session's change committed at once as that session, and noted in its project's conversation. */
+  const writeAtOnce = async (proposal: Proposal, paths: string[]) => {
+    const sha = await apply(proposal, { name: proposal.by }, false);
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
+    notice(proposal.projectId, {
+      title: `${proposal.by} wrote ${pathsOf(proposal)}`,
+      body: `Committed as ${proposal.by} ${sha.slice(0, 9)}.\n\nWhy: ${proposal.why}`,
+      event: { kind: "file", what: "wrote", path: paths[0] ?? "", sha },
+    });
+    return { paths, sha, notes: proposal.notes, committed: true };
+  };
+
   const propose = async (
     actor: InstanceRow,
     asked: {
@@ -2775,7 +3000,11 @@ export const createMemory = ({
       return change;
     }
     const { paths, why, notes, files } = change;
-    const { at, opened } = await openProposal(projectId, files);
+    const proposing = await openProposal(projectId, files);
+    if (proposing instanceof ElysiaStatus) {
+      return proposing;
+    }
+    const { at, opened } = proposing;
     const proposal: Proposal = {
       ...opened,
       notes,
@@ -2786,21 +3015,22 @@ export const createMemory = ({
       ...(toolUseId ? { toolUseId } : {}),
     };
     if (!(curatorRun || asked.ask)) {
-      const sha = await apply(proposal, { name: proposal.by }, false);
-      notice(projectId, {
-        title: `${proposal.by} wrote ${pathsOf(proposal)}`,
-        body: `Committed as ${proposal.by} ${sha.slice(0, 9)}.\n\nWhy: ${why}`,
-        event: { kind: "file", what: "wrote", path: paths[0] ?? "", sha },
-      });
-      return { paths, sha, notes, committed: true };
+      return await writeAtOnce(proposal, paths);
     }
-    await keep(proposal, project);
+    const kept = await keep(proposal, project);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
     return { id: proposal.id, paths, notes, waiting: WAITING };
   };
 
   /** A new proposal's own facts: its id, made now, its project, its files and the folder commit it is based on. */
   const openProposal = async (projectId: string, files: Proposal["files"]) => {
-    const [head] = (await folderHistory(projectId, "", 1)).commits;
+    const history = await folderHistory(projectId, "", 1);
+    if (history instanceof ElysiaStatus) {
+      return history;
+    }
+    const [head] = history.commits;
     const at = new Date();
     return {
       at,
@@ -2809,10 +3039,7 @@ export const createMemory = ({
   };
 
   /** A proposal kept as its file, then parked for the person where it was made. */
-  const keep = async (
-    proposal: Proposal,
-    project: ProjectRow
-  ): Promise<void> => {
+  const keep = async (proposal: Proposal, project: ProjectRow) => {
     const written = await writeFolderFile(
       project.id,
       `${PROPOSALS_DIR}/${proposal.id}.json`,
@@ -2822,6 +3049,9 @@ export const createMemory = ({
         message: `memory: propose a change to ${pathsOf(proposal)}`,
       }
     );
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
     folderChanged(project.id);
     parkProposal(proposal);
     console.log(
@@ -2860,6 +3090,9 @@ export const createMemory = ({
       );
     }
     const before = await fileOr(projectId, path);
+    if (before instanceof ElysiaStatus) {
+      return before;
+    }
     if (before === content) {
       return refusal(
         409,
@@ -2868,9 +3101,13 @@ export const createMemory = ({
       );
     }
     const name = path.slice(DELEGATES_DIR.length, -".md".length);
-    const { at, opened } = await openProposal(projectId, [
+    const proposing = await openProposal(projectId, [
       { path, before, content },
     ]);
+    if (proposing instanceof ElysiaStatus) {
+      return proposing;
+    }
+    const { at, opened } = proposing;
     const proposal: Proposal = {
       ...opened,
       notes: [],
@@ -2882,25 +3119,28 @@ export const createMemory = ({
       time: at.toISOString(),
       ...(toolUseId ? { toolUseId } : {}),
     };
-    await keep(proposal, project);
+    const kept = await keep(proposal, project);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
     return { id: proposal.id, path, waiting: WAITING };
   };
 
   /** The proposal file, read back; undefined when it is gone. */
-  const proposalFile = async (
-    projectId: string,
-    id: string
-  ): Promise<Proposal | undefined> =>
-    (await proposalsOf(projectId)).find((proposal) => proposal.id === id);
+  const proposalFile = async (projectId: string, id: string) => {
+    const proposals = await proposalsOf(projectId);
+    return proposals instanceof ElysiaStatus
+      ? proposals
+      : proposals.find((proposal) => proposal.id === id);
+  };
 
   /** The notes a proposal cites, as the inbox holds them. */
-  const citedNotes = async (
-    projectId: string,
-    proposal: Proposal
-  ): Promise<Note[]> =>
-    (await notesIn(projectId, INBOX_DIR)).filter((each) =>
-      proposal.notes.includes(each.id)
-    );
+  const citedNotes = async (projectId: string, proposal: Proposal) => {
+    const inbox = await notesIn(projectId, INBOX_DIR);
+    return inbox instanceof ElysiaStatus
+      ? inbox
+      : inbox.filter((each) => proposal.notes.includes(each.id));
+  };
 
   /** A memory change's commit message: the files and why, then the proposal kept and the notes cited. */
   const commitMessage = (proposal: Proposal, kept: boolean): string => {
@@ -2915,26 +3155,35 @@ export const createMemory = ({
   };
 
   /** A note wherever it is (the inbox, else the archive), or undefined. */
-  const noteNamed = async (
-    projectId: string,
-    id: string
-  ): Promise<Note | undefined> =>
-    (await notesIn(projectId, INBOX_DIR)).find((each) => each.id === id) ??
-    (await notesIn(projectId, ARCHIVE_DIR)).find((each) => each.id === id);
+  const noteNamed = async (projectId: string, id: string) => {
+    const inbox = await notesIn(projectId, INBOX_DIR);
+    if (inbox instanceof ElysiaStatus) {
+      return inbox;
+    }
+    const waiting = inbox.find((each) => each.id === id);
+    if (waiting) {
+      return waiting;
+    }
+    const archiveNotes = await notesIn(projectId, ARCHIVE_DIR);
+    return archiveNotes instanceof ElysiaStatus
+      ? archiveNotes
+      : archiveNotes.find((each) => each.id === id);
+  };
 
   /**
    * Whether a proposal still applies to its files as they are now: the one
    * rule for every proposal kind (proposal-base.ts). Approving reads it, and
    * so does every commit that changes one of its files ({@link folderCommitted}).
    */
-  const mergedNow = (proposal: Proposal): Promise<Applies> =>
+  const mergedNow = (proposal: Proposal) =>
     appliesNow(proposal.files, (path) => fileOr(proposal.projectId, path));
 
   /** {@link mergedNow}'s writes; a proposal that no longer applies throws, saying why. */
-  const writesNow = async (
-    proposal: Proposal
-  ): Promise<{ content: string; path: string }[]> => {
+  const writesNow = async (proposal: Proposal) => {
     const merged = await mergedNow(proposal);
+    if (merged instanceof ElysiaStatus) {
+      return merged;
+    }
     if ("stale" in merged) {
       throw new Error(askWords.proposalClosed(merged.stale));
     }
@@ -2949,10 +3198,7 @@ export const createMemory = ({
    * it can propose again from the file as it is now. Answers whether that
    * session was told.
    */
-  const closeStale = async (
-    proposal: Proposal,
-    path: string
-  ): Promise<boolean> => {
+  const closeStale = async (proposal: Proposal, path: string) => {
     const { projectId } = proposal;
     if (closing.has(proposal.id)) {
       return false;
@@ -2960,11 +3206,14 @@ export const createMemory = ({
     closing.add(proposal.id);
     const why = askWords.proposalClosed(path);
     try {
-      await changeFolderFiles(
+      const closed = await changeFolderFiles(
         projectId,
         { writes: [], deletes: [`${PROPOSALS_DIR}/${proposal.id}.json`] },
         { author: HUB, message: `memory: ${proposal.id} closed: ${why}` }
       );
+      if (closed instanceof ElysiaStatus) {
+        return closed;
+      }
       open.delete(proposal.id);
     } finally {
       closing.delete(proposal.id);
@@ -2993,8 +3242,12 @@ export const createMemory = ({
   const folderCommitted = async (
     projectId: string,
     paths: ReadonlySet<string>
-  ): Promise<void> => {
-    const touched = (await proposalsOf(projectId)).filter(
+  ) => {
+    const proposals = await proposalsOf(projectId);
+    if (proposals instanceof ElysiaStatus) {
+      return proposals;
+    }
+    const touched = proposals.filter(
       (proposal) =>
         open.get(proposal.id) === projectId &&
         !answering.has(proposal.id) &&
@@ -3002,12 +3255,18 @@ export const createMemory = ({
     );
     for (const proposal of touched) {
       const merged = await mergedNow(proposal);
+      if (merged instanceof ElysiaStatus) {
+        return merged;
+      }
       if (
         "stale" in merged &&
         open.has(proposal.id) &&
         !answering.has(proposal.id)
       ) {
-        await closeStale(proposal, merged.stale);
+        const closed = await closeStale(proposal, merged.stale);
+        if (closed instanceof ElysiaStatus) {
+          return closed;
+        }
       }
     }
   };
@@ -3018,54 +3277,88 @@ export const createMemory = ({
    * withdrawn note's move; its notes archived as applied; a kept proposal's
    * file goes with them.
    */
+  /** A proposal's change as one commit makes it: its writes merged now, and a withdrawn note's move to the archive. */
+  const changeNow = async (proposal: Proposal) => {
+    const writes = await writesNow(proposal);
+    if (writes instanceof ElysiaStatus) {
+      return writes;
+    }
+    const deletes: string[] = [];
+    const gone = proposal.withdraws
+      ? await noteNamed(proposal.projectId, proposal.withdraws)
+      : undefined;
+    if (gone instanceof ElysiaStatus) {
+      return gone;
+    }
+    if (gone) {
+      writes.push({
+        path: archived(gone),
+        content: renderNote({ ...gone, outcome: "withdrawn" }),
+      });
+      if (gone.path !== archived(gone)) {
+        deletes.push(gone.path);
+      }
+    }
+    return { writes, deletes };
+  };
+
+  /** The notes an applied proposal cites, archived as applied at `sha`, a kept proposal's file with them, in one commit. */
+  const archiveApplied = async (
+    proposal: Proposal,
+    sha: string,
+    kept: boolean
+  ) => {
+    const notes = await citedNotes(proposal.projectId, proposal);
+    if (notes instanceof ElysiaStatus) {
+      return notes;
+    }
+    if (notes.length === 0 && !kept) {
+      return;
+    }
+    const done = await changeFolderFiles(
+      proposal.projectId,
+      {
+        writes: notes.map((each) => ({
+          path: archived(each),
+          content: renderNote({
+            ...each,
+            verdict: "lasting",
+            outcome: `applied ${sha.slice(0, 12)}`,
+          }),
+        })),
+        deletes: [
+          ...notes.map((each) => each.path),
+          ...(kept ? [`${PROPOSALS_DIR}/${proposal.id}.json`] : []),
+        ],
+      },
+      {
+        author: HUB,
+        message: `memory: ${kept ? proposal.id : "Caw's write"} applied to ${pathsOf(proposal)}`,
+      }
+    );
+    return done instanceof ElysiaStatus ? done : undefined;
+  };
+
   const apply = async (
     proposal: Proposal,
     author: FolderAuthor,
     kept: boolean
-  ): Promise<string> => {
+  ) => {
     const { projectId } = proposal;
-    const writes = await writesNow(proposal);
-    const deletes: string[] = [];
-    if (proposal.withdraws) {
-      const gone = await noteNamed(projectId, proposal.withdraws);
-      if (gone) {
-        writes.push({
-          path: archived(gone),
-          content: renderNote({ ...gone, outcome: "withdrawn" }),
-        });
-        if (gone.path !== archived(gone)) {
-          deletes.push(gone.path);
-        }
-      }
+    const change = await changeNow(proposal);
+    if (change instanceof ElysiaStatus) {
+      return change;
     }
-    const written = await changeFolderFiles(
-      projectId,
-      { writes, deletes },
-      { author, message: commitMessage(proposal, kept) }
-    );
-    const notes = await citedNotes(projectId, proposal);
-    if (notes.length > 0 || kept) {
-      await changeFolderFiles(
-        projectId,
-        {
-          writes: notes.map((each) => ({
-            path: archived(each),
-            content: renderNote({
-              ...each,
-              verdict: "lasting",
-              outcome: `applied ${written.sha.slice(0, 12)}`,
-            }),
-          })),
-          deletes: [
-            ...notes.map((each) => each.path),
-            ...(kept ? [`${PROPOSALS_DIR}/${proposal.id}.json`] : []),
-          ],
-        },
-        {
-          author: HUB,
-          message: `memory: ${kept ? proposal.id : "Caw's write"} applied to ${pathsOf(proposal)}`,
-        }
-      );
+    const written = await changeFolderFiles(projectId, change, {
+      author,
+      message: commitMessage(proposal, kept),
+    });
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
+    const archivedNotes = await archiveApplied(proposal, written.sha, kept);
+    if (archivedNotes instanceof ElysiaStatus) {
+      return archivedNotes;
     }
     folderChanged(projectId);
     console.log(
@@ -3156,12 +3449,15 @@ export const createMemory = ({
   };
 
   /** Reject: the proposal goes, its notes archived as rejected; a withdrawal's note stays where it was; a hub proposal's rejection is remembered. */
-  const reject = async (proposal: Proposal, reason: string): Promise<void> => {
+  const reject = async (proposal: Proposal, reason: string) => {
     const { projectId } = proposal;
     rememberRejection(proposal);
     const notes = await citedNotes(projectId, proposal);
+    if (notes instanceof ElysiaStatus) {
+      return notes;
+    }
     const outcome = `rejected${reason ? `: ${reason}` : ""}`;
-    await changeFolderFiles(
+    const done = await changeFolderFiles(
       projectId,
       {
         writes: notes.map((each) => ({
@@ -3175,6 +3471,9 @@ export const createMemory = ({
       },
       { author: YOU, message: `memory: ${proposal.id} rejected` }
     );
+    if (done instanceof ElysiaStatus) {
+      return done;
+    }
     folderChanged(projectId);
     console.log(`[memory] ${projectId}: ${proposal.id} rejected`);
   };
@@ -3184,20 +3483,27 @@ export const createMemory = ({
    * resting on it alone moves to the file's archive, a line with other
    * sources keeps them.
    */
-  const withoutNote = async (
-    projectId: string,
-    id: string
-  ): Promise<{ files: ProposalFile[]; retired: number; trimmed: number }> => {
+  const withoutNote = async (projectId: string, id: string) => {
     const today = dayOf(new Date());
-    const changed = (await factFilesOf(projectId))
+    const factFiles = await factFilesOf(projectId);
+    if (factFiles instanceof ElysiaStatus) {
+      return factFiles;
+    }
+    const changed = factFiles
       .map((file) => ({
         file,
         after: withoutSource(file.path, file.content, id),
       }))
       .filter(({ after }) => after.retired.length > 0 || after.trimmed > 0);
-    const archives = await Promise.all(
+    const archives: string[] = [];
+    for (const read of await Promise.all(
       changed.map(({ file }) => fileOr(projectId, archivePath(file.path)))
-    );
+    )) {
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      archives.push(read);
+    }
     const files = changed.flatMap(({ file, after }, index): ProposalFile[] => {
       const now = archives[index] ?? "";
       return [
@@ -3246,6 +3552,9 @@ export const createMemory = ({
       );
     }
     const gone = await noteNamed(projectId, id);
+    if (gone instanceof ElysiaStatus) {
+      return gone;
+    }
     if (!gone) {
       return refusal(
         404,
@@ -3260,7 +3569,11 @@ export const createMemory = ({
         `${id} is withdrawn already.`
       );
     }
-    const pending = (await proposalsOf(projectId)).find(
+    const proposals = await proposalsOf(projectId);
+    if (proposals instanceof ElysiaStatus) {
+      return proposals;
+    }
+    const pending = proposals.find(
       (each) => each.notes.includes(id) || each.withdraws === id
     );
     if (pending) {
@@ -3273,6 +3586,28 @@ export const createMemory = ({
     return gone;
   };
 
+  /** A note no fact rests on, archived as withdrawn at once: nothing curated changes. */
+  const withdrawAlone = async (projectId: string, gone: Note) => {
+    const done = await changeFolderFiles(
+      projectId,
+      {
+        writes: [
+          {
+            path: archived(gone),
+            content: renderNote({ ...gone, outcome: "withdrawn" }),
+          },
+        ],
+        deletes: gone.path === archived(gone) ? [] : [gone.path],
+      },
+      { author: YOU, message: `memory: ${gone.id} withdrawn` }
+    );
+    if (done instanceof ElysiaStatus) {
+      return done;
+    }
+    folderChanged(projectId);
+    return { withdrawn: gone.id, sha: done.sha, retires: 0, keeps: 0 };
+  };
+
   const withdraw = async (projectId: string, id: string) => {
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
@@ -3282,25 +3617,19 @@ export const createMemory = ({
     if (gone instanceof ElysiaStatus) {
       return gone;
     }
-    const { files, retired, trimmed } = await withoutNote(projectId, id);
-    if (files.length === 0) {
-      const done = await changeFolderFiles(
-        projectId,
-        {
-          writes: [
-            {
-              path: archived(gone),
-              content: renderNote({ ...gone, outcome: "withdrawn" }),
-            },
-          ],
-          deletes: gone.path === archived(gone) ? [] : [gone.path],
-        },
-        { author: YOU, message: `memory: ${id} withdrawn` }
-      );
-      folderChanged(projectId);
-      return { withdrawn: id, sha: done.sha, retires: 0, keeps: 0 };
+    const without = await withoutNote(projectId, id);
+    if (without instanceof ElysiaStatus) {
+      return without;
     }
-    const { at, opened } = await openProposal(projectId, files);
+    const { files, retired, trimmed } = without;
+    if (files.length === 0) {
+      return await withdrawAlone(projectId, gone);
+    }
+    const proposing = await openProposal(projectId, files);
+    if (proposing instanceof ElysiaStatus) {
+      return proposing;
+    }
+    const { at, opened } = proposing;
     const proposal: Proposal = {
       ...opened,
       notes: [],
@@ -3310,7 +3639,10 @@ export const createMemory = ({
       session: "",
       time: at.toISOString(),
     };
-    await keep(proposal, project);
+    const kept = await keep(proposal, project);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
     return {
       id: proposal.id,
       retires: retired,
@@ -3333,10 +3665,15 @@ export const createMemory = ({
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    const notes = [
-      ...(await notesIn(projectId, INBOX_DIR)),
-      ...(await notesIn(projectId, ARCHIVE_DIR)),
-    ].filter(
+    const inbox = await notesIn(projectId, INBOX_DIR);
+    if (inbox instanceof ElysiaStatus) {
+      return inbox;
+    }
+    const archiveNotes = await notesIn(projectId, ARCHIVE_DIR);
+    if (archiveNotes instanceof ElysiaStatus) {
+      return archiveNotes;
+    }
+    const notes = [...inbox, ...archiveNotes].filter(
       (each) => each.session === instanceId && each.outcome !== "withdrawn"
     );
     const done: string[] = [];
@@ -3367,6 +3704,9 @@ export const createMemory = ({
       return noProject("This session is in no project.");
     }
     const waiting = await candidates(projectId);
+    if (waiting instanceof ElysiaStatus) {
+      return waiting;
+    }
     const settled: Settled[] = [];
     for (const { id, kind } of sorted) {
       const each = waiting.find((one) => one.id === id);
@@ -3385,6 +3725,9 @@ export const createMemory = ({
       `memory: the curator archives ${settled.length} note${settled.length === 1 ? "" : "s"}`,
       { name: "Memory curator" }
     );
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
     return { archived: settled.map(({ note: each }) => each.id), sha };
   };
 
@@ -3394,8 +3737,20 @@ export const createMemory = ({
       return noProject("This session is in no project.");
     }
     if (!raw) {
+      const inbox = await candidates(projectId);
+      if (inbox instanceof ElysiaStatus) {
+        return inbox;
+      }
+      const knowledge = await knowledgeOf(projectId);
+      if (knowledge instanceof ElysiaStatus) {
+        return knowledge;
+      }
+      const files = await factFilesOf(projectId);
+      if (files instanceof ElysiaStatus) {
+        return files;
+      }
       return {
-        inbox: (await candidates(projectId)).map((each) => ({
+        inbox: inbox.map((each) => ({
           id: each.id,
           from: each.author,
           since: sinceOf(each),
@@ -3404,20 +3759,18 @@ export const createMemory = ({
           verdict: each.verdict,
           text: each.text,
         })),
-        knowledge: (await knowledgeOf(projectId)).map((file) => file.path),
-        ...(await (async () => {
-          const files = await factFilesOf(projectId);
-          return {
-            unreadable: files
-              .filter((file) => !isProse(file))
-              .flatMap((file) => file.unreadable)
-              .map(lineWords),
-            prose: files.filter(isProse).map((file) => file.path),
-          };
-        })()),
+        knowledge: knowledge.map((file) => file.path),
+        unreadable: files
+          .filter((file) => !isProse(file))
+          .flatMap((file) => file.unreadable)
+          .map(lineWords),
+        prose: files.filter(isProse).map((file) => file.path),
       };
     }
     const rel = folderPath(raw);
+    if (rel instanceof ElysiaStatus) {
+      return rel;
+    }
     if (!(
       rel === AGENTS_FILE ||
       rel.startsWith(`${KNOWLEDGE_DIR}/`) ||
@@ -3452,11 +3805,17 @@ export const createMemory = ({
       );
     }
     const before = await fileOr(projectId, AGENTS_FILE);
+    if (before instanceof ElysiaStatus) {
+      return before;
+    }
     const after = withNote(before, words);
     const written = await writeFolderFile(projectId, AGENTS_FILE, after, {
       author: YOU,
       message: "AGENTS.md: a note from you",
     });
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
     folderChanged(projectId);
     console.log(
       `[memory] ${projectId}: you noted in AGENTS.md at ${written.sha.slice(0, 9)}`
@@ -3589,11 +3948,15 @@ export const createMemory = ({
    * marked, until its rewrite is approved. Nothing when the project has none
    * of it.
    */
-  const contextFor = async (
-    projectId: string,
-    task: BriefTask
-  ): Promise<string> => {
+  const contextFor = async (projectId: string, task: BriefTask) => {
     const knowledge = await knowledgeOf(projectId);
+    if (knowledge instanceof ElysiaStatus) {
+      return knowledge;
+    }
+    const agents = await fileOr(projectId, AGENTS_FILE);
+    if (agents instanceof ElysiaStatus) {
+      return agents;
+    }
     const named = new Set(
       task.context.map((path) => path.replace(LEADING_SLASHES, ""))
     );
@@ -3611,7 +3974,7 @@ export const createMemory = ({
       [
         {
           path: AGENTS_FILE,
-          content: (await fileOr(projectId, AGENTS_FILE)).trim(),
+          content: agents.trim(),
         },
         ...knowledge.filter(
           (file) => BRAND.test(file.path) && named.has(file.path)
@@ -3663,21 +4026,24 @@ export const createMemory = ({
    * conversion, run as the hub starts, so no open ask is dropped. Answers how
    * many it rewrote.
    */
-  const convertOneFileProposals = async (
-    project: ProjectRow
-  ): Promise<number> => {
-    const names = (await folderFileNames(project.id, PROPOSALS_DIR)).filter(
-      (name) => name.endsWith(".json")
-    );
+  const convertOneFileProposals = async (project: ProjectRow) => {
+    const all = await folderFileNames(project.id, PROPOSALS_DIR);
+    if (all instanceof ElysiaStatus) {
+      return all;
+    }
+    const names = all.filter((name) => name.endsWith(".json"));
     const rewritten = (
       await Promise.all(
         names.map(async (name) => {
           const path = `${PROPOSALS_DIR}/${name}`;
+          const text = await fileOr(project.id, path);
+          if (text instanceof ElysiaStatus) {
+            // Not read: proposalsOf says so as it reads the folder.
+            return;
+          }
           let kept: Record<string, unknown>;
           try {
-            kept = z
-              .record(z.string(), z.unknown())
-              .parse(JSON.parse(await fileOr(project.id, path)));
+            kept = z.record(z.string(), z.unknown()).parse(JSON.parse(text));
           } catch {
             // Not JSON: proposalsOf says so as it reads the folder.
             return;
@@ -3699,7 +4065,7 @@ export const createMemory = ({
       )
     ).filter((write) => write !== undefined);
     if (rewritten.length > 0) {
-      await changeFolderFiles(
+      const changed = await changeFolderFiles(
         project.id,
         { writes: rewritten, deletes: [] },
         {
@@ -3707,6 +4073,9 @@ export const createMemory = ({
           message: `memory: ${rewritten.length} open proposal${rewritten.length === 1 ? "" : "s"} rewritten to name ${rewritten.length === 1 ? "its file" : "their files"}`,
         }
       );
+      if (changed instanceof ElysiaStatus) {
+        return changed;
+      }
       folderChanged(project.id);
       console.log(
         `[memory] ${project.name}: ${rewritten.length} open proposal${rewritten.length === 1 ? "" : "s"} rewritten in the files shape`
@@ -3715,25 +4084,48 @@ export const createMemory = ({
     return rewritten.length;
   };
 
+  /** Project `project`'s open proposals parked again ({@link start}), each one that no longer applies closed. */
+  const parkAgain = async (project: ProjectRow) => {
+    const converted = await convertOneFileProposals(project);
+    if (converted instanceof ElysiaStatus) {
+      return converted;
+    }
+    const proposals = await proposalsOf(project.id);
+    if (proposals instanceof ElysiaStatus) {
+      return proposals;
+    }
+    for (const proposal of proposals) {
+      // The folder may have changed while no hub watched it.
+      const merged = await mergedNow(proposal);
+      if (merged instanceof ElysiaStatus) {
+        return merged;
+      }
+      if ("stale" in merged) {
+        const closed = await closeStale(proposal, merged.stale);
+        if (closed instanceof ElysiaStatus) {
+          return closed;
+        }
+      } else {
+        parkProposal(proposal);
+      }
+    }
+  };
+
   /** Every open proposal, parked again as the hub starts: the person's asks outlive it. */
   const start = async (): Promise<void> => {
     await Promise.all(
       db.listProjects().map(async (project) => {
+        const notRead = (why: string) =>
+          console.warn(
+            `[memory] ${project.name}: its proposals were not read: ${why}`
+          );
         try {
-          await convertOneFileProposals(project);
-          for (const proposal of await proposalsOf(project.id)) {
-            // The folder may have changed while no hub watched it.
-            const merged = await mergedNow(proposal);
-            if ("stale" in merged) {
-              await closeStale(proposal, merged.stale);
-            } else {
-              parkProposal(proposal);
-            }
+          const parked = await parkAgain(project);
+          if (parked instanceof ElysiaStatus) {
+            notRead(parked.response.detail);
           }
         } catch (error) {
-          console.warn(
-            `[memory] ${project.name}: its proposals were not read: ${error instanceof Error ? error.message : String(error)}`
-          );
+          notRead(error instanceof Error ? error.message : String(error));
         }
       })
     );
@@ -3750,8 +4142,14 @@ export const createMemory = ({
       return asked;
     }
     const merged = await mergedNow(asked);
+    if (merged instanceof ElysiaStatus) {
+      return merged;
+    }
     if ("stale" in merged) {
       const told = await closeStale(proposal, merged.stale);
+      if (told instanceof ElysiaStatus) {
+        return told;
+      }
       const closed = askWords.proposalClosedOnAnswer(merged.stale);
       throw new Error(
         told ? `${closed} ${askWords.proposerTold(proposal.by)}` : closed
@@ -3772,6 +4170,9 @@ export const createMemory = ({
     result: PermissionResult
   ) => {
     const proposal = await proposalFile(projectId, requestId);
+    if (proposal instanceof ElysiaStatus) {
+      return proposal;
+    }
     if (proposal) {
       const approved = result.behavior === "allow";
       let sha = "";
@@ -3782,7 +4183,10 @@ export const createMemory = ({
         }
         sha = applied;
       } else {
-        await reject(proposal, result.message.trim());
+        const rejected = await reject(proposal, result.message.trim());
+        if (rejected instanceof ElysiaStatus) {
+          return rejected;
+        }
       }
       notice(
         projectId,
@@ -3826,16 +4230,20 @@ export const createMemory = ({
      * restart reads it so too), and is parked again, its card drawn under
      * `to`.
      */
-    async folded(from: string, to: string): Promise<void> {
+    async folded(from: string, to: string) {
       const projects = new Set(open.values());
       for (const projectId of projects) {
-        const moved = (await proposalsOf(projectId)).filter(
+        const proposals = await proposalsOf(projectId);
+        if (proposals instanceof ElysiaStatus) {
+          return proposals;
+        }
+        const moved = proposals.filter(
           (proposal) => open.has(proposal.id) && proposal.session === from
         );
         if (moved.length === 0) {
           continue;
         }
-        await changeFolderFiles(
+        const changed = await changeFolderFiles(
           projectId,
           {
             writes: moved.map((proposal) => ({
@@ -3849,6 +4257,9 @@ export const createMemory = ({
             message: `memory: ${moved.length} open proposal${moved.length === 1 ? "" : "s"} of ${from} go${moved.length === 1 ? "es" : ""} on with ${to}, the session it went on in`,
           }
         );
+        if (changed instanceof ElysiaStatus) {
+          return changed;
+        }
         for (const proposal of moved) {
           parkProposal({ ...proposal, session: to });
         }
@@ -3970,12 +4381,10 @@ export const memoryRoutes = (memory: Memory) =>
         body: t.Object({ text: t.String({ maxLength: NOTE_LIMIT }) }),
         detail: { hide: true },
       },
-      ({ params, body }) =>
-        folderAttempt(() => memory.makeNote(params.id, body.text))
+      ({ params, body }) => memory.makeNote(params.id, body.text)
     )
     .post(
       "/api/projects/:id/memory/notes/:note/withdraw",
       { detail: { hide: true } },
-      ({ params }) =>
-        folderAttempt(() => memory.withdraw(params.id, params.note))
+      ({ params }) => memory.withdraw(params.id, params.note)
     );

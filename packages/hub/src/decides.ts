@@ -37,12 +37,7 @@ import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { DECIDES_FILE, decidesTable, decidesText } from "./decides-file";
-import {
-  folderAttempt,
-  MESSAGE_LIMIT,
-  writeFolderFile,
-  YOU,
-} from "./project-folder";
+import { MESSAGE_LIMIT, writeFolderFile, YOU } from "./project-folder";
 import { refusal } from "./refusal";
 
 /** A harness on the fleet, as the page draws setup from it. */
@@ -150,13 +145,10 @@ const unknownRoutes = (
   );
 
 /** A project's decides.md as read now: its own lines and its text; undefined when it has none or it doesn't read. */
-const projectOwn = async (
-  projectId: string,
-  fleet: FleetDecides
-): Promise<{ own: DecidesOwn; text: string } | undefined> => {
+const projectOwn = async (projectId: string, fleet: FleetDecides) => {
   const text = await decidesText(projectId);
-  if (text === undefined) {
-    return;
+  if (text === undefined || text instanceof ElysiaStatus) {
+    return text;
   }
   const reading = readDecides(text, fleet);
   return reading.ok
@@ -369,7 +361,11 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     fleet: FleetDecides,
     routes: Record<string, string | null>
   ) => {
-    const text = (await decidesText(projectId)) ?? null;
+    const read = await decidesText(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const text = read ?? null;
     const reading = text === null ? undefined : readDecides(text, fleet);
     if (reading && !reading.ok) {
       return refusal(
@@ -393,29 +389,42 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     );
   };
 
-  /** Writes each project's decides.md that `change` rewrites, one commit each; answers the projects written. */
+  /** Each project's decides.md as `change` rewrites it, for one commit each ({@link writeRewrites}); a project it leaves is not among them. */
   const rewriteProjects = async (
     fleet: FleetDecides,
-    change: (own: DecidesOwn) => DecidesOwn | undefined,
-    message: string
-  ): Promise<{ id: string; write: () => Promise<unknown> }[]> => {
-    const writes: { id: string; write: () => Promise<unknown> }[] = [];
+    change: (own: DecidesOwn) => DecidesOwn | undefined
+  ) => {
+    const rewrites: { content: string; id: string }[] = [];
     for (const project of deps.projects()) {
       const read = await projectOwn(project.id, fleet);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
       const next = read ? change(read.own) : undefined;
       if (read && next) {
-        const content = decidesFileOf(next, fleet.kinds, read.text);
-        writes.push({
+        rewrites.push({
           id: project.id,
-          write: () =>
-            writeFolderFile(project.id, DECIDES_FILE, content, {
-              author: YOU,
-              message,
-            }),
+          content: decidesFileOf(next, fleet.kinds, read.text),
         });
       }
     }
-    return writes;
+    return rewrites;
+  };
+
+  /** Writes each of {@link rewriteProjects}' files, one commit each, under `message`; stops at the first the folder refuses. */
+  const writeRewrites = async (
+    rewrites: { content: string; id: string }[],
+    message: string
+  ) => {
+    for (const one of rewrites) {
+      const written = await writeFolderFile(one.id, DECIDES_FILE, one.content, {
+        author: YOU,
+        message,
+      });
+      if (written instanceof ElysiaStatus) {
+        return written;
+      }
+    }
   };
 
   return (
@@ -554,49 +563,50 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           return memberOf(db.fleet(), member.id) as Member;
         }
       )
-      .delete("/api/decides/members/:id", ({ params }) => {
+      .delete("/api/decides/members/:id", async ({ params }) => {
         const member = added(params.id);
         if (member instanceof ElysiaStatus) {
           return member;
         }
-        return folderAttempt(async () => {
-          const fleet = db.fleet();
-          const writes = await rewriteProjects(
-            fleet,
-            (own) => {
-              const kinds = Object.keys(own.routes).filter(
-                (kind) => own.routes[kind] === member.id
-              );
-              return kinds.length > 0
-                ? {
-                    ...own,
-                    routes: {
-                      ...own.routes,
-                      ...Object.fromEntries(kinds.map((kind) => [kind, "you"])),
-                    },
-                  }
-                : undefined;
-            },
-            decidesWords.removedCommit(
-              member.name,
-              fleet.kinds
-                .filter((kind) => fleet.routes[kind.id] === member.id)
-                .map((kind) => kind.name)
-            )
+        const fleet = db.fleet();
+        const rewrites = await rewriteProjects(fleet, (own) => {
+          const kinds = Object.keys(own.routes).filter(
+            (kind) => own.routes[kind] === member.id
           );
-          // Its delegate type goes to the trash, as a type's delete does.
-          if (member.delegateType) {
-            deps.trashType(member.delegateType);
-          }
-          const kindsReturned = db.removeMember(member.id);
-          for (const one of writes) {
-            await one.write();
-          }
-          return {
-            kindsReturned,
-            projectsRewritten: writes.map((one) => one.id),
-          };
+          return kinds.length > 0
+            ? {
+                ...own,
+                routes: {
+                  ...own.routes,
+                  ...Object.fromEntries(kinds.map((kind) => [kind, "you"])),
+                },
+              }
+            : undefined;
         });
+        if (rewrites instanceof ElysiaStatus) {
+          return rewrites;
+        }
+        // Its delegate type goes to the trash, as a type's delete does.
+        if (member.delegateType) {
+          deps.trashType(member.delegateType);
+        }
+        const kindsReturned = db.removeMember(member.id);
+        const written = await writeRewrites(
+          rewrites,
+          decidesWords.removedCommit(
+            member.name,
+            fleet.kinds
+              .filter((kind) => fleet.routes[kind.id] === member.id)
+              .map((kind) => kind.name)
+          )
+        );
+        if (written instanceof ElysiaStatus) {
+          return written;
+        }
+        return {
+          kindsReturned,
+          projectsRewritten: rewrites.map((one) => one.id),
+        };
       })
       .post(
         "/api/decides/kinds",
@@ -660,33 +670,36 @@ export const decidesRoutes = (deps: DecidesDeps) => {
       .delete(
         "/api/decides/kinds/:id",
         { body: t.Object({ moveTo: t.String() }) },
-        ({ params, body }) => {
+        async ({ params, body }) => {
           const fleet = db.fleet();
           const kind = removable(fleet, params.id, body.moveTo);
           if (kind instanceof ElysiaStatus) {
             return kind;
           }
-          return folderAttempt(async () => {
-            // Read every project's file while the kind still reads in it.
-            const writes = await rewriteProjects(
-              fleet,
-              (own) => {
-                if (!(kind.id in own.routes)) {
-                  return;
-                }
-                const { [kind.id]: _gone, ...routes } = own.routes;
-                return { ...own, routes };
-              },
-              decidesWords.kindRemovedCommit(kind.name)
-            );
-            const { moved, projects } = await refileAll(kind.id, body.moveTo);
-            db.removeKind(kind.id, body.moveTo);
-            for (const one of writes) {
-              await one.write();
-              projects.add(one.id);
+          // Read every project's file while the kind still reads in it.
+          const rewrites = await rewriteProjects(fleet, (own) => {
+            if (!(kind.id in own.routes)) {
+              return;
             }
-            return { moved, projects: [...projects] };
+            const { [kind.id]: _gone, ...routes } = own.routes;
+            return { ...own, routes };
           });
+          if (rewrites instanceof ElysiaStatus) {
+            return rewrites;
+          }
+          const { moved, projects } = await refileAll(kind.id, body.moveTo);
+          db.removeKind(kind.id, body.moveTo);
+          const written = await writeRewrites(
+            rewrites,
+            decidesWords.kindRemovedCommit(kind.name)
+          );
+          if (written instanceof ElysiaStatus) {
+            return written;
+          }
+          for (const one of rewrites) {
+            projects.add(one.id);
+          }
+          return { moved, projects: [...projects] };
         }
       )
       .get("/api/decides/kinds/:id/waiting", ({ params }) => {
@@ -760,18 +773,18 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           takenBackAt: row.takenBackAt?.toISOString() ?? null,
         })),
       }))
-      .get("/api/projects/:id/decides", ({ params }) => {
+      .get("/api/projects/:id/decides", async ({ params }) => {
         const unknown = unknownProject(params.id);
         if (unknown) {
           return unknown;
         }
-        return folderAttempt(async () => ({
-          file: DECIDES_FILE,
-          decides: await decidesTable(
-            { projectId: params.id, areaId: areaOf(params.id) },
-            db.fleet()
-          ),
-        }));
+        const decides = await decidesTable(
+          { projectId: params.id, areaId: areaOf(params.id) },
+          db.fleet()
+        );
+        return decides instanceof ElysiaStatus
+          ? decides
+          : { file: DECIDES_FILE, decides };
       })
       .put(
         "/api/projects/:id/decides",
@@ -781,30 +794,31 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             message: t.String({ minLength: 1, maxLength: MESSAGE_LIMIT }),
           }),
         },
-        ({ params, body }) => {
+        async ({ params, body }) => {
           const fleet = db.fleet();
           const unknown =
             unknownProject(params.id) ?? unknownRoutes(fleet, body.routes);
           if (unknown) {
             return unknown;
           }
-          return folderAttempt(async () => {
-            const file = await projectFile(params.id, fleet, body.routes);
-            if (file instanceof ElysiaStatus) {
-              return file;
-            }
-            await writeFolderFile(params.id, DECIDES_FILE, file, {
-              author: YOU,
-              message: body.message,
-            });
-            return {
-              file: DECIDES_FILE,
-              decides: await decidesTable(
-                { projectId: params.id, areaId: areaOf(params.id) },
-                db.fleet()
-              ),
-            };
+          const file = await projectFile(params.id, fleet, body.routes);
+          if (file instanceof ElysiaStatus) {
+            return file;
+          }
+          const written = await writeFolderFile(params.id, DECIDES_FILE, file, {
+            author: YOU,
+            message: body.message,
           });
+          if (written instanceof ElysiaStatus) {
+            return written;
+          }
+          const decides = await decidesTable(
+            { projectId: params.id, areaId: areaOf(params.id) },
+            db.fleet()
+          );
+          return decides instanceof ElysiaStatus
+            ? decides
+            : { file: DECIDES_FILE, decides };
         }
       )
   );
