@@ -189,6 +189,7 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { depart } from "#lib/platform/motion/share.svelte.js";
+  import { newestRead } from "#lib/platform/newest-read.js";
   import { store, stored } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
@@ -369,14 +370,13 @@
   /** The archived tasks, for the board's Archived rail. */
   let archived = $state<TaskSummary[]>([]);
   /** Reads of the archived tasks so far: only the newest one's answer is kept. */
-  let archivedReads = 0;
+  const archivedReads = newestRead();
   async function readArchived() {
     const id = projectId;
-    archivedReads += 1;
-    const ticket = archivedReads;
+    const newest = archivedReads.next();
     try {
       const read = await listArchived(id);
-      if (id === projectId && ticket === archivedReads) {
+      if (id === projectId && newest()) {
         archived = read.tasks;
       }
     } catch {
@@ -474,20 +474,19 @@
   );
 
   /** Reads of the views, and of the dated tasks, so far: only each newest one's answer is kept. */
-  let viewsReads = 0;
-  let datedReads = 0;
+  const viewsReads = newestRead();
+  const datedReads = newestRead();
   async function readViews() {
     const id = projectId;
-    viewsReads += 1;
-    const ticket = viewsReads;
+    const newest = viewsReads.next();
     try {
       const read = await viewsOf(id);
-      if (id === projectId && ticket === viewsReads) {
+      if (id === projectId && newest()) {
         views = read;
         viewsProblem = null;
       }
     } catch (error) {
-      if (ticket === viewsReads) {
+      if (newest()) {
         viewsProblem = message(error);
       }
     } finally {
@@ -497,13 +496,12 @@
 
   async function readDated() {
     const id = projectId;
-    datedReads += 1;
-    const ticket = datedReads;
+    const newest = datedReads.next();
     try {
       const read = (await viewTool(id, "tasks", {})) as {
         rows: ViewTaskRow[];
       };
-      if (id === projectId && ticket === datedReads) {
+      if (id === projectId && newest()) {
         dated = read.rows;
       }
     } catch {
@@ -879,16 +877,15 @@
   // --- the hub's writes ---------------------------------------------------------
 
   /** Reads of the tasks so far: only the newest one's answer is kept. */
-  let reads = 0;
+  const reads = newestRead();
   async function refresh() {
     const id = projectId;
-    reads += 1;
-    const ticket = reads;
+    const newest = reads.next();
     const [read, readStagesNow] = await Promise.allSettled([
       listTasks(id),
       readStages(id),
     ]);
-    if (id !== projectId || ticket !== reads) {
+    if (id !== projectId || !newest()) {
       return;
     }
     if (read.status === "fulfilled") {
