@@ -25,8 +25,9 @@ import { commonWords } from "@cawco/core/words/common";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { z } from "zod";
 import { ParkedStartSchema } from "#lib/cawco/stored-shapes.js";
-import { track } from "#lib/cawco/track.js";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
+import { track } from "#lib/platform/track.js";
 import { cawco, followContinuations, sendFirstPrompt } from "../client.svelte";
 import {
   type ContinueSource,
@@ -36,7 +37,6 @@ import {
   type SessionDraft,
 } from "../continue.svelte";
 import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
-import { readJson, writeJson } from "../storage";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { type SpawnPrefill, spawning } from "./new-session.svelte";
 

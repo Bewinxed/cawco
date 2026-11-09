@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import { traitsOf } from "@cawco/core/harness/traits";
   import type { PermissionResult } from "@cawco/core/session-messages";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import type { PendingPermission } from "../client.svelte";
 
   /**
@@ -86,23 +86,6 @@
   import { flushSync, type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
-  import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
-  import {
-    CURVE,
-    dur,
-    ease,
-    easeDrawer,
-    easeOut,
-    motionOk,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { scrollMotion } from "#lib/cawco/motion/keyed.svelte.js";
-  import { popOut } from "#lib/cawco/motion/pop.svelte.js";
-  import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { departBox } from "#lib/cawco/motion/share.svelte.js";
-  import { msOf } from "#lib/cawco/motion/time.js";
-  import { track } from "#lib/cawco/track.js";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -118,16 +101,33 @@
     IconSend,
     IconStop,
   } from "#lib/icons.js";
+  import { felt } from "#lib/platform/feel.svelte.js";
+  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
+  import { newId } from "#lib/platform/id.js";
+  import { autosize } from "#lib/platform/motion/autosize.svelte.js";
+  import {
+    CURVE,
+    dur,
+    ease,
+    easeDrawer,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
+  import { popOut } from "#lib/platform/motion/pop.svelte.js";
+  import { handOver, reflow } from "#lib/platform/motion/rows.svelte.js";
+  import { departBox } from "#lib/platform/motion/share.svelte.js";
+  import { msOf } from "#lib/platform/motion/time.js";
+  import { track } from "#lib/platform/track.js";
   import { handBack, stages } from "../canvas/stage.svelte";
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
-  import { felt } from "../feel.svelte";
   import type { ConversationFind } from "../find/conversation-find.svelte";
   import FindLayer from "../find/FindLayer.svelte";
   import FindLine from "../find/FindLine.svelte";
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
-  import { newId } from "../id";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
   import { skillsOf } from "../skill-chips";

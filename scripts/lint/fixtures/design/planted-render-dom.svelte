@@ -4,8 +4,8 @@
   leave alone: a call that runs only in a browser.
 -->
 <script lang="ts">
-  import { dur, numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
+  import { dur, numberOf } from "#lib/platform/motion/curves.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { browser } from "$app/env";
 
   const swap = new ListSwap<never>();

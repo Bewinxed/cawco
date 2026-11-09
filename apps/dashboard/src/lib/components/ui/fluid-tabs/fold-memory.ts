@@ -6,14 +6,15 @@
  * guess and stretched to the box showed a wrong contour until the page ran.
  * A tab no browser here has measured yet is drawn once it is (TabItem).
  *
- * Kept in localStorage, the source, and as a pref (lib/cawco/prefs.ts), the
+ * Kept in localStorage, the source, and as a pref (lib/platform/prefs.ts), the
  * server's copy, which the layout's load reads. Keyed by the tab's value, the
  * most recently measured last, at most `KEPT` of them and fewer where they
  * would not fit a cookie: the oldest go first.
  */
-import { keepPrefs, PREF_VALUE_LIMIT, type Pref } from "#lib/cawco/prefs.js";
-import { store, stored as storedIn } from "#lib/cawco/storage.js";
-import type { FoldBox } from "./fold-path";
+
+import type { FoldBox } from "#lib/platform/motion/fold-path.js";
+import { keepPrefs, PREF_VALUE_LIMIT, type Pref } from "#lib/platform/prefs.js";
+import { store, stored as storedIn } from "#lib/platform/storage.js";
 
 /** A tab's measured shape: its box, and its rim's stroke and taper. */
 export interface FoldMeasure {

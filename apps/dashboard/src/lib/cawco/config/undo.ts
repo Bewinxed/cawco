@@ -1,7 +1,7 @@
 import { detach } from "@cawco/core/detach";
 import type { Deleted } from "@cawco/core/fleet";
 import { configureWords } from "@cawco/core/words/configure";
-import { toast } from "../toasts";
+import { toast } from "#lib/platform/toasts.js";
 import { restore } from "./unrestored.svelte";
 
 export type { Deleted } from "@cawco/core/fleet";
