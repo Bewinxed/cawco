@@ -31,6 +31,7 @@ import {
 } from "@cawco/core/accounts/controls";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
+import { accountsWords } from "@cawco/core/words/accounts";
 import {
   accountOfIdentity,
   keepProbe,
@@ -137,13 +138,13 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
   > => {
     const machine = ctx.machineName(machineId);
     const asked =
-      traitsOf(store).accountModel === "dir"
+      traitsOf(store).homeLogin === "dir"
         ? await ctx.readAgent(
             machineId,
             CONTROL_READ_HOME_LOGIN,
             [],
             SIGNIN_TIMEOUT_MS,
-            "claude"
+            store
           )
         : await ctx.readAgent(
             machineId,
@@ -166,18 +167,19 @@ export const createAccountSignin = (ctx: AccountSigninContext) => {
         error: read.error ?? `${machine} could not say what its stores hold.`,
       };
     }
-    if (traitsOf(store).accountModel === "dir") {
+    const { homeLogin, soleProvider } = traitsOf(store);
+    if (homeLogin === "dir" && soleProvider !== null) {
       const home = read.result as HomeLogin;
       return home.loggedIn && home.identity
         ? {
             identity: home.identity,
             kind: home.kind ?? "subscription",
-            provider: CLAUDE_PROVIDER,
-            storeProvider: CLAUDE_PROVIDER,
+            provider: soleProvider,
+            storeProvider: soleProvider,
           }
         : {
             status: 409,
-            error: `Claude Code on ${machine} isn't signed in, so there is no login to move.`,
+            error: `${accountsWords.harnesses[store]} on ${machine} isn't signed in, so there is no login to move.`,
           };
     }
     const found = (read.result as HomeCredential[]).find(
