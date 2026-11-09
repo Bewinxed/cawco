@@ -51,12 +51,12 @@ import type { Page } from "playwright-core";
 import { publicOrigin } from "../../../apps/dashboard/public-origin.js";
 import { crossSiteRefusal } from "../../../packages/core/src/browser-gate";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { RELAY_HEADER } from "../../../packages/core/src/preview/proxy";
 import {
   type PreviewTicket,
   previewEnterUrl,
 } from "../../../packages/core/src/preview/routes";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
+import { RELAY_HEADER } from "../../../packages/preview/src/proxy";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";

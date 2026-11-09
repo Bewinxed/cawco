@@ -33,11 +33,6 @@ import {
   type PageFaultsKept,
 } from "../../../../packages/core/src/page-faults";
 import {
-  injectOverlay,
-  OVERLAY_KEY,
-  overlayResponse,
-} from "../../../../packages/core/src/preview/proxy";
-import {
   OVERLAY_PATH,
   PREVIEW_ERRORS_PATH,
 } from "../../../../packages/core/src/preview/routes";
@@ -51,6 +46,11 @@ import { buildDecisionPage } from "../../../../packages/hub/src/decision-page";
 import { DECISION_ASSETS } from "../../../../packages/hub/src/decision-program";
 import type { HubLifetimeShape } from "../../../../packages/hub/src/lifetime";
 import { artifactReadWords } from "../../../../packages/hub/src/presenters/artifacts";
+import {
+  injectOverlay,
+  OVERLAY_KEY,
+  overlayResponse,
+} from "../../../../packages/preview/src/proxy";
 import type { Kit, Spec } from "../../kit";
 
 const ID = "5f0c2a8e-7d41-4f3b-9a6e-2c1d8b4e7f90";

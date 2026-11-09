@@ -16,11 +16,6 @@ import {
   buildStageHost,
   HOST_RUNTIME_ENV,
 } from "../../packages/agent/src/stage-host/build";
-import {
-  injectOverlay,
-  OVERLAY_KEY,
-  overlayResponse,
-} from "../../packages/core/src/preview/proxy";
 import { OVERLAY_PATH } from "../../packages/core/src/preview/routes";
 import {
   type DecisionMedia,
@@ -34,6 +29,11 @@ import {
   programHost,
   scriptJson,
 } from "../../packages/hub/src/decision-program";
+import {
+  injectOverlay,
+  OVERLAY_KEY,
+  overlayResponse,
+} from "../../packages/preview/src/proxy";
 import { until } from "../scratch-fleet";
 import { ROOT, type Theme } from "./kit";
 
@@ -51,7 +51,7 @@ const TITLE = /Decisions\("([^"]*)"/u;
 /** Where a stage's page loads the overlay's own pick, wired to the stand-in bridge (`pickWiring`). */
 const PICK_PATH = "/__probe/pick.js";
 
-/** The overlay's pick (agent preview-overlay pick.ts) wired to `CAWCO_BRIDGE`, bundled for the page (decision-pick-wiring.ts). */
+/** The overlay's pick (preview overlay/pick.ts) wired to `CAWCO_BRIDGE`, bundled for the page (decision-pick-wiring.ts). */
 async function pickWiring(): Promise<string> {
   const built = await Bun.build({
     entrypoints: [join(import.meta.dir, "decision-pick-wiring.ts")],
@@ -69,7 +69,7 @@ async function pickWiring(): Promise<string> {
 
 /**
  * The overlay's bridge as CawCo puts it on a page it shows (agent
- * preview-overlay page.ts `window.cawco`), standing in for the hub: picks,
+ * preview overlay/page.ts `window.cawco`), standing in for the hub: picks,
  * notes and values kept in the page, each pick marked on its option as the
  * overlay marks it (`data-cawco-picked`, `aria-pressed`) and heard by the
  * page's `picks` listeners, and Send answered. With it the page draws as the
@@ -177,7 +177,7 @@ interface Socket {
 
 /**
  * The overlay on a page this harness serves, as a preview origin serves it
- * (core preview-proxy.ts): its script at {@link OVERLAY_PATH}, its host's
+ * (preview proxy.ts): its script at {@link OVERLAY_PATH}, its host's
  * origins (`parents`) frozen before it, and its tag injected before every
  * script of each HTML page (`injectOverlay`). Null where the page is not on.
  */

@@ -977,7 +977,7 @@ export const pinUnsent = (pin: Pin): boolean =>
  * makes by a tap before the person writes in it goes once they have (or
  * resolved it). An annotation stands on its ink, and goes as it is. The
  * dashboard's comments are written with their words (commentOn), so this
- * holds back only the apps' tap pins (preview-overlay page.ts
+ * holds back only the apps' tap pins (preview overlay/page.ts
  * `appCommenting`): it exists until the app's commenting lands (tsk-59) and
  * is deleted then.
  */
@@ -1514,7 +1514,7 @@ export function deletePin(doc: MapDoc, pin: string): string | null {
  * as if the tap had not been made (`cawco:withdraw`). Ink it stands on stays,
  * as it was before its Comment was picked. A pin that holds a thread, or is
  * gone, is left alone. The apps' tap path alone writes such a pin
- * (preview-overlay page.ts `appCommenting`): this exists until the app's
+ * (preview overlay/page.ts `appCommenting`): this exists until the app's
  * commenting lands (tsk-59) and is deleted then.
  */
 export function withdrawPin(doc: MapDoc, pin: string): void {

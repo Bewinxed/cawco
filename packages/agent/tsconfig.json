@@ -15,7 +15,6 @@
     "node_modules",
     "dist",
     "src/canvas-host",
-    "src/preview-overlay",
     "src/stage-host/canvas"
   ],
   "references": [
@@ -27,6 +26,9 @@
     },
     {
       "path": "../design-tokens"
+    },
+    {
+      "path": "../preview"
     }
   ]
 }
