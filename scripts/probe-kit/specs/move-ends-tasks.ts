@@ -1,6 +1,6 @@
 /**
  * A move that ends a session's background work ends what that work runs in
- * its workspace, as the session is told it did (agent session.ts
+ * its workspace, as the session is told it did (agent claude-carry.ts
  * `#stopForCarry`, hub account-carry.ts `endedByMoveWords`).
  *
  * 2026-11-04: a session moved to another account read "the move ended what
