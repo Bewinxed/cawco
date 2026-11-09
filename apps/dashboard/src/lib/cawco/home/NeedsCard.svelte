@@ -77,7 +77,6 @@
   import { presenceWords } from "@cawco/core/words/presence";
   import { tailnetWords } from "@cawco/core/words/tailnet";
   import type { Component } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
   import {
     actOnRelayCard,
@@ -112,6 +111,7 @@
     IconWarningTriangle,
     IconWindow,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { isTyping } from "#lib/utils/typing.js";
   import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";

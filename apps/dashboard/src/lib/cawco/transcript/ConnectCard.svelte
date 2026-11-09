@@ -46,6 +46,13 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconKey, IconRefresh, IconTick, IconTransfer } from "#lib/icons.js";
   import {
+    crossIn,
+    crossOut,
+    dur,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import {
     cawco,
     commandRecord,
     isStale,
@@ -54,9 +61,6 @@
   } from "../client.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { hubSeam } from "../hub-live";
-  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
-  import { morph } from "../motion/morph.svelte";
   import type { Message } from "../types";
   import ConnectAddress from "./ConnectAddress.svelte";
   import ConnectRow from "./ConnectRow.svelte";

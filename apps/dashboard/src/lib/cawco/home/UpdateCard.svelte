@@ -17,11 +17,11 @@
 </script>
 
 <script lang="ts">
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { reflowsFrom, reread } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconChevronDown, IconError } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { reflowsFrom, reread } from "#lib/platform/motion/rows.svelte.js";
   /**
    * The update notice as a row of Caw's panel (CawPanel), its one surface,
    * until its ✕ (NoticeRow) or its act acknowledges it. At rest it is two

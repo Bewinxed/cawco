@@ -5,7 +5,7 @@
  */
 import type { AskAnswer } from "@cawco/core/asks";
 import type { SendPayload } from "@cawco/core/protocol";
-import { newId } from "../id";
+import { newId } from "#lib/platform/id.js";
 import type { Message } from "../types";
 
 /**

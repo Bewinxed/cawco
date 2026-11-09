@@ -14,8 +14,9 @@
  * changed changes what the words find. A refusal keeps the last answer and
  * says why in the hub's words (`problem`), for Try again.
  */
-import { failureWords } from "#lib/cawco/hub-read.js";
+
 import { findTasks } from "#lib/cawco/project-tasks.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 
 /** An answer: the words it was for, and the ids of the tasks, live and archived, they found. */
 export interface Found {
