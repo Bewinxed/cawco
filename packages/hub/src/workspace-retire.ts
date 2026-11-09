@@ -28,7 +28,8 @@
  * idle half hour ran out (artifacts service `keepWaitingUp`).
  */
 import type { HubLifetimeShape } from "./lifetime";
-import type { HeldWork, WorkItems } from "./work-items";
+import type { WorkItems } from "./work-items";
+import type { HeldWork } from "./workspaces";
 
 /** How often the hub settles the workspaces on every online machine. Ours: a minute, against events that settle at once. */
 const RETIRE_SWEEP_MS = 60_000;
