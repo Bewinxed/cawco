@@ -132,7 +132,7 @@ export interface ClaudeLimits {
 }
 
 /** Why a {@link ClaudeLimits} has no windows. */
-export type ClaudeLimitsGap = "not-signed-in" | "no-reading";
+type ClaudeLimitsGap = "not-signed-in" | "no-reading";
 
 /** Extra usage: requests past the plan's limits, paid as they go. */
 export interface ClaudeExtraUsage {
@@ -159,7 +159,7 @@ export type UsageGroupBy =
   "machine" | "model" | "project" | "session" | "start";
 
 /** The machine a summary row ran on: named, never shown by id. */
-export interface UsageRowMachine {
+interface UsageRowMachine {
   hostname: string;
   id: string;
   os: string;
