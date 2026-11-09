@@ -480,7 +480,7 @@ const collapsed = (
  * project ignores ({@link ignoredDirs}) that holds such a file, whole (an
  * install that hardlinks from its cache, as bun's and uv's do, fills one with
  * them), and every other file with more than one link. A clone's are copied apart
- * but those linked to the workspaces' own bun cache (boundary/
+ * but those linked to the workspaces' own bun cache (boundary/package-managers.ts
  * `ownInodes`); a person's own folder is never rewritten, so
  * these are only denied for writing: a write through one would change a file
  * the host runs.
