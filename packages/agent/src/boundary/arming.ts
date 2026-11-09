@@ -10,6 +10,7 @@ import { atMost } from "@cawco/core/at-most";
 import {
   type HandoverCommand,
   type HandoverEvent,
+  type HandoverState,
   step as handoverStep,
   initialHandover,
   KEEPERS_ASK_AGAIN_MS,
@@ -140,13 +141,13 @@ const REARM_CONCURRENCY = 16;
  * started again, or left until a session there needs them. This module only
  * reads the workspaces and the keepers, arms, and runs what the reducer says.
  */
-export let armState = initialHandover();
+let armState = initialHandover();
 
 /** Each workspace's arming under way or done, by id ({@link hookArmed}). */
-export const rearming = new Map<string, Promise<void>>();
+const rearming = new Map<string, Promise<void>>();
 
 /** Settled each time the start-up reading moves, for a gate waiting on it. */
-export let readingMoved = Promise.withResolvers<void>();
+let readingMoved = Promise.withResolvers<void>();
 
 /** The workspaces the last whole reading found, with the clone each runs in. */
 let readRefs = new Map<string, WorkspaceRef>();
@@ -170,6 +171,23 @@ class ArmingBlocked extends Error {
     this.workspace = workspace;
   }
 }
+
+/** Where the start-up reading stands now. */
+export const armPhase = (): HandoverState["arming"] => armState.arming;
+
+/** Each workspace's arming as the last whole reading left it. */
+export const armedWorkspaces = (): HandoverState["workspaces"] =>
+  armState.workspaces;
+
+/** Workspace `id`'s arming under way or done, if any ({@link hookArmed}). */
+export const armingOf = (id: string): Promise<void> | undefined =>
+  rearming.get(id);
+
+/** Every workspace's arming under way or done, now. */
+export const allArming = (): Promise<void>[] => [...rearming.values()];
+
+/** Settles the next time the start-up reading moves. */
+export const nextReading = (): Promise<void> => readingMoved.promise;
 
 /** One step of the arming, its commands run in order. */
 export const armStep = (event: HandoverEvent): void => {
