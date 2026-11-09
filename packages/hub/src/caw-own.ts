@@ -1,5 +1,5 @@
 import type { DbShape } from "./db";
-import { isHubParent } from "./work-items";
+import { isHubParent } from "./work-item-state";
 
 type ProjectRow = NonNullable<ReturnType<DbShape["project"]>>;
 export type Row = ReturnType<DbShape["getInstancesByIds"]>[number];
