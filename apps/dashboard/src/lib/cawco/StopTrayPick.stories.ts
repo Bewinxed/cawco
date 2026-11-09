@@ -7,6 +7,7 @@
  * doing as the rail has it.
  */
 
+import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 import type { PickRow } from "./StopTrayPick.svelte";
 import StopTrayPick from "./StopTrayPick.svelte";
 import CawOffPanel from "./stop-preview/CawOffPanel.svelte";
@@ -372,7 +373,7 @@ const formIn = (context: object): "desk" | "phone" => {
   if (known) {
     return known;
   }
-  const form = matchMedia("(width < 640px)").matches ? "phone" : "desk";
+  const form = matchMedia(PHONE_QUERY).matches ? "phone" : "desk";
   forms.set(context, form);
   return form;
 };
