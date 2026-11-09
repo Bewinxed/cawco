@@ -274,7 +274,7 @@ import {
 } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import type { FolderWeight } from "@cawco/preview/proxy";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createAccountCarry } from "./account-carry";
 import { createAccountProbes } from "./account-probes";
@@ -297,7 +297,7 @@ import {
   RESTORE_MAX,
 } from "./agent-socket/wire-reads";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
-import { AreaRefusal, createAreas } from "./areas";
+import { createAreas } from "./areas";
 import { createArtifactEvents } from "./artifact-events";
 import { createArtifactPages } from "./artifact-pages";
 import { createArtifactSessions } from "./artifact-session";
@@ -566,6 +566,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
+import { refusal } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl, peekAnswer } from "./relay-control";
@@ -4644,12 +4645,9 @@ export const createServer = (
         name: (projectId, name) => setupEdit(projectId, { name }),
         account: (projectId, account) => setupEdit(projectId, { account }),
         area: async (projectId, area) => {
-          try {
-            await projectAreas.place(projectId, area);
-          } catch (error) {
-            throw error instanceof AreaRefusal
-              ? new PlaceRefusal(error.status, error.message)
-              : error;
+          const placed = await projectAreas.place(projectId, area);
+          if (placed instanceof ElysiaStatus) {
+            throw new PlaceRefusal(placed.status, placed.response.detail);
           }
         },
         shape: async (projectId, template) => {
@@ -6085,16 +6083,16 @@ export const createServer = (
       );
       return;
     }
-    const refuse = (refusal: string): void => {
+    const refuse = (why: string): void => {
       // Custody also inspects failed OpenCode handles. A row the hub already
       // refused to start stays failed until its account or settings can run,
       // rather than failing each boot.
       if (startRefused(row)) {
         return;
       }
-      db.failInstance(row.id, refusal, "start-refused");
-      forgetPending(row.id, refusal);
-      console.warn(`[hub] not restoring ${row.id}: ${refusal}`);
+      db.failInstance(row.id, why, "start-refused");
+      forgetPending(row.id, why);
+      console.warn(`[hub] not restoring ${row.id}: ${why}`);
     };
     const unsigned = accountStartRefusal(row.machineId, row, sessionName(row));
     if (unsigned) {
@@ -8649,13 +8647,13 @@ export const createServer = (
         }
       );
       if ("refusal" in sent) {
-        const { refusal } = sent;
+        const { refusal: refused } = sent;
         throw new DecisionRefusal(
-          refusal.status === 409 || refusal.status === 404
-            ? refusal.status
+          refused.status === 409 || refused.status === 404
+            ? refused.status
             : 503,
-          refusal.message,
-          { cause: refusal }
+          refused.message,
+          { cause: refused }
         );
       }
       return sent.heard;
@@ -8856,12 +8854,12 @@ export const createServer = (
    */
   const tellPlan = (instanceId: string, text: string): PlanTold => {
     const origin = { kind: "system" as const, name: PLAN_ORIGIN };
-    const refusal = inputRefusal(instanceId, origin);
-    if (refusal?.gone || refusal?.refusal?.kind === "workspace-archived") {
-      return { kind: "ended", reason: refusal.reason };
+    const refused = inputRefusal(instanceId, origin);
+    if (refused?.gone || refused?.refusal?.kind === "workspace-archived") {
+      return { kind: "ended", reason: refused.reason };
     }
-    if (refusal) {
-      return { kind: "refused", reason: refusal.reason };
+    if (refused) {
+      return { kind: "refused", reason: refused.reason };
     }
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
@@ -9040,9 +9038,9 @@ export const createServer = (
         note: comment,
       };
       const asker: ContinuationAsker = { kind: "task", id: taskId };
-      const refusal = await continuationRefusal(prepared, request, asker);
-      if (refusal) {
-        throw new Error(refusal);
+      const why = await continuationRefusal(prepared, request, asker);
+      if (why) {
+        throw new Error(why);
       }
       job = startContinuation(prepared, request, asker);
     } finally {
@@ -9610,9 +9608,9 @@ export const createServer = (
     if (!(to && row) || row.accountId === to.id) {
       return;
     }
-    const refusal = handMoveRefusal(row, to);
-    if (refusal) {
-      return refusal;
+    const why = handMoveRefusal(row, to);
+    if (why) {
+      return why;
     }
     const moved = await moveByHand(row, to);
     return "refusal" in moved ? moved.refusal : moved.why;
@@ -11486,12 +11484,10 @@ export const createServer = (
       .onError("global", ({ error }) => {
         const unknown = unknownFieldsOf(error);
         return unknown
-          ? new Response(
-              hubFailureWords.unknownFields(unknown.on, unknown.fields),
-              {
-                status: 422,
-                headers: { "content-type": "text/plain; charset=utf-8" },
-              }
+          ? refusal(
+              422,
+              "unknown-fields",
+              hubFailureWords.unknownFields(unknown.on, unknown.fields)
             )
           : undefined;
       })
@@ -12450,7 +12446,7 @@ export const createServer = (
                 sendFrame(ws, failure(message, start.refusal));
                 break;
               }
-              const refusal =
+              const why =
                 (message.instanceId
                   ? inFlightRefusal(message.instanceId)
                   : undefined) ??
@@ -12460,9 +12456,9 @@ export const createServer = (
                     : undefined,
                   start
                 );
-              if (refusal) {
-                console.warn(spawnWords.refusedLine(refusal));
-                sendFrame(ws, failure(message, refusal));
+              if (why) {
+                console.warn(spawnWords.refusedLine(why));
+                sendFrame(ws, failure(message, why));
                 break;
               }
               // A spawn that names no model runs on its harness's own default
