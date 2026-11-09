@@ -187,14 +187,6 @@ for my $link (find0("-name", "node_modules", "-prune", "-o", "-type", "l", "-new
 exit($moved ? 3 : 0);
 `;
 
-/**
- * The runner's word that its commands run in a place ({@link runnerText}):
- * nothing a command starts outlives it. Set once on the boundary as it
- * starts, by the build that starts it, and read by that boundary's own
- * runner and host, so an older boundary still running reads its own word.
- */
-export const PLACE_ENV = "CAWCO_PLACE";
-
 /** A place's guard, written into the boundary's generation dir ({@link placeGuard}); none for a clone. */
 export const guardFiles = (id: string, gen: string): [string, string][] =>
   isPlace(id) ? [[guardOf(id, gen), placeGuard()]] : [];
