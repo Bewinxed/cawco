@@ -51,6 +51,8 @@
     // A harness is a table and a facet, never a name
     // (packages/core/src/harness/traits.ts).
     "./scripts/lint/no-harness-compare.grit",
+    // An artifact doc's meta map is reached through core doc-meta.ts.
+    "./scripts/lint/doc-meta-door.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
