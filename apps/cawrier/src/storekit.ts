@@ -8,7 +8,7 @@
  */
 import { Buffer } from "node:buffer";
 import type { SignedDataVerifier } from "@apple/app-store-server-library";
-import { DAY_MS } from "../../../packages/core/src/time";
+import { DAY_MS } from "@cawco/core/time";
 
 /** https://www.apple.com/certificateauthority/AppleRootCA-G3.cer, sha256 63343abf…3e9179. */
 const APPLE_ROOT_CA_G3 = Buffer.from(
