@@ -16,7 +16,8 @@
    * and the account it runs on calls it off. Only while this tab's ask is on
    * its way to the hub does it take no picks.
    */
-  import { type BoardRow, cawco } from "../client.svelte";
+  import { cawco } from "../client.svelte";
+  import type { BoardRow } from "../links";
   import NsPopover from "../spawn/NsPopover.svelte";
   import AccountName from "./AccountName.svelte";
   import { hueVar, nameOf } from "./model.svelte";
