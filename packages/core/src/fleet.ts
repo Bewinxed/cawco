@@ -650,12 +650,12 @@ export interface MemoryScope {
 
 /**
  * One superseded version of the fleet's memory, as a listing reads it —
- * without its content. `createdAt` is a `Date` in the hub and its ISO string
- * on the wire (`GET /api/fleet/memory/history`).
+ * without its content (`GET /api/fleet/memory/history`).
  */
 export interface MemoryVersion {
   bytes: number;
-  createdAt: Date;
+  /** When it was kept, ISO, as the answer carries it. */
+  createdAt: string;
   hash: string;
   id: number;
   /** Which document of the set it was a version of; absent is the main one. */
