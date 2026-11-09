@@ -254,11 +254,11 @@ export type NarrowCause =
  *   clone, the workspace going or settled ({@link stopWorkspaceBoundary}).
  * - `host-restarted`: its srt host stopped its sandbox, with everything in
  *   it, and started it again, a path it guards (`path`) changed on the host
- *   (boundary-host.ts `guard`), as the host records it ({@link
- *   recordHostRestarts}); `inner` the init of the sandbox it stopped.
+ *   (boundary-host.ts `guard`), as the host records it (watch.ts
+ *   `recordHostRestarts`); `inner` the init of the sandbox it stopped.
  * - `restarted-unasked`: the boundary ended with nothing of the agent's
  *   ending it, and was started again (`to`, lifecycle.ts `restartUnasked`).
- * - `left-down`: it ended unasked again within {@link UNASKED_RESTART_MS}
+ * - `left-down`: it ended unasked again within watch.ts `UNASKED_RESTART_MS`
  *   of being started again, and is left down.
  */
 export type BoundaryDecision =
