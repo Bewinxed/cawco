@@ -395,6 +395,11 @@ export const pricedRequest = (
 /**
  * Refresh the in-memory rates from models.dev, at most once per 24h. On failure
  * the bundled snapshot stays in place; never blocks a scan. Offline works.
+ * models.dev's rates are laid over the bundled snapshot's: a model it lists
+ * takes its price, and one it does not list (yet, or any more) keeps the
+ * snapshot's, so a model the snapshot prices ahead of models.dev
+ * (`anthropic/claude-fable-5-2` before anomalyco/models.dev#13194) stays
+ * priced.
  */
 export async function refreshPricing(): Promise<number> {
   const now = Date.now();
@@ -424,7 +429,12 @@ export async function refreshPricing(): Promise<number> {
   if (Object.keys(filtered.models).length === 0) {
     return RATES.size;
   }
-  loadFromSnapshot(filtered);
+  loadFromSnapshot({
+    models: {
+      ...(snapshot as PricingSnapshot).models,
+      ...filtered.models,
+    },
+  });
   return RATES.size;
 }
 
