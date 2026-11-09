@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { InstanceRow } from "@cawco/core/protocol";
   import { LogoClaude as ClaudeIcon } from "@cawco/icons/marks";
   /**
    * The page's lead, as Rings: can you keep going, on which account, what
@@ -18,7 +19,7 @@
   import { IconKey, IconRefresh } from "#lib/icons.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import AccountName from "../accounts/AccountName.svelte";
-  import { cawco, type InstanceRow } from "../client.svelte";
+  import { cawco } from "../client.svelte";
   import OpenCodeLogo from "../OpenCodeLogo.svelte";
   import { claudeGap, extraUsageLine, money } from "../usage";
   import Figure from "./Figure.svelte";
