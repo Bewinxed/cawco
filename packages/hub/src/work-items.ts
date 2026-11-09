@@ -113,6 +113,7 @@ import {
   IGNORED_STATUS,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
+import { ElysiaStatus } from "elysia";
 import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
 import type {
@@ -153,7 +154,7 @@ import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import { handle } from "./presenters/words";
-import { FolderRefusal, folderPath } from "./project-folder";
+import { folderPath } from "./project-folder";
 import type { Refused } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
@@ -1343,14 +1344,8 @@ const requestProblem = (request: WorkItemRequest): string | undefined =>
 
 /** A path as the project's folder reads it, or undefined when the folder refuses it. */
 const folderPathOf = (raw: string): string | undefined => {
-  try {
-    return folderPath(raw);
-  } catch (error) {
-    if (error instanceof FolderRefusal) {
-      return undefined;
-    }
-    throw error;
-  }
+  const rel = folderPath(raw);
+  return rel instanceof ElysiaStatus ? undefined : rel;
 };
 
 const OUTPUTS_LIMIT = 50;

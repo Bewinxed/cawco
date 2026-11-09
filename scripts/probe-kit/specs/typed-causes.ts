@@ -495,7 +495,7 @@ const trailerless = async (kit: Kit, scratch: string): Promise<void> => {
   const projectId = "proj-typed-causes";
   const path = "tasks/tsk-1-probe.md";
   // The hub's own write: its commit carries its trailers.
-  await folder.writeFolderFile(
+  const committed = await folder.writeFolderFile(
     projectId,
     path,
     "---\nstage: draft\n---\n# Probe\n",
@@ -505,8 +505,13 @@ const trailerless = async (kit: Kit, scratch: string): Promise<void> => {
         "task tsk-1: create “Probe” in draft (by you)\n\nCawCo-Actor: you\nCawCo-Mover: you\nCawCo-What: create “Probe” in draft\nCawCo-Stage: (none) -> draft\nCawCo-Change: create",
     }
   );
+  if (!("sha" in committed)) {
+    throw new Error(committed.response.detail);
+  }
   // A commit with the words hubs once wrote, and no trailers.
-  const root = folder.projectRoot(projectId);
+  const { projectRootOf } =
+    await import("../../../packages/hub/src/project-refusal");
+  const root = projectRootOf(projectId);
   await writeFile(join(root, path), "---\nstage: review\n---\n# Probe\n");
   await shell(
     root,
@@ -519,7 +524,11 @@ const trailerless = async (kit: Kit, scratch: string): Promise<void> => {
     },
     `git add -- ${path} && git commit --quiet -m 'task tsk-1: stage draft → review (by you)'`
   );
-  const { times } = await folder.folderFileTimes(projectId, "tasks");
+  const read = await folder.folderFileTimes(projectId, "tasks");
+  if (!("times" in read)) {
+    throw new Error(read.response.detail);
+  }
+  const { times } = read;
   const entry = times.get(path);
   const events = entry ? historyOf(entry) : [];
   kit.note(

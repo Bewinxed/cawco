@@ -69,8 +69,13 @@ import type {
   ProjectGate,
   RunsOnCapability,
 } from "@cawco/core/project-gate";
-import { Elysia } from "elysia";
-import { FolderRefusal, readFolderFile, refused } from "./project-folder";
+import { Elysia, ElysiaStatus } from "elysia";
+import { readFolderFile } from "./project-folder";
+import {
+  ProjectRefusal,
+  projectRefusalOf,
+  projectRefused,
+} from "./project-refusal";
 import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
 
 /** The file in the project's folder that declares its gate. */
@@ -362,15 +367,14 @@ export const projectGate = async (projectId: string): Promise<ProjectGate> => {
 const gateReading = async (
   projectId: string
 ): Promise<GateReading | undefined> => {
-  try {
-    const { content } = await readFolderFile(projectId, GATE_FILE);
-    return readGate(content);
-  } catch (error) {
-    if (error instanceof FolderRefusal && error.status === 404) {
+  const file = await readFolderFile(projectId, GATE_FILE);
+  if (file instanceof ElysiaStatus) {
+    if (file.status === 404) {
       return;
     }
-    throw error;
+    throw projectRefusalOf(file);
   }
+  return readGate(file.content);
 };
 
 /**
@@ -395,11 +399,11 @@ export const gateRoutes = (projectExists: (id: string) => boolean) =>
   new Elysia().get("/api/projects/:id/gate", async ({ params }) => {
     try {
       if (!projectExists(params.id)) {
-        throw new FolderRefusal(404, `The hub keeps no project ${params.id}.`);
+        throw new ProjectRefusal(404, `The hub keeps no project ${params.id}.`);
       }
       return { file: GATE_FILE, gate: await projectGate(params.id) };
     } catch (error) {
-      return refused(error);
+      return projectRefused(error);
     }
   });
 
