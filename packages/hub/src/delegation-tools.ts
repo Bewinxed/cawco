@@ -1,5 +1,6 @@
 import { DECIDES_RULE, type Kind } from "@cawco/core/decides";
 import {
+  type MayStart,
   sessionMayStart,
   spawningToolAllowed,
   startsAny,
@@ -112,6 +113,7 @@ import {
   SESSION_TITLE_DESCRIPTION,
   SESSION_TITLE_MAX,
   WAIT_ITEM_LIMIT,
+  WAIT_ITEM_MAX_MINUTES,
 } from "./work-items";
 
 /**
@@ -323,8 +325,6 @@ const READ_ONLY = {
 
 /** Hub-owned tool definitions; every harness discovers this same registry. */
 
-export type { HandoffDeps } from "./delegation-actions";
-
 /**
  * What {@link NO_REPLY_TOOL} says on each harness. Claude Code and pi end
  * the turn at the call (core no-reply.ts `END_TURN_META`). OpenCode's loop
@@ -356,19 +356,36 @@ const NO_REPLY_WORDS: Record<
  * it gets turn on these alone (delegation-mcp.ts lists them with nothing
  * else of the session).
  */
-export type ToolView = Pick<
-  HandoffDeps,
-  "harness" | "hasParent" | "lands" | "mayStart" | "workItem"
->;
+export interface ToolView {
+  /**
+   * The harness the tools are listed for and called from: what a tool's
+   * words say can differ by it ({@link NO_REPLY_WORDS}).
+   */
+  readonly harness: HarnessKind;
+  /**
+   * Whether this session has a parent (it was started by another session):
+   * artifact_create then offers `to: "parent"`.
+   */
+  readonly hasParent?: boolean;
+  /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
+  readonly lands?: ItemEnd;
+  /**
+   * The delegate types THIS session may start (core `MayStart`): its row's
+   * list; absent, a session nobody delegated, which may start any.
+   */
+  readonly mayStart?: MayStart;
+  /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
+  readonly workItem?: boolean;
+}
 
 /** What a session's tool acts through as it is called: its actions, and whether the person is owed an answer. */
-export interface HandoffOn {
+interface HandoffOn {
   readonly actions: HandoffActions;
   readonly personOwed: HandoffDeps["personOwed"];
 }
 
 /** What `list_delegate_types` acts through: the catalog alone, which a call with no session reads too. */
-export interface CatalogOn {
+interface CatalogOn {
   readonly actions: Pick<HandoffActions, "listDelegateTypes">;
 }
 
@@ -883,8 +900,10 @@ export function handoffTools(view: ToolView): McpToolOn<HandoffOn>[] {
           .number({ error: WAIT_ITEM_LIMIT })
           .int({ error: WAIT_ITEM_LIMIT })
           .min(1, { error: WAIT_ITEM_LIMIT })
-          .max(120, { error: WAIT_ITEM_LIMIT })
-          .describe("Whole minutes to wait, from 1 to 120."),
+          .max(WAIT_ITEM_MAX_MINUTES, { error: WAIT_ITEM_LIMIT })
+          .describe(
+            `Whole minutes to wait, from 1 to ${WAIT_ITEM_MAX_MINUTES}.`
+          ),
         reason: z
           .string({ error: WAIT_ITEM_LIMIT })
           .trim()
