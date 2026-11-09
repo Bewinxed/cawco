@@ -4,7 +4,9 @@
  * under it (TreeMark's switch, which keeps its own press). One rule for
  * every such row.
  */
+
 import { createContext } from "svelte";
+import { plainClick } from "#lib/platform/plain-click.js";
 import { page } from "$app/state";
 import { tabOfPath } from "./workspace/tabs";
 import { workspace } from "./workspace/workspace.svelte";
@@ -40,11 +42,7 @@ export function openProjectPress(
   if (
     inSheet ||
     tabOfPath((page.shallow?.url ?? page.url).pathname) === undefined ||
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
+    !plainClick(event)
   ) {
     return;
   }

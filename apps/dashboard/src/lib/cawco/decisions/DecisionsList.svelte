@@ -43,6 +43,7 @@
   } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
+  import { plainClick } from "#lib/platform/plain-click.js";
   import { formatAgeShort, formatTimestamp } from "#lib/utils/time.js";
   import { makeDecisionTasks } from "./decisions-api";
   import { isDecided } from "./words";
@@ -149,13 +150,7 @@
 
   /** A press that opens a page in place; a modified press keeps the browser's own. */
   function opening(event: MouseEvent, name: string) {
-    if (
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey ||
-      event.button !== 0
-    ) {
+    if (!plainClick(event)) {
       return;
     }
     event.preventDefault();
