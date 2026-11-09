@@ -69,7 +69,7 @@ import {
 import { ROUTINE_TOOLS, type Routines } from "./routines";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
-import { isVerifierParent } from "./work-items";
+import { isVerifierParent } from "./work-item-state";
 
 type ToolFactory = typeof handoffTools;
 type CawTool = ReturnType<Caw["tools"]>[number];
