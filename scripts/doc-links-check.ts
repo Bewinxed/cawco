@@ -1,15 +1,19 @@
 /**
  * `bun scripts/doc-links-check.ts` (part of `bun run check`): every
  * `{@link import("<module>").<Name>}` in a doc comment names a module that
- * exports `<Name>`. The compiler reads none of these, so a name that moves
+ * exports `<Name>`, with or without a member path (`.<Name>.field`) or a
+ * label (`{@link import("m").Name | its name}`), as `@linkcode` and
+ * `@linkplain` too. The compiler reads none of these, so a name that moves
  * leaves the link behind: transcript-types.ts kept pointing
  * `CONTINUATION_ORIGIN` at harness.ts after it moved to harness/kinds.ts,
  * and openapi.json carried the stale link in a description.
  *
  * Each module is resolved as Bun resolves an import from the file (relative
  * paths and workspace packages' `exports` alike) and read with the
- * TypeScript parser for its exported names. Prints `file:line: module.Name`
- * for each link that does not resolve; exits 1 on any.
+ * TypeScript parser for its exported names, through its `export * from`s;
+ * `export default` exports `default`. Prints `file:line: module.Name` for
+ * each link that does not resolve, and each `{@link import(` it cannot read;
+ * exits 1 on any.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -17,23 +21,46 @@ import ts from "typescript";
 
 const ROOT = join(import.meta.dir, "..");
 const SOURCES = /^(?:packages|apps\/dashboard|apps\/cawrier|scripts)\//u;
-const LINK = /\{@link import\("([^"]+)"\)\.(\w+)\}/gu;
+/** Where a link to an import starts. */
+const OPENER = /\{@link(?:code|plain)?\s+import\(/gu;
+/** One such link: its module, the name it exports, then any member path or label. */
+const LINK =
+  /\{@link(?:code|plain)?\s+import\((["'])([^"']+)\1\)\.([\w$]+)(?:\.[\w$.]+)?(?:(?:\s*\|\s*|\s+)[^}]*)?\}/gu;
 
-/** The names one statement exports: its declarations, or an `export { … }` list's. */
-const exportedBy = (statement: ts.Statement): string[] => {
+/**
+ * The names one statement of `file` exports: its declarations, an
+ * `export { … }` list's, an `export * as name`'s name, everything an
+ * `export * from` module exports, or `default`.
+ */
+const exportedBy = (file: string, statement: ts.Statement): string[] => {
+  if (ts.isExportAssignment(statement)) {
+    return statement.isExportEquals ? [] : ["default"];
+  }
   if (ts.isExportDeclaration(statement)) {
     const clause = statement.exportClause;
-    return clause && ts.isNamedExports(clause)
-      ? clause.elements.map((element) => element.name.text)
-      : [];
+    if (clause && ts.isNamedExports(clause)) {
+      return clause.elements.map((element) => element.name.text);
+    }
+    if (clause && ts.isNamespaceExport(clause)) {
+      return [clause.name.text];
+    }
+    const from = statement.moduleSpecifier;
+    if (!(from && ts.isStringLiteral(from))) {
+      return [];
+    }
+    // `export * from` leaves out the other module's default.
+    return [...exported(Bun.resolveSync(from.text, dirname(file)))].filter(
+      (exportName) => exportName !== "default"
+    );
   }
-  const exporting =
-    ts.canHaveModifiers(statement) &&
-    ts
-      .getModifiers(statement)
-      ?.some((one) => one.kind === ts.SyntaxKind.ExportKeyword);
-  if (!exporting) {
+  const modifiers = ts.canHaveModifiers(statement)
+    ? (ts.getModifiers(statement) ?? [])
+    : [];
+  if (!modifiers.some((one) => one.kind === ts.SyntaxKind.ExportKeyword)) {
     return [];
+  }
+  if (modifiers.some((one) => one.kind === ts.SyntaxKind.DefaultKeyword)) {
+    return ["default"];
   }
   if (ts.isVariableStatement(statement)) {
     return statement.declarationList.declarations.flatMap((declaration) =>
@@ -46,32 +73,50 @@ const exportedBy = (statement: ts.Statement): string[] => {
 
 /** The names a module exports, by the parser. */
 const exportsOf = new Map<string, Set<string>>();
-const exported = (file: string): Set<string> => {
+function exported(file: string): Set<string> {
   const known = exportsOf.get(file);
   if (known) {
     return known;
   }
+  const names = new Set<string>();
+  // Held while it is read: two modules exporting each other's `*` end there.
+  exportsOf.set(file, names);
   const source = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
     ts.ScriptTarget.Latest
   );
-  const names = new Set(source.statements.flatMap(exportedBy));
-  exportsOf.set(file, names);
+  for (const statement of source.statements) {
+    for (const name of exportedBy(file, statement)) {
+      names.add(name);
+    }
+  }
   return names;
-};
+}
 
 const stale: string[] = [];
 const files = [...new Bun.Glob("**/*.{ts,svelte}").scanSync({ cwd: ROOT })]
-  .filter((path) => SOURCES.test(path) && !path.includes("node_modules/"))
+  .filter(
+    (path) =>
+      SOURCES.test(path) &&
+      !path.includes("node_modules/") &&
+      // Its own comments and messages show the syntax with no module behind it.
+      path !== relative(ROOT, import.meta.path)
+  )
   .sort();
 for (const path of files) {
   const text = readFileSync(join(ROOT, path), "utf8");
-  if (!text.includes("{@link import(")) {
-    continue;
+  const read = new Set([...text.matchAll(LINK)].map((found) => found.index));
+  for (const found of text.matchAll(OPENER)) {
+    if (!read.has(found.index)) {
+      const line = text.slice(0, found.index).split("\n").length;
+      stale.push(
+        `${path}:${line}: a link this check cannot read; write it {@link import("<module>").<Name>}, a member path or label after`
+      );
+    }
   }
   for (const found of text.matchAll(LINK)) {
-    const [, module = "", name = ""] = found;
+    const [, , module = "", name = ""] = found;
     const line = text.slice(0, found.index).split("\n").length;
     let target: string | undefined;
     try {
