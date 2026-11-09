@@ -230,7 +230,6 @@ function pollFor(deviceCode: string, every: number): void {
   polling = setTimeout(poll, interval);
 }
 
-/** The hub's answer to a call, or its words when it refused. */
 /** The person's answer to another device's pairing, by the code it shows. */
 export const answerPairing = (userCode: string, approve: boolean) =>
   hubDone(
