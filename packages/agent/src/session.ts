@@ -97,6 +97,7 @@ import {
   PREVIEW_START,
   PREVIEW_STOP,
   PREVIEW_WEIGHT,
+  PreviewStartDown,
 } from "@cawco/core/preview/protocol";
 import type {
   ControlPayload,
@@ -5584,10 +5585,16 @@ export class SessionSupervisor {
         requestId,
         ok: false,
         error: message,
-        refusal: {
-          kind: error instanceof NotRunning ? "not-running" : "unknown",
-          message,
-        },
+        refusal:
+          error instanceof NotRunning
+            ? { kind: "not-running", message }
+            : {
+                kind: "unknown",
+                message,
+                ...(error instanceof PreviewStartDown
+                  ? { down: error.down }
+                  : {}),
+              },
       });
     }
   }
