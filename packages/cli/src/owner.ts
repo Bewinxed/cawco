@@ -12,6 +12,7 @@
  */
 
 import {
+  dataOf,
   type HubClient,
   hubClient,
   reached,
@@ -51,7 +52,7 @@ const approve = async (origin: string, command: string): Promise<string> => {
       ).api.pair.post({ kind: "cli", name: command })
     );
     return answer.error === null
-      ? { ok: true as const, pairing: answer.data }
+      ? { ok: true as const, pairing: dataOf(answer) }
       : {
           ok: false as const,
           status: answer.status,

@@ -9,7 +9,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
-import { hubClient, reached } from "@cawco/agent/hub-client";
+import { dataOf, hubClient, reached } from "@cawco/agent/hub-client";
 import { isServiceId } from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
@@ -448,7 +448,7 @@ const status = async (args: Args): Promise<number> => {
     );
     return 1;
   }
-  printFleet(answer.data);
+  printFleet(dataOf(answer));
   return 0;
 };
 
