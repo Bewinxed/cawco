@@ -7,6 +7,4 @@ import { t } from "elysia";
  * and strictly by `ruleProblem`, so the form and the hub refuse in the same
  * sentences.
  */
-export const harnessSchema = t.Union(
-  HARNESSES.map((harness) => t.Literal(harness))
-);
+export const harnessSchema = t.UnionEnum(HARNESSES);

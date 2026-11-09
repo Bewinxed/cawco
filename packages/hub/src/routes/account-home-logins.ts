@@ -17,10 +17,8 @@ import { unreachable } from "../unreachable";
  * One of a machine's own stores a credential is moved out of, in the order
  * the apps' generated schema has it.
  */
-const homeStore = t.Union(
-  everyOf<HomeStore>()(["claude", "pi", "opencode"]).map((store) =>
-    t.Literal(store)
-  )
+const homeStore = t.UnionEnum(
+  everyOf<HomeStore>()(["claude", "pi", "opencode"])
 );
 
 export const accountHomeLoginRoutes = ({
