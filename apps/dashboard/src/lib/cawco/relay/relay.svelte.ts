@@ -15,7 +15,7 @@
  *   the moment the start ticks, and again on Check again.
  * - **Acts** (`actOnRelayCard`): Check again is this screen's own proof;
  *   every other act is the hub's.
- * - **The take-over's entry** ({@link relayEntry}, {@link setUpRelay}): the
+ * - **The take-over's entry**: the
  *   later item that draws the stream's place reads whether this page came
  *   through a domain while no relay is live, and opens the journey there.
  */

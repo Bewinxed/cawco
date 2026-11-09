@@ -33,7 +33,7 @@ export const runtimeCommit =
  * write to, and holds no post for the person (`/api/upstream/asks` is gone);
  * an epoch-5 agent's doors go on by the last rule it wrote and raise held
  * posts there. Epoch 7: a preview's listener is started for the source key
- * its origin's artifact row names (core preview-upstream.ts `SourceKey`):
+ * its origin's artifact row names (core preview/upstream.ts `SourceKey`):
  * `PREVIEW_START` carries `for`, which the agent refuses a start without,
  * and the register's previews carry `for` in place of their `source`; an
  * epoch-6 hub starts every preview with no `for` and reads a `source` the
