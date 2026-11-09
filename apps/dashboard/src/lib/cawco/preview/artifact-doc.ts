@@ -5,7 +5,6 @@ import {
 } from "@cawco/core/choices";
 import {
   type ActivityLine,
-  type ArtifactChanges,
   activityOf,
   deletePin,
   goneOf,
@@ -31,6 +30,7 @@ import {
   tendDeviceDocs,
   watchSilence,
 } from "@cawco/core/doc-link";
+import type { ArtifactChanges } from "@cawco/core/doc-meta";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { StageState, StageUnreached } from "@cawco/core/stage";
 import {
