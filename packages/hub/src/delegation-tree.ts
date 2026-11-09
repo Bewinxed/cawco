@@ -106,7 +106,7 @@ export type PeekContext =
   | {
       /**
        * Its filing at its context threshold since its harness last compacted
-       * it (server.ts `fileAtThreshold`): where it stands, and where its
+       * it (compaction.ts `fileAtThreshold`): where it stands, and where its
        * harness compacts it. Absent when none came.
        */
       filing?: { compactsAt: number; stage: FilingStage };
@@ -210,7 +210,7 @@ export interface DelegationTreeDeps {
   stalled: (
     instanceId: string
   ) => { stale?: true; words: string; until?: number } | undefined;
-  /** Why the session's start is held at the hub (server.ts `startHold`); undefined once it went. */
+  /** Why the session's start is held at the hub (start-holds.ts `startHold`); undefined once it went. */
   startHeld: (instanceId: string) => string | undefined;
   /** What session's workspace holds on no remote (work-items `unlanded`); throws the machine's words. */
   unlanded: (instanceId: string) => Promise<Unlanded | undefined>;

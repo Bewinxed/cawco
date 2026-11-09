@@ -180,7 +180,7 @@ const probing = new Map<string, Promise<CatalogRead>>();
  * How long after its `attempt`th failure in a row (from 0) a probe of an
  * account is tried again: 30 s, doubling to 30 minutes. The one schedule
  * for a probe that failed, whoever asked for it: a machine's account sync
- * (server.ts `syncAccounts`) and a session's stale catalog
+ * (account-probes.ts `syncAccounts`) and a session's stale catalog
  * ({@link refreshCatalog}). What fails a probe (a locked login keychain, a
  * machine that does not answer, Claude Code refusing initialize) is a state
  * that outlasts the next session's start, and the catalog held serves the
@@ -290,7 +290,7 @@ const dirState = (
   if (!account.identity) {
     // One identity is one account: a fresh account's store signed in as
     // another account's identity is not named after it. The sign-in's own
-    // answer joins it into that account (server.ts `joinExisting`); until
+    // answer joins it into that account (account-signin.ts `joinExisting`); until
     // then it is signed in as nobody of its own.
     if (db.accounts.byIdentity(account.provider, report.identity, account.id)) {
       return "signed-out";
@@ -306,7 +306,7 @@ const dirState = (
  * Where one account store on `machineId` stands for a pass of a report
  * received at `receivedAt`, and whether the pass writes it. A sign-in settled
  * since the report came in stands. One the hub signed out when a session met
- * its credential refused for good (`reason`, server.ts `settleRefusal`)
+ * its credential refused for good (`reason`, ask-routing.ts `settleRefusal`)
  * stands too, reason and all, while the store reads signed in or signed out:
  * the store still holds that credential, which `auth status` reads as
  * signed in, so only a sign-in through CawCo brings it back. Signed in as

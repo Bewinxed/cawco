@@ -960,7 +960,7 @@ export interface WorkItemStart {
 export interface WorkItemDeps {
   /**
    * Whether a send to the session is still pending, owed or handed, other
-   * than a keep-alive ping (server.ts `awaitsSend`): that send is its next
+   * than a keep-alive ping (cut-turns.ts `awaitsSend`): that send is its next
    * turn, so nothing need wake it.
    */
   readonly awaitsSend: (instanceId: string) => boolean;
@@ -1031,7 +1031,7 @@ export interface WorkItemDeps {
   readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
   /**
    * The {@link WorkItems.finishingFor} hold on `instanceId` is over: what it
-   * kept at the hub goes now, in order (server.ts `releaseOwed`).
+   * kept at the hub goes now, in order (sends.ts `releaseOwed`).
    */
   readonly finishOver: (instanceId: string) => void;
   /** The machine the hub runs on, once read (server.ts `ownMachineIdRead`): where a project ships from (ship.ts). */
@@ -1142,14 +1142,14 @@ export interface WorkItemDeps {
    * send its harness was handed and has not read, from a sender the
    * {@link WorkItems.finishingFor} hold keeps, is taken back from the harness
    * and kept at the hub, so it goes as the session's next turn and never
-   * into the turn that is ending (server.ts `reclaimUnread`). Settles once
+   * into the turn that is ending (sends.ts `reclaimUnread`). Settles once
    * each has answered; never throws.
    */
   readonly reclaimUnread: (instanceId: string) => Promise<void>;
   /**
    * The retired workspace of `instanceId`'s item is cut again
    * ({@link WorkItems.recutFor}): what was kept at the hub for the session
-   * meanwhile goes to it now, waking it (server.ts `releaseOwed`).
+   * meanwhile goes to it now, waking it (sends.ts `releaseOwed`).
    */
   readonly recutDone?: (instanceId: string) => void;
   /** It could not be cut again, for `reason`: what was kept for the session fails with it. */
@@ -1157,7 +1157,7 @@ export interface WorkItemDeps {
   /**
    * It was not cut yet because its machine's agent is restarting, or
    * restarted as it cut ({@link recutWaitsForAgent}): what was kept for the
-   * session goes through the send path again (server.ts `releaseOwed`),
+   * session goes through the send path again (sends.ts `releaseOwed`),
    * whose hold asks for the cut again ({@link WorkItems.recutFor}).
    */
   readonly recutKept?: (instanceId: string) => void;
@@ -1234,7 +1234,7 @@ export interface WorkItemDeps {
   readonly stalled: (instanceId: string) => string | undefined;
   /**
    * Why `instanceId`'s start is held at the hub while its machine takes none
-   * ("Omars-MacBook-Pro is installing an update", server.ts `startHold`);
+   * ("Omars-MacBook-Pro is installing an update", start-holds.ts `startHold`);
    * undefined once it went. A held start goes by itself when the hold ends.
    */
   readonly startHeld: (instanceId: string) => string | undefined;
@@ -1265,7 +1265,7 @@ export interface WorkItemDeps {
   readonly types: (projectId?: string | null) => DelegateType[];
   /**
    * Item `instanceId`'s block is over: what was kept at the hub for its
-   * session goes now, waking it (server.ts `releaseOwed`).
+   * session goes now, waking it (sends.ts `releaseOwed`).
    */
   readonly unblocked: (instanceId: string) => void;
   readonly untellYou: (instanceId: string) => void;
@@ -2741,7 +2741,7 @@ export const createWorkItems = ({
    * Each landing this hub process runs, by item: aborted as its item ends
    * ({@link finish}), which cancels every command the landing has running,
    * its gate's steps on every machine included, through the runner that
-   * started each (server.ts `runOnMachine`, `how.stop`). Before 2026-10-18 a
+   * started each (machine-commands.ts `runOnMachine`, `how.stop`). Before 2026-10-18 a
    * stop ended a landing only at its next turn or push: three stopped items'
    * iOS steps waited on in the Mac's queue, one for 1 h 22 m.
    */
@@ -2942,7 +2942,7 @@ export const createWorkItems = ({
 
   /**
    * The boundary a session runs inside: its work item's workspace; none for
-   * any other session (server.ts `sessionWorkspace`, every spawn's).
+   * any other session (launches.ts `sessionWorkspace`, every spawn's).
    */
   const boundOf = (row: InstanceRow): WorkspaceRef | undefined => {
     const item = itemOf(row);
@@ -3402,7 +3402,7 @@ export const createWorkItems = ({
    * Its process lost without a turn ending is how it gets here: a process
    * that exits on its own between turns or mid-turn with no turn recorded
    * open (the agent files it asleep, `#gone`), one a signal killed with no
-   * turn recorded to hand back (server.ts `diedOnSignal`), a heartbeat that
+   * turn recorded to hand back (cut-turns.ts `diedOnSignal`), a heartbeat that
    * no longer lists it (an OpenCode server restart; db `reconcileHeartbeat`),
    * a register that restored no process for it (a turn a restart cut, its
    * row older than the restore's horizon or past its cap: the first sweep
@@ -3410,7 +3410,7 @@ export const createWorkItems = ({
    * rest until the agent slept it, and a spawn whose session came up and
    * lost its process before its first turn. A row in `error` or gone is
    * {@link followSessions}'s. A session the register did restore is handed
-   * its cut turn by the restore itself (server.ts `resumeCutTurn`); it has a
+   * its cut turn by the restore itself (cut-turns.ts `resumeCutTurn`); it has a
    * process, or a send on its way, and the sweep leaves it.
    */
   const wakeAsleep = (): void => {
@@ -4784,7 +4784,7 @@ export const createWorkItems = ({
    * a project's folder is inside it ({@link placesIn}), or a message or
    * continuation is on its way to one of its sessions (its new turn's work
    * is not left work). Why: a done delegate stays awake until it is at rest
-   * (server.ts `sleepFinished` then puts it to sleep), or for its idle half
+   * (login-moves.ts `sleepFinished` then puts it to sleep), or for its idle half
    * hour while its session is kept warm, and until it slept what its
    * commands left ran on; on 2026-10-24 its parent was told to end three
    * pids it left, already gone by the time it looked.
