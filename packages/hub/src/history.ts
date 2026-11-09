@@ -1,6 +1,4 @@
 import type { AccountMove } from "@cawco/core/accounts";
-import type { SkillFile } from "@cawco/core/fleet";
-import { READ_SKILL_FILES } from "@cawco/core/fleet";
 import {
   ACCOUNT_MOVE,
   CUSTODY_HELD,
@@ -23,8 +21,6 @@ import { contextLine } from "./compaction";
 import { freshStartLine, machineLine } from "./cut-turns";
 import type { PriorConversation } from "./db/schema";
 import type { HubContext } from "./hub-context";
-import type { RouteSet, Unanswered } from "./machine-answers";
-import { machineSkillFiles } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages } from "./media";
 import { HISTORY_WINDOW } from "./sends";
@@ -161,7 +157,6 @@ export type HistoryContext = Pick<
   | "machinePresence"
   | "nameFromFirstTurn"
   | "readAgent"
-  | "readMachineHookScript"
   | "registry"
   | "sendLines"
   | "unlocatedWords"
@@ -234,144 +229,6 @@ export const createHistory = (ctx: HistoryContext) => {
       harness: row.harness,
     };
     return { where, cut: fork?.at, row };
-  };
-
-  /**
-   * Whether a machine that is not connected is on its way back: the ms left
-   * in its reconnecting window ({@link machinePresence}, the one deadline
-   * sends wait on too), 0 when it is offline now. A refused read says it as
-   * its `Retry-After`, so a reader asks again once the hub's word on the
-   * machine changes rather than holding "reconnecting" for good.
-   */
-  const reconnectingFor = (machineId: string): number => {
-    const away = ctx.machinePresence(machineId);
-    return away.kind === "reconnecting" && !ctx.registry.agent(machineId)
-      ? Math.max(0, away.until - Date.now())
-      : 0;
-  };
-
-  /**
-   * A read's machine is away, as every route that reads off a machine
-   * answers it: 503, the machine named (`X-Cawco-Machine`), so a reader can
-   * say which one is away and hear it come back, and whether it is on its
-   * way back: then `Retry-After` is when this hub stops reading it so (whole
-   * seconds, rounded up, so a read then finds it offline).
-   */
-  const awayHeaders = (machineId: string): Record<string, string> => {
-    const left = reconnectingFor(machineId);
-    return {
-      "X-Cawco-Machine": machineId,
-      ...(left > 0
-        ? {
-            "X-Cawco-Machine-State": "reconnecting",
-            "Retry-After": String(Math.ceil(left / 1000)),
-          }
-        : {}),
-    };
-  };
-
-  /**
-   * {@link awayHeaders} put on a route's `set`, and the 503 its typed
-   * `status` answers with: `words`, the read's own sentence, else the
-   * machine's offline fault.
-   */
-  const awayStatus = (
-    set: RouteSet,
-    machineId: string,
-    words?: string
-  ): { code: 503; said: string } => {
-    Object.assign(set.headers, awayHeaders(machineId));
-    return { code: 503, said: words ?? ctx.machineFault(machineId, "offline") };
-  };
-
-  /**
-   * A read its machine left unanswered, as a route answers it: not
-   * connected (or away past the read's deadline, {@link asRead}) is
-   * {@link awayStatus}; silent, 504.
-   */
-  const unansweredStatus = (
-    set: RouteSet,
-    machineId: string,
-    answer: Unanswered
-  ): { code: 503 | 504; said: string } =>
-    answer.reason === "dead"
-      ? awayStatus(set, machineId)
-      : { code: 504, said: ctx.machineFault(machineId, "silent") };
-
-  /** What a route answers for a read `machineId` left unanswered. */
-  const awayAnswer = <Answer>(
-    set: RouteSet,
-    machineId: string,
-    answer: Unanswered,
-    status: (code: 503 | 504, said: string) => Answer
-  ): Answer => {
-    const away = unansweredStatus(set, machineId, answer);
-    return status(away.code, away.said);
-  };
-
-  /** A skill's files read off `machineId`, or what the route answers when it could not read them. */
-  const skillFilesOff = async <Refused>(
-    machineId: string,
-    args: unknown[],
-    set: RouteSet,
-    status: (code: 400 | 503 | 504, said: string) => Refused
-  ): Promise<{ files: SkillFile[] } | { refused: Refused }> => {
-    const asked = await ctx.readAgent(
-      machineId,
-      READ_SKILL_FILES,
-      args,
-      READ_TIMEOUT_MS
-    );
-    switch (asked.kind) {
-      case "unanswered": {
-        const away = unansweredStatus(set, machineId, asked);
-        return { refused: status(away.code, away.said) };
-      }
-      case "answered":
-        break;
-      default:
-        throw unreachable(asked);
-    }
-    const answer = asked.value;
-    if (!answer.ok) {
-      return {
-        refused: status(
-          400,
-          answer.error ?? "the machine could not read the skill"
-        ),
-      };
-    }
-    return { files: machineSkillFiles(answer.result) };
-  };
-
-  /** A fleet hook and the copy of its script `machineId` holds, or what the route answers when either is missing. */
-  const hookCopyOff = async <Refused>(
-    body: { id: string; machineId: string },
-    set: RouteSet,
-    status: (code: 404 | 500 | 503 | 504, said: string) => Refused
-  ) => {
-    const current = ctx.db.getFleetHook(body.id);
-    if (!current) {
-      return { refused: status(404, `the fleet keeps no hook ${body.id}`) };
-    }
-    const read = await ctx.readMachineHookScript(body.machineId, body.id, set);
-    if (!read.ok) {
-      return { refused: status(read.code, read.said) };
-    }
-    return { current, copy: read.copy };
-  };
-
-  /** The fleet to push to `body.machineId`, or what the route answers when that machine is not connected. */
-  const pushTarget = <Refused>(
-    body: { machineId: string },
-    status: (code: 404, said: string) => Refused
-  ) => {
-    if (!ctx.registry.agent(body.machineId)) {
-      return {
-        refused: status(404, ctx.machineFault(body.machineId, "offline")),
-      };
-    }
-    return { config: ctx.db.fleetConfig() };
   };
 
   /**
@@ -805,14 +662,6 @@ export const createHistory = (ctx: HistoryContext) => {
 
   return {
     forkSeeds,
-    reconnectingFor,
-    awayHeaders,
-    awayStatus,
-    unansweredStatus,
-    awayAnswer,
-    skillFilesOff,
-    hookCopyOff,
-    pushTarget,
     storedWindow,
     readHistory,
     readOlder,

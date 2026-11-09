@@ -5,6 +5,7 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 
 /**
  * How many conversations one naming request may ask about. A reader's open tabs
@@ -56,22 +57,26 @@ export const instanceTitleRoutes = ({
     .post(
       "/api/instances/:id/account",
       { body: t.Object({ accountId: t.String() }) },
-      async ({ params, body, status }) => {
+      async ({ params, body }) => {
         // A move it owed being carried now goes first: its machine refuses
         // a second carry of the conversation meanwhile, and this one
         // starts from where that one left the row.
         await owedCarries.get(params.id)?.catch(() => undefined);
         const [row] = db.getInstancesByIds([params.id]);
         if (!row) {
-          return status(404, "Session not found");
+          return refusal(404, "session-not-found", "Session not found");
         }
         const account = db.accounts.get(body.accountId);
         if (!account) {
-          return status(404, `There is no account ${body.accountId}.`);
+          return refusal(
+            404,
+            "no-account",
+            `There is no account ${body.accountId}.`
+          );
         }
-        const refusal = handMoveRefusal(row, account);
-        if (refusal) {
-          return status(409, refusal);
+        const why = handMoveRefusal(row, account);
+        if (why) {
+          return refusal(409, "move-refused", why);
         }
         if (row.accountId === account.id) {
           // Back to the account it runs on: a move asked mid-turn is off.
@@ -89,24 +94,22 @@ export const instanceTitleRoutes = ({
         console.info(
           `[accounts] ${"refusal" in moved ? moved.refusal : moved.why}`
         );
-        return "refusal" in moved ? status(409, moved.refusal) : moved;
+        return "refusal" in moved
+          ? refusal(409, "move-refused", moved.refusal)
+          : moved;
       }
     )
-    .post(
-      "/api/instances/:id/context-size",
-      hidden,
-      async ({ params, status }) => {
-        const [row] = db.getInstancesByIds([params.id]);
-        if (!row) {
-          return status(404, "Session not found");
-        }
-        const reported = await reportedContextOf(row);
-        // The answer's own words for a machine that did not answer.
-        return "kind" in reported
-          ? { reason: reported.reason === "dead" ? "offline" : "timeout" }
-          : reported;
+    .post("/api/instances/:id/context-size", hidden, async ({ params }) => {
+      const [row] = db.getInstancesByIds([params.id]);
+      if (!row) {
+        return refusal(404, "session-not-found", "Session not found");
       }
-    )
+      const reported = await reportedContextOf(row);
+      // The answer's own words for a machine that did not answer.
+      return "kind" in reported
+        ? { reason: reported.reason === "dead" ? "offline" : "timeout" }
+        : reported;
+    })
     // What each tab's id names, as the dashboard asks of the tabs it kept
     // from an earlier visit and of an address before it reads them: the
     // session it is read by (itself, a former id's session, a harness key's
