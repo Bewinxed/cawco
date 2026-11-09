@@ -6,12 +6,9 @@
  * and a step that already succeeded answers what it found. A failed step is
  * not kept: asked again, it runs again.
  *
- * The hub's git remote is reached with this machine's credential, which the
- * hub hands over in the register ack and which lives only in this module's
- * memory: git gets it per command through env-only config
- * (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`), so nothing is
- * written to disk, and it never reaches a session's environment. Anything a
- * step says back (git's last line) has it removed first.
+ * The hub's git remote is reached with this machine's credential
+ * (git/hub-credential.ts). Anything a step says back (git's last line) has it
+ * removed first.
  */
 
 import {
@@ -26,12 +23,7 @@ import {
 } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import {
-  type HubRepoKey,
-  hubRepoOfUrl,
-  hubRepoSegment,
-} from "@cawco/core/hub-repo";
+import { type HubRepoKey, hubRepoOfUrl } from "@cawco/core/hub-repo";
 import {
   FREE_SPACE_MARGIN,
   LARGE_FILE_BYTES,
@@ -55,27 +47,14 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
-import {
-  configEnv,
-  hubOriginOf,
-  useHubCredentialHelper,
-} from "./git-credential";
+import { holdingRemote, withoutCredential } from "./git/hub-credential";
+import { hubGitEnv, hubRepo, hubRepoOf } from "./git/hub-remote";
+import { LFS_FILTERS } from "./git/lfs";
+import { configEnv, useHubCredentialHelper } from "./git-credential";
 import { notAProject, placeSettled, placeTurn } from "./place-repo";
 import { remoteWithoutCredential } from "./remote-credential";
-import { hubRepoOf } from "./workspace";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
-
-/** This machine's credential for the hub's git remote, from the last register ack. */
-let hubCredential: { machineId: string; credential: string } | undefined;
-
-/** Takes the credential a register ack carries; the one before it stops working at the hub. */
-export const setHubCredential = (
-  machineId: string,
-  credential: string | undefined
-): void => {
-  hubCredential = credential ? { machineId, credential } : undefined;
-};
 
 /** Where progress frames go: the daemon's socket. */
 let sendProgress: (frame: MoveProgressFrame) => void = () => undefined;
@@ -85,131 +64,6 @@ export const setMoveProgress = (
   sendProgress = send;
 };
 
-/** The hub's HTTP origin, from the socket address this daemon is connected on. */
-const hubOrigin = (): string => {
-  const ws = process.env[CAWCO_ENV.hubUrl];
-  if (!ws) {
-    throw new Error("This machine is not connected to a hub.");
-  }
-  const url = new URL(ws);
-  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  return url.origin;
-};
-
-/** One of a project's repositories on the hub (core hub-repo.ts), at the address this machine reaches it by. */
-export const hubRepo = (key: HubRepoKey): string =>
-  `${hubOrigin()}/git/${hubRepoSegment(key)}`;
-
-/**
- * Whether `url` names one of the hub's repositories, under any address the
- * hub answers at (git-credential.ts {@link hubOriginOf}), not only the one
- * this machine reaches it by.
- */
-export const isHubRemote = (url: string): boolean =>
-  hubOriginOf(url) !== undefined;
-
-/** This machine's id and credential for the hub's git remote, or undefined before the first register. */
-export const hubGitLogin = ():
-  { machineId: string; credential: string } | undefined => hubCredential;
-
-const basicOf = (): string => {
-  if (!hubCredential) {
-    throw new Error(
-      "This machine has no credential for the hub's git remote yet: it gets one each time it registers."
-    );
-  }
-  const { machineId, credential } = hubCredential;
-  return Buffer.from(`${machineId}:${credential}`).toString("base64");
-};
-
-/**
- * An outside remote's credentials held by the steps running now
- * ({@link holdingRemote}), each with how many hold it: taken out of
- * anything a step says.
- */
-const remoteSecrets = new Map<string, number>();
-
-/**
- * Projects' declared LFS credentials this agent was handed (host-lfs.ts
- * `declaredLfs`): taken out of anything a step says for as long as it runs.
- */
-const declaredSecrets = new Set<string>();
-
-/** Every form a credential could take in text a tool printed. */
-const secretsOf = (): string[] => [
-  ...(hubCredential ? [hubCredential.credential, basicOf()] : []),
-  ...remoteSecrets.keys(),
-  ...declaredSecrets,
-];
-
-/** A declared LFS credential (HTTP Basic), and each part it decodes to, taken out of what git says from now on. */
-export const holdDeclaredSecret = (basic: string): void => {
-  declaredSecrets.add(basic);
-  for (const part of Buffer.from(basic, "base64").toString().split(":")) {
-    if (part.length >= 8) {
-      declaredSecrets.add(part);
-    }
-  }
-};
-
-/**
- * `work` with an outside remote's credential taken out of all it says, for
- * as long as it runs: the Basic value and each part of what it decodes to.
- */
-const holdingRemote = async <T>(
-  basic: string | undefined,
-  work: () => Promise<T>
-): Promise<T> => {
-  if (!basic) {
-    return await work();
-  }
-  const held = [
-    basic,
-    ...Buffer.from(basic, "base64")
-      .toString()
-      .split(":")
-      .filter((part) => part.length >= 4),
-  ];
-  for (const secret of held) {
-    remoteSecrets.set(secret, (remoteSecrets.get(secret) ?? 0) + 1);
-  }
-  try {
-    return await work();
-  } finally {
-    for (const secret of held) {
-      const left = (remoteSecrets.get(secret) ?? 1) - 1;
-      if (left > 0) {
-        remoteSecrets.set(secret, left);
-      } else {
-        remoteSecrets.delete(secret);
-      }
-    }
-  }
-};
-
-const AUTHORIZATION_VALUE = /(authorization:\s*\w+\s+)\S+/giu;
-
-/** `text` with the credential and any `Authorization` value taken out. */
-export const withoutCredential = (text: string): string => {
-  let clean = text.replace(AUTHORIZATION_VALUE, "$1[hidden]");
-  for (const secret of secretsOf()) {
-    clean = clean.split(secret).join("[hidden]");
-  }
-  return clean;
-};
-
-/**
- * Large-file filters named in env-only config ({@link configEnv}), so a
- * snapshot's clean filter runs in a repository whose LFS hooks were never
- * installed.
- */
-export const LFS_FILTERS: [string, string][] = [
-  ["filter.lfs.clean", "git-lfs clean -- %f"],
-  ["filter.lfs.smudge", "git-lfs smudge -- %f"],
-  ["filter.lfs.process", "git-lfs filter-process"],
-  ["filter.lfs.required", "true"],
-];
-
 /** git's environment for a command that reaches the hub's repository `key`. */
 const hubEnv = (
   key: HubRepoKey,
@@ -218,164 +72,6 @@ const hubEnv = (
   ...hubGitEnv(hubRepo(key), extra),
   GIT_OPTIONAL_LOCKS: "0",
 });
-
-/**
- * The LFS endpoint git-lfs derives from a clone URL: `<url>/info/lfs` for
- * one ending in `.git`, `<url>.git/info/lfs` otherwise
- * (lfsapi/endpoint_finder.go `NewEndpointFromCloneURL`).
- */
-export const lfsEndpointOf = (repo: string): string => {
-  const url = repo.replace(TRAILING_SLASH, "");
-  return url.endsWith(".git") ? `${url}/info/lfs` : `${url}.git/info/lfs`;
-};
-
-const TRAILING_SLASH = /\/+$/u;
-
-/** An LFS endpoint as two of them are compared: no trailing slash. */
-export const sameEndpoint = (a: string, b: string): boolean =>
-  a.replace(TRAILING_SLASH, "") === b.replace(TRAILING_SLASH, "");
-
-/**
- * Where a project declared its large files live (hub `GET
- * /api/lfs/projects/:id`, its Large files setting): the LFS endpoint, and
- * the credential of the fleet connection it is bound to, as HTTP Basic.
- */
-export interface DeclaredLfs {
-  basic: string;
-  endpoint: string;
-}
-
-/**
- * git-lfs held to `endpoint` alone, env-only, whatever a repository's
- * committed `.lfsconfig` names: `.lfsconfig` still permits `lfs.url`,
- * `lfs.pushurl`, `remote.<name>.lfsurl` and `lfs.<url>.access`, and
- * "Settings from Git configuration files override the `.lfsconfig` file"
- * (git-lfs-config(5)). `lfs.url` and `lfs.pushurl` come before every other
- * source of an endpoint (lfsapi/endpoint_finder.go `getEndpoint`). At that
- * endpoint, lock checks off, and, when `signed` (CawCo hands git-lfs the
- * endpoint's credential, or the host's own helpers answer for it), the
- * access mode as `basic`, so the credential goes up front: both at the
- * endpoint's own URL, so no more specific key in `.lfsconfig` outranks
- * them. Otherwise a 401 or a missing locks API has git-lfs persist what it
- * learned into the clone's own `.git/config` by lock-and-rename (`SetAccess`
- * is `gitConfig.SetLocal`; lockverifier.go `disableFor`). Unsigned, the
- * access is left alone: `basic` with no credential to give fails every
- * transfer ("credential fill errors", git-lfs 3.7.1).
- */
-export const lfsPins = (
-  endpoint: string,
-  signed: boolean
-): [string, string][] => [
-  ["lfs.url", endpoint],
-  ["lfs.pushurl", endpoint],
-  [`lfs.${endpoint}.locksverify`, "false"],
-  ...(signed
-    ? ([[`lfs.${endpoint}.access`, "basic"]] as [string, string][])
-    : []),
-];
-
-/**
- * git-lfs held to a project's declared endpoint ({@link lfsPins}), its
- * connection's credential sent to that endpoint alone as an `Authorization`
- * header (`http.<endpoint>.extraHeader`, matched on whole path segments,
- * which git-lfs reads for its own requests, lfshttp/client.go): git's own
- * requests to the origin keep the origin's credential, though both be on one
- * host. A request that carries it asks no credential helper, and the host's
- * helpers for the endpoint's host are emptied (`helper =` resets the list,
- * git-config(1)) unless that host is the origin's (`originHost`), whose
- * credential git needs: nothing of the machine's own is asked, or handed
- * the credential to keep.
- */
-export const declaredPins = (
-  declared: DeclaredLfs,
-  originHost: string | undefined
-): [string, string][] => {
-  const host = new URL(declared.endpoint).origin;
-  return [
-    ...lfsPins(declared.endpoint, true),
-    [
-      `http.${declared.endpoint}.extraHeader`,
-      `Authorization: Basic ${declared.basic}`,
-    ],
-    ...(host === originHost
-      ? []
-      : ([[`credential.${host}.helper`, ""]] as [string, string][])),
-  ];
-};
-
-/** The origin (`scheme://host[:port]`) of a remote URL; undefined for one that is no URL (`git@host:…`). */
-export const urlOrigin = (url: string): string | undefined => {
-  try {
-    return new URL(url).origin;
-  } catch {
-    // An scp-like remote is no URL, so it has no origin.
-  }
-};
-
-/** An scp-like remote (`git@host:owner/repo.git`): user, host and path. */
-const SCP_LIKE = /^(?:[^@/]+@)?([^:/]+):(.+)$/u;
-const LEADING_SLASHES = /^\/+/u;
-
-/**
- * The LFS endpoint git-lfs derives from `origin`: `<url>/info/lfs` for an
- * http(s) one; for an ssh one (`ssh://…`, `git@host:…`), the https URL of the
- * same host and path's (lfsapi/endpoint_finder.go `NewEndpointFromCloneURL`).
- */
-export const originEndpoint = (origin: string): string => {
-  if (urlOrigin(origin)?.startsWith("http")) {
-    return lfsEndpointOf(origin);
-  }
-  const ssh = origin.startsWith("ssh://") ? new URL(origin) : undefined;
-  const scp = ssh ? undefined : SCP_LIKE.exec(origin);
-  const host = ssh?.hostname ?? scp?.[1] ?? "";
-  const path = (ssh?.pathname ?? `/${scp?.[2] ?? ""}`).replace(
-    LEADING_SLASHES,
-    ""
-  );
-  return lfsEndpointOf(`https://${host}/${path}`);
-};
-
-/**
- * git's environment for a command that reaches the hub's repository `repo`
- * with this machine's credential, env-only: a workspace's clone and
- * fetches, a workspace's own fetch and push run on the host (`hub-git.ts`),
- * a place's push and a move's steps. The credential is `repo`'s alone
- * (`http.<repo>.extraHeader`, matched on whole path segments), so nothing
- * run in a clone reaches another project's repository with it.
- *
- * git-lfs talks to `repo`'s own LFS alone, whatever the repository's
- * committed `.lfsconfig` names ("Settings from Git configuration files
- * override the `.lfsconfig` file", git-lfs-config(5)): `lfs.url` and
- * `lfs.pushurl` are its endpoint, which comes before every other source of
- * one (lfsapi/endpoint_finder.go `getEndpoint`). At that endpoint, lock
- * checks off (the hub has none) and the access mode given as `basic`, the
- * hub's realm, both at its own URL so no more specific key in `.lfsconfig`
- * outranks them. Otherwise a 401 or a missing locks API has git-lfs persist
- * what it learned into the clone's own config by lock-and-rename
- * (`SetAccess` is `gitConfig.SetLocal`; lockverifier.go `disableFor`). The
- * rename drops a workspace sandbox's read-only bind on `.git/config`, which
- * stops the sandbox, and the key is one `repositoryConfigProblem` refuses.
- * A project that declared where its large files live (`declared`) has
- * git-lfs held there instead, with its connection's credential
- * ({@link declaredPins}).
- */
-export const hubGitEnv = (
-  repo: string,
-  extra: [string, string][] = [],
-  declared?: DeclaredLfs
-): Record<string, string> =>
-  ({
-    ...hostEnvironment(),
-    ...GIT_LOCALE,
-    GIT_TERMINAL_PROMPT: "0",
-    ...configEnv([
-      [`http.${repo}.extraHeader`, `Authorization: Basic ${basicOf()}`],
-      ...(declared
-        ? declaredPins(declared, urlOrigin(repo))
-        : lfsPins(lfsEndpointOf(repo), true)),
-      ...extra,
-    ]),
-  }) as Record<string, string>;
 
 /**
  * git's environment for anything else. `GIT_OPTIONAL_LOCKS=0`: a read
@@ -1266,7 +962,7 @@ const outsideNewLfs = async (
 /**
  * The hub repository a snapshot of the folder at `path` goes to: the one its
  * `origin` names when that is the hub's, else the one the folder is in
- * project `projectId` (workspace.ts {@link hubRepoOf}), so an unrelated
+ * project `projectId` (git/hub-remote.ts {@link hubRepoOf}), so an unrelated
  * repository's snapshot never lands among the main one's branches.
  */
 const snapshotRepo = async (
