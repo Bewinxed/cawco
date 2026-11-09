@@ -17,6 +17,7 @@ import { holdingWords } from "@cawco/core/words/workspace-holding";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { hashText } from "./fleet";
+import type { FrameSink } from "./frame-sink";
 import { expandHome } from "./fs";
 import { fetchDefaultBranch, hostGit } from "./git/run";
 import type { Harness } from "./harness";
@@ -24,7 +25,6 @@ import { harness as harnessOf } from "./harnesses";
 import { isDirectory } from "./is-directory";
 import { readJson, writeJson } from "./json-file";
 import { repoTop } from "./repo-top";
-import type { FrameSink } from "./session";
 import { warn } from "./session-log";
 
 /** What the spin-offs say to the hub and read of the sessions around them. */
