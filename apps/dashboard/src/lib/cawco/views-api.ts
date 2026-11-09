@@ -7,12 +7,13 @@
 
 import { hubRequest, hubRequestAsGiven } from "@cawco/core/hub-request";
 import type { ProjectView, ViewToolName } from "@cawco/core/views";
-import { send as askHub } from "./project-tasks";
+import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** A project's views: kept ones, then Caw's drafts. */
 export const viewsOf = (projectId: string): Promise<ProjectView[]> =>
-  askHub(
-    hubRequest("GET /api/projects/:id/views", { path: { id: projectId } })
+  hubJson(
+    hubRequest("GET /api/projects/:id/views", { path: { id: projectId } }),
+    { failure: refusedOrUnreached }
   );
 
 /** Keeps a draft view: it becomes `views/<name>.oui`, one commit. */
@@ -20,10 +21,11 @@ export const keepView = (
   projectId: string,
   name: string
 ): Promise<ProjectView> =>
-  askHub(
+  hubJson(
     hubRequest("POST /api/projects/:id/views/:name/keep", {
       path: { id: projectId, name },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** Discards a draft view. */
@@ -31,10 +33,11 @@ export const discardView = (
   projectId: string,
   name: string
 ): Promise<{ ok: true }> =>
-  askHub(
+  hubJson(
     hubRequest("DELETE /api/projects/:id/views/drafts/:name", {
       path: { id: projectId, name },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /**
@@ -50,9 +53,10 @@ export const viewTool = (
   tool: ViewToolName,
   args: Record<string, unknown>
 ): Promise<unknown> =>
-  askHub(
+  hubJson(
     hubRequestAsGiven(`POST /api/projects/:id/view-tools/${tool}`, {
       path: { id: projectId },
       body: args,
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
