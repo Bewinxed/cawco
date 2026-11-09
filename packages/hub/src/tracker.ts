@@ -81,7 +81,7 @@ import {
   type TrackerView,
 } from "@cawco/core/trackers";
 import { connectionsWords } from "@cawco/core/words/connections";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { TrackerCursor, TrackerSynced } from "./db/stored-types";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
@@ -94,6 +94,7 @@ import type {
 import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
 import { turnTaker } from "./project-folder";
+import { refusal } from "./refusal";
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
 import {
   externalStateOf,
@@ -645,10 +646,10 @@ const projectAfter = (
 
 /** Where a binding stands after a sync that stopped: refused for a sign-in or scope, else as it stood. */
 const stateAfter = (
-  refusal: TrackerRefusal,
+  trackerRefusal: TrackerRefusal,
   binding: TrackerBindingRow
 ): TrackerSyncState =>
-  refusal.kind === "scope" || refusal.kind === "sign-in"
+  trackerRefusal.kind === "scope" || trackerRefusal.kind === "sign-in"
     ? "refused"
     : binding.state;
 
@@ -810,15 +811,15 @@ export const createTrackers = (deps: TrackersDeps) => {
    * on the binding, and issues keep syncing. Answers the words.
    */
   const statusStopped = (sync: Sync, error: unknown): string => {
-    const refusal = problemOf(error);
+    const trackerRefusal = problemOf(error);
     if (
-      refusal instanceof TrackerRefusal &&
-      (refusal.kind === "scope" || refusal.kind === "sign-in")
+      trackerRefusal instanceof TrackerRefusal &&
+      (trackerRefusal.kind === "scope" || trackerRefusal.kind === "sign-in")
     ) {
-      sync.statusRefused = refusal.message;
+      sync.statusRefused = trackerRefusal.message;
       sync.onProject = undefined;
     }
-    return problemWords(refusal);
+    return problemWords(trackerRefusal);
   };
 
   /** The task's move put on its item: added to the Project when it is not on it, its Status set. */
@@ -1491,22 +1492,24 @@ export const createTrackers = (deps: TrackersDeps) => {
     marked: Set<string>,
     error: unknown
   ): void => {
-    const refusal =
+    const trackerRefusal =
       error instanceof TrackerRefusal
         ? error
         : new TrackerRefusal("input", wordsOf(error));
-    if (refusal.kind === "sign-in") {
-      deps.connections.refusedBy(binding.connection, refusal.message);
+    if (trackerRefusal.kind === "sign-in") {
+      deps.connections.refusedBy(binding.connection, trackerRefusal.message);
     }
     for (const id of marked) {
       dirtyOf(binding.projectId).add(id);
     }
-    console.warn(`[tracker] ${binding.projectId}: ${refusal.message}`);
+    console.warn(`[tracker] ${binding.projectId}: ${trackerRefusal.message}`);
     db.trackers.updateBinding(binding.projectId, {
-      state: stateAfter(refusal, binding),
-      reason: refusal.message,
+      state: stateAfter(trackerRefusal, binding),
+      reason: trackerRefusal.message,
       polledAt: new Date(),
-      resumeAt: refusal.resumeAt ? new Date(refusal.resumeAt) : null,
+      resumeAt: trackerRefusal.resumeAt
+        ? new Date(trackerRefusal.resumeAt)
+        : null,
     });
   };
 
@@ -1851,7 +1854,7 @@ export type Trackers = ReturnType<typeof createTrackers>;
 
 const refused = (error: unknown) => {
   if (error instanceof TrackerProblem) {
-    return status(400, error.message);
+    return refusal(400, "tracker-problem", error.message);
   }
   throw error;
 };
