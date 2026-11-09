@@ -20,7 +20,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   MACHINE,
   MODEL,
@@ -29,6 +28,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const TAG = "PROBE-HOST-HANDS-BACK";
 const BEGIN = "HANDSBACK-BEGIN";
@@ -109,13 +109,6 @@ const respond = (request: Seen): Reply => {
     summary: `${TAG} READ ${JSON.stringify(reading)}`,
   });
 };
-
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-}
-
 const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "host-hands-back",
@@ -133,13 +126,11 @@ const spec: Spec = {
     await fleet.accountSignedIn();
     const src = join(fleet.sandbox, "src");
     await mkdir(src, { recursive: true });
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Host hands back",
-          machineId: MACHINE,
-          cwd: src,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Host hands back",
+        machineId: MACHINE,
+        cwd: src,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", src, {
@@ -147,9 +138,9 @@ const spec: Spec = {
     });
     const input = join(fleet.sandbox, IN_FILE);
     await writeFile(input, "handed in\n");
-    const started = await fleet.api<Started>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const started = delegateStarted(
+      await fleet.api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: parent,
           title: "Hand files back",
           prompt: `${TAG}: copy the files into $TMPDIR/outputs/, then finish.`,
@@ -157,8 +148,8 @@ const spec: Spec = {
           model: MODEL.claude,
           host: true,
           inputs: [input],
-        },
-      })
+        })
+      )
     );
     const state = await until(
       "the host delegate's item ended",

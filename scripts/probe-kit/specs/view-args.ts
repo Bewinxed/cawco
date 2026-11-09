@@ -21,10 +21,7 @@
  *   bun scripts/probe-kit/run.ts view-args
  */
 
-import {
-  hubRequest,
-  hubRequestAsGiven,
-} from "../../../packages/core/src/hub-request";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply } from "../../scratch-fleet";
@@ -50,14 +47,12 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
 
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Garden views",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Garden views",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
     })
   );
   const session = await fleet.spawn("claude", "Garden views", fleet.repo, {
@@ -93,12 +88,9 @@ const run = async (kit: Kit) => {
 
   // 2. The route.
   const routeRefused = await fleet
-    .api(
-      // Sent as given: the route's refusal is what this proves.
-      hubRequestAsGiven("POST /api/projects/:id/view-tools/tasks", {
-        path: { id: project.id },
-        body: { limit: 5 },
-      })
+    .postGiven(
+      hubPath.api.projects({ id: project.id })["view-tools"].tasks["~path"],
+      { limit: 5 }
     )
     .then(
       (answer) => `answered ${JSON.stringify(answer)}`,
@@ -106,11 +98,8 @@ const run = async (kit: Kit) => {
         error instanceof Error ? error.message : String(error)
     );
   const routeTaken = await fleet
-    .api<{ rows?: unknown[] }>(
-      hubRequest("POST /api/projects/:id/view-tools/tasks", {
-        path: { id: project.id },
-        body: {},
-      })
+    .api((hub) =>
+      hub.api.projects({ id: project.id })["view-tools"].tasks.post({})
     )
     .catch((error: unknown) => ({
       refused: error instanceof Error ? error.message : String(error),
