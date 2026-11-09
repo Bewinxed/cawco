@@ -38,7 +38,7 @@ import {
   type MachineState,
   PRESENCE_BEAT_MS,
 } from "@cawco/core/notifications";
-import { hub, hubPath } from "#lib/platform/hub.js";
+import { hub } from "#lib/platform/hub.js";
 import { hubReached } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { store, stored } from "#lib/platform/storage.js";
@@ -162,18 +162,12 @@ const handheld = (): boolean =>
   typeof matchMedia !== "undefined" &&
   matchMedia("(pointer: coarse) and (hover: none)").matches;
 
-const post = (
-  beat: Parameters<typeof hub.api.presence.post>[0],
-  leaving: boolean
-): void => {
-  if (leaving) {
-    // The page is going: only a beacon is sure to leave with it.
-    navigator.sendBeacon(
-      hubPath(hub.api.presence),
-      new Blob([JSON.stringify(beat)], { type: "application/json" })
-    );
-    return;
-  }
+/**
+ * Sends a beat. `keepalive` lets it outlive the page, so the one a closing
+ * page sends still goes (Fetch: a keepalive request is not cancelled with
+ * its fetch group), as a beacon would.
+ */
+const post = (beat: Parameters<typeof hub.api.presence.post>[0]): void => {
   hubReached(hub.api.presence.post(beat, { fetch: { keepalive: true } })).catch(
     (error: unknown) => {
       // The next change or beat says it again.
@@ -196,23 +190,20 @@ const report = (beat = false, leaving = false): void => {
     told = state;
     const idleMs = idleNow(now);
     const deskIdleMs = deskIdleNow(now);
-    post(
-      {
-        clientId: presenceClientId(),
-        client: "web",
-        sessionId,
-        active,
-        showing: chats,
-        alerts,
-        handheld: handheld(),
-        ...(idleMs === undefined ? {} : { idleMs }),
-        ...(deskIdleMs === undefined ? {} : { deskIdleMs }),
-        ...(machine ? { machine } : {}),
-        // Beats can land out of order; the hub keeps the newest said.
-        saidAt: now,
-      },
-      leaving
-    );
+    post({
+      clientId: presenceClientId(),
+      client: "web",
+      sessionId,
+      active,
+      showing: chats,
+      alerts,
+      handheld: handheld(),
+      ...(idleMs === undefined ? {} : { idleMs }),
+      ...(deskIdleMs === undefined ? {} : { deskIdleMs }),
+      ...(machine ? { machine } : {}),
+      // Beats can land out of order; the hub keeps the newest said.
+      saidAt: now,
+    });
   }
 };
 
