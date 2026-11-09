@@ -80,7 +80,8 @@
   import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
-  import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import { planProgress, planShows } from "./plan";
+  import PlanPane from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import {
     listTasks,
