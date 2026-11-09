@@ -32,7 +32,7 @@
  *   upgrade passed through as a tunnel once its head is sent. Whatever srt
  *   answers reaches the client as srt wrote it: a refusal by policy reads
  *   as srt's own 403.
- * - The sandbox half ({@link RELAY_STEP}), in the runner (boundary/
+ * - The sandbox half ({@link RELAY_STEP}), in the runner (boundary/runner.ts
  *   `runnerText`): socat on `127.0.0.1:` {@link RELAY_PORT} inside the sandbox's
  *   own network namespace, as srt puts its own bridges there, to that
  *   socket; then srt's proxy URLs pointed at it.
