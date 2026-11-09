@@ -7,6 +7,7 @@ import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { jevAccess } from "../jev";
+import { refusal } from "../refusal";
 import { suggest } from "../suggest";
 
 export const modelAccessRoutes = ({
@@ -35,10 +36,14 @@ export const modelAccessRoutes = ({
       .put(
         "/api/jev/typesafe-key",
         { body: t.Object({ key: t.String({ minLength: 1 }) }) },
-        ({ body, status }) => {
+        ({ body }) => {
           const key = body.key.trim();
           if (!key) {
-            return status(400, "The TypeSafe key is empty; nothing was saved.");
+            return refusal(
+              400,
+              "typesafe-key-empty-nothing",
+              "The TypeSafe key is empty; nothing was saved."
+            );
           }
           db.setTypesafeKey(key);
           console.log("[jev] TypeSafe key set: Jev takes route=typesafe");
@@ -56,10 +61,11 @@ export const modelAccessRoutes = ({
       .put(
         "/api/jev/suggest",
         { body: t.Object({ enabled: t.Boolean() }) },
-        ({ body, status }) => {
+        ({ body }) => {
           if (!jevAccess(db)) {
-            return status(
+            return refusal(
               409,
+              "jev-off-set-typesafe",
               "Jev is off. Set a TypeSafe key or connect OpenRouter in Settings first."
             );
           }
@@ -82,17 +88,18 @@ export const modelAccessRoutes = ({
             ),
           }),
         },
-        async ({ body, status }) => {
+        async ({ body }) => {
           const access = jevAccess(db);
           if (!access) {
-            return status(
+            return refusal(
               409,
+              "jev-off-set-typesafe",
               "Jev is off. Set a TypeSafe key or connect OpenRouter in Settings first."
             );
           }
           const result = await suggest(db, access, body.text, body.candidates);
           if ("error" in result) {
-            return status(502, result.error);
+            return refusal(502, "suggest-failed", result.error);
           }
           return result;
         }
@@ -115,10 +122,11 @@ export const modelAccessRoutes = ({
       .post(
         "/api/openrouter/exchange",
         { body: t.Object({ code: t.String() }) },
-        async ({ body, status }) => {
+        async ({ body }) => {
           if (!openrouterVerifier) {
-            return status(
+            return refusal(
               409,
+              "no-openrouter-connect-progress",
               "No OpenRouter connect is in progress on this hub. Start again from Settings."
             );
           }
