@@ -1341,7 +1341,7 @@ export type DelegateEvent =
          * The hub's own word about the delegate's work, not the delegate's
          * report (core injected.ts `reportMarker`, its outcome `notice`):
          * its workspace held, or retired with its commits in a carry (hub
-         * work-items.ts `workspaceNotice`). Absent on a report.
+         * workspaces.ts `workspaceNotice`). Absent on a report.
          */
         notice?: true;
         /**
