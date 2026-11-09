@@ -22,9 +22,10 @@
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Sending, ToolArgs } from "../../../packages/core/src/hub-request";
+import type { Sending } from "../../../packages/core/src/sending";
 import { workWords } from "../../../packages/core/src/words/work";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
+import type { ToolArgs } from "../../../packages/hub/src/tool-args";
 import {
   type ToolSession,
   type ToolWords,

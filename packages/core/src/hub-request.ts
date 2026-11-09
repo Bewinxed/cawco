@@ -20,40 +20,11 @@
  * hub-request.fixtures.ts holds both drifts as type errors.
  */
 import type { components } from "./hub-routes.gen";
-
-type Generated = components["schemas"];
+import type { ReadonlyDeep, Sending } from "./sending";
 
 /** Every hub route by `METHOD /path`, and what it takes: `path`, `query`, `body`. */
-type HubRoutes = {
-  [
-    K in keyof Generated as K extends `tool ${string}` ? never : K
-  ]: Generated[K];
-};
+type HubRoutes = components["schemas"];
 export type HubRoute = keyof HubRoutes;
-
-/** Every CawCo tool a session is listed, by name, and the arguments it takes. */
-export type ToolInputs = {
-  [
-    K in keyof Generated as K extends `tool ${infer N}` ? N : never
-  ]: Generated[K];
-};
-
-/**
- * `T` as a caller may send it: every array and field read-only (what is sent
- * is never written, so a read-only array a caller holds goes as it is), and
- * a record of anything (`t.Record(t.String(), t.Unknown())`) as any object,
- * which an interface is too (an interface has no index signature, so it is
- * no `Record<string, unknown>`).
- */
-type ReadonlyDeep<T> = T extends readonly (infer I)[]
-  ? readonly ReadonlyDeep<I>[]
-  : T extends object
-    ? string extends keyof T
-      ? unknown extends T[string]
-        ? object
-        : { readonly [K in keyof T]: ReadonlyDeep<T[K]> }
-      : { readonly [K in keyof T]: ReadonlyDeep<T[K]> }
-    : T;
 
 /** What `route` takes. */
 export type HubSent<R extends HubRoute> = ReadonlyDeep<HubRoutes[R]>;
@@ -62,66 +33,6 @@ export type HubSent<R extends HubRoute> = ReadonlyDeep<HubRoutes[R]>;
 type BareRoute = {
   [R in HubRoute]: Record<string, never> extends HubRoutes[R] ? R : never;
 }[HubRoute];
-
-declare const notTaken: unique symbol;
-/** A field the route doesn't take: what `Exact` puts in its place, so the type error names it. */
-interface NotTaken {
-  readonly [notTaken]: "a field this hub route doesn't take";
-}
-
-/** Whether schema type `S` takes keys it doesn't list: `unknown`, any object, or a record. */
-type Open<S> = unknown extends S
-  ? true
-  : [keyof NonNullable<S>, object] extends [never, NonNullable<S>]
-    ? true
-    : S extends object
-      ? string extends keyof S
-        ? true
-        : false
-      : false;
-/** Every key any branch of `S` declares. */
-type KeysOf<S> = S extends unknown ? keyof S : never;
-/** `K`'s type in each branch of `S` that declares it. */
-type At<S, K> = S extends unknown ? (K extends keyof S ? S[K] : never) : never;
-type ItemOf<S> = S extends readonly (infer I)[] ? I : never;
-
-/**
- * `T` with each field schema `S` doesn't take as {@link NotTaken}, at every
- * depth: `T` is assignable to it only when it sends nothing more. `any`
- * is never: it is assignable to anything else.
- */
-type Exact<T, S> = 0 extends 1 & T
-  ? never
-  : true extends Open<S>
-    ? T
-    : T extends readonly unknown[]
-      ? { [I in keyof T]: Exact<T[I], ItemOf<Extract<S, readonly unknown[]>>> }
-      : T extends object
-        ? {
-            [K in keyof T]: K extends KeysOf<Extract<S, object>>
-              ? Exact<T[K], At<Extract<S, object>, K>>
-              : NotTaken;
-          }
-        : T;
-
-/**
- * `A`, what a caller sends, as it may stand where schema type `S` is taken:
- * all `S` needs, nothing `S` doesn't take ({@link Exact}), and never `any`.
- * A signature takes `A` as its own type parameter (`<const A>`) so it is
- * read as the caller wrote it, literal or typed variable.
- */
-export type Sending<A, S> = 0 extends 1 & A ? never : A & S & Exact<A, S>;
-
-/** A CawCo tool, by its name. */
-export type ToolName = keyof ToolInputs & string;
-
-/** The arguments tool `N` takes, as a caller may send them. */
-export type ToolArgs<N extends ToolName> = ReadonlyDeep<ToolInputs[N]>;
-
-/** The tools that need no argument, called with none. */
-export type BareTool = {
-  [N in ToolName]: Record<string, never> extends ToolInputs[N] ? N : never;
-}[ToolName];
 
 /** A request as each transport sends it: spread it into `fetch`'s init. */
 export interface HubRequest {
@@ -192,7 +103,7 @@ const requestOf = (route: string, parts: Parts): HubRequest => {
 
 /**
  * The request for `route`, with what it sends: its path parameters, query
- * and body, each held exactly to what the route takes ({@link Exact}).
+ * and body, each held exactly to what the route takes (core sending.ts `Exact`).
  */
 export function hubRequest<R extends BareRoute>(route: R): HubRequest;
 export function hubRequest<R extends HubRoute, const S>(
