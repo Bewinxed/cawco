@@ -392,12 +392,6 @@ const COMPACT_BY: Record<
   Extract<AccountMove, { kind: "moved" }>["compactBy"]
 > = { claude: undefined, opencode: "opencode", pi: "pi" };
 
-/**
- * `move`, a move's line, as one `plan` compacts says it: natively, its
- * stages from `filing`, before the move when the plan says so, by the
- * harness `harness` names when it is not Claude Code. A plan that doesn't
- * compact natively leaves it as it is.
- */
 /** The `compactBy` a moved line of `harness` stores, when it names one. */
 const compactByOf = (harness: string) => {
   const kind = harnessNamed(harness);
@@ -405,6 +399,12 @@ const compactByOf = (harness: string) => {
   return by ? { compactBy: by } : {};
 };
 
+/**
+ * `move`, a move's line, as one `plan` compacts says it: natively, its
+ * stages from `filing`, before the move when the plan says so, by the
+ * harness `harness` names when it is not Claude Code. A plan that doesn't
+ * compact natively leaves it as it is.
+ */
 export const compactedLine = (
   move: Extract<AccountMove, { kind: "moved" }>,
   plan: CompactionPlan,
