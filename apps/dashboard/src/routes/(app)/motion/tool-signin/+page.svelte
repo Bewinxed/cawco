@@ -71,7 +71,10 @@
       ? new Response(body, { status })
       : Response.json(body, { status });
   const real = window.fetch.bind(window);
-  window.fetch = async (input, init) => {
+  const answered = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1]
+  ): Promise<Response> => {
     const url = input instanceof Request ? input.url : String(input);
     const match = SIGNIN.exec(new URL(url, location.href).pathname);
     if (!match) {
@@ -97,6 +100,10 @@
     }
     return answer(status);
   };
+  window.fetch = new Proxy(window.fetch, {
+    apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) =>
+      answered(input, init),
+  });
 
   const section = sectionOf("cli-tools");
   // Configure's store, never read: the rail as it stands before its counts.
