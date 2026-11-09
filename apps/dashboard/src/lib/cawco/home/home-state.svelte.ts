@@ -80,6 +80,7 @@ import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
 import { boardStore, isFailed } from "../stores/board.svelte";
+import { catalogStore } from "../stores/catalog.svelte";
 import { mcpServersStore } from "../stores/mcp-servers.svelte";
 import { movesStore } from "../stores/moves.svelte";
 import { needsStore } from "../stores/needs.svelte";
@@ -1248,7 +1249,9 @@ class Home {
       $effect(() => {
         if (
           connectionStore.hub === "unreachable" ||
-          (boardStore.fleetRead && boardStore.liveRead && cawco.catalogsRead)
+          (boardStore.fleetRead &&
+            boardStore.liveRead &&
+            catalogStore.catalogsRead)
         ) {
           this.#ready = true;
         }
@@ -1284,7 +1287,7 @@ class Home {
     boardStore.machines.filter(
       (machine) =>
         machine.status !== "online" ||
-        !cawco.catalogRead(machine.machineId) ||
+        !catalogStore.catalogRead(machine.machineId) ||
         boardStore.staleInstances.some(
           (row) => row.machineId === machine.machineId
         )
@@ -1641,7 +1644,7 @@ class Home {
     return (
       boardStore.listedInstances.length === 0 &&
       boardStore.machines.every(
-        (machine) => !cawco.hasStored(machine.machineId)
+        (machine) => !catalogStore.hasStored(machine.machineId)
       )
     );
   }
@@ -1691,7 +1694,7 @@ class Home {
       if (!machineId) {
         continue;
       }
-      for (const info of cawco.catalogOf(machineId)) {
+      for (const info of catalogStore.catalogOf(machineId)) {
         // A listed session's transcript is its row.
         if (running.has(info.sessionId)) {
           continue;
