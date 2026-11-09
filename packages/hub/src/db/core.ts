@@ -7,6 +7,7 @@ import { and, eq, inArray, not, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { type AreasDb, areasDb } from "./areas";
 import { type ArtifactEvents, artifactEvents, projectPage } from "./artifacts";
+import type { TakeChanges } from "./board-log";
 import {
   artifacts,
   delegateEvents,
@@ -38,10 +39,15 @@ export interface DbCore extends ArtifactEvents, Revocations {
   readonly dropInstances: (tx: Tx, ids: readonly string[]) => void;
   /** The fleet's choices row, which drizzle 0032 writes on every hub. */
   readonly supervisorChoices: () => typeof supervisorConfig.$inferSelect;
+  /** The board's change log (db/board-log.ts). */
+  readonly takeChanges: TakeChanges;
   readonly taskLinksOf: TaskLinksDb;
 }
 
-export const dbCore = (db: BunSQLiteDatabase): DbCore => {
+export const dbCore = (
+  db: BunSQLiteDatabase,
+  takeChanges: TakeChanges
+): DbCore => {
   const areasStore = areasDb(db);
   const taskLinksOf = taskLinksDb(db);
   const events = artifactEvents(db);
@@ -127,6 +133,7 @@ export const dbCore = (db: BunSQLiteDatabase): DbCore => {
     deniedToolNames,
     dropInstances,
     supervisorChoices,
+    takeChanges,
     taskLinksOf,
   };
 };
