@@ -310,6 +310,22 @@ export async function readable(response: Response): Promise<Response> {
 }
 
 /**
+ * A response the dashboard fetched itself (a send Eden can't make,
+ * hub.ts `hubPath`) as Eden's client would hand it back ({@link HubAnswer}),
+ * so the readers read it by the same rule: made readable ({@link
+ * readable}), its body read as treaty2 reads one ({@link bodyIn}), and a
+ * status outside 2xx a refusal (treaty2: `status >= 300 || status < 200`).
+ */
+export async function answerOf(fetched: Response): Promise<HubAnswer<unknown>> {
+  const response = await readable(fetched);
+  const body = await bodyIn(response);
+  const { status } = response;
+  return status >= 300 || status < 200
+    ? { data: null, error: { status, value: body }, response, status }
+    : { data: body, error: null, response, status };
+}
+
+/**
  * A refused response the dashboard fetched itself (a file, a page's own
  * route, a read timed apart from its body) as the {@link Refused} Eden's
  * client would make of it: made readable ({@link readable}), its body read
