@@ -1,13 +1,15 @@
 language js
 
-// The dashboard and the agent take the hub's types alone (its routes, for
-// their Eden clients: packages/hub/src/app.ts), never its code: a value
-// taken from the hub would put the server in a browser's bundle or the
-// agent's binary. `import type` and `export type … from` are erased in the
-// build. `import { type X }` is not: under verbatimModuleSyntax
-// (tsconfig.paths.json) it is kept as `import {} from …`, which loads the
-// module and runs it, so it is refused with the rest. So are an import
-// for its effect, a re-export, a dynamic `import()` and a `require`.
+// The dashboard, the agent and the scripts take the hub's types alone (its
+// routes, for their Eden clients: packages/hub/src/app.ts), never its code by
+// package name: a value taken from the hub would put the server in a
+// browser's bundle or the agent's binary. `import type` and `export type …
+// from` are erased in the build. `import { type X }` is not: under
+// verbatimModuleSyntax (tsconfig.paths.json) it is kept as `import {} from
+// …`, which loads the module and runs it, so it is refused with the rest. So
+// are an import for its effect, a re-export, a dynamic `import()` and a
+// `require`. A probe that runs a hub in process imports the hub's source by
+// its path, which this rule does not read.
 or {
   `import $clause from $source` as $hit where {
     not $hit <: `import type $_ from $_`
@@ -22,6 +24,6 @@ or {
   `require($source)` as $hit
 } where {
   $source <: r"[\"']@cawco/hub(?:/.*)?[\"']",
-  $filename <: or { includes "apps/dashboard/", includes "packages/agent/" },
-  register_diagnostic(span=$hit, message="Import the hub's types alone here (`import type`): its code never goes in the dashboard's bundle or the agent.")
+  $filename <: or { includes "apps/dashboard/", includes "packages/agent/", r"(^|/)scripts/(probe-kit|binary|lib|decisions-preview)/.*", r"(^|/)scripts/[^/]+\.ts$" },
+  register_diagnostic(span=$hit, message="Import the hub's types alone here (`import type`): its code never goes in the dashboard's bundle, the agent or a script.")
 }
