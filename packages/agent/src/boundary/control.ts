@@ -38,7 +38,7 @@ import {
   type Held,
   isClosing,
   isStarting,
-  keepers,
+  procsHeld,
   readHeld,
   readRetiring,
   refusal,
@@ -236,7 +236,7 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
  */
 export const leaveRetiringKeepers = async (): Promise<void> => {
   const current = await sessiond();
-  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const procs = (await procsHeld()).filter((proc) => proc.alive);
   const elsewhere = procs.filter((proc) => proc.epoch !== current.epoch);
   if (elsewhere.length === 0) {
     return;
