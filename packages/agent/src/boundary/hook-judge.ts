@@ -18,6 +18,7 @@ import { systemProgram } from "@cawco/core/workspace-needs";
 import { bunScriptRuntime } from "../bun-runtime";
 import { isJudgeOf, JUDGE_FORM_LENGTH } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
+import { JUDGE_BUILD_QUESTION, type JudgeArgs } from "./protocol";
 import { scriptText } from "./shims";
 import { closing, refusal, starting, stateDir } from "./state";
 
@@ -106,7 +107,7 @@ export interface JudgeAt {
  * and SOCK_STREAM are 1 on Linux and macOS alike. The call's JSON goes over
  * on one line (a line break in JSON is whitespace or invalid), the prefix on
  * the next, in hex, or `-` when the CLI's environment names none. The answer
- * is read up to the judge's end mark (boundary-judge.ts `ANSWER_END`), or the
+ * is read up to the judge's end mark (protocol.ts `JUDGE_ANSWER_END`), or the
  * connection's end, whichever comes first: never the end alone, which on
  * macOS at times never came once the answer was written.
  */
@@ -223,38 +224,33 @@ export const JUDGE_SCRIPT = "workspace-judge.ts";
 /** The judge server's file name in a workspace's state dir, beside {@link JUDGE_SCRIPT}. */
 export const JUDGE_SERVER = "boundary-judge.ts";
 
-/** The line the judge prints once it answers on its socket. */
-export const JUDGE_READY = "cawco-judge-ready";
-
-/** The judge's two scripts as this build runs them: the judge beside it, and the server. */
-export const judgeScripts = (): Promise<[string, string]> =>
+/**
+ * The judge's three scripts as this build runs them: the judge beside it,
+ * the server, and the protocol the server loads from beside it.
+ */
+export const judgeScripts = (): Promise<[string, string, string]> =>
   Promise.all([
     scriptText(
       "boundary/workspace-judge.ts",
       join(import.meta.dir, "..", "..", "..", "core", "src", JUDGE_SCRIPT)
     ),
     scriptText("boundary/judge.ts", join(import.meta.dir, "..", JUDGE_SERVER)),
+    scriptText("boundary/protocol.ts", join(import.meta.dir, "protocol.ts")),
   ]);
 
 /**
  * The build a judge runs, as it says it ({@link JUDGE_BUILD_QUESTION}): its
- * two scripts, hashed. Handed to each judge as it starts.
+ * three scripts, hashed. Handed to each judge as it starts.
  */
-export const judgeBuildOf = ([judgeText, serverText]: [
+export const judgeBuildOf = ([judgeText, serverText, protocolText]: [
+  string,
   string,
   string,
 ]): string =>
   createHash("sha256")
-    .update([serverText, judgeText].join("\0"))
+    .update([serverText, judgeText, protocolText].join("\0"))
     .digest("hex")
     .slice(0, JUDGE_FORM_LENGTH);
-
-/**
- * The line a judge answers with the build it runs, `0` and the build
- * (`boundary-judge.ts`); a call's JSON is never this. A judge of a build
- * before this question refuses it, as it refuses any line it cannot read.
- */
-const JUDGE_BUILD_QUESTION = "cawco-judge-build";
 
 /** The judges starting now, by their sessiond id: one start each, however many ask. */
 export const judging = new Map<string, Promise<void>>();
@@ -302,26 +298,29 @@ export const watchedJudges = new Map<string, SessiondClient>();
  * lives (`boundary-judge.ts`). One that exits otherwise is started again
  * (lifecycle.ts `watchJudge`). Refuses the workspace when it cannot start.
  */
+/** What a workspace's judge is handed besides its socket and its build. */
+export type JudgeHanded = Omit<JudgeArgs, "socket" | "build">;
+
 /**
- * What workspace `id`'s judge is handed between its socket and its build
- * (boundary-judge.ts: `HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM`),
- * for the executor at `exec`, the hook at `hook` and the policy at `policy`.
+ * What workspace `id`'s judge is handed besides its socket and its build
+ * ({@link judgeArgv}), for the executor at `exec`, the hook at `hook` and
+ * the policy at `policy`.
  */
 export const judgeHanded = (
   id: string,
   exec: string,
   hook: string,
   policy: string
-): string[] => [
+): JudgeHanded => ({
   hook,
-  String(HOOK_TIMEOUT_S),
+  graceS: String(HOOK_TIMEOUT_S),
   exec,
-  claudePrefixOf(id),
-  workspaceClaudeTmpDir(id),
-  policy,
-  systemProgram("cat"),
-  systemProgram("rm"),
-];
+  prefix: claudePrefixOf(id),
+  claudeTmp: workspaceClaudeTmpDir(id),
+  policyFile: policy,
+  cat: systemProgram("cat"),
+  rm: systemProgram("rm"),
+});
 
 /** The judge socket a workspace's hook names ({@link hookScript}'s `$judge`). */
 const HOOK_JUDGE = /^\$judge = '((?:[^'\\]|\\.)*)';$/mu;
