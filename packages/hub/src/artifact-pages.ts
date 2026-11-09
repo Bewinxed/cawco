@@ -22,13 +22,13 @@ import { sessionLabel } from "./labels";
 import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PreviewTarget } from "./preview";
 import {
-  embedKey,
   previewFrame,
   previewTargets,
   servedByMachine,
   shownArtifact,
 } from "./preview";
 import { PreviewRefusal } from "./preview-hosts";
+import { embedKey } from "./preview-origin";
 import {
   changeFolderFiles,
   FolderRefusal,
