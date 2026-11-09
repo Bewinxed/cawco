@@ -19,7 +19,8 @@ import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
 import { type Step, stepsEnough, stepsOf } from "./transcript-steps";
 import { isHubParent } from "./work-item-state";
-import type { HeldWork, QueuedDelegate, Unlanded } from "./work-items";
+import type { QueuedDelegate } from "./work-items";
+import type { HeldWork, Unlanded } from "./workspaces";
 
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
 type DelegateListInclude = "live" | "all";
