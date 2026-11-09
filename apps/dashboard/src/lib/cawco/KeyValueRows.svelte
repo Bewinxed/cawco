@@ -1,6 +1,5 @@
 <script lang="ts">
   import { mcpWords } from "@cawco/core/words/mcp";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   /**
@@ -12,6 +11,7 @@
    * place of its value, which the hub never sends, until something is typed.
    */
   import { IconClose } from "#lib/icons.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import type { Pair } from "./fleet";
 
   let {

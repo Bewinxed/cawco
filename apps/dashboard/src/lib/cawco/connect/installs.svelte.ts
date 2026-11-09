@@ -37,10 +37,10 @@ import type {
 } from "@cawco/core/install";
 import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
+import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
-import { failureWords, hubFetch, hubRefusal } from "../hub-read";
 
 /** The URL's word for the window: an install's id, or the draft's. */
 export const INSTALL_PARAM = "install";

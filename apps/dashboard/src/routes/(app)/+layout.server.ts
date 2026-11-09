@@ -12,9 +12,7 @@ import type {
 } from "@cawco/core/protocol";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { servedBoardOf } from "#lib/cawco/first-paint.js";
-import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
-import { KEPT, type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import type { Area, ServedBoard } from "#lib/cawco/served-board.js";
 import { routedToParent } from "#lib/cawco/transcript/present.js";
 import {
@@ -38,6 +36,8 @@ import {
   FOLD_BOXES_PREF,
   parseFoldBoxes,
 } from "#lib/components/ui/fluid-tabs/fold-memory.js";
+import { type HubRead, readHub } from "#lib/platform/hub-read.js";
+import { KEPT, type Pref, prefCookie } from "#lib/platform/prefs.js";
 import type { LayoutServerLoad } from "./$types";
 
 /**
@@ -72,7 +72,7 @@ const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
  * first visit, before any cookie, the client hints and the user agent stand
  * in. The cookie is primary because an iPad in desktop mode reports a
  * Macintosh UA. The first client render draws this answer too, and the query
- * takes over a frame later (lib/cawco/first-render.svelte.ts).
+ * takes over a frame later (lib/platform/first-render.svelte.ts).
  */
 const NARROW_KEY = "cawco-narrow";
 const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/iu;

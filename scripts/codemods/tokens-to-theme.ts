@@ -614,7 +614,7 @@ const EDITS: Edit[] = [
   },
   {
     file: "apps/dashboard/src/lib/cawco/project/typed-examples.svelte.ts",
-    find: 'import { msOf } from "#lib/cawco/motion/time.js";\n',
+    find: 'import { msOf } from "#lib/platform/motion/time.js";\n',
     replace: "",
   },
   {

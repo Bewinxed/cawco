@@ -55,7 +55,6 @@
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import {
@@ -83,6 +82,7 @@
     IconSuccess,
     IconUser,
   } from "#lib/icons.js";
+  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import {
     crossIn,
@@ -94,9 +94,9 @@
     motionOk,
     reveal,
     revealOut,
-  } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
-  import { ListSwap } from "../motion/list-swap.svelte";
+  } from "../../platform/motion/curves.svelte";
+  import { unfold } from "../../platform/motion/fold.svelte";
+  import { ListSwap } from "../../platform/motion/list-swap.svelte";
   import { LINK_DROPPED, type ListHold } from "./artifact-doc";
   import {
     attachedTo,

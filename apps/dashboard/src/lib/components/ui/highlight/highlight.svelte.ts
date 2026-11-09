@@ -43,9 +43,9 @@
  */
 
 import { untrack } from "svelte";
-import { frameObserver } from "#lib/cawco/frame-observer.js";
-import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
-import { watchRendered } from "#lib/utils/rendered.js";
+import { frameObserver } from "#lib/platform/frame-observer.js";
+import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
+import { watchRendered } from "#lib/platform/rendered.js";
 
 /**
  * A layer's parts, in the order they are drawn: four bands that fill it,

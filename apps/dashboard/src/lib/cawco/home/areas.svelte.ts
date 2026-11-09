@@ -6,9 +6,9 @@
  * names and their order are the areas'.
  */
 import { hubRequest } from "@cawco/core/hub-request";
+import { hubFetch } from "../../platform/hub-read";
 import { cawco } from "../client.svelte";
 import { devDebug } from "../dev-debug";
-import { hubFetch } from "../hub-read";
 import type { Area } from "../served-board";
 
 /** The areas as last read, and whether this page has read them: until it has, the served board's (first-paint.ts `ServedBoard`). */

@@ -133,19 +133,6 @@
     Popover as PopoverPrimitive,
   } from "bits-ui";
   import { type Snippet, untrack } from "svelte";
-  import {
-    hang,
-    type Neck,
-    regrow,
-    sameNeck,
-    setNeck,
-  } from "#lib/cawco/motion/hang.js";
-  import {
-    type HangGeometry,
-    hangAt,
-    hangClip,
-  } from "#lib/cawco/motion/hang-shape.js";
-  import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
   import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
   import DropdownMenuContent from "#lib/components/ui/dropdown-menu/dropdown-menu-content.svelte";
   import {
@@ -156,6 +143,19 @@
   import PopoverContent, {
     floatingSurface,
   } from "#lib/components/ui/popover/popover-content.svelte";
+  import {
+    hang,
+    type Neck,
+    regrow,
+    sameNeck,
+    setNeck,
+  } from "#lib/platform/motion/hang.js";
+  import {
+    type HangGeometry,
+    hangAt,
+    hangClip,
+  } from "#lib/platform/motion/hang-shape.js";
+  import type { Morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn } from "#lib/utils.js";
   import { outlineLayer } from "./hang-outline.js";
 

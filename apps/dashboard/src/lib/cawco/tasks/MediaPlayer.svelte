@@ -31,8 +31,6 @@
    */
   import type { Attachment } from "svelte/attachments";
   import { on } from "svelte/events";
-  import { reveal } from "#lib/cawco/motion/curves.svelte.js";
-  import { track } from "#lib/cawco/track.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import { placeItems } from "#lib/components/ui/bar-glass/place.js";
   import {
@@ -44,6 +42,8 @@
     IconSoundLinear,
     IconSoundOffLinear,
   } from "#lib/icons.js";
+  import { reveal } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import MediaButton from "./MediaButton.svelte";
   import "./media-elements";
   import type { PlayerElement } from "./media-elements";

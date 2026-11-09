@@ -38,6 +38,15 @@
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
+  import { type BranchOptions, branch } from "../platform/motion/branch.svelte";
+  import { echoBeat } from "../platform/motion/echo.svelte";
+  import { reflow } from "../platform/motion/rows.svelte";
+  import {
+    landRegroup,
+    regroup,
+    regroupPrimer,
+  } from "../platform/motion/share.svelte";
+  import { stored } from "../platform/storage";
   import { epochOf } from "./board.svelte";
   import { type BoardRow, cawco, type ProjectRow } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
@@ -73,10 +82,6 @@
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";
-  import { type BranchOptions, branch } from "./motion/branch.svelte";
-  import { echoBeat } from "./motion/echo.svelte";
-  import { reflow } from "./motion/rows.svelte";
-  import { landRegroup, regroup, regroupPrimer } from "./motion/share.svelte";
   import { olderOut } from "./OlderRows.svelte";
   import { type Reading, runningIds } from "./older";
   import { openTrees, type TreeList } from "./open-trees.svelte";
@@ -90,7 +95,6 @@
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
-  import { stored } from "./storage";
   import TreeLine from "./TreeLine.svelte";
   import { type FlatRow, flatTree, lineAttrs } from "./tree-lines";
   import UsageMeter from "./UsageMeter.svelte";
