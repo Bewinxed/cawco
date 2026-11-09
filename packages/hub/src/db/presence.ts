@@ -1,3 +1,4 @@
+import { singleton, singletonColumn } from "./singleton";
 /** Who is at the hub: presence, push devices and what notifications are owed. */
 
 import { desc, eq, gte, inArray, lt } from "drizzle-orm";
@@ -5,6 +6,7 @@ import type { DbCore } from "./core";
 import {
   notificationCleared,
   notificationSent,
+  PRESENCE_ID,
   presenceClients,
   presenceDevices,
   presenceSettings,
@@ -27,9 +29,6 @@ export type PushDeviceRow = Omit<
   typeof pushDevices.$inferSelect,
   "secret" | "key"
 > & { key: string; secret: string };
-
-/** The one {@link presenceSettings} row's key, and the one {@link findSettings} row's. */
-export const PRESENCE_ID = "person";
 
 export interface PresenceDb {
   /** What a device was shown and what has been cleared, by collapse id (notifications.ts). */
@@ -155,11 +154,7 @@ export const presenceDb = (core: DbCore): PresenceDb => {
     },
     presence: {
       appearAway: () => {
-        const row = db
-          .select()
-          .from(presenceSettings)
-          .where(eq(presenceSettings.id, PRESENCE_ID))
-          .get();
+        const row = singleton(db, presenceSettings, PRESENCE_ID);
         return row?.appearAway ? (row.appearAwayAt ?? new Date(0)) : null;
       },
       setAppearAway: (on, at) => {
@@ -201,11 +196,12 @@ export const presenceDb = (core: DbCore): PresenceDb => {
           .run();
       },
       awayAfter: () =>
-        db
-          .select({ ms: presenceSettings.awayAfterMs })
-          .from(presenceSettings)
-          .where(eq(presenceSettings.id, PRESENCE_ID))
-          .get()?.ms ?? null,
+        singletonColumn(
+          db,
+          presenceSettings,
+          PRESENCE_ID,
+          presenceSettings.awayAfterMs
+        ) ?? null,
       setAwayAfter: (ms) => {
         db.insert(presenceSettings)
           .values({ id: PRESENCE_ID, appearAway: false, awayAfterMs: ms })
@@ -216,11 +212,7 @@ export const presenceDb = (core: DbCore): PresenceDb => {
           .run();
       },
       stretch: () => {
-        const row = db
-          .select()
-          .from(presenceSettings)
-          .where(eq(presenceSettings.id, PRESENCE_ID))
-          .get();
+        const row = singleton(db, presenceSettings, PRESENCE_ID);
         return {
           awaySince: row?.awaySince ?? null,
           backAt: row?.backAt ?? null,
