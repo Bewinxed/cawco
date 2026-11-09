@@ -509,5 +509,129 @@
         },
       },
     },
+    {
+      // The dashboard's layers: the kit (components/ui) and what it stands
+      // on (lib/platform, lib/hooks, the lib root's own modules) depend on
+      // nothing above them. These overrides restate the root's and the sheet
+      // override's options, as an override's options replace them.
+      "includes": [
+        "apps/dashboard/src/lib/components/ui/**",
+        "apps/dashboard/src/lib/hooks/**",
+        "apps/dashboard/src/lib/*.ts",
+        "!apps/dashboard/src/lib/components/ui/**/*.stories.ts",
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "#lib/cawco/**",
+                      "#lib/components/features/**",
+                      "**/cawco/**",
+                      "**/components/features/**",
+                      "../features/**",
+                      "../../features/**",
+                    ],
+                    "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // lib/platform stands under the kit as well.
+      "includes": ["apps/dashboard/src/lib/platform/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "#lib/cawco/**",
+                      "#lib/components/features/**",
+                      "**/cawco/**",
+                      "**/components/features/**",
+                      "../features/**",
+                      "../../features/**",
+                    ],
+                    "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
+                  },
+                  {
+                    "group": [
+                      "#lib/components/**",
+                      "!#lib/components/icons/**",
+                      "../components/**",
+                      "../../components/**",
+                    ],
+                    "message": "lib/platform stands under the kit: what both need lives here, and the kit imports it.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // The kit's own states files: a sheet's rules and the kit's.
+      "includes": ["apps/dashboard/src/lib/components/ui/**/*.stories.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "#lib/cawco/**",
+                      "#lib/components/features/**",
+                      "**/cawco/**",
+                      "**/components/features/**",
+                      "../features/**",
+                      "../../features/**",
+                    ],
+                    "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
+                  },
+                  {
+                    "group": [
+                      "**/cawco/client.svelte",
+                      "**/cawco/client.svelte.js",
+                      "./client.svelte",
+                      "./client.svelte.js",
+                      "../client.svelte",
+                      "../client.svelte.js",
+                    ],
+                    "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
+                  },
+                ],
+                "paths": {
+                  "$app/navigation": "The stage stubs $app/navigation; a story never needs it.",
+                  "$app/state": "The stage stubs $app/state; a story never needs it.",
+                  "$app/stores": "The stage stubs $app/stores; a story never needs it.",
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   ],
 }
