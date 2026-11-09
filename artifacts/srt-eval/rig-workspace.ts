@@ -8,7 +8,7 @@
  *
  * `create` prints the checkout as JSON (its clone path, its boundary's pid)
  * once the workspace is armed, then stays up as the agent does, serving the
- * doors arming opened (its git door, GitHub door and tool door, boundary.ts
+ * doors arming opened (its git door, GitHub door and tool door, boundary/
  * `armHook`) until it is sent SIGTERM. Stop it before `archive`.
  */
 
