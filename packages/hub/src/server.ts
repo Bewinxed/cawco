@@ -8823,7 +8823,7 @@ export const createServer = (
     db.listBoardInstances().map((row) => [row.id, row] as const)
   );
   /** The rows the database changed since the last publish took them. */
-  let boardMoved = new Set<string>();
+  const boardMoved = new Set<string>();
   /**
    * The find engine's sessions follow the same change log as the board
    * (find.ts `instancesChanged`): told here, once the engine is made below.
@@ -9638,7 +9638,7 @@ export const createServer = (
       publishedOverlays.set(row.id, overlayOf(row));
     }
   });
-  boardMoved = new Set();
+  boardMoved.clear();
   const publishedExtras = boardExtras();
   const publishedAgents = new Map(
     publishedExtras.agents.map((row) => [row.machineId, JSON.stringify(row)])
@@ -9703,8 +9703,8 @@ export const createServer = (
     machineId: string,
     rows: ReturnType<typeof boardRows>
   ): void => {
-    const moved = boardMoved;
-    boardMoved = new Set();
+    const moved = new Set(boardMoved);
+    boardMoved.clear();
     // A work item follows its session's life: of every row the database
     // changed since the last publish (its change log, whichever path wrote
     // it — a failed process, a register's settle, a refused restore), one in
