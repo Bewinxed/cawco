@@ -172,14 +172,13 @@ import {
   type Tasks,
   type TaskView,
 } from "./tasks";
+import { isLive, WorkItemRefusal } from "./work-item-state";
 import {
   budgetProblem,
   type CloneRef,
   DEFAULT_DELEGATE_TYPE,
-  isLive,
   OwnsOverlap,
   SESSION_TITLE_MAX,
-  WorkItemRefusal,
   type WorkItemRequest,
   type WorkItemStart,
 } from "./work-items";
