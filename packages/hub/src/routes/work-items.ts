@@ -8,6 +8,7 @@ import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { FolderRefusal } from "../project-folder";
 import { BUDGET, LANDS } from "../tasks";
+import { firstValidationIssue } from "../validation-issue";
 import {
   SESSION_TITLE_DESCRIPTION,
   WAIT_ITEM_LIMIT,
@@ -165,11 +166,7 @@ export const workItemRoutes = ({
         // a delegate without a title is refused, never named from its brief.
         error({ error, status }) {
           if (error instanceof ValidationError) {
-            const [first] = error.all as {
-              path: string;
-              message: string;
-              params?: { requiredProperties?: string[] };
-            }[];
+            const first = firstValidationIssue(error);
             // A missing field has no path of its own; its name is in params.
             const field =
               first?.params?.requiredProperties?.[0] ??
