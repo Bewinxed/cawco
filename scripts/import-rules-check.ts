@@ -3,25 +3,18 @@
  * one way, read off every import of the tree (lib/import-graph.ts), value and
  * type alike.
  *
- * - **cycle**: an import from a file to another of its own import cycle. A
- *   package free of cycles stays free; elsewhere each file's count is
- *   ratcheted (lib/ratchet.ts) from the measured value.
- * - **core-reaches-out**: `@cawco/core` imports no other package: it is what
- *   every other one stands on.
- * - **kit-reaches-up**: the dashboard's kit (`lib/components/ui/`) imports
- *   nothing above it: no feature component (`lib/components/features/`), no
- *   route, and no module that itself imports the kit.
- * - **reaches-in**: a workspace member imports another's file only through
- *   that member's manifest (`@cawco/<name>/…` as its `exports` or `main`
- *   name it), never by a path into its folder. The repository's own folders
- *   (`scripts/`, `assets/`, `design/`) are no member's: its checks and probes
- *   read the members' sources by design, and a member reading a shared asset
- *   has no manifest to go through.
+ * - **cycle**: an import from a file to another of its own import cycle.
+ * - **kit-reaches-up**: the dashboard's kit (`lib/components/ui/`) imports no
+ *   module that itself imports the kit, however far down.
  *
- * Every rule counts imports against scripts/import-rules.baseline.tsv
- * (lib/ratchet.ts): a count falls or moves with its file, and never rises. Biome's noImportCycles reads no `.svelte` file, and
- * dependency-cruiser loses a component's type imports, so the graph is read
- * here with TypeScript's parser.
+ * What a specifier alone can say (core imports no other package, the kit
+ * imports no feature or route, a member reaches another through its
+ * manifest) is Biome's noRestrictedImports, in biome.jsonc. These two need
+ * the graph, and count against scripts/import-rules.baseline.tsv
+ * (lib/ratchet.ts): a count falls or moves with its file, and never rises.
+ * Biome's noImportCycles reads no `.svelte` file, and dependency-cruiser
+ * loses a component's type imports, so the graph is read here with
+ * TypeScript's parser.
  *
  *   bun scripts/import-rules-check.ts                   exits 1 on a rise
  *   bun scripts/import-rules-check.ts --write-baseline  starts a rule the baseline does not hold
