@@ -214,7 +214,7 @@ const NO_APP_BUILD = "no app build: nothing the app compiles changed";
  * `targets:` step that is due builds the targets the map gives the change
  * ({@link affectedTargets}), named in its command's `{targets}` and its
  * name, and keeps its pass by what they compile ({@link compiledInputs}).
- * The hub's gate (work-items.ts `gateSteps`) then picks its machine.
+ * The hub's gate (gate.ts `gateSteps`) then picks its machine.
  */
 export const gateStepFor = (
   step: DeclaredStep,

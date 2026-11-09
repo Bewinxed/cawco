@@ -12,7 +12,7 @@
 import type { WorkspaceTool } from "../capabilities";
 import { andList } from "./helpers";
 
-/** How every refusal of these begins: the hub knows one by it (work-items.ts `openWorkspace`). */
+/** How every refusal of these begins: the hub knows one by it (workspaces.ts `openWorkspace`). */
 const WORKSPACE_NEEDS_LEAD = "This machine is missing";
 
 export const workspaceNeedsWords = {
