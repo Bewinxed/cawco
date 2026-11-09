@@ -1,3 +1,5 @@
+/** Session rows: opening, listing, ending, settling and what keeps one on the board. */
+
 import type { MayStart, StartingSet } from "@cawco/core/delegate-types";
 import type {
   EffortLevel,
@@ -38,7 +40,6 @@ import {
 import type { DbCore } from "./core";
 import { foldMovedColumns } from "./owned-rows";
 import { projectHoldingOf } from "./projects";
-/** Session rows: opening, listing, ending, settling and what keeps one on the board. */
 import {
   accounts,
   delegateEvents,
