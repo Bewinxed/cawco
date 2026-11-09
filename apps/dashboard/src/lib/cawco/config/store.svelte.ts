@@ -5,11 +5,11 @@ import type {
 } from "@cawco/core/fleet";
 import type { FleetConfigRead } from "@cawco/core/fleet-secrets";
 import type { FleetFetchFrame } from "@cawco/core/frames";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
+import { hubRequest } from "@cawco/core/hub-request";
 import type { RuleRow } from "@cawco/core/rules";
 import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
-import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { failureWords, hubJson } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import type { ProjectRow } from "../client.svelte";
 import type {
@@ -77,30 +77,22 @@ export interface ToolsState {
   policies: ToolPolicy[];
 }
 
-async function read<T>(request: HubRequest): Promise<T> {
-  const response = await hubFetch(request);
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
-  return (await response.json()) as T;
-}
-
 /** How long a saved row stays marked after the list comes back: its flash (`animate-row-flash`). */
 const flashMs = () => dur("--duration-fade") * 3;
 
 export class ConfigStore {
   readonly rules = new Slot("the rules", async () => {
-    const payload = await read<RulesPayload>(hubRequest("GET /api/rules"));
+    const payload = await hubJson<RulesPayload>(hubRequest("GET /api/rules"));
     return payload.rules;
   });
   readonly hooks = new Slot("the hooks", async () => {
-    const payload = await read<HooksPayload>(
+    const payload = await hubJson<HooksPayload>(
       hubRequest("GET /api/fleet/hooks")
     );
     return payload.hooks;
   });
   readonly types = new Slot("the delegate types", async () => {
-    const payload = await read<DelegateTypesPayload>(
+    const payload = await hubJson<DelegateTypesPayload>(
       hubRequest("GET /api/delegate-types")
     );
     return payload.types;
@@ -112,12 +104,12 @@ export class ConfigStore {
   readonly projectTypes = new Slot(
     "the projects' delegate types",
     async (): Promise<ProjectTypes[]> => {
-      const projects = await read<ProjectRow[]>(
+      const projects = await hubJson<ProjectRow[]>(
         hubRequest("GET /api/projects")
       );
       const catalogs = await Promise.all(
         projects.map(async ({ id, name }) => {
-          const catalog = await read<ProjectCatalogPayload>(
+          const catalog = await hubJson<ProjectCatalogPayload>(
             hubRequest("GET /api/projects/:id/delegate-types", { path: { id } })
           );
           return {
@@ -137,7 +129,9 @@ export class ConfigStore {
   readonly fleet = new Slot(
     "the fleet's setup",
     async (): Promise<FleetState> => {
-      const snapshot = await read<FleetSnapshot>(hubRequest("GET /api/fleet"));
+      const snapshot = await hubJson<FleetSnapshot>(
+        hubRequest("GET /api/fleet")
+      );
       return {
         config: snapshot.config,
         links: snapshot.links,
@@ -151,7 +145,9 @@ export class ConfigStore {
   readonly tools = new Slot(
     "the tool catalog",
     async (): Promise<ToolsState> => {
-      const snapshot = await read<ToolsSnapshot>(hubRequest("GET /api/tools"));
+      const snapshot = await hubJson<ToolsSnapshot>(
+        hubRequest("GET /api/tools")
+      );
       return {
         catalog: snapshot.catalog,
         policies: snapshot.policies,
