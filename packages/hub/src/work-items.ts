@@ -173,6 +173,9 @@ import {
   createWorkspaces,
   GIT_TIMEOUT_MS,
   type HeldWork,
+  isFolderOverlay,
+  isGateClone,
+  isHostFolder,
   outputsFolder,
   ownCopy,
   refOf,
@@ -180,6 +183,7 @@ import {
   SPACES,
   type Unlanded,
   type WorkspacesDeps,
+  workspaceOf,
 } from "./workspaces";
 
 /** How long the name a caller gives a delegate or a started session may run. */
@@ -1067,7 +1071,7 @@ const scratchRefOf = (workspace: WorkspaceRow): WorkspaceRef => ({
 
 /** The boundary a session in `workspace` runs inside: none for a host-scope one. */
 const boundaryOf = (workspace: WorkspaceRow): WorkspaceRef | undefined =>
-  workspace.host ? undefined : refOf(workspace);
+  isHostFolder(workspace) ? undefined : refOf(workspace);
 
 /**
  * The item's session: nested under its parent, working in the workspace's
@@ -1089,7 +1093,7 @@ const spawnOf = (
     ...sessionOf(instanceId, title, parent, settings),
     cwd: workspace.path,
     ...(bound ? { workspace: bound } : {}),
-    ...(workspace.host ? { hostScratch: workspace.id } : {}),
+    ...(isHostFolder(workspace) ? { hostScratch: workspace.id } : {}),
   };
 };
 
@@ -1148,7 +1152,7 @@ const sessionOf = (
  * copies inputs by path (none for a workspace cut before it was recorded).
  */
 const placeOf = (workspace: WorkspaceRow): string =>
-  workspace.host
+  isHostFolder(workspace)
     ? `${workspace.path} on the host, no clone and no boundary; files it leaves in $TMPDIR/outputs/ come back as its item's assets`
     : `${workspace.path}, branch ${workspace.branch}${workspace.tmp ? `, TMPDIR ${workspace.tmp}` : ""}`;
 
@@ -2966,7 +2970,7 @@ export const createWorkItems = ({
     // lands otherwise or hands in outputs.
     const told =
       (item.lands === "main" && !item.outputs?.length) ||
-      workspace.kind === "folder"
+      isFolderOverlay(workspace)
         ? brief
         : withLandingLine(brief, workspace.base, landingOf(item));
     const sent = send(messageOf(session.id, session.machineId, parent, told));
@@ -3074,7 +3078,7 @@ export const createWorkItems = ({
     workspace: WorkspaceRow
   ): Promise<WorkspaceRow | undefined> => {
     // A host-scope row's folder is the machine's own: there is no clone.
-    if (workspace.host) {
+    if (isHostFolder(workspace)) {
       return workspace;
     }
     if (workspaces.recuttable(workspace)) {
@@ -3913,7 +3917,7 @@ export const createWorkItems = ({
           instanceId,
           workspace.machineId,
           parent,
-          workspace.host
+          isHostFolder(workspace)
             ? withHostLine(
                 content,
                 workspace.path,
@@ -3986,7 +3990,7 @@ export const createWorkItems = ({
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, starting with every turn of yours so far, `
           : `a fresh ${harness} session, `) +
-        (workspace.host
+        (isHostFolder(workspace)
           ? `work item ${item.id.slice(0, 8)} with host scope on ${machineName(workspace.machineId)} (${placeOf(workspace)}; nothing lands).`
           : `work item ${item.id.slice(0, 8)} in workspace ${workspace.id.slice(0, 8)} (${placeOf(workspace)}).`) +
         ` ${REPORT_ARRIVES} Guide it, or continue it after it ` +
@@ -4503,8 +4507,8 @@ export const createWorkItems = ({
     if (
       !workspace ||
       workspace.state === "archived" ||
-      workspace.checksFor ||
-      workspace.host
+      isGateClone(workspace) ||
+      isHostFolder(workspace)
     ) {
       return false;
     }
@@ -4512,7 +4516,7 @@ export const createWorkItems = ({
       return true;
     }
     // A folder's work since is its change set not yet in its folder.
-    if (workspace.kind === "folder") {
+    if (isFolderOverlay(workspace)) {
       const changes = (await call(
         workspace.machineId,
         CONTROL_WORKSPACE_CHANGES,
@@ -4611,8 +4615,8 @@ export const createWorkItems = ({
     // A folder's changes are its change set, which is what lands.
     if (
       workspace?.state !== "active" ||
-      workspace.host ||
-      workspace.kind === "folder"
+      isHostFolder(workspace) ||
+      isFolderOverlay(workspace)
     ) {
       return;
     }
@@ -5064,7 +5068,7 @@ export const createWorkItems = ({
      * workspace's turn (a settle that may be retiring it as the send came),
      * the workspace retired is cut again at its own path (workspaces.ts `recut`),
      * then what was kept for it goes ({@link WorkItemDeps.recutDone}); its
-     * settle meanwhile is deferred by the send on its way (workspaces.ts `holdOn`).
+     * settle meanwhile is deferred by the send on its way (workspaces.ts `holdsOf`).
      * Fails it with why the cut could not be made
      * ({@link WorkItemDeps.recutFailed}), unless only its machine's agent's
      * restart stopped the cut ({@link recutWaitsForAgent}): then it stays
@@ -5260,7 +5264,7 @@ export const createWorkItems = ({
      * Item `itemId`'s workspace with its clone there, held for a
      * continuation of its session: in the workspace's turn, after any settle
      * already under way, a retired one cut again ({@link withClone}), and
-     * from then on held (workspaces.ts `holdOn`) until the answered release, called
+     * from then on held (workspaces.ts `holdsOf`) until the answered release, called
      * once the continuation's job is filed (its record holds it from there)
      * or has failed to be. Throws why there is no clone.
      */
@@ -5583,7 +5587,7 @@ export const createWorkItems = ({
      * (workspaces.ts `goOnIn`): a retired one cut again first (workspaces.ts `recut`), the
      * inputs written into its `$TMPDIR/inputs/` (a host-scope one's scratch
      * dir, agent host-scratch.ts), and the message sent there, so it holds
-     * the workspace (workspaces.ts `sessionsHold`) before any settle can retire it
+     * the workspace (workspaces.ts `holdsOf`) before any settle can retire it
      * and its scratch dir with the inputs. For a session with no work item,
      * its own inputs folder on its machine (core `InputsPlace`). Refused,
      * with nothing sent, for an input that may not go or cannot be read
@@ -5781,7 +5785,7 @@ export const createWorkItems = ({
       if (!workspace) {
         return {};
       }
-      return workspace.host
+      return isHostFolder(workspace)
         ? { hostScratch: workspace.id }
         : { workspace: refOf(workspace) };
     },
@@ -5919,7 +5923,12 @@ export const createWorkItems = ({
      */
     settleStagesOf(placeId: string): void {
       const [workspace] = db.workspacesNamed(stageCloneId(placeId));
-      if (workspace?.stageFor === placeId && workspace.state === "active") {
+      const member = workspace && workspaceOf(workspace);
+      if (
+        member?.kind === "stageClone" &&
+        member.place === placeId &&
+        member.row.state === "active"
+      ) {
         workspaces.settleSoon(workspace.id);
       }
     },
@@ -5930,7 +5939,7 @@ export const createWorkItems = ({
      */
     settleShown(machineId: string): void {
       for (const workspace of db.activeWorkspacesOn(machineId)) {
-        if (!workspace.checksFor) {
+        if (!isGateClone(workspace)) {
           workspaces.settleSoon(workspace.id);
         }
       }
