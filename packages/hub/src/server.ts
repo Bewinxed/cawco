@@ -1070,6 +1070,7 @@ import { fleetMarketplaceRoutes } from "./routes/fleet-marketplaces";
 import { fleetMcpRoutes } from "./routes/fleet-mcp";
 import { fleetMemoryRoutes } from "./routes/fleet-memory";
 import { fleetPluginRoutes } from "./routes/fleet-plugins";
+import { fleetSyncRoutes } from "./routes/fleet-sync";
 import { fleetWatchRoutes } from "./routes/fleet-watch";
 import { followupStateRoutes } from "./routes/followup-state";
 import { harnessSchema } from "./routes/harness-schema";
@@ -34653,42 +34654,9 @@ export const createServer = (
           publishInstances(body.machineId);
           return { ok: true };
         }
-      )
-      // The click for a machine that drifted, or for the whole fleet: what
-      // moved goes, and every item the machine holds converges again.
-      .post(
-        "/api/fleet/sync",
-        { body: t.Object({ machineId: t.Optional(t.String()) }) },
-        ({ body, status }) => {
-          if (body.machineId && !registry.agent(body.machineId)) {
-            return status(404, machineFault(body.machineId, "offline"));
-          }
-          fleetSyncs.changed("asked for", {
-            reconverge: true,
-            ...(body.machineId ? { machineId: body.machineId } : {}),
-          });
-          return { ok: true };
-        }
-      )
-      // A person's Retry of the items that failed to converge on a machine
-      // for one cause (the machines panel's group): sent forced in one
-      // delta, so its machine converges them again.
-      .post(
-        "/api/fleet/items/retry",
-        {
-          body: t.Object({
-            machineId: t.String(),
-            ids: t.Array(t.String(), { minItems: 1 }),
-          }),
-        },
-        ({ body, status }) => {
-          if (!registry.agent(body.machineId)) {
-            return status(404, machineFault(body.machineId, "offline"));
-          }
-          fleetSyncs.retry(body.machineId, body.ids);
-          return { ok: true };
-        }
-      )
+      ),
+    fleetSyncRoutes(ctx),
+    new Elysia()
       // Each row spread into a fresh object, not the named `ProjectRow`: the
       // native app's client types a project by this route's own schema
       // (`GetApiProjects200Payload`), which a named row would rename.
