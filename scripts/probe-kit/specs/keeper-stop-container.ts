@@ -14,7 +14,7 @@
  * conmon passes SIGTERM on to the container (conmon ctr_exit.c
  * `on_sig_exit`, 2.1.13).
  *
- * The rule now (agent keeper-jobs.ts): `remove()` and `restart()` read the
+ * The rule now (agent service-manager/keeper-job.ts): `remove()` and `restart()` read the
  * unit's cgroup and refuse, naming each process, while anything there is
  * neither the keeper nor in the process tree of a child its register lists;
  * `force` is the one override. Nothing is moved out at stop time.
@@ -67,7 +67,7 @@ import { join } from "node:path";
 import {
   keeperJob,
   type UnitStop,
-} from "../../../packages/agent/src/keeper-jobs";
+} from "../../../packages/agent/src/service-manager/keeper-job";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { until } from "../../scratch-fleet";
 import {
