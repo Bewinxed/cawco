@@ -35,7 +35,7 @@ export const workspaceRoutes = ({
     // (workspace-retire.ts); `delegate_list` shows a session its own tree's.
     // Every held workspace: its item ended with work that is nowhere else,
     // and the session that started its work, told as it was held,
-    // continues it or discards it (work-items.ts `heldNotice`).
+    // continues it or discards it (workspaces.ts `heldNotice`).
     .get("/api/workspaces/held", hidden, () => ({
       held: workItems.heldWorkspaces(),
     }))
