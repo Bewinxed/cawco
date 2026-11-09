@@ -67,12 +67,7 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
   import { stopWords } from "../accounts/switch.svelte";
-  import {
-    cawco,
-    dismissWorkItem,
-    retryWorkItem,
-    type TrayChild,
-  } from "../client.svelte";
+  import { cawco, type TrayChild } from "../client.svelte";
   import { age } from "../find/find-rows";
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
@@ -82,6 +77,7 @@
   import { sessionPlace } from "../session-names.svelte";
   import { boardStore } from "../stores/board.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
+  import { dismissWorkItem, retryWorkItem } from "../stores/work-items.svelte";
   import { composerLayerOf } from "./composer-layer.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { layoutScale } from "./grown";
