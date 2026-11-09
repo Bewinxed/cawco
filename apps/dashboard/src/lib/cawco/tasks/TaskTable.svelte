@@ -15,6 +15,7 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import { IconChevronDown, IconChevronUp, IconNeedsYou } from "#lib/icons.js";
+  import { plainClick } from "#lib/platform/plain-click.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   /**
    * The table view: the same tasks as a ledger — id, title, stage, labels,
@@ -197,13 +198,7 @@
   };
 
   function open(event: MouseEvent, id: string) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
+    if (!plainClick(event)) {
       return;
     }
     event.preventDefault();
