@@ -86,7 +86,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
-import { leaveRetiringKeepers } from "./boundary";
+import { leaveRetiringKeepers } from "./boundary/control";
 import { provenFetch } from "./hub-proof";
 import {
   type KeeperConnection,
