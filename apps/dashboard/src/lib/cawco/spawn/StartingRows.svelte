@@ -28,9 +28,10 @@
     IconWorking,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import { cawco } from "../client.svelte";
+
   import { conversationHref } from "../links";
   import RowFault from "../RowFault.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import {
     dropStart,
     type ParkedStart,
@@ -45,7 +46,9 @@
   /** Where it starts, by its first machine's name. */
   const hostOf = (start: ParkedStart): string => {
     const id = start.draft.machineIds[0] ?? "";
-    return cawco.machines.find((row) => row.machineId === id)?.hostname ?? id;
+    return (
+      boardStore.machines.find((row) => row.machineId === id)?.hostname ?? id
+    );
   };
 
   /** The meta line: what it is doing, or what it came to. */
@@ -69,7 +72,7 @@
     if (start.state === "started" && start.target) {
       const { target } = start;
       dropStart(start.id);
-      await goto(conversationHref(target, cawco.instanceIndex));
+      await goto(conversationHref(target, boardStore.instanceIndex));
       return;
     }
     reopenStart(start.id, rowOf(start.id));
