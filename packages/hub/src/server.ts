@@ -12609,68 +12609,58 @@ export const createServer = (
    * about to destroy is kept before it goes. `set`: the asking route's, which
    * names the machine when it is away ({@link awayStatus}).
    */
-  const readMachineMemory = async (
+  /** A file a machine's agent reads for `method`, or why it could not be read. */
+  const readOffMachine = async <Copy>(
     machineId: string,
-    set: RouteSet
-  ): Promise<MemoryRead> => {
-    const answer = await readAgent(
-      machineId,
-      READ_MEMORY_FILE,
-      [],
-      READ_TIMEOUT_MS
-    );
+    method: string,
+    args: unknown[],
+    set: RouteSet,
+    copyOf: (result: unknown) => Copy,
+    failed: string
+  ): Promise<{ ok: true; copy: Copy } | ReadRefused> => {
+    const answer = await readAgent(machineId, method, args, READ_TIMEOUT_MS);
     switch (answer.kind) {
       case "unanswered":
         return { ok: false, ...unansweredStatus(set, machineId, answer) };
       case "answered":
         return answer.value.ok
-          ? { ok: true, copy: peekMemoryFile(answer.value.result) }
-          : {
-              ok: false,
-              code: 500,
-              said:
-                answer.value.error ?? "the machine could not read its memory",
-            };
+          ? { ok: true, copy: copyOf(answer.value.result) }
+          : { ok: false, code: 500, said: answer.value.error ?? failed };
       default:
         throw unreachable(answer);
     }
   };
 
+  const readMachineMemory = (
+    machineId: string,
+    set: RouteSet
+  ): Promise<MemoryRead> =>
+    readOffMachine(
+      machineId,
+      READ_MEMORY_FILE,
+      [],
+      set,
+      peekMemoryFile,
+      "the machine could not read its memory"
+    );
+
   /**
    * One fleet hook's script as one machine has it on disk. A compare is this
    * alone; adopting is this and a store. `set` as {@link readMachineMemory}'s.
    */
-  const readMachineHookScript = async (
+  const readMachineHookScript = (
     machineId: string,
     id: string,
     set: RouteSet
-  ): Promise<{ ok: true; copy: MachineHookScript | null } | ReadRefused> => {
-    const answer = await readAgent(
+  ): Promise<{ ok: true; copy: MachineHookScript | null } | ReadRefused> =>
+    readOffMachine(
       machineId,
       READ_HOOK_SCRIPT,
       [id],
-      READ_TIMEOUT_MS
+      set,
+      (result) => result as MachineHookScript | null,
+      "the machine could not read the hook's script"
     );
-    switch (answer.kind) {
-      case "unanswered":
-        return { ok: false, ...unansweredStatus(set, machineId, answer) };
-      case "answered":
-        return answer.value.ok
-          ? {
-              ok: true,
-              copy: answer.value.result as MachineHookScript | null,
-            }
-          : {
-              ok: false,
-              code: 500,
-              said:
-                answer.value.error ??
-                "the machine could not read the hook's script",
-            };
-      default:
-        throw unreachable(answer);
-    }
-  };
 
   /** The version about to be replaced, kept — a save is not a way to lose one. */
   const keepReplacedMemory = (content: string): void => {
