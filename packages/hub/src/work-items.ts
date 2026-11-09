@@ -130,6 +130,7 @@ import type {
   WorkBudget,
   WorkItemSubmission,
 } from "./db/stored-types";
+import { failedWith } from "./gate";
 import {
   capableMachines,
   capableOnline,
@@ -143,7 +144,6 @@ import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { statusCommand } from "./landing";
 import {
   createLandingRun,
-  failedWith,
   fenced,
   findingsBlock,
   MIB,
