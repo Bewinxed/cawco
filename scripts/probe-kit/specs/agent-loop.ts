@@ -13,7 +13,7 @@
  * of {@link LONG_MB} MB (obelisk's longest was 97 MB), are written before
  * the agent starts, so it comes up indexing and scanning them; once it is
  * online, the hub is asked each one's tail ({@link TAIL} entries) at once,
- * as its settle reads ask (server.ts `storedIn`).
+ * as its settle reads ask (sends.ts `storedIn`).
  *
  * Their words are drawn from a vocabulary of {@link VOCABULARY} made-up
  * words, as a real corpus's are many: an index's work grows with the
