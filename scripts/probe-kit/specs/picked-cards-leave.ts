@@ -143,7 +143,9 @@ const run = async (kit: Kit): Promise<void> => {
       await import("../../../packages/hub/src/project-folder");
     const call = async (request: HubAsk): Promise<Answer> => {
       const answer = await request(
-        handled((r) => hub.handle(r), { [PRESENCE_HEADER]: PRESENCE })
+        handled((r) => hub.handle(r), {
+          headers: { [PRESENCE_HEADER]: PRESENCE },
+        })
       );
       return said(answer);
     };
