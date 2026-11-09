@@ -14,7 +14,7 @@
  * saves and compile errors go the same way once quiet {@link MARKS_QUIET_MS}.
  */
 
-import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import {
@@ -178,8 +178,6 @@ import {
   type StageWarm,
   type StoryOp,
 } from "@cawco/core/stage";
-import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
-import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import { unhandled } from "@cawco/core/unhandled";
@@ -201,7 +199,6 @@ import {
   keptImagePaths,
   keptLinks,
   mergeProgram,
-  PROGRAM_FILE,
   ProgramRefusal,
   readKept,
 } from "../decision-program";
@@ -264,15 +261,13 @@ import {
 } from "./needs";
 import { answersKept, answersReplaced, testedKeys } from "./overwrite";
 import {
-  bytesHash,
   cardChanges,
   cssEscape,
   htmlChanges,
   pictureChanges,
   sceneChanges,
 } from "./page-changes";
-import { pagePictures } from "./page-pictures";
-import { picturePath, thumbnailPath } from "./page-store";
+import { createPageStore } from "./page-store";
 import {
   answersOf,
   noneOpen,
@@ -1094,6 +1089,7 @@ const sayDelivery = (
 };
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
+  const store = createPageStore(deps.root);
   const {
     above,
     answerable,
@@ -1164,12 +1160,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!thumbnails.has(id)) {
       let kept: ArtifactThumbnail | null = null;
       try {
-        const file = thumbnailPath(deps.root, id, "json");
-        kept = parseRecord(
-          file,
-          readFileSync(file, "utf8"),
-          ArtifactThumbnailSchema
-        );
+        kept = store.thumbnailRecord(id);
       } catch {
         kept = null;
       }
@@ -1324,9 +1315,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     let words = "";
     if (row.kind === "page") {
       try {
-        words = pageText(
-          readFileSync(join(deps.root, row.id, "index.html"), "utf8")
-        );
+        words = pageText(store.html(row.id));
       } catch {
         words = "";
       }
@@ -1546,10 +1535,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       updatedAt: now,
       shownAt: null,
     });
-    const folder = join(deps.root, row.id);
-    if (existsSync(folder)) {
-      cpSync(folder, join(deps.root, next.id), { recursive: true });
-    }
+    store.copy(row.id, next.id);
     docs.fork(row.id, next.id);
     // Nothing shows it: a canvas's writes are drawn on the headless screen (draw).
     docs.transact(next.id, "hub", (doc) => {
@@ -1752,7 +1738,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
-    rmSync(join(deps.root, row.id), { recursive: true, force: true });
+    store.remove(row.id);
     deps.removed?.(row);
     releaseServed(row);
     if (row.heldFor !== null) {
@@ -1833,30 +1819,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     next: ArtifactRow
   ): Promise<ArtifactRow> => {
-    const folder = join(deps.root, row.id);
-    const nextFolder = join(deps.root, next.id);
-    const html = join(nextFolder, "index.html");
     const maker = next.madeBy ? deps.instance(next.madeBy) : undefined;
-    if (row.kind === "page" && maker && existsSync(html)) {
+    if (row.kind === "page" && maker && store.hasHtml(next.id)) {
       // Its project's folder takes it now, as a build that isn't held does; one it refuses opens nothing.
-      const program = join(nextFolder, PROGRAM_FILE);
+      const html = store.html(next.id);
+      const program = store.program(next.id);
       const refused = await deps.keepPage(maker, row.name, {
-        html: readFileSync(html, "utf8"),
-        ...(existsSync(program)
-          ? { program: readFileSync(program, "utf8") }
-          : {}),
+        html,
+        ...(program === undefined ? {} : { program }),
       });
       if (refused) {
         throw new ArtifactRefusal(refused.status, refused.refused);
       }
     }
     letGoHeadless(next.id);
-    if (existsSync(nextFolder)) {
-      // A page's files are its revision's alone (writePage).
-      rmSync(join(folder, "files"), { recursive: true, force: true });
-      rmSync(join(folder, PROGRAM_FILE), { force: true });
-      cpSync(nextFolder, folder, { recursive: true, force: true });
-    }
+    store.takeVersion(next.id, row.id);
     // The state of the server its source names, as that server's frames
     // left it in the version's doc ({@link staged}): the row's doc holds its
     // own source's, set beside it since the fork, and the merge keeps
@@ -1997,32 +1974,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * page keeps no program.
    */
   const writePage = (id: string, html: string, program?: BuiltProgram) => {
-    const folder = join(deps.root, id);
     // The Canvases and Previews this revision drops stay the page's pictures (needs.ts).
     const page = db.get(id);
-    const was = join(folder, PROGRAM_FILE);
-    if (page && existsSync(was)) {
+    const was = page ? store.program(id) : undefined;
+    if (page && was !== undefined) {
       const kept = new Set(
         program ? readKept(program.program).artifacts.map((one) => one.id) : []
       );
       keptAsMedia(
         page,
-        readKept(readFileSync(was, "utf8"))
+        readKept(was)
           .artifacts.map((one) => one.id)
           .filter((one) => !kept.has(one))
       );
     }
-    rmSync(join(folder, "files"), { recursive: true, force: true });
-    rmSync(join(folder, PROGRAM_FILE), { force: true });
-    writeStateFileSync(join(folder, "index.html"), html);
-    if (program) {
-      writeStateFileSync(join(folder, PROGRAM_FILE), program.program);
-      for (const file of program.files) {
-        writeStateFileSync(join(folder, file.path), file.bytes);
-      }
-      if (page) {
-        warmPreviews(page, program.read);
-      }
+    store.write(id, html, program);
+    if (program && page) {
+      warmPreviews(page, program.read);
     }
   };
 
@@ -2083,34 +2051,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         docs.transact(id, "hub", (doc) => setMeta(doc, "mediaOf", page.id));
       }
     }
-  };
-
-  /** A page's files as they stand before a revision writes the next: its HTML and a decision page's program; null before its first. */
-  const pageWas = (id: string): PageWas | null => {
-    const folder = join(deps.root, id);
-    const html = join(folder, "index.html");
-    if (!existsSync(html)) {
-      return null;
-    }
-    const program = join(folder, PROGRAM_FILE);
-    // Each picture's file by its address, fingerprinted: what tells one drawn again.
-    const files = new Map<string, string>();
-    const pictures = join(folder, "files");
-    if (existsSync(pictures)) {
-      for (const name of readdirSync(pictures)) {
-        files.set(
-          `files/${name}`,
-          bytesHash(readFileSync(join(pictures, name)))
-        );
-      }
-    }
-    return {
-      html: readFileSync(html, "utf8"),
-      files,
-      ...(existsSync(program)
-        ? { program: readFileSync(program, "utf8") }
-        : {}),
-    };
   };
 
   /**
@@ -2284,7 +2224,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     html: string,
     program: BuiltProgram | undefined
   ): ChangedItem[] => {
-    const was = pageWas(row.id);
+    const was = store.revision(row.id);
     writePage(row.id, html, program);
     return was
       ? markChanges(row, pageChanges(row.id, was, { html, program }))
@@ -2307,12 +2247,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
 
   /** A decision page's program as the hub keeps it; undefined for an HTML page or any other artifact. */
-  const programOf = (row: ArtifactRow): string | undefined => {
-    const file = join(deps.root, row.id, PROGRAM_FILE);
-    return row.kind === "page" && existsSync(file)
-      ? readFileSync(file, "utf8")
-      : undefined;
-  };
+  const programOf = (row: ArtifactRow): string | undefined =>
+    row.kind === "page" ? store.program(row.id) : undefined;
 
   /**
    * The artifacts a program's Canvas and Preview pieces name, each one the
@@ -2424,25 +2360,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return pageHash(program.program);
     }
     return html === null ? null : pageHash(html);
-  };
-
-  /**
-   * The pictures decision page `id` shows, from its folder (`writePage`), by
-   * the name each Image of its kept program `program` gives.
-   */
-  const shownPictures = (
-    id: string,
-    program: string
-  ): Map<string, Uint8Array> => {
-    const folder = join(deps.root, id);
-    const shown = new Map<string, Uint8Array>();
-    for (const [name, path] of keptImagePaths(program)) {
-      const file = join(folder, path);
-      if (existsSync(file)) {
-        shown.set(name, new Uint8Array(readFileSync(file)));
-      }
-    }
-    return shown;
   };
 
   /**
@@ -3187,7 +3104,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /** The artifact's latest picture's bytes: a canvas's, or a page's from its last send; null when it has none. */
   const pictureBytes = (id: string): Buffer | null => {
     try {
-      return readFileSync(picturePath(deps.root, id));
+      return store.picture(id);
     } catch {
       return null;
     }
@@ -3201,7 +3118,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const latestPicture = (row: ArtifactRow): Buffer | null => {
     if (row.kind !== "canvas" && keptThumbnail(row.id)) {
       try {
-        return readFileSync(thumbnailPath(deps.root, row.id, "light"));
+        return store.thumbnail(row.id, "light");
       } catch {
         // Its file went since it was kept: its ink picture, when it has one.
       }
@@ -3218,10 +3135,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!png || row.kind === "canvas") {
       return;
     }
-    writeStateFileSync(
-      picturePath(deps.root, row.id),
-      Buffer.from(png, "base64")
-    );
+    store.keepPicture(row.id, Buffer.from(png, "base64"));
   };
 
   /*
@@ -3792,7 +3706,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       "ink.json": promotedJson(doc.getMap("ink").toJSON()),
     };
     if (row.kind === "page") {
-      files["index.html"] = readFileSync(join(deps.root, row.id, "index.html"));
+      files["index.html"] = store.htmlBytes(row.id);
       files["state.json"] = promotedJson(stateOf(doc));
     } else if (row.kind === "canvas") {
       const { file, outline } = canvasFile(row.id);
@@ -5003,7 +4917,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     let html: string;
     try {
-      html = readFileSync(join(deps.root, row.id, "index.html"), "utf8");
+      html = store.html(row.id);
     } catch {
       return [];
     }
@@ -5388,7 +5302,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         row.heldFor === null
       );
       const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
-      const was = pageWas(moved.id);
+      const was = store.revision(moved.id);
       writePage(moved.id, html);
       // Every page open on it hears the new revision in the doc and morphs
       // in place (the overlay); nothing reloads.
@@ -5462,7 +5376,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
     const broken = await brokenBy(row, readKept(merged.merged).cards);
     const dir = getMeta(docs.doc(row.id), "programDir");
-    const shown = shownPictures(row.id, existing);
+    const shown = store.shownPictures(row.id, existing);
     const readOn = revisionReadsOn(row, instance, shown);
     const page = await built(
       instance,
@@ -5481,7 +5395,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const before = new Set(kept.map((card) => card.id));
     const after = program.read.cards.map((card) => card.id);
     const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
-    const was = pageWas(moved.id);
+    const was = store.revision(moved.id);
     writePage(moved.id, page.html, program);
     keepPictureSources(moved, program, { read: readOn });
     const hash = pageHash(program.program);
@@ -6611,21 +6525,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(light && size)) {
         throw new ArtifactRefusal(422, "A thumbnail needs a picture.");
       }
-      writeStateFileSync(thumbnailPath(deps.root, id, "light"), light);
+      store.keepThumbnail(id, "light", light);
       if (shot.single || !shot.dark) {
-        rmSync(thumbnailPath(deps.root, id, "dark"), { force: true });
+        store.dropDark(id);
       } else {
-        writeStateFileSync(thumbnailPath(deps.root, id, "dark"), shot.dark);
+        store.keepThumbnail(id, "dark", shot.dark);
       }
       const kept: ArtifactThumbnail = {
         at: new Date().toISOString(),
         single: shot.single || !shot.dark,
         ...size,
       };
-      writeStateFileSync(
-        thumbnailPath(deps.root, id, "json"),
-        JSON.stringify(kept)
-      );
+      store.keepThumbnail(id, "json", JSON.stringify(kept));
       thumbnails.set(id, kept);
       return kept;
     },
@@ -6644,9 +6555,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return null;
       }
       try {
-        return readFileSync(
-          thumbnailPath(deps.root, id, kept.single ? "light" : scheme)
-        );
+        return store.thumbnail(id, kept.single ? "light" : scheme);
       } catch {
         return null;
       }
@@ -7092,7 +7001,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return {
         hash: pageHash(program),
         media,
-        pictures: pagePictures(join(deps.root, id)),
+        pictures: store.pictures(id),
       };
     },
 
@@ -7498,7 +7407,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         files.push(
           {
             name: `${base}.html`,
-            bytes: readFileSync(join(deps.root, row.id, "index.html")),
+            bytes: store.htmlBytes(row.id),
           },
           ...(program === undefined
             ? []
