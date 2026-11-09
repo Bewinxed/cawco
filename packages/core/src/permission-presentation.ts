@@ -35,7 +35,7 @@ import {
 } from "./words/project-settings";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
-export interface PermissionChange {
+interface PermissionChange {
   /** Lines the proposed side adds. */
   added: number;
   /** The text the proposed side ends with. */
@@ -49,7 +49,7 @@ export interface PermissionChange {
 }
 
 /** One input field, as shown: its value written out, secrets already hidden. */
-export interface PermissionField {
+interface PermissionField {
   key: string;
   value: string;
 }
@@ -1221,7 +1221,7 @@ export const PROJECT_LANDS = [
   "branch",
   "pr",
 ] as const satisfies readonly LandsMode[];
-export type ProjectLands = (typeof PROJECT_LANDS)[number];
+type ProjectLands = (typeof PROJECT_LANDS)[number];
 
 /** Every change `project_settings` makes, by its kind. */
 export const PROJECT_SETTING_KINDS = [
