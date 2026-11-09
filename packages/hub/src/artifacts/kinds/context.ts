@@ -3,26 +3,54 @@
  * artifact service: its deps, and the service's parts it calls, each read
  * when called. Each kind picks what it reads.
  */
+
 import type { ArtifactDoes } from "@cawco/core/artifact-kinds";
 import type { ArtifactPending } from "@cawco/core/artifact-needs";
 import type { ChoiceEntry } from "@cawco/core/choices";
+import type { DecisionCard } from "@cawco/core/decisions";
 import type { ChangedItem, MetaMap } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { ArtifactRow } from "../../db/artifacts";
+import type { BuiltProgram } from "../../decision-program";
 import type { createAccess } from "../access";
 import type { ArtifactServiceDeps } from "../deps";
 import type { createMarks } from "../marks";
-import type { ArtifactInput, ArtifactRead, Opened } from "../shapes";
+import type { createPageStore } from "../page-store";
+import type {
+  ArtifactInput,
+  ArtifactRead,
+  Opened,
+  PageBroken,
+} from "../shapes";
 import type { createVersions } from "../versions";
+import type { createPreviewKind } from "./preview";
 
 export interface KindContext {
   above: ReturnType<typeof createAccess>["above"];
   actsNoMore: (instance: InstanceRow) => boolean;
+  answersHad: (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    change: {
+      after: Record<string, unknown>;
+      before: Record<string, unknown>;
+      tested: ReadonlySet<string>;
+    }
+  ) => void;
   askedOf: (input: Pick<ArtifactInput, "does" | "ask" | "title">) => {
     ask: string;
     does: ArtifactDoes;
     title: string;
   };
+  brokenBy: (
+    page: { id: string | undefined; name: string; projectId: string | null },
+    cards: DecisionCard[]
+  ) => Promise<PageBroken | undefined>;
+  cardLinks: (
+    id: string,
+    cards: readonly DecisionCard[]
+  ) => Record<string, string>;
+  choicesAsked: (row: ArtifactRow) => { card?: DecisionCard; id: string }[];
   db: ArtifactServiceDeps["db"];
   deps: ArtifactServiceDeps;
   discard: (row: ArtifactRow) => void;
@@ -32,6 +60,7 @@ export interface KindContext {
   heldId: ReturnType<typeof createVersions>["heldId"];
   holder: ReturnType<typeof createAccess>["holder"];
   holdNext: ReturnType<typeof createVersions>["holdNext"];
+  holdsChange: ReturnType<typeof createVersions>["holdsChange"];
   inPanel: (row: ArtifactRow) => boolean;
   marked: ReturnType<typeof createMarks>["marked"];
   markedLinks: (
@@ -43,7 +72,9 @@ export interface KindContext {
     items: ChangedItem[],
     revision: (meta: MetaMap) => number
   ) => ChangedItem[];
+  mediaHeld: (owner: InstanceRow, program: BuiltProgram) => void;
   mediaSeen: (page: ArtifactRow, id: string) => ArtifactRow | undefined;
+  namedFor: ReturnType<typeof createAccess>["namedFor"];
   ofTree: ReturnType<typeof createAccess>["ofTree"];
   openedOf: (shown: Opened) => Opened;
   openNextFirst: ReturnType<typeof createVersions>["openNextFirst"];
@@ -67,6 +98,15 @@ export interface KindContext {
     returned: (key: string) => boolean
   ) => number;
   relistOf: (row: ArtifactRow) => void;
+  routedOn: (
+    asker: InstanceRow,
+    id: string,
+    cards: DecisionCard[],
+    all: DecisionCard[]
+  ) => Promise<Record<string, string>>;
   stampMeta: (row: ArtifactRow, given: string | null) => void;
+  store: ReturnType<typeof createPageStore>;
   waitsOnPerson: (row: ArtifactRow) => boolean;
+  warmPreviews: ReturnType<typeof createPreviewKind>["warmPreviews"];
+  whole: ReturnType<typeof createAccess>["whole"];
 }
