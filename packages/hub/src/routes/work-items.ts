@@ -9,12 +9,12 @@ import { FolderRefusal } from "../project-folder";
 import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
 import { workItemCalls } from "../work-item-calls";
-import { WorkItemRefusal } from "../work-item-state";
 import {
-  SESSION_TITLE_DESCRIPTION,
   WAIT_ITEM_LIMIT,
   WAIT_ITEM_MAX_MINUTES,
-} from "../work-items";
+  WorkItemRefusal,
+} from "../work-item-state";
+import { SESSION_TITLE_DESCRIPTION } from "../work-items";
 import { harnessSchema } from "./harness-schema";
 import { sessionCallerRefusal } from "./session-caller";
 

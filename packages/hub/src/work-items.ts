@@ -165,6 +165,8 @@ import {
   isRoutineParent,
   LIVE,
   type Parent,
+  WAIT_ITEM_LIMIT,
+  WAIT_ITEM_MAX_MINUTES,
   WorkItemRefusal,
 } from "./work-item-state";
 import type { WorkPlace } from "./work-place";
@@ -1277,11 +1279,6 @@ const waitClock = (at: Date): string =>
     minute: "2-digit",
     hour12: false,
   });
-
-/** The longest wait `wait_item` declares, in whole minutes: its tool, its route and {@link WorkItems.waitItem} read it here. */
-export const WAIT_ITEM_MAX_MINUTES = 120;
-
-export const WAIT_ITEM_LIMIT = `Wait not set. Use whole minutes from 1 to ${WAIT_ITEM_MAX_MINUTES} and a non-empty reason for waiting on a command you started.`;
 
 /** A `from` request with what it cannot go with: a new workspace, cut where its source's repository is. */
 const fromProblem = (request: WorkItemRequest): string | undefined => {
