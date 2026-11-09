@@ -769,8 +769,8 @@ export class SessionSupervisor {
     .map((adapter) =>
       adapter.carrier?.({
         adopting: (instanceId) => this.#adopting.has(instanceId),
-        awake: (instanceId, session, serverBusy, keepAliveAside, forMove) =>
-          this.#awake(instanceId, session, serverBusy, keepAliveAside, forMove),
+        awakeForMove: (instanceId, session) =>
+          this.#awakeForMove(instanceId, session),
         drop: (instanceId, how) => this.#live.drop(instanceId, how),
         endWork: (instanceId, why) => this.#endWork(instanceId, why),
         queued: (instanceId) => this.#queues.has(instanceId),
@@ -1823,11 +1823,17 @@ export class SessionSupervisor {
   async #awake(
     instanceId: string,
     session: HarnessSession,
-    serverBusy?: string[],
-    /** The hub's keep-alive is left out: {@link CONTROL_RESTLESS} asks for the rest alone. */
-    keepAliveAside = false,
-    /** A move's stop: what its resume on the new account brings back is not counted ({@link HarnessSession.holding}). */
-    forMove = false
+    {
+      serverBusy,
+      keepAliveAside = false,
+      forMove = false,
+    }: {
+      serverBusy?: string[];
+      /** The hub's keep-alive is left out: {@link CONTROL_RESTLESS} asks for the rest alone. */
+      keepAliveAside?: boolean;
+      /** A move's stop: what its resume on the new account brings back is not counted ({@link HarnessSession.holding}). */
+      forMove?: boolean;
+    } = {}
   ): Promise<{ why: string; unsure?: true; later?: true } | undefined> {
     if (this.#adopting.has(instanceId)) {
       return { why: "its custody is still being decided", unsure: true };
@@ -1876,6 +1882,21 @@ export class SessionSupervisor {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Why a carried session's process cannot be ended for a move now
+   * ({@link #awake}): the hub's keep-alive left out, and what its resume on
+   * the new account brings back not counted.
+   */
+  #awakeForMove(
+    instanceId: string,
+    session: HarnessSession
+  ): Promise<{ why: string; unsure?: true; later?: true } | undefined> {
+    return this.#awake(instanceId, session, {
+      keepAliveAside: true,
+      forMove: true,
+    });
   }
 
   /**
@@ -1965,7 +1986,9 @@ export class SessionSupervisor {
     if (!session) {
       return { asleep: this.#asleep.has(instanceId) };
     }
-    const awake = await this.#awake(instanceId, session, undefined, retire);
+    const awake = await this.#awake(instanceId, session, {
+      keepAliveAside: retire,
+    });
     if (awake) {
       return { asleep: false, awake: awake.why };
     }
@@ -2087,7 +2110,10 @@ export class SessionSupervisor {
       if (!session) {
         continue;
       }
-      const awake = await this.#awake(instanceId, session, serverBusy, true);
+      const awake = await this.#awake(instanceId, session, {
+        serverBusy,
+        keepAliveAside: true,
+      });
       if (awake) {
         restless[instanceId] = awake.why;
       }
@@ -2113,7 +2139,7 @@ export class SessionSupervisor {
         this.#retire(instanceId, session, outdated);
         continue;
       }
-      const awake = await this.#awake(instanceId, session, serverBusy);
+      const awake = await this.#awake(instanceId, session, { serverBusy });
       if (awake) {
         if (!awake.unsure) {
           this.#live.touch(instanceId);
@@ -2439,7 +2465,7 @@ export class SessionSupervisor {
     ) {
       return;
     }
-    const awake = await this.#awake(instanceId, session, undefined, true, true);
+    const awake = await this.#awakeForMove(instanceId, session);
     if (awake || this.#queues.has(instanceId)) {
       console.info(
         `[compact] ${instanceId}: its process ran a manual /compact; it is replaced at a later turn's end, not now: ${awake?.why ?? "something sent to it is still on its way"}`
