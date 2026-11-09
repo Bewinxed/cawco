@@ -49,7 +49,7 @@
   import { failureWords as message } from "#lib/platform/hub-read.js";
   import { idForWords, type SentWords } from "#lib/platform/id.js";
   import { artifactNamed } from "../artifact-names.svelte";
-  import { cawco } from "../client.svelte";
+
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { plainMarkdown } from "../plain-markdown";
@@ -73,6 +73,7 @@
   import SessionMark from "../SessionMark.svelte";
   import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import { sessionStatus } from "../session-status";
+  import { boardStore } from "../stores/board.svelte";
   import { openBeside } from "./beside.svelte";
   import Presented, { isPresented } from "./stage/Presented.svelte";
 
@@ -134,7 +135,7 @@
   const wordsStage = $derived(!(presented || unreported) && whole.length > 0);
 
   const row = $derived(
-    from ? cawco.instanceIndex.byId.get(from.instanceId) : undefined
+    from ? boardStore.instanceIndex.byId.get(from.instanceId) : undefined
   );
   const fromName = $derived(
     from ? (sessionTitle(from.instanceId) ?? commonWords.itsSession) : ""

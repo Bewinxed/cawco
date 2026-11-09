@@ -1,7 +1,7 @@
 <script lang="ts">
   import { HOOK_TEMPLATES } from "@cawco/core/hooks";
   import { hookSentence } from "@cawco/core/words/hooks";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import { deleteHook } from "#lib/cawco/config/deletes.js";
   import FleetStarters from "#lib/cawco/config/FleetStarters.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
@@ -15,6 +15,7 @@
   import { configStore } from "#lib/cawco/config/store.svelte.js";
   import { draftOf, type FleetHook, saveHook } from "#lib/cawco/hooks.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";
   import { newId } from "#lib/platform/id.js";
@@ -29,7 +30,7 @@
   const HUE = section.hue;
 
   const hooks = $derived(store.hooks.value ?? []);
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   const acts = new RowActs<FleetHook>("/config/hooks", {
     key: (row) => row.id,
     toggle: async (row, enabled) => {

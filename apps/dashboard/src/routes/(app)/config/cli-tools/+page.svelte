@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { cawco } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import ToolMatrix from "#lib/cawco/ToolMatrix.svelte";
 
   /**
@@ -13,7 +13,7 @@
    */
   const store = configStore();
   const section = sectionOf("cli-tools");
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
 </script>
 
 <SectionFrame

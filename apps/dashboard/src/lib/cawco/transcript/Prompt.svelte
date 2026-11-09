@@ -82,15 +82,14 @@
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
   import {
-    cawco,
     commandRecord,
-    isStale,
     type PendingPermission,
     permissionAnswer,
   } from "../client.svelte";
   import { hubSeam } from "../hub-live";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
+  import { boardStore, isStale } from "../stores/board.svelte";
   import { takeOverBrowser } from "../stores/browsers.svelte";
 
   let {
@@ -517,7 +516,7 @@
   let pressed = $state<Choice | null>(null);
   /** A take-over on its way (`takeOverBrowser`), which goes out as no command. */
   let taking = $state(false);
-  const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
+  const row = $derived(boardStore.instanceIndex.byId.get(request.instanceId));
   /** The session's machine is offline: the ask stands, its answer waits. */
   const offline = $derived(row ? isStale(row) : false);
   /** The hub as this card reads it: the live client's, or a states file's stand-in. */
