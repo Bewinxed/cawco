@@ -1,6 +1,6 @@
 /**
  * What a component reads of the hub, through its own tree: the connection's
- * state, as `cawco.hub` says it, and a read of the hub's REST, as `hubJson`
+ * state, as `connectionStore.hub` says it, and a read of the hub's REST, as `hubJson`
  * answers one. A states file provides a stand-in for the hub state it names
  * (HubStandIn, by a story's decorator): context, not a store, because the
  * canvas draws every frame in one page, and two frames naming two hub

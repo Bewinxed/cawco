@@ -190,7 +190,7 @@ export const load: LayoutServerLoad = async ({
 
   // What the fleet calls these conversations, and what each is doing as the
   // hub's pulses say: the store draws these until the socket's first frame
-  // (client.svelte.ts `pulseOf`), so a working tab is drawn working from the
+  // (stores/board.svelte.ts `pulseOf`), so a working tab is drawn working from the
   // first paint. A read that fails leaves the socket to say it, as before.
   const [listing, pulseRead] = await Promise.all([
     readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
