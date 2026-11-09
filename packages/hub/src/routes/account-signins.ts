@@ -82,7 +82,7 @@ export const accountSigninRoutes = ({
           );
         }
         // Signed in there again while a sign-out waited on a process there
-        // ({@link leaveAccounts}): the store stays.
+        // (`leaveAccounts`): the store stays.
         db.accounts.dropLeave(account.id, params.machineId);
         // The machine's sign-in runs under the id it was asked for, the id
         // `…/signin/complete` finishes it under: one a join removed
@@ -117,7 +117,7 @@ export const accountSigninRoutes = ({
         // that store signed out, as its next register would report, so
         // removing the account forgets it there. A store under an id a
         // join removed is no account's: the machine forgets it when it
-        // next names its stores ({@link unknownAccountsOf}).
+        // next names its stores (`unknownAccountsOf`).
         if (
           sent &&
           params.id === account.id &&
@@ -240,7 +240,7 @@ export const accountSigninRoutes = ({
         const machines = await Promise.all(
           body.machineIds.map(async (machineId) => {
             // Its key sent there again while a sign-out waited on a process
-            // there ({@link leaveAccounts}): the store stays.
+            // there (`leaveAccounts`): the store stays.
             db.accounts.dropLeave(account.id, machineId);
             const answer = await callAgent(
               machineId,
