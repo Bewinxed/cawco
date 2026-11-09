@@ -98,7 +98,7 @@ import {
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
-import { JUDGE_SCRIPT } from "../boundary";
+import { JUDGE_SCRIPT } from "../boundary/hook-judge";
 import { CHROME_DEVTOOLS } from "../browser/door";
 import {
   delegationHubUrl,

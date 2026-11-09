@@ -4,7 +4,7 @@
 # Linux: SIGKILL to the outer bwrap takes the whole pid namespace; srt then
 # sees its child exit and removes its proxy, socat bridge and mount points.
 # macOS: Seatbelt has no pid namespace, so every process carrying the
-# workspace's marker is killed (as boundary.ts killMarked does today), then srt.
+# workspace's marker is killed (as boundary/ killMarked does today), then srt.
 set -u
 state=$1
 if [ -f "$state/sandbox.pid" ]; then kill -KILL "$(cat "$state/sandbox.pid")" 2>/dev/null; fi

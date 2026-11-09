@@ -1,6 +1,6 @@
 /**
  * `boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES [PLACE...]`: a Linux workspace's boundary,
- * as sessiond holds it, one process per workspace (`boundary.ts`). It hosts
+ * as sessiond holds it, one process per workspace (`boundary/`). It hosts
  * @anthropic-ai/sandbox-runtime (srt) in library mode: `SandboxManager` is a
  * module-level singleton, one config and one proxy per process, so each
  * workspace has its own process. It starts srt's proxy with the workspace's
@@ -255,7 +255,7 @@ const guardedFile = join(process.cwd(), "guarded");
 /**
  * `<state>/restarts.json`: each restart of the sandbox for a guarded path
  * changed on the host, `{at, path, inner}`, oldest first, written before the
- * line saying it, which the agent records it from (boundary.ts
+ * line saying it, which the agent records it from (boundary/
  * `recordHostRestarts`).
  */
 const restartsFile = join(process.cwd(), "restarts.json");
@@ -301,7 +301,7 @@ const GONE_STATUS = 66;
 
 const refuseGone = (reason: string): never => {
   // On stdout, as a line: the agent names a boundary that did not start by
-  // what it heard (`ready` in boundary.ts).
+  // what it heard (`ready` in boundary/).
   console.log(
     `cawco: ${reason}, so the workspace's boundary closes and no sandbox starts there`
   );
@@ -393,7 +393,7 @@ const above = (path: string): string[] => {
  * {@link standIn} for one path: its parents made as the clone's own
  * directories, then the path itself. A mount point an earlier sandbox left
  * (`left`) may still be held by that sandbox: an older boundary runs on
- * beside this one until nothing runs in it (`handOver` in boundary.ts), and
+ * beside this one until nothing runs in it (`handOver` in boundary/), and
  * unlinking the file it binds would drop its deny there. So a file's stand-in
  * is written into it in place, its inode kept, and a dir's is made only once
  * no mount namespace holds it (`mountedAnywhere`); until then srt covers it
@@ -577,7 +577,7 @@ const PID = /^\d+$/u;
 /**
  * `inner` and every process that descends from it, by each one's parent:
  * the sandbox, in its own pid namespace and any nested in it. The agent
- * judges an older boundary by the same tree (`inTree` in boundary.ts).
+ * judges an older boundary by the same tree (`inTree` in boundary/).
  */
 const treeOf = (inner: number): number[] => {
   const children = new Map<number, number[]>();
@@ -633,12 +633,12 @@ const inherited = [
   "LOGNAME",
   "LANG",
   "CAWCO_WORKSPACE",
-  // A place: nothing a command starts outlives it (boundary.ts `LAUNCH`).
+  // A place: nothing a command starts outlives it (boundary/runner.ts `LAUNCH`).
   "CAWCO_PLACE",
 ];
 const runnerEnv = {
   // The dirs of the agent's PATH no session can change, which this host was
-  // handed (boundary.ts `planFor`), where srt finds socat and bash too.
+  // handed (boundary/plan.ts `planFor`), where srt finds socat and bash too.
   PATH: trustedPath(),
   // The relay's socket, which the runner bridges into the sandbox (proxy-relay.ts `RELAY_STEP`).
   [RELAY_SOCKET_ENV]: relaySocket,
@@ -659,7 +659,7 @@ const runnerEnv = {
  * What bwrap and srt say on stderr before the runner is ready is passed on
  * as lines too: sessiond streams a process's stdout alone, and the agent
  * says why a boundary did not start from the lines it heard (`ready` in
- * boundary.ts), so a refused sandbox is named with bwrap's own words, not
+ * boundary/), so a refused sandbox is named with bwrap's own words, not
  * an exit status alone. After that, stderr is this process's own, as before.
  */
 const startSandbox = async (): Promise<Sandbox | Unstarted> => {
@@ -954,7 +954,7 @@ for (;;) {
   }
   // Recorded, then said on stdout, as a line: the keeper drains stderr
   // unread, and the agent says each line its host says after the sandbox is
-  // ready (`watchHost` in boundary.ts), so a restart, which ends everything
+  // ready (`watchHost` in boundary/), so a restart, which ends everything
   // in the workspace, is in its log and its record.
   restarts.push({
     at: Date.now(),
