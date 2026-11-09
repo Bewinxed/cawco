@@ -35,9 +35,9 @@ import {
   sessiond,
   sessiondPath,
   stateDir,
+  type UnaskedCalls,
   writeWhole,
 } from "./state";
-import { judgeExited } from "./unasked";
 
 /** The judges starting now, by their sessiond id: one start each, however many ask. */
 const judging = new Map<string, Promise<void>>();
@@ -99,7 +99,8 @@ export const judgeFor = async (
   id: string,
   held: Pick<Held, "exec">,
   hook: string,
-  policy: string
+  policy: string,
+  unasked: UnaskedCalls
 ): Promise<JudgeAt> => {
   const runtime = await bunRuntime(id);
   const scripts = await judgeScripts();
@@ -177,7 +178,7 @@ export const judgeFor = async (
     judging.set(procId, started);
   }
   await started;
-  await watchJudge(id, procId);
+  await watchJudge(id, procId, unasked);
   return { socket, address: await socketAddress(id, socket) };
 };
 
@@ -188,7 +189,11 @@ export const judgeFor = async (
  * the workspace closed, finds the current one running, or no workspace. A
  * watch lives on its sessiond connection, so a new connection watches again.
  */
-const watchJudge = async (id: string, procId: string): Promise<void> => {
+const watchJudge = async (
+  id: string,
+  procId: string,
+  unasked: UnaskedCalls
+): Promise<void> => {
   const client = await sessiond();
   if (watchedJudges.get(procId) === client) {
     return;
@@ -210,7 +215,7 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
             `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
           );
         }
-        await judgeExited(id, held !== undefined);
+        await unasked.judgeExited(id, held !== undefined);
       }).catch((error: unknown) => {
         console.warn(
           `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
