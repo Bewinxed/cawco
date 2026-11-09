@@ -519,7 +519,7 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
   /**
    * {@link readAgent} for a read the machine stops once the hub stops
    * waiting for it (core `CONTROL_ABANDON`, agent session.ts
-   * `registerAbandonable`): when `timeoutMs` passes with no answer, or
+   * `declareRead`): when `timeoutMs` passes with no answer, or
    * `ask.signal` aborts (its asker typed on), the machine is told under the
    * read's own request id, and stops it where it runs. A deadline that
    * passes is logged with who asked, so a late answer's line (`lateAnswer`,
