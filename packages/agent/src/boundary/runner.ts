@@ -22,6 +22,7 @@ import { runtimeSockets } from "../browser/runtime";
 import { RELAY_STEP } from "../proxy-relay";
 import { execScript } from "./exec";
 import { perl } from "./hook-judge";
+import { HOST_ENV } from "./protocol";
 import { generationDir, READY, refusal } from "./state";
 
 /**
@@ -103,7 +104,7 @@ const LAUNCH = [
   "close($asked);",
   '$ENV{CAWCO_SEARCHABLE_PATH} = join(":", grep { !(m{^/} && !lstat("$_/.cawco-path-lookup") && $!{EPERM}) } split(/:/, $path, -1));',
   "setpgrp(0, 0);",
-  "exec @ARGV unless $ENV{CAWCO_PLACE};",
+  `exec @ARGV unless $ENV{${HOST_ENV.place}};`,
   'if ($^O eq "linux") {',
   "  my %nr = (x86_64 => 157, aarch64 => 167, i686 => 172, armv7l => 172, armv6l => 172, riscv64 => 167);",
   "  my $n = $nr{(POSIX::uname())[4]};",
@@ -364,8 +365,9 @@ export const hostScript = (): string =>
 
 /**
  * What the host script runs, for the form: a change to it is a change of
- * form. A build's script bundles srt and the proxy relay; a checkout's
- * imports them, so the relay (proxy-relay.ts) and srt's module that writes
+ * form. A build's script bundles srt, the proxy relay and the protocol; a
+ * checkout's imports them, so the relay (proxy-relay.ts), the protocol
+ * (protocol.ts) and srt's module that writes
  * the sandbox's mounts (each read-deny tmpfs among them, which the bwrap it
  * runs makes read-only, {@link bwrapLauncherOf}) are read beside it.
  */
@@ -380,6 +382,7 @@ export const readHostText = async (host: string): Promise<string> => {
     [
       host,
       join(dirname(host), "proxy-relay.ts"),
+      join(dirname(host), "boundary", "protocol.ts"),
       join(srt, "sandbox", "linux-sandbox-utils.js"),
     ].map((file) => Bun.file(file).text())
   );
