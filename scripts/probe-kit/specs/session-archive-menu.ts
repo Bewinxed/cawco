@@ -149,7 +149,7 @@ const run = async (kit: Kit) => {
     delegate
   );
   // Rows written behind the hub's back: the board reads a session's row
-  // again when the hub changes it (server.ts `refreshBoard`), so the
+  // again when the hub changes it (board.ts `refreshBoard`), so the
   // delegate is renamed through the hub, as the person renames one.
   const renamed = await fetchHub(
     fetch,
