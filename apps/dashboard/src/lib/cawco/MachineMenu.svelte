@@ -26,17 +26,13 @@
    * a session. What it asks stands under the row (`AskHere`).
    */
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import {
-    cawco,
-    loadCatalog,
-    pauseMachine,
-    removeMachine,
-  } from "./client.svelte";
+  import { cawco, pauseMachine, removeMachine } from "./client.svelte";
   import { resolveSessionTitle } from "./links";
   import { pauseChoices } from "./machine-pause";
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
   import { boardStore, type Machine } from "./stores/board.svelte";
+  import { loadCatalog } from "./stores/catalog.svelte";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
 
