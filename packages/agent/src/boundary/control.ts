@@ -21,16 +21,13 @@ import {
   readingMoved,
   rearming,
   replaceSoon,
-  settleGonePlace,
   staleLook,
   start,
-  stopGeneration,
-  stopNow,
 } from "./lifecycle";
 import { closeQuietly, liveFacts, setProject } from "./looks";
 import { workLeft } from "./narrowing";
 import { commandsEnded } from "./processes";
-import { sandboxesGone, sayWhyLeft, stale } from "./staleness";
+import { sayWhyLeft, stale } from "./staleness";
 import {
   type Boundary,
   closing,
@@ -43,6 +40,12 @@ import {
   sessiond,
   starting,
 } from "./state";
+import {
+  sandboxesGone,
+  settleGonePlace,
+  stopGeneration,
+  stopNow,
+} from "./stop";
 
 /**
  * At this agent's start: each place on record here ({@link readHeld})
