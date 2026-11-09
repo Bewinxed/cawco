@@ -35,6 +35,7 @@ import { noteText } from "@cawco/core/choices";
 import type { Anchor } from "@cawco/core/comments/anchor";
 import { type Pin, pinAsks } from "@cawco/core/comments/model";
 import { type DecisionCard, pickMade } from "@cawco/core/decisions";
+import type { QuestionClose } from "@cawco/core/doc-meta";
 import { pinName } from "@cawco/core/pin-name";
 import { artifactLink, decisionLink, pinLink } from "@cawco/core/references";
 import type {
@@ -42,19 +43,6 @@ import type {
   SessionQuestionKind,
 } from "@cawco/core/session-questions";
 import { cssEscape } from "./page-changes";
-
-/** The doc's `meta` key holding the agent's closes, by question key: the hub's alone to write. */
-export const QUESTIONS_CLOSED = "questionsClosed";
-
-/** The agent's close of a question: acted on his answer (`taken`), or superseded (`withdrawn`). */
-export interface QuestionClose {
-  as: "taken" | "withdrawn";
-  at: string;
-  /** The session that closed it. */
-  by: string;
-  /** Taken: his words it acted on, quoted; withdrawn: what superseded it. */
-  why: string;
-}
 
 /** What he answered with, in his words. */
 export interface QuestionAnswer {
