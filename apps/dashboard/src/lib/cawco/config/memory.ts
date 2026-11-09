@@ -1,7 +1,7 @@
 import { userLayerLabel } from "@cawco/core/claude-dirs";
 import { type MemoryScope, scoped } from "@cawco/core/fleet";
 import { scopeWords } from "@cawco/core/words/memory-scope";
-import type { Machine } from "../client.svelte";
+import type { Machine } from "../stores/board.svelte";
 
 /**
  * The main file has no path under memories/, so in a URL it is `CLAUDE.md` —

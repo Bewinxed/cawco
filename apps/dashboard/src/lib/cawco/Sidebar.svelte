@@ -58,13 +58,7 @@
   import { stored } from "#lib/platform/storage.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import {
-    cawco,
-    isFailed,
-    isResumable,
-    isStale,
-    type ProjectRow,
-  } from "./client.svelte";
+  import { cawco, type ProjectRow } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import { files, filesCount } from "./files/files.svelte";
@@ -97,6 +91,12 @@
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { sameRow } from "./same-row";
   import { newSession } from "./spawn/new-session.svelte";
+  import {
+    boardStore,
+    isFailed,
+    isResumable,
+    isStale,
+  } from "./stores/board.svelte";
   import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { projectTab, tabOfPath } from "./workspace/tabs";
@@ -219,7 +219,7 @@
     if (connectionStore.hub === "unreachable") {
       return 3;
     }
-    if (!cawco.fleetRead) {
+    if (!boardStore.fleetRead) {
       return 1;
     }
     return cawco.catalogsRead ? 3 : 2;
@@ -270,7 +270,7 @@
   /**
    * What is running now, as every list shows it.
    */
-  const running = $derived(cawco.runningInstances);
+  const running = $derived(boardStore.runningInstances);
 
   const orderedProjects = $derived.by(() =>
     [...cawco.projects].sort((a, b) => {
@@ -286,7 +286,7 @@
   /**
    * Every row the lists hold, as they hold it.
    */
-  const railRows = $derived(cawco.listedById);
+  const railRows = $derived(boardStore.listedById);
 
   /** The rows the projects' lists are built from (`built`). */
   interface Built {
@@ -344,7 +344,7 @@
   const built = $derived.by((): Built => {
     const next: Built = {
       byId: railRows,
-      rows: cawco.listedInstances,
+      rows: boardStore.listedInstances,
       running,
       notRunning,
     };
@@ -557,7 +557,7 @@
 
   /** What a project says when nothing in it runs: how much of it is resumable. */
   const notRunning = $derived(
-    cawco.listedInstances.filter(
+    boardStore.listedInstances.filter(
       (row) => isResumable(row) || isStale(row) || isFailed(row)
     )
   );
@@ -750,7 +750,7 @@
 
   /** The sessions waiting on you (core `waitingOnYou`), in the attention tone; else the ones running. */
   const fleetCount = $derived(
-    cawco.waitingCount || cawco.runningInstances.length
+    cawco.waitingCount || boardStore.runningInstances.length
   );
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
@@ -1155,7 +1155,7 @@
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
           <p class="px-space-3 text-meta text-ink-muted" data-flip>
-            {cawco.machines.length === 0
+            {boardStore.machines.length === 0
               ? sidebarWords.noProjectsNoMachines
               : sidebarWords.noProjects}
           </p>

@@ -1,9 +1,7 @@
 <script lang="ts" module>
-  import { cawco } from "./client.svelte";
-
   /** How many machines are online: the phone sidebar's count. */
   export const machinesOnline = (): number =>
-    cawco.machines.filter((machine) => machine.status === "online").length;
+    boardStore.machines.filter((machine) => machine.status === "online").length;
 </script>
 
 <script lang="ts">
@@ -29,6 +27,7 @@
   import { barGlass } from "./bar-glass.svelte";
   import { connect } from "./connect/installs.svelte";
   import { home } from "./home/home-state.svelte";
+  import { boardStore } from "./stores/board.svelte";
 
   /**
    * How many machines, from the first paint: the layout's count until this
@@ -40,7 +39,9 @@
     connect.installs.filter(
       (one) =>
         one.state === "running" &&
-        !cawco.machines.some((machine) => machine.machineId === one.returning)
+        !boardStore.machines.some(
+          (machine) => machine.machineId === one.returning
+        )
     ).length
   );
   /** Installs that ended badly and wait on the person. */
@@ -48,8 +49,8 @@
     connect.band.filter((one) => one.state !== "running").length
   );
   const count = $derived(
-    (cawco.fleetRead || cawco.machines.length > 0
-      ? cawco.machines.length
+    (boardStore.fleetRead || boardStore.machines.length > 0
+      ? boardStore.machines.length
       : ((page.data as { machineCount?: number | null }).machineCount ?? 0)) +
       adding
   );
@@ -58,7 +59,7 @@
     if (home.exceptions.length === 0) {
       return unsettled > 0 ? "attn" : undefined;
     }
-    return cawco.machines.some((machine) => machine.status !== "online")
+    return boardStore.machines.some((machine) => machine.status !== "online")
       ? "fail"
       : "attn";
   });
@@ -86,7 +87,7 @@
     const byFault = Map.groupBy(home.exceptions, ({ text }) => text);
     const clauses = [...byFault].map(([text, entries]) => {
       const who = entries.map(({ machineId }) => {
-        const machine = cawco.machines.find(
+        const machine = boardStore.machines.find(
           (entry) => entry.machineId === machineId
         );
         return machine ? machineLabel(machine.hostname) : machineId;
