@@ -586,7 +586,7 @@ const runBinaryApply = async (args: Args): Promise<number> => {
  * `cawco binary-units`: this build's units, as it writes them. `services`:
  * the hub's, the dashboard's and the agent's and the dashboard's socket
  * (service.ts `refreshServices`), and the install's record of where the
- * dashboard answers, which the update's verification probes (core
+ * dashboard answers, which the update's verification probes (cli
  * binary-health.ts), as the socket now names it; else its keeper's own unit.
  */
 const writeBinaryUnits = async (services: boolean): Promise<void> => {
