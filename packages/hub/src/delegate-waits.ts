@@ -8,14 +8,14 @@
  * browser ask (browser-tools.ts), a connect ask (connect-asks.ts), a move
  * (moves.ts), a design proposal (design-system.ts), and an ask handed to the
  * parent that went to the person when the parent went to rest unanswered
- * (server.ts `escalateRoutedAsks`).
+ * (ask-routing.ts `escalateRoutedAsks`).
  *
  * As an ask starts waiting ({@link DelegateWaits.asked}), its asker's parent
- * (server.ts `delegateAskParent`: the session that started its work, live
+ * (ask-routing.ts `delegateAskParent`: the session that started its work, live
  * or asleep with a conversation to wake from) is told one of three things:
  *
  * - an ask it may answer (a harness's prompt routed to it, a question): the
- *   ask itself, with how to answer it (server.ts `deliverDelegateAsk`);
+ *   ask itself, with how to answer it (ask-routing.ts `deliverDelegateAsk`);
  * - an ask only the person answers ({@link DelegateWaits.personOnly}): what
  *   it asks, that the person holds it, and that answer_delegate is refused
  *   for it;
@@ -42,7 +42,7 @@
  * A parent read `unknown` (as every live row is from a hub's start until
  * its machine registers) is told as any other: the send path keeps the
  * notice durably, owed in `sent_messages`, and hands it over as the
- * machine registers (server.ts `deliverToSession`, `away`), under the same
+ * machine registers (sends.ts `deliverToSession`, `away`), under the same
  * name, so a wait or an end told meanwhile reaches it once. A machine that
  * does not come back within its window has every send kept for it fail, by
  * the fleet's rule for every send. And as each machine registers the hub
@@ -82,7 +82,7 @@ const withdrawnHow = (closed: string | undefined): string =>
 export interface DelegateWaitsDeps {
   /** The name a session's answer carries (`AnswerFrom.name`). */
   readonly answererName: (row: InstanceRow) => string;
-  /** Hands `parent` the ask as its own to answer, with how (server.ts `deliverDelegateAsk`). */
+  /** Hands `parent` the ask as its own to answer, with how (ask-routing.ts `deliverDelegateAsk`). */
   readonly hand: (
     asker: InstanceRow,
     parent: InstanceRow,

@@ -1,7 +1,7 @@
 /**
  * A continuation anything but the person's own Continue asks for is its
  * source going on in a new session: one session, its steps all or nothing
- * (server.ts `oneSession`).
+ * (continuations.ts `oneSession`).
  *
  * 2026-11-05 10:13:07, obelisk's hub, project Private office: Caw went on
  * from a summary as its move. The new session took Caw's 30 delegates
