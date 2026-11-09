@@ -52,13 +52,8 @@ export function loadSuggestSetting(seam: HubSeam): void {
   loaded = true;
   // A hub away or restarting answers no setting: suggestions stay off, and
   // the read says why as every failed read does.
-  seam.client.api.jev
-    .get()
-    .then((answer) => {
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
-      const state = answer.data;
+  hubData(seam.client.api.jev.get(), refusedOrUnreached)
+    .then((state) => {
       suggestions.enabled = state.route !== null && state.suggestWhileTyping;
     })
     .catch((error: unknown) => {
