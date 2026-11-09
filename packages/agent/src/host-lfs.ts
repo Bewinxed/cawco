@@ -6,7 +6,7 @@
  * Large files setting: where its large files live, bound to a fleet
  * connection, whose credential the hub hands this machine,
  * {@link declaredLfs}), else its origin's own (`<clone-url>/info/lfs`,
- * move.ts `lfsEndpointOf`), pinned env-only (move.ts `lfsPins`,
+ * git/lfs.ts `lfsEndpointOf`), pinned env-only (git/lfs.ts `lfsPins`,
  * `declaredPins`). Nothing is written to the clone's `.git/config`.
  *
  * A `.lfsconfig` that names an endpoint that is neither the origin's nor the
@@ -28,8 +28,9 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
 import { z } from "zod";
 import { toHttpBase } from "./discovery";
+import { holdDeclaredSecret } from "./git/hub-credential";
+import { type DeclaredLfs, sameEndpoint } from "./git/lfs";
 import { provenFetch } from "./hub-proof";
-import { type DeclaredLfs, holdDeclaredSecret, sameEndpoint } from "./move";
 
 /** How long the hub may take to say where a project's large files live. Our choice. */
 const HUB_MS = 15_000;
@@ -169,7 +170,7 @@ export const undeclaredEndpoint = async (
 /**
  * Whether the host's own credential helpers hold a credential for
  * `endpoint`'s host (`git credential fill`, no prompt): git-lfs is then
- * given its access as `basic` (move.ts `lfsPins`), so a private origin's
+ * given its access as `basic` (git/lfs.ts `lfsPins`), so a private origin's
  * first request carries it and no 401 has git-lfs write the access into
  * the clone's config; a public one, with none to give, is left to ask
  * nothing.
