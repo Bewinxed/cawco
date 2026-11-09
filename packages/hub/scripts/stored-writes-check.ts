@@ -1,5 +1,5 @@
 /**
- * `bun scripts/stored-writes-check.ts` in packages/hub: a stored JSON column (core
+ * `bun scripts/stored-writes-check.ts` in packages/hub: a stored JSON column (hub
  * stored-json.ts `storedJson`) refuses a write holding a key its type does
  * not declare, and still reads a row that holds one. Planted on a table of
  * its own in an in-memory database, through Drizzle as the hub writes, with
