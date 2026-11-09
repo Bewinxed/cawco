@@ -23,6 +23,7 @@ import { cawco } from "./client.svelte";
 import { findNames } from "./find/find-client";
 import { age, rowOf } from "./find/find-rows";
 import { resolveSessionTitle } from "./links";
+import { continuationsStore } from "./stores/continuations.svelte";
 
 /** The shortest id part that names a session (the hub's resolver's own). */
 const SHORT_ID = 6;
@@ -63,7 +64,7 @@ function onlyStarting(
 /** The id a name has among the rows this browser holds, or null. */
 function heldId(name: string): string | null {
   const rows = cawco.instanceIndex.byId;
-  const former = cawco.formerIds;
+  const former = continuationsStore.formerIds;
   if (rows.has(name)) {
     return name;
   }
