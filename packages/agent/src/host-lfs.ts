@@ -16,9 +16,11 @@
  * told the endpoint and how to declare it ({@link noteRefused}). It is a refusal
  * to fetch from an undeclared server, not a way round one.
  */
+
 import { spawn } from "node:child_process";
 import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
+import { refusalWords } from "@cawco/core/hub-refusal";
 import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile } from "@cawco/core/paths/workspace";
@@ -91,7 +93,9 @@ const askHub = async (
   }
   const { ok, status, text } = read.value;
   if (!ok) {
-    throw new Error(`the hub did not say ${what} (${status}: ${text.trim()})`);
+    throw new Error(
+      `the hub did not say ${what} (${status}: ${refusalWords(text)})`
+    );
   }
   return JSON.parse(text) as unknown;
 };
