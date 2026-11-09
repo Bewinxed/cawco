@@ -41,15 +41,15 @@
 import { readdirSync, rmSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import StyleDictionary from "style-dictionary";
-import type { TransformedToken } from "style-dictionary/types";
-import type { ViewTextRole } from "../../../packages/core/src/views";
+import type { ViewTextRole } from "@cawco/core/views";
 import {
   buildTokens,
   cssLeafName,
   tailwindThemeCss,
-} from "../../../packages/design-tokens/src/design-tokens";
-import { KIT_TOKENS_PATH } from "../../../packages/design-tokens/src/kit-tokens";
+} from "@cawco/design-tokens/design-tokens";
+import { KIT_TOKENS_PATH } from "@cawco/design-tokens/kit-tokens";
+import StyleDictionary from "style-dictionary";
+import type { TransformedToken } from "style-dictionary/types";
 import { formatText, formattedAlike } from "../../../scripts/fmt";
 import {
   COLOUR_CATALOG,
