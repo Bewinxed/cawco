@@ -454,7 +454,7 @@ Options, each with its risk:
 
 ## 9. After the cutover
 
-The product now runs §7 (packages/agent/src/boundary.ts, boundary-host.ts,
+The product now runs §7 (packages/agent/src/boundary/, boundary-host.ts,
 boundary-policy.ts, tool-door.ts). The prototype files beside this report stay
 as the evaluation's evidence. Three scripts here check the product itself:
 - `run-linux-checks.sh [OTHER_CLONE] [HOST_PID]`: run from inside a Linux
