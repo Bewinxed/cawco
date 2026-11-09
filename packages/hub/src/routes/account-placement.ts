@@ -17,11 +17,11 @@ import { accountProvider } from "../routes/accounts";
 import { harnessSchema } from "../routes/harness-schema";
 
 const strategyChoice = t.Object({
-  strategy: t.Union(PLACEMENT_STRATEGIES.map((one) => t.Literal(one))),
+  strategy: t.UnionEnum(PLACEMENT_STRATEGIES),
   pinnedAccountId: t.Optional(t.String()),
 });
 /** A compaction method (core `CompactMethod`), as the routing's policy names it. */
-const compactMethod = t.Union(COMPACT_METHODS.map((one) => t.Literal(one)));
+const compactMethod = t.UnionEnum(COMPACT_METHODS);
 
 /**
  * The compaction policy a routing save asks for: what it sent, the room
