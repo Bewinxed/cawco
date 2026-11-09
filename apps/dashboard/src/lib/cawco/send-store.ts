@@ -9,9 +9,12 @@
  * kept with its words for Try again or Edit, for as long as those stand.
  */
 
+import type { SendPayload } from "@cawco/core/protocol";
 import { KeptSendSchema } from "#lib/cawco/stored-shapes.js";
 import { database, done, result, SENDS } from "./idb";
-import type { SendExtras } from "./stores/commands.svelte";
+
+/** What a turn carries besides its typed text — pastes turned into chips, images. */
+export type SendExtras = Pick<SendPayload, "attachments" | "images">;
 
 /** One send as it is kept: enough to send it again exactly as it went. */
 export interface KeptSend {
