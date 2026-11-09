@@ -824,7 +824,7 @@ export const folderCommands = async (
 };
 
 /**
- * Links the fleet's user layer (core paths.ts) into an account's dir: each
+ * Links the fleet's user layer (core paths/claude.ts) into an account's dir: each
  * of its dirs ({@link USER_LAYER_DIRS}, made in {@link claudeHome} when it is
  * not there yet, so an account never starts a copy of its own) and each of
  * its files `claudeHome` has ({@link USER_LAYER_FILES}) becomes a symlink to
