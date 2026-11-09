@@ -1,0 +1,327 @@
+/**
+ * The hub's accounts: who they are, where each is signed in, each one's
+ * model catalog, and the providers the account picker offers. Read on
+ * connect and again on every `usage` frame; written through the hub's
+ * account routes, each write read back whole.
+ */
+import type {
+  Account,
+  AccountBench,
+  AccountCatalog,
+  AccountCatalogFault,
+  AccountKind,
+  AccountProvider,
+  AccountReading,
+  AccountSetupStep,
+  AccountSignin,
+  AccountSigninResult,
+  PendingAccountSignin,
+  PlacementPreview,
+  ProviderChoice,
+  ProviderRouting,
+  ProviderSigninChallenge,
+  ProviderSigninResult,
+  RebalanceNotice,
+  RefusalVerdict,
+} from "@cawco/core/accounts";
+import type { AccountHue } from "@cawco/core/accounts/kinds";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { load } from "../hub/load";
+import { equal } from "./same";
+
+const accountsState = $state({
+  /**
+   * The hub's accounts (`/api/accounts`): who they are, where each is signed
+   * in, and each one's model catalog. Read on connect and after every
+   * `kind: 'usage'` frame, which the hub sends when any of it moves.
+   */
+  accounts: null as AccountsView | null,
+  /**
+   * The account picker's rows (`/api/accounts/providers`): every provider
+   * the fleet's machines know, each with how it signs in. Read with the
+   * accounts; null until read.
+   */
+  accountProviders: null as ProviderChoice[] | null,
+});
+
+/** What `/api/accounts` answers. */
+export interface AccountsView {
+  accounts: Account[];
+  /** Accounts out of placement until a window resets. */
+  bench: AccountBench[];
+  /** Why accounts with no catalog have none: their last probe's fault. */
+  catalogFaults: AccountCatalogFault[];
+  catalogs: AccountCatalog[];
+  /** Sign-ins started on a machine and not finished: the link or code each showed. */
+  pending: PendingAccountSignin[];
+  /** Each account's freshest reading: its windows, plan and extra usage. */
+  readings: AccountReading[];
+  /** What adding an account (or one back from its bench) set moving, newest first. */
+  rebalances: RebalanceNotice[];
+  /** How each provider's new sessions choose among its accounts. */
+  routing: ProviderRouting[];
+  signins: AccountSignin[];
+}
+
+/** Reads of the accounts so far: only the newest one's answer is kept. */
+let accountsReads = 0;
+
+/** Who hears the hub's accounts signal (see {@link followAccounts}). */
+let accountsFollower: (() => void) | null = null;
+
+/**
+ * Calls `follower` each time the hub says an account moved (a reading, a
+ * sign-in, a catalog), and on connect: the usage forecast's reader
+ * (usage/forecast.svelte.ts) reads again then. One follower.
+ */
+export function followAccounts(follower: () => void): void {
+  accountsFollower = follower;
+}
+
+/** Who takes each new accounts read as it lands (see {@link takeAccounts}). */
+let accountsTaker: ((view: AccountsView) => void) | null = null;
+
+/**
+ * Calls `taker` with each accounts read that changed what the hub said, as
+ * it is kept: the sign-ins under way in this tab take up the link or code
+ * the hub kept for them (accounts/flows.svelte.ts). One taker.
+ */
+export function takeAccounts(taker: (view: AccountsView) => void): void {
+  accountsTaker = taker;
+}
+
+/**
+ * Reads the hub's accounts of every provider, their sign-ins and catalogs,
+ * and the providers the fleet's machines know; a failed read keeps what was
+ * there.
+ */
+export async function readAccounts(): Promise<void> {
+  accountsFollower?.();
+  accountsReads += 1;
+  const ticket = accountsReads;
+  const [view, providers] = await Promise.all([
+    load<AccountsView>(hubRequest("GET /api/accounts")),
+    load<ProviderChoice[]>(hubRequest("GET /api/accounts/providers")),
+  ]);
+  // Reads overlap (every `usage` frame and every write asks again): only the
+  // newest one's answer is kept, so an older one landing last never stands.
+  if (ticket !== accountsReads) {
+    return;
+  }
+  if (view && !equal(accountsState.accounts, view)) {
+    accountsState.accounts = view;
+    accountsTaker?.(view);
+  }
+  if (providers && !equal(accountsState.accountProviders, providers)) {
+    accountsState.accountProviders = providers;
+  }
+}
+
+/**
+ * One write to the accounts routes. A refusal is thrown in the hub's own
+ * sentence, which is written for people; the accounts are read again after
+ * every write that landed, since only a sign-in makes the hub say so.
+ */
+async function accountsWrite<T>(request: HubRequest): Promise<T> {
+  const response = await hubFetch(request);
+  if (!response.ok) {
+    throw await hubRefusal(response);
+  }
+  const answer = (await response.json()) as T;
+  await readAccounts();
+  return answer;
+}
+
+/** Adds an account; it goes last in its provider's fill-first order. */
+export const createAccount = (body: {
+  kind: AccountKind;
+  provider: AccountProvider;
+  hue?: AccountHue;
+  label?: string;
+  /** Made by the setup: the step it stands at, until it is done. */
+  setupStep?: AccountSetupStep;
+}): Promise<Account> =>
+  accountsWrite(hubRequest("POST /api/accounts", { body }));
+
+/** Changes an account's nickname (null: its email), colour, order or limits. */
+export const patchAccount = (
+  id: string,
+  patch: {
+    hue?: AccountHue;
+    label?: string | null;
+    neverBackup?: boolean;
+    order?: number;
+    reservePct?: number | null;
+    /** Where its setup stands; null once the setup is done. */
+    setupStep?: AccountSetupStep | null;
+  }
+): Promise<Account> =>
+  accountsWrite(
+    hubRequest("PATCH /api/accounts/:id", { path: { id }, body: patch })
+  );
+
+/**
+ * What removing an account does with the sessions on it, for its confirm:
+ * how many move to another account and how many have none to go to.
+ * Null when the hub could not say.
+ */
+export const accountRemoval = (
+  id: string
+): Promise<{ moving: number; staying: number } | null> =>
+  load(hubRequest("GET /api/accounts/:id/removal", { path: { id } }));
+
+/**
+ * Removes an account, signing it out on every machine signed in to it; its
+ * sessions move to the accounts placement carries them to.
+ */
+export const deleteAccount = (id: string): Promise<{ ok: true }> =>
+  accountsWrite(hubRequest("DELETE /api/accounts/:id", { path: { id } }));
+
+/** Sets how a provider's new sessions choose among its accounts: the fields the hub's route takes. */
+export const putRouting = (
+  provider: AccountProvider,
+  routing: Omit<ProviderRouting, "provider">
+): Promise<ProviderRouting> =>
+  accountsWrite(
+    hubRequest("PUT /api/accounts/routing/:provider", {
+      path: { provider },
+      body: {
+        yours: routing.yours,
+        delegates: routing.delegates,
+        atLimit: routing.atLimit,
+      },
+    })
+  );
+
+/** Starts Claude Code's own login for the account on a machine: the link to open. */
+export const beginSignin = (
+  id: string,
+  machineId: string
+): Promise<{ url: string }> =>
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
+      path: { id, machineId },
+    })
+  );
+
+/** Types the pasted code into that login: signed in, or someone else's account. */
+export const completeSignin = (
+  id: string,
+  machineId: string,
+  code: string
+): Promise<AccountSigninResult> =>
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
+      path: { id, machineId },
+      body: { code },
+    })
+  );
+
+/**
+ * Starts a provider's own OAuth sign-in for the account on a machine: a
+ * device code to enter on any device, where, and until when.
+ */
+export const beginDeviceSignin = (
+  id: string,
+  machineId: string
+): Promise<ProviderSigninChallenge> =>
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin", {
+      path: { id, machineId },
+    })
+  );
+
+/**
+ * Waits up to a minute for the device code to be entered: signed in, as
+ * someone else, expired, or still pending (ask again).
+ */
+export const awaitDeviceSignin = (
+  id: string,
+  machineId: string
+): Promise<ProviderSigninResult> =>
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/machines/:machineId/signin/complete", {
+      path: { id, machineId },
+      body: {},
+    })
+  );
+
+/**
+ * Checks now whether Claude Code still refuses an account it refused
+ * account-wide: one turn as the account on a machine its refusal signed
+ * out. The accounts are read again once it answers.
+ */
+export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/refusal-check", { path: { id } })
+  );
+
+/**
+ * Signs an account out on one machine and drops its store there; the hub
+ * refuses a machine that is offline (409) or not signed in (404).
+ */
+export const signOutOn = (id: string, machineId: string): Promise<unknown> =>
+  accountsWrite(
+    hubRequest("DELETE /api/accounts/:id/machines/:machineId", {
+      path: { id, machineId },
+    })
+  );
+
+/** What sending a key came to on one machine: its result, or why it didn't arrive. */
+export type KeyDelivery =
+  | { machineId: string; result: ProviderSigninResult }
+  | { machineId: string; error: string };
+
+/** Relays a key account's key to each machine named; the hub never keeps it. */
+export const sendAccountKey = (
+  id: string,
+  key: string,
+  machineIds: string[]
+): Promise<{ machines: KeyDelivery[] }> =>
+  accountsWrite(
+    hubRequest("POST /api/accounts/:id/key", {
+      path: { id },
+      body: {
+        key,
+        machineIds,
+      },
+    })
+  );
+
+/**
+ * Which account a session would start on, why, and the model it was read for
+ * as the session would start on it in `cwd` (`/api/accounts/placement`).
+ * Undefined when it cannot be read; a refusal is thrown in the hub's words:
+ * no account can take it (400), or the machine could not say which model pi
+ * starts on in that folder (503), either of which refuses the start too.
+ */
+export async function placementFor(query: {
+  cwd?: string;
+  harness: string;
+  machineId: string;
+  model?: string;
+  projectId?: string;
+}): Promise<PlacementPreview | undefined> {
+  const response = await hubFetch(
+    hubRequest("GET /api/accounts/placement", { query })
+  );
+  if (response.status === 400 || response.status === 503) {
+    throw await hubRefusal(response);
+  }
+  return response.ok
+    ? ((await response.json()) as PlacementPreview)
+    : undefined;
+}
+
+/** The hub's accounts and the providers the fleet can sign in to; null until read. */
+export const accountsStore = {
+  /** The hub's accounts, their sign-ins and catalogs; null until read. */
+  get accounts(): AccountsView | null {
+    return accountsState.accounts;
+  },
+  /** The account picker's rows, every provider the fleet knows; null until read. */
+  get accountProviders(): ProviderChoice[] | null {
+    return accountsState.accountProviders;
+  },
+};
