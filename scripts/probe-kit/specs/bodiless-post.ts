@@ -36,6 +36,7 @@ import { mkdir } from "node:fs/promises";
 import { connect } from "node:http2";
 import { join } from "node:path";
 import { couldNot } from "../../../apps/dashboard/src/lib/platform/hub-read";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { dashboardRelay } from "../../../packages/hub/src/tailnet-https";
 import { scratchCertificate } from "../cloudflare-front";
@@ -89,7 +90,9 @@ const postOverH1 = async (origin: string, path: string): Promise<Answer> => {
   return {
     status: response.status,
     type: response.headers.get("content-type") ?? "",
-    body: await response.text(),
+    body: response.ok
+      ? await response.text()
+      : refusalWords(await response.text(), response.status),
     protocol: "http/1.1",
   };
 };
