@@ -750,18 +750,18 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
   };
 
   return {
+    unstrand,
+    moveRowsToAccount,
+    tellEndedByMove,
+    keptNextWords,
+    cutTasksWords,
     accountWords,
     claudeSessionsOn,
-    cutTasksWords,
-    forgetOn,
-    keptNextWords,
-    moveRowsToAccount,
-    processMayRun,
     readLaunchDirs,
-    rowsLeave,
+    forgetOn,
     signOutEverywhere,
-    tellEndedByMove,
+    rowsLeave,
+    processMayRun,
     tickLeaves,
-    unstrand,
   };
 };
