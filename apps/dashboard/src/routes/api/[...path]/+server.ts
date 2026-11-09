@@ -6,11 +6,11 @@ import {
   PREVIEW_PORT_PASS_COOKIE,
 } from "@cawco/core/preview/routes";
 import { devServerWords } from "@cawco/core/words/dev-server";
+import { ownOrigin } from "#lib/cawco/own-origin.js";
 import {
   HUB_UNREACHABLE,
   HUB_UNREACHABLE_HEADER,
-} from "#lib/cawco/hub-read.js";
-import { ownOrigin } from "#lib/cawco/own-origin.js";
+} from "#lib/platform/hub-read.js";
 import type { RequestEvent, RequestHandler } from "./$types";
 
 /**

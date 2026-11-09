@@ -2,6 +2,13 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { commonWords } from "@cawco/core/words/common";
   import { fleetFaultWords } from "@cawco/core/words/fleet-faults";
+  import { Alert, AlertTitle } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import {
+    IconChevronRight,
+    IconRefresh,
+    IconWarningTriangle,
+  } from "#lib/icons.js";
   /**
    * One fault, rendered the same way everywhere it appears.
    *
@@ -18,14 +25,9 @@
    * Its disclosures fold (240ms open, 160ms shut, motion/fold) and what its
    * remedy came to is said under the button, in place.
    */
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import { Alert, AlertTitle } from "#lib/components/ui/alert/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    IconChevronRight,
-    IconRefresh,
-    IconWarningTriangle,
-  } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import { appear, CURVE, dur } from "#lib/platform/motion/curves.svelte.js";
+  import { fold } from "#lib/platform/motion/fold.svelte.js";
   import type { Machine } from "./client.svelte";
   import {
     adoptSkill,
@@ -43,8 +45,6 @@
   } from "./fleet-faults";
   import MachineAway from "./MachineAway.svelte";
   import { MachineWait } from "./machine-wait.svelte";
-  import { appear, CURVE, dur } from "./motion/curves.svelte";
-  import { fold } from "./motion/fold.svelte";
   import OsMark from "./OsMark.svelte";
 
   let {

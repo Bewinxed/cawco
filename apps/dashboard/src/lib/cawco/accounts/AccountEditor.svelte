@@ -24,10 +24,10 @@
   import EditorSection from "#lib/cawco/config/EditorSection.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import TitleInput from "#lib/cawco/config/TitleInput.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconPalette, IconServer, IconUsage } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import AccountMachines from "./AccountMachines.svelte";
