@@ -53,7 +53,7 @@ export interface HandedInputDeps {
   /** Every file at any depth under a folder of a project's folder, by path from its root; none when it is not there. */
   folderFiles: (projectId: string, dir: string) => Promise<string[]>;
   instance: (id: string) => InstanceRow | undefined;
-  /** The folder an item's outputs landed in (work-items.ts `outputsFolder`). */
+  /** The folder an item's outputs landed in (workspaces.ts `outputsFolder`). */
   outputsFolder: (item: WorkItemRow) => string;
   /** The work items the caller reads, newest first: those of its delegation tree and of its project. */
   reachable: (caller: InstanceRow) => WorkItemRow[];
