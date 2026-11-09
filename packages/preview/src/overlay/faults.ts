@@ -17,11 +17,11 @@ import {
   PAGE_FAULT_EVENT,
   PAGE_FAULT_TEXT_MAX,
   PAGE_FAULTS_KEPT,
+  type PageErrorReport,
   type PageFault,
   sameFault,
 } from "@cawco/core/page-faults";
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
-import type { HubApp } from "@cawco/hub/app";
 
 /** The first frame of a stack that names its place: V8's `at … (url:line:col)` or `at url:line:col`, WebKit's and Gecko's `…@url:line:col`. */
 const FRAME_PLACE = /(?:\(|@|at )((?:https?|blob):[^\s()]+):(\d+):(\d+)\)?/u;
@@ -68,7 +68,7 @@ function send(fault: PageFault): void {
     return;
   }
   sent += 1;
-  const report = {
+  const report: PageErrorReport = {
     message: clip(
       fault.kind === "error" ? fault.message : `${fault.kind} fault`
     ),
@@ -78,7 +78,7 @@ function send(fault: PageFault): void {
     version: "overlay",
     userAgent: navigator.userAgent.slice(0, 512),
     fault: { artifact: to.artifact, revision: to.revision, fault },
-  } satisfies HubApp["~Routes"]["api"]["dashboard-errors"]["post"]["body"];
+  };
   fetch(PREVIEW_ERRORS_PATH, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
