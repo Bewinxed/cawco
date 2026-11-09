@@ -28,7 +28,7 @@ import { ParkedStartSchema } from "#lib/cawco/stored-shapes.js";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { track } from "#lib/platform/track.js";
-import { cawco, sendFirstPrompt } from "../client.svelte";
+import { sendFirstPrompt } from "../client.svelte";
 import {
   type ContinueSource,
   continuationRunning,
@@ -37,6 +37,7 @@ import {
   type SessionDraft,
 } from "../continue.svelte";
 import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
+import { boardStore } from "../stores/board.svelte";
 import {
   continuationsStore,
   followContinuations,
@@ -396,11 +397,11 @@ function recover(start: ParkedStart): void {
     failStart(start.id, start.askedAt ? NOT_KNOWN : NOTHING_ASKED);
     return;
   }
-  if (!cawco.fleetRead) {
+  if (!boardStore.fleetRead) {
     return;
   }
   const listed = asked.filter((ask) =>
-    cawco.instanceIndex.byId.has(ask.instanceId)
+    boardStore.instanceIndex.byId.has(ask.instanceId)
   );
   for (const ask of listed) {
     if (!ask.sent) {

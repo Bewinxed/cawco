@@ -22,6 +22,7 @@ import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
+import { boardStore } from "./stores/board.svelte";
 import { plansStore } from "./stores/plans.svelte";
 import { tickersStore } from "./stores/tickers.svelte";
 
@@ -139,7 +140,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       : null;
   },
   machine: (id) => {
-    const machine = cawco.machines.find((one) => one.machineId === id);
+    const machine = boardStore.machines.find((one) => one.machineId === id);
     return machine
       ? {
           label: machineLabel(machine.hostname),
