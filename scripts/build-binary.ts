@@ -176,7 +176,7 @@ const writeWorkFiles = async (copies: [string, string][]): Promise<void> => {
       writeFile(join(WORK, name), await Bun.file(join(ROOT, source)).bytes())
     ),
     // A Linux workspace's boundary host, srt inside, run as plain Bun by
-    // sessiond (boundary.ts); a Linux target embeds it with the ripgrep srt
+    // sessiond (boundary/); a Linux target embeds it with the ripgrep srt
     // scans a clone with: a fresh machine has none (REPORT.md §1). macOS
     // boundaries run on Seatbelt and need neither.
     writeBundle("The boundary host", join(WORK, "srt-host.js"), {
@@ -282,12 +282,12 @@ export async function prepareAssets(options: {
     ...canvas,
     ...decision,
     ...fileViewer,
-    // Run as plain Bun as each workspace's judge, never as cawco (boundary.ts).
+    // Run as plain Bun as each workspace's judge, never as cawco (boundary/).
     ["boundary/judge.ts", join(ROOT, "packages/agent/src/boundary-judge.ts")],
-    // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).
+    // Run as plain Bun by a macOS workspace's `log` shim (boundary/).
     ["boundary/log.ts", join(ROOT, "packages/agent/src/boundary-log.ts")],
     ["boundary/log-protocol.ts", join(WORK, "boundary-log-protocol.ts")],
-    // Run as plain Bun beside the judge, and imported by OpenCode's plugin (boundary.ts).
+    // Run as plain Bun beside the judge, and imported by OpenCode's plugin (boundary/).
     ["boundary/workspace-judge.ts", join(WORK, "workspace-judge.ts")],
     // A project's browser image's build context, sent to the machine's
     // container runtime as it is (agent browser/image.ts).
