@@ -37,7 +37,12 @@ import type {
 } from "@cawco/core/install";
 import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
-import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  failureWords,
+  hubFetch,
+  hubJson,
+  hubRefusal,
+} from "#lib/platform/hub-read.js";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
@@ -225,11 +230,7 @@ class Connect {
   async load(delay = 1000): Promise<void> {
     clearTimeout(this.#readRetry);
     try {
-      const response = await hubFetch(hubRequest("GET /api/installs"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      this.take((await response.json()) as InstallsRead);
+      this.take(await hubJson<InstallsRead>(hubRequest("GET /api/installs")));
     } catch {
       if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
         return;
@@ -242,11 +243,7 @@ class Connect {
 
   async loadJoin(): Promise<void> {
     try {
-      const response = await hubFetch(hubRequest("GET /api/join"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      this.join = (await response.json()) as JoinInfo;
+      this.join = await hubJson<JoinInfo>(hubRequest("GET /api/join"));
       this.joinFailed = null;
     } catch (error) {
       this.joinFailed = failureWords(error);
@@ -486,15 +483,11 @@ class Connect {
   async start(body: InstallStart, hold = 0): Promise<InstallStarted> {
     this.#startingValue = true;
     try {
-      const response = await hubFetch(
+      const started = await hubJson<InstallStarted>(
         hubRequest("POST /api/installs", {
           body: { ...body, stamp: this.#stamp() },
         })
       );
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      const started = (await response.json()) as InstallStarted;
       if (!started.existing) {
         clearTimeout(this.#saveTimer);
         this.#saveTimer = undefined;
@@ -527,27 +520,21 @@ class Connect {
   }
 
   async stop(id: string): Promise<void> {
-    const response = await hubFetch(
-      hubRequest("POST /api/installs/:id/stop", { path: { id } })
+    this.take(
+      await hubJson<InstallsRead>(
+        hubRequest("POST /api/installs/:id/stop", { path: { id } })
+      )
     );
-    if (!response.ok) {
-      throw await hubRefusal(response);
-    }
-    this.take((await response.json()) as InstallsRead);
   }
 
   async retry(id: string): Promise<void> {
     const install = this.installs.find((one) => one.id === id);
-    const response = await hubFetch(
+    const started = await hubJson<InstallStarted>(
       hubRequest("POST /api/installs/:id/retry", {
         path: { id },
         body: install?.signIn === "password" ? { password: this.password } : {},
       })
     );
-    if (!response.ok) {
-      throw await hubRefusal(response);
-    }
-    const started = (await response.json()) as InstallStarted;
     this.#adopt(started.install);
     // A command install retried is a new one, with a new code.
     this.id = started.install.id;
@@ -558,24 +545,20 @@ class Connect {
 
   /** Remove install, or a joined one's notice dismissed: it leaves the band. */
   async remove(id: string): Promise<void> {
-    const response = await hubFetch(
-      hubRequest("DELETE /api/installs/:id", { path: { id } })
+    this.take(
+      await hubJson<InstallsRead>(
+        hubRequest("DELETE /api/installs/:id", { path: { id } })
+      )
     );
-    if (!response.ok) {
-      throw await hubRefusal(response);
-    }
-    this.take((await response.json()) as InstallsRead);
   }
 
   /** The install's whole output, for the output sheet. */
   async outputOf(id: string): Promise<string[]> {
-    const response = await hubFetch(
-      hubRequest("GET /api/installs/:id/output", { path: { id } })
-    );
-    if (!response.ok) {
-      throw await hubRefusal(response);
-    }
-    return ((await response.json()) as { lines: string[] }).lines;
+    return (
+      await hubJson<{ lines: string[] }>(
+        hubRequest("GET /api/installs/:id/output", { path: { id } })
+      )
+    ).lines;
   }
 }
 
