@@ -48,6 +48,7 @@ import {
   CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
 } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import { answeredWithOriginal } from "./ask-presentation";
 import { peek } from "./cut-turns";
 import type { HubContext } from "./hub-context";
@@ -265,7 +266,10 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       // card's diff (`updatedInput.edits`) are theirs, the proposal itself
       // the hub's kept file, never the client's copy.
       if (ctx.projectMemory.owns(requestId)) {
-        await ctx.projectMemory.answer(requestId, answer);
+        const refused = await ctx.projectMemory.answer(requestId, answer);
+        if (refused) {
+          throw new Error(refused.response.detail);
+        }
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
@@ -631,9 +635,14 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       ctx.db.find.purge(message.machineId, [deleted]);
       for (const row of rows) {
         if (row.projectId) {
+          const what = `memory: notes of purged session ${row.id}`;
           detach(
-            ctx.projectMemory.purged(row.projectId, row.id),
-            `memory: notes of purged session ${row.id}`
+            ctx.projectMemory.purged(row.projectId, row.id).then((purged) => {
+              if (purged instanceof ElysiaStatus) {
+                console.warn(`[${what}] failed: ${purged.response.detail}`);
+              }
+            }),
+            what
           );
         }
       }
