@@ -48,7 +48,11 @@ import type { ContinuationAsker, ContinueRequest } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
 import { cacheWarmNow, promptCacheExpiresAt } from "./keep-alive";
 import type { PlacementInput } from "./placement";
-import { place as placeAccount, runningAccounts } from "./placement";
+import {
+  accountFacts,
+  place as placeAccount,
+  runningAccounts,
+} from "./placement";
 import { sessionBurn } from "./rebalance";
 import { unreachable } from "./unreachable";
 
@@ -898,12 +902,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     const asks = rowAsks(row);
     const now = Date.now();
     const placed = placeAccount({
-      accounts: ctx.db.accounts
-        .list()
-        .filter((account) => account.provider === provider),
-      signins: ctx.db.accounts.signins(),
-      readings: ctx.db.accounts.readings(),
-      bench: ctx.db.accounts.bench(),
+      ...accountFacts(ctx.db, provider),
       routing,
       machineId: row.machineId,
       machineName: ctx.machineName(row.machineId),
