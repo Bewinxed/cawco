@@ -752,7 +752,10 @@ const run = async (kit: Kit): Promise<void> => {
   await until("the tab's next beat", heardAt, (at) => at !== lastBeat, 40_000);
   const beforeBack = heardAt();
   await tab.evaluate(() =>
-    (Reflect.get(globalThis, "__cawcoSocket") as WebSocket | undefined)?.close()
+    (
+      Reflect.get(globalThis, "__cawcoHub") as
+        { socket: WebSocket | null } | undefined
+    )?.socket?.close()
   );
   await until(
     "a beat from the tab as its link comes back, before its next",
