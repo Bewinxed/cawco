@@ -1113,6 +1113,7 @@ export interface HubContext {
     cancelled: () => boolean,
     mode: PermissionMode
   ) => Promise<string>;
+  summarisers: Set<string>;
   summarizerOf: (row: { accountId?: string | null }) => {
     harness: HarnessKind;
     model: string;
