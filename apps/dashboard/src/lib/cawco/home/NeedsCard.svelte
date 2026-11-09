@@ -118,11 +118,9 @@
   import {
     answerFor,
     cawco,
-    decideAction,
     type PermissionAnswer,
     permissionAnswer,
     submitCommand,
-    takeOverBrowser,
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
@@ -137,6 +135,9 @@
   import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
+  import { takeOverBrowser } from "../stores/browsers.svelte";
+  import { decideAction } from "../stores/needs.svelte";
+  import { relayStore } from "../stores/relay.svelte";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import {
@@ -695,7 +696,7 @@
   >
     <RelayJourney
       candidates={item.journey.candidates}
-      domain={cawco.relayDomain}
+      domain={relayStore.relayDomain}
       machine={item.journey.machine}
       onact={actOnRelayCard}
       row

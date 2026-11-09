@@ -59,6 +59,7 @@ import { minimizedAsks } from "../minimized-asks.svelte";
 import type { TaskSummary } from "../project-tasks";
 import { QUESTION_KEYS } from "../question";
 import { clockStore } from "../stores/clock.svelte";
+import { needsStore } from "../stores/needs.svelte";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
@@ -486,7 +487,7 @@ export class CawLead {
   readonly cards = $derived.by((): ArtifactNeed[] => {
     const id = this.conversationId;
     return id
-      ? cawco.artifactNeedsOpen.filter((need) => need.instanceId === id)
+      ? needsStore.artifactNeedsOpen.filter((need) => need.instanceId === id)
       : [];
   });
 

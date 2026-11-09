@@ -33,6 +33,7 @@ import { listAttachments, listFiles } from "../artifact-api";
 import { cawco, storedReadWaits } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { extensionOf } from "../lightbox/extension";
+import { needsStore } from "../stores/needs.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 import { onArtifactReached } from "./reached";
@@ -323,7 +324,7 @@ const newestCarrying = (instanceId: string): string => {
  */
 const waitingKey = (instanceId: string): string =>
   JSON.stringify([
-    cawco.artifactNeeds
+    needsStore.artifactNeeds
       .filter((need) => need.instanceId === instanceId)
       .map((need) => [
         need.artifactId,
@@ -331,7 +332,7 @@ const waitingKey = (instanceId: string): string =>
         need.parked,
         need.pending,
       ]),
-    cawco.artifactNotices
+    needsStore.artifactNotices
       .filter((notice) => notice.instanceId === instanceId)
       .map((notice) => [notice.artifactId, notice.parts]),
   ]);

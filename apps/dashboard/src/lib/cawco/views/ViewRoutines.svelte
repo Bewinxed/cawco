@@ -11,7 +11,7 @@
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
   import CantStart from "#lib/cawco/CantStart.svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
@@ -84,6 +84,7 @@
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { GLYPHS } from "#lib/cawco/starter-glyphs.js";
+  import { needsStore } from "#lib/cawco/stores/needs.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -192,7 +193,7 @@
   });
   // An action waiting on you comes or goes: the page is read again.
   const waitingIds = $derived(
-    cawco.actions.map((action) => `${action.id}:${action.state}`).join()
+    needsStore.actions.map((action) => `${action.id}:${action.state}`).join()
   );
   let seen: string | null = null;
   $effect(() => {

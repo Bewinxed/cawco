@@ -70,3 +70,6 @@ export function routeFrames<const R extends readonly AnyRoute[]>(
 export function takeFrame(frame: FramePayload): void {
   routes.get(frame.kind)?.(frame as never);
 }
+
+/** The board, whole (`instances`) or as what moved (`instances_delta`). */
+export type BoardFrame = FrameOf<"instances" | "instances_delta">;

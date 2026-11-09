@@ -27,6 +27,7 @@
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -110,8 +111,8 @@
 
   // Read on arrival, and again whenever the hub says its pages or tasks moved.
   $effect(() => {
-    cawco.decisionsChangedOf(projectId);
-    cawco.tasksChangedOf(projectId);
+    tickersStore.decisionsChangedOf(projectId);
+    tickersStore.tasksChangedOf(projectId);
     const page = name;
     untrack(() => load(page));
   });

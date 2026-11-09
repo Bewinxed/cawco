@@ -73,7 +73,6 @@
     setPeeked,
     showContext,
     submitCommand,
-    takeOverBrowser,
   } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
@@ -88,6 +87,8 @@
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus } from "./session-status";
   import { startFork } from "./spawn/new-session.svelte";
+  import { takeOverBrowser } from "./stores/browsers.svelte";
+  import { plansStore } from "./stores/plans.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
@@ -251,7 +252,7 @@
 
   // The hub's plan, live: a peeked session is streamed (`setPeeked`), and the
   // hub sends its streamers the plan whole on subscribe, then its deltas.
-  const plan = $derived(cawco.planOf(target.viewId));
+  const plan = $derived(plansStore.planOf(target.viewId));
   const progress = $derived(plan ? planProgress(plan) : null);
   /** Its steps, else (a task attempt that wrote none) its task's to-dos. */
   const planRows = $derived(
