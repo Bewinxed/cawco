@@ -1704,7 +1704,7 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
 
 /**
  * Stops serving workspace `id`'s git door. The dir it is in goes once the
- * workspace's judges are gone too (boundary/lifecycle.ts `closeBoundary`).
+ * workspace's judges are gone too (boundary/stop.ts `closeBoundary`).
  */
 export const closeGitDoor = async (id: string): Promise<void> => {
   const server = doors.get(id);
