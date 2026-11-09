@@ -1772,7 +1772,7 @@ const FILES_WIDTHS = [1440, 1100, 1000, 920];
  * scrollbars opening and closing rapidly"): the scrollbar takes width, the
  * scale and the height drop under the window's, the scrollbar goes, and
  * round again every frame. The root's gutter CawCo keeps on every framed
- * page (core preview-proxy `GUTTER_FLOOR`) holds it still.
+ * page (preview proxy `GUTTER_FLOOR`) holds it still.
  */
 const STILL_PAGE = `<!doctype html>
 <html lang="en">

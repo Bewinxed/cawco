@@ -12,7 +12,7 @@
       "path": "../../../core"
     },
     {
-      "path": "../preview-overlay"
+      "path": "../../../preview/src/overlay"
     },
     {
       "path": "../../../design-tokens"
