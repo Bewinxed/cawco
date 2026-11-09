@@ -1340,7 +1340,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * it held one, has one session from here): its row names `to`
    * ({@link InstanceRow.continuedInto}), so core `relaunchOf` refuses every
    * wake of it (a send's, a revive's, a relaunch on another account) and
-   * every send to it goes to `to` ({@link toContinuation}); its at-limit
+   * every send to it goes to `to` (`toContinuation`); its at-limit
    * hold and the resume at its reset go, and a move owed at its turn's end;
    * and its process is stopped, the wake-ups it scheduled inside it with
    * it. What it was owed goes to `to` once the opening has gone
