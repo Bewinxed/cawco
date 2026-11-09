@@ -37,6 +37,7 @@ import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref, isSessionRow } from "../links";
 import { openArtifactIn } from "../reference-open.svelte";
+import { boardStore } from "../stores/board.svelte";
 import { askOpenAt, carryOpenAt, MATCH } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -438,7 +439,7 @@ function remember(sessionId: string, ctx?: AskedContext): void {
  * as the fleet answers.
  */
 export function contextOf(sessionId: string): SessionContext | null {
-  const instance = cawco.instanceIndex.byId.get(sessionId);
+  const instance = boardStore.instanceIndex.byId.get(sessionId);
   if (instance?.machineId && isSessionRow(instance)) {
     return {
       machine: instance.machineId,
@@ -446,7 +447,7 @@ export function contextOf(sessionId: string): SessionContext | null {
       harness: instance.harness,
     };
   }
-  for (const machine of cawco.machines) {
+  for (const machine of boardStore.machines) {
     if (machine.status !== "online") {
       continue;
     }
@@ -512,7 +513,7 @@ function project(sessionId: string | null, mode: "push" | "replace"): void {
   const ctx = sessionId && !projectId ? contextOf(sessionId) : null;
   const url = projectId
     ? projectHref(projectId, projectSearch.get(projectId))
-    : conversationHref(sessionId, cawco.instanceIndex, {
+    : conversationHref(sessionId, boardStore.instanceIndex, {
         machineId: ctx?.machine,
         cwd: ctx?.cwd,
       });

@@ -139,6 +139,7 @@
     spawnPrefs,
   } from "../spawnPrefs.svelte";
   import { accountsStore, placementFor } from "../stores/accounts.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -413,7 +414,7 @@
     Boolean(machineIds.length && cwd.trim()) && verifiedLocation !== locationKey
   );
   const machine = $derived(
-    cawco.machines.find((row) => row.machineId === machineId)
+    boardStore.machines.find((row) => row.machineId === machineId)
   );
   /**
    * Whether the first machine is connected, as a value: every board publish
@@ -422,7 +423,7 @@
    */
   const machineOnline = $derived(machine?.status === "online");
   const offlineMachine = $derived(
-    cawco.machines.find(
+    boardStore.machines.find(
       (row) => machineIds.includes(row.machineId) && row.status !== "online"
     )
   );
@@ -708,7 +709,7 @@
    */
   const sourceProject = $derived.by(() => {
     const id = continueFrom
-      ? cawco.instanceIndex.byId.get(continueFrom.instanceId)?.projectId
+      ? boardStore.instanceIndex.byId.get(continueFrom.instanceId)?.projectId
       : undefined;
     return id ? cawco.project(id) : null;
   });
@@ -779,7 +780,7 @@
     project && moveTo
       ? [moveTo, moveFrom?.machineId ?? ""].map(
           (id) =>
-            cawco.machines.find((row) => row.machineId === id)?.status ===
+            boardStore.machines.find((row) => row.machineId === id)?.status ===
             "online"
         )
       : []
@@ -900,9 +901,9 @@
       : spawnWords.machines.running(running);
   };
   const machineItems = $derived<MachineItem[]>(
-    cawco.machines.map((row, i) => {
+    boardStore.machines.map((row, i) => {
       const online = row.status === "online";
-      const running = cawco.liveOn(row.machineId).length;
+      const running = boardStore.liveOn(row.machineId).length;
       // With a project chosen, each row says where it is there, or that
       // Start clones it there first (design §1b).
       const place = project ? checkoutOn(project, row.machineId) : undefined;
@@ -946,7 +947,7 @@
     cawco.projects
       .flatMap((row): Offered[] => {
         if (machineIds.length === 0) {
-          return cawco.machines.flatMap((one) => {
+          return boardStore.machines.flatMap((one) => {
             const place = checkoutOn(row, one.machineId);
             return place ? [{ row, place, machine: one.hostname }] : [];
           });
@@ -999,7 +1000,8 @@
     if (!locationUnverified && missingMachines.length) {
       const names = missingMachines.map(
         (id) =>
-          cawco.machines.find((row) => row.machineId === id)?.hostname ?? id
+          boardStore.machines.find((row) => row.machineId === id)?.hostname ??
+          id
       );
       return spawnWords.form.folderMissing(names.join(", "));
     }
@@ -1026,11 +1028,12 @@
       return "";
     }
     const there =
-      cawco.machines.find((row) => row.machineId === moveTo)?.hostname ??
+      boardStore.machines.find((row) => row.machineId === moveTo)?.hostname ??
       moveTo;
     const from = moveFrom?.machineId;
     const source =
-      cawco.machines.find((row) => row.machineId === from)?.hostname ?? from;
+      boardStore.machines.find((row) => row.machineId === from)?.hostname ??
+      from;
     // One size, history and large files together: step 2 splits them.
     const { bytes, lfsBytes, uncommittedFiles } = moveEstimated;
     const size =
@@ -1415,7 +1418,10 @@
       return;
     }
     const id = remembered;
-    if (id !== null && cawco.machines.some((row) => row.machineId === id)) {
+    if (
+      id !== null &&
+      boardStore.machines.some((row) => row.machineId === id)
+    ) {
       untrack(() => {
         machineIds = [id];
       });
@@ -1557,7 +1563,7 @@
       return "";
     }
     const where =
-      cawco.machines.find((row) => row.machineId === forking.machineId)
+      boardStore.machines.find((row) => row.machineId === forking.machineId)
         ?.hostname ?? forking.machineId;
     return spawnWords.form.forkWhere(
       forking.harness,
@@ -1819,7 +1825,7 @@
     } catch {
       unreadable = true;
       const host =
-        cawco.machines.find((row) => row.machineId === target)?.hostname ??
+        boardStore.machines.find((row) => row.machineId === target)?.hostname ??
         target;
       if (open) {
         await tick();
@@ -2237,7 +2243,7 @@
     submission += 1;
     onclose();
     await tick();
-    await goto(conversationHref(target, cawco.instanceIndex));
+    await goto(conversationHref(target, boardStore.instanceIndex));
   }
   function keydown(event: KeyboardEvent) {
     if (!open || event.defaultPrevented || event.isComposing) {
@@ -2416,8 +2422,9 @@
             </span>
           {:else}
             <ProjectChip
-              home={cawco.machines.find((row) => row.machineId === machineId)
-                ?.home}
+              home={boardStore.machines.find(
+                (row) => row.machineId === machineId
+              )?.home}
               onchange={(value) => {
                 popover = value ? "project" : null;
               }}
@@ -2549,8 +2556,9 @@
               value: place.id,
               label: spawnWords.form.moveFromFolder(
                 tilde(place.path),
-                cawco.machines.find((row) => row.machineId === place.machineId)
-                  ?.hostname ?? place.machineId
+                boardStore.machines.find(
+                  (row) => row.machineId === place.machineId
+                )?.hostname ?? place.machineId
               ),
             }))}
             value={moveFrom.id}
