@@ -68,6 +68,12 @@ const keepListed = (id: string, held: Pick<Held, "gen" | "path">): void => {
     });
 };
 
+/** Ends boundary `procId`'s watch of its clone's `info/exclude` ({@link keepListed}). */
+const endKeepingListed = (procId: string): void => {
+  standInWatches.get(procId)?.();
+  standInWatches.delete(procId);
+};
+
 /** Each macOS boundary's watch of the folder it holds ({@link watchCloneOf}), by its proc id: what ends it. */
 const cloneWatches = new Map<string, (() => void)[]>();
 
@@ -122,6 +128,9 @@ const watchParent = (dir: string, look: () => void): (() => void) => {
 
 /** The proc ids of macOS boundaries stopped because their folder went: their exit is no unasked one ({@link restartUnasked}). */
 const goneStops = new Set<string>();
+
+/** Whether boundary `procId` stopped because its folder went ({@link goneStops}): the mark goes with the asking. */
+const stoppedAsGone = (procId: string): boolean => goneStops.delete(procId);
 
 /** Whether workspace `id` holds a plain folder, not a repository's copy: a place, or a copy of a folder that is no repository (layer.ts), as the host's `plainFolder` (boundary-host.ts). */
 const plainFolder = (id: string): boolean => isPlace(id) || folderSync(id);
@@ -327,13 +336,11 @@ export const watchHost = async (
         }
         stop();
         unwatchCloneOf(procId);
-        standInWatches.get(procId)?.();
-        standInWatches.delete(procId);
+        endKeepingListed(procId);
         client.release(procId, pid);
         // A macOS boundary the agent stopped as its folder went exits as the
         // host's gone exit does ({@link watchCloneOf}).
-        const stoppedAsGone = goneStops.delete(procId);
-        if (exitCode === HOST_GONE_STATUS || stoppedAsGone) {
+        if (exitCode === HOST_GONE_STATUS || stoppedAsGone(procId)) {
           // Its folder is gone: no start would hold it (ensure.ts `placeReady`).
           settleGonePlace({ id, path: held.path }).catch((error: unknown) => {
             console.warn(
