@@ -1,6 +1,8 @@
 /**
  * Shapes the hub's sections read of each other, away from any one section's file.
  */
+
+import type { AccountProvider, HomeStore } from "@cawco/core/accounts";
 import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -84,3 +86,19 @@ export type SettledSpawn = NamedSpawn & {
   bootstrap?: { repo: string; baseDir: MachinePath };
   scratch?: { worktree?: boolean; baseCwd?: MachinePath };
 };
+
+/** What the last move of each credential came to, by {@link createLoginMoves}' `moveResults`. */
+export type LoginMoveResults = Map<
+  string,
+  {
+    accountId: string;
+    at: number;
+    error?: string;
+    machineId: string;
+    provider: AccountProvider;
+    /** Where the moved credential is kept now, as its owner names it. */
+    kept?: string;
+    store: HomeStore;
+    storeProvider: string;
+  }
+>;
