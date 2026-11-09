@@ -14,7 +14,7 @@
  *
  * A parameter named `fetch` stands (a SvelteKit load's own, handed in), and
  * so does an assignment to `globalThis.fetch` or a property named `fetch`.
- * golar.config.ts runs it over the same files as house/hub-path-door;
+ * golar.config.ts runs it over the same files as house/hub-path-by-hand;
  * scripts/lint/fixtures/fetch-alias.ts holds what it must report.
  */
 import { defineRule } from "golar/unstable";
