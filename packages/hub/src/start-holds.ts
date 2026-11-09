@@ -100,7 +100,7 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
    * machine takes no start ({@link startHold}), keeps it on its row as
    * asked, and binds it when it goes ({@link flushOwedStarts}). Either way
    * its credential and account are the hub's as of its start
-   * ({@link grantLaunch}). A dashboard's start ({@link sendDashboardStart})
+   * (`grantLaunch`). A dashboard's start (`sendDashboardStart`)
    * and a continuation's ({@link spawnFromHub}) meet the same hold.
    */
   const sendSpawn = (
@@ -200,7 +200,7 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
    *
    * Each is bound as it goes ({@link bounded}), on the account its row runs
    * on now, and its machine asks for its credential as it starts it
-   * ({@link grantLaunch}). One that may not go (its account was signed out
+   * (`grantLaunch`). One that may not go (its account was signed out
    * there while the machine updated, or its launch is refused) fails once
    * with the reason: the row and its work item say so, and what it was sent
    * stays owed.
@@ -274,7 +274,7 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
       if (refused) {
         throw new Error(refused);
       }
-      // In flight from here ({@link launchGoes}).
+      // In flight from here (`launchGoes`).
       return ctx.bounded(asked);
     } catch (problem) {
       const reason =

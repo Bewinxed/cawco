@@ -1,6 +1,6 @@
 /**
  * `boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY BUILD`: a
- * workspace's judge, which answers its hook (`boundary.ts` {@link hookScript})
+ * workspace's judge, which answers its hook (`boundary.ts` `hookScript`)
  * for every shell or path-naming tool call of a work item's claude session
  * (`HOOKED_TOOLS`). sessiond holds it beside the boundary, so it outlives the
  * agent; the hook only hands it the call over SOCKET and says what it
