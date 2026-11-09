@@ -15,7 +15,8 @@
    */
   import FindRow from "#lib/cawco/find/FindRow.svelte";
   import type { Row } from "#lib/cawco/find/find-rows.js";
-  import PlanTree, { type PlanNode } from "#lib/cawco/plan/PlanTree.svelte";
+  import PlanTree from "#lib/cawco/plan/PlanTree.svelte";
+  import type { PlanNode } from "#lib/cawco/plan.js";
   import PinMark from "#lib/cawco/preview/PinMark.svelte";
   import CatchUp from "#lib/cawco/transcript/CatchUp.svelte";
   import SessionStatus from "#lib/cawco/workspace/SessionStatus.svelte";
