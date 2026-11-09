@@ -343,7 +343,7 @@ const copyApart = async (file: string, copy: string): Promise<void> => {
  * boundary starts with no sandbox of the workspace running (its first start,
  * a start after a reboot, a replacement once the one before is stopped),
  * never beside an older generation still running in the clone at a handover
- * ({@link launch}). A Linux view of a folder never runs it: its folder is
+ * (start.ts `launch`). A Linux view of a folder never runs it: its folder is
  * the person's, and the overlay copies a file up before any write reaches
  * it (layer.ts). On macOS each copy is an APFS clone ({@link copyApart}).
  */
