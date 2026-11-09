@@ -24,18 +24,15 @@
  * motion tokens they are built from are emitted) and are not emitted.
  */
 import { join } from "node:path";
-import type Color from "colorjs.io";
-import type { Dictionary, TransformedToken } from "style-dictionary/types";
 import {
   CssEvaluator,
   call,
   gradientStops,
   splitTop,
-} from "../../../packages/design-tokens/src/design-css";
-import type {
-  TokenView,
-  ViewToken,
-} from "../../../packages/design-tokens/src/design-tokens";
+} from "@cawco/design-tokens/design-css";
+import type { TokenView, ViewToken } from "@cawco/design-tokens/design-tokens";
+import type Color from "colorjs.io";
+import type { Dictionary, TransformedToken } from "style-dictionary/types";
 import { isAppleToken } from "./token-groups";
 
 const CATALOG = "Resources/Tokens.xcassets";
