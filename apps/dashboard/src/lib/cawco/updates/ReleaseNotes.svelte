@@ -8,8 +8,8 @@
    * the size of the text around them.
    */
   import type { Component } from "svelte";
+  import Markdown from "#lib/cawco/Markdown.svelte";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { IconBug, IconGraphUp, IconStars } from "#lib/icons.js";
 
   let { source }: { source: string } = $props();
