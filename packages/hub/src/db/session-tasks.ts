@@ -13,7 +13,7 @@ interface SessionTask {
 /**
  * The background tasks each Claude session's process runs now, kept across a
  * hub restart, so that what a process restart or a kill cut is never lost
- * (server.ts `tellCutTasks`).
+ * (cut-turns.ts `tellCutTasks`).
  */
 export interface SessionTasksDb {
   /** Forgets every task kept for `instanceId`: a move told it of them its own way. */
