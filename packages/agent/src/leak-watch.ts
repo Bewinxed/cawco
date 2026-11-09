@@ -17,7 +17,7 @@
  *   moment). An orphan is reparented to whoever reaps for its parent: the
  *   service manager or init, outside the child's processes, or, inside a
  *   workspace's sandbox on Linux, the sandbox's init, which starts nothing
- *   of its own after its runner (boundary.ts `Place.idle`). A browser's
+ *   of its own after its runner (boundary/state.ts `Place.idle`). A browser's
  *   crash handler, which Chromium starts orphaned and which ends with its
  *   browser, is one only once no process of its browser's install runs
  *   ({@link browsersHandlers}).
@@ -25,7 +25,7 @@
  * What a child started: on Linux, where the keeper gives each child a cgroup
  * of its own (sessiond cgroup.ts), every process in that cgroup, a
  * double-forked one included; on macOS, for a workspace's boundary, every
- * process its Seatbelt profile names its own (boundary.ts `answering`),
+ * process its Seatbelt profile names its own (boundary/processes.ts `answering`),
  * wherever it moved. Beside those, its tree, as the keeper reads it (sessiond
  * server.ts `survey`): its descendants, and every process an earlier reading
  * found that is still the same process, so one whose parent ended is still
@@ -366,7 +366,7 @@ const climbed = async (
   };
 };
 
-/** A workspace boundary's sandbox (boundary.ts `sandboxOf`): Linux's init and what it held at the start, the Mac's processes by its profile. */
+/** A workspace boundary's sandbox (boundary/sandboxes.ts `sandboxOf`): Linux's init and what it held at the start, the Mac's processes by its profile. */
 type Sandbox =
   { idle: readonly number[]; inner: number } | { members: readonly number[] };
 
@@ -666,7 +666,7 @@ export const runsWorking = (): readonly string[] => working;
  * Starts the watch: every {@link LOOK_MS}, each keeper child `targetOf`
  * names sessions for is read, and each leak found is handed to `tell` with
  * its sessions, its id (one leak's, the same however often it is found) and
- * its words. `sandboxOf` answers a workspace boundary's sandbox (boundary.ts
+ * its words. `sandboxOf` answers a workspace boundary's sandbox (boundary/
  * `sandboxOf`). Once per agent.
  */
 export const watchLeaks = (options: LeakOptions): void => {
