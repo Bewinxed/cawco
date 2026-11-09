@@ -85,7 +85,7 @@ open -g URL:         exit 1 (refused; allowAppleEvents is off)
 xcrun simctl list:   lists the simulators
 xcodebuild -showdestinations: 91 iOS Simulator destinations inside srt, 91 bare
 
-== today's macOS boundary profile (rebuilt by today-mac-profile.sh from boundary.ts profileOf), same checks
+== today's macOS boundary profile (rebuilt by today-mac-profile.sh from boundary/ profileOf), same checks
 read ~/.cawco/accounts         OPEN
 read claude sign-in            BLOCKED
 read other repo .env           OPEN

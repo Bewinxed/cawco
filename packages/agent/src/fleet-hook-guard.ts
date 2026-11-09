@@ -25,7 +25,7 @@ import { fleetHooksDir } from "@cawco/core/paths/fleet";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { systemProgram } from "@cawco/core/workspace-needs";
 
-/** The perl the guard runs on: the one every boundary's runner runs on (boundary.ts), on the agent's PATH. */
+/** The perl the guard runs on: the one every boundary's runner runs on (boundary/), on the agent's PATH. */
 const perl = (): string => systemProgram("perl");
 
 /** Where the guard is written. */
