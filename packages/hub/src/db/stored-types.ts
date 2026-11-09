@@ -74,7 +74,7 @@ export interface ContinueRequest {
     model?: string;
     /**
      * The mode asked for; none asked, the mode of the session that caused
-     * the job as it starts (server.ts `continuationCauseMode`), settled by
+     * the job as it starts (continuations.ts `continuationCauseMode`), settled by
      * the hub's one rule (`settleMode`).
      */
     permissionMode?: PermissionMode;
@@ -202,7 +202,7 @@ export interface ProposedFile {
 
 /**
  * Why the hub keeps a send queued instead of handing it to its session now
- * (server.ts `deliverSend`): its machine is installing an update, so the
+ * (sends.ts `deliverSend`): its machine is installing an update, so the
  * session's start waits for it (`update`); its machine runs a build older
  * than its hub's, which cannot start sessions for it, so the session's start
  * waits until that machine installs the hub's build (`build`); its machine's
@@ -228,7 +228,7 @@ export interface ProposedFile {
  * wakes it (`held`); or its workspace retired once its work was over and the
  * hub is cutting its clone again at the same path (`recut`, work-items.ts
  * `recut`); or its start waits its turn among the hub's own launches on its
- * machine, which go one at a time (`starting`, server.ts `paceSpawn`); or
+ * machine, which go one at a time (`starting`, start-holds.ts `paceSpawn`); or
  * its work item is blocked, its delegate type, machine or
  * account missing, and it goes once that is back (`blocked`, work-items.ts
  * `blockIfMissing`).
@@ -379,7 +379,7 @@ export type ContinuationAsker =
   | {
       /**
        * Its provider's compaction policy, as its move to account `to`
-       * (core `Compaction` `summary`, server.ts `continueAsMove`): `stopped`
+       * (core `Compaction` `summary`, limit-moves.ts `continueAsMove`): `stopped`
        * says what stopped it there (its limit, its refused sign-in), or
        * false ahead of a limit; `move` is the line the move would have
        * written whole, under the id `line`, which a summary that fails

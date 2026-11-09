@@ -3,7 +3,7 @@
  * turn however many times the hub hands it over.
  *
  * The hub owes a pending send again whenever it cannot tell that its session
- * read it (server.ts `settleSend`), and it cannot always tell: a harness's read
+ * read it (sends.ts `settleSend`), and it cannot always tell: a harness's read
  * handed to a hub that then stopped is not sent to the hub that replaced it
  * (outbox.ts), and a transcript can lag what its process took, or hold nothing
  * (the proof's stand-in). On 2026-10-17 a session took a send 0.3 s before its
@@ -17,7 +17,7 @@
  *
  * Only the latest {@link TAKEN_KEPT} are kept: a send the hub owes again is
  * pending there, and every read a session makes settles the pending sends
- * accepted before it (server.ts `takeRead`), so one taken longer ago than that
+ * accepted before it (sends.ts `takeRead`), so one taken longer ago than that
  * is no longer pending anywhere. Our call.
  */
 import { rmSync } from "node:fs";
