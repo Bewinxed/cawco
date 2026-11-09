@@ -25,6 +25,7 @@ export const createProjectOut =
   (project: ProjectRow, live: readonly ProjectRow[] = db.listProjects()) => ({
     ...project,
     createdAt: project.createdAt.toISOString(),
+    moveDeclinedAt: project.moveDeclinedAt?.toISOString() ?? null,
     places: project.places.map((place) => ({
       ...placeOut(place),
       held: null as BridgedHeldPlace | null,
