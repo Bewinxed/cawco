@@ -13,13 +13,13 @@ import { attachedIn, commandsNow } from "./holding";
 import { executors } from "./processes";
 import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
 import {
-  closing,
   generationDir,
   type Held,
+  isClosing,
+  isStarting,
   keepers,
   READY,
   readHeld,
-  starting,
 } from "./state";
 import { settleGonePlace, stopBoundary } from "./stop";
 import { ensureAgain } from "./unasked";
@@ -444,7 +444,7 @@ const restartUnasked = async (
   id: string,
   held: Pick<Held, "gen" | "path" | "pid">
 ): Promise<void> => {
-  if (closing.has(id) || starting.has(id)) {
+  if (isClosing(id) || isStarting(id)) {
     return;
   }
   const now = await readHeld(id).catch(() => undefined);
