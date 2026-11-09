@@ -169,7 +169,7 @@ export const UPDATE_DRAIN_MS = 45_000;
  * it: auto-update's restart of the machine's services, and an account move's
  * restart of a running session's Claude Code process, whose background
  * commands no resume brings back, nor a self-paced loop's wake-up (hub
- * server.ts `waitForLater`; a session stopped at its limit doesn't wait).
+ * account-carry.ts `waitForLater`; a session stopped at its limit doesn't wait).
  * Ours: past the long work a restart would cut (an image generation is given
  * 10 minutes, a delegate's workspace and a continuation's summary take
  * minutes, a landing gate step 10 minutes by default, a build or a probe chain run in
@@ -183,7 +183,7 @@ export const RESTART_WAIT_CAP_MS = 30 * 60_000;
  * Whether a restart that has waited since `since` on work it would cut now
  * cuts it: never before {@link RESTART_WAIT_CAP_MS}. The one rule an
  * auto-update (agent binary-update.ts `#drain`) and an account move (hub
- * server.ts `waitForLater`) wait by.
+ * account-carry.ts `waitForLater`) wait by.
  */
 export const waitedOut = (since: number, now = Date.now()): boolean =>
   now - since >= RESTART_WAIT_CAP_MS;

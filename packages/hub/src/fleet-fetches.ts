@@ -1,7 +1,7 @@
 /**
  * The hub's own ear on its `fleet.fetch` announcements. A skill, plugin or
  * marketplace fetch runs after the request that asked for it has answered
- * (server.ts `fetchSkill`, `fetchPlugins`, `readMarketplaceSource`,
+ * (fleet-sources.ts `fetchSkill`, `fetchPlugins`, `readMarketplaceSource`,
  * `linkMarketplace`); dashboards learn what came of it from the frame, and an
  * agent's admin tool (admin-tools.ts) from here, in the same process.
  */
