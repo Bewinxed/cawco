@@ -102,3 +102,5 @@ as-unknown-as/Planted.svelte:3:36 as-unknown-as
 as-unknown-as/Planted.svelte:6:25 as-unknown-as
 doc-meta-door/planted.ts:4:23 doc-meta-door
 doc-meta-door/planted.ts:5:21 doc-meta-door
+phone-query/planted.ts:3:31 phone-query
+phone-query/planted.ts:4:31 phone-query
