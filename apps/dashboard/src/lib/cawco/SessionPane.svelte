@@ -58,16 +58,13 @@
     holdForStart,
     keepServedAway,
     keepServedPage,
-    loadMcpServers,
     openSession,
     type ReadCause,
     readFaultOf,
     readTranscript,
     reconnectingNow,
-    refreshCommands,
     type SendExtras,
     type ServerTail,
-    seededSession,
     submitCommand,
     unwatchDelegate,
     watchDelegate,
@@ -104,12 +101,17 @@
   import { offersStore } from "./stores/offers.svelte";
   import { plansStore } from "./stores/plans.svelte";
   import {
+    loadMcpServers,
+    refreshCommands,
+  } from "./stores/session-detail.svelte";
+  import {
     type PendingPermission,
     type ReadFault,
     type SessionState,
     sessionsStore,
   } from "./stores/sessions.svelte";
   import { tickersStore } from "./stores/tickers.svelte";
+  import { seededSession } from "./stores/transcripts.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
