@@ -545,6 +545,12 @@ const unpushed = (
   }
 };
 
+/**
+ * The fields that say an item's landing is over: no landing under way and no
+ * submission waiting. `update` clears the landing's phase with them.
+ */
+export const LANDING_ENDED = { landingSince: null, submission: null } as const;
+
 export interface LandingRunDeps
   extends
     Pick<WorkspacesDeps, "call" | "command" | "db">,
@@ -662,6 +668,10 @@ export const createLandingRun = ({
   };
   /** One landing at a time per repository and branch (landing.ts). */
   const landings = landingQueue();
+
+  /** Ends `id`'s landing: no landing under way and no submission waiting ({@link LANDING_ENDED}). */
+  const endLanding = (id: string): WorkItemRow | undefined =>
+    update(id, LANDING_ENDED);
   /**
    * Whether the landing `item` is in was stopped ({@link LandingDeps.stopped}):
    * the item ended (a stop cancels it and clears its `landingSince`), or its
@@ -1509,6 +1519,22 @@ export const createLandingRun = ({
     }
   };
   /**
+   * What `item`'s finish hears when its outputs are not ready to collect
+   * ({@link outputsProblem}): its landing ends and the problem goes back to
+   * it. Nothing when they are ready.
+   */
+  const outputsUnready = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<{ done: false; text: string } | undefined> => {
+    const unready = await outputsProblem(workspace, item);
+    if (!unready) {
+      return undefined;
+    }
+    endLanding(item.id);
+    return { done: false, text: unready };
+  };
+  /**
    * A finished item whose gate passed at finish_item, to its end: its
    * outputs must be in its workspace (else it is back to running, told which
    * are not); then it lands as its row says (on its base, the rest of the
@@ -1525,11 +1551,9 @@ export const createLandingRun = ({
     submission: WorkItemSubmission,
     earlier: GateRun
   ): Promise<{ done: boolean; text: string }> => {
-    const settled = { landingSince: null, submission: null };
-    const unready = await outputsProblem(workspace, item);
+    const unready = await outputsUnready(workspace, item);
     if (unready) {
-      update(item.id, settled);
-      return { done: false, text: unready };
+      return unready;
     }
     const landing = await landFinished(
       workspace,
@@ -1539,7 +1563,7 @@ export const createLandingRun = ({
       submission.summary
     );
     if (landing.kind === "retry") {
-      update(item.id, settled);
+      endLanding(item.id);
       return { done: false, text: landing.text };
     }
     return await reportLanding(item, row, workspace, submission, landing);
@@ -1556,7 +1580,6 @@ export const createLandingRun = ({
     submission: WorkItemSubmission,
     landing: Exclude<Landed, { kind: "retry" }>
   ): Promise<{ done: boolean; text: string }> => {
-    const settled = { landingSince: null, submission: null };
     // Its stop settled the row already.
     if (landing.kind === "stopped") {
       console.log(
@@ -1590,7 +1613,7 @@ export const createLandingRun = ({
       headline: submission.headline,
       digest: `${submission.summary.trim()}\n${landing.line}${collected.line}`,
       ...landedFields(landing),
-      ...settled,
+      ...LANDING_ENDED,
     });
     const held = reportOrHold(
       row,
@@ -1659,7 +1682,7 @@ export const createLandingRun = ({
     try {
       return await landSubmitted(item, submission);
     } catch (error) {
-      update(item.id, { landingSince: null, submission: null });
+      endLanding(item.id);
       if (error instanceof CommandStopped) {
         return stoppedWith(item, error);
       }
@@ -1708,10 +1731,9 @@ export const createLandingRun = ({
     workspace: WorkspaceRow,
     submission: WorkItemSubmission
   ): Promise<{ done: boolean; text: string }> => {
-    const unready = await outputsProblem(workspace, item);
+    const unready = await outputsUnready(workspace, item);
     if (unready) {
-      update(item.id, { landingSince: null, submission: null });
-      return { done: false, text: unready };
+      return unready;
     }
     return await reportLanding(item, row, workspace, submission, {
       kind: "done",
@@ -1729,13 +1751,12 @@ export const createLandingRun = ({
   ): Promise<{ done: boolean; text: string }> => {
     const [row] = db.getInstancesByIds([item.instanceId]);
     const [workspace] = db.workspacesNamed(item.workspaceId);
-    const settled = { landingSince: null, submission: null };
     if (workspace.host) {
       return await reportHost(item, row, workspace, submission);
     }
     const gate = await gateRun.gateSteps(workspace, item);
     if ("refusal" in gate) {
-      const refused = update(item.id, settled) ?? item;
+      const refused = endLanding(item.id) ?? item;
       // No machine a due step needs is online: the item waits for one, never
       // idle, and the sweep wakes it when one comes (work-items.ts `wakeCapable`).
       if (gate.needs && LIVE.has(refused.state)) {
@@ -1764,7 +1785,7 @@ export const createLandingRun = ({
       }
     );
     if (runFailed(run)) {
-      update(item.id, settled);
+      endLanding(item.id);
       return { done: false, text: gateFailedText(run, "your commits") };
     }
     // The gate took its time: the item may have been stopped since.
