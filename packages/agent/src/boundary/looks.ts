@@ -57,15 +57,20 @@ import { busyOld, executors, lookAtPreTag, QUIET_SWEEP_MS } from "./processes";
 import { endMembers } from "./sandboxes";
 import { forgetRetiring, forgetStale, forgetStubbed, stale } from "./staleness";
 import {
-  closing,
+  closeEnded,
+  closeUnderWay,
   holding,
+  isClosing,
+  isStarting,
   keepers,
+  markClosing,
+  markStarting,
   readHeld,
   readRetiring,
   retiringFileOf,
   STOP_TIMEOUT_MS,
   sessiond,
-  starting,
+  startEnded,
   stateDir,
   writeWhole,
 } from "./state";
@@ -179,7 +184,7 @@ const recheckNow = async (
     ids ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
   ).filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)));
   for (const id of runningIds) {
-    if (starting.has(id) || closing.has(id)) {
+    if (isStarting(id) || isClosing(id)) {
       continue;
     }
     const held = await readHeld(id).catch(() => undefined);
@@ -190,7 +195,7 @@ const recheckNow = async (
     const narrowed = await narrowedGenerations(ref, held).catch(
       () => undefined
     );
-    if (!narrowed || starting.has(id) || closing.has(id)) {
+    if (!narrowed || isStarting(id) || isClosing(id)) {
       continue;
     }
     console.info(
@@ -205,14 +210,14 @@ const recheckNow = async (
         await ownKeeperOwed(),
         cause
       ))();
-    starting.set(id, replaced);
+    markStarting(id, replaced);
     await replaced
       .catch((error: unknown) => {
         console.warn(
           `[workspace] ${id}: its narrowed boundary could not be replaced: ${error instanceof Error ? error.message : String(error)}`
         );
       })
-      .finally(() => starting.delete(id));
+      .finally(() => startEnded(id));
   }
 };
 
@@ -226,7 +231,7 @@ const inUseNow = async (): Promise<string[]> => {
   const procs = (await keepers.held()).filter((proc) => proc.alive);
   const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
-    .filter((id) => !(starting.has(id) || closing.has(id)));
+    .filter((id) => !(isStarting(id) || isClosing(id)));
   const facts = await liveFacts(procs);
   if (!facts) {
     return ids;
@@ -356,7 +361,7 @@ export const liveFacts = async (
  * its way in leaves the boundary as it is. Never rejects.
  */
 export const closeQuietly = (id: string, why: string): Promise<void> => {
-  const pending = closing.get(id);
+  const pending = closeUnderWay(id);
   if (pending) {
     return pending;
   }
@@ -367,11 +372,9 @@ export const closeQuietly = (id: string, why: string): Promise<void> => {
       );
     })
     .finally(() => {
-      if (closing.get(id) === work) {
-        closing.delete(id);
-      }
+      closeEnded(id, work);
     });
-  closing.set(id, work);
+  markClosing(id, work);
   return work;
 };
 
@@ -435,7 +438,7 @@ const sweepQuiet = async (): Promise<void> => {
   const procs = (await keepers.held()).filter((proc) => proc.alive);
   const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
-    .filter((id) => !closing.has(id));
+    .filter((id) => !isClosing(id));
   if (ids.length === 0) {
     return;
   }
@@ -455,7 +458,7 @@ const sweepQuiet = async (): Promise<void> => {
       liveAt.set(id, now);
       continue;
     }
-    if (!(recentlyHeld(id) || starting.has(id))) {
+    if (!(recentlyHeld(id) || isStarting(id))) {
       await closeQuietly(
         id,
         `it has been quiet for ${Math.round((now - since) / 60_000)} min`
