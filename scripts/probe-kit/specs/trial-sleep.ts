@@ -35,6 +35,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runsFrom } from "../../../packages/agent/src/binary-update";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import {
   rollbackCause,
   WAKE_GRACE_MS,
@@ -45,7 +46,6 @@ import {
   rolledBack,
 } from "../../../packages/core/src/binary-updates";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { updatesWords } from "../../../packages/core/src/words/updates";
 import type { Spec } from "../kit";
@@ -69,9 +69,7 @@ const DOOR_UNREACHABLE = 502;
 
 /** One trial on a hub of its own: its verdict, the trial as the helper left it, and what the helper said. */
 const trialAcrossSleep = async (hubBack: boolean) => {
-  const rowPath = hubRequest("GET /api/agents/:machineId", {
-    path: { machineId: MACHINE },
-  }).path;
+  const rowPath = hubPath.api.agents({ machineId: MACHINE })["~path"];
   let silent = false;
   let firstHealthy: (() => void) | undefined;
   const healthy = new Promise<void>((resolve) => {

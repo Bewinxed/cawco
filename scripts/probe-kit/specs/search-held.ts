@@ -39,14 +39,13 @@ import { copyFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { READ_LIMIT_MS } from "../../../packages/agent/src/search/process";
 import {
-  type FindAnswer,
   TRANSCRIPT_ANSWER_MS,
   type TranscriptAnswer,
 } from "../../../packages/core/src/find";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { searchWords } from "../../../packages/core/src/words/search";
 import { delay, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { running, theProcess } from "../search-processes";
 
@@ -139,8 +138,8 @@ export default {
     const direct = await search(Q34, AS_FIND_TOOL);
     const directMs = performance.now() - at;
     at = performance.now();
-    const viaHub = await fleet.api<FindAnswer>(
-      hubRequest("GET /api/find", { query: { q: Q34, limit: "20" } })
+    const viaHub = await fleet.api((hub) =>
+      hub.api.find.get({ query: { q: Q34, limit: "20" } })
     );
     const viaHubMs = performance.now() - at;
     const [hubCoverage] = viaHub.coverage.machines;
@@ -184,10 +183,8 @@ export default {
     );
     signal(listedPid(after), "SIGSTOP");
     at = performance.now();
-    const abandoned = await fleet.api<FindAnswer>(
-      hubRequest("GET /api/find", {
-        query: { q: "fix%20the%20bug", limit: "20" },
-      })
+    const abandoned = await fleet.api((hub) =>
+      hub.api.find.get({ query: { q: "fix%20the%20bug", limit: "20" } })
     );
     const abandonedMs = performance.now() - at;
     const gone = await until(
@@ -232,14 +229,9 @@ export default {
     signal(listedPid(third), "SIGSTOP");
     const typedOn = new AbortController();
     at = performance.now();
-    const dropped = fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("GET /api/find", {
-        query: { q: "fix%20the%20bug", limit: "20" },
-      }),
-      { signal: typedOn.signal }
-    ).catch(() => "dropped");
+    const dropped = hubAt(fleet.base, { signal: typedOn.signal })
+      .api.find.get({ query: { q: "fix%20the%20bug", limit: "20" } })
+      .catch(() => "dropped");
     await delay(SUPERSEDED_AFTER_MS);
     typedOn.abort();
     await dropped;

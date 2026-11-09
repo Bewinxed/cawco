@@ -39,7 +39,6 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, ToolCalls, toolReply } from "../../tool-calls";
 import { type Kit, open, pressIn, ROOT, type Spec, settle } from "../kit";
@@ -269,12 +268,8 @@ const run = async (kit: Kit) => {
   // artifact_read here would count as the agent having read his answers,
   // which then settle telling it nothing (needs.ts `answersUnheard`).
   const read = () =>
-    fleet.api<{
-      choices: Record<string, { note: string | null; options: string[] }>;
-    }>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
-        path: { id: session, artifact: id },
-      })
+    fleet.api((hub) =>
+      hub.api.instances({ id: session }).artifacts({ artifact: id }).view.get()
     );
   await pressIn(frame, '[data-option="cover"]');
   const note = frame.locator('[data-dp-note="song"]');
@@ -428,12 +423,8 @@ const run = async (kit: Kit) => {
   await pressIn(frame, '[data-option="original"]');
   const unsent = async () =>
     (
-      await fleet.api<{
-        artifacts: { id: string; picks?: { unsent: number } }[];
-      }>(
-        hubRequest("GET /api/instances/:id/artifacts/list", {
-          path: { id: session },
-        })
+      await fleet.api((hub) =>
+        hub.api.instances({ id: session }).artifacts.list.get()
       )
     ).artifacts.find((one) => one.id === id)?.picks?.unsent ?? null;
   const counted = await until(

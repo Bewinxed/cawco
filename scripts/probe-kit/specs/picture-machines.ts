@@ -24,7 +24,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PNG } from "pngjs";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -86,14 +85,12 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   await fleet.launchMachine(OTHER);
-  const { id: projectId } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Pictures",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
+  const { id: projectId } = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Pictures",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
     })
   );
   const writer = await fleet.spawn("claude", "Publisher", fleet.repo, {
@@ -115,17 +112,14 @@ const run = async (kit: Kit) => {
   await writeFile(join(folder, "line.png"), greyPng(200));
   await writeFile(far, greyPng(200));
   await writeFile(join(folder, "page.oui"), program(far));
-  const page = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: writer },
-      body: {
-        kind: "page",
-        does: "pick",
-        title: "Pictures on a machine",
-        ask: "Pick for the launch",
-        name: "picture-machines",
-        dir: folder,
-      },
+  const page = await fleet.api((hub) =>
+    hub.api.instances({ id: writer }).artifacts.post({
+      kind: "page",
+      does: "pick",
+      title: "Pictures on a machine",
+      ask: "Pick for the launch",
+      name: "picture-machines",
+      dir: folder,
     })
   );
   // Each file drawn again: the bytes the reviser's machine would read at those paths.
@@ -134,11 +128,11 @@ const run = async (kit: Kit) => {
 
   const revise = (statements: string) =>
     fleet
-      .api<Revised>(
-        hubRequest("POST /api/instances/:id/artifacts/:artifact/statements", {
-          path: { id: reviser, artifact: page.id },
-          body: { statements },
-        })
+      .api((hub) =>
+        hub.api
+          .instances({ id: reviser })
+          .artifacts({ artifact: page.id })
+          .statements.post({ statements })
       )
       .catch((error: Error) => ({ refused: error.message }));
 

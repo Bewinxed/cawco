@@ -56,10 +56,11 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const B = "probe-b";
@@ -269,11 +270,13 @@ const markMac = (fleet: KitFleet): void => {
 };
 
 interface Started {
-  instanceId: string | null;
-  queued: string | null;
+  instanceId?: string;
+  queued?: string | null;
+  state: string;
   text: string;
-  workItemId: string | null;
-  workspaceId: string | null;
+  workItemId?: string | null;
+  workspaceId?: string;
+  workspaceTmp?: string;
 }
 
 const run = async (kit: Kit) => {
@@ -305,22 +308,17 @@ const run = async (kit: Kit) => {
     .cwd(repo)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Machine pause",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Machine pause",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
-  await fleet.api(
-    hubRequest("POST /api/projects/:id/places", {
-      path: { id: project.id },
-      body: {
-        machineId: B,
-        path: repo,
-      },
+  await fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).places.post({
+      machineId: B,
+      path: repo,
     })
   );
   await declareGate(fleet.base, project.id, APPLE_GATE);
@@ -346,18 +344,20 @@ const run = async (kit: Kit) => {
         ?.last ?? ""
     );
   };
-  const delegate = (title: string, prompt: string, extra: object = {}) =>
-    fleet.api<Started>(
-      hubRequest("POST /api/work-items", {
-        body: {
-          parentInstanceId: parent,
-          title,
-          prompt,
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          cwd: repo,
-          ...extra,
-        },
+  const delegate = (
+    title: string,
+    prompt: string,
+    extra: object = {}
+  ): Promise<Started> =>
+    fleet.api((hub) =>
+      hub.api["work-items"].post({
+        parentInstanceId: parent,
+        title,
+        prompt,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: repo,
+        ...extra,
       })
     );
   const turnOpen = (id: string) =>
@@ -492,9 +492,7 @@ const clock = (at: number): string =>
   });
 
 const pausedUntil = async (fleet: KitFleet): Promise<number | null> => {
-  const rows = await fleet.api<
-    { machineId: string; pausedUntil?: number | null }[]
-  >(hubRequest("GET /api/agents"));
+  const rows = await fleet.api((hub) => hub.api.agents.get());
   return rows.find((row) => row.machineId === B)?.pausedUntil ?? null;
 };
 
@@ -522,17 +520,10 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
   // p1
   const pausedAt = Date.now();
   const until_ = pausedAt + PAUSE_MS;
-  const answer = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/machines/:machineId/pause", {
-      path: { machineId: B },
-      body: { until: new Date(until_).toISOString() },
-    })
-  );
-  const view = (await answer.json().catch(() => ({}))) as {
-    pausedUntil?: number;
-  };
+  const answer = await hubAt(fleet.base)
+    .api.machines({ machineId: B })
+    .pause.post({ until: new Date(until_).toISOString() });
+  const view = dataOf(answer);
   check(
     "p1: POST /api/machines/:id/pause pauses B until the time asked",
     answer.status === 200 && view.pausedUntil === until_,
@@ -596,8 +587,8 @@ const pauseSection = async (kit: Kit, fleet: KitFleet, probe: Probe) => {
 
   // p4
   const tray = () =>
-    fleet.api<{ id: string; checkQueue: { words: string } | null }[]>(
-      hubRequest("GET /api/work-items", { query: { parent: probe.parent } })
+    fleet.api((hub) =>
+      hub.api["work-items"].get({ query: { parent: probe.parent } })
     );
   const gateWait = () =>
     until(
@@ -774,17 +765,10 @@ const runningBuild = async (
   const landing = row();
   const pausedAt = Date.now();
   const until_ = pausedAt + P7_PAUSE_MS;
-  const answer = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/machines/:machineId/pause", {
-      path: { machineId: B },
-      body: { until: new Date(until_).toISOString() },
-    })
-  );
-  const view = (await answer.json().catch(() => ({}))) as {
-    pauseStopped?: string | null;
-  };
+  const answer = await hubAt(fleet.base)
+    .api.machines({ machineId: B })
+    .pause.post({ until: new Date(until_).toISOString() });
+  const view = dataOf(answer);
   const gone = await until(
     "D's sleep gone",
     async () => {

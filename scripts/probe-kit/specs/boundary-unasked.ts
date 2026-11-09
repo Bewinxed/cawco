@@ -34,7 +34,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   isAlive,
   listedPid,
@@ -45,6 +44,7 @@ import { readRecord } from "../../../packages/core/src/state-file";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = "PROBE-UNASKED";
@@ -188,29 +188,27 @@ const run = async (kit: Kit) => {
   const home = fleet.env.HOME as string;
   const repo = join(fleet.sandbox, "code");
   await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && printf 'unasked probe\\n' > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm 'First commit'`.quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Boundary ended unasked",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Boundary ended unasked",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });
-  const item = await fleet.api<{ workItemId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const item = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Run commands while the boundary ends",
         prompt: `${TAG}: run commands, then finish.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: repo,
-      },
-    })
+      })
+    )
   );
   const itemOf = () =>
     fleet.query<{ state: string; error: string | null; workspace_id: string }>(
