@@ -4,7 +4,7 @@
  */
 
 import type { ProjectCap } from "@cawco/core/areas";
-import { type HubSent, hubRequest } from "@cawco/core/hub-request";
+import type { HubSent } from "@cawco/core/hub-request";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type {
   ClaudeExtraUsage,
@@ -14,7 +14,8 @@ import type {
   UsageSummary,
 } from "@cawco/core/usage/types";
 import { windowLabel, windowSpan } from "@cawco/core/usage/windows";
-import { hubJson } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubRefusal } from "#lib/platform/hub-read.js";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start
@@ -65,11 +66,13 @@ export function summaryReader(): (
     if (known) {
       return known;
     }
-    const summary = await hubJson<UsageSummary>(
-      hubRequest("GET /api/usage/summary", {
-        query: { harness, groupBy, since },
-      })
-    );
+    const answer = await hub.api.usage.summary.get({
+      query: { harness, groupBy, since },
+    });
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    const summary = answer.data;
     cache.set(key, summary);
     return summary;
   };
