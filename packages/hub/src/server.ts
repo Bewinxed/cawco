@@ -308,11 +308,8 @@ import {
   effectiveImageChoice,
   GENERATE_IMAGE,
   IMAGE_GENERATION_TIMEOUT_MS,
-  IMAGE_PROVIDER_MODELS,
   IMAGE_PROVIDERS,
-  type ImageSettings,
   imageProviderOf,
-  offersModelChoice,
 } from "@cawco/core/image-generation";
 import {
   artifactCommentsNotice,
@@ -578,7 +575,6 @@ import { turnCutWords } from "@cawco/core/words/cuts";
 import { delegateWaitWords } from "@cawco/core/words/delegates";
 import { harnessWords } from "@cawco/core/words/harness";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
-import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
 import {
   machineFaultWords,
@@ -1057,6 +1053,7 @@ import { fleetMcpRoutes } from "./routes/fleet-mcp";
 import { followupStateRoutes } from "./routes/followup-state";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
+import { imageSettingRoutes } from "./routes/image-settings";
 import { lfsRoutes } from "./routes/lfs";
 import { machinePauseRoutes } from "./routes/machines";
 import { mcpRoutes } from "./routes/mcp";
@@ -33499,52 +33496,8 @@ export const createServer = (
         };
       }),
     modelAccessRoutes(ctx),
+    imageSettingRoutes(ctx),
     new Elysia()
-      // ── image default (core ImageSettings) ────────────────────────────────
-      // The provider and model a generate_image call that names no provider
-      // goes to; with no row, ChatGPT on its own model.
-      .get("/api/image-settings", (): ImageSettings => db.imageSettings())
-      .put(
-        "/api/image-settings",
-        {
-          body: t.Object({
-            // One of core's IMAGE_PROVIDERS, checked below in words.
-            provider: t.String(),
-            model: t.Optional(t.Union([t.String(), t.Null()])),
-          }),
-        },
-        ({ body, status }) => {
-          const provider = imageProviderOf(body.provider);
-          if (!provider) {
-            return status(
-              400,
-              imageGenerationWords.noSuchProvider(body.provider)
-            );
-          }
-          const model = body.model?.trim() || null;
-          const models = IMAGE_PROVIDER_MODELS[provider];
-          if (model && !offersModelChoice(provider)) {
-            return status(
-              400,
-              imageGenerationWords.settingsNoModelChoice(provider, models[0])
-            );
-          }
-          if (model && !models.includes(model)) {
-            return status(
-              400,
-              imageGenerationWords.settingsUnknownModel(provider, model, [
-                ...models,
-              ])
-            );
-          }
-          const chosen: ImageSettings = { provider, model };
-          db.setImageSettings(chosen);
-          console.log(
-            `[images] default: ${provider}${model ? ` on ${model}` : ""}`
-          );
-          return chosen;
-        }
-      )
       // ── fleet watch (fleet-watch.ts) ──────────────────────────────────────
       // Its switch, and its limits and Jev as facts: Settings shows them.
       .get("/api/fleet-watch", (): FleetWatchSettings => ({
