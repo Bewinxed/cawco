@@ -48,6 +48,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@apple/app-store-server-library": "3.1.0",
+        "@cawco/core": "workspace:*",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^5.20261008.1",
