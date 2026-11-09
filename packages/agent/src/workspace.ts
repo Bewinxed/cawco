@@ -28,10 +28,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
-import type { HubRepoKey } from "@cawco/core/hub-repo";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import { isSecretFileName } from "@cawco/core/paths/host-policy";
@@ -50,7 +48,6 @@ import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
   SAFE_GIT_SHELL,
-  safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -60,7 +57,6 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import { unhandled } from "@cawco/core/unhandled";
 import { holdingWords } from "@cawco/core/words/workspace-holding";
 import type {
   CarryRestored,
@@ -114,8 +110,17 @@ import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
 import { dropPlaceSet } from "./fleet-place-set";
 import { expandHome } from "./fs";
+import { hubGitEnv, hubRepo, hubRepoOf, isHubRemote } from "./git/hub-remote";
+import {
+  type DeclaredLfs,
+  declaredPins,
+  LFS_FILTERS,
+  lfsPins,
+  originEndpoint,
+  urlOrigin,
+} from "./git/lfs";
+import { type CopyRun, type Git, gitUntil, hostGit } from "./git/run";
 import { configEnv, useHubCredentialHelper } from "./git-credential";
-import { hostGit } from "./host-git";
 import {
   declaredLfs,
   hostSigns,
@@ -151,18 +156,6 @@ import {
   viewArgv,
   viewPath,
 } from "./layer";
-import {
-  type DeclaredLfs,
-  declaredPins,
-  hubGitEnv,
-  hubRepo,
-  isHubRemote,
-  LFS_FILTERS,
-  lfsPins,
-  originEndpoint,
-  urlOrigin,
-  withoutCredential,
-} from "./move";
 import { PACKAGE_TREES } from "./package-trees";
 import { removeTree } from "./remove-tree";
 import { repoTop } from "./repo-top";
@@ -170,58 +163,6 @@ import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { workspaceModulesRoot } from "./workspace-modules";
 import { cloneHolding } from "./workspace-records";
-
-type Git = (root: string, ...args: string[]) => Promise<string>;
-
-/**
- * git on this host as `safe-git.ts` says, its stdout trimmed, within the
- * create's one `deadline`; `env` in place of the host's (the hub's
- * credential, env-only); in a workspace's copy as `access` reaches it
- * ({@link accessOf}) when given; `input` its stdin. git's stderr,
- * credential taken out, is the error.
- */
-export const gitUntil =
-  (
-    deadline: number,
-    env: Record<string, string> = hostEnvironment(),
-    access?: CopyAccess,
-    input?: string
-  ): Git =>
-  async (root, ...args) => {
-    const late = `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      throw new Error(late);
-    }
-    const run = access
-      ? access.run(root, safeGitArgv(args))
-      : { argv: safeGitArgv(args), cwd: root };
-    const ran = await readWithin(remaining, async (signal) => {
-      const { code, signalCode, stdout, stderr } = await runCaptured(run.argv, {
-        cwd: run.cwd,
-        env: { ...env, ...SAFE_GIT_ENV },
-        ...(input === undefined ? {} : { input }),
-        signal,
-        killSignal: "SIGKILL",
-      });
-      if (code !== 0) {
-        throw new Error(
-          signalCode
-            ? `git ${args[0]} was ended by ${signalCode}`
-            : `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`
-        );
-      }
-      return stdout.trim();
-    });
-    switch (ran.kind) {
-      case "answered":
-        return ran.value;
-      case "unanswered":
-        throw new Error(late);
-      default:
-        unhandled("read", ran);
-    }
-  };
 
 const SYMREF = /^ref: refs\/heads\/(\S+)\tHEAD$/mu;
 
@@ -432,104 +373,6 @@ const holdingSource = async <T>(
 };
 
 /**
- * The ref of a project's main hub repository naming the repository that took
- * it before it had a branch: a blob holding that one's root commit. Pushed
- * create-only, so of two repositories that ask at once, git's receive-pack
- * gives it to one ({@link hubRepoOf}).
- */
-const MAIN_CLAIM = "refs/cawco/main-root";
-
-/** `git ls-remote`'s lines as each ref's object. */
-const remoteRefs = (listed: string): Map<string, string> =>
-  new Map(
-    listed
-      .split("\n")
-      .map((line) => line.split("\t"))
-      .filter((pair): pair is [string, string] => pair.length === 2)
-      .map(([oid, ref]) => [ref, oid])
-  );
-
-/**
- * Which of project `projectId`'s hub repositories (core hub-repo.ts) the
- * source repository `repoRoot`, which has no hub remote yet, is: the main
- * one when `repoRoot` has no commit to key by, when it holds the commit at
- * the main one's HEAD (a checkout of it), or when the main one has no
- * default branch yet and `repoRoot` is the repository that claimed it
- * ({@link MAIN_CLAIM}, by its root commit: the first to ask); otherwise one
- * of its own, keyed by its root commit, so an unrelated repository never
- * cuts from, lands on, or moves through the main one's branches.
- */
-export const hubRepoOf = async (
-  repoRoot: string,
-  projectId: string,
-  deadline: number
-): Promise<HubRepoKey> => {
-  const plain = gitUntil(deadline);
-  const main: HubRepoKey = { projectId };
-  const root = await plain(
-    repoRoot,
-    "rev-list",
-    "--max-parents=0",
-    "--first-parent",
-    "HEAD"
-  ).catch(() => "");
-  if (!root) {
-    return main;
-  }
-  const own: HubRepoKey = { projectId, root };
-  const url = hubRepo(main);
-  const hubGit = gitUntil(deadline, hubGitEnv(url));
-  const listed = remoteRefs(
-    await hubGit(repoRoot, "ls-remote", url, "HEAD", MAIN_CLAIM)
-  );
-  const head = listed.get("HEAD");
-  if (head) {
-    const holds = await plain(
-      repoRoot,
-      "cat-file",
-      "-e",
-      `${head}^{commit}`
-    ).then(
-      () => true,
-      () => false
-    );
-    return holds ? main : own;
-  }
-  const mine = await gitUntil(
-    deadline,
-    hostEnvironment(),
-    undefined,
-    `${root}\n`
-  )(repoRoot, "hash-object", "-w", "--stdin");
-  let claimed = listed.get(MAIN_CLAIM);
-  if (!claimed) {
-    // `--no-verify`: the repository's own pre-push hooks are for its own pushes.
-    const refused = await hubGit(
-      repoRoot,
-      "push",
-      "--quiet",
-      "--no-verify",
-      `--force-with-lease=${MAIN_CLAIM}:`,
-      url,
-      `${mine}:${MAIN_CLAIM}`
-    ).then(
-      () => undefined,
-      (error: Error) => error
-    );
-    claimed = remoteRefs(
-      await hubGit(repoRoot, "ls-remote", url, MAIN_CLAIM)
-    ).get(MAIN_CLAIM);
-    if (!claimed) {
-      throw (
-        refused ??
-        new Error(`The hub's ${url} holds no ${MAIN_CLAIM} after its push.`)
-      );
-    }
-  }
-  return claimed === mine ? main : own;
-};
-
-/**
  * Readies source repository `repoRoot` for a workspace cut from it, inside
  * {@link inSource}: its `origin` (the hub's remote of it in `projectId` when
  * it has none, {@link hubRepoOf}), the hub's credential helper in its config when that is the hub and
@@ -584,13 +427,10 @@ const readySource = (
  * argv run in the copy, in a directory there, with the directory its spawn
  * starts in.
  */
-export interface CopyAccess {
+interface CopyAccess {
   at: (path: string) => string;
   layer: Layer;
-  run: (
-    cwd: string,
-    argv: readonly string[]
-  ) => { argv: string[]; cwd: string };
+  run: CopyRun;
 }
 
 /**

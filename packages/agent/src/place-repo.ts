@@ -43,8 +43,8 @@ import {
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
+import { LFS_FILTERS } from "./git/lfs";
 import { configEnv } from "./git-credential";
-import { LFS_FILTERS } from "./move";
 import { repoTop } from "./repo-top";
 import { credentialIn } from "./secret-text";
 
