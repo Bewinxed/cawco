@@ -30,6 +30,18 @@ const JUDGE_ARGS = [
   "build",
 ] as const;
 
+/** The end of an argument's name a usage line leaves out. */
+const USAGE_SUFFIX = /(?:File|Line)$/u;
+
+const USAGE_WORD = /[A-Z]/gu;
+
+/** Argument `name` as a usage line spells it: `graceS`, `GRACE_S`; `policyFile`, `POLICY`. */
+const usageName = (name: string): string =>
+  name.replace(USAGE_SUFFIX, "").replace(USAGE_WORD, "_$&").toUpperCase();
+
+/** What the judge says when an argument is missing or empty. */
+export const JUDGE_USAGE = `usage: boundary-judge.ts ${JUDGE_ARGS.map(usageName).join(" ")}`;
+
 /** The judge's arguments, by name. */
 export type JudgeArgs = Readonly<Record<(typeof JUDGE_ARGS)[number], string>>;
 
@@ -58,9 +70,21 @@ export const JUDGE_BUILD_QUESTION = "cawco-judge-build";
 /**
  * What ends every answer of the judge: a NUL, which no answer holds (JSON
  * escapes one, and no path or reason has one; any is taken out before it is
- * sent). The hook's perl reads up to it (`"\0"` in its script).
+ * sent). The hook's perl reads up to it ({@link JUDGE_ANSWER_END_PERL}).
  */
 export const JUDGE_ANSWER_END = "\0";
+
+/** {@link JUDGE_ANSWER_END}, as an escape in the hook's perl spells it. */
+export const JUDGE_ANSWER_END_PERL = `\\${JUDGE_ANSWER_END.codePointAt(0)}`;
+
+/** What the first line of every judge's answer begins with when the call may run. */
+export const JUDGE_ALLOWS = "0";
+
+/** What the first line of every judge's answer begins with when the call is refused. */
+export const JUDGE_REFUSES = "2";
+
+/** What the hook sends in place of its CLI's shell prefix for a CLI whose environment names none. */
+export const JUDGE_NO_PREFIX = "-";
 
 /** This file's path in a workspace's state dir, from the judge beside it, which imports it there. */
 export const JUDGE_PROTOCOL_FILE = "boundary/protocol.ts";
@@ -74,6 +98,9 @@ const HOST_ARGS = [
   "readyLine",
   "deniesFile",
 ] as const;
+
+/** What the srt host says when an argument is missing or empty. */
+export const HOST_USAGE = `usage: boundary-host.ts ${HOST_ARGS.map(usageName).join(" ")} [PLACE...]`;
 
 /** The srt host's arguments, by name, and the places it binds. */
 export type HostArgs = Readonly<
