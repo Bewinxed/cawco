@@ -151,10 +151,9 @@ export const agentControlRoutes = ({
         }),
       },
       async ({ params, query, set, status }) => {
-        const account =
-          traitsOf(query.harness).accountModel === "dir"
-            ? (query.account ?? machineAccount(db, params.machineId))
-            : undefined;
+        const account = traitsOf(query.harness).accountDir
+          ? (query.account ?? machineAccount(db, params.machineId))
+          : undefined;
         const answer = await readAgent(
           params.machineId,
           CONTROL_FOLDER_COMMANDS,
