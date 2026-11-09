@@ -47,7 +47,7 @@ import {
   ARTIFACT_SESSION_PATH,
   ARTIFACT_SESSION_REFUSED,
 } from "@cawco/core/artifact-session";
-import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
+import { RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { AskAnswer } from "@cawco/core/asks";
 import { FULL_SEND_ANSWER, PROJECT_SETTINGS } from "@cawco/core/asks";
 import {
@@ -201,13 +201,7 @@ import {
   IMAGE_PROVIDERS,
   imageProviderOf,
 } from "@cawco/core/image-generation";
-import {
-  type DelegateWaitAbout,
-  delegateAskText,
-  delegateWaitNotice,
-  parseDelegateWaitNotice,
-  reportMarker,
-} from "@cawco/core/injected";
+import { parseDelegateWaitNotice } from "@cawco/core/injected";
 import { doing } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
@@ -445,7 +439,6 @@ import { createAccountCarry } from "./account-carry";
 import { createAccountProbes } from "./account-probes";
 import { createAccountSignin } from "./account-signin";
 import {
-  claudeCredentialRefused,
   confirmReading,
   keepReading,
   machineAccount,
@@ -453,7 +446,6 @@ import {
   noteRateLimit,
   refreshCatalog,
   sessionLimitsReader,
-  signOutRefused,
   uncompared,
   withOrgIdFrom,
 } from "./accounts";
@@ -486,6 +478,7 @@ import {
 } from "./artifacts/sync";
 import { takesNoInput } from "./artifacts/taker";
 import { clientCopy, createAskPresenter } from "./ask-presentation";
+import { createAskRouting } from "./ask-routing";
 import { createAsks } from "./asks";
 import { createAtLimit, type Stall, type TakenUpBy } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
@@ -509,7 +502,6 @@ import {
   type Caw,
   cawRoutes,
   createCaw,
-  eventContext,
   isProjectConversation,
   type PersonsSend,
   PROJECT_ORIGIN,
@@ -639,7 +631,6 @@ import { hubHttpUrl } from "./hub-self";
 import {
   type FolderSkillBody,
   MachineAway,
-  type ReportTold,
   type SessionLocation,
 } from "./hub-shapes";
 import { createHubTools, installBuild } from "./hub-tools";
@@ -971,15 +962,6 @@ const waitNoticeUuid = (
   uuidOf(
     `delegate-wait\u0000${requestId}\u0000${mark}${above ? `\u0000${above}` : ""}`
   );
-
-/** `text` with `line` after its marker (core `markerTag`, its first line), when there is a line. */
-const withContext = (text: string, line: string | undefined): string => {
-  if (!line) {
-    return text;
-  }
-  const at = text.indexOf("]\n") + 2;
-  return `${text.slice(0, at)}${line}\n\n${text.slice(at)}`;
-};
 
 /** A project's page source in its folder (kept-blocks.ts `pageSourcePaths`): a decision page's `decisions/<name>/page.oui` or built `index.html`, or a block's `artifacts/<name>/page.oui`; its name at 1. */
 const PAGE_SOURCE =
@@ -1469,47 +1451,6 @@ const registerAck = (
 /** Sent back as a frame, the only verb a dashboard renders. */
 const failure = (envelope: Envelope, message: string): Envelope<ErrorFrame> =>
   refusalFrame(envelope, message, envelope.verb);
-
-/**
- * Renders a parked ask readably for the parent session that has to answer it:
- * a question's text and option labels verbatim, or a tool's name and its input
- * summary. The parent reads this off a peer message and answers with the
- * `answer_delegate` tool, so the phrasing has to carry every choice it needs.
- */
-const renderDelegateAsk = (payload: unknown): string => {
-  const toolName = peek(payload, "toolName");
-  const input = (payload as { input?: unknown } | null)?.input;
-  const questions = (input as { questions?: unknown } | null)?.questions;
-  if (
-    (peek(payload, "requestKind") === "question" ||
-      toolName === ASK_USER_QUESTION) &&
-    Array.isArray(questions) &&
-    questions.length > 0
-  ) {
-    return questions
-      .map((question, index) => {
-        const q = question as { question?: unknown; options?: unknown };
-        const options = Array.isArray(q.options)
-          ? q.options
-              .map((option) => (option as { label?: unknown }).label)
-              .filter((label): label is string => typeof label === "string")
-              .map((label) => `- ${label}`)
-              .join("\n")
-          : "";
-        const text = typeof q.question === "string" ? q.question : "";
-        return `Q${index + 1}: ${text}${options ? `\n${options}` : ""}`;
-      })
-      .join("\n");
-  }
-  const summary =
-    input === undefined || input === null
-      ? ""
-      : // biome-ignore lint/style/noNestedTernary: input is either a string or an arbitrary value to stringify — two mutually exclusive shapes, not a simplifiable condition.
-        typeof input === "string"
-        ? input
-        : JSON.stringify(input);
-  return `${toolName ?? "a tool"}${summary ? ` — ${summary}` : ""}`;
-};
 
 /** The report beat's word on what each harness adapter on the machine can do. */
 const peekHarnesses = (
@@ -2359,6 +2300,16 @@ export const createServer = (
     publishedOverlays: () => publishedOverlays,
     publishedRows: () => publishedRows,
     shownFrame: () => shownFrame,
+    delegateWaits: () => delegateWaits,
+    homeLoginMoveOf: () => homeLoginMoveOf,
+    inCustody: () => inCustody,
+    keepPrompt: () => keepPrompt,
+    noteWithdrawn: () => noteWithdrawn,
+    oweMoveOff: () => oweMoveOff,
+    publishDelegateEvent: () => publishDelegateEvent,
+    settlePending: () => settlePending,
+    touched: () => touched,
+    usageCounter: () => usageCounter,
   });
   const {
     anchors,
@@ -2750,6 +2701,18 @@ export const createServer = (
       }),
     wrapped: (sessionId) => db.instanceBySessionId(sessionId) !== undefined,
   });
+  const {
+    askRefusal,
+    delegateAskParent,
+    deliverDelegateAsk,
+    escalateRoutedAsks,
+    forgetPending,
+    ownsPermission,
+    processGeneration,
+    reportToParent,
+    settleRefusal,
+    tellParentOfWait,
+  } = createAskRouting(ctx);
   const { autoInstall, installArgs, installAsk, readyHarnesses } =
     createToolInstalls(ctx);
 
@@ -4355,460 +4318,6 @@ export const createServer = (
    * and its sessions' pulses. Made once Caw is, whose wake its nudges take.
    */
   let watch: FleetWatch | undefined;
-
-  /**
-   * Drops a dead process's parked questions, telling whoever carried them
-   * elsewhere that they are over — a push whose buttons still work after the
-   * session behind them is gone is a notification that lies.
-   */
-  const forgetPending = (
-    instanceId: string,
-    why: string,
-    outlived = false,
-    /**
-     * `all`: the session runs again, so nothing it was sent fails here — what
-     * its process never read is owed to the next one, as its machine hands it
-     * back ({@link takeBack}) or {@link losePending} decides. `none`: it never
-     * runs again (stopped, deleted, archived, nothing to resume), and what it
-     * never read fails for `why`.
-     */
-    keep: "none" | "all" = "none",
-    /** What its failed sends offer back, beside `why` (a wake's refusal, {@link wakeOf}). */
-    refusal?: StoredSendRefusal
-  ): void => {
-    // A process gone mid-turn ends that turn: what it read of a grant
-    // lapses with it (asks.ts `turnEnded`). Its asks the hub owns stay
-    // unless it ended for good.
-    hubAsks.turnEnded(instanceId);
-    hubAsks.withdrawEnded(instanceId);
-    if (!outlived) {
-      // If it runs again, a permission prompt it was halted on stays, and
-      // what it had asked the person is asked again.
-      if (keep === "all") {
-        noteWithdrawn(
-          pending
-            .list()
-            .filter(
-              (ask) =>
-                ask.instanceId === instanceId &&
-                !outlivesSession(ask) &&
-                !keepPrompt(ask)
-            )
-        );
-      }
-      // Its connect asks' calls end with it, signed in or not.
-      connectAsks.ended(instanceId);
-      pending.forget(instanceId);
-    }
-    // Nor is it doing anything any more: a pulse outliving its process is the
-    // same stale-liveness lie in memory instead of in a column.
-    pulses.delete(instanceId);
-    // A turn that called finish_item ends with its process: what waited out
-    // that turn is the next process's to read.
-    if (!outlived) {
-      // And its transcript's tail says so: a process killed or crashed
-      // mid-turn sent no `result`, and the tail went on saying busy over a
-      // session doing nothing (a page read then drew Stop). One that outlived
-      // its agent may still be in its turn, which its adoption says.
-      transcripts.processGone(instanceId);
-      workItems.turnOver(instanceId);
-    }
-    // A conversation's turn ends with its process.
-    lead?.sessionEnded(instanceId);
-    // And whatever its turn had read or started with it (memory.ts).
-    memoryWatch.ended(instanceId);
-    touched.delete(instanceId);
-    // A session that died before it ever said anything is never going to name
-    // itself; nothing should still be waiting to hear its first words.
-    awaitingFirstTurn.delete(instanceId);
-    // Nor is anything it was sent and never read going to run — unless its
-    // harness wrote it down as it went. A process that outlived its agent
-    // may hold it still: custody decides that ({@link decideCustody}).
-    if (!outlived) {
-      inCustody.delete(instanceId);
-      // What is kept for the session at rest ({@link startsTurnIn}) never
-      // reached a process: no process's end fails it. It waits for a person
-      // or its parent.
-      const [row] = db.getInstancesByIds([instanceId]);
-      const keptAtRest = (send: SentMessageRow): boolean =>
-        !!(send.owed && row) &&
-        !startsTurnIn({ ...row, status: "stopped" }, send.body as SentMessage);
-      if (keep === "none") {
-        settlePending(
-          instanceId,
-          why,
-          "fail",
-          (send) => !keptAtRest(send),
-          undefined,
-          refusal
-        );
-      }
-    }
-    // A session that never runs again: what fleet watch read of it is over,
-    // and a triage run that was it frees its slot. One that runs again
-    // (a launch, a restart) is the same session to fleet watch.
-    if (keep === "none") {
-      watch?.forget(instanceId);
-    }
-    usageCounter.forget(instanceId);
-  };
-
-  // The hub's persisted spawn identity changes on every relaunch, but not on
-  // a socket reconnect or a turn's init. A request belongs to that launch.
-  const processGeneration = (
-    row: ReturnType<DbShape["getInstancesByIds"]>[number]
-  ): string => JSON.stringify([row.id, row.spawnedAt]);
-  /**
-   * A Claude session's error in place of an answer, read for what it says of
-   * its account ({@link claudeCredentialRefused}). Refused for good: the
-   * account is signed out where the refusal reaches ({@link signOutRefused}),
-   * the session's machine or every machine it is signed in on, with the
-   * refusal's words, so no new session is placed on it there and Configure →
-   * Accounts offers to sign it in again; the sessions resting on it there
-   * owe a move to the account placement carries each to
-   * ({@link moveRestingOff}). Any other error changes nothing.
-   * Only the row's live launch speaks for its account, and only one
-   * reading the account's own credential: not one on the machine's own login
-   * while it moves into CawCo, nor one still running from a credential that
-   * has moved out of its store, whose refusal is that old credential's.
-   * Answers what the live launch said, which the turn's end then answers
-   * ({@link credentialTurns}): a refusal also when another session's had
-   * already signed the account out there.
-   */
-  const settleRefusal = (
-    machineId: string,
-    instanceId: string,
-    generation: string | undefined,
-    error: string | undefined,
-    text: string
-  ): ReturnType<typeof claudeCredentialRefused> => {
-    const word = claudeCredentialRefused(error, text);
-    const [row] = word ? db.getInstancesByIds([instanceId]) : [];
-    const accountId = row?.accountId;
-    if (
-      !(word && row && accountId) ||
-      traitsOf(row.harness).accountModel !== "dir" ||
-      generation !== processGeneration(row) ||
-      homeLoginMoveOf(machineId, row) ||
-      movedFrom().has(row.id)
-    ) {
-      return;
-    }
-    const out = signOutRefused(db, machineId, accountId, word);
-    if (out.length === 0) {
-      return word;
-    }
-    const named = accountWords(accountId);
-    console.warn(
-      word.reach === "account"
-        ? `[accounts] ${named} is signed out on ${out.map(machineName).join(", ")}: ${sessionName(row)}'s Claude Code on ${machineName(machineId)} was refused the account itself, whatever credential asks (${word.reason}). Nothing new is placed on ${named} until it is signed in again in ${configurePage("accounts")}; the session it stopped, and every session resting on it, moves to another account.`
-        : `[accounts] ${named} on ${machineName(machineId)} is signed out: ${sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${machineName(machineId)} in ${configurePage("accounts")}; the session it stopped, and every session resting on it there, moves to another account.`
-    );
-    for (const one of out) {
-      publishUsage(one);
-    }
-    moveRestingOff(accountId, out, row.id);
-    return word;
-  };
-  /**
-   * The sessions on `accountId` on `machines`, its sign-in just refused
-   * there ({@link settleRefusal}), other than `refused` (whose own turn's
-   * end moves it, {@link takeCredentialTurn}): each whose process is gone
-   * owes a move to the account placement carries it to now
-   * ({@link oweMoveOff}), so its next wake launches there and what it
-   * is sent goes to it ({@link wakeOf} reads the owed account). One with a
-   * process moves when its next turn meets the same refusal. One no account
-   * can take stays, and a send to it is refused with the way back
-   * (`account-signed-out`).
-   */
-  const moveRestingOff = (
-    accountId: string,
-    machines: readonly string[],
-    refused: string
-  ): void => {
-    for (const row of db.listInstances()) {
-      if (
-        row.id !== refused &&
-        row.accountId === accountId &&
-        traitsOf(row.harness).accountModel === "dir" &&
-        machines.includes(row.machineId) &&
-        wakesForSend(row) &&
-        !owedMoves.has(row.id)
-      ) {
-        oweMoveOff(row.id, accountId, "refused");
-      }
-    }
-  };
-  /** Why an ask arriving from a machine is not this row's live process's; none when it is. */
-  const askRefusal = (
-    owner: ReturnType<DbShape["getInstancesByIds"]>[number] | undefined,
-    ask: Envelope
-  ): string | undefined => {
-    if (!owner) {
-      return "no such session";
-    }
-    if (owner.machineId !== ask.machineId) {
-      return `it belongs to ${machineName(owner.machineId)}`;
-    }
-    if (!["running", "starting", "unknown"].includes(owner.status)) {
-      return `the session is ${owner.status}`;
-    }
-    if (peek(ask.payload, "processGeneration") !== processGeneration(owner)) {
-      return "an earlier launch asked it";
-    }
-    return undefined;
-  };
-  const ownsPermission = (parked: Envelope): boolean => {
-    const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
-    return askRefusal(row, parked) === undefined;
-  };
-
-  /**
-   * The session a parked ask was routed to: its parent (work-items.ts
-   * `reportees`), as the ask's record names it
-   * ({@link deliverDelegateAsk}). Undefined for an ask not routed.
-   */
-  const routedRecipient = (parked: Envelope): string | undefined => {
-    const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
-    return payload.kind === "permission_request" &&
-      payload.routedTo === "parent" &&
-      parked.requestId
-      ? db.delegateAsk(parked.requestId)?.parentInstanceId
-      : undefined;
-  };
-
-  /**
-   * A session just died — a parent, or a project's conversation — while an ask routed
-   * to it was still parked. The user is the fallback: re-broadcast the ask
-   * untagged so it returns to the attention queue, and let push hear it like
-   * any other. A routed ask must never sit unanswerable and
-   * invisible.
-   */
-  const escalateRoutedAsks = (recipientId: string): void => {
-    for (const parked of pending.list()) {
-      if (routedRecipient(parked) !== recipientId) {
-        continue;
-      }
-      pending.unroute(parked.requestId ?? "");
-      console.log(
-        `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
-      );
-      registry.broadcast(clientCopy(parked));
-      push.onAsk(parked);
-      // Its parent, if it can still be woken, hears it is the person's now.
-      delegateWaits.asked(parked, true);
-    }
-  };
-
-  /**
-   * The parent a delegate's ask goes to: the session that started its work,
-   * and no other (work-items.ts `reportees`), live, or asleep with a
-   * conversation to wake from, and whose own work is not finished; none
-   * leaves the ask the person's.
-   */
-  const delegateAskParent = (
-    sender: InstanceRow,
-    { unknown = false }: { unknown?: boolean } = {}
-  ): InstanceRow | undefined => {
-    const parentId = sender.parentInstanceId;
-    if (!parentId || parentId === sender.id) {
-      return undefined;
-    }
-    return workItems
-      .reportees(sender)
-      .find(
-        (row) =>
-          (row.status === "running" ||
-            row.status === "starting" ||
-            (unknown && row.status === "unknown") ||
-            (row.status === "sleeping" && row.sessionId !== null)) &&
-          !workItems.refusal(row, { kind: "peer", fromSession: sender.id })
-      );
-  };
-
-  /**
-   * Delivers a delegate's ask to its parent as a queued peer message, in the
-   * same shape the auto-report block uses: the parent reads it when its current
-   * turn ends and answers with the `answer_delegate` tool. The final line is
-   * machine-readable so the parent's model can copy the ids verbatim.
-   */
-  /**
-   * The context line a send for a delegate's report or question opens with
-   * when `parent` is its project's conversation (caw.ts `eventContext`):
-   * where it runs, what `trigger` happened, the skill. Undefined for any
-   * other session.
-   */
-  const conversationContext = (
-    parent: { id: string },
-    trigger: string
-  ): string | undefined => {
-    const [row] = db.getInstancesByIds([parent.id]);
-    const project = row?.projectId ? db.project(row.projectId) : undefined;
-    return row && project && isProjectConversation(row, db.project)
-      ? eventContext(project, row.cwd, "delegate-report", trigger)
-      : undefined;
-  };
-
-  const deliverDelegateAsk = (
-    delegate: InstanceRow,
-    parent: { id: string; machineId: string },
-    ask: { requestId?: string; payload: unknown }
-  ): void => {
-    const { name, tag: label } = sessionLabel(delegate);
-    const body = renderDelegateAsk(ask.payload);
-    const instruction =
-      "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
-      "answers are keyed by the exact question text and the value is the chosen option label " +
-      "(pass deny=true to refuse it).";
-    deliverSend(
-      sessionWord(
-        parent,
-        withContext(
-          delegateAskText({
-            label,
-            body,
-            instance: delegate.id,
-            request: String(ask.requestId),
-            instruction,
-          }),
-          conversationContext(
-            parent,
-            `${sessionLink(delegate.id, boardTitle(delegate))} asked a question`
-          )
-        ),
-        {
-          kind: "peer",
-          from: delegate.id,
-          name,
-          fromSession: delegate.id,
-        },
-        { shouldQuery: false }
-      )
-    );
-    const toolName = peek(ask.payload, "toolName");
-    publishDelegateEvent(
-      delegate.machineId,
-      db.recordDelegateEvent({
-        instanceId: delegate.id,
-        parentInstanceId: parent.id,
-        kind: "ask",
-        requestId: ask.requestId,
-        toolName,
-        requestKind:
-          peek(ask.payload, "requestKind") === "question" ||
-          toolName === ASK_USER_QUESTION
-            ? "question"
-            : "tool",
-        payload: {
-          input: (
-            ask.payload as Extract<
-              FramePayload,
-              { kind: "permission_request" }
-            > | null
-          )?.input,
-        },
-        status: "pending",
-      })
-    );
-  };
-
-  /**
-   * The hub's word to `parent` while its delegate waits on the person, or of
-   * how its ask ended (delegate-waits.ts): the hub's, under its own origin
-   * (core `DELEGATE_WAIT_ORIGIN`), never the delegate's message, so it wakes
-   * a parent at rest and a send of it that fails tells no session it
-   * failed. Drawn in the parent's transcript as a note titled `line`; its
-   * tag names the ask, its delegate and what it asks (`about`). Under a
-   * `uuid` already sent it goes nowhere: each is told once.
-   */
-  const tellParentOfWait = (
-    parent: InstanceRow,
-    uuid: string,
-    line: string,
-    body: string,
-    about: DelegateWaitAbout
-  ): void => {
-    deliverSend({
-      verb: "send",
-      machineId: parent.machineId,
-      instanceId: parent.id,
-      payload: {
-        instanceId: parent.id,
-        message: {
-          type: "user",
-          uuid,
-          message: {
-            role: "user",
-            content: withContext(
-              delegateWaitNotice(line, body, about),
-              conversationContext(parent, line)
-            ),
-          },
-          parent_tool_use_id: null,
-          origin: { kind: "system", name: DELEGATE_WAIT_ORIGIN, line },
-        },
-      },
-    });
-  };
-
-  /**
-   * A delegate's report to its parent, as a queued peer message: what its
-   * turn said (or why it never started), under the marker the parent's
-   * transcript renders as a report. The parent, the session that started its
-   * work, is the only one that hears it (work-items.ts `reportees`).
-   * `headline` is the delegate's one-or-two-sentence outcome from
-   * `finish_item`, carried on the marker.
-   */
-  const reportToParent = (
-    delegate: InstanceRow,
-    body: string,
-    failed: boolean,
-    told: ReportTold = {}
-  ): void => {
-    for (const parent of workItems.reportees(delegate)) {
-      reportTo(parent, delegate, body, failed, told);
-    }
-  };
-
-  /** One report, to one of the sessions that hears a delegate's reports. */
-  const reportTo = (
-    parent: InstanceRow,
-    delegate: InstanceRow,
-    body: string,
-    failed: boolean,
-    { completion, notice = false, headline, outputs }: ReportTold
-  ): void => {
-    const { name, tag: label } = sessionLabel(delegate);
-    deliverSend(
-      sessionWord(
-        parent,
-        `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}`,
-        {
-          kind: "peer",
-          from: delegate.id,
-          name,
-          fromSession: delegate.id,
-        },
-        { shouldQuery: false }
-      )
-    );
-    publishDelegateEvent(
-      delegate.machineId,
-      db.recordDelegateEvent({
-        instanceId: delegate.id,
-        parentInstanceId: parent.id,
-        kind: "report",
-        payload: {
-          body,
-          failed,
-          ...(headline ? { headline } : {}),
-          ...(outputs?.length ? { outputs } : {}),
-          ...(notice ? { notice: true } : {}),
-          ...completion,
-        },
-      })
-    );
-  };
 
   /**
    * A spawn for a session that runs a work item, bounded to its workspace:
