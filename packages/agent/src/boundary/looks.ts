@@ -71,10 +71,11 @@ import {
 } from "./staleness";
 import {
   closeUnderWay,
+  heldProc,
   holding,
   isClosing,
   isStarting,
-  keepers,
+  procsHeld,
   readHeld,
   readRetiring,
   retiringFileOf,
@@ -190,7 +191,7 @@ const recheckNow = async (
   cause: NarrowCause,
   ids?: readonly string[]
 ): Promise<void> => {
-  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const procs = (await procsHeld()).filter((proc) => proc.alive);
   const runningIds = (
     ids ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
   ).filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)));
@@ -241,7 +242,7 @@ const recheckNow = async (
  * items are live.
  */
 const inUseNow = async (): Promise<string[]> => {
-  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const procs = (await procsHeld()).filter((proc) => proc.alive);
   const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
     .filter((id) => !(isStarting(id) || isClosing(id)));
@@ -411,7 +412,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
       await cleanGeneration(id, boundary);
       await rm(retiringFileOf(id, boundary), { force: true });
     }
-    const left = (await keepers.held()).filter(
+    const left = (await procsHeld()).filter(
       (proc) => proc.alive && isBoundaryOf(proc.procId, id)
     );
     await Promise.all(
@@ -422,7 +423,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     await closeToolDoor(id);
     await closeGitDoor(id);
     await closeGithubDoor(id);
-    const judges = (await keepers.held()).filter(
+    const judges = (await procsHeld()).filter(
       (proc) => proc.alive && isJudgeOf(proc.procId, id)
     );
     await Promise.all(
@@ -448,7 +449,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
  * items are live.
  */
 const sweepQuiet = async (): Promise<void> => {
-  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const procs = (await procsHeld()).filter((proc) => proc.alive);
   const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
     .filter((id) => !isClosing(id));
@@ -571,7 +572,7 @@ const repairJudge = async (
     : undefined;
   if (form) {
     const procId = judgeProcId(ref.id, form);
-    const stuck = await keepers.holding(procId);
+    const stuck = await heldProc(procId);
     if (stuck) {
       await stuck.client.signal(procId, "SIGKILL");
       await until(async () => !(await holding(procId)), {
@@ -633,7 +634,7 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
     lookAtEveryFolder();
     sweepQuiet()
       .then(async () =>
-        judgesAnswer((await keepers.held()).filter((proc) => proc.alive))
+        judgesAnswer((await procsHeld()).filter((proc) => proc.alive))
       )
       .catch((error: unknown) => {
         console.warn(
