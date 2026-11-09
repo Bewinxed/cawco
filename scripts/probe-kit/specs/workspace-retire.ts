@@ -98,16 +98,13 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import type {
-  HubSent,
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
+import type { HubSent } from "../../../packages/core/src/hub-request";
 import { movedLine } from "../../../packages/core/src/injected";
+import type { Sending } from "../../../packages/core/src/sending";
 import { signal as signalPid } from "../../../packages/core/src/signal";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { workWords } from "../../../packages/core/src/words/work";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { startedSince } from "../agent-records";

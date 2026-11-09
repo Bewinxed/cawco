@@ -9,13 +9,8 @@
  * program that read its old shape, by name, never silently.
  */
 import { readWithin } from "../../packages/core/src/bounded";
-import type {
-  BareTool,
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../packages/core/src/hub-request";
 import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
+import type { Sending } from "../../packages/core/src/sending";
 import {
   envelopeText,
   recordOf,
@@ -23,6 +18,11 @@ import {
   type ToolForm,
   toolArguments,
 } from "../../packages/core/src/tool-answer";
+import type {
+  BareTool,
+  ToolArgs,
+  ToolName,
+} from "../../packages/hub/src/tool-args";
 
 /** The session a call acts as: the hub it reaches, its id and its credential. */
 export interface ToolSession {
@@ -144,9 +144,9 @@ const call = async (
 
 /**
  * `name` called as `session`, read as an agent reads it: its words. Its
- * arguments are held to what the tool takes (core hub-routes.gen.ts, every
+ * arguments are held to what the tool takes (hub tool-args.ts, every
  * tool a session is listed): one it doesn't take, or one missing it needs,
- * is a type error, as at the hub's routes (core hub-request.ts `Sending`).
+ * is a type error, as at the hub's routes (core sending.ts `Sending`).
  */
 export function toolWords<N extends BareTool>(
   session: ToolSession,
@@ -175,7 +175,7 @@ export interface ToolCall {
   readonly name: ToolName;
 }
 
-/** Tool `name` with `args`, each one it takes and all it needs (core hub-request.ts `Sending`). */
+/** Tool `name` with `args`, each one it takes and all it needs (core sending.ts `Sending`). */
 export function toolCall<N extends BareTool>(name: N): ToolCall;
 export function toolCall<N extends ToolName, const A>(
   name: N,

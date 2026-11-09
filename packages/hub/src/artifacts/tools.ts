@@ -159,7 +159,7 @@ const mermaid = z
   .describe('Mermaid, like "flowchart LR; A --> B".');
 
 export const artifactCreate = {
-  name: "artifact_create",
+  name: "artifact_create" as const,
   description:
     "Open something in the person's panel for them to act on; `title` names it to them everywhere, `ask` heads the panel until they act. The `show` skill " +
     "chooses `does`, `ask` and `kind` before you build. Proof, references, plans and finished work go in your words; " +
@@ -252,7 +252,7 @@ export const artifactCreateToParent = {
 };
 
 export const artifactUpdate = {
-  name: "artifact_update",
+  name: "artifact_update" as const,
   description:
     "Change an artifact of yours, or one a cold session of your project left. `statements`: a decision page's statements that change, merged by name (any of your project's pages). " +
     "`html` replaces a page, picks kept. `patch`: JSON Patch over its state by choice id, all or none, like " +
@@ -308,7 +308,7 @@ export const artifactUpdate = {
 };
 
 export const artifactRead = {
-  name: "artifact_read",
+  name: "artifact_read" as const,
   description:
     "Read the person's picks, notes and values on an artifact artifact_list lists: each choice " +
     "picked or not yet. `since`: the seq your last read gave. No id: your newest. `png` adds its picture, pins and all, `width` px wide; " +
@@ -348,7 +348,7 @@ export const artifactRead = {
 export const LIST_PAGE = 25;
 
 export const artifactList = {
-  name: "artifact_list",
+  name: "artifact_list" as const,
   description:
     "Every artifact your artifact tools act on (yours, your tree's, your project's pages, what its cold sessions left), newest first, with whose move each is. " +
     `${LIST_PAGE} a page. What you asked the person is open_items'.`,
@@ -362,14 +362,14 @@ export const artifactList = {
 };
 
 export const artifactShow = {
-  name: "artifact_show",
+  name: "artifact_show" as const,
   description:
     "Bring an artifact, yours or your delegation tree's, to the front of your panel; one a delegate handed you opens by this, at its newest version.",
   input: { id },
 };
 
 export const artifactBrowse = {
-  name: "artifact_browse",
+  name: "artifact_browse" as const,
   description:
     "Open an artifact in your own browser tool to click through it as the person would, when the brief asks for that or a fault needs seeing. " +
     "Answers an address to load once, open for 15 minutes or until this session ends.",
@@ -377,14 +377,14 @@ export const artifactBrowse = {
 };
 
 export const artifactPromote = {
-  name: "artifact_promote",
+  name: "artifact_promote" as const,
   description:
     "Keep an artifact with your project: commits it to artifacts/<name>/ in the project's folder, which outlives this session.",
   input: { id },
 };
 
 export const artifactDelete = {
-  name: "artifact_delete",
+  name: "artifact_delete" as const,
   description:
     "Remove an artifact of yours a newer one superseded, one a delegate below you left once its work item ended, " +
     "or one a cold session of your project left, once its pins are resolved. " +
@@ -393,7 +393,7 @@ export const artifactDelete = {
 };
 
 export const designMap = {
-  name: "design_map",
+  name: "design_map" as const,
   description:
     "The project's component library: each component's states, frames drawn, what it is made of and used in. " +
     "`component` (a file) answers its card: props, stories, moves, call sites. Mount what it lists.",
@@ -414,7 +414,7 @@ export const designMap = {
 const pin = z.string().min(6).max(36).describe("Its handle or id.");
 
 export const commentRead = {
-  name: "comment_read",
+  name: "comment_read" as const,
   description:
     "Read the person's pins on your artifacts: what each stands on (selector, file:line, text), and its thread. New ones reach you by themselves. No artifact: all of yours.",
   input: {
@@ -429,7 +429,7 @@ export const commentRead = {
 };
 
 export const commentReply = {
-  name: "comment_reply",
+  name: "comment_reply" as const,
   description:
     "Answer a pin in its thread; after a change, name the files changed. `asks: true` when the reply " +
     "needs their answer or pick: it reaches them in Needs you until they reply or resolve, so leave the pin " +
@@ -446,14 +446,14 @@ export const commentReply = {
 };
 
 export const commentResolve = {
-  name: "comment_resolve",
+  name: "comment_resolve" as const,
   description:
     "Resolve a pin once your change answers it, with a last line when it helps. The person can reopen it.",
   input: { pin, text: z.string().min(1).max(COMMENT_LIMITS.text).optional() },
 };
 
 export const questionClose = {
-  name: "question_close",
+  name: "question_close" as const,
   description:
     "Close a question your tree put to the person: use when open_items lists it answered and you acted on it, or when it no longer applies. He is asked it no more; nothing is deleted.",
   input: {
@@ -476,7 +476,7 @@ export const questionClose = {
 };
 
 export const settle = {
-  name: "settle",
+  name: "settle" as const,
   description:
     "Pick an option on a decision card the project's Who decides gives you as a member of it: a card of yours whose kind goes to the agent that asked, or a card the hub sent you to settle. A card the person decides is refused.",
   input: {
