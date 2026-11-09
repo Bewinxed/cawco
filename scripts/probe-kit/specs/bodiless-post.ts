@@ -35,7 +35,10 @@
 import { mkdir } from "node:fs/promises";
 import { connect } from "node:http2";
 import { join } from "node:path";
-import { couldNot } from "../../../apps/dashboard/src/lib/platform/hub-read";
+import {
+  couldNot,
+  refusedOf,
+} from "../../../apps/dashboard/src/lib/platform/hub-read";
 import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { dashboardRelay } from "../../../packages/hub/src/tailnet-https";
@@ -203,8 +206,10 @@ const run = async (kit: Kit) => {
       }),
       { status: 400, headers: { "content-type": "application/problem+json" } }
     );
-    const shown = (await couldNot(`start sign-in to ${SERVER}`, parseProblem))
-      .message;
+    const shown = couldNot(
+      `start sign-in to ${SERVER}`,
+      await refusedOf(parseProblem)
+    ).message;
     kit.check(
       "4: a parse problem from the hub reads in Configure as the hub's refusal with its status, never the parser's words",
       shown ===

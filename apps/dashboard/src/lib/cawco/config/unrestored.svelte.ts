@@ -1,6 +1,11 @@
 import type { Deleted } from "@cawco/core/fleet";
 import { hubRequest } from "@cawco/core/hub-request";
-import { failureClause, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  failureClause,
+  hubFetch,
+  hubRefusal,
+  refusedOf,
+} from "#lib/platform/hub-read.js";
 import { refusals } from "../refusals.svelte";
 
 /**
@@ -37,7 +42,7 @@ async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
   );
   if (!response.ok) {
     // The hub says why in a sentence: its window ran out, or its name is taken.
-    throw await hubRefusal(response);
+    throw hubRefusal(await refusedOf(response));
   }
   return ((await response.json()) as { row: T }).row;
 }
