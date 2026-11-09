@@ -18,12 +18,8 @@ import { byHandle } from "./handles";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
 import { type Step, stepsEnough, stepsOf } from "./transcript-steps";
-import {
-  type HeldWork,
-  isHubParent,
-  type QueuedDelegate,
-  type Unlanded,
-} from "./work-items";
+import { isHubParent } from "./work-item-state";
+import type { HeldWork, QueuedDelegate, Unlanded } from "./work-items";
 
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
 type DelegateListInclude = "live" | "all";
