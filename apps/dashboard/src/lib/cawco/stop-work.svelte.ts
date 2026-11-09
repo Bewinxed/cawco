@@ -37,12 +37,8 @@ import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
-import {
-  failureWords,
-  hubFetch,
-  hubJson,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { route } from "#lib/platform/motion/route.svelte.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -986,17 +982,11 @@ class StopWork {
 
 /** What of the project still runs, as the hub lists it. */
 async function runningSessions(job: StopJob): Promise<RunningSession[]> {
-  return (
-    await hubJson<{ sessions: RunningSession[] }>(
-      hubRequest("GET /api/projects/:id/running", {
-        path: { id: job.projectId },
-      }),
-      {
-        failure: (refused) =>
-          hubRefusal(refused, projectWords.sessionsNotListedThen),
-      }
-    )
-  ).sessions;
+  const answer = await hub.api.projects({ id: job.projectId }).running.get();
+  if (answer.error) {
+    throw hubRefusal(answer, projectWords.sessionsNotListedThen);
+  }
+  return answer.data.sessions;
 }
 
 function jobKey(job: StopJob): string {
