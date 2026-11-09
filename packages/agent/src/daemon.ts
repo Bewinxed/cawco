@@ -3648,7 +3648,7 @@ const startDaemon = (rediscover = false) =>
     );
     // A workspace whose items have all ended: what their sessions left
     // running in its boundary ends, the boundary and the sessions running on
-    // (hub work-items.ts `settle`).
+    // (hub workspaces.ts `settle`).
     supervisor.registerDaemonFunction(CONTROL_WORKSPACE_WORK_END, (asked) => {
       const { id, instanceIds } = (asked ?? {}) as Partial<WorkspaceWorkEnd>;
       if (!(
