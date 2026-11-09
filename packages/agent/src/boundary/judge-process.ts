@@ -11,7 +11,6 @@ import { workspaceDoorDir } from "@cawco/core/paths/workspace";
 import { trustedPath } from "@cawco/core/workspace-needs";
 import { BUN_SCRIPT_ENV } from "../bun-runtime";
 import { isJudgeOf, JUDGE_FORM_LENGTH, judgeProcId } from "../proc-id";
-import type { SessiondClient } from "../sessiond-client";
 import { socketPlace } from "../tool-door";
 import { ready } from "./exec";
 import {
@@ -28,12 +27,10 @@ import {
   holding,
   isClosing,
   isStarting,
-  readHeld,
   refusal,
   sessiond,
   sessiondPath,
   stateDir,
-  type UnaskedCalls,
   writeWhole,
 } from "./state";
 
@@ -41,8 +38,8 @@ import {
 const judging = new Map<string, Promise<void>>();
 
 /**
- * How many arms of each workspace's hook are under way (arm.ts `armHook`),
- * from a judge's exit to its start again too ({@link watchJudge}): its hook
+ * How many arms of each workspace's hook are under way (ensure.ts `armHook`),
+ * from a judge's exit to its start again too (ensure.ts `watchJudge`): its hook
  * may name a judge that is going while it is.
  */
 const arming = new Map<string, number>();
@@ -64,9 +61,6 @@ export const whileArming = async <T>(
     }
   }
 };
-
-/** The judges whose exit this agent watches, by their sessiond id, each with the connection it watches on. */
-const watchedJudges = new Map<string, SessiondClient>();
 
 /**
  * Whether workspace `id` is between states its hook and judge move through:
@@ -91,7 +85,7 @@ export const settling = (id: string): boolean =>
  * once it answers: a hook already running still reaches the old one, which
  * leaves on its own once the hook has not named it for as long as a hook
  * lives (`boundary-judge.ts`). One that exits otherwise is started again
- * ({@link watchJudge}). Refuses the workspace when it cannot start.
+ * (ensure.ts `watchJudge`). Refuses the workspace when it cannot start.
  */
 export const judgeFor = async (
   id: string,
@@ -176,47 +170,4 @@ export const judgeFor = async (
   }
   await started;
   return { procId, socket };
-};
-
-/**
- * Starts the workspace's judge again when it exits while the workspace is
- * still held, by arming its hook again (arm.ts `armHook`): a crashed judge
- * would refuse every call. One that left because a newer judge took over, or
- * the workspace closed, finds the current one running, or no workspace. A
- * watch lives on its sessiond connection, so a new connection watches again.
- */
-export const watchJudge = async (
-  id: string,
-  procId: string,
-  unasked: UnaskedCalls
-): Promise<void> => {
-  const client = await sessiond();
-  if (watchedJudges.get(procId) === client) {
-    return;
-  }
-  watchedJudges.set(procId, client);
-  let stop = (): void => undefined;
-  stop = client.subscribe(procId, {
-    line: () => undefined,
-    exit: (code, signal, pid) => {
-      watchedJudges.delete(procId);
-      stop();
-      client.release(procId, pid);
-      // Counted as arming from its exit until it is started again, as the
-      // handover decides (arming.ts `armStep`).
-      whileArming(id, async () => {
-        const held = await readHeld(id);
-        if (held) {
-          console.warn(
-            `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
-          );
-        }
-        await unasked.judgeExited(id, held !== undefined);
-      }).catch((error: unknown) => {
-        console.warn(
-          `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
-    },
-  });
 };
