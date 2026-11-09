@@ -3,7 +3,7 @@
  * through, on the host, so no GitHub token ever enters its boundary.
  *
  * Every workspace's commands run with a gh config dir of their own
- * (boundary.ts `commandEnv`), whose `http_unix_socket` names this door and
+ * (boundary/exec.ts `commandEnv`), whose `http_unix_socket` names this door and
  * whose login is a placeholder. gh then sends every request over the socket
  * in the clear: go-gh reads `http_unix_socket` from gh's config when no
  * socket is passed (pkg/api/client_options.go `resolveOptions`), and dials
