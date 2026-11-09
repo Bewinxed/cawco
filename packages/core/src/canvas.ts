@@ -148,13 +148,6 @@ export const keptOnRemake = (
   entry.el.type === "freedraw" ||
   entry.el.type === "image";
 
-/**
- * The canvas doc's meta key holding when the agent's last write landed (an
- * ISO time, hub artifacts/canvas.ts): a picture posted before it
- * (`meta.pictureAt`) shows the drawing as it was before that write.
- */
-export const CANVAS_WROTE_AT = "wroteAt";
-
 /** The refusal when the screen a write was handed to left before it drew (DESIGN.md's error formula). */
 export const NO_SCREEN =
   "The canvas wasn't changed: the screen drawing it closed first. Try again.";
