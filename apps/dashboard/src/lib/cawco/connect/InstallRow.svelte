@@ -30,7 +30,7 @@
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { tickingClock } from "../motion/clock.svelte";
+  import { tickingClock } from "#lib/platform/motion/clock.svelte.js";
   import { connect, phone } from "./installs.svelte";
   import StepMark from "./StepMark.svelte";
   import { currentRow, stepRows } from "./steps";

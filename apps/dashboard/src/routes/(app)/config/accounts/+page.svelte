@@ -14,11 +14,11 @@
   import { cawco } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { IconChevronRight, IconPlus } from "#lib/icons.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
 
   const section = sectionOf("accounts");
   const groups = $derived(groupsOf());

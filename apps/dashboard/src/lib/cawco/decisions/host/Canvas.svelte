@@ -19,7 +19,7 @@
   import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { revealHere, revealOut } from "../../motion/curves.svelte.js";
+  import { revealHere, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, pieceName, served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";

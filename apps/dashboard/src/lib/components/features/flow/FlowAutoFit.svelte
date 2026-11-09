@@ -23,7 +23,11 @@
    */
   import { useSvelteFlow } from "@xyflow/svelte";
   import { untrack } from "svelte";
-  import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    dur,
+    easeInOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { FIT, fitPadding } from "./fit";
   import { onCanvasResize } from "./resized.svelte";
 

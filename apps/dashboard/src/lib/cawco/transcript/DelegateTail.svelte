@@ -31,16 +31,16 @@
     IconReport,
     IconRules,
   } from "#lib/icons.js";
-  import { cawco } from "../client.svelte";
-  import { entrance } from "../hover-entrance";
-  import MessageBody from "../MessageBody.svelte";
   import {
     afterSkeleton,
     CURVE,
     dur,
     motionOk,
     revealOut,
-  } from "../motion/curves.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { cawco } from "../client.svelte";
+  import { entrance } from "../hover-entrance";
+  import MessageBody from "../MessageBody.svelte";
   import { sessionAnswer, sessionFacts } from "../session-names.svelte";
   import type { Message } from "../types";
 
