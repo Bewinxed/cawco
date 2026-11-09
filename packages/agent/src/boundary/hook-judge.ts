@@ -17,7 +17,15 @@ import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { bunScriptRuntime } from "../bun-runtime";
 import { JUDGE_FORM_LENGTH } from "../proc-id";
-import { JUDGE_BUILD_QUESTION, type JudgeArgs } from "./protocol";
+import {
+  JUDGE_ALLOWS,
+  JUDGE_ANSWER_END,
+  JUDGE_ANSWER_END_PERL,
+  JUDGE_BUILD_QUESTION,
+  JUDGE_NO_PREFIX,
+  JUDGE_REFUSES,
+  type JudgeArgs,
+} from "./protocol";
 import { scriptText } from "./shims";
 import { refusal, stateDir } from "./state";
 
@@ -128,17 +136,17 @@ alarm ${HOOK_LIMIT_S};
 $call = do { local $/; <STDIN> };
 refuse("cawco: the call reached the boundary hook with no input, so it did not run") unless length $call;
 $call =~ tr/\\r\\n/  /;
-$prefix = defined $ENV{CLAUDE_CODE_SHELL_PREFIX} ? unpack('H*', $ENV{CLAUDE_CODE_SHELL_PREFIX}) : '-';
+$prefix = defined $ENV{CLAUDE_CODE_SHELL_PREFIX} ? unpack('H*', $ENV{CLAUDE_CODE_SHELL_PREFIX}) : '${JUDGE_NO_PREFIX}';
 socket(JUDGE, 1, 1, 0) or refuse("cawco: the boundary hook could not open a socket ($!), so this call did not run");
 connect(JUDGE, pack('H*', '${judge.address}')) or refuse("cawco: the workspace's judge at $judge did not answer ($!), so this call did not run");
 select((select(JUDGE), $| = 1)[0]);
 print JUDGE $call, "\\n", $prefix, "\\n" or refuse("cawco: the call could not be handed to the workspace's judge at $judge ($!), so it did not run");
-$answer = do { local $/ = "\\0"; <JUDGE> };
+$answer = do { local $/ = "${JUDGE_ANSWER_END_PERL}"; <JUDGE> };
 defined $answer or refuse("cawco: the workspace's judge at $judge answered nothing, so this call did not run");
-$answer =~ s/\\0\\z//;
+$answer =~ s/${JUDGE_ANSWER_END_PERL}\\z//;
 close JUDGE;
-$answer =~ /\\A([02])\\n/ or refuse("cawco: the workspace's judge at $judge answered nothing, so this call did not run");
-$allowed = $1 eq '0';
+$answer =~ /\\A([${JUDGE_ALLOWS}${JUDGE_REFUSES}])\\n/ or refuse("cawco: the workspace's judge at $judge answered nothing, so this call did not run");
+$allowed = $1 eq '${JUDGE_ALLOWS}';
 $said = substr($answer, 2);
 refuse($said) unless $allowed;
 print STDOUT $said or refuse("cawco: the judge's answer could not be written ($!), so this call did not run");
@@ -296,13 +304,13 @@ const judgeSays = (socket: string): Promise<Bounded<string>> =>
         connection.on("connect", () => {
           connection.write(`${JUDGE_BUILD_QUESTION}\n`);
         });
-        // Its answer is whole at its end mark (boundary-judge.ts
-        // `ANSWER_END`), or at the connection's end, which a judge on macOS
-        // at times never sent.
+        // Its answer is whole at its end mark (protocol.ts
+        // `JUDGE_ANSWER_END`), or at the connection's end, which a judge on
+        // macOS at times never sent.
         connection.on("data", (chunk: Buffer) => {
           chunks.push(chunk);
           const read = Buffer.concat(chunks);
-          const end = read.indexOf(0);
+          const end = read.indexOf(JUDGE_ANSWER_END);
           if (end >= 0) {
             connection.destroy();
             resolve(read.subarray(0, end).toString("utf8"));
@@ -356,7 +364,8 @@ export const judgeAnswer = async (
   }
   const read = await judgeSays(socket);
   return {
-    answers: read.kind === "answered" && read.value === `0\n${build}`,
+    answers:
+      read.kind === "answered" && read.value === `${JUDGE_ALLOWS}\n${build}`,
     socket,
     words: `its hook's judge at ${socket} answered ${JSON.stringify(judgeWords(read))}`,
   };
