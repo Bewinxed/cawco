@@ -11,12 +11,11 @@ import { inView, overlaySync, ownFolderSync } from "../layer";
 import { sessionOfProc } from "../proc-id";
 import { executors } from "./processes";
 import {
-  closeEnded,
   closeUnderWay,
   isStarting,
-  markClosing,
   startUnderWay,
   stateDir,
+  withClose,
 } from "./state";
 
 /**
@@ -61,7 +60,7 @@ export const forgetHeld = (id: string): void => {
  * with its generation's dir, FIFO and state dir taken from under it, or start
  * a boundary the close has already passed.
  */
-export const closedWhile = async <T>(
+export const closedWhile = <T>(
   id: string,
   close: () => Promise<T>
 ): Promise<T> => {
@@ -71,12 +70,7 @@ export const closedWhile = async <T>(
     () => undefined,
     () => undefined
   );
-  markClosing(id, held);
-  try {
-    return await work;
-  } finally {
-    closeEnded(id, held);
-  }
+  return withClose(id, held, work);
 };
 
 /**
