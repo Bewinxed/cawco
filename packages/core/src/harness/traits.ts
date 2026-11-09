@@ -15,7 +15,7 @@ import { HOUR_MS } from "../time";
 import { harnessWords } from "../words/harness";
 import { HARNESSES, type HarnessKind, harnessNamed } from "./kinds";
 
-export interface HarnessTraits {
+interface HarnessTraitsBase {
   /**
    * Whether a session runs in its account's own config dir, which holds the
    * account's login and its conversations: a launch picks the dir, a session
@@ -54,12 +54,6 @@ export interface HarnessTraits {
    * proves no absence by not being listed.
    */
   readonly custody: "keeper" | "server";
-  /**
-   * What the machine's own sign-in to it is, the one CawCo can move into an
-   * account. `dir`: one login, its whole home config dir (`~/.claude`).
-   * `credentials`: a store holding a credential per provider.
-   */
-  readonly homeLogin: "dir" | "credentials";
   /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
   readonly listsAllConversations: boolean;
   /** Whether a live session can reload its skills and reinitialize in place. */
@@ -110,14 +104,29 @@ export interface HarnessTraits {
    * itself. `assistant-before`: the assistant frame before it.
    */
   readonly rewindAnchor: "user-turn" | "assistant-before";
-  /**
-   * The one provider every account of it is of, or null when a session's
-   * model names its provider.
-   */
-  readonly soleProvider: string | null;
   /** A row can start with no conversation of its own and take one at its first send; until then it is never started, not ended. */
   readonly startsWithoutConversation: boolean;
 }
+
+/**
+ * What the machine's own sign-in to a harness is, the one CawCo can move into
+ * an account, and the one provider every account of it is of (null when a
+ * session's model names its provider). A home login that is one whole dir is
+ * one provider's login, so a harness with one names its provider.
+ */
+type HomeLoginTraits =
+  | {
+      /** One login, its whole home config dir (`~/.claude`). */
+      readonly homeLogin: "dir";
+      readonly soleProvider: string;
+    }
+  | {
+      /** A store holding a credential per provider. */
+      readonly homeLogin: "credentials";
+      readonly soleProvider: string | null;
+    };
+
+export type HarnessTraits = HarnessTraitsBase & HomeLoginTraits;
 
 const CLAUDE_TRAITS = {
   accountDir: true,
