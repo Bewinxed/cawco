@@ -5,16 +5,15 @@ import {
   inArray,
   isNotNull,
   isNull,
-  ne,
-  or,
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DbCore } from "./core";
-import { PRESENCE_ID } from "./presence";
+import { findable } from "./instances";
 import {
   artifactChanges,
   artifacts,
+  FIND_SETTINGS_ID,
   findSettings,
   instanceConversations,
   instances,
@@ -27,6 +26,7 @@ import {
   workItems,
   workspaces,
 } from "./schema";
+import { singletonColumn } from "./singleton";
 
 /** An artifact as the find engine reads it: its row, and whether the person changed any of its keys. */
 export type FindArtifactRow = typeof artifacts.$inferSelect & {
@@ -139,14 +139,6 @@ export interface FindDb {
   /** Each workspace's branch, by its id. */
   readonly workspaceBranches: () => Map<string, string>;
 }
-
-const findable = () =>
-  and(
-    eq(instances.machineRemoved, false),
-    ne(instances.status, "discarded"),
-    ne(instances.kind, "summariser"),
-    or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
-  );
 
 /** What a session id's prefix may hold: hex and dashes. */
 const ID_PREFIX = /^[0-9a-f-]+$/u;
@@ -376,15 +368,16 @@ export const findSettingsDb = (core: DbCore): FindSettingsDb => {
   return {
     findSettings: {
       hideSecrets: () =>
-        db
-          .select({ hideSecrets: findSettings.hideSecrets })
-          .from(findSettings)
-          .where(eq(findSettings.id, PRESENCE_ID))
-          .get()?.hideSecrets ?? true,
+        singletonColumn(
+          db,
+          findSettings,
+          FIND_SETTINGS_ID,
+          findSettings.hideSecrets
+        ) ?? true,
       setHideSecrets: (on, at) => {
         const set = { hideSecrets: on, changedAt: at };
         db.insert(findSettings)
-          .values({ id: PRESENCE_ID, ...set })
+          .values({ id: FIND_SETTINGS_ID, ...set })
           .onConflictDoUpdate({ target: findSettings.id, set })
           .run();
       },
