@@ -14,7 +14,7 @@
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
   import Coded from "../../Coded.svelte";
-  import { cawco } from "../../client.svelte";
+
   import {
     isRemoteMcp,
     mcpNameProblem,
@@ -26,6 +26,7 @@
   } from "../../fleet";
   import KeyValueRows from "../../KeyValueRows.svelte";
   import { boardStore } from "../../stores/board.svelte";
+  import { projectsStore } from "../../stores/projects.svelte";
   import Choice from "../Choice.svelte";
   import { deleteMcpServer } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -430,7 +431,7 @@
         }}
         options={[
           { value: "", label: words.everyMachine },
-          ...cawco.projects.map((project) => ({
+          ...projectsStore.projects.map((project) => ({
             value: project.id,
             label: project.name,
           })),

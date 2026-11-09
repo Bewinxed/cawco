@@ -32,12 +32,12 @@
   import { failureWords } from "#lib/platform/hub-read.js";
   import { cn } from "#lib/utils.js";
   import CawOffTray from "./CawOffTray.svelte";
-  import { type ProjectRow, projectRunning } from "./client.svelte";
   import { endAtRail, endHost } from "./project-end.svelte";
   import RowFault from "./RowFault.svelte";
   import StopParked from "./StopParked.svelte";
   import StopTray from "./StopTray.svelte";
   import { type EndKind, stopWork } from "./stop-work.svelte";
+  import { type ProjectRow, projectRunning } from "./stores/projects.svelte";
 
   let {
     at,

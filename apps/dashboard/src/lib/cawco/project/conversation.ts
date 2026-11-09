@@ -12,10 +12,8 @@ import { detach } from "@cawco/core/detach";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { newId } from "#lib/platform/id.js";
 import {
-  conversationStart,
   drawFirstPrompt,
   type HeldSend,
-  nameConversation,
   type SendExtras,
   spawnSession,
   withdrawFirstPrompt,
@@ -31,6 +29,7 @@ import {
   parked,
   planAsks,
 } from "../spawn/parked.svelte";
+import { conversationStart, nameConversation } from "../stores/projects.svelte";
 
 /**
  * Starts it; its session's id. Throws the hub's refusal, or why it can't
