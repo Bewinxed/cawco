@@ -2263,7 +2263,7 @@
    a jump, so the panes either side tween to it (ui/resizable Pane, `grid`).
    Here rather than in variants.css, which `bun run variants` writes whole. */
 @custom-variant pane-keyed (:where([data-pane-group]:has(> [data-pane-resizer][data-active="keyboard"])) > &);
-/* The phone's session strip (ui/fluid-tabs TabsList, `strip="session"`):
+/* The phone's session strip (ui/fluid-tabs TabsList, cawco/tab-strips `SESSION_STRIP`):
    its ends fade over a short run, each cut short at a tab drawn chosen
    (TabsList's `--fade-cap-start`/`--fade-cap-end`), so a tab slides under
    the toggle and Caw rather than being cut. Five stops a side, an eased
