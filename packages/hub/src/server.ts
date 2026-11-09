@@ -4129,7 +4129,7 @@ export const createServer = (
     const [row] = db.getInstancesByIds([instanceId]);
     // A person's words to a session a continuation took the work item of
     // are refused, in the words its page says in its composer's place: they
-    // never go on to the new session unseen ({@link toContinuation}).
+    // never go on to the new session unseen (`toContinuation`).
     if (row?.continuedInto && origin.kind === "human") {
       const [now] = db.getInstancesByIds([continuationNow(row.id)]);
       return {
@@ -4306,7 +4306,7 @@ export const createServer = (
 
   /**
    * The sessions among `ids` whose prompt cache this hub is keeping warm
-   * ({@link tickKeepAlive}): keep-alive is on and has a cache to ping for, or
+   * (`tickKeepAlive`): keep-alive is on and has a cache to ping for, or
    * is waiting out a usage limit to. A ping needs the session's process and is
    * never sent to a sleeping one, so its machine keeps these awake
    * (`HeartbeatAckPayload.keepAwake`). One whose cache has gone cold, or whose
@@ -4357,7 +4357,7 @@ export const createServer = (
   });
   /**
    * What the hub keeps as it starts, read back from the records
-   * ({@link keepHold}): each owed send, its session, and why it waits as
+   * (`keepHold`): each owed send, its session, and why it waits as
    * the hub that kept it wrote, so nothing kept is silent across a restart.
    * Each goes as its hold's release says, its machine's register the first
    * look.
@@ -6719,7 +6719,7 @@ export const createServer = (
    * being told a comfortable lie.
    *
    * Applied at the only two places a machine's status is emitted to a reader:
-   * the `/api/agents` route and {@link instancesFrame}. The other
+   * the `/api/agents` route and `instancesFrame`. The other
    * `db.listAgents()` callers are fleet/config lookups that never read `status`,
    * and are deliberately left alone.
    */
@@ -7349,7 +7349,7 @@ export const createServer = (
    * only the rows whose serialisation differs and the ids that are gone: the
    * board is ~900 rows and ~650KB, and every dashboard used to parse and
    * re-render all of it on each move of any one of them. A dashboard that
-   * connects after a publish gets the whole board from {@link instancesFrame},
+   * connects after a publish gets the whole board from `instancesFrame`,
    * so the only rows this can leave stale are ones that changed without a
    * publish — which the full frame never caught either.
    */
@@ -7565,7 +7565,7 @@ export const createServer = (
    * The newest release of each CLI CawCo keeps current on every machine
    * (core `ToolSpec.release`: Claude Code), read as the hub starts and every
    * 30 minutes (tool-releases.ts); after each read, every online machine is
-   * sent what it is owed ({@link keepCurrent}, through `autoInstall`).
+   * sent what it is owed (`keepCurrent`, through `autoInstall`).
    */
   const toolReleases = new ToolReleases({
     urls: TOOL_RELEASES,
@@ -12897,7 +12897,7 @@ export const createServer = (
               // hands over what was held for it (core handover.ts). A turn
               // first: handing over a hundred kept sends is 200 ms of its own,
               // and a send to one of their sessions that arrives meanwhile is
-              // owed behind them ({@link sendWaits}).
+              // owed behind them (`sendWaits`).
               await new Promise<void>((resolve) => setImmediate(resolve));
               hubStep({
                 kind: "agent-register",
