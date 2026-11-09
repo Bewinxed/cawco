@@ -139,11 +139,11 @@ export const accountHomeLoginRoutes = (
           const { machineId, store } = body;
           const found = await homeCredentialOf(machineId, store, body.provider);
           if ("error" in found) {
-            return status(found.status, found.error);
+            return refusal(found.status, "home-login-refused", found.error);
           }
           const started = await startMove(machineId, store, found);
           return "error" in started
-            ? status(started.status, started.error)
+            ? refusal(started.status, "home-login-refused", started.error)
             : status(202, started);
         }
       )
