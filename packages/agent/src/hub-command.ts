@@ -31,11 +31,9 @@ import { DAY_MS } from "@cawco/core/time";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
-import {
-  agentCommandStarted,
-  ensureBoundary,
-  whileSandboxDown,
-} from "./boundary";
+import { whileSandboxDown } from "./boundary/control";
+import { ensureBoundary } from "./boundary/lifecycle";
+import { agentCommandStarted } from "./boundary/work";
 import { copyPathSync, inCopySync, viewRunning } from "./layer";
 import { type DenyPaths, denyPathspecs, shimPaths } from "./worktree-guard";
 
@@ -561,7 +559,7 @@ const spawned = ({
       live.add(running);
     }
     // Never a session's: a session's sweep of its workspace leaves what it
-    // runs there running (boundary.ts `agentCommandStarted`).
+    // runs there running (boundary/work.ts `agentCommandStarted`).
     const executor = spawnedPid(child);
     const letGo =
       isWorkspaceRef(workspace) && executor !== undefined
