@@ -15,7 +15,7 @@
 import { refusalText, unwrap } from "@cawco/agent/hub-client";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { CONNECTION_NAME } from "@cawco/core/delegate-types";
-import { ownerClient } from "./owner";
+import { ownerCall } from "./owner";
 
 export class ConnectionKeyError extends Error {}
 
@@ -118,16 +118,15 @@ export const setConnectionKey = async (
     throw new ConnectionKeyError("no key was given; nothing was sent");
   }
   const view = unwrap(
-    await ownerClient(
+    await ownerCall(
       hub,
       `cawco connections ${name}`,
       90_000,
       ConnectionKeyError,
       (seconds) =>
-        `${hub} did not answer within ${seconds}s, so whether it took the key for ${name} is not known. Run this again to set it.`
-    )
-      .api.connections({ name })
-      .key.put({ key }),
+        `${hub} did not answer within ${seconds}s, so whether it took the key for ${name} is not known. Run this again to set it.`,
+      (client) => client.api.connections({ name }).key.put({ key })
+    ),
     (refusal) =>
       new ConnectionKeyError(
         `${hub} refused the key for ${name} (${refusal.status}): ${refusalText(refusal).slice(0, 300)}`

@@ -5,11 +5,10 @@
 // moment it loads. A `cawco hub` holding that could not be stopped while its
 // event loop was busy (nightly 2069, killed by systemd after 90s). The daemon
 // and the harnesses load inside the verbs that run them.
-import { unhandled } from "@cawco/core/unhandled";
 import "@cawco/core/no-huge-pages";
 import { CONFIG_PATH } from "@cawco/agent/config";
 import { toHttpBase } from "@cawco/agent/discovery";
-import { dataOf, hubClient, reached } from "@cawco/agent/hub-client";
+import { dataOf, reached } from "@cawco/agent/hub-client";
 import { isServiceId } from "@cawco/agent/service-manager/units";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
@@ -22,7 +21,7 @@ import { secondsOf } from "@cawco/core/time";
 import { pinnedTools } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
-import { OwnerApprovalError, ownerFetch, ownerResponse } from "./owner";
+import { ownerRead } from "./owner";
 import { pairingOff } from "./pairing";
 import { isServiceAction, SERVICE_ACTIONS, service } from "./service";
 import { callTool, listTools, sessionOf, toolDoor } from "./tools";
@@ -417,28 +416,24 @@ const status = async (args: Args): Promise<number> => {
 
   // The fleet's list is the person's (hub hub-auth.ts): a hub that requires
   // paired devices asks the person to approve this run (owner.ts).
-  const answer = await hubClient(hub.httpUrl, async (url, init) => {
-    const asked = await ownerFetch(url, init, "cawco status", STATUS_ANSWER_MS);
-    switch (asked.kind) {
-      case "unanswered":
-        throw new StatusUnanswered(secondsOf(asked.after));
-      case "answered":
-        return ownerResponse(asked.value);
-      default:
-        unhandled("read", asked);
-    }
-  }).api.agents.get();
+  const asked = await ownerRead(
+    hub.httpUrl,
+    "cawco status",
+    STATUS_ANSWER_MS,
+    (client) => client.api.agents.get()
+  );
+  if (asked.kind === "unanswered") {
+    console.error(
+      `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${secondsOf(asked.after)}s`
+    );
+    return 1;
+  }
+  const answer = asked.value;
   try {
     reached(answer);
   } catch (error) {
-    // The person's no is said as it is; a hub that could not be reached, below.
-    if (error instanceof OwnerApprovalError) {
-      throw error;
-    }
     console.error(
-      error instanceof StatusUnanswered
-        ? `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${error.seconds}s`
-        : `\ncawco: ${hub.httpUrl} could not be reached: ${error instanceof Error ? error.message : String(error)}`
+      `\ncawco: ${hub.httpUrl} could not be reached: ${error instanceof Error ? error.message : String(error)}`
     );
     return 1;
   }
@@ -451,15 +446,6 @@ const status = async (args: Args): Promise<number> => {
   printFleet(dataOf(answer));
   return 0;
 };
-
-/** `cawco status` got no answer within its bound. */
-class StatusUnanswered extends Error {
-  readonly seconds: number;
-  constructor(seconds: number) {
-    super("no answer");
-    this.seconds = seconds;
-  }
-}
 
 /**
  * Starts the daemon at once: whether a Claude account is signed in here is

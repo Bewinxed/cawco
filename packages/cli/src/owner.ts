@@ -13,6 +13,7 @@
 
 import {
   dataOf,
+  type HubAnswer,
   type HubClient,
   hubClient,
   reached,
@@ -29,16 +30,7 @@ import { unhandled } from "@cawco/core/unhandled";
 let token: string | undefined;
 
 /** Thrown when the person did not approve the command: a sentence for them. */
-export class OwnerApprovalError extends Error {}
-
-const withToken = (init: RequestInit): RequestInit => {
-  if (!token) {
-    return init;
-  }
-  const headers = new Headers(init.headers);
-  headers.set("authorization", `${OWNER_SCHEME} ${token}`);
-  return { ...init, headers };
-};
+class OwnerApprovalError extends Error {}
 
 /** How long one request of an approval is given to answer. */
 const PAIR_ANSWER_MS = 15_000;
@@ -129,92 +121,80 @@ const approve = async (origin: string, command: string): Promise<string> => {
   );
 };
 
-/** What an owner request's answer said: its status and its body as text. */
-export interface OwnerAnswer {
-  contentType: string;
-  ok: boolean;
-  /** The hub said it requires paired devices. */
-  pairing: boolean;
-  said: string;
-  status: number;
-}
-
 /**
- * `fetch` as the person: as it is first, and once more with this run's
- * approval when the hub says it requires paired devices. Each request, its
- * body read with it, is given `ms` to answer; the person's approval in
- * between is not. `init.body` must be one the second try can send again (a
- * string).
+ * A request of the hub at `hub` (its http base) as the person: as it is
+ * first, and once more with this run's approval when the hub says it
+ * requires paired devices. Each try, its body read with it, is given `ms`
+ * to answer; the person's approval in between is not. The token goes on by
+ * treaty's `headers` function (next.elysiajs.com/eden/treaty/config#function),
+ * read at each request.
  */
-export const ownerFetch = async (
-  url: string,
-  init: RequestInit,
+export const ownerRead = async <A extends HubAnswer>(
+  hub: string,
   command: string,
-  ms: number
-): Promise<Bounded<OwnerAnswer>> => {
+  ms: number,
+  request: (client: HubClient) => Promise<A>
+): Promise<Bounded<A>> => {
   const send = () =>
-    readWithin(ms, async (signal): Promise<OwnerAnswer> => {
-      const response = await fetch(url, { ...withToken(init), signal });
-      return {
-        contentType: response.headers.get("content-type") ?? "",
-        ok: response.ok,
-        status: response.status,
-        pairing: response.headers.get("x-cawco-pairing") === "required",
-        said: await response.text(),
-      };
-    });
+    readWithin(ms, (signal) =>
+      request(
+        hubClient(hub, (url, init) => fetch(url, { ...init, signal }), {
+          headers: () =>
+            token ? { authorization: `${OWNER_SCHEME} ${token}` } : undefined,
+        })
+      )
+    );
   const first = await send();
   switch (first.kind) {
     case "unanswered":
       return first;
     case "answered":
-      if (!(first.value.status === 401 && first.value.pairing)) {
+      if (!(
+        first.value.status === 401 &&
+        first.value.response.headers.get("x-cawco-pairing") === "required"
+      )) {
         return first;
       }
-      token = await approve(new URL(url).origin, command);
+      token = await approve(new URL(hub).origin, command);
       return send();
     default:
       unhandled("read", first);
   }
 };
 
-/** `answer` as the response Eden reads (a 204's body is none). */
-export const ownerResponse = (answer: OwnerAnswer): Response =>
-  new Response(answer.said || null, {
-    status: answer.status,
-    headers: { "content-type": answer.contentType },
-  });
-
 /**
- * The hub at `hub` (its http base) as the person, for a command that stops on
- * any failure: the person's no, a hub that could not be reached and one that
- * did not answer each throw a `Fail` with a sentence for the person;
- * `unanswered` says the last from the seconds waited.
+ * {@link ownerRead} for a command that stops on any failure: the person's
+ * no, a hub that could not be reached and one that did not answer each throw
+ * a `Fail` with a sentence for the person; `unanswered` says the last from
+ * the seconds waited.
  */
-export const ownerClient = (
+export const ownerCall = async <A extends HubAnswer>(
   hub: string,
   command: string,
   ms: number,
   Fail: new (message: string) => Error,
-  unanswered: (seconds: number) => string
-): HubClient =>
-  hubClient(hub, async (url, init) => {
-    const answer = await ownerFetch(url, init, command, ms).catch(
-      (error: unknown) => {
-        if (error instanceof OwnerApprovalError) {
-          throw new Fail(error.message);
-        }
+  unanswered: (seconds: number) => string,
+  request: (client: HubClient) => Promise<A>
+): Promise<A> => {
+  const read = await ownerRead(hub, command, ms, request).catch(
+    (error: unknown) => {
+      throw new Fail(error instanceof Error ? error.message : String(error));
+    }
+  );
+  switch (read.kind) {
+    case "unanswered":
+      throw new Fail(unanswered(secondsOf(read.after)));
+    case "answered": {
+      const answer = read.value;
+      if (answer.response === undefined) {
+        const reason = answer.error?.value;
         throw new Fail(
-          `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
+          `${hub} could not be reached: ${reason instanceof Error ? reason.message : String(reason)}`
         );
       }
-    );
-    switch (answer.kind) {
-      case "unanswered":
-        throw new Fail(unanswered(secondsOf(answer.after)));
-      case "answered":
-        return ownerResponse(answer.value);
-      default:
-        unhandled("read", answer);
+      return answer;
     }
-  });
+    default:
+      unhandled("read", read);
+  }
+};
