@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { transcriptWords } from "@cawco/core/words/transcript";
+  import { Popover } from "bits-ui";
   /**
    * The session card (HangCard `details`, `tab`) in a frame of its own (its
    * states file's): hung open from the chosen folder tab of a session strip,
@@ -11,8 +13,7 @@
    * under the phone's screen.
    */
   // bits-ui's own popover, as PaneTabs hangs it: its bare content in one portal.
-  import { transcriptWords } from "@cawco/core/words/transcript";
-  import { Popover } from "bits-ui";
+  import { SESSION_STRIP } from "#lib/cawco/tab-strips.js";
   import { cardWidthIn, placeUnder } from "#lib/cawco/workspace/hang-place.js";
   import {
     TabItem,
@@ -73,7 +74,7 @@
 >
   <Tabs
     data-session-tabs
-    strip="session"
+    strip={SESSION_STRIP}
     value={chosen}
     values={tabs}
     variant="folder"
