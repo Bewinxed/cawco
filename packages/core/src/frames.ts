@@ -416,7 +416,7 @@ export type DaemonPermissionRequestFrame = Omit<
   "presentation" | "raisedAt"
 >;
 
-export interface PermissionSettledFrame {
+interface PermissionSettledFrame {
   /** What won, and where, when the ask was answered (`outcome: answered`) and the hub knows. */
   answer?: AskAnswer;
   instanceId: string;
