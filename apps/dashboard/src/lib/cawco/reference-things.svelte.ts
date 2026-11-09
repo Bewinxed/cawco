@@ -11,16 +11,15 @@
  * and its chip is its label alone (the registry's rule).
  */
 
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { SessionPlan } from "@cawco/core/plan";
 import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
-import { hubFetch } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { type HubAnswer, hubData } from "#lib/platform/hub-read.js";
 import { planProgress } from "./plan";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
-import type { Routine } from "./routines/routines-api";
 import { boardStore } from "./stores/board.svelte";
 import { plansStore } from "./stores/plans.svelte";
 import { projectsStore } from "./stores/projects.svelte";
@@ -83,9 +82,7 @@ const taskOf = (project: string, task: string): TaskView | null | undefined => {
 const planOf = (session: string): SessionPlan | null | undefined =>
   plansStore.planOf(session) ??
   askOnce(`plan:${session}`, () =>
-    readJson<SessionPlan>(
-      hubRequest("GET /api/instances/:id/plan", { path: { id: session } })
-    )
+    readJson(hub.api.instances({ id: session }).plan.get())
   );
 
 const STEP_WORDS: Record<string, string> = {
@@ -110,17 +107,12 @@ const planName = (plan: SessionPlan): string => {
 const HEADING = /^#+\s*/u;
 
 /** A hub read as JSON; its status on a refusal, so a 4xx keeps "none". */
-async function readJson<T>(request: HubRequest): Promise<T> {
-  const response = await hubFetch(request);
-  if (!response.ok) {
-    throw Object.assign(
-      new Error(`${request.path} answered ${response.status}`),
-      {
-        status: response.status,
-      }
-    );
-  }
-  return (await response.json()) as T;
+function readJson<T>(call: Promise<HubAnswer<T>>): Promise<T> {
+  return hubData(call, ({ response }) =>
+    Object.assign(new Error(`${response.url} answered ${response.status}`), {
+      status: response.status,
+    })
+  );
 }
 
 const projectHref = (project: string) =>
@@ -232,7 +224,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
   },
   routine: (id) => {
     const routine = askOnce(`routine:${id}`, () =>
-      readJson<Routine>(hubRequest("GET /api/routines/:id", { path: { id } }))
+      readJson(hub.api.routines({ id }).get())
     );
     if (!routine) {
       return routine;

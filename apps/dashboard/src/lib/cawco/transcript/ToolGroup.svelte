@@ -4,7 +4,6 @@
     sidecarOf,
     VIDEO_FILE,
   } from "@cawco/core/attachments";
-  import { hubRequest } from "@cawco/core/hub-request";
   import { parseReference } from "@cawco/core/references";
   import {
     hasBody as bodyFor,
@@ -55,6 +54,7 @@
     IconUser,
     IconWindow,
   } from "#lib/icons.js";
+  import { hubPath } from "#lib/platform/hub.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import {
     dur,
@@ -88,10 +88,7 @@
 
   /** A picture or video on the session's machine, read through the hub when looked at. */
   const machineMedia = (machineId: string, path: string): string =>
-    hubRequest("GET /api/agents/:machineId/media", {
-      path: { machineId },
-      query: { path },
-    }).path;
+    hubPath(hub.client.api.agents({ machineId }).media, { path });
 
   const isVideo = (path: string): boolean => VIDEO_FILE.test(path);
   /** Where a video's captions would be served from; nothing for a picture. */
