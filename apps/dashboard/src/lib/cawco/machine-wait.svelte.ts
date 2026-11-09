@@ -12,7 +12,7 @@
  */
 import { machineLabel } from "@cawco/core/machine-names";
 import { MachineAwayError } from "#lib/platform/hub-read.js";
-import { cawco } from "./client.svelte";
+import { boardStore } from "./stores/board.svelte";
 
 /**
  * How long an ask waits before it runs again when its machine is listed
@@ -23,7 +23,7 @@ const LISTED_ONLINE_WAIT_MS = 2000;
 
 /** The machine an ask waits for, as the fleet lists it by name. */
 const awayMachineName = (away: MachineAwayError): string => {
-  const row = cawco.machines.find(
+  const row = boardStore.machines.find(
     (listed) => listed.machineId === away.machineId
   );
   return row ? machineLabel(row.hostname) : away.machineId;
@@ -43,7 +43,7 @@ export const awayWords = (away: MachineAwayError, now: number): string =>
 
 /** Whether the hub lists `machineId` online now. */
 const listedOnline = (machineId: string): boolean =>
-  cawco.machines.some(
+  boardStore.machines.some(
     (row) => row.machineId === machineId && row.status === "online"
   );
 

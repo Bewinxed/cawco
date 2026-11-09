@@ -6,8 +6,8 @@
  */
 
 import { failureWords as message } from "#lib/platform/hub-read.js";
-import type { Machine } from "../client.svelte";
 import { MachineWait } from "../machine-wait.svelte";
+import type { Machine } from "../stores/board.svelte";
 
 export class MachineCopies {
   /** The machine whose copy stands open under its row. */
