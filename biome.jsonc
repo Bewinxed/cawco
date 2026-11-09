@@ -269,6 +269,17 @@
   },
   "overrides": [
     {
+      // boundary/'s files call each other in one direction: what must call
+      // round a loop (ensuring a boundary follows its host, whose exit
+      // ensures it again) is one file, ensure.ts.
+      "includes": ["packages/agent/src/boundary/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noImportCycles": "error" },
+        },
+      },
+    },
+    {
       // scripts/, assets/, design/ and the root's own files are no member's:
       // the checks and probes read the members' sources by design, and a
       // member reading a shared asset has no manifest to go through.
