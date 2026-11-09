@@ -3,7 +3,7 @@
  * its browser tool opens them: through the machine's gate (agent
  * browser/gate.ts), by the door a workspace's boundary makes for it (its
  * token and its project in the workspace's state dir: gate.ts
- * `ensureGateToken`, boundary.ts `setProject`). A spec that seeds a
+ * `ensureGateToken`, boundary/looks.ts `setProject`). A spec that seeds a
  * delegate's workspace on the hub's rows makes its door here, so that
  * delegate's `browser_ask` finds the page it asks about (agent shield.ts
  * `askedPage`), and a page is driven as an agent drives one (gate.ts

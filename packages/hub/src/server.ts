@@ -4906,7 +4906,7 @@ export const createServer = (
    * list (artifacts/service.ts `dropBrowser`), made again if the item is
    * taken up again and asks (browsers.ts `browserFor`). Its pages are its
    * door's, and live as long as the door does: they close as the
-   * workspace's boundary ends (agent boundary.ts `stopNow`; a session's own
+   * workspace's boundary ends (agent boundary/lifecycle.ts `stopNow`; a session's own
    * door with its process, door.ts `closeBrowserDoor`), each one's address
    * kept, and open again as the door comes back (agent gate.ts `restore`),
    * so a delegate whose item a handoff reopens (work-items.ts `reopen`), in
@@ -7247,7 +7247,7 @@ export const createServer = (
   /**
    * A project's folder was moved away (its delete, a merge): every machine's
    * agent checks each workspace boundary there for an access its policy no
-   * longer grants (agent boundary.ts `recheckNarrowed`): a workspace of that
+   * longer grants (agent boundary/looks.ts `recheckNarrowed`): a workspace of that
    * project read the folder, and its boundary must not go on reading it.
    */
   const projectFolderMoved = (): void => {
