@@ -87,6 +87,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { projectSettingsWords } from "@cawco/core/words/project-settings";
+import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import type { Areas } from "./areas";
 import type { Connections } from "./connections";
@@ -742,8 +743,10 @@ export const createProjectSettings = ({
         await edit(project.id, { accountAtLimit: change.atLimit });
         break;
       case "set_area": {
-        const { said } = await areas.place(project.id, change.area);
-        return [projectSettingWords(change), ...said];
+        const placed = await areas.place(project.id, change.area);
+        return placed instanceof ElysiaStatus
+          ? refuse(placed.response.detail)
+          : [projectSettingWords(change), ...placed.said];
       }
       case "set_lands":
         await edit(project.id, { lands: change.lands });

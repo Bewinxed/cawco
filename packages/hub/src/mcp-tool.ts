@@ -22,6 +22,7 @@ import type {
   CallToolResult,
   ToolAnnotations,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 
 /** A picture beside the words: a canvas's latest, as `artifact_read` answers it. */
@@ -29,6 +30,20 @@ export interface Picture {
   data: string;
   mimeType: "image/png";
 }
+
+/**
+ * A run's answer without its refusals (refusal.ts), by Elysia's own mark on
+ * its status: what a presenter reads. A refusal is the call's error.
+ */
+type Answered<R> = Exclude<R, { readonly "~status": true }>;
+
+/** Whether a run's answer is one, not a refusal. */
+const answered = <R>(answer: R): answer is Answered<R> =>
+  !(answer instanceof ElysiaStatus);
+
+/** A refusal's sentence: its problem's `detail`. */
+const refusalWords = (refused: unknown): string =>
+  refused instanceof ElysiaStatus ? refused.response.detail : String(refused);
 
 /** What a presenter gives: words, or words with pictures. */
 export type Presented = string | { pictures: Picture[]; text: string };
@@ -131,8 +146,8 @@ export function tool<T extends z.ZodRawShape, R, N extends string = string>(
   input: T,
   /** The domain answer; `format`, for a tool whose detailed form reads more (find's neighbouring turns). */
   run: (args: z.infer<z.ZodObject<T>>, format: ResponseFormat) => Promise<R>,
-  present: Presenter<R, z.infer<z.ZodObject<T>>>,
-  options: ToolOptions<R, z.infer<z.ZodObject<T>>> = {}
+  present: Presenter<Answered<R>, z.infer<z.ZodObject<T>>>,
+  options: ToolOptions<Answered<R>, z.infer<z.ZodObject<T>>> = {}
 ): McpTool & { name: N } {
   const defined = toolOn<undefined>()(
     name,
@@ -169,8 +184,8 @@ export const toolOn =
       format: ResponseFormat,
       on: C
     ) => Promise<R>,
-    present: Presenter<R, z.infer<z.ZodObject<T>>>,
-    options: ToolOptions<R, z.infer<z.ZodObject<T>>> = {}
+    present: Presenter<Answered<R>, z.infer<z.ZodObject<T>>>,
+    options: ToolOptions<Answered<R>, z.infer<z.ZodObject<T>>> = {}
   ): McpToolOn<C> & { name: N } => {
     const formats = (present as unknown) !== sentence;
     const shape = formats
@@ -229,6 +244,13 @@ export const toolOn =
         } & z.infer<z.ZodObject<T>>;
         const asked = rest as z.infer<z.ZodObject<T>>;
         const answer = await run(asked, format ?? "concise", on);
+        // A refusal the run returned is the call's error, in its own words.
+        if (!answered(answer)) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: refusalWords(answer) }],
+          };
+        }
         const detailed = options.detailed ?? asJson;
         const result = resultOf(
           format === "detailed"
