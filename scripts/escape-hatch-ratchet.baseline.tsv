@@ -588,7 +588,6 @@ catch-drops-reason	PropertyAccessExpression	scripts/probe-kit/specs/proposal-clo
 catch-drops-reason	TemplateExpression	apps/dashboard/src/lib/cawco/preview/pass.ts	1
 empty-catch		apps/dashboard/serve.js	1
 empty-catch		apps/dashboard/src/lib/cawco/blocks/arrangement.svelte.ts	1
-empty-catch		apps/dashboard/src/lib/cawco/client.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/config/ConnectionsSection.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/error-report.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/home/NeedsCard.svelte	1
@@ -597,6 +596,7 @@ empty-catch		apps/dashboard/src/lib/cawco/preview/browser-stream.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/project/project-board.svelte.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/project/ProjectPage.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/spawn/EffortPips.svelte	1
+empty-catch		apps/dashboard/src/lib/cawco/stores/commands.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/usage/forecast.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/workspace/workspace.svelte.ts	1
