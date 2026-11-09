@@ -5,7 +5,7 @@
 import { Elysia, t, ValidationError } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { FolderRefusal } from "../project-folder";
+import { ProjectRefusal } from "../project-refusal";
 import { refusal } from "../refusal";
 import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
@@ -186,7 +186,8 @@ export const workItemRoutes = (
             // Anything that is not the hub's own refusal is the machine's:
             // offline, or git turning the checkout down.
             return refusal(
-              error instanceof WorkItemRefusal || error instanceof FolderRefusal
+              error instanceof WorkItemRefusal ||
+                error instanceof ProjectRefusal
                 ? error.status
                 : 502,
               "work-item-refused",
