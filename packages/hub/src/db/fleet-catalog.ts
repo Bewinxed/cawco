@@ -87,7 +87,8 @@ export interface MemoryDocRow {
   path: string;
   /** The sessions it is loaded into; absent is a linked document under `~/.claude/memories/`. */
   scope?: MemoryScope;
-  updatedAt: Date;
+  /** When it was last stored, ISO, as the answer carries it. */
+  updatedAt: string;
 }
 
 /** A stored row as the hub answers it, its projects and types read off their link tables. */
@@ -116,14 +117,15 @@ const memoryDocRow = (
     content: row.content,
     hash: row.hash,
     ...(scoped(scope) ? { scope } : {}),
-    updatedAt: row.updatedAt,
+    updatedAt: row.updatedAt.toISOString(),
   };
 };
 
 /** One superseded version of one skill, as a listing reads it — without its files. */
 export interface SkillVersion {
   bytes: number;
-  createdAt: Date;
+  /** When it was kept, ISO, as the answer carries it. */
+  createdAt: string;
   hash: string;
   id: number;
   name: string;
@@ -367,7 +369,7 @@ export interface FleetCatalogDb {
   readonly getFleetHook: (id: string) => FleetHook | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
   readonly getFleetMemory: () =>
-    { content: string; hash: string; updatedAt: Date } | undefined;
+    { content: string; hash: string; updatedAt: string } | undefined;
   readonly getFleetMemoryDoc: (path: string) => MemoryDocRow | undefined;
   /** One row, by its kind and name. */
   readonly getHarnessConfig: (
@@ -548,7 +550,8 @@ export interface FleetCatalogDb {
   readonly setFleetMemory: (content: string) => {
     content: string;
     hash: string;
-    updatedAt: Date;
+    /** ISO, as the answer carries it. */
+    updatedAt: string;
   };
   /**
    * Switches a stored skill on or off, its source and files as they are: no
@@ -663,7 +666,11 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
   const getFleetMemory = () => {
     const row = singleton(db, fleetMemory, MEMORY_ID);
     return row
-      ? { content: row.content, hash: row.hash, updatedAt: row.updatedAt }
+      ? {
+          content: row.content,
+          hash: row.hash,
+          updatedAt: row.updatedAt.toISOString(),
+        }
       : undefined;
   };
 
@@ -1398,13 +1405,16 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         .from(fleetSkillHistory)
         .where(eq(fleetSkillHistory.name, name))
         .orderBy(desc(fleetSkillHistory.id))
-        .all(),
-    fleetSkillVersion: (id) =>
-      db
+        .all()
+        .map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
+    fleetSkillVersion: (id) => {
+      const row = db
         .select()
         .from(fleetSkillHistory)
         .where(eq(fleetSkillHistory.id, id))
-        .get(),
+        .get();
+      return row && { ...row, createdAt: row.createdAt.toISOString() };
+    },
     listFleetAgents: () =>
       db
         .select()
@@ -1566,7 +1576,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           name,
           hash,
           source,
-          createdAt,
+          createdAt: createdAt.toISOString(),
         })),
     fleetHookVersion: (id) => {
       const row = db
@@ -1583,7 +1593,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
         name: row.name,
         hash: row.hash,
         source: row.source,
-        createdAt: row.createdAt,
+        createdAt: row.createdAt.toISOString(),
         event: row.event,
         ...(row.matcher ? { matcher: row.matcher } : {}),
         enabled: row.enabled,
@@ -1613,7 +1623,11 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           },
         })
         .run();
-      return { content: row.content, hash: row.hash, updatedAt: row.updatedAt };
+      return {
+        content: row.content,
+        hash: row.hash,
+        updatedAt: row.updatedAt.toISOString(),
+      };
     },
     listFleetMemoryDocs,
     getFleetMemoryDoc,
@@ -1729,7 +1743,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
           source,
           ...(of ? { path: of } : {}),
           bytes: Buffer.byteLength(content),
-          createdAt,
+          createdAt: createdAt.toISOString(),
         })),
     fleetMemoryVersion: (id) => {
       const row = db
@@ -1744,7 +1758,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
             source: row.source,
             ...(row.path ? { path: row.path } : {}),
             bytes: Buffer.byteLength(row.content),
-            createdAt: row.createdAt,
+            createdAt: row.createdAt.toISOString(),
             content: row.content,
           }
         : undefined;
