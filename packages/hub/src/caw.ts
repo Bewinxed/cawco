@@ -84,7 +84,7 @@ import { projectWords } from "@cawco/core/words/project";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
@@ -1205,11 +1205,25 @@ export const createCaw = ({
       ? `They asked from the ${BLOCK_PAGE_TITLES[place.page]} page: page "${place.page}"${place.position === null ? "" : `, position ${place.position}`}.`
       : "They asked from the views strip: no page.";
 
+  /** The views' refusal of project `projectId`; none when it keeps no view `name`, which is refused (a change keeps the view's place, so it is drafted without a page). */
+  const keptAlready = async (projectId: string, name: string) => {
+    const kept = await folderCall(() => views.kept(projectId));
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    if (kept.includes(name)) {
+      throw new Error(
+        `“${name}” is a kept view already, standing where the person put it: draft its change without a page.`
+      );
+    }
+  };
+
   /**
    * Caw's draft written (`view_draft`), as view_draft answers it. For a
    * page, a name that is a kept view's is refused (a change keeps the view's
    * place, so it is drafted without one); with a page, the draft stands
-   * there as a proposed block.
+   * there as a proposed block. A refusal of the view's or the block's is
+   * answered as it is.
    */
   const draftView = async (
     projectId: string,
@@ -1224,17 +1238,18 @@ export const createCaw = ({
       source: string;
     }
   ) => {
-    if (
-      input.page &&
-      (await folderCall(() => views.kept(projectId))).includes(input.name)
-    ) {
-      throw new Error(
-        `“${input.name}” is a kept view already, standing where the person put it: draft its change without a page.`
-      );
+    const unplaced = input.page
+      ? await keptAlready(projectId, input.name)
+      : undefined;
+    if (unplaced) {
+      return unplaced;
     }
     const drafted = await folderCall(() =>
       views.draft(projectId, input.name, input.source, { name: by }, session)
     );
+    if (drafted instanceof ElysiaStatus) {
+      return drafted;
+    }
     const proposed = input.page
       ? blocks.propose(
           projectId,
@@ -1244,6 +1259,9 @@ export const createCaw = ({
           by
         )
       : null;
+    if (proposed instanceof ElysiaStatus) {
+      return proposed;
+    }
     return {
       ok: true as const,
       view: drafted.name,
@@ -1626,6 +1644,9 @@ export const createCaw = ({
     ): Promise<{ instanceId: string }> {
       const words = bodyOf(raw);
       const kept = await views.view(projectId, name).catch(refusedBy);
+      if (kept instanceof ElysiaStatus) {
+        return refuse(kept.status, kept.response.detail);
+      }
       const told = await tellYours(projectId, {
         by: "you",
         kind: "view-request",
@@ -1878,6 +1899,9 @@ export const createCaw = ({
             const projectId = ours();
             const by = boardTitle(me());
             const drafted = await draftView(projectId, me().id, by, input);
+            if (drafted instanceof ElysiaStatus) {
+              return drafted;
+            }
             api.notice(projectId, {
               title: `View · ${by} drafted “${drafted.view}”`,
               event: { kind: "view", name: drafted.view },
