@@ -57,12 +57,8 @@ export interface RoutinesPage {
 export async function readRoutinesPage(
   projectId: string
 ): Promise<RoutinesPage> {
-  const id = encodeURIComponent(projectId);
   const [routines, ingress, relays, actions, connections] = await Promise.all([
-    hubData(
-      hub.api.routines.get({ query: { projectId: id } }),
-      refusedOrUnreached
-    ),
+    hubData(hub.api.routines.get({ query: { projectId } }), refusedOrUnreached),
     hubData(
       hub.api.projects({ id: projectId }).ingress.get(),
       refusedOrUnreached
@@ -71,10 +67,7 @@ export async function readRoutinesPage(
       hub.api.projects({ id: projectId }).relays.get(),
       refusedOrUnreached
     ),
-    hubData(
-      hub.api.actions.get({ query: { projectId: id } }),
-      refusedOrUnreached
-    ),
+    hubData(hub.api.actions.get({ query: { projectId } }), refusedOrUnreached),
     hubData(hub.api.connections.get(), refusedOrUnreached),
   ]);
   /** Each connection by its name: what polls and `conn:` sources name it by. */
