@@ -9,7 +9,7 @@
  * source's process only when it held a work item: the old orchestrator kept
  * running and kept answering his messages; and a comment on a page it had
  * made still went to it (its artifacts were not carried with its delegates,
- * db/index.ts `adoptChildren`), waking it again.
+ * db/instances.ts `adoptChildren`), waking it again.
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model): a session with no work item, one delegate of its own and a
