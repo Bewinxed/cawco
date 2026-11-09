@@ -924,7 +924,7 @@ export class SessiondServer {
    * A DEAD CHILD STAYS UNTIL THE AGENT THAT FOLLOWS IT HAS SETTLED ITS END.
    * Its exit and its ring are what an agent that was away when it died
    * reads it by: a carry lets go of a session whose process its keeper lists
-   * exited (session.ts `#carryReady`), and a subscribe after the death learns
+   * exited (claude-carry.ts `#carryReady`), and a subscribe after the death learns
    * it from the listing (agent sessiond-client.ts `subscribe`). The keeper
    * cannot tell when that is over: an exit written to an agent that ended
    * before reading it was never read. So it is the agent's to say, and a
