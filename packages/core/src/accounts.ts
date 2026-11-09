@@ -103,7 +103,7 @@ export type HomeStore = Extract<import("./harness/kinds").HarnessKind, string>;
  * the machine waits. `api-key`: a key typed once in the dashboard and relayed
  * to the machines picked.
  */
-export type SigninKind = "paste-code" | "device-code" | "api-key";
+type SigninKind = "paste-code" | "device-code" | "api-key";
 
 /**
  * The providers whose limits CawCo reads: Claude's from its sessions'

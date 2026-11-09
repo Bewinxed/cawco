@@ -72,7 +72,7 @@ export type SshJoinProblem =
   | { kind: "unregistered" };
 
 /** A password add's refusal as the shipped apps read it (TestFlight 20261018): the hub no longer sends one. */
-export interface SshPasswordProblem {
+interface SshPasswordProblem {
   asked: boolean;
 }
 
