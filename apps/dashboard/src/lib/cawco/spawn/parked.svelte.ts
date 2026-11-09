@@ -28,7 +28,6 @@ import { ParkedStartSchema } from "#lib/cawco/stored-shapes.js";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { track } from "#lib/platform/track.js";
-import { sendFirstPrompt } from "../client.svelte";
 import {
   type ContinueSource,
   continuationRunning,
@@ -42,6 +41,7 @@ import {
   continuationsStore,
   followContinuations,
 } from "../stores/continuations.svelte";
+import { sendFirstPrompt } from "../stores/session-start.svelte";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { type SpawnPrefill, spawning } from "./new-session.svelte";
 

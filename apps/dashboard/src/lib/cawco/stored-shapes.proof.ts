@@ -80,10 +80,6 @@ import type {
 } from "@cawco/core/stage";
 import type { TailnetOrigin as TailnetOriginType } from "@cawco/core/tailnet-https";
 import type {
-  ForkSource as ForkSourceType,
-  SendExtras as SendExtrasType,
-} from "./client.svelte";
-import type {
   ContinueSource as ContinueSourceType,
   SessionDraft as SessionDraftType,
 } from "./continue.svelte";
@@ -225,7 +221,9 @@ import type {
   UserQuestionResultOutput,
   VisitOutput,
 } from "./stored-shapes";
+import type { SendExtras as SendExtrasType } from "./stores/commands.svelte";
 import type { RunningSession as RunningSessionType } from "./stores/projects.svelte";
+import type { ForkSource as ForkSourceType } from "./stores/session-start.svelte";
 import type { Beside as BesideType } from "./tasks/beside.svelte";
 import type {
   DraftCanvas as DraftCanvasType,
