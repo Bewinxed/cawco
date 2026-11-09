@@ -10,7 +10,7 @@
  * on a reload or a revision.
  *
  * The panels draw in a shadow root of their own, as the preview overlay
- * does in every page (agent preview-overlay page.ts): its host takes none
+ * does in every page (preview overlay/page.ts): its host takes none
  * of the page's styles (`all: initial`), the house's sheet stands inside it
  * alone (`dials.css`, hub page-css.ts `shadowSheet`), and the page's own
  * elements take none of it, so a page draws the same with `{{DIALS}}` and
