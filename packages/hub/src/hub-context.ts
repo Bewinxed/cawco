@@ -71,8 +71,10 @@ import type {
 import type {
   ModeAsk,
   NeutralOrigin,
+  SendRecord,
   SendRefusal,
   SentMessage,
+  SessionMessage,
 } from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type { UsageSpend } from "@cawco/core/usage/types";
@@ -424,6 +426,7 @@ export interface HubContext {
     source: string
   ) => Promise<("changed" | "failed" | "same") | undefined>;
   find: ReturnType<typeof createFind>;
+  firstTurnOf: (transcript: unknown[]) => string | undefined;
   fleetChanged: (why?: string) => void;
   fleetMcp: FleetMcp;
   fleetSyncs: FleetSync;
@@ -477,6 +480,10 @@ export interface HubContext {
     harness: string
   ) => HarnessReport | undefined;
   heldClaim: (rowId: string) => string | undefined;
+  heldSessions: Map<
+    string,
+    { machineId: string; since: number; reason: string }
+  >;
   hookCopyOff: <Refused>(
     body: { id: string; machineId: string },
     set: RouteSet,
@@ -647,6 +654,11 @@ export interface HubContext {
     model?: string | null;
   }) => LoginMove | undefined;
   movingLogins: () => LoginMove[];
+  nameFromFirstTurn: (
+    machineId: string,
+    instanceId: string,
+    raw: string
+  ) => string;
   nameFromLiveTurn: (
     machineId: string,
     instanceId: string,
@@ -849,6 +861,12 @@ export interface HubContext {
     extras?: Pick<SendPayload, "images" | "attachments">,
     origin?: SentMessage["origin"]
   ) => void;
+  sendLines: (
+    instanceId: string | undefined,
+    entries: SessionMessage[],
+    newest: boolean,
+    start: boolean
+  ) => { record: SendRecord }[];
   sendRefusal: (
     instanceId: string,
     origin: NeutralOrigin
