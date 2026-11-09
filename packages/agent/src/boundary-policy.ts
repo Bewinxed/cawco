@@ -50,7 +50,7 @@ export interface SrtPlace {
   /** The bwrap srt runs (its `bwrapPath`): {@link readOnlyDeniesBwrap}, as the workspace's boundary writes it. */
   readonly bwrap: string;
   /**
-   * The container runtimes' sockets on this machine (boundary.ts
+   * The container runtimes' sockets on this machine (boundary/
    * `containerSockets`): their own dirs, and every socket the runtime
    * registry may dial, each as named and as the file it names.
    */
@@ -358,8 +358,8 @@ export interface SeatbeltPlace {
   /**
    * The host sockets a command still connects to, each a Seatbelt regex over
    * the socket's whole path, inside a dir of {@link hostSockets}: each booted
-   * simulator's testmanagerd (boundary.ts `TEST_MANAGER_SOCKET`) and its
-   * remote automation (boundary.ts `REMOTE_AUTOMATION_SOCKET`).
+   * simulator's testmanagerd (boundary/runner.ts `TEST_MANAGER_SOCKET`) and its
+   * remote automation (boundary/runner.ts `REMOTE_AUTOMATION_SOCKET`).
    */
   readonly reachedHostSockets: readonly string[];
 }
