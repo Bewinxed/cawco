@@ -18,6 +18,7 @@ import {
   CancelledNotificationSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { problemResponse } from "elysia/error";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
 import { ASK_TOOLS, type Asks } from "./asks";
@@ -1284,12 +1285,18 @@ export function createDelegationMcp(options: {
   const bindingProblem = (bindings: string[]): Response | undefined => {
     const [binding] = bindings;
     if (bindings.length > 1 || (binding !== undefined && !binding.trim())) {
-      return new Response("CawCo instanceId must be one non-empty string", {
+      return problemResponse({
         status: 400,
+        code: "cawco-instanceid-must-one",
+        detail: "CawCo instanceId must be one non-empty string",
       });
     }
     if (binding !== undefined && !options.instanceById(binding)) {
-      return new Response("Unknown CawCo instanceId", { status: 400 });
+      return problemResponse({
+        status: 400,
+        code: "unknown-cawco-instanceid",
+        detail: "Unknown CawCo instanceId",
+      });
     }
     return undefined;
   };
@@ -1304,7 +1311,11 @@ export function createDelegationMcp(options: {
     const authorization = request.headers.get("authorization");
     const actor = options.credentialActor(authorization);
     if (authorization !== null && !actor) {
-      return new Response("Invalid session credential", { status: 401 });
+      return problemResponse({
+        status: 401,
+        code: "invalid-session-credential",
+        detail: "Invalid session credential",
+      });
     }
     const bindings = new URL(request.url).searchParams.getAll("instanceId");
     const invalid = bindingProblem(bindings);
@@ -1312,16 +1323,18 @@ export function createDelegationMcp(options: {
       return invalid;
     }
     if (bindings[0] !== undefined && !actor) {
-      return new Response(
-        "A session's CawCo connection needs its session credential",
-        { status: 401 }
-      );
+      return problemResponse({
+        status: 401,
+        code: "sessions-cawco-connection-needs",
+        detail: "A session's CawCo connection needs its session credential",
+      });
     }
     if (actor && bindings[0] !== undefined && bindings[0] !== actor.id) {
-      return new Response(
-        "Session credential does not belong to the named instanceId",
-        { status: 403 }
-      );
+      return problemResponse({
+        status: 403,
+        code: "session-credential-does-not",
+        detail: "Session credential does not belong to the named instanceId",
+      });
     }
     return actor?.id ?? null;
   };
@@ -1367,10 +1380,14 @@ export function createDelegationMcp(options: {
       return await openStream(binding, request);
     }
     if (request.method !== "POST") {
-      return new Response("CawCo MCP accepts POST and GET requests only", {
-        status: 405,
-        headers: { Allow: "POST, GET" },
-      });
+      return problemResponse(
+        {
+          status: 405,
+          code: "cawco-mcp-accepts-post",
+          detail: "CawCo MCP accepts POST and GET requests only",
+        },
+        { Allow: "POST, GET" }
+      );
     }
     // A body not parsed here is read by the transport: it may be one.
     const { transport, server } = await open(

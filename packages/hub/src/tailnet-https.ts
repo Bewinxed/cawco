@@ -53,6 +53,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/preview/proxy";
+import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
@@ -685,7 +686,11 @@ export const dashboardRelay =
             instanceId: "dashboard",
           })
             ? undefined
-            : new Response("WebSocket upgrade failed", { status: 400 });
+            : problemResponse({
+                status: 400,
+                code: "websocket-upgrade-failed",
+                detail: "WebSocket upgrade failed",
+              });
         }
         try {
           const answer = await forwardRequest(
@@ -699,10 +704,11 @@ export const dashboardRelay =
             headers: answer.headers,
           });
         } catch (error) {
-          return new Response(
-            `The dashboard on port ${port} didn't answer: ${causeOf(error)}`,
-            { status: 502 }
-          );
+          return problemResponse({
+            status: 502,
+            code: "dashboard-port-didnt-answer",
+            detail: `The dashboard on port ${port} didn't answer: ${causeOf(error)}`,
+          });
         }
       },
     });
