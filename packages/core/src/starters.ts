@@ -9,7 +9,7 @@
  * The kinds of work a starter names, each drawn by the dashboard as its
  * Solar duotone glyph (StarterCards).
  */
-export const STARTER_GLYPHS = [
+const STARTER_GLYPHS = [
   "brief",
   "bug",
   "calendar",
@@ -45,7 +45,7 @@ export const STARTER_PLACES = ["board", "routines", "decisions"] as const;
 export type StarterPlace = (typeof STARTER_PLACES)[number];
 
 /** What in a project a starter comes from. */
-export const STARTER_SOURCE_KINDS = [
+const STARTER_SOURCE_KINDS = [
   "task",
   "thread",
   "path",
