@@ -756,22 +756,20 @@ export class SessionSupervisor {
     forget: (instanceId) => this.#forgetProcess(instanceId),
   });
   /**
-   * The carry of sessions between account directories, from the harness
-   * whose session data lives in one ({@link Harness.carrier}).
+   * The carry of sessions between account directories
+   * ({@link Harness.carrier}): its requests name Claude sessions (core
+   * `RegisterAckPayload.sessions`, {@link CONTROL_CARRY_SESSIONS}), so it is
+   * the Claude adapter's.
    */
-  readonly #carrier = harnesses()
-    .flatMap((adapter) => (adapter.carrier ? [adapter] : []))
-    .map((adapter) =>
-      adapter.carrier?.({
-        adopting: (instanceId) => this.#adopting.has(instanceId),
-        awakeForMove: (instanceId, session) =>
-          this.#awakeForMove(instanceId, session),
-        drop: (instanceId, how) => this.#live.drop(instanceId, how),
-        endWork: (instanceId, why) => this.#endWork(instanceId, why),
-        queued: (instanceId) => this.#queues.has(instanceId),
-        running: (instanceId) => this.#live.sessions.get(instanceId),
-      })
-    )[0];
+  readonly #carrier = harnessOf("claude")?.carrier?.({
+    adopting: (instanceId) => this.#adopting.has(instanceId),
+    awakeForMove: (instanceId, session) =>
+      this.#awakeForMove(instanceId, session),
+    drop: (instanceId, how) => this.#live.drop(instanceId, how),
+    endWork: (instanceId, why) => this.#endWork(instanceId, why),
+    queued: (instanceId) => this.#queues.has(instanceId),
+    running: (instanceId) => this.#live.sessions.get(instanceId),
+  });
 
   /** The carry of sessions between account directories ({@link CONTROL_CARRY_SESSIONS}). */
   get carrier(): SessionCarry {
