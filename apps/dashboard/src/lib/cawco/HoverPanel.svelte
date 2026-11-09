@@ -56,13 +56,13 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { onNavigate } from "$app/navigation";
-  import {
-    readTranscript,
-    unwatchDelegate,
-    watchDelegate,
-  } from "./client.svelte";
   import { provideEntrance } from "./hover-entrance";
   import { sessionsStore } from "./stores/sessions.svelte";
+  import {
+    unwatchDelegate,
+    watchDelegate,
+  } from "./stores/subscriptions.svelte";
+  import { readTranscript } from "./stores/transcript-reads.svelte";
 
   let {
     key,
