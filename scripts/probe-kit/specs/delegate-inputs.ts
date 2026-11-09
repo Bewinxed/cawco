@@ -354,7 +354,7 @@ const handsOn = async (
 /**
  * The folder output, collected whole: the report lists each of its files at
  * its whole path, `<project folder>/assets/<item>/.decisions/deck/…` (hub
- * work-items.ts `outputsFolder`: an item of no task by its id's first eight
+ * workspaces.ts `outputsFolder`: an item of no task by its id's first eight
  * characters), and each holds what the leaf wrote.
  */
 const collectsFolder = async (
@@ -417,7 +417,7 @@ const spec: Spec = {
     const outside = join(fleet.sandbox, "parent-files");
     await mkdir(outside, { recursive: true });
     await writeFile(join(outside, INPUT), `${TOKEN}\n`);
-    // A file a delegate handed in (hub work-items.ts `outputsFolder`).
+    // A file a delegate handed in (hub workspaces.ts `outputsFolder`).
     const assets = join(
       dirname(fleet.env.CAWCO_DB_PATH as string),
       "projects",

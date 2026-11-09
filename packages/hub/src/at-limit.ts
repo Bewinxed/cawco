@@ -1195,7 +1195,7 @@ type InputPorts = Pick<
   | "waitedOn"
 >;
 
-/** Whether `row` is the session of a live work item (work-items.ts `isLive`). */
+/** Whether `row` is the session of a live work item (work-item-state.ts `isLive`). */
 const liveWorkOf = (db: DbShape, row: LimitRow): boolean => {
   const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
   return item?.instanceId === row.id && isLive(item.state);
