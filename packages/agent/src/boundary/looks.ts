@@ -46,8 +46,6 @@ import {
 } from "./hook-judge";
 import {
   armState,
-  cleanGeneration,
-  endUsers,
   ensureBoundary,
   ensureNow,
   forgetRetiring,
@@ -55,7 +53,6 @@ import {
   forgetStubbed,
   rearming,
   replaceNarrowed,
-  stopBoundary,
 } from "./lifecycle";
 import {
   NARROW_CAUSE_WORDS,
@@ -80,6 +77,7 @@ import {
   stateDir,
   writeWhole,
 } from "./state";
+import { cleanGeneration, endUsers, stopBoundary } from "./stop";
 import { cloneLooks, hubLive } from "./watch";
 
 /**
