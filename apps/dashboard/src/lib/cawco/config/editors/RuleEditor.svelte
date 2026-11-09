@@ -33,11 +33,12 @@
   import { folds, unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
-  import { cawco } from "../../client.svelte";
+
   import RuleActivity from "../../RuleActivity.svelte";
   import RuleTester from "../../RuleTester.svelte";
   import { blankRule, createRule, draftOf, saveRule } from "../../rules";
   import { boardStore } from "../../stores/board.svelte";
+  import { projectsStore } from "../../stores/projects.svelte";
   import Choice from "../Choice.svelte";
   import { deleteRule } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -438,7 +439,7 @@
         onpick={(next) => narrow("projectId", next)}
         options={[
           { value: "", label: "Every project" },
-          ...cawco.projects.map((project) => ({
+          ...projectsStore.projects.map((project) => ({
             value: project.id,
             label: project.name,
           })),

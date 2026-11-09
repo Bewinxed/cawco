@@ -60,18 +60,14 @@
     keepServedPage,
     loadMcpServers,
     openSession,
-    type PendingPermission,
     type ReadCause,
-    type ReadFault,
     readFaultOf,
     readTranscript,
     reconnectingNow,
     refreshCommands,
     type SendExtras,
     type ServerTail,
-    type SessionState,
     seededSession,
-    sendFailureNotice,
     submitCommand,
     unwatchDelegate,
     watchDelegate,
@@ -104,8 +100,15 @@
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
   import { boardStore, machineConnected } from "./stores/board.svelte";
+  import { sendFailureNotice } from "./stores/ledger.svelte";
   import { offersStore } from "./stores/offers.svelte";
   import { plansStore } from "./stores/plans.svelte";
+  import {
+    type PendingPermission,
+    type ReadFault,
+    type SessionState,
+    sessionsStore,
+  } from "./stores/sessions.svelte";
   import { tickersStore } from "./stores/tickers.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
@@ -250,7 +253,7 @@
    * (`waitingAsks`), each leading back to its card.
    */
   const connectsOpen = $derived(
-    (cawco.session(viewId)?.pending ?? []).flatMap((request) =>
+    (sessionsStore.session(viewId)?.pending ?? []).flatMap((request) =>
       request.connectAsk &&
       connectSignIns.of(request.requestId).stage !== "done"
         ? [{ requestId: request.requestId, server: request.connectAsk.server }]
@@ -337,7 +340,7 @@
 
   /** Asks the hub holds under this id with no session behind it (a project's memory proposal, hub memory.ts). */
   const rowless = $derived(
-    isLive ? [] : parkedAsks(cawco.session(viewId)?.pending ?? [])
+    isLive ? [] : parkedAsks(sessionsStore.session(viewId)?.pending ?? [])
   );
   /**
    * An ask is answered where it was made: one a curator run made opens that
@@ -449,7 +452,7 @@
     // written by the read below) re-runs this the moment it becomes
     // answerable, so the transcript reads back instead of staying empty.
     track(connectionStore.status);
-    track(cawco.session(id)?.machineId);
+    track(sessionsStore.session(id)?.machineId);
     untrack(() => {
       // What the last read said stands while this pass reads again: a
       // reconnect re-reads behind a "no session" or an offline card, and
@@ -469,7 +472,7 @@
     // collapsed, scrollTop clamped, the view lurched, and the follow rode the
     // rebuild. That was the tab-switch scroll hijack. The stream heals any gap
     // on its own.
-    const held = cawco.session(id);
+    const held = sessionsStore.session(id);
     // A newest page taken is the transcript in hand, an empty one too (a
     // session nothing has been said in): its stream follows it, resumed by
     // the socket's next connection, and the socket's status moving asks
@@ -553,7 +556,7 @@
     const present = here;
     untrack(() => {
       if (!present) {
-        const held = cawco.session(viewId);
+        const held = sessionsStore.session(viewId);
         leftUnread =
           seenBefore && !(held?.initialized && held.messages.length > 0);
         return;
@@ -617,7 +620,7 @@
    */
   let live = $state(false);
   $effect(() => {
-    const held = cawco.session(viewId);
+    const held = sessionsStore.session(viewId);
     if (!held) {
       return;
     }
@@ -626,8 +629,10 @@
     }
   });
 
-  const session = $derived(live || !seeded ? cawco.session(viewId) : seeded);
-  const machineId = $derived(cawco.session(viewId)?.machineId ?? "");
+  const session = $derived(
+    live || !seeded ? sessionsStore.session(viewId) : seeded
+  );
+  const machineId = $derived(sessionsStore.session(viewId)?.machineId ?? "");
 
   /**
    * The load opened the conversation at one of its records (`?at=`,
@@ -912,7 +917,7 @@
     return () => unwatchDelegate(id);
   });
 
-  const commands = $derived(cawco.commandsOf(viewId));
+  const commands = $derived(sessionsStore.commandsOf(viewId));
 
   /** The session's skills: a `/name` of one in its transcript draws as its chip. */
   const sessionSkills = $derived(skillsOf(commands));
@@ -929,7 +934,7 @@
    * and tool, for chips that mostly had nothing to show.
    */
   const candidates = $derived.by((): SuggestCandidate[] => {
-    const tooling = cawco.toolingOf(viewId);
+    const tooling = sessionsStore.toolingOf(viewId);
     const skills: SuggestCandidate[] = commands
       .filter((command) => command.type === "skill")
       .map((command) => ({

@@ -22,11 +22,11 @@
   import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { onMount } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import type { HeldPlan } from "#lib/cawco/plan.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
