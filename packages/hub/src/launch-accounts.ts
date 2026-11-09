@@ -357,7 +357,6 @@ export const createLaunchAccounts = (ctx: LaunchAccountsContext) => {
     machineId: string,
     row: { accountId?: string | null; harness?: string | null }
   ) =>
-    traitsOf(row.harness).accountDir &&
     traitsOf(row.harness).homeLogin === "dir"
       ? movingLogins().find(
           (move) =>
