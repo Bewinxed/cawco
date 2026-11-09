@@ -1,16 +1,23 @@
+import { join } from "node:path";
+import { readWithin } from "@cawco/core/bounded";
+import { runCaptured } from "@cawco/core/run-captured";
+import {
+  repositoryConfigProblem,
+  SAFE_GIT_ENV,
+  SAFE_GIT_FLAGS,
+  safeGitArgv,
+} from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
+import { unhandled } from "@cawco/core/unhandled";
+import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
+import { cloneHolding } from "../workspace-records";
+import { withoutCredential } from "./hub-credential";
+
 /**
  * git on this host, in a folder of the person's or a workspace's copy, as
  * every git call there runs (`safe-git.ts`), and the remote's default branch
  * fetched into a checkout.
  */
-import { join } from "node:path";
-import {
-  repositoryConfigProblem,
-  SAFE_GIT_ENV,
-  SAFE_GIT_FLAGS,
-} from "@cawco/core/safe-git";
-import { hostEnvironment } from "@cawco/core/session-env";
-import { cloneHolding } from "./workspace-records";
 
 /**
  * git in `dir`, on this host, as every git call there runs (`safe-git.ts`).
@@ -97,3 +104,61 @@ export const fetchDefaultBranch = async (
   );
   return base;
 };
+
+export type Git = (root: string, ...args: string[]) => Promise<string>;
+
+/** An argv run in a workspace's copy, in a directory there, with the directory its spawn starts in (workspace.ts `CopyAccess`). */
+export type CopyRun = (
+  cwd: string,
+  argv: readonly string[]
+) => { argv: string[]; cwd: string };
+
+/**
+ * git on this host as `safe-git.ts` says, its stdout trimmed, within the
+ * create's one `deadline`; `env` in place of the host's (the hub's
+ * credential, env-only); in a workspace's copy as `access` reaches it
+ * (../workspace.ts `accessOf`) when given; `input` its stdin. git's stderr,
+ * credential taken out, is the error.
+ */
+export const gitUntil =
+  (
+    deadline: number,
+    env: Record<string, string> = hostEnvironment(),
+    access?: { run: CopyRun },
+    input?: string
+  ): Git =>
+  async (root, ...args) => {
+    const late = `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error(late);
+    }
+    const run = access
+      ? access.run(root, safeGitArgv(args))
+      : { argv: safeGitArgv(args), cwd: root };
+    const ran = await readWithin(remaining, async (signal) => {
+      const { code, signalCode, stdout, stderr } = await runCaptured(run.argv, {
+        cwd: run.cwd,
+        env: { ...env, ...SAFE_GIT_ENV },
+        ...(input === undefined ? {} : { input }),
+        signal,
+        killSignal: "SIGKILL",
+      });
+      if (code !== 0) {
+        throw new Error(
+          signalCode
+            ? `git ${args[0]} was ended by ${signalCode}`
+            : `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`
+        );
+      }
+      return stdout.trim();
+    });
+    switch (ran.kind) {
+      case "answered":
+        return ran.value;
+      case "unanswered":
+        throw new Error(late);
+      default:
+        unhandled("read", ran);
+    }
+  };
