@@ -14,7 +14,7 @@
    *   checkout other than the primary can be removed, another added (a
    *   machine and a folder on it). The primary and the project's folder on
    *   the hub say they can't be removed. A held workspace is its delegating
-   *   session's to continue or discard, never yours (hub work-items.ts
+   *   session's to continue or discard, never yours (hub workspaces.ts
    *   `heldNotice`).
    * - Repositories: the project's links, each read from a folder's remote
    *   or published from one, said so.
