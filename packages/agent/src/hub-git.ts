@@ -110,7 +110,7 @@ export const gitDoorOf = (id: string): string =>
 /**
  * A workspace's read-only bin, first on its commands' PATH: its
  * `git-remote-cawco` and `cawco-ssh`, the `git` that judges a move of the
- * worktree (worktree-guard.ts `gitShim`), `cawco-chromium` (boundary/
+ * worktree (worktree-guard.ts `gitShim`), `cawco-chromium` (boundary/shims.ts
  * `writeChromiumShim`), and on macOS the boundary's
  * toolchain shims (boundary/shims.ts `writeShims`).
  */
