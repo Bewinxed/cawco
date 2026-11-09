@@ -865,8 +865,7 @@ export class SessionSupervisor {
   readonly #keepers = new KeeperPool();
   /** The machine's fleet convergence, which reads the live sessions only to tell one to heal (fleet-converger.ts). */
   readonly #fleet = new FleetConverger({
-    session: (instanceId) => this.#live.sessions.get(instanceId),
-    ids: () => this.instanceIds,
+    sessions: this.#live.sessions,
     cwdOf: (instanceId) => this.#resumable.get(instanceId)?.cwd,
     emit: (envelope) => this.emit(envelope),
   });
