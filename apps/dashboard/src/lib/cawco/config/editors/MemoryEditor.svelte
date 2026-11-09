@@ -23,7 +23,7 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
-  import { cawco, type Machine } from "../../client.svelte";
+  import { cawco } from "../../client.svelte";
   import {
     adoptMemory,
     adoptMemoryDoc,
@@ -40,6 +40,7 @@
   } from "../../fleet";
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
+  import { boardStore, type Machine } from "../../stores/board.svelte";
   import { deleteMemory } from "../deletes";
   import { drafts, keepDraft } from "../drafts.svelte";
   import EditorFrame from "../EditorFrame.svelte";
@@ -81,7 +82,7 @@
       ? (fleet?.memory ?? null)
       : (fleet?.memoryDocs.find((doc) => doc.path === path) ?? null)
   );
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
 
   let text = $state(untrack(() => saved?.content ?? ""));
   /**

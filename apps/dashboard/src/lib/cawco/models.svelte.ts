@@ -24,7 +24,6 @@ import {
 import { z } from "zod";
 import { hubJson } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
-import { cawco } from "./client.svelte";
 import {
   admittedOn,
   covers,
@@ -34,6 +33,7 @@ import {
   typedOffered,
 } from "./model-catalog";
 import { accountsStore } from "./stores/accounts.svelte";
+import { boardStore } from "./stores/board.svelte";
 import { speakerName } from "./transcript/speaker";
 
 /**
@@ -77,7 +77,7 @@ store.recent = readJson(
  */
 function reported(): HarnessModel[] {
   const rows: HarnessModel[] = [];
-  for (const machine of cawco.machines) {
+  for (const machine of boardStore.machines) {
     for (const report of machine.harnesses ?? []) {
       for (const model of report.models ?? []) {
         rows.push({
@@ -154,7 +154,7 @@ function unread(harness: string, machineIds?: string[]): string | null {
   if (modelsForHarness(catalog(), harness, machineIds).length > 0) {
     return null;
   }
-  const machines = cawco.machines.filter(
+  const machines = boardStore.machines.filter(
     (machine) => !machineIds?.length || machineIds.includes(machine.machineId)
   );
   const said =
@@ -219,7 +219,7 @@ function listingOn(harness: HarnessKind, machineId: string): ModelListing {
       .map((signin) => signin.accountId)
   );
   return modelListingOn(harness, {
-    report: cawco.machines
+    report: boardStore.machines
       .find((machine) => machine.machineId === machineId)
       ?.harnesses?.find((report) => report.harness === harness),
     catalogs: (view?.catalogs ?? [])
@@ -243,7 +243,7 @@ const listingsOn = (harness: HarnessKind, machineIds?: string[]): ListingsOn =>
       }
     : {
         every: false,
-        listings: cawco.machines.map((machine) =>
+        listings: boardStore.machines.map((machine) =>
           listingOn(harness, machine.machineId)
         ),
       };

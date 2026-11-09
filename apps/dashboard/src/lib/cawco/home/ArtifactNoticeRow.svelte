@@ -26,12 +26,13 @@
     IconGlobe,
     IconWindow,
   } from "#lib/icons.js";
-  import { cawco } from "../client.svelte";
+
   import RowFault from "../RowFault.svelte";
   import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
   import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
+  import { boardStore } from "../stores/board.svelte";
   import NoticeRow from "./NoticeRow.svelte";
 
   let {
@@ -70,7 +71,7 @@
   }
   const row = $derived(
     notice.instanceId
-      ? cawco.instanceIndex.byId.get(notice.instanceId)
+      ? boardStore.instanceIndex.byId.get(notice.instanceId)
       : undefined
   );
 </script>
