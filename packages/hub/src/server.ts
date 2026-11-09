@@ -480,6 +480,7 @@ import {
   type PauseCaller,
 } from "./machine-pause";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import { reconnectingFor } from "./machine-reads";
 import { createMachineRuntime } from "./machine-runtime";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
@@ -685,7 +686,7 @@ import { createToolCallKeys } from "./tool-call-keys";
 import { createToolInstalls } from "./tool-installs";
 import { ToolReleases } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
-import { createTranscripts, type HistoryFault } from "./transcripts";
+import { createTranscripts } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
 import { turnState } from "./turn-state";
 import { turnUsageOf } from "./turn-usage";
@@ -1152,6 +1153,8 @@ export const createServer = (
   // What the route families read of this closure (hub-context.ts).
   const ctx: HubContext = hubContextOf({
     readSessionProcess: () => readSessionProcess,
+    reconnectingFor: () => (machineId: string) =>
+      reconnectingFor(ctx, machineId),
     advanceContinuation: () => advanceContinuation,
     afterPausingCall: () => afterPausingCall,
     allowGranted: () => allowGranted,
@@ -1313,9 +1316,7 @@ export const createServer = (
     publishUsage: () => publishUsage,
     pushAgents: () => pushAgents,
     readAgent: () => readAgent,
-    readMachineHookScript: () => readMachineHookScript,
     readMachineMedia: () => readMachineMedia,
-    readMachineMemory: () => readMachineMemory,
     readMarketplaceSource: () => readMarketplaceSource,
     readStoppable: () => readStoppable,
     registry: () => registry,
@@ -1331,17 +1332,12 @@ export const createServer = (
     tailnetHttps: () => tailnetHttps,
     toolCallKeys: () => toolCallKeys,
     treeStops: () => treeStops,
-    unansweredStatus: () => unansweredStatus,
     unpushable: () => unpushable,
     watch: () => watchPort.now(),
     withPresence: () => withPresence,
     workItems: () => workItems,
     workspaceArchived: () => workspaceArchived,
     workspaceRetire: () => workspaceRetire,
-    awayAnswer: () => awayAnswer,
-    hookCopyOff: () => hookCopyOff,
-    pushTarget: () => pushTarget,
-    skillFilesOff: () => skillFilesOff,
     addProjectPlace: () => addProjectPlace,
     askedProjectName: () => askedProjectName,
     askerOf: () => askerOf,
@@ -1387,7 +1383,6 @@ export const createServer = (
     plans: () => plans,
     processAt: () => processAt,
     push: () => push,
-    reconnectingFor: () => reconnectingFor,
     sayCompaction: () => sayCompaction,
     sendFrame: () => sendFrame,
     sendRefusal: () => sendRefusal,
@@ -1631,7 +1626,6 @@ export const createServer = (
     settleProviderSignin: () => settleProviderSignin,
     settleSignin: () => settleSignin,
     undoRemovedSignin: () => undoRemovedSignin,
-    awayStatus: () => awayStatus,
     homeCredentialOf: () => homeCredentialOf,
     startMove: () => startMove,
     forgePosts: () => forgePosts,
@@ -1648,7 +1642,6 @@ export const createServer = (
     applyPermissionMode: () => applyPermissionMode,
     continuationNow: () => continuationNow,
     everyPage: () => everyPage,
-    historyAway: () => historyAway,
     keepAliveScheduler: () => keepAliveScheduler,
     withKeepAlive: () => withKeepAlive,
   });
@@ -1881,20 +1874,8 @@ export const createServer = (
     saidInterrupt,
     withdrawUnshown,
   } = createRelayControl(ctx);
-  const {
-    awayAnswer,
-    awayHeaders,
-    awayStatus,
-    forkSeeds,
-    hookCopyOff,
-    pushTarget,
-    readHistory,
-    readOlder,
-    reconnectingFor,
-    skillFilesOff,
-    storedWindow,
-    unansweredStatus,
-  } = createHistory(ctx);
+  const { forkSeeds, readHistory, readOlder, storedWindow } =
+    createHistory(ctx);
   const {
     agentMoved,
     announceSkill,
@@ -1918,9 +1899,7 @@ export const createServer = (
     noteFetch,
     pluginRow,
     pushAgents,
-    readMachineHookScript,
     readMachineMedia,
-    readMachineMemory,
     readMarketplaceSource,
     refreshSessions,
     reresolveFailed,
@@ -7408,13 +7387,6 @@ export const createServer = (
     },
   };
 
-  /** A stored transcript's machine is away, as its routes answer it: 503 with {@link awayHeaders}. */
-  const historyAway = (fault: HistoryFault): Response =>
-    new Response(fault.message, {
-      status: 503,
-      headers: awayHeaders(fault.machineId ?? ""),
-    });
-
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
     lifetime,
@@ -11083,9 +11055,8 @@ export const createServer = (
   const harnessConfigPut = (
     kind: HarnessConfigKind,
     name: string,
-    body: HarnessConfigBody,
-    status: (code: 400, text: string) => unknown
-  ): unknown => {
+    body: HarnessConfigBody
+  ) => {
     const merged: Record<string, unknown> = {
       enabled: true,
       ...db.getHarnessConfig(kind, name),
@@ -11105,12 +11076,12 @@ export const createServer = (
       placed as { areaId?: string; projectId?: string }
     );
     if (unplaced) {
-      return status(400, unplaced);
+      return refusal(400, "harness-config-unplaced", unplaced);
     }
     const row = placed as unknown as FleetHarnessConfig;
     const problem = harnessConfigProblem(row);
     if (problem) {
-      return status(400, problem);
+      return refusal(400, "harness-config-invalid", problem);
     }
     const kept = db.putHarnessConfig(row);
     fleetChanged();
@@ -11118,11 +11089,7 @@ export const createServer = (
   };
 
   /** A row's delete, kept in the trash for its undo. */
-  const harnessConfigDelete = (
-    kind: HarnessConfigKind,
-    name: string,
-    status: (code: 404, text: string) => unknown
-  ): unknown => {
+  const harnessConfigDelete = (kind: HarnessConfigKind, name: string) => {
     const trashed = db.getHarnessConfig(kind, name)
       ? db.trash.put(
           { kind: "harnessConfig", key: `${kind}:${name}` },
@@ -11130,7 +11097,11 @@ export const createServer = (
         )
       : undefined;
     if (trashed === undefined) {
-      return status(404, `the fleet keeps no ${kind} row ${name}`);
+      return refusal(
+        404,
+        "no-harness-config",
+        `the fleet keeps no ${kind} row ${name}`
+      );
     }
     fleetChanged();
     return undoable(trashed);
@@ -11513,17 +11484,18 @@ export const createServer = (
           console.warn(
             `[hub] refused ${refused} to ${request.method} ${new URL(request.url).pathname}`
           );
-          return new Response(
-            "The hub answers its own dashboard only: this request came from another page.",
-            { status: 403 }
+          return refusal(
+            403,
+            "hub-answers-own-dashboard",
+            "The hub answers its own dashboard only: this request came from another page."
           );
         }
       })
       // Who is calling, and whether they may (hub-auth.ts): every route is
       // the person's unless it is listed for sessions, machines or anyone.
       // A socket's upgrade passes here too.
-      .onRequest(({ request, server }) =>
-        hubAuth.gate(request, addressOf(server, request))
+      .onRequest(({ request, server, set }) =>
+        hubAuth.gate(request, addressOf(server, request), set)
       )
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
