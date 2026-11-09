@@ -29,13 +29,9 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workWords } from "@cawco/core/words/work";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
-import type {
-  ArtifactServiceDeps,
-  MarksDelivery,
-  MarksOutcome,
-  StageAt,
-} from "./artifacts/service";
-import { ArtifactRefusal } from "./artifacts/service";
+import type { ArtifactServiceDeps } from "./artifacts/deps";
+import { ArtifactRefusal } from "./artifacts/refusals";
+import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker } from "./artifacts/taker";
 import type { Caw } from "./caw";
 import { stagePlaceRef } from "./caw";
