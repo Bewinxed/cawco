@@ -20,9 +20,9 @@ import type { ContinuationJob } from "@cawco/core/protocol";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
 import { hubJson, hubSend } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
-import type { SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
 import { boardStore } from "./stores/board.svelte";
+import type { SendExtras } from "./stores/commands.svelte";
 import { sessionsStore } from "./stores/sessions.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
 
