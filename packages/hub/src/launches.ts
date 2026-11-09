@@ -30,7 +30,8 @@ import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { makesRoutines } from "./roles";
 import { UNREAD } from "./sends";
 import { peekResume } from "./spawns";
-import { blockWords, WorkItemRefusal } from "./work-items";
+import { WorkItemRefusal } from "./work-item-state";
+import { blockWords } from "./work-items";
 
 /** Settings reported by the harness, including a live mode change's receipt. */
 const peekSessionSettings = (
