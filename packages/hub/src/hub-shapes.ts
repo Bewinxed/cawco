@@ -3,6 +3,8 @@
  */
 import type { FleetVersioned } from "@cawco/core/fleet";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { MachinePath } from "@cawco/core/machine-path";
+import type { NamedSpawn } from "@cawco/core/protocol";
 
 /**
  * A step or a read that could not finish because its machine went away. Not
@@ -68,3 +70,17 @@ export interface FolderSkillBody {
 
 /** A fleet item's copy before or after a fetch: its version, its hash and where it came from. */
 export type FetchedCopy = FleetVersioned & { hash?: string; source?: string };
+
+/**
+ * Whether a launch's account is only asked about (`ask`: what would it run
+ * on, or why not, placing nothing) or taken for a launch that goes now
+ * (`claim`: a row with no account is placed on one, {@link claimAccount}).
+ */
+export type AccountUse = "ask" | "claim";
+
+/** A spawn as it leaves the hub ({@link settleMode}): its harness named, and every folder it names a path on its machine. */
+export type SettledSpawn = NamedSpawn & {
+  cwd: MachinePath;
+  bootstrap?: { repo: string; baseDir: MachinePath };
+  scratch?: { worktree?: boolean; baseCwd?: MachinePath };
+};
