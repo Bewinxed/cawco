@@ -100,7 +100,10 @@ const COMMAND_KINDS = new Set<string>([
  * The `control_result` shape a settled command reads: exactly the frame the
  * daemon already sends back for every control it runs.
  */
-type ControlResultFrame = Extract<FramePayload, { kind: "control_result" }>;
+export type ControlResultFrame = Extract<
+  FramePayload,
+  { kind: "control_result" }
+>;
 
 /**
  * What this module needs from the hub it lives in. Narrow on purpose: the
