@@ -817,6 +817,18 @@ class RowActivity {
 }
 const rowActivity = new Map<string, RowActivity>();
 
+/** Each row the board took holds its activity, and each row it let go lets its go. */
+function holdActivities({ moved, gone }: RowsMoved): void {
+  for (const id of gone) {
+    rowActivity.delete(id);
+  }
+  for (const row of moved) {
+    if (!rowActivity.has(row.id)) {
+      rowActivity.set(row.id, new RowActivity(row.id));
+    }
+  }
+}
+
 /**
  * The hub's rows as `next` has them: each row that moved (`moved`) and each
  * gone (`gone`) written to the keyed store, key by key, so a delta wakes
@@ -832,7 +844,6 @@ function holdRows(
     if (was) {
       leaveSession(was);
       rowsById.delete(id);
-      rowActivity.delete(id);
     }
   }
   for (const row of moved) {
@@ -845,11 +856,48 @@ function holdRows(
     }
     rowsById.set(row.id, row);
     joinSession(row);
-    if (!rowActivity.has(row.id)) {
-      rowActivity.set(row.id, new RowActivity(row.id));
-    }
   }
   hubRows = next;
+}
+
+/** The rows a change to the board moved, and the ids of those it took off. */
+interface RowsMoved {
+  gone: readonly string[];
+  moved: readonly InstanceRow[];
+}
+
+/** The board's rows as the hub's snapshot has them; null when none moved. */
+function adoptRows(rows: InstanceRow[]): RowsMoved | null {
+  const next = reconcileRows(hubRows, rows, (row) => row.id);
+  if (next === hubRows) {
+    return null;
+  }
+  const present = new Set(next.map((row) => row.id));
+  const held = {
+    moved: next,
+    gone: hubRows.filter((row) => !present.has(row.id)).map((row) => row.id),
+  };
+  holdRows(next, held.moved, held.gone);
+  return held;
+}
+
+/** The board's rows as a delta moves them; null when none moved. */
+function patchBoardRows(
+  upserts: InstanceRow[],
+  removed: string[]
+): RowsMoved | null {
+  const next = patchRows(hubRows, upserts, removed, (row) => row.id);
+  if (next === hubRows) {
+    return null;
+  }
+  // The rows as `next` holds them: an upsert equal to the row held keeps it.
+  const upserted = new Set(upserts.map((row) => row.id));
+  const held = {
+    moved: next.filter((row) => upserted.has(row.id)),
+    gone: removed,
+  };
+  holdRows(next, held.moved, held.gone);
+  return held;
 }
 
 /** A row out of its session key's rows. */
@@ -968,7 +1016,7 @@ const sessionChild = (row: InstanceRow): TrayChild => {
       case "unknown":
         break;
     }
-    return cawco.activityOf(row.id) === "idle" ? "done" : "running";
+    return activityFor(row.id) === "idle" ? "done" : "running";
   })();
   return {
     id: row.id,
@@ -1401,15 +1449,20 @@ let benchHub: BenchHub | null = null;
 
 /** Stands the page on a bench's hub: the socket closed, the hub said reached (dev only). */
 function standHub(answer: BenchHub): void {
+  standSocket(answer);
+  // What the bench stood in is the fleet as read, live and stored alike.
+  boardState.fleetRead = true;
+  boardState.liveRead = true;
+}
+
+/** The socket closed while a bench stands in, and the hub said reached (dev only). */
+function standSocket(answer: BenchHub): void {
   benchHub = answer;
-  globalThis.__cawcoDisposing = true;
+  hubHeld.disposing = true;
   teardown();
   connectionState.status = "connected";
   connectionState.failed = false;
   connectionState.outageAt = null;
-  // What the bench stood in is the fleet as read, live and stored alike.
-  boardState.fleetRead = true;
-  boardState.liveRead = true;
 }
 
 /** The bench is gone: the page reaches for the real hub again (dev only). */
@@ -1418,33 +1471,35 @@ function leaveHub(): void {
   connect();
 }
 
-// HMR-persistent socket references, so a module reload never leaves an orphan.
+/** What a module reload hands its next instance: the socket and its schedule, so a reload never leaves an orphan. */
+interface HubHeld {
+  /** This document asked for the hub (`openHub`): only then does a wake reconnect. */
+  asked: boolean;
+  disposing: boolean;
+  reconnectAttempts: number;
+  reconnectTimeout: ReturnType<typeof setTimeout> | null;
+  socket: WebSocket | null;
+  /** The wake listeners are document-wide; bound once across reloads. */
+  wakeBound: boolean;
+}
+
 declare global {
   // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
-  var __cawcoSocket: WebSocket | null;
-  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
-  var __cawcoReconnectTimeout: ReturnType<typeof setTimeout> | null;
-  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
-  var __cawcoReconnectAttempts: number;
-  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
-  var __cawcoDisposing: boolean;
-  /** The wake listeners are document-wide; bind them once across HMR reloads. */
-  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
-  var __cawcoWakeBound: boolean;
-  /** This document asked for the hub (`ensureConnected`): only then does a wake reconnect. */
-  // biome-ignore lint/style/useVarsOnTop: an ambient `declare global` var types a globalThis property; nothing is hoisted, and the rule reports it even first in the file.
-  var __cawcoHubAsked: boolean;
+  var __cawcoHub: HubHeld | undefined;
 }
-globalThis.__cawcoSocket ??= null;
-globalThis.__cawcoReconnectTimeout ??= null;
-globalThis.__cawcoReconnectAttempts ??= 0;
-globalThis.__cawcoDisposing ??= false;
-globalThis.__cawcoWakeBound ??= false;
-globalThis.__cawcoHubAsked ??= false;
+globalThis.__cawcoHub ??= {
+  socket: null,
+  reconnectTimeout: null,
+  reconnectAttempts: 0,
+  disposing: false,
+  wakeBound: false,
+  asked: false,
+};
+const hubHeld: HubHeld = globalThis.__cawcoHub;
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    globalThis.__cawcoDisposing = true;
+    hubHeld.disposing = true;
     teardown();
   });
 }
@@ -1456,18 +1511,56 @@ function abandonInflight(reason: string): void {
   inflight.clear();
 }
 
+/**
+ * What the stores do as the connection moves, and what takes the messages it
+ * reads: the client wires it once every store has loaded ({@link wireHub}).
+ */
+interface HubWiring {
+  /** The socket closed, by either side or dropped as dead. */
+  onClose: readonly (() => void)[];
+  /** Each time the hub is reached on a new socket, in order. */
+  onConnect: readonly (() => void)[];
+  /** The socket is torn down: a new one replaces it, a bench stands in, the module reloads. */
+  onTeardown: readonly (() => void)[];
+  /** Every store's read of the hub again; true once the board's own reads landed. */
+  reread: () => Promise<boolean>;
+  /** A message off the socket, past what the connection reads of it itself. */
+  take: (message: unknown) => void;
+}
+
+let wiring: HubWiring = {
+  take: () => undefined,
+  onConnect: [],
+  onClose: [],
+  onTeardown: [],
+  reread: () => Promise.resolve(false),
+};
+
+/**
+ * The stores, wired to the connection. A module reload wires them again,
+ * and the socket the module before opened is then replaced on the next
+ * {@link openHub}: its board went to the stores before.
+ */
+function wireHub(next: HubWiring): void {
+  wiring = next;
+  claimed = false;
+}
+
+/** Every store reads the hub again: after an act that moved what they hold. */
+function rereadHub(): Promise<boolean> {
+  return wiring.reread();
+}
+
 function teardown(): void {
-  // The ledger's ack timer is the one thing here that outlives the socket by
-  // design, so it is the one thing a teardown has to cancel by hand — an HMR
-  // reload that left it armed would fire a sweep into a module nobody renders.
-  disarmCommandSweep(streamState, streamHost);
-  stopHeartbeat();
-  cancelFleetRead();
-  if (globalThis.__cawcoReconnectTimeout) {
-    clearTimeout(globalThis.__cawcoReconnectTimeout);
-    globalThis.__cawcoReconnectTimeout = null;
+  for (const step of wiring.onTeardown) {
+    step();
   }
-  const socket = globalThis.__cawcoSocket;
+  stopHeartbeat();
+  if (hubHeld.reconnectTimeout) {
+    clearTimeout(hubHeld.reconnectTimeout);
+    hubHeld.reconnectTimeout = null;
+  }
+  const { socket } = hubHeld;
   if (!socket) {
     return;
   }
@@ -1476,7 +1569,7 @@ function teardown(): void {
   socket.onmessage = null;
   socket.onerror = null;
   socket.close();
-  globalThis.__cawcoSocket = null;
+  hubHeld.socket = null;
   abandonInflight("The connection to the hub closed before that finished.");
 }
 
@@ -2684,16 +2777,11 @@ async function load<T>(request: HubRequest): Promise<T | null> {
  * from it, so a snapshot is also how a bare `/session/[id]` fills itself in.
  */
 function adoptInstances(rows: InstanceRow[]): void {
-  const next = reconcileRows(hubRows, rows, (row) => row.id);
-  if (next === hubRows) {
+  const moved = adoptRows(rows);
+  if (!moved) {
     return;
   }
-  const present = new Set(next.map((row) => row.id));
-  holdRows(
-    next,
-    next,
-    hubRows.filter((row) => !present.has(row.id)).map((row) => row.id)
-  );
+  holdActivities(moved);
   for (const target of Object.values(sessionsState.sessions)) {
     hydrate(target);
   }
@@ -2752,17 +2840,11 @@ function patchRows<T>(
  * instead of all of them.
  */
 function patchInstances(upserts: InstanceRow[], removed: string[]): void {
-  const next = patchRows(hubRows, upserts, removed, (row) => row.id);
-  if (next === hubRows) {
+  const moved = patchBoardRows(upserts, removed);
+  if (!moved) {
     return;
   }
-  // The rows as `next` holds them: an upsert equal to the row held keeps it.
-  const upserted = new Set(upserts.map((row) => row.id));
-  holdRows(
-    next,
-    next.filter((row) => upserted.has(row.id)),
-    removed
-  );
+  holdActivities(moved);
   for (const row of upserts) {
     const held = sessionsState.sessions[row.id];
     if (held) {
@@ -3285,7 +3367,7 @@ function readFleet(delay = 1000): void {
         refreshCatalogs();
         return;
       }
-      if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
+      if (hubHeld.socket?.readyState !== WebSocket.OPEN) {
         return;
       }
       fleetRetry = setTimeout(
@@ -3316,20 +3398,11 @@ function refreshCatalogs(): void {
  * (`cawco.catalogsRead`) then waits on catalogs nobody ever asked for.
  */
 function adoptMachines(incoming: Machine[]): void {
-  const next = reconcileRows(
-    boardState.machines,
-    incoming,
-    (row) => row.machineId
-  );
-  if (next === boardState.machines) {
+  const wasOnline = holdMachines(incoming);
+  if (wasOnline === null) {
     return;
   }
-  const wasOnline = new Set(
-    boardState.machines
-      .filter((machine) => machine.status === "online")
-      .map((machine) => machine.machineId)
-  );
-  boardState.machines = next;
+  const next = boardState.machines;
   // A transcript whose read found its machine offline is read again once the
   // hub says it is online: across a hub restart this tab may never have seen
   // it go, so it is every online machine, not a change of one.
@@ -3347,6 +3420,28 @@ function adoptMachines(incoming: Machine[]): void {
       detach(loadCatalog(machine.machineId), "loadCatalog");
     }
   }
+}
+
+/**
+ * The hub's machines as `incoming` has them, each one equal to the one held
+ * kept as it was. The machines online before, or null when none moved.
+ */
+function holdMachines(incoming: Machine[]): ReadonlySet<string> | null {
+  const next = reconcileRows(
+    boardState.machines,
+    incoming,
+    (row) => row.machineId
+  );
+  if (next === boardState.machines) {
+    return null;
+  }
+  const wasOnline = new Set(
+    boardState.machines
+      .filter((machine) => machine.status === "online")
+      .map((machine) => machine.machineId)
+  );
+  boardState.machines = next;
+  return wasOnline;
 }
 
 /**
@@ -3988,6 +4083,51 @@ routeFrames([
   ...hubOnly("fleet_report", "fleet_converge"),
 ]);
 
+wireHub({
+  take: takeHubMessage,
+  onConnect: [
+    presenceAgain,
+    // A set heard before the socket went may have been replaced while it was
+    // away: the stages each page reads again on a connection carry the newer.
+    () => {
+      tickersState.starters = {};
+    },
+    readFleet,
+    () => detach(readInstalls(), "readInstalls"),
+    rereadFollowed,
+    () => {
+      if (connections > 1) {
+        rereadTrays();
+        rereadDelegates();
+      }
+    },
+    () => resumePendingSends(streamState, streamHost),
+    () => detach(checkServedBuild(), "checkServedBuild"),
+    () => detach(updates.loadPolicy(), "loadPolicy"),
+  ],
+  onClose: [
+    cancelFleetRead,
+    () => {
+      for (const listener of fleetFetchListeners) {
+        listener.dropped();
+      }
+    },
+    // Subscriptions, resumes and unanswered commands all died with the socket,
+    // and the next one reads every followed transcript again (`rereadFollowed`).
+    // With the host, for the same reason the traffic sweep passes it: a socket
+    // that dies mid-command must SAY so, not merely record it.
+    () => noteDisconnect(streamState, Date.now(), streamHost),
+  ],
+  onTeardown: [
+    // The ledger's ack timer is the one thing here that outlives the socket by
+    // design, so it is the one thing a teardown has to cancel by hand — an HMR
+    // reload that left it armed would fire a sweep into a module nobody renders.
+    () => disarmCommandSweep(streamState, streamHost),
+    cancelFleetRead,
+  ],
+  reread: refresh,
+});
+
 /* ------------------------------------------------------------------ *
  * The Ledger Protocol binding
  *
@@ -4004,28 +4144,30 @@ routeFrames([
  */
 const streamState = $state(createStreamState());
 
+/** What the ledger reaches back into: the stores' frame apply, follows, re-reads and failure word. */
+type LedgerPorts = Required<
+  Pick<StreamHost, "applyFrame" | "follows" | "rereadHistory" | "noteFailure">
+>;
+
+let ledgerPorts: LedgerPorts = {
+  applyFrame: () => undefined,
+  follows: () => false,
+  rereadHistory: () => undefined,
+  noteFailure: () => undefined,
+};
+
+/** The stores, plugged into the ledger's ports. */
+function plugLedger(ports: LedgerPorts): void {
+  ledgerPorts = ports;
+}
+
 const streamHost: StreamHost = {
-  // A session's own changes arrive only here, sequenced: what the hub's builder
-  // made of each frame, and its preview's state. Everything broadcast (the
-  // board, pulses, permissions, replies) comes as an envelope (`bind`).
-  applyFrame: (sessionId, frame) => {
-    const payload = frame as SessionStreamFrame;
-    if (payload.kind !== "transcript") {
-      takeFrame(payload);
-      return;
-    }
-    const target = session(sessionId);
-    applyTranscript(target, payload.events);
-    trackWorking(target);
-    target.lastActivityAt = new Date();
-  },
-  follows: (sessionId) => watchedIds().includes(sessionId),
-  // The newest page again, which resumes the stream from the `seq` it carries.
-  rereadHistory: (sessionId, cause) => {
-    detach(readTranscript(sessionId, cause), "readTranscript");
-  },
+  applyFrame: (sessionId, frame) => ledgerPorts.applyFrame(sessionId, frame),
+  follows: (sessionId) => ledgerPorts.follows(sessionId),
+  rereadHistory: (sessionId, cause) =>
+    ledgerPorts.rereadHistory(sessionId, cause),
   sendToHub: (message) => {
-    const socket = globalThis.__cawcoSocket;
+    const { socket } = hubHeld;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
@@ -4045,6 +4187,29 @@ const streamHost: StreamHost = {
   setTimer: (delayMs, run) => setTimeout(run, delayMs) as unknown as number,
   clearTimer: (handle) =>
     clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
+  noteFailure: (record) => ledgerPorts.noteFailure(record),
+};
+
+plugLedger({
+  // A session's own changes arrive only here, sequenced: what the hub's builder
+  // made of each frame, and its preview's state. Everything broadcast (the
+  // board, pulses, permissions, replies) comes as an envelope (`bind`).
+  applyFrame: (sessionId, frame) => {
+    const payload = frame as SessionStreamFrame;
+    if (payload.kind !== "transcript") {
+      takeFrame(payload);
+      return;
+    }
+    const target = session(sessionId);
+    applyTranscript(target, payload.events);
+    trackWorking(target);
+    target.lastActivityAt = new Date();
+  },
+  follows: (sessionId) => watchedIds().includes(sessionId),
+  // The newest page again, which resumes the stream from the `seq` it carries.
+  rereadHistory: (sessionId, cause) => {
+    detach(readTranscript(sessionId, cause), "readTranscript");
+  },
   /**
    * The client half of the ledger's failure port: every command that ever
    * reaches `failed`, on either dialect, is heard exactly once here.
@@ -4095,7 +4260,7 @@ const streamHost: StreamHost = {
     // composer. A reload says it again in the same place.
     sayCommandFault(record);
   },
-};
+});
 
 /** The kinds the session's details card asks for, and says the failure of. */
 const SETTINGS_KINDS: ReadonlySet<CommandKind> = new Set([
@@ -5164,7 +5329,7 @@ const harnessCan = (
   where: { harness: HarnessKind | null; machineId: string },
   capability: HarnessCapability
 ): boolean =>
-  cawco.machines
+  boardState.machines
     .find((entry) => entry.machineId === where.machineId)
     ?.harnesses?.find((entry) => entry.harness === where.harness)?.capabilities[
     capability
@@ -5593,7 +5758,7 @@ export function unwatchDelegate(instanceId: string): void {
 }
 
 function send(envelope: Envelope): void {
-  const socket = globalThis.__cawcoSocket;
+  const { socket } = hubHeld;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     throw new Error(
       "Not connected to the hub. Check that it is running, then try again."
@@ -5618,7 +5783,7 @@ function send(envelope: Envelope): void {
  * after.
  */
 function scheduleReconnect(): void {
-  const attempt = globalThis.__cawcoReconnectAttempts;
+  const attempt = hubHeld.reconnectAttempts;
   const updating =
     connectionState.restart !== null &&
     connectionState.restart.until > Date.now();
@@ -5630,8 +5795,8 @@ function scheduleReconnect(): void {
         WS_RECONNECT_MAX_DELAY
       );
   connectionState.retryAt = Date.now() + delay;
-  globalThis.__cawcoReconnectTimeout = setTimeout(() => {
-    globalThis.__cawcoReconnectAttempts += 1;
+  hubHeld.reconnectTimeout = setTimeout(() => {
+    hubHeld.reconnectAttempts += 1;
     connect();
   }, delay);
 }
@@ -5643,24 +5808,24 @@ function scheduleReconnect(): void {
  * evidence worth more than the schedule.
  */
 export function reconnectNow(): void {
-  const socket = globalThis.__cawcoSocket;
+  const { socket } = hubHeld;
   if (
     socket?.readyState === WebSocket.OPEN ||
     socket?.readyState === WebSocket.CONNECTING
   ) {
     return;
   }
-  if (globalThis.__cawcoReconnectTimeout) {
-    clearTimeout(globalThis.__cawcoReconnectTimeout);
+  if (hubHeld.reconnectTimeout) {
+    clearTimeout(hubHeld.reconnectTimeout);
   }
-  globalThis.__cawcoReconnectAttempts = 0;
+  hubHeld.reconnectAttempts = 0;
   connectionState.retryAt = null;
   connect();
 }
 
 /**
  * Whether the socket on `globalThis` is one this module instance opened
- * (`connect`); one another instance opened is replaced (`ensureConnected`).
+ * (`connect`); one another instance opened is replaced (`openHub`).
  */
 let claimed = false;
 
@@ -5680,7 +5845,7 @@ function connect(): void {
   if (import.meta.env.DEV && benchHub) {
     return;
   }
-  globalThis.__cawcoDisposing = false;
+  hubHeld.disposing = false;
   teardown();
   connectionState.status = "connecting";
 
@@ -5702,7 +5867,7 @@ function connect(): void {
   // This module made it, so `ensureConnected` keeps it, and `hubReached`
   // above is what refreshes.
   claimed = true;
-  globalThis.__cawcoSocket = socket;
+  hubHeld.socket = socket;
 }
 
 /**
@@ -5718,7 +5883,6 @@ function connect(): void {
  * tab never read yet waits for its pane's own read.
  */
 function rereadFollowed(): void {
-  connections += 1;
   const ids = subscriptionIds().sort();
   lastSubscriptionKey = ids.join("\u0000");
   forgetUnwatched(streamState, streamHost, watchedIds());
@@ -5738,24 +5902,14 @@ let socketRun: string | null = null;
 function hubReached(): void {
   connectionState.status = "connected";
   connectionState.retryAt = null;
-  presenceAgain();
-  // A set heard before the socket went may have been replaced while it was
-  // away: the stages each page reads again on a connection carry the newer.
-  tickersState.starters = {};
   connectionState.failed = false;
   connectionState.outageAt = null;
   connectionState.restart = null;
-  globalThis.__cawcoReconnectAttempts = 0;
-  readFleet();
-  detach(readInstalls(), "readInstalls");
-  rereadFollowed();
-  if (connections > 1) {
-    rereadTrays();
-    rereadDelegates();
+  hubHeld.reconnectAttempts = 0;
+  connections += 1;
+  for (const step of wiring.onConnect) {
+    step();
   }
-  resumePendingSends(streamState, streamHost);
-  detach(checkServedBuild(), "checkServedBuild");
-  detach(updates.loadPolicy(), "loadPolicy");
 }
 
 /**
@@ -5929,7 +6083,7 @@ function takeHeld(): void {
   });
 }
 
-/** One message off the hub's socket, taken into the store. */
+/** One message off the hub's socket: the connection's reading of it, then the stores'. */
 function takeMessage(message: unknown): void {
   // The hub is reached once its board on this socket is read: the board is
   // the first frame the hub owes every socket (`olderThanHub`), and a proxy
@@ -5951,6 +6105,11 @@ function takeMessage(message: unknown): void {
   if (olderThanHub(message)) {
     return;
   }
+  wiring.take(message);
+}
+
+/** One message off the hub's socket, taken into the stores. */
+function takeHubMessage(message: unknown): void {
   // A session's own frames are sequenced; everything else — the board,
   // pulses, permissions, replies — is broadcast as an envelope.
   if (handleStreamMessage(streamState, streamHost, message)) {
@@ -5989,26 +6148,20 @@ function socketClosed(): void {
   connectionState.status = "disconnected";
   // A socket that closed is an attempt that is over, one way or the other.
   connectionState.failed = true;
-  cancelFleetRead();
   // An announced update is the hub on its way back until its deadline.
   connectionState.outageAt ??=
     connectionState.restart && connectionState.restart.until > Date.now()
       ? connectionState.restart.until
       : Date.now() + OUTAGE_GRACE;
   abandonInflight("The connection to the hub dropped before that finished.");
-  for (const listener of fleetFetchListeners) {
-    listener.dropped();
+  for (const step of wiring.onClose) {
+    step();
   }
-  // Subscriptions, resumes and unanswered commands all died with the socket,
-  // and the next one reads every followed transcript again (`rereadFollowed`).
-  // With the host, for the same reason the traffic sweep passes it: a socket
-  // that dies mid-command must SAY so, not merely record it.
-  noteDisconnect(streamState, Date.now(), streamHost);
   // A hub that now requires paired devices closes the socket of a browser it
   // does not know, and refuses its next: the app then shows the pairing
   // screen (hub-auth.svelte.ts).
   readAuth().then(() => {
-    if (!(globalThis.__cawcoDisposing || mustPair())) {
+    if (!(hubHeld.disposing || mustPair())) {
       scheduleReconnect();
     }
   });
@@ -6044,17 +6197,14 @@ function startHeartbeat(socket: WebSocket): void {
   stopHeartbeat();
   lastHeard = Date.now();
   heartbeatTimer = setInterval(() => {
-    if (
-      socket !== globalThis.__cawcoSocket ||
-      socket.readyState !== WebSocket.OPEN
-    ) {
+    if (socket !== hubHeld.socket || socket.readyState !== WebSocket.OPEN) {
       return;
     }
     const asked = Date.now();
     clientLine(socket).send({ type: "heartbeat" } satisfies StreamHeartbeat);
     clearTimeout(heartbeatDeadline);
     heartbeatDeadline = setTimeout(() => {
-      if (lastHeard >= asked || socket !== globalThis.__cawcoSocket) {
+      if (lastHeard >= asked || socket !== hubHeld.socket) {
         return;
       }
       console.warn(
@@ -6082,6 +6232,17 @@ function dropDeadSocket(socket: WebSocket): void {
 /** The sends an earlier load kept were sent again: once per load of the page. */
 let keptSendsResumed = false;
 
+/** What routes call on mount: the socket, and the sends an earlier load kept sent again. */
+export function ensureConnected(): void {
+  if (!keptSendsResumed) {
+    keptSendsResumed = true;
+    resumeKeptSends().catch((error: unknown) =>
+      console.warn("[cawco] kept sends could not be read", error)
+    );
+  }
+  openHub();
+}
+
 /**
  * What routes call on mount: the socket is app-scoped, not page-scoped.
  *
@@ -6096,15 +6257,9 @@ let keptSendsResumed = false;
  * once while the preview isn't up (`notUpYet`). A dev server with no hub
  * closes it, and the retries back off as any refused socket's do.
  */
-export function ensureConnected(): void {
-  globalThis.__cawcoHubAsked = true;
-  if (!keptSendsResumed) {
-    keptSendsResumed = true;
-    resumeKeptSends().catch((error: unknown) =>
-      console.warn("[cawco] kept sends could not be read", error)
-    );
-  }
-  const socket = globalThis.__cawcoSocket;
+function openHub(): void {
+  hubHeld.asked = true;
+  const { socket } = hubHeld;
   if (
     claimed &&
     socket &&
@@ -6117,7 +6272,7 @@ export function ensureConnected(): void {
   // adopted: its board snapshot went to that instance's state, and this one's
   // board comes only from a snapshot on a socket of its own (`refresh`).
   // A navigation is a fresh user intent — earlier exhausted retries don't apply.
-  globalThis.__cawcoReconnectAttempts = 0;
+  hubHeld.reconnectAttempts = 0;
   connect();
 }
 
@@ -6126,14 +6281,14 @@ export function ensureConnected(): void {
  * network is back, the tab comes to the foreground after a sleep, and the
  * window regains focus. Each means the outage may be over right now, and the
  * timer was set when none of that was known. Registered once per document,
- * and only for a document that asked for the hub (`ensureConnected`): one
+ * and only for a document that asked for the hub (`openHub`): one
  * that only imports this module (a component canvas on a stage, which talks
  * to no hub) never dials one when it takes the focus.
  */
-if (typeof window !== "undefined" && !globalThis.__cawcoWakeBound) {
-  globalThis.__cawcoWakeBound = true;
+if (typeof window !== "undefined" && !hubHeld.wakeBound) {
+  hubHeld.wakeBound = true;
   const wake = () => {
-    if (!globalThis.__cawcoHubAsked || document.visibilityState === "hidden") {
+    if (!hubHeld.asked || document.visibilityState === "hidden") {
       return;
     }
     reconnectNow();
@@ -6150,7 +6305,7 @@ if (typeof window !== "undefined" && !globalThis.__cawcoWakeBound) {
  * so: the machine was never asked.
  */
 async function waitForHub(timeoutMs = 5000): Promise<void> {
-  ensureConnected();
+  openHub();
   const reached = () => connectionState.status === "connected";
   if (reached()) {
     return;
@@ -6394,7 +6549,7 @@ export async function spawnSession({
     extras,
     firstCommandId
   );
-  detach(refresh(), "refresh");
+  detach(rereadHub(), "rereadHub");
   return { kind: "answered", value: started.value.instanceId };
 }
 
@@ -6602,7 +6757,7 @@ export async function forkSession({
       return started;
     case "answered":
       sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
-      detach(refresh(), "refresh");
+      detach(rereadHub(), "rereadHub");
       return { kind: "answered", value: started.value.instanceId };
     default:
       unhandled("read", started);
@@ -6720,7 +6875,7 @@ export async function stopSession(
         unhandled("read", stopped);
     }
   } finally {
-    detach(refresh(), "refresh");
+    detach(rereadHub(), "rereadHub");
   }
 }
 
@@ -6752,7 +6907,7 @@ export async function discardSession(
         unhandled("read", discarded);
     }
   } finally {
-    await refresh();
+    await rereadHub();
   }
 }
 
@@ -7032,7 +7187,7 @@ export async function createProject(project: {
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
   };
-  await refresh();
+  await rereadHub();
   return created;
 }
 
@@ -7056,7 +7211,7 @@ export async function projectAtFolder(project: {
     place: ProjectPlace;
     placeAdded: boolean;
   };
-  await refresh();
+  await rereadHub();
   return created;
 }
 
@@ -7233,7 +7388,7 @@ export async function answerProjectOffer(
     offersState.projectJoins[instanceId] = accepted;
   }
   offerGone();
-  await refresh();
+  await rereadHub();
   return accepted;
 }
 
@@ -7711,7 +7866,7 @@ export async function removeMachine(machineId: string): Promise<void> {
   if (!response.ok) {
     throw await hubRefusal(response, machineWords.notRemovedThen);
   }
-  await refresh();
+  await rereadHub();
 }
 
 /**
@@ -7735,7 +7890,7 @@ export async function pauseMachine(
   if (!response.ok) {
     throw await hubRefusal(response, machineWords.pauseNotChangedThen);
   }
-  await refresh();
+  await rereadHub();
 }
 
 /**
@@ -7835,7 +7990,7 @@ export async function archiveWorkspace(
   if (!response.ok) {
     throw await hubRefusal(response, sidebarWords.notArchivedThen);
   }
-  await refresh();
+  await rereadHub();
 }
 
 export async function removeSession(instanceId: string): Promise<void> {
@@ -7845,7 +8000,7 @@ export async function removeSession(instanceId: string): Promise<void> {
   if (!response.ok) {
     throw await hubRefusal(response, sidebarWords.sessionNotRemovedThen);
   }
-  await refresh();
+  await rereadHub();
 }
 
 /**
@@ -9143,7 +9298,7 @@ export async function relaunchSession(
     throw error;
   } finally {
     target.relaunching = false;
-    detach(refresh(), "refresh");
+    detach(rereadHub(), "rereadHub");
   }
 }
 
@@ -9362,7 +9517,7 @@ export async function editAndResend(
     }
   } finally {
     target.relaunching = false;
-    detach(refresh(), "refresh");
+    detach(rereadHub(), "rereadHub");
   }
 }
 
@@ -9482,6 +9637,14 @@ const waiting = $derived.by((): ReadonlySet<string> => {
   return now;
 });
 let waitingWas: ReadonlySet<string> = new Set();
+
+/**
+ * What a session needs from you — `idle` for one nothing has been heard
+ * from. A hub row's is held per row ({@link RowActivity}).
+ */
+function activityFor(instanceId: string): Activity {
+  return rowActivity.get(instanceId)?.value ?? activityNow(instanceId);
+}
 
 /** What a session needs from you — `idle` for one nothing has been heard from. */
 function activityNow(instanceId: string): Activity {
@@ -9880,8 +10043,7 @@ export const cawco = {
    * What a session needs from you — `idle` for one nothing has been heard
    * from. A hub row's is held per row ({@link RowActivity}).
    */
-  activityOf: (instanceId: string): Activity =>
-    rowActivity.get(instanceId)?.value ?? activityNow(instanceId),
+  activityOf: activityFor,
   /**
    * Whether the session's own main loop is in a turn, its delegates and
    * subagents aside: what a project's Caw is doing himself, where
