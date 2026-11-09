@@ -32,10 +32,10 @@ import {
   commandsNow,
   liveAt,
 } from "./holding";
-import { forgetRetiring, forgetStale, forgetStubbed } from "./lifecycle";
 import { executors, killAnswering } from "./processes";
 import { srtTmpOf } from "./runner";
 import { endMembers, goneWithin, isBwrap } from "./sandboxes";
+import { forgetRetiring, forgetStale, forgetStubbed } from "./staleness";
 import {
   fifoOf,
   generationDir,
