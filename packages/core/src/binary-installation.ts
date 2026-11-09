@@ -33,7 +33,7 @@ export type BinaryInstallation = z.infer<typeof BinaryInstallationSchema>;
  * The binary install of the data dir this process runs with, and the only
  * derivation of it: every updater, helper, wrapper and installer read and
  * write goes through here. A unit is given its data dir as `XDG_DATA_HOME`
- * (service.ts `environment`), so a process started with a scratch data dir
+ * (agent service-manager/units.ts `environment`), so a process started with a scratch data dir
  * (a rig, a proof) has a scratch install and never reaches the machine's.
  */
 export const binaryRoot = (): string =>
