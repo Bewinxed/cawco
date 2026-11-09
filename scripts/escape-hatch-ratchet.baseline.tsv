@@ -210,6 +210,7 @@ catch-drops-reason	TemplateExpression	apps/dashboard/src/lib/cawco/preview/pass.
 empty-catch		apps/dashboard/serve.js	1
 empty-catch		apps/dashboard/src/lib/cawco/blocks/arrangement.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/client.svelte.ts	1
+empty-catch		apps/dashboard/src/lib/cawco/config/ConnectionsSection.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/error-report.ts	2
 empty-catch		apps/dashboard/src/lib/cawco/home/areas.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/home/NeedsCard.svelte	1
@@ -222,7 +223,6 @@ empty-catch		apps/dashboard/src/lib/cawco/views/openui/BlockVideo.svelte	1
 empty-catch		apps/dashboard/src/lib/cawco/workspace/workspace.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/platform/feel.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/platform/storage.ts	2
-empty-catch		apps/dashboard/src/routes/(app)/config/connections/+page.svelte	1
 empty-catch		packages/agent/src/activity.ts	2
 empty-catch		packages/agent/src/boundary-judge.ts	1
 empty-catch		packages/agent/src/boundary/watch.ts	1
