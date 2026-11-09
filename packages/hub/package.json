@@ -43,7 +43,7 @@
     "cronstrue": "3.32.0",
     "drizzle-orm": "^0.45.3",
     "effect": "^4.0.0",
-    "elysia": "2.0.0-rc.3",
+    "elysia": "2.0.0-rc.4",
     "exact-mirror": "^1.2.7",
     "image-size": "2.0.4",
     "lib0": "0.2.119",
