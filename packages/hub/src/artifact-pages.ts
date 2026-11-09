@@ -5,6 +5,7 @@ import { detach } from "@cawco/core/detach";
 import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
 import { PREVIEW_FOLDERS } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { ElysiaStatus } from "elysia";
 import { timedShowStep } from "./artifacts/service";
 import type { PageFrom } from "./artifacts/shapes";
 import type { ArtifactRow } from "./db/artifacts";
@@ -798,14 +799,15 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       return { status: program.code, refused: program.refused };
     }
     if (program) {
-      // A refusal of the program's is thrown, and answered by the service.
       const built = await buildProgram(
         program.text,
         (file) => programImage(row, file, program),
         artifact,
         ctx.db.decides.kinds()
       );
-      return { html: built.html, program: built };
+      return built instanceof ElysiaStatus
+        ? { status: built.status, refused: built.response.detail }
+        : { html: built.html, program: built };
     }
     if ("program" in from) {
       return { status: 400, refused: "A program is required." };
