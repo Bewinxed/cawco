@@ -8,10 +8,10 @@ type RefusalCode = 400 | 403 | 404 | 409;
  * Each module subclasses it, so its routes answer its own refusals and let
  * anything else through.
  */
-export class StatusRefusal extends Error {
-  readonly status: RefusalCode;
-  constructor(code: RefusalCode, message: string) {
-    super(message);
+export class StatusRefusal<Code extends number = RefusalCode> extends Error {
+  readonly status: Code;
+  constructor(code: Code, message: string, options?: ErrorOptions) {
+    super(message, options);
     this.status = code;
   }
 }
