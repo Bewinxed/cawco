@@ -10,9 +10,7 @@
 import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
 import { BUILT_IN, type BuiltInMember } from "@cawco/core/decides";
 import type { ArtifactRow } from "./db/artifacts";
-
-/** The pass's name in `data_migrations`. */
-const SETTLED_NAMES = "settled_member_names";
+import { SETTLED_NAMES } from "./db/migration-names";
 
 /** Each route word a pick was settled by before members, as the member it is. */
 const WAS: Record<string, BuiltInMember> = {
