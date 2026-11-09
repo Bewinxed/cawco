@@ -2226,6 +2226,8 @@ export const fleetAgents = sqliteTable("fleet_agents", {
   bytes: integer("bytes").notNull(),
   updatedAt: stampedNow("updated_at"),
 });
+/** The one row of {@link fleetMemory}: there is one document, not a list. */
+export const MEMORY_ID = "memory";
 
 /** The fleet's user-scope CLAUDE.md — one row, one document (NEW.md §11). */
 export const fleetMemory = sqliteTable("fleet_memory", {
@@ -3298,6 +3300,8 @@ export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
   source: text("source").notNull(),
   createdAt: stampedNow("created_at"),
 });
+/** The one row of {@link supervisorConfig}. */
+export const SUPERVISOR_CONFIG_ID = "supervisor";
 
 /**
  * The fleet's choices — one row, keyed `'supervisor'`, following the
@@ -3333,6 +3337,8 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
 export const fleetDeniedTools = sqliteTable("fleet_denied_tools", {
   tool: text("tool").primaryKey(),
 });
+/** The one row of {@link spendSettings}. */
+export const SPEND_SETTINGS_ID = "spend";
 
 /**
  * The fleet's spend settings — one row, keyed `'spend'`, following the
@@ -3345,6 +3351,8 @@ export const spendSettings = sqliteTable("spend_settings", {
   id: text("id").primaryKey(),
   onCap: text("on_cap").$type<OnCap>().notNull().default("both"),
 });
+/** The one row of {@link imageSettings}. */
+export const IMAGE_SETTINGS_ID = "images";
 
 /**
  * The fleet's image default (core `ImageSettings`) — one row, keyed
@@ -3358,6 +3366,8 @@ export const imageSettings = sqliteTable("image_settings", {
   provider: text("provider").$type<ImageProviderId>().notNull(),
   model: text("model"),
 });
+/** The one row of {@link sessionLimits}. */
+export const SESSION_LIMITS_ID = "session";
 
 /**
  * The fleet's session limits (core `SessionLimits`) — one row, keyed
@@ -3371,6 +3381,8 @@ export const sessionLimits = sqliteTable("session_limits", {
   memoryPercent: integer("memory_percent"),
   cpuPercent: integer("cpu_percent"),
 });
+/** The one row of {@link decidesSettings}. */
+export const DECIDES_ID = "decides";
 
 /**
  * The fleet's Who decides (core decides.ts) — one row, keyed `'decides'`,
@@ -3486,6 +3498,8 @@ export const cardSettlings = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.artifactId, table.card] })]
 );
+/** The one row of {@link fleetWatchSettings}. */
+export const FLEET_WATCH_ID = "fleet-watch";
 
 /**
  * Fleet watch's switch (fleet-watch.ts) — one row, keyed `'fleet-watch'`,
@@ -3512,6 +3526,8 @@ export const fleetWatchNotices = sqliteTable("fleet_watch_notices", {
   body: text("body").notNull(),
   at: timestamp("at").notNull(),
 });
+/** The one row of {@link openrouterConnection}. */
+export const OPENROUTER_CONNECTION_ID = "openrouter";
 
 /**
  * The fleet's OpenRouter connection — one row, keyed `'openrouter'`, following
@@ -3526,6 +3542,8 @@ export const openrouterConnection = sqliteTable("openrouter_connection", {
   apiKey: sealedText("api_key").notNull(),
   connectedAt: timestamp("connected_at").notNull(),
 });
+/** The one row of {@link jevSettings}. */
+export const JEV_SETTINGS_ID = "jev";
 
 /**
  * Jev's own settings — one row, keyed `'jev'`, following the
@@ -3861,6 +3879,8 @@ export const pushDevices = sqliteTable("push_devices", {
   /** Why the last push was refused, cleared by the next one taken. */
   lastError: text("last_error"),
 });
+/** The one row of {@link pairingSettings}. */
+export const PAIRING_ID = "pairing";
 
 /**
  * Whether the hub requires paired devices (hub-auth.ts) — one row, keyed
@@ -3980,6 +4000,8 @@ export const notificationCleared = sqliteTable(
   },
   (table) => [index("notification_cleared_at").on(table.clearedAt)]
 );
+/** The one row of {@link presenceSettings}. */
+export const PRESENCE_ID = "person";
 
 /**
  * The person's Appear away (notifications.ts), one row keyed `'person'`:
@@ -4041,6 +4063,8 @@ export const presenceClients = sqliteTable("presence_clients", {
   /** When the hub heard it. */
   at: timestamp("at").notNull(),
 });
+/** The one row of {@link findSettings}. */
+export const FIND_SETTINGS_ID = "person";
 
 /**
  * The person's Find settings (find-secrets.ts), one row keyed `'person'`,
@@ -4639,6 +4663,8 @@ export const previewPorts = sqliteTable(
     ),
   ]
 );
+/** The one row of {@link streamRelay}. */
+export const STREAM_RELAY_ID = "relay";
 
 /**
  * The fleet's stream relay (stream-relay.ts) — one row, keyed `'relay'`,
@@ -4712,6 +4738,8 @@ export const browsers = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.machineId, table.key] })]
 );
+/** The one row of {@link streamRelayJourney}. */
+export const STREAM_JOURNEY_ID = "journey";
 
 /**
  * The stream relay's guided journey (relay-journey.ts) — one row, keyed
@@ -4783,6 +4811,8 @@ export const streamRelayProofs = sqliteTable("stream_relay_proofs", {
   refused: integer("refused", { mode: "boolean" }).notNull().default(false),
   at: timestamp("at").notNull(),
 });
+/** The one row of {@link previewSettings}. */
+export const PREVIEW_SETTINGS_ID = "preview";
 
 /**
  * How previews are reached, fleet-wide (core `PreviewSettings`) — one row,
