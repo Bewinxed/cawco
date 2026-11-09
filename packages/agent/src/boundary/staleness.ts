@@ -33,7 +33,7 @@ export const retiringNow = (): string[] => [...retiring];
  * the host would drop the deny inside that sandbox, so the boundary is
  * replaced once nothing runs in it, and its new host makes the dir. Each
  * with the commands running at the last look that left it as it is
- * ({@link drainable}).
+ * (processes.ts `drainable`).
  */
 const stubbed = new Map<
   string,
@@ -67,7 +67,7 @@ export const noteStubbedCommands = (
  * Why the start-up pass left each older boundary of workspaces `ids`
  * running (control.ts `closeLeftRetiring`), in the log: a start of the
  * workspace's boundary under way, which the look passes over, or what still
- * runs in it ({@link busyOld}).
+ * runs in it (processes.ts `busyOld`).
  */
 export const sayWhyLeft = async (ids: readonly string[]): Promise<void> => {
   if (ids.length === 0) {
@@ -98,10 +98,9 @@ export interface KeptRunning {
 
 /**
  * The workspaces whose boundary of an older form, or on a retiring keeper,
- * is kept as it is because its work still runs (lifecycle.ts `replaceOlder`), each
- * with what it runs as last said ({@link workLeft}), said once per change,
- * and the commands running at the last look that kept it ({@link
- * drainable}). Each stays {@link stale}, looked at until the last of its
+ * is kept as it is because its work still runs (ensure.ts `replaceOlder`), each
+ * with what it runs as last said (narrowing.ts `workLeft`), said once per change,
+ * and the commands running at the last look that kept it (processes.ts `drainable`). Each stays {@link stale}, looked at until the last of its
  * work ends, then handed over.
  */
 const keptRunning = new Map<string, KeptRunning>();
@@ -133,7 +132,7 @@ export const forgetStubbed = (id: string): void => {
   stopLooking();
 };
 
-/** The look at the older boundaries under way ({@link lookAtStale}): one at a time. */
+/** The look at the older boundaries under way (stale-look.ts `lookAtStale`): one at a time. */
 let staleLook: Promise<void> | undefined;
 
 /** The look at the older boundaries under way, if any. */
