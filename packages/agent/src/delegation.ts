@@ -137,7 +137,10 @@ export async function callDelegationTool(
   const take = async (response: Response) => {
     if (!response.ok) {
       // A refusal says why in its body (a restarting agent: not started, retry), and the model reads it.
-      const why = refusalWords(await response.text().catch(() => ""));
+      const why = refusalWords(
+        await response.text().catch(() => ""),
+        response.status
+      );
       throw new Error(
         `CawCo tool ${name}: HTTP ${response.status}${why ? `: ${why}` : ""}`
       );

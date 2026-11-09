@@ -37,6 +37,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -154,7 +155,12 @@ const posted = async (
   request: HubRequest
 ): Promise<{ status: number; text: string }> => {
   const response = await fetchHub(fetch, base, request);
-  return { status: response.status, text: await response.text() };
+  return {
+    status: response.status,
+    text: response.ok
+      ? await response.text()
+      : refusalWords(await response.text(), response.status),
+  };
 };
 
 /** (f) The hub's notices record, damaged at its start: said, refused, Reset, whole again. */
