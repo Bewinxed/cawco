@@ -24,7 +24,7 @@ import type { Pin } from "@cawco/core/comments/model";
 import { hubRequest } from "@cawco/core/hub-request";
 import { pinReference } from "@cawco/core/references";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { hubFetch } from "#lib/cawco/hub-read.js";
+import { hubFetch } from "#lib/platform/hub-read.js";
 import { browser } from "$app/env";
 import { ArtifactRefused, findArtifact } from "./artifact-api";
 

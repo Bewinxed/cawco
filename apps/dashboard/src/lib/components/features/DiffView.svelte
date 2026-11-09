@@ -14,18 +14,18 @@
     isHighlighterLoaded,
     parseDiffFromFile,
   } from "@pierre/diffs";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconAlert, IconMaximize } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import {
     crossIn,
     crossOut,
     reveal,
     revealHere,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconAlert, IconMaximize } from "#lib/icons.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import DiffModal from "./DiffModal.svelte";
   import { fileName, languageOf } from "./diff-language";
   import { houseDiff } from "./diff-theme.svelte";

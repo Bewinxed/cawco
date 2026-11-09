@@ -7,8 +7,8 @@
 
 import { bringIntoView } from "@cawco/core/bring-into-view";
 import { untrack } from "svelte";
+import { frameObserver } from "../platform/frame-observer";
 import { cawco } from "./client.svelte";
-import { frameObserver } from "./frame-observer";
 import { span } from "./span";
 import { type StopJob, type StopRow, stopWork } from "./stop-work.svelte";
 

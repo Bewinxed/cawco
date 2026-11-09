@@ -23,7 +23,7 @@
    * rare moment, nothing looping).
    */
   import { regionFaultWords } from "@cawco/core/words/region-fault";
-  import { appearOnMount } from "../motion/curves.svelte";
+  import { appearOnMount } from "#lib/platform/motion/curves.svelte.js";
   import type { FaultCaw } from "./caw";
   import FaultActions from "./FaultActions.svelte";
 

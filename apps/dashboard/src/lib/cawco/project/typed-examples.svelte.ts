@@ -12,7 +12,7 @@
  * and it starts again at the next example. The field's name for a screen
  * reader is the page's question, never these words (Composer `label`).
  */
-import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
 
 /** `--duration-breath` in ms, read from the root. */
 const breathMs = (): number => dur("--duration-breath");

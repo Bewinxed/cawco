@@ -29,8 +29,6 @@
    */
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
@@ -43,6 +41,8 @@
     IconSend,
     IconSuccess,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatAgeShort, formatTimestamp } from "#lib/utils/time.js";
   import { makeDecisionTasks } from "./decisions-api";
   import { isDecided } from "./words";

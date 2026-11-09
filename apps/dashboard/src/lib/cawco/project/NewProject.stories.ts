@@ -4,7 +4,7 @@
  * typed on the live fleet (2026-11-02). The meta's args are every story's;
  * a story's own args are what it changes.
  */
-import { PROMPT_UNREACHED } from "#lib/cawco/hub-read.js";
+import { PROMPT_UNREACHED } from "#lib/platform/hub-read.js";
 import NewProject from "./NewProject.svelte";
 
 const PR_TEAM =
