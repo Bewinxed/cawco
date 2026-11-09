@@ -83,10 +83,13 @@
     ToolNotFoundError,
   } from "@openuidev/lang-core";
   import { untrack } from "svelte";
+  import {
+    afterSkeleton,
+    revealOut,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { reportError } from "../../error-report.js";
   import type { FaultCaw } from "../../fault/caw";
   import FaultBoundary from "../../fault/FaultBoundary.svelte";
-  import { afterSkeleton, revealOut } from "../../motion/curves.svelte";
 
   let {
     response,

@@ -10,7 +10,7 @@ import { hubRequest } from "@cawco/core/hub-request";
 import type { DamagedHubRecord } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { SvelteSet } from "svelte/reactivity";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 
 class Notices {
   /** Notice ids acknowledged anywhere, plus this tab's own on their way to the hub. */

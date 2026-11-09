@@ -10,7 +10,7 @@
  */
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { VisitSchema } from "#lib/cawco/stored-shapes.js";
-import { store, stored } from "./storage";
+import { store, stored } from "#lib/platform/storage.js";
 import { workspace } from "./workspace/workspace.svelte";
 
 const WORKING_SET_KEY = "cawco-working-set";

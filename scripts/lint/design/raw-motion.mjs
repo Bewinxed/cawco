@@ -8,7 +8,7 @@
 // attributes (a `style`, a `style:` directive, a class's arbitrary value):
 //
 // - a CSS time written out (`120ms`, `0.24s`): `var(--dur-…)`, or `dur()`
-//   (lib/cawco/motion/curves.svelte.ts) in a script, a run of arrivals
+//   (lib/platform/motion/curves.svelte.ts) in a script, a run of arrivals
 //   `staggered(n)`; `0s` and `0ms` say "at once" and stand;
 // - a `cubic-bezier(…)`: `var(--ease-…)`, or `ease()` in a script;
 // - CSS's own `ease`, `ease-in`, `ease-out` or `ease-in-out` as a curve (after

@@ -13,8 +13,8 @@ import type {
   ToolStatus,
 } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
+import { couldNot, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { machineControl } from "./client.svelte";
-import { couldNot, hubFetch, hubRefusal } from "./hub-read";
 
 /** What `GET /api/tools` answers with. */
 export interface ToolsSnapshot {

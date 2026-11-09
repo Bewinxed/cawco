@@ -13,12 +13,12 @@
    * id.
    */
   import { decisionsWords as words } from "@cawco/core/words/decisions";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { IconChevronDown, IconUser } from "#lib/icons.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
 
   let {
     card,

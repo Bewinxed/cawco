@@ -49,8 +49,8 @@
 
 <script lang="ts">
   import type { ClassValue, HTMLTextareaAttributes } from "svelte/elements";
-  import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import FieldArea from "#lib/components/ui/field-area.svelte";
+  import { autosize } from "#lib/platform/motion/autosize.svelte.js";
   import { cn, type WithElementRef, type WithoutChildren } from "#lib/utils.js";
 
   let {

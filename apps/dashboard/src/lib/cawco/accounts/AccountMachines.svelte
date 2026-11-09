@@ -30,14 +30,14 @@
   import { z } from "zod";
   import { cawco, signOutOn } from "#lib/cawco/client.svelte.js";
   import RowMenu from "#lib/cawco/config/RowMenu.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
   import NsPopoverGroup from "#lib/cawco/spawn/NsPopoverGroup.svelte";
   import { TabDraft } from "#lib/cawco/tab-draft.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import HarnessBlock from "../HarnessBlock.svelte";
   import {
     harnessWords as blockWords,

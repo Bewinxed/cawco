@@ -24,7 +24,6 @@
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { setupPageWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import DraftColumn from "#lib/cawco/project/DraftColumn.svelte";
   import {
     moved,
@@ -35,6 +34,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     aim,
