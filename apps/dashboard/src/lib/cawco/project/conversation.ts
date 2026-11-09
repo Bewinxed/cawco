@@ -12,7 +12,6 @@ import { detach } from "@cawco/core/detach";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { newId } from "#lib/platform/id.js";
 import {
-  answeredOr,
   conversationStart,
   drawFirstPrompt,
   type HeldSend,
@@ -23,6 +22,7 @@ import {
 } from "../client.svelte";
 import { continuationStageWords } from "../continue.svelte";
 import type { DraftContent } from "../draft-store";
+import { answeredOr } from "../hub/control";
 import {
   askedFor,
   beginStart,
