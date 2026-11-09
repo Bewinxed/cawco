@@ -122,7 +122,7 @@ export interface ProjectEditsDeps {
   readonly accounts: () => Account[];
   /**
    * Its running conversation moved onto the account it starts its sessions
-   * on now, as a person's move of a session is (server.ts `moveByHand`):
+   * on now, as a person's move of a session is (limit-moves.ts `moveByHand`):
    * what became of it in a sentence; undefined when it has none to move.
    */
   readonly conversationTo: (project: ProjectRow) => Promise<string | undefined>;
