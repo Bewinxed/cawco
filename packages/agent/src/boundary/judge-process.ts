@@ -13,6 +13,7 @@ import { BUN_SCRIPT_ENV } from "../bun-runtime";
 import { isJudgeOf, JUDGE_FORM_LENGTH, judgeProcId } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { socketPlace } from "../tool-door";
+import { armStep, rearming } from "./arming";
 import { ready } from "./exec";
 import {
   bunRuntime,
@@ -24,7 +25,6 @@ import {
   judgeScripts,
   socketAddress,
 } from "./hook-judge";
-import { armStep, rearming } from "./lifecycle";
 import { JUDGE_PROTOCOL_FILE, JUDGE_READY, judgeArgv } from "./protocol";
 import {
   closing,
