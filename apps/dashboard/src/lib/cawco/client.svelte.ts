@@ -202,7 +202,7 @@ import {
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
-import { unlessSame } from "#lib/platform/unless-same.js";
+
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 import { page as servedPage } from "$app/state";
@@ -222,6 +222,7 @@ import {
   routeFrames,
   takeFrame,
 } from "./hub/frames";
+import { load } from "./hub/load";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   type BoardRow,
@@ -246,6 +247,7 @@ import {
   detailsOf,
 } from "./slash-commands";
 import { ahead, minute } from "./stores/clock.svelte";
+import { equal, keepsLast, patchRows, reconcileRows } from "./stores/same";
 import type {
   CommandRecord,
   SettleStage,
@@ -1013,19 +1015,6 @@ const instanceIndex: InstanceIndex<BoardRow> = {
   bySession: rowsBySession,
 };
 
-/**
- * A derived list that hands back the array it handed back before while it
- * holds the same rows in the same order (board.svelte.ts `unlessSame`), so what
- * reads it is not woken by a row that moved outside it.
- */
-function keepsLast<T>(list: () => T[]): () => T[] {
-  let was: T[] | undefined;
-  return () => {
-    was = unlessSame(was, list());
-    return was;
-  };
-}
-
 const runningInstances = $derived.by(keepsLast(() => instances.filter(isLive)));
 const listedInstances = $derived.by(
   keepsLast(() => instances.filter(isListed))
@@ -1671,27 +1660,6 @@ function place(target: SessionState, kept = 0): void {
     from + same,
     current.length - from - same,
     ...next.slice(same)
-  );
-}
-
-/** Whether two plain values say the same thing, field for field. */
-function equal(a: unknown, b: unknown): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (!(a && b && typeof a === "object" && typeof b === "object")) {
-    return false;
-  }
-  const ak = Object.keys(a);
-  const bk = Object.keys(b);
-  return (
-    ak.length === bk.length &&
-    ak.every((key) =>
-      equal(
-        (a as Record<string, unknown>)[key],
-        (b as Record<string, unknown>)[key]
-      )
-    )
   );
 }
 
@@ -2717,19 +2685,6 @@ async function workItemAct(
   keepWorkItem((await response.json()) as WorkItemSummary, mark);
 }
 
-async function load<T>(request: HubRequest): Promise<T | null> {
-  try {
-    const response = await hubFetch(request);
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
-    return (await response.json()) as T;
-  } catch (error) {
-    console.error(`[cawco] ${request.path} failed:`, error);
-    return null;
-  }
-}
-
 /**
  * Takes the hub's word on what is running — whether it was asked for or pushed.
  * Views this browser opened for a session it did not spawn learn their machine
@@ -2744,51 +2699,6 @@ function adoptInstances(rows: InstanceRow[]): void {
   for (const target of Object.values(sessionsState.sessions)) {
     hydrate(target);
   }
-}
-
-/** A snapshot keeps unchanged rows and, when nothing moved, the list itself. */
-function reconcileRows<T>(
-  current: T[],
-  incoming: T[],
-  key: (row: T) => string
-): T[] {
-  const known = new Map(current.map((row) => [key(row), row]));
-  const next = incoming.map((row) => {
-    const held = known.get(key(row));
-    return held && equal(held, row) ? held : row;
-  });
-  return current.length === next.length &&
-    current.every((row, i) => row === next[i])
-    ? current
-    : next;
-}
-
-/** A delta keeps all absent rows; an empty or identical patch is a no-op. */
-function patchRows<T>(
-  current: T[],
-  upserts: T[],
-  removed: string[],
-  key: (row: T) => string
-): T[] {
-  if (upserts.length === 0 && removed.length === 0) {
-    return current;
-  }
-  const gone = new Set(removed);
-  const next = current.filter((row) => !gone.has(key(row)));
-  const at = new Map(next.map((row, i) => [key(row), i]));
-  for (const row of upserts) {
-    const i = at.get(key(row));
-    if (i === undefined) {
-      at.set(key(row), next.length);
-      next.push(row);
-    } else if (!equal(next[i], row)) {
-      next[i] = row;
-    }
-  }
-  return current.length === next.length &&
-    current.every((row, i) => row === next[i])
-    ? current
-    : next;
 }
 
 /**
