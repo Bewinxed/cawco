@@ -1,5 +1,3 @@
-import { SKILL_PLUGIN_VERSIONS } from "./migration-names";
-import { singleton } from "./singleton";
 /** The fleet's catalog: skills, plugins, marketplaces, agents, hooks, harness config and memory, and each one's history. */
 
 import { hashFiles } from "@cawco/core/file-hash";
@@ -35,6 +33,7 @@ import { bundledSkills, starterSkills } from "../bundled-skills";
 import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import type { DbCore } from "./core";
 import { bindingOf, placementOf } from "./fleet-bindings";
+import { SKILL_PLUGIN_VERSIONS } from "./migration-names";
 import {
   dataMigrations,
   fleetAgents,
@@ -57,6 +56,7 @@ import {
   projects,
   skills,
 } from "./schema";
+import { singleton } from "./singleton";
 
 /** A line its machine said about a session, kept on its row ({@link DbShape.noteMachineLine}). */
 /**

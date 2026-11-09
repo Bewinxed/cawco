@@ -1,11 +1,11 @@
-import { idList } from "./id-list";
-import { walkOwned } from "./owned-rows";
 /** Folding sessions into one: every kind of row a session owns moved onto the survivor. */
 
 import { CONTINUATION_ORIGIN } from "@cawco/core/harness/kinds";
 import { and, asc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import type { DbCore } from "./core";
+import { idList } from "./id-list";
 import { conversationsOf, putConversations } from "./instances";
+import { walkOwned } from "./owned-rows";
 import {
   instanceAliases,
   instanceConversations,
