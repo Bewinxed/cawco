@@ -8,8 +8,9 @@
 import type { CawStatus } from "@cawco/core/project-conversation";
 import { commonWords } from "@cawco/core/words/common";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
-import { cawco, isFailed, isStale } from "./client.svelte";
+import { cawco } from "./client.svelte";
 import type { BoardRow } from "./links";
+import { boardStore, isFailed, isStale } from "./stores/board.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
 
 const STATUS_WORD: Record<MarkStatus, string> = {
@@ -88,7 +89,7 @@ export function sessionStatus(
  * events reach. Null for any other session, which is never named Caw.
  */
 export const cawOf = (id: string): CawStatus | null => {
-  const projectId = cawco.rowOf(id)?.projectId;
+  const projectId = boardStore.rowOf(id)?.projectId;
   if (!projectId || cawco.project(projectId)?.conversationInstanceId !== id) {
     return null;
   }

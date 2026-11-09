@@ -3,12 +3,13 @@
   import { commonWords } from "@cawco/core/words/common";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
     displayVersion,
@@ -32,7 +33,7 @@
    */
   const section = sectionOf("updates");
 
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   const policy = $derived(updates.policy);
 
   let chosen = $state<"stable" | "nightly">(

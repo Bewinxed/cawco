@@ -25,6 +25,7 @@
     suggestMcpName,
   } from "../../fleet";
   import KeyValueRows from "../../KeyValueRows.svelte";
+  import { boardStore } from "../../stores/board.svelte";
   import Choice from "../Choice.svelte";
   import { deleteMcpServer } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -209,7 +210,7 @@
     {#if server}
       <RolloutChip
         kind="mcp"
-        machines={cawco.machines}
+        machines={boardStore.machines}
         name={server.name}
         what={server.name}
       />
