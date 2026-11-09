@@ -1,3 +1,8 @@
+/**
+ * The watchers on a workspace's clone, its parent and its srt host, which stop
+ * or restart a boundary when what it holds goes.
+ */
+
 import { type FSWatcher, lstatSync, watch } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
