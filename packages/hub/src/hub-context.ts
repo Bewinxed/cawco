@@ -36,6 +36,7 @@ import type {
   BuildInfo,
   Envelope,
   SendPayload,
+  SessionPulse,
 } from "@cawco/core/protocol";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type { UsageSpend } from "@cawco/core/usage/types";
@@ -334,6 +335,7 @@ export interface HubContext {
   projectTypes: ProjectDelegateTypes;
   publishInstances: (machineId: string) => void;
   publishUsage: (machineId?: string) => void;
+  pulses: Map<string, SessionPulse>;
   pushAgents: (machineId: string) => Promise<void>;
   pushTarget: <Refused>(
     body: { machineId: string },
