@@ -76,10 +76,8 @@ export interface FleetHost {
   cwdOf: (instanceId: string) => string | undefined;
   /** An envelope on the daemon's hub socket. */
   emit: (envelope: Envelope) => void;
-  /** The live sessions, by instance id. */
-  ids: () => string[];
-  /** The live session's harness process, if this agent carries one. */
-  session: (instanceId: string) => HarnessSession | undefined;
+  /** The harness process of each session this agent carries, by instance id. */
+  sessions: ReadonlyMap<string, HarnessSession>;
 }
 
 /**
@@ -198,7 +196,7 @@ export class FleetConverger {
   ): void {
     this.#healing = this.#healing.then(async () => {
       for (const { instanceId, mcp, settings } of asks) {
-        const session = this.#host.session(instanceId);
+        const session = this.#host.sessions.get(instanceId);
         if (!(session && harnessOf(session.harness)?.healsFleetMcp)) {
           continue;
         }
@@ -243,7 +241,7 @@ export class FleetConverger {
     const wideMcp = moves.wide.has("mcp");
     const wideSettings =
       moves.wide.has("hook") || moves.wide.has("harnessConfig");
-    return this.#host.ids().flatMap((instanceId) => {
+    return [...this.#host.sessions.keys()].flatMap((instanceId) => {
       const cwd = this.#host.cwdOf(instanceId);
       const inside = (paths: readonly string[]): boolean =>
         cwd !== undefined && paths.some((path) => within(cwd, path));
@@ -770,7 +768,7 @@ export class FleetConverger {
           result,
         };
       },
-      () => this.#host.ids()
+      () => [...this.#host.sessions.keys()]
     );
     return {
       mcp: launched.mcp.map(({ row, launcher }) =>
