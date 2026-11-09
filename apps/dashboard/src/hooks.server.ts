@@ -4,6 +4,7 @@ import { gateWords } from "@cawco/core/words/gate";
 import type { Handle } from "@sveltejs/kit/hooks";
 import { ownOrigin } from "#lib/cawco/own-origin.js";
 import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
+import { RAIL_MAX, RAIL_MIN, RAIL_PREF } from "#lib/platform/prefs.js";
 
 /**
  * Every request the dashboard's server answers:
@@ -21,9 +22,10 @@ import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
  * - **Isolation**: `Origin-Agent-Cluster` keeps this origin in its own agent
  *   cluster, apart from a preview on the same site; `frame-ancestors 'self'`
  *   lets no other origin frame the dashboard.
- * - app.html's icon link gets the resting tab icon's hashed URL, on every page
- *   the server sends: one rendered here and the shell of a route with SSR off
- *   alike.
+ * - app.html's icon link gets the resting tab icon's hashed URL, and its
+ *   pre-paint script the rail's key and bounds ({@link RAIL_PREPAINT}), on
+ *   every page the server sends: one rendered here and the shell of a route
+ *   with SSR off alike.
  * - Scripts and styles are preloaded, as by default, the scripts at low
  *   priority (`fetchpriority="low"`, "allows the browser to increase or
  *   decrease the priority, and potentially load the image earlier or later
@@ -46,6 +48,17 @@ import { RESTING_TAB_ICON } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
  *   files are already, as adapter-node precompresses them. A server load's
  *   own `fetch` reads its answer as it is.
  */
+/**
+ * app.html's pre-paint script's rail: the localStorage key it reads and the
+ * bounds it holds a width to, as the Shell and the layout load hold them,
+ * each written inside a string of the script's.
+ */
+const RAIL_PREPAINT: [placeholder: string, value: string][] = [
+  ["%cawco.rail-pref%", RAIL_PREF],
+  ["%cawco.rail-min%", String(RAIL_MIN)],
+  ["%cawco.rail-max%", String(RAIL_MAX)],
+];
+
 /** Kit's modulepreload tag in the head (kit render.js `add_link_tag`), and the same at low priority. */
 const MODULE_PRELOAD = '" rel="modulepreload">';
 const LOW_PRELOAD = '" rel="modulepreload" fetchpriority="low">';
@@ -65,7 +78,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   const resolved = await resolve(event, {
     preload: (input) => input.type === "js" || input.type === "css",
     transformPageChunk: ({ html }) =>
-      html
+      RAIL_PREPAINT.reduce(
+        (page, [placeholder, value]) => page.replaceAll(placeholder, value),
+        html
+      )
         .replace("%cawco.tab-icon%", RESTING_TAB_ICON)
         .replaceAll(MODULE_PRELOAD, LOW_PRELOAD),
   });
