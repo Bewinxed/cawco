@@ -270,6 +270,7 @@ import {
   sceneChanges,
 } from "./page-changes";
 import { pagePictures } from "./page-pictures";
+import { picturePath, thumbnailPath } from "./page-store";
 import {
   answersOf,
   noneOpen,
@@ -322,7 +323,6 @@ import {
   type SkeletonElement,
   type StageAt,
 } from "./shapes";
-import { picturePath, thumbnailPath } from "./sync";
 import { LIST_PAGE } from "./tools";
 
 /** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
