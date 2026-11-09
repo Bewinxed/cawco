@@ -245,8 +245,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     const [row] = word ? ctx.db.getInstancesByIds([instanceId]) : [];
     const accountId = row?.accountId;
     if (
-      !(word && row && accountId) ||
-      traitsOf(row.harness).accountModel !== "dir" ||
+      !(word && row && accountId && traitsOf(row.harness).accountDir) ||
       generation !== processGeneration(row) ||
       ctx.homeLoginMoveOf(machineId, row) ||
       ctx.movedFrom().has(row.id)
@@ -289,7 +288,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       if (
         row.id !== refused &&
         row.accountId === accountId &&
-        traitsOf(row.harness).accountModel === "dir" &&
+        traitsOf(row.harness).accountDir &&
         machines.includes(row.machineId) &&
         ctx.wakesForSend(row) &&
         !ctx.owedMoves.has(row.id)
