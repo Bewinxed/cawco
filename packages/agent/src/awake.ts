@@ -5,7 +5,7 @@
  *  - a session's turn, every harness's (session.ts `turnsRunning`);
  *  - a command the hub asked of this machine, a landing gate's step among
  *    them (hub-command.ts `commandsRunning`);
- *  - a command in a workspace's boundary (boundary.ts
+ *  - a command in a workspace's boundary (boundary/
  *    `workspacesWithCommands`, its executors' marks);
  *  - a run a session's processes are working on past its turn (a probe kit
  *    run, a typecheck or a release left running in its shell), as the leak
@@ -53,7 +53,7 @@ import { spawn } from "node:child_process";
 import { type Pid, spawnedPid } from "@cawco/core/signal";
 import { endGroup, holdCommand } from "./awake-hold";
 import { updateRunning } from "./binary-update";
-import { workspacesWithCommands } from "./boundary";
+import { workspacesWithCommands } from "./boundary/processes";
 import { commandsRunning } from "./hub-command";
 import { runsWorking } from "./leak-watch";
 import { toolEnv } from "./tools";

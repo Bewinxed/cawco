@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prototype of a workspace executor on srt, the shape boundary.ts linuxExec/darwinExec
+# Prototype of a workspace executor on srt, the shape boundary/ linuxExec/darwinExec
 # take today: srt-exec.sh SETTINGS [--cwd-out FILE] COMMAND
 # Runs COMMAND in the caller's directory under the workspace's srt settings, and
 # writes the directory COMMAND ended in to FILE, so a session's cd follows.

@@ -651,7 +651,7 @@ const legBack = async ({ check }: Kit, at: Reopening): Promise<void> => {
   );
   const ended = await quietEnd(at, "(k)");
   // Its clone holds nothing that is nowhere else: its session is put to
-  // sleep and it retires, its boundary ending (agent boundary.ts `stopNow`)
+  // sleep and it retires, its boundary ending (agent boundary/lifecycle.ts `stopNow`)
   // and its pages closing with it.
   const retired = await until(
     "(k) the deep delegate's workspace retired",
