@@ -29,7 +29,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import ts from "typescript";
-import { parsed } from "./lib/parse-source";
+import { commentsOf, parsed } from "./lib/parse-source";
 import { ROOT, repoFiles } from "./lib/repo-files";
 import { fileAt, packages, targetOf } from "./lib/workspace-imports";
 
@@ -61,11 +61,6 @@ const READ =
 const LIB_ALIAS = /^[#$]lib\//u;
 const MEMBER_FOLDER = /^(?:apps|packages)\//u;
 const LOOSE = /^(?:scripts|site)\//u;
-/** A config's comments: block, or line where `//` follows no `:` (a URL) or `"`. */
-const CONFIG_COMMENT = /\/\*[\s\S]*?\*\/|(?<![:"])\/\/[^\n]*/gu;
-const MARKUP_COMMENT = /<!--[\s\S]*?-->/gu;
-const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/gu;
-const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//gu;
 const URL_SCHEME = /^[a-z][\w+.-]*:/iu;
 const CALL_PARENS = /\(\)$/u;
 const MEMBER_SEPARATOR = /[.#~]/u;
@@ -125,55 +120,6 @@ const inMember = (member: string, path: string): boolean => {
     return true;
   }
   return own.some((file) => file.endsWith(`/${path}`));
-};
-
-/** A comment's words, its ` * ` gutter gone, and where it starts. */
-interface Comment {
-  at: number;
-  text: string;
-}
-const commentsOf = (file: string, text: string): Comment[] => {
-  if (file.endsWith(".md")) {
-    return [{ at: 0, text }];
-  }
-  if (!CODE.test(file)) {
-    return [...text.matchAll(CONFIG_COMMENT)].map((match) => ({
-      at: match.index ?? 0,
-      text: match[0],
-    }));
-  }
-  const found: Comment[] = [];
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    false,
-    ts.LanguageVariant.Standard,
-    parsed(file, text).text
-  );
-  for (
-    let kind = scanner.scan();
-    kind !== ts.SyntaxKind.EndOfFileToken;
-    kind = scanner.scan()
-  ) {
-    if (
-      kind === ts.SyntaxKind.SingleLineCommentTrivia ||
-      kind === ts.SyntaxKind.MultiLineCommentTrivia
-    ) {
-      found.push({ at: scanner.getTokenPos(), text: scanner.getTokenText() });
-    }
-  }
-  if (file.endsWith(".svelte")) {
-    // The markup's comments, and the style block's; the script's are read above.
-    for (const match of text.matchAll(MARKUP_COMMENT)) {
-      found.push({ at: match.index ?? 0, text: match[0] });
-    }
-    for (const style of text.matchAll(STYLE)) {
-      const start = (style.index ?? 0) + style[0].indexOf(style[1] ?? "");
-      for (const match of (style[1] ?? "").matchAll(BLOCK_COMMENT)) {
-        found.push({ at: start + (match.index ?? 0), text: match[0] });
-      }
-    }
-  }
-  return found;
 };
 
 /** Every identifier in a syntax tree. */
