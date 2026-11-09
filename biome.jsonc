@@ -275,10 +275,12 @@
                   {
                     // A member imports another member's file through its
                     // manifest (@cawco/<name>/…), never by a path into its
-                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -315,10 +317,12 @@
                   {
                     // A member imports another member's file through its
                     // manifest (@cawco/<name>/…), never by a path into its
-                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -332,13 +336,6 @@
                       "!@cawco/core",
                       "!@cawco/core/**",
                       "!@cawco/jsonl-parser",
-                      "**/agent/src/**",
-                      "**/auth/src/**",
-                      "**/cli/src/**",
-                      "**/design-tokens/src/**",
-                      "**/hub/src/**",
-                      "**/icons/src/**",
-                      "**/sessiond/src/**",
                     ],
                     "message": "@cawco/core imports no other package; what it needs moves into core.",
                   },
@@ -369,10 +366,12 @@
                   {
                     // A member imports another member's file through its
                     // manifest (@cawco/<name>/…), never by a path into its
-                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -605,10 +604,12 @@
                   {
                     // A member imports another member's file through its
                     // manifest (@cawco/<name>/…), never by a path into its
-                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
