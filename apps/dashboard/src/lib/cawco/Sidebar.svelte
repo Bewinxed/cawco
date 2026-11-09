@@ -58,7 +58,7 @@
   import { stored } from "#lib/platform/storage.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { cawco } from "./client.svelte";
+
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import { files, filesCount } from "./files/files.svelte";
@@ -91,6 +91,7 @@
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { sameRow } from "./same-row";
   import { newSession } from "./spawn/new-session.svelte";
+  import { asksStore } from "./stores/asks.svelte";
   import {
     boardStore,
     isFailed,
@@ -612,7 +613,7 @@
       .map((row) => ({
         row,
         name: by === "name" ? sessionName(row) : "",
-        state: by === "state" ? STATE_ORDER[cawco.activityOf(row.id)] : 0,
+        state: by === "state" ? STATE_ORDER[asksStore.activityOf(row.id)] : 0,
         at: lastAt(row),
       }))
       .sort((a, b) => {
@@ -752,7 +753,7 @@
 
   /** The sessions waiting on you (core `waitingOnYou`), in the attention tone; else the ones running. */
   const fleetCount = $derived(
-    cawco.waitingCount || boardStore.runningInstances.length
+    asksStore.waitingCount || boardStore.runningInstances.length
   );
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
@@ -1049,7 +1050,7 @@
                    the kit's active and hover inks are for a plain count, and
                    on the live fill the active one reads 3.3:1. -->
               <Sidebar.MenuBadge
-                data-blocked={cawco.waitingCount > 0 || undefined}
+                data-blocked={asksStore.waitingCount > 0 || undefined}
                 data-flip="pop box"
                 tone="live"
               >
