@@ -254,7 +254,7 @@ const guardedFile = join(process.cwd(), HOST_FILES.guarded);
 /**
  * `<state>/restarts.json`: each restart of the sandbox for a guarded path
  * changed on the host, `{at, path, inner}`, oldest first, written before the
- * line saying it, which the agent records it from (boundary/watch.ts
+ * line saying it, which the agent records it from (boundary/ensure.ts
  * `recordHostRestarts`).
  */
 const restartsFile = join(process.cwd(), HOST_FILES.restarts);
