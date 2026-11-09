@@ -29,7 +29,8 @@ const refuses = (type: Type | undefined): boolean => {
   if (type.types) {
     return type.types.some(refuses);
   }
-  return (type.target ?? type).symbol?.name === "ElysiaStatus";
+  const name = (type.target ?? type).symbol?.name;
+  return name === "ElysiaStatus" || name === "Refused";
 };
 
 export const refusalKept = defineRule({
