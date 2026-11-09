@@ -283,6 +283,115 @@ export async function hubSend(
 }
 
 /**
+ * An answer as Eden's client hands one back (hub.ts): answered, its `data`;
+ * refused, its `error` and the answer itself ({@link Refused}).
+ */
+type Answer<T> =
+  | { data: T; error: null; response: Response; status: number }
+  | {
+      data: null;
+      error: { status: unknown; value: unknown };
+      response: Response;
+      status: number;
+    };
+
+/** What a refused request throws: the hub's refusal in its own words, or the caller's. */
+type Refusal = (refused: Refused) => Error;
+
+/**
+ * A refused answer as `refusal` words it. A request that got no answer
+ * rejects with what `fetch` threw, before any refusal reads it
+ * ({@link refusedAnswer}).
+ */
+function refusalOf(
+  answer: { error: Refused["error"]; response: Response },
+  refusal: Refusal
+): Error {
+  const refused = { error: answer.error, response: answer.response };
+  refusedAnswer(refused);
+  return refusal(refused);
+}
+
+/** The content types Eden reads a body as JSON by. */
+const JSON_TYPE = /^application\/(?:problem\+)?json(?:;|$)/u;
+
+/** The status a JSON route answers with, named when Eden's parse of its body fails and leaves none. */
+const OK = 200;
+
+/** The status of an answer with no body. */
+const NO_CONTENT = 204;
+
+/**
+ * `call` as it settles, a body that says it is JSON and doesn't parse (Eden
+ * rejects with the parser's `SyntaxError`) thrown as the hub not answering.
+ */
+const settled = <T>(call: Promise<Answer<T>>): Promise<Answer<T>> =>
+  call.catch((error: unknown) => {
+    if (error instanceof SyntaxError) {
+      throw new Error(`${noAnswer(OK)}.`, { cause: error });
+    }
+    throw error;
+  });
+
+/**
+ * An answered body as Eden read it, which must be JSON: Elysia sends a
+ * route's bare `true` or number as text, and Eden reads those; a body that
+ * is no JSON at all (a proxy's page, an empty answer), which Eden hands back
+ * as its text, is the hub not answering ({@link noAnswer}). A 204 says it
+ * has no body, and is answered as Eden reads it.
+ */
+function bodyOf<T>(answer: Extract<Answer<T>, { error: null }>): T {
+  const kind = answer.response.headers.get("content-type") ?? "";
+  if (
+    typeof answer.data === "string" &&
+    answer.status !== NO_CONTENT &&
+    !JSON_TYPE.test(kind)
+  ) {
+    throw new Error(`${noAnswer(answer.status)}.`);
+  }
+  return answer.data;
+}
+
+/**
+ * THE ONE READER of what the hub answers, everywhere the dashboard asks it
+ * through Eden (hub.ts): refused, `refusal`'s error is thrown, the hub's
+ * refusal in its own words ({@link hubRefusal}) unless the caller words it
+ * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`);
+ * answered, its body ({@link bodyOf}).
+ */
+export async function hubData<T>(
+  call: Promise<Answer<T>>,
+  refusal: Refusal = hubRefusal
+): Promise<T> {
+  const answer = await settled(call);
+  if (answer.error) {
+    throw refusalOf(answer, refusal);
+  }
+  return bodyOf(answer);
+}
+
+/**
+ * A hub write whose answer is not read: refused, `refusal`'s error is
+ * thrown, worded as {@link hubData}'s; answered, its body is never asked
+ * to be JSON.
+ */
+export async function hubDone(
+  call: Promise<Answer<unknown>>,
+  refusal: Refusal = hubRefusal
+): Promise<void> {
+  const answer = await call.catch((error: unknown) => {
+    // A body that says it is JSON and doesn't parse: an answer all the same.
+    if (error instanceof SyntaxError) {
+      return null;
+    }
+    throw error;
+  });
+  if (answer?.error) {
+    throw refusalOf(answer, refusal);
+  }
+}
+
+/**
  * A Configure read's or write's refusal: "Couldn't `attempt`. The hub's
  * words." ({@link couldNot}), or the {@link MachineAwayError} when the hub
  * says the machine it asked is away ({@link awayOf}).

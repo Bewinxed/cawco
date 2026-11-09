@@ -25,7 +25,12 @@ import type {
 import { hubRequest } from "@cawco/core/hub-request";
 import { KeptPairingSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
-import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  failureWords,
+  hubData,
+  hubFetch,
+  hubRefusal,
+} from "#lib/platform/hub-read.js";
 import { readJson, unstore, writeJson } from "#lib/platform/storage.js";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { leaveThePage } from "./leaving";
@@ -170,11 +175,7 @@ export async function startPairing(): Promise<void> {
   stageTo({ kind: "asking" });
   let started: PairingStart;
   try {
-    const answer = await hub.api.pair.post({ kind: "browser" });
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    started = answer.data;
+    started = await hubData(hub.api.pair.post({ kind: "browser" }));
   } catch (error) {
     stageTo({ kind: "failed", message: failureWords(error) });
     return;

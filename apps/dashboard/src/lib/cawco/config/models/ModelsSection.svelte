@@ -35,6 +35,7 @@
   import {
     failureClause,
     failureWords,
+    hubData,
     hubRefusal,
     hubSaid,
   } from "#lib/platform/hub-read.js";
@@ -78,11 +79,7 @@
 
   async function readOpenRouter() {
     try {
-      const answer = await hub.api.openrouter.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      openrouter = answer.data;
+      openrouter = await hubData(hub.api.openrouter.get());
     } catch (error) {
       openrouterError = `Could not read the OpenRouter connection — ${failureClause(error)}.`;
     }
@@ -104,11 +101,8 @@
 
   async function readJev() {
     try {
-      const answer = await hub.api.jev.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      takeJev(answer.data);
+      const answer = await hubData(hub.api.jev.get());
+      takeJev(answer);
     } catch (error) {
       jevError = `Could not read Jev's settings — ${failureClause(error)}.`;
     }
@@ -248,11 +242,7 @@
 
   async function readWatch() {
     try {
-      const answer = await hub.api["fleet-watch"].get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      watch = answer.data;
+      watch = await hubData(hub.api["fleet-watch"].get());
     } catch (error) {
       watchError = `Could not read fleet watch — ${failureClause(error)}.`;
     }
@@ -289,11 +279,7 @@
 
   async function readImage() {
     try {
-      const answer = await hub.api["image-settings"].get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      image = answer.data;
+      image = await hubData(hub.api["image-settings"].get());
       imageShown = image;
     } catch (error) {
       imageUnread = imageSettingsWords.unread(failureClause(error));

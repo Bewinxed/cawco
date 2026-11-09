@@ -36,6 +36,7 @@ import { MediaQuery } from "svelte/reactivity";
 import { hub } from "#lib/platform/hub.js";
 import {
   failureWords,
+  hubData,
   hubFetch,
   hubJson,
   refusedOrUnreached,
@@ -349,13 +350,11 @@ export async function allowHere(from: "row" | "menu"): Promise<void> {
   try {
     state.permissions = await allowed;
     if (agent) {
-      const answer = await hub.api.person
-        .devices({ machineId: agent })
-        .post({ counts: true });
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
-      takePerson(answer.data);
+      const answer = await hubData(
+        hub.api.person.devices({ machineId: agent }).post({ counts: true }),
+        refusedOrUnreached
+      );
+      takePerson(answer);
     }
     state.reportOn = deskReportOn();
     state.answered = deskAnswered();

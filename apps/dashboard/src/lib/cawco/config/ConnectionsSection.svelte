@@ -7,7 +7,11 @@
   } from "@cawco/core/words/connections";
   import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { hub } from "#lib/platform/hub.js";
-  import { refusedOrUnreached } from "#lib/platform/hub-read.js";
+  import {
+    hubData,
+    hubDone,
+    refusedOrUnreached,
+  } from "#lib/platform/hub-read.js";
 
   /** One way the hub signs in to a service (core `ConnectionWay`). */
   export type Way = ConnectionWay;
@@ -155,11 +159,11 @@
 
   async function read() {
     try {
-      const answer = await hub.api.connections.get();
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
-      ({ connections: rows } = answer.data);
+      const answer = await hubData(
+        hub.api.connections.get(),
+        refusedOrUnreached
+      );
+      ({ connections: rows } = answer);
       loaded = true;
       readError = null;
     } catch (error) {
@@ -325,14 +329,13 @@
     signing[name] = true;
     delete problems[name];
     try {
-      const answer = await hub.api.connections({ name })["sign-in"].post({
-        origin: window.location.origin,
-        ...(organization ? { organization } : {}),
-      });
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
-      const { authorizationUrl } = answer.data;
+      const { authorizationUrl } = await hubData(
+        hub.api.connections({ name })["sign-in"].post({
+          origin: window.location.origin,
+          ...(organization ? { organization } : {}),
+        }),
+        refusedOrUnreached
+      );
       tab?.location.assign(authorizationUrl);
     } catch (error) {
       tab?.close();
@@ -381,12 +384,10 @@
     keyPending = true;
     delete problems[row.name];
     try {
-      const answer = await hub.api
-        .connections({ name: row.name })
-        .key.put({ key });
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
+      await hubDone(
+        hub.api.connections({ name: row.name }).key.put({ key }),
+        refusedOrUnreached
+      );
       key = "";
       keying = null;
     } catch (error) {
@@ -427,12 +428,10 @@
     appPending = true;
     delete problems[row.name];
     try {
-      const answer = await hub.api
-        .connections({ name: row.name })
-        .app.put(rowApp);
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
+      await hubDone(
+        hub.api.connections({ name: row.name }).app.put(rowApp),
+        refusedOrUnreached
+      );
       rowApp = emptyApp();
       appFor = null;
     } catch (error) {
@@ -541,11 +540,10 @@
     ghProblem = null;
     const offered = typed.way;
     try {
-      const answer = await hub.api["github-sign-in"].gh.get();
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
-      gh = answer.data;
+      gh = await hubData(
+        hub.api["github-sign-in"].gh.get(),
+        refusedOrUnreached
+      );
     } catch (error) {
       ghProblem = words.ghUnread(failureClause(error));
       gh = { signIns: [], unread: [] };
@@ -567,14 +565,14 @@
     ghPending = ghKey(one);
     ghProblem = null;
     try {
-      const answer = await hub.api["github-sign-in"].gh.post({
-        machineId: one.machineId,
-        host: one.host,
-        login: one.login,
-      });
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
+      await hubDone(
+        hub.api["github-sign-in"].gh.post({
+          machineId: one.machineId,
+          host: one.host,
+          login: one.login,
+        }),
+        refusedOrUnreached
+      );
       stopAdding();
     } catch (error) {
       ghProblem = failureWords(error);
@@ -612,12 +610,12 @@
     }
     try {
       const connection = hub.api.connections({ name });
-      const answer = await (way.auth === "app"
-        ? connection.app.put(typedApp)
-        : connection.key.put({ key: typedKey }));
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
+      await hubDone(
+        way.auth === "app"
+          ? connection.app.put(typedApp)
+          : connection.key.put({ key: typedKey }),
+        refusedOrUnreached
+      );
       return true;
     } catch (error) {
       problems[name] = failureWords(error);
@@ -648,17 +646,17 @@
     addPending = true;
     typed.problem = null;
     try {
-      const answer = await hub.api.connections.post({
-        name,
-        service: service.service,
-        account: typed.account.trim(),
-        transport: "http",
-        url,
-        auth: way.auth,
-      });
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
+      await hubDone(
+        hub.api.connections.post({
+          name,
+          service: service.service,
+          account: typed.account.trim(),
+          transport: "http",
+          url,
+          auth: way.auth,
+        }),
+        refusedOrUnreached
+      );
     } catch (error) {
       tab?.close();
       typed.problem = failureWords(error);
@@ -690,11 +688,10 @@
     removing = row.name;
     delete problems[row.name];
     try {
-      const answer = await hub.api.connections({ name: row.name }).delete();
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
-      const deleted = answer.data;
+      const deleted = await hubData(
+        hub.api.connections({ name: row.name }).delete(),
+        refusedOrUnreached
+      );
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
       offerUndo(
@@ -734,13 +731,10 @@
       : row.projects.filter((each) => each !== project);
     delete problems[row.name];
     try {
-      const answer = await hub.api
-        .connections({ name: row.name })
-        .patch({ projects });
-      if (answer.error) {
-        throw refusedOrUnreached(answer);
-      }
-      const next = answer.data;
+      const next = await hubData(
+        hub.api.connections({ name: row.name }).patch({ projects }),
+        refusedOrUnreached
+      );
       rows = rows.map((each) => (each.name === next.name ? next : each));
       choosing = next;
     } catch (error) {
