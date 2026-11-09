@@ -95,6 +95,3 @@ scripts/lint/fixtures/design/planted-back-close.svelte:24:3 house/back-close-sym
 scripts/lint/fixtures/design/planted-back-close.svelte:28:1 house/back-close-symbol
 scripts/lint/fixtures/design/planted-back-close.svelte:29:24 house/back-close-symbol
 scripts/lint/fixtures/design/planted-back-close.svelte:30:9 house/back-close-symbol
-scripts/lint/fixtures/harness-compare.ts:5:37 house/no-harness-compare
-scripts/lint/fixtures/harness-compare.ts:6:40 house/no-harness-compare
-scripts/lint/fixtures/harness-compare.ts:10:10 house/no-harness-compare
