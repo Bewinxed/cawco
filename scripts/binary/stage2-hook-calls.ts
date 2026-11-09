@@ -1,7 +1,7 @@
 /**
  * Hands a shell call to a workspace's PreToolUse hook every second, as a work item's claude session does before
  * each of its Bash calls (exec form, `perl -T <hook>`, with the workspace's shell prefix in its environment), and
- * runs the command through that prefix, as the CLI then does (boundary.ts `claudePrefixScript`). Run inside the
+ * runs the command through that prefix, as the CLI then does (boundary/hook-judge.ts `claudePrefixScript`). Run inside the
  * joined container by the installed binary acting as bun (BUN_BE_BUN=1), while the machine updates with the
  * workspace open: the hook must be answered by a live judge from before the agent restarts until after the boundary
  * is handed over to the new build's keeper.
