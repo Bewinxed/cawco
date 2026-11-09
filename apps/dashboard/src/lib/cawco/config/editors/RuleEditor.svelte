@@ -1,15 +1,14 @@
 <script lang="ts">
-  import type { HarnessKind } from "@cawco/core/harness/kinds";
-  import { HARNESSES } from "@cawco/core/harness/kinds";
+  import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
   import { hubRequest } from "@cawco/core/hub-request";
-  import type {
-    RuleDraft,
-    RuleMatchKind,
-    RuleRow,
-    RuleTiming,
-    RuleWatch,
+  import {
+    type RuleDraft,
+    type RuleMatchKind,
+    type RuleRow,
+    type RuleTiming,
+    type RuleWatch,
+    ruleProblem,
   } from "@cawco/core/rules";
-  import { ruleProblem } from "@cawco/core/rules";
   import { commonWords } from "@cawco/core/words/common";
   import { ruleSentence } from "@cawco/core/words/rule-lines";
   import { rulesWords } from "@cawco/core/words/rules";
@@ -38,6 +37,7 @@
   import RuleActivity from "../../RuleActivity.svelte";
   import RuleTester from "../../RuleTester.svelte";
   import { blankRule, createRule, draftOf, saveRule } from "../../rules";
+  import { boardStore } from "../../stores/board.svelte";
   import Choice from "../Choice.svelte";
   import { deleteRule } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -108,7 +108,7 @@
   const models = $derived(
     [
       ...new Set(
-        cawco.instances
+        boardStore.instances
           .map((row) => row.model)
           .filter(
             (model): model is string =>
@@ -426,7 +426,7 @@
         onpick={(next) => narrow("machineId", next)}
         options={[
           { value: "", label: "Every machine" },
-          ...cawco.machines.map((machine) => ({
+          ...boardStore.machines.map((machine) => ({
             value: machine.machineId,
             label: machine.hostname,
           })),

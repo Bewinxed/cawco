@@ -33,7 +33,7 @@
   import { failureWords } from "#lib/platform/hub-read.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { barGlass } from "./bar-glass.svelte";
-  import { cawco, type Machine } from "./client.svelte";
+
   import InstallRow from "./connect/InstallRow.svelte";
   import { connect } from "./connect/installs.svelte";
   import { CONNECT_WAYS } from "./connect/ways";
@@ -46,6 +46,7 @@
   import { pausedWords } from "./machine-pause";
   import RowFault from "./RowFault.svelte";
   import SignInWaits from "./SignInWaits.svelte";
+  import { boardStore, type Machine } from "./stores/board.svelte";
   import { cellFor } from "./updates/model";
   import { updates } from "./updates/updates.svelte";
 
@@ -90,7 +91,9 @@
     connect.band.filter(
       (one) =>
         one.returning === null ||
-        !cawco.machines.some((machine) => machine.machineId === one.returning)
+        !boardStore.machines.some(
+          (machine) => machine.machineId === one.returning
+        )
     )
   );
 
@@ -110,7 +113,8 @@
   }
 
   const liveOn = (machineId: string): number =>
-    cawco.runningInstances.filter((row) => row.machineId === machineId).length;
+    boardStore.runningInstances.filter((row) => row.machineId === machineId)
+      .length;
   /** The row's dot: down, up but in trouble, or fine. */
   function presenceOf(up: boolean, fault: string | undefined): MachinePresence {
     if (!up) {
@@ -128,10 +132,10 @@
     const id = barGlass.machine;
     // Read so a list that was hidden looks again when the card changes.
     const card = barGlass.open;
-    if (!id || cawco.machines.length === 0 || card === undefined) {
+    if (!id || boardStore.machines.length === 0 || card === undefined) {
       return;
     }
-    if (!cawco.machines.some((each) => each.machineId === id)) {
+    if (!boardStore.machines.some((each) => each.machineId === id)) {
       // Gone from the fleet: nothing to open onto, and no later opening of
       // the machines should land on it.
       barGlass.machine = null;
@@ -291,7 +295,7 @@
     {/each}
   </ul>
 {/if}
-{#if cawco.machines.length === 0}
+{#if boardStore.machines.length === 0}
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
   <p
     class={[
@@ -334,13 +338,13 @@
   </ul>
 {:else}
   <!-- The fleet's servers waiting on a sign-in: once for the fleet, ahead of its machines. -->
-  <SignInWaits names={signInsWaiting(cawco.machines)} />
+  <SignInWaits names={signInsWaiting(boardStore.machines)} />
   <ul
     data-slot="list"
     class="m-0 flex list-none flex-col gap-space-row p-0"
     {@attach reflow()}
   >
-    {#each cawco.machines as machine, index (machine.machineId)}
+    {#each boardStore.machines as machine, index (machine.machineId)}
       {@const up = machine.status === "online"}
       {@const live = liveOn(machine.machineId)}
       {@const fault = faultOf(machine.machineId)}
