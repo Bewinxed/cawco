@@ -1,3 +1,4 @@
+import { GO_WITH_MACHINE, MACHINE_MOVED } from "./owned-rows";
 /** Machines: each one's row, what its daemon reports, and re-keying and removing one. */
 
 import type {
@@ -23,47 +24,17 @@ import { stoppedWords } from "@cawco/core/words/machine-pause";
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { DbCore } from "./core";
 import {
-  accountSignins,
   agentHarnesses,
   agents,
   agentTools,
   chosenModes,
   instances,
   projectPlaces,
-  projectRepositories,
   removedMachines,
-  usageLimits,
 } from "./schema";
 import type { Tx } from "./tx";
 
 export type AgentAuth = (typeof agents.$inferSelect)["auth"];
-
-/**
- * Every column that names a machine with no foreign key to it, by table:
- * what a machine re-joining under a new id moves ({@link rekeyMachine}).
- * `keyed`: the machine is part of the row's key, so a row the new id holds
- * already keeps its place and the old one goes.
- */
-const MACHINE_MOVED: readonly (readonly [string, string, "keyed"?])[] = [
-  ["instances", "machine_id"],
-  ["workspaces", "machine_id"],
-  ["workspace_creates", "machine_id"],
-  ["artifacts", "machine_id"],
-  ["parked_asks", "machine_id"],
-  ["moved_from_sessions", "machine_id"],
-  ["fleet_watch_notices", "machine_id"],
-  ["moves", "source_machine_id"],
-  ["moves", "target_machine_id"],
-  ["rules", "scope_machine_id"],
-  ["project_places", "machine_id", "keyed"],
-  ["project_repositories", "machine_id", "keyed"],
-  ["account_signins", "machine_id", "keyed"],
-  ["login_moves", "machine_id", "keyed"],
-  ["usage_limits", "machine_id", "keyed"],
-  ["machine_keys", "machine_id", "keyed"],
-  ["ssh_machines", "machine_id"],
-  ["chosen_modes", "machine_id", "keyed"],
-];
 
 /** How many rows moved, by what they are: what a re-key answers. */
 type Moved = (what: string, count: number) => void;
@@ -747,9 +718,6 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         tx.delete(projectPlaces)
           .where(eq(projectPlaces.machineId, machineId))
           .run();
-        tx.delete(projectRepositories)
-          .where(eq(projectRepositories.machineId, machineId))
-          .run();
         for (const { projectId } of orphaned) {
           const [next] = tx
             .select()
@@ -770,13 +738,11 @@ export const machinesDb = (core: DbCore): MachinesDb => {
               .run();
           }
         }
-        tx.delete(usageLimits)
-          .where(eq(usageLimits.machineId, machineId))
-          .run();
-        tx.delete(accountSignins)
-          .where(eq(accountSignins.machineId, machineId))
-          .run();
-        tx.delete(agents).where(eq(agents.machineId, machineId)).run();
+        for (const { table, column } of GO_WITH_MACHINE) {
+          tx.run(
+            sql`DELETE FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} = ${machineId}`
+          );
+        }
         return { instanceIds: ids };
       }),
     rekeyMachine: (from, to) =>
@@ -788,14 +754,14 @@ export const machinesDb = (core: DbCore): MachinesDb => {
           }
         };
         moveMachineRow(tx, from, to, note);
-        for (const [table, column, keyed] of MACHINE_MOVED) {
+        for (const { table, column, rekey } of MACHINE_MOVED) {
           const name = sql.identifier(table);
           const by = sql.identifier(column);
           const before = naming(tx, table, column, from);
           tx.run(
             sql`UPDATE OR IGNORE ${name} SET ${by} = ${to} WHERE ${by} = ${from}`
           );
-          if (keyed) {
+          if (rekey === "keyed") {
             tx.run(sql`DELETE FROM ${name} WHERE ${by} = ${from}`);
           }
           note(table, before);
