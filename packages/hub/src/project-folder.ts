@@ -49,8 +49,8 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
-import { Elysia, status, t } from "elysia";
-import { StatusRefusal } from "./refusal";
+import { Elysia, t } from "elysia";
+import { refusal, StatusRefusal } from "./refusal";
 
 /**
  * Where every project's folder lives: `projects/` beside the database, by
@@ -2036,7 +2036,7 @@ export const untrashProjectFolder = async (
 /** A refusal as the route's answer, in its status and words; anything else is thrown on. */
 export const refused = (error: unknown) => {
   if (error instanceof FolderRefusal) {
-    return status(error.status, error.message);
+    return refusal(error.status, "folder-refused", error.message);
   }
   throw error;
 };

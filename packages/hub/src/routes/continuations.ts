@@ -162,11 +162,15 @@ export const continuationRoutes = (
       .get("/api/continuations", () => continuationTable())
       // Cancel, in any stage before the new session has its opening: nothing
       // starts from it after that (`cancelContinuation`).
-      .delete("/api/continuations/:id", ({ params, status }) => {
+      .delete("/api/continuations/:id", ({ params }) => {
         const cancelled = cancelContinuation(params.id);
         return "row" in cancelled
           ? continuationJob(cancelled.row)
-          : status(cancelled.refused, cancelled.why);
+          : refusal(
+              cancelled.refused,
+              "continuation-not-cancelled",
+              cancelled.why
+            );
       })
   );
 };
