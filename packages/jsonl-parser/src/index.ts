@@ -6,7 +6,6 @@
  *                                     scanner, lazy parse, text extraction,
  *                                     checkpoints, worker fan-out
  * - `@cawco/jsonl-parser/fts5`      BM25 index over parsed docs (bun:sqlite)
- * - `@cawco/jsonl-parser/opencode`  OpenCode sqlite adapter (bun:sqlite)
  */
 
 export type { FileHarness, TranscriptFile } from "./docs.ts";
@@ -22,7 +21,7 @@ export {
   type Span,
 } from "./file.ts";
 export { parseMany, type ParseManyOptions } from "./pool.ts";
-export { setSectionMarker } from "./section.ts";
+export { section, setSectionMarker } from "./section.ts";
 export {
   completeLines,
   includesAny,
@@ -40,6 +39,7 @@ export {
   type DocAuthor,
   extractDoc,
   type ExtractOptions,
+  TOOL_OUTPUT_CHARS,
   type TranscriptDoc,
   userAuthor,
 } from "./text.ts";

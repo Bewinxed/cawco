@@ -1,7 +1,7 @@
 {
   "name": "@cawco/jsonl-parser",
   "version": "0.1.0",
-  "description": "Fast, incremental parser and BM25 indexer for agent-session transcripts (Claude Code and pi JSONL, OpenCode sqlite).",
+  "description": "Fast, incremental parser and BM25 indexer for agent-session transcripts (Claude Code and pi JSONL).",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
   "exports": {
@@ -12,10 +12,6 @@
     "./fts5": {
       "types": "./src/fts5.ts",
       "default": "./src/fts5.ts"
-    },
-    "./opencode": {
-      "types": "./src/opencode.ts",
-      "default": "./src/opencode.ts"
     }
   },
   "main": "./src/index.ts",
@@ -32,10 +28,6 @@
       "./fts5": {
         "types": "./dist/fts5.d.ts",
         "default": "./dist/fts5.js"
-      },
-      "./opencode": {
-        "types": "./dist/opencode.d.ts",
-        "default": "./dist/opencode.js"
       }
     }
   },
