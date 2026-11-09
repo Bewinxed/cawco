@@ -153,11 +153,11 @@ const pageAnswers = (
   routines: Routine[],
   offered: boolean
 ): Record<string, unknown> => {
-  const id = encodeURIComponent(PROJECT.id);
   const path = (request: { path: string }) => request.path;
   return {
-    [path(hubRequest("GET /api/routines", { query: { projectId: id } }))]:
-      routines,
+    [path(
+      hubRequest("GET /api/routines", { query: { projectId: PROJECT.id } })
+    )]: routines,
     [path(
       hubRequest("GET /api/projects/:id/ingress", { path: { id: PROJECT.id } })
     )]: {
@@ -174,7 +174,9 @@ const pageAnswers = (
     [path(
       hubRequest("GET /api/projects/:id/relays", { path: { id: PROJECT.id } })
     )]: [],
-    [path(hubRequest("GET /api/actions", { query: { projectId: id } }))]: {
+    [path(
+      hubRequest("GET /api/actions", { query: { projectId: PROJECT.id } })
+    )]: {
       actions: [],
     },
     [path(hubRequest("GET /api/connections"))]: { connections: [] },
