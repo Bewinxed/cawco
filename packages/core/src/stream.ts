@@ -274,12 +274,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    no longer carries `tool`: a match in a tool's output is named by its
  *    result's own record. A page built for 54 reads an `answered` the hub
  *    no longer sends, so it reloads first.
+ * 57: unchanged on the wire, the hub's routes say what they send: a
+ *    trash restore answers its row typed by its kind, a session's,
+ *    project's and workspace's times that may be null are strings or
+ *    null, and a subagent's delete answers its 404 as a refusal. A page
+ *    built for 56 reads the same values, and reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 56;
+export const WIRE_PROTOCOL = 57;
 
 /**
  * What a session's stream carries: the changes each frame made to its

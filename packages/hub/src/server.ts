@@ -380,7 +380,6 @@ import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
-import type { TrashKind } from "./db/schema";
 import type { SentMessageRow } from "./db/sends";
 import type {
   ContinuationAsker,
@@ -1245,7 +1244,6 @@ export const createServer = (
     withdrawUnshown: () => withdrawUnshown,
     TOOL_SIGNIN_BEGIN_MS: () => TOOL_SIGNIN_BEGIN_MS,
     TOOL_SIGNIN_COMPLETE_MS: () => TOOL_SIGNIN_COMPLETE_MS,
-    agentMoved: () => agentMoved,
     announceMcp: () => announceMcp,
     announceSkill: () => announceSkill,
     archiveView: () => archiveView,
@@ -1322,7 +1320,6 @@ export const createServer = (
     readStoppable: () => readStoppable,
     registry: () => registry,
     retryFromTray: () => retryFromTray,
-    returned: () => returned,
     sessionName: () => sessionName,
     sharedProblem: () => sharedProblem,
     skillChoices: () => skillChoices,
@@ -1878,7 +1875,6 @@ export const createServer = (
   const { forkSeeds, readHistory, readOlder, storedWindow } =
     createHistory(ctx);
   const {
-    agentMoved,
     announceSkill,
     callFs,
     checkDue,
@@ -11106,61 +11102,6 @@ export const createServer = (
     }
     fleetChanged();
     return undoable(trashed);
-  };
-
-  /**
-   * A config item the trash just put back (db/trash.ts): what its delete
-   * stopped, started again, and the item as its list reads it.
-   */
-  const returned = async (kind: TrashKind, key: string): Promise<unknown> => {
-    switch (kind) {
-      case "rule": {
-        ruleEngine.reload();
-        const rule = db.getRule(key);
-        return rule ? ruleRowsOf([rule])[0] : null;
-      }
-      case "hook":
-        fleetChanged();
-        return db.getFleetHook(key) ?? null;
-      case "skill":
-        fleetChanged();
-        return db.listSkills().find((row) => row.name === key) ?? null;
-      case "plugin":
-        fleetChanged();
-        return db.listPlugins().find((row) => row.id === key) ?? null;
-      case "marketplace":
-        fleetChanged();
-        return (
-          db.fleetConfig().marketplaces.find((row) => row.name === key) ?? null
-        );
-      case "agent":
-        fanOutAgents();
-        return db.listFleetAgents().find((row) => row.name === key) ?? null;
-      case "mcp":
-        await fleetMcp.probe(key);
-        announceMcp();
-        return db.fleetConfig().mcp.find((row) => row.name === key) ?? null;
-      case "delegateType":
-        return delegateTypes.get(key) ?? null;
-      case "memory":
-        fleetChanged();
-        return {
-          memory: db.getFleetMemory() ?? null,
-          docs: db.listFleetMemoryDocs(),
-        };
-      case "memoryDoc":
-        fleetChanged();
-        return db.getFleetMemoryDoc(key) ?? null;
-      case "connection":
-        return connections.returned(key);
-      case "harnessConfig": {
-        fleetChanged();
-        const [harness, name] = key.split(":") as [HarnessConfigKind, string];
-        return db.getHarnessConfig(harness, name) ?? null;
-      }
-      default:
-        throw unreachable(kind);
-    }
   };
 
   /** The fleet's update policy and the builds it is offered; its channel is what an SSH add installs (join.ts). */
