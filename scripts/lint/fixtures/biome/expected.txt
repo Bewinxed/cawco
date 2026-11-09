@@ -88,3 +88,6 @@ no-harness-compare/planted.ts:17:5 no-harness-compare
 no-harness-compare/Planted.svelte:3:20 no-harness-compare
 no-harness-compare/Planted.svelte:6:6 no-harness-compare
 no-harness-compare/Planted.svelte:7:11 no-harness-compare
+as-unknown-as/planted.ts:3:44 as-unknown-as
+as-unknown-as/Planted.svelte:3:36 as-unknown-as
+as-unknown-as/Planted.svelte:6:25 as-unknown-as
