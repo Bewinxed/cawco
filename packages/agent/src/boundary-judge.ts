@@ -1,5 +1,5 @@
 /**
- * `boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY BUILD`: a
+ * `boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM BUILD`: a
  * workspace's judge, which answers its hook (`boundary/hook-judge.ts` `hookScript`)
  * for every shell or path-naming tool call of a work item's claude session
  * (`HOOKED_TOOLS`). sessiond holds it beside the boundary, so it outlives the
@@ -59,9 +59,13 @@ import { accessSync, constants, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import {
+  JUDGE_ALLOWS,
   JUDGE_ANSWER_END,
   JUDGE_BUILD_QUESTION,
+  JUDGE_NO_PREFIX,
   JUDGE_READY,
+  JUDGE_REFUSES,
+  JUDGE_USAGE,
   judgeArgsOf,
 } from "./boundary/protocol";
 
@@ -71,9 +75,7 @@ type Judge = typeof import("@cawco/core/workspace-judge");
 /** CAT and RM: the agent's, as its PATH finds them (core workspace-needs.ts), for a rewrite's shell, whose PATH is the session's. */
 const handed = judgeArgsOf(process.argv.slice(2));
 if (!handed) {
-  throw new Error(
-    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM BUILD"
-  );
+  throw new Error(JUDGE_USAGE);
 }
 const {
   socket,
@@ -88,13 +90,6 @@ const {
   build,
 } = handed;
 
-/**
- * The line the agent asks which build this judge runs, answered `0` and
- * BUILD: the agent's beat checks that every live workspace's judge is its
- * own build's.
- */
-const BUILD_QUESTION = JUDGE_BUILD_QUESTION;
-
 /** The copy the agent wrote beside this script (`JUDGE_SCRIPT`). */
 const { judgeCall, readPolicy } = (await import(
   join(import.meta.dir, "workspace-judge.ts")
@@ -103,19 +98,13 @@ const { judgeCall, readPolicy } = (await import(
 /** The tools whose command runs through the CLI's shell prefix; every other tool is judged. */
 const SHELL_TOOLS = new Set(["Bash", "Monitor"]);
 
-const refuse = (reason: string): string => `2\n${reason}`;
-
-/** What ends every answer (protocol.ts `JUDGE_ANSWER_END`). */
-const ANSWER_END = JUDGE_ANSWER_END;
+const refuse = (reason: string): string => `${JUDGE_REFUSES}\n${reason}`;
 
 /** What the model reads when its CLI's shell prefix is not the workspace's. */
 const UNPREFIXED =
   "cawco: this session's shell commands would run outside the workspace's boundary (a settings file sets CLAUDE_CODE_SHELL_PREFIX to something other than the workspace's executor), so this call did not run. Say so and end your turn: that setting is the person's to change.";
 
 const HEX = /^(?:[0-9a-f]{2})*$/u;
-
-/** What the hook sends for a CLI whose environment names no shell prefix: one launched before it had one. */
-const NO_PREFIX = "-";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -130,7 +119,7 @@ const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 const throughExecutor = (call: Record<string, unknown>): string => {
   const ended = quote(join(claudeTmp, `.cwd-${randomUUID()}`));
   const command = `${quote(exec)} --session --cwd-out ${ended} ${quote(call.command as string)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(${quote(cat)} ${ended})"; fi; ${quote(rm)} -f ${ended}; (exit $__cawco_status)`;
-  return `0\n${JSON.stringify({
+  return `${JUDGE_ALLOWS}\n${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "allow",
@@ -173,9 +162,9 @@ const answer = (text: string, shellPrefix: string): string => {
     if (SHELL_TOOLS.has(input.tool_name)) {
       // Monitor's websocket form runs no command, so there is nothing to bound.
       if (typeof call.command !== "string") {
-        return "0\n";
+        return `${JUDGE_ALLOWS}\n`;
       }
-      if (shellPrefix === NO_PREFIX) {
+      if (shellPrefix === JUDGE_NO_PREFIX) {
         return throughExecutor(call);
       }
       if (!HEX.test(shellPrefix)) {
@@ -184,7 +173,7 @@ const answer = (text: string, shellPrefix: string): string => {
       // No decision: the CLI's own permission flow goes on, on the command
       // as written, and its prefix runs it inside.
       return Buffer.from(shellPrefix, "hex").toString("utf8") === prefix
-        ? "0\n"
+        ? `${JUDGE_ALLOWS}\n`
         : refuse(UNPREFIXED);
     }
     if (typeof input.cwd !== "string") {
@@ -200,7 +189,7 @@ const answer = (text: string, shellPrefix: string): string => {
           ? input.transcript_path
           : undefined,
     });
-    return verdict.ok ? "0\n" : refuse(verdict.reason);
+    return verdict.ok ? `${JUDGE_ALLOWS}\n` : refuse(verdict.reason);
   } catch (error) {
     return refuse(
       `cawco: this call did not run, because the workspace boundary could not judge it: ${error instanceof Error ? error.message : String(error)}`
@@ -219,8 +208,8 @@ const answerTo = (received: string): string | undefined => {
     return;
   }
   const call = received.slice(0, first);
-  if (call === BUILD_QUESTION) {
-    return `0\n${build}`;
+  if (call === JUDGE_BUILD_QUESTION) {
+    return `${JUDGE_ALLOWS}\n${build}`;
   }
   const second = received.indexOf("\n", first + 1);
   return second < 0
@@ -240,7 +229,9 @@ const server = createServer((connection) => {
       return;
     }
     connection.removeAllListeners("data");
-    connection.end(`${answered.replaceAll(ANSWER_END, "")}${ANSWER_END}`);
+    connection.end(
+      `${answered.replaceAll(JUDGE_ANSWER_END, "")}${JUDGE_ANSWER_END}`
+    );
   });
   // A hook killed mid-call leaves nothing to answer.
   connection.on("error", () => connection.destroy());
