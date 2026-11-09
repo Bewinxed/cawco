@@ -17,7 +17,7 @@
   import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { hubRefusal } from "../../hub-read.js";
+  import { hubRefusal } from "#lib/platform/hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { overlayTag } from "./page.svelte.js";
   import Well from "./Well.svelte";

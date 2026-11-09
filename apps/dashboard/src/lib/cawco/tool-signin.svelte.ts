@@ -24,12 +24,12 @@ import { toolSpec } from "@cawco/core/tools";
 import { toolWords } from "@cawco/core/words/tools";
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
+import { failureWords } from "#lib/platform/hub-read.js";
 import {
   openSigninTab,
   type PasteSignin,
   type SigninPhase,
 } from "./accounts/signin.svelte";
-import { failureWords } from "./hub-read";
 import { TabDraft } from "./tab-draft.svelte";
 import {
   beginToolSignin,

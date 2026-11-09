@@ -6,8 +6,6 @@
     memoryHistory,
     memoryVersion,
   } from "#lib/cawco/fleet.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * What an `admin_memory_read` or `admin_memory_write` call read or wrote, as the document it is. The
    * sentence above already names the action and the path, so none of the raw
@@ -24,6 +22,8 @@
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronRight } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import DiffView from "../DiffView.svelte";
   import ToolProse from "./ToolProse.svelte";
 

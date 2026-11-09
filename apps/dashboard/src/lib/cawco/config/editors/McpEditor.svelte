@@ -2,16 +2,16 @@
   import type { FleetMcpConfig, FleetMcpServer } from "@cawco/core/fleet";
   import { mcpWords as words } from "@cawco/core/words/mcp";
   import { untrack } from "svelte";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { IconKey, IconMapPoint, IconPlay } from "#lib/icons.js";
   import {
     appear,
     crossIn,
     crossOut,
     dur,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import { IconKey, IconMapPoint, IconPlay } from "#lib/icons.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
   import Coded from "../../Coded.svelte";
   import { cawco } from "../../client.svelte";

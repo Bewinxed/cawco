@@ -19,7 +19,6 @@
     pushAgents,
     saveAgent,
   } from "#lib/cawco/fleet.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
@@ -33,6 +32,7 @@
     IconPlus,
     IconSubagent,
   } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
 
   /**
    * Subagents, fleet-wide: define one and it lands in every machine's

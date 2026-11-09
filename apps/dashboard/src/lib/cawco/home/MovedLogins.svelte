@@ -16,9 +16,9 @@
    * entries and two asks were 696px against the panel's 560.
    */
   import type { MovedLogin as Moved } from "#lib/cawco/accounts/model.svelte.js";
-  import { reflowsFrom, reread } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconAccounts, IconChevronDown } from "#lib/icons.js";
+  import { reflowsFrom, reread } from "#lib/platform/motion/rows.svelte.js";
   import { plural } from "../updates/model";
   import MovedLogin from "./MovedLogin.svelte";
   import NoticeRow from "./NoticeRow.svelte";

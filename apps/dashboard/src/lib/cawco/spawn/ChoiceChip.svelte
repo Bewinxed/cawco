@@ -12,7 +12,6 @@
 </script>
 
 <script lang="ts" generics="T">
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /**
@@ -22,6 +21,7 @@
    * starts (Lifetime, Context) are each this with their options.
    */
   import { IconSuccess as Check, IconChevronDown as Down } from "#lib/icons.js";
+  import { staggered } from "#lib/platform/motion/curves.svelte.js";
   import NsPopover from "./NsPopover.svelte";
 
   let {

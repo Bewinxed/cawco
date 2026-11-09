@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
   /**
    * A presented artifact (`kind: "artifact"`: a page, a preview, a canvas)
    * drawn by the artifact panel's own renderer (PreviewPane, inset), as its
@@ -6,10 +8,8 @@
    * its own socket (artifact-session.svelte.ts), whatever its session's
    * panel shows, which it never moves.
    */
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { findArtifact } from "../../artifact-api";
-  import { failureWords as message } from "../../hub-read";
   import { ArtifactSession } from "../../preview/artifact-session.svelte";
   import PreviewPane from "../../preview/PreviewPane.svelte";
   import { setPaneFleet } from "../../preview/pane-fleet";

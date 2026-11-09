@@ -3,7 +3,10 @@
   import { untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconToolGeneric, IconToolMcp, IconToolSkill } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import {
     dur,
     easeDrawer,
@@ -12,10 +15,7 @@
     motionOk,
     pinnedAtBox,
     revealOut,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { Kbd } from "#lib/components/ui/kbd/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconToolGeneric, IconToolMcp, IconToolSkill } from "#lib/icons.js";
+  } from "#lib/platform/motion/curves.svelte.js";
   import {
     askSuggestions,
     SUGGEST_PAUSE_MS,

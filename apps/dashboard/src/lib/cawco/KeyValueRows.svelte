@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   /**
@@ -9,6 +8,7 @@
    * fades in, or closes and fades out, the lines after it sliding.
    */
   import { IconClose } from "#lib/icons.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
 
   let {
     rows = $bindable(),
