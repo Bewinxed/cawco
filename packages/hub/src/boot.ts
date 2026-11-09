@@ -26,3 +26,16 @@ export const portOf = <T>(name: string, empty: T): Port<T> => {
     },
   };
 };
+
+/** Something a hub that serves starts off its boot path, by name in its list. */
+export interface BootStep {
+  name: string;
+  run: () => void;
+}
+
+/** Starts the serving hub's boot path, each step in the list's order. */
+export const runBootSteps = (steps: readonly BootStep[]): void => {
+  for (const { run } of steps) {
+    run();
+  }
+};
