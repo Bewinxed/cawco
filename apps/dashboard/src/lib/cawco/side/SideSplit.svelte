@@ -20,16 +20,16 @@
    * width and expansion are the conversation's own, kept across visits.
    */
   import { sideWords } from "@cawco/core/words/side";
-  import type { Snippet } from "svelte";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { cawco, closePreview } from "../client.svelte";
+
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
+  import { closePreview, previewsStore } from "../stores/previews.svelte";
   import { putAway } from "../tasks/beside.svelte";
   import FailedSurface from "./FailedSurface.svelte";
   import SideSheet from "./SideSheet.svelte";
@@ -79,7 +79,9 @@
 
   // --- what the surface holds --------------------------------------------------
 
-  const previewOpen = $derived(cawco.previews[viewId]?.state === "open");
+  const previewOpen = $derived(
+    previewsStore.previews[viewId]?.state === "open"
+  );
   const taskShown = $derived(taskOpen && !!task && phone === false);
   const open = $derived(previewOpen || taskShown);
   /** What is open, in the switch's order. */
@@ -150,7 +152,7 @@
     if (what === "task") {
       return;
     }
-    const preview = cawco.previews[viewId];
+    const preview = previewsStore.previews[viewId];
     return preview?.artifact?.title ?? preview?.title;
   }
   /** A failed card's Close: what was on show goes, as its own Close puts it away. */
