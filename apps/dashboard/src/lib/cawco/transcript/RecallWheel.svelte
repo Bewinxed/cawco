@@ -43,6 +43,7 @@
    * growing, with the same outcomes.
    */
   import { onMount, tick, untrack } from "svelte";
+  import { DRAWER_QUERY, PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconSearch } from "#lib/icons.js";
   import { felt } from "#lib/platform/feel.svelte.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
@@ -120,7 +121,7 @@
    * A compact window (DESIGN.md: narrower than 640px, or a coarse pointer
    * narrower than the drawer's line): a phone.
    */
-  const COMPACT = "(max-width: 639px), (pointer: coarse) and (width < 900px)";
+  const COMPACT = `${PHONE_QUERY}, (pointer: coarse) and ${DRAWER_QUERY}`;
   /** How far up the window the shape's top reaches, as a share of its height. */
   const REACH = { compact: 0.5, wide: 0.4 } as const;
   /**
