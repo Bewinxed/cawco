@@ -6,7 +6,11 @@
 
 import type { SuggestCandidate } from "@cawco/core/suggest";
 import { hub } from "#lib/platform/hub.js";
-import { hubRefusal, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import {
+  hubData,
+  hubDone,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 import type { HubSeam } from "./hub-seam";
 
 export type { SuggestCandidate } from "@cawco/core/suggest";
@@ -64,10 +68,7 @@ export function loadSuggestSetting(seam: HubSeam): void {
 
 /** Turns suggestions on or off for every composer. */
 export async function saveSuggestSetting(enabled: boolean): Promise<void> {
-  const answer = await hub.api.jev.suggest.put({ enabled });
-  if (answer.error) {
-    throw hubRefusal(answer);
-  }
+  await hubDone(hub.api.jev.suggest.put({ enabled }));
   suggestions.enabled = enabled;
 }
 
@@ -76,11 +77,10 @@ export async function askSuggestions(
   body: { text: string; candidates: SuggestCandidate[] },
   signal: AbortSignal
 ): Promise<{ id: string; noul: number }[]> {
-  const answer = await hub.api.suggest.post(body, { fetch: { signal } });
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  const { suggestions: ranked } = answer.data;
+  const { suggestions: ranked } = await hubData(
+    hub.api.suggest.post(body, { fetch: { signal } }),
+    refusedOrUnreached
+  );
   return ranked;
 }
 

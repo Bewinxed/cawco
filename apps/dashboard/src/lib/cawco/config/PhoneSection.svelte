@@ -10,7 +10,11 @@
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconPhone } from "#lib/icons.js";
   import { hub } from "#lib/platform/hub.js";
-  import { failureClause, hubRefusal } from "#lib/platform/hub-read.js";
+  import {
+    failureClause,
+    hubData,
+    hubRefusal,
+  } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
 
@@ -35,11 +39,8 @@
 
   async function read() {
     try {
-      const answer = await hub.api.push.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      ({ devices } = answer.data);
+      const answer = await hubData(hub.api.push.get());
+      ({ devices } = answer);
       loaded = true;
     } catch (error) {
       readError = `Could not read the push settings — ${failureClause(error)}.`;
