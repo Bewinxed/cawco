@@ -205,10 +205,10 @@ export const accountPlacementRoutes = ({
           cwd: t.Optional(t.String()),
         }),
       },
-      async ({ query, status }) => {
+      async ({ query }) => {
         const asked = await askedStart(query);
         if ("refusal" in asked) {
-          return status(asked.status, asked.refusal);
+          return refusal(asked.status, "placement-refused", asked.refusal);
         }
         // Where a start would go says what its start would: a machine
         // that refuses the harness refuses it (`placeSpawn`).
