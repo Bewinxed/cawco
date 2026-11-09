@@ -163,7 +163,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { NARROW_QUERY, PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconArtifactSheet,
     IconColumns,
@@ -541,7 +541,7 @@
   /** Under 900px a task is its own page, not the split beside the view (`phone`). */
   const sheetQuery = new MediaQuery("(width < 900px)");
   /** Under 640px the page is the one scroller, not the pane (the styles' own line). */
-  const pageScrollsQuery = new MediaQuery("(max-width: 639px)", false);
+  const pageScrollsQuery = new MediaQuery(PHONE_QUERY, false);
   // The first paint, on both sides, has the width cookie's guess
   // (first-render.svelte.ts); the queries answer from a frame after mount.
   const wide = $derived(
