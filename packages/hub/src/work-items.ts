@@ -5568,7 +5568,7 @@ export const createWorkItems = ({
   /**
    * What a refused workspace create says: the machine's words, `pending`
    * the discard's own failure when it did not go. A machine that lacks what
-   * a workspace needs (agent workspace-needs.ts) refused before anything was
+   * a workspace needs (core workspace-needs.ts) refused before anything was
    * cut, and its words end in the install command alone, so they go on
    * whole, nothing after it; its discard, if it waits, is retried as every
    * other's is.
