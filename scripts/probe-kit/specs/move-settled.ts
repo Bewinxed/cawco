@@ -211,7 +211,7 @@ const run = async (kit: Kit) => {
   );
 
   // The modeless leg: a move whose session names no permission mode is
-  // refused as any start is (server.ts `unchosenMode`), before it copies anything.
+  // refused as any start is (launches.ts `unchosenMode`), before it copies anything.
   const modelessTarget = join(fleet.sandbox, "moved-modeless");
   const modeless = await fleet
     .api<{ id?: string }>(

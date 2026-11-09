@@ -40,7 +40,7 @@
  * change goes to every dashboard (`person`), to the push outlet (push.ts
  * holds a phone push while the person is at a desk) and to the hand of
  * each send (server.ts, the presence line), and to the hub's word to each
- * session holding news after a real return (server.ts `tellBack`): a start
+ * session holding news after a real return (sends.ts `tellBack`): a start
  * with an away stretch still open reads that return on its first roll.
  *
  * **Clears.** A notification is over when its ask settles, its session is
@@ -803,7 +803,7 @@ export const createNotifications = ({
    * roll that would have ended the stretch). So it starts with them away
    * since the stretch opened, and the first roll after the start (a beat,
    * the sweep) reads their return through `turned` and the person's
-   * listeners: the one path every return takes (server.ts `tellBack`), the
+   * listeners: the one path every return takes (sends.ts `tellBack`), the
    * listeners being on by then.
    */
   const asLastTold = (person: Rolled): Rolled =>

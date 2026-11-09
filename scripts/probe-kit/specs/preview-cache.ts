@@ -183,7 +183,7 @@ const probe = async (kit: Kit) => {
     Boolean,
     180_000
   );
-  // The preview's own origin (hub server.ts `frameAddress`).
+  // The preview's own origin (hub artifact-pages.ts `frameAddress`).
   const id = made.match(ANSWERED_ID)?.[1] ?? "";
   const address = async () =>
     (await (

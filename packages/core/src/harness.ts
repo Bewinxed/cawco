@@ -305,7 +305,7 @@ export const LEAK_FOUND = "leak_found";
  * (agent leak-watch.ts). The agent's frame to the hub (`uuid` names the
  * leak, as its {@link LEAK_FOUND} did), and the hub sets the notice it sent
  * for it to `ended` on its record, so its row says so, live and read back
- * (hub server.ts `endLeak`). Nothing is said to the session.
+ * (hub session-notes.ts `endLeak`). Nothing is said to the session.
  */
 export const LEAK_ENDED = "leak_ended";
 
