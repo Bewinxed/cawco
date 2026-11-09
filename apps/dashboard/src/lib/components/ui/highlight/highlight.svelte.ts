@@ -41,8 +41,8 @@
  */
 
 import { untrack } from "svelte";
-import { frameObserver } from "#lib/cawco/frame-observer.js";
-import { watchRendered } from "#lib/utils/rendered.js";
+import { frameObserver } from "#lib/platform/frame-observer.js";
+import { watchRendered } from "#lib/platform/rendered.js";
 
 /**
  * The layers' recipe, the sheet every container's shadow root adopts (one

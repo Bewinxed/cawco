@@ -15,7 +15,12 @@
   import { patchAccount, putRouting } from "#lib/cawco/client.svelte.js";
   import { savedShown } from "#lib/cawco/config/EditorFooter.svelte";
   import EditorFrame from "#lib/cawco/config/EditorFrame.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import {
     appear,
     dur,
@@ -24,13 +29,8 @@
     lifting,
     motionOk,
     pinned,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { goto } from "$app/navigation";
   import AtLimitBlock from "./AtLimitBlock.svelte";
   import { providerLimits, providerName, strategyLabel } from "./model.svelte";

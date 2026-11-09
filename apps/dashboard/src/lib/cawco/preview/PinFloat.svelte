@@ -75,8 +75,8 @@
     easeOut,
     motionOk,
     numberOf,
-  } from "../motion/curves.svelte";
-  import { type PopSide, popOut } from "../motion/pop.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { type PopSide, popOut } from "#lib/platform/motion/pop.svelte.js";
   import {
     type Box,
     FLOAT_W,

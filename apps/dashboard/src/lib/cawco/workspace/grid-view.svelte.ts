@@ -8,8 +8,9 @@
  * Derived rather than set from an effect: a ghost set a step after the tree
  * would be drawn after it, and the groups rebuilt at their default shares.
  */
+
+import { motionOk } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
-import { motionOk } from "../motion/curves.svelte";
 import {
   type BranchNode,
   type PaneNode,

@@ -1,16 +1,16 @@
 <script lang="ts">
-  /**
-   * A task's labels, edited where they stand: each badge shows its × under
-   * the pointer (always on a finger), and "+ label" opens a one-line field
-   * offering the project's other labels. Enter adds, Escape puts it away.
-   */
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { labelOf } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconClose, IconPlus } from "#lib/icons.js";
+  /**
+   * A task's labels, edited where they stand: each badge shows its × under
+   * the pointer (always on a finger), and "+ label" opens a one-line field
+   * offering the project's other labels. Enter adds, Escape puts it away.
+   */
+  import { failureWords } from "#lib/platform/hub-read.js";
 
   let {
     labels,

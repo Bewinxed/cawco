@@ -1,13 +1,13 @@
 <script lang="ts">
   import { findInWords } from "@cawco/core/words/find-in";
+  import { IconArrowDownDuotone as IconArrowDown } from "#lib/icons.js";
   /**
    * The way back to the newest row, while the reader is scrolled away from it.
    * The transcript never moves under someone reading history — new rows land
    * below, out of sight — so this is what says there is more, and takes them
    * there in one glide.
    */
-  import { rise } from "#lib/cawco/motion/curves.svelte.js";
-  import { IconArrowDownDuotone as IconArrowDown } from "#lib/icons.js";
+  import { rise } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     onjump,

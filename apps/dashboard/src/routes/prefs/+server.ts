@@ -6,11 +6,11 @@ import {
   type Pref,
   prefCookie,
   secureScheme,
-} from "#lib/cawco/prefs.js";
+} from "#lib/platform/prefs.js";
 import type { RequestHandler } from "./$types";
 
 /**
- * Keeps the page's prefs for the server's next render (lib/cawco/prefs.ts):
+ * Keeps the page's prefs for the server's next render (lib/platform/prefs.ts):
  * each a cookie only this server reads, HttpOnly, `__Host-` where the scheme
  * allows. Only the ones it renders from, each under its size; `null` takes
  * one away. All or none: a request with one value it refuses keeps none of

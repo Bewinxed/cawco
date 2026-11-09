@@ -45,7 +45,7 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { openPageWrites } from "./open-pages";
 
 /**
