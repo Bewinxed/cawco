@@ -1,4 +1,3 @@
-import { singleton, singletonColumn } from "./singleton";
 /** The hub's own settings rows: the supervisor's mode, images, the fleet watch, connections, what Jev may spend. */
 
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
@@ -22,6 +21,7 @@ import {
   SUPERVISOR_CONFIG_ID,
   supervisorConfig,
 } from "./schema";
+import { singleton, singletonColumn } from "./singleton";
 
 export interface HubSettingsDb {
   /** The fleet's choices row (`supervisor_config`) and its tool denials. */
