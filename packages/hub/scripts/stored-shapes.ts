@@ -337,7 +337,9 @@ const reach = (declaration: Declaration): void => {
   visiting.delete(declaration);
   order.push(declaration);
 };
-for (const root of roots) {
+// Sorted: which file imports a schema says nothing about where its shape
+// sits, so moving an import between files leaves the generated files alone.
+for (const root of [...roots].sort()) {
   reach(rootDeclaration(root));
 }
 
