@@ -2278,3 +2278,5 @@ export const createWorkspaces = ({
     discardable,
   };
 };
+
+export type Workspaces = ReturnType<typeof createWorkspaces>;
