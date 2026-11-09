@@ -55,6 +55,7 @@ import {
   leavesOf,
   type PaneNode,
   parseWorkspace,
+  placeTab,
   type SessionContext,
   type WorkspaceV1,
 } from "./tree";
@@ -280,26 +281,6 @@ function leafHolding(sessionId: string): LeafNode | null {
    other tab forgets where it came from (owner: "if i open a tab from the
    tab i'm already on it should open next to it not at the end, and closing
    it returns me to the tab i was on"). */
-
-/**
- * Puts a conversation in a group's strip if it is not there yet: just after
- * the tab in front, which it was opened from, else (the board in front) at
- * the end.
- */
-function place(leaf: LeafNode, sessionId: string): void {
-  if (leaf.tabs.includes(sessionId)) {
-    return;
-  }
-  const from = leaf.active;
-  const at = from ? leaf.tabs.indexOf(from) : -1;
-  if (!from || at === -1) {
-    leaf.tabs.push(sessionId);
-    leaf.opened = null;
-    return;
-  }
-  leaf.tabs.splice(at + 1, 0, sessionId);
-  leaf.opened = { id: sessionId, from };
-}
 
 /** Puts a tab in front of its group; any other tab than the one just opened forgets its opener. */
 function show(leaf: LeafNode, sessionId: string | null): void {
@@ -653,7 +634,7 @@ export const workspace = {
     const leaf =
       (leafId ? leafById(leafId) : leafHolding(sessionId ?? "")) ?? focused();
     if (sessionId) {
-      place(leaf, sessionId);
+      placeTab(leaf, sessionId);
     }
     show(leaf, sessionId);
     held.focusedLeaf = leaf.id;
@@ -729,7 +710,7 @@ export const workspace = {
     }
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
     if (sessionId) {
-      place(leaf, sessionId);
+      placeTab(leaf, sessionId);
       // An address can name anything: asked of the hub before it is read.
       askName(sessionId);
     }
@@ -894,7 +875,7 @@ export const workspace = {
     restore();
     workingSet.visit(sessionId);
     const leaf = leafHolding(sessionId) ?? focused();
-    place(leaf, sessionId);
+    placeTab(leaf, sessionId);
     show(leaf, sessionId);
     held.focusedLeaf = leaf.id;
     save();
