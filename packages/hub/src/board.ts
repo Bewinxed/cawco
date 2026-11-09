@@ -13,7 +13,7 @@ import type { KeepAliveRow } from "./keep-alive";
 import { keepAliveState } from "./keep-alive";
 import { previewTargets } from "./preview";
 import type { HubSocket } from "./wire-socket";
-import { isHubParent } from "./work-items";
+import { isHubParent } from "./work-item-state";
 
 export type BoardContext = Pick<
   HubContext,
