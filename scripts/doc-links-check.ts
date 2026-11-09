@@ -1,8 +1,8 @@
 /**
  * `bun scripts/doc-links-check.ts` (part of `bun run check`): every
- * `{@link import("<module>").<Name>}` in a doc comment names a module that
+ * `@link import("<module>").<Name>` in a doc comment names a module that
  * exports `<Name>`, with or without a member path (`.<Name>.field`) or a
- * label (`{@link import("m").Name | its name}`), as `@linkcode` and
+ * label (`@link import("m").Name | its name`), as `@linkcode` and
  * `@linkplain` too. The compiler reads none of these, so a name that moves
  * leaves the link behind: transcript-types.ts kept pointing
  * `CONTINUATION_ORIGIN` at harness.ts after it moved to harness/kinds.ts,
@@ -12,7 +12,7 @@
  * paths and workspace packages' `exports` alike) and read with the
  * TypeScript parser for its exported names, through its `export * from`s;
  * `export default` exports `default`. Prints `file:line: module.Name` for
- * each link that does not resolve, and each `{@link import(` it cannot read;
+ * each link that does not resolve, and each `@link import(` it cannot read;
  * exits 1 on any.
  */
 import { readFileSync } from "node:fs";
