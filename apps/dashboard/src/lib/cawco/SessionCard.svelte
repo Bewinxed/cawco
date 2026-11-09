@@ -12,7 +12,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { STOPPING_LABEL } from "./activity";
-  import { cawco } from "./client.svelte";
+
   import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
   import {
@@ -22,6 +22,7 @@
     sessionTitle,
   } from "./session-names.svelte";
   import { cawOf } from "./session-status";
+  import { asksStore } from "./stores/asks.svelte";
   import { boardStore, isFailed } from "./stores/board.svelte";
   import { sessionsStore } from "./stores/sessions.svelte";
   import { workItemsStore } from "./stores/work-items.svelte";
@@ -57,7 +58,7 @@
     ) {
       return "needs";
     }
-    if (cawco.activityOf(of) === "working") {
+    if (asksStore.activityOf(of) === "working") {
       return "live";
     }
     return row?.status === "stopped" ? "done" : "idle";
