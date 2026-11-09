@@ -5,40 +5,43 @@
  * loads only what the view needs.
  */
 
-import { hubRequest, hubRequestAsGiven } from "@cawco/core/hub-request";
-import type { ProjectView, ViewToolName } from "@cawco/core/views";
+import { hubRequestAsGiven } from "@cawco/core/hub-request";
+import type { ViewToolName } from "@cawco/core/views";
+import { hub } from "#lib/platform/hub.js";
 import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** A project's views: kept ones, then Caw's drafts. */
-export const viewsOf = (projectId: string): Promise<ProjectView[]> =>
-  hubJson(
-    hubRequest("GET /api/projects/:id/views", { path: { id: projectId } }),
-    { failure: refusedOrUnreached }
-  );
+export const viewsOf = async (projectId: string) => {
+  const answer = await hub.api.projects({ id: projectId }).views.get();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Keeps a draft view: it becomes `views/<name>.oui`, one commit. */
-export const keepView = (
-  projectId: string,
-  name: string
-): Promise<ProjectView> =>
-  hubJson(
-    hubRequest("POST /api/projects/:id/views/:name/keep", {
-      path: { id: projectId, name },
-    }),
-    { failure: refusedOrUnreached }
-  );
+export const keepView = async (projectId: string, name: string) => {
+  const answer = await hub.api
+    .projects({ id: projectId })
+    .views({ name })
+    .keep.post();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /** Discards a draft view. */
-export const discardView = (
-  projectId: string,
-  name: string
-): Promise<{ ok: true }> =>
-  hubJson(
-    hubRequest("DELETE /api/projects/:id/views/drafts/:name", {
-      path: { id: projectId, name },
-    }),
-    { failure: refusedOrUnreached }
-  );
+export const discardView = async (projectId: string, name: string) => {
+  const answer = await hub.api
+    .projects({ id: projectId })
+    .views.drafts({ name })
+    .delete();
+  if (answer.error) {
+    throw refusedOrUnreached(answer);
+  }
+  return answer.data;
+};
 
 /**
  * One view tool's answer: what a view's `Query("<tool>", args)` reads, the
