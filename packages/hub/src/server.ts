@@ -6259,7 +6259,7 @@ export const createServer = (
   /**
    * One machine's row as `GET /api/agents` answers it; undefined when the hub
    * knows none. Read and dressed alone: an update's trial asks it every
-   * second (core binary-health.ts), so it costs one machine's row, never the
+   * second (cli binary-health.ts), so it costs one machine's row, never the
    * fleet's (every machine's fleet document, tools, harness reports and held
    * sessions, all but one thrown away).
    */
