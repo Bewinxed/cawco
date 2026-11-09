@@ -133,7 +133,7 @@ export interface PreviewWays {
 export const INSTANT_REFUSAL_MS = 10;
 
 /** Our call: a probe unanswered in 10 s is a failed one. */
-const PROBE_ANSWER_MS = 10_000;
+export const PROBE_ANSWER_MS = 10_000;
 
 /** Every way a browser's probe of a preview origin fails, by what it shows. */
 export type PreviewUnreached =
@@ -303,7 +303,7 @@ const answeredWith = async (
   return said === null ? null : { cause: "down", ...said };
 };
 
-/** The hub's answer at `url` (a {@link PREVIEW_REACH_PATH} or the hub's `GET /api/preview-reach` with `?origin=` (core `hubRequest`)), or null when the hub can't be asked. */
+/** The hub's answer at `url` (a {@link PREVIEW_REACH_PATH} on a preview origin; the dashboard asks its hub through Eden), or null when the hub can't be asked. */
 export const askHubReach = async (
   url: string,
   heard?: (ways: PreviewWays) => void
