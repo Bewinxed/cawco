@@ -45,6 +45,21 @@ export interface PageFaultReport {
   revision: number;
 }
 
+/**
+ * What a page on a preview origin posts to `PREVIEW_ERRORS_PATH`: the
+ * preview's own door, which the hub reads as the dashboard's error report
+ * (hub dashboard-errors.ts `takeErrorReport`), a fault of its artifact beside it.
+ */
+export interface PageErrorReport {
+  fault: PageFaultReport;
+  message: string;
+  path: string;
+  sessionId: null;
+  stack: string;
+  userAgent: string;
+  version: string;
+}
+
 /** Faults as the artifact's doc keeps them (`meta.faults`): the latest revision's alone, the first {@link PAGE_FAULTS_KEPT}. */
 export interface PageFaultsKept {
   faults: PageFault[];
