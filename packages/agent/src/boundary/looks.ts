@@ -70,21 +70,19 @@ import {
   isStale,
 } from "./staleness";
 import {
-  closeEnded,
   closeUnderWay,
   holding,
   isClosing,
   isStarting,
   keepers,
-  markClosing,
-  markStarting,
   readHeld,
   readRetiring,
   retiringFileOf,
   STOP_TIMEOUT_MS,
   sessiond,
-  startEnded,
   stateDir,
+  withClose,
+  withStart,
   writeWhole,
 } from "./state";
 import { cleanGeneration, endUsers, stopBoundary } from "./stop";
@@ -224,14 +222,15 @@ const recheckNow = async (
         cause,
         unasked
       ))();
-    markStarting(id, replaced);
-    await replaced
-      .catch((error: unknown) => {
+    await withStart(
+      id,
+      replaced,
+      replaced.catch((error: unknown) => {
         console.warn(
           `[workspace] ${id}: its narrowed boundary could not be replaced: ${error instanceof Error ? error.message : String(error)}`
         );
       })
-      .finally(() => startEnded(id));
+    );
   }
 };
 
@@ -384,17 +383,12 @@ export const closeQuietly = (id: string, why: string): Promise<void> => {
   if (pending) {
     return pending;
   }
-  const work = closeNow(id, why)
-    .catch((error: unknown) => {
-      console.warn(
-        `[workspace] ${id}: its boundary could not be closed: ${error instanceof Error ? error.message : String(error)}`
-      );
-    })
-    .finally(() => {
-      closeEnded(id, work);
-    });
-  markClosing(id, work);
-  return work;
+  const work = closeNow(id, why).catch((error: unknown) => {
+    console.warn(
+      `[workspace] ${id}: its boundary could not be closed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
+  return withClose(id, work, work);
 };
 
 /** {@link closeQuietly}'s close itself. */
