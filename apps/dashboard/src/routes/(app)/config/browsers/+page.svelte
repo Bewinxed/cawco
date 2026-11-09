@@ -8,7 +8,7 @@
    * each port's answer, the certificate's end, who proved it from outside),
    * with Check the stream relay again, Add a name while none stands, and
    * Stop and Remove the stream relay asked in place. The card is the one
-   * Caw's Needs you draws, from the same journey, live (client.svelte.ts
+   * Caw's Needs you draws, from the same journey, live (stores/relay.svelte.ts
    * `relayJourney`).
    */
   import type { RelayJourneyView } from "@cawco/core/stream-relay";

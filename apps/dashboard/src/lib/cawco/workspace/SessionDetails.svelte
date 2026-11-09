@@ -290,7 +290,7 @@
   });
   onDestroy(() => stopWaiting());
   // The card draws this session's reading while it is mounted: its turns'
-  // ends read it again only while one does (client.svelte.ts `showContext`).
+  // ends read it again only while one does (stores/session-detail.svelte.ts `showContext`).
   $effect(() => showContext(sessionId));
   /**
    * A copy the browser refused (the link, the working directory): said
@@ -310,7 +310,7 @@
     }
   }
   // While this card stands, its settings' failures are said on its lines,
-  // under the control that asked, and nowhere else (client.svelte.ts).
+  // under the control that asked, and nowhere else (stores/commands.svelte.ts).
   $effect(() => holdDetails(sessionId));
   const reading = $derived(
     (askPending || !!session?.contextPending) && stats.totalTokens === null
@@ -455,7 +455,7 @@
     if (slot === "model" && kept) {
       return kept.refused;
     }
-    // Kept for the session (client.svelte.ts `settingFault`), so a reload
+    // Kept for the session (stores/commands.svelte.ts `settingFault`), so a reload
     // says it again here.
     return settingFault(sessionId, kinds[slot])?.words ?? null;
   }
