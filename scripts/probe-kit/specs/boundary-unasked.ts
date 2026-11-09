@@ -154,7 +154,7 @@ const sleepPid = async (): Promise<Pid | undefined> => {
  * on Linux the srt host (`boundary-host.ts`, a binary install's
  * `srt/host.js`); on macOS the runner, which `sandbox-exec` runs in its own
  * place once it has entered the sandbox, under the same pid: its command
- * line is then the runner's bash, named `cawco-boundary` (agent boundary/
+ * line is then the runner's bash, named `cawco-boundary` (agent boundary/plan.ts
  * `planFor`), no longer `sandbox-exec` (r189 on the Mac read pid 97318 as
  * no boundary for that). Undefined for any other process, or none.
  */
