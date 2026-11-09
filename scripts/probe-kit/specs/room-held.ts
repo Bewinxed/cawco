@@ -1,6 +1,6 @@
 /**
  * A session's start waits while its machine's room on memory fails, and is
- * never refused for it (packages/agent session.ts `#roomForStart`, core
+ * never refused for it (packages/agent session.ts `#roomForStart`, agent
  * machine-room.ts `measureMemoryRoom`).
  *
  * On a scratch fleet whose agent reads its memory as full (Linux's least
