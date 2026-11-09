@@ -3,7 +3,12 @@ import { transcriptUrl } from "#lib/cawco/links.js";
 import type { ServerTail } from "#lib/cawco/stores/transcript-reads.svelte.js";
 import { FIRST_SCREEN_PAGE } from "#lib/config.js";
 import { hubThrough } from "#lib/platform/hub.js";
-import { hubFailure, hubRead, machineAway } from "#lib/platform/hub-read.js";
+import {
+  hubFailure,
+  hubRead,
+  machineAway,
+  refusedOf,
+} from "#lib/platform/hub-read.js";
 import type { PageServerLoad } from "./$types";
 
 /** Whether the hub holds an ask parked under `viewId` (`/api/pending`). */
@@ -65,7 +70,7 @@ export const load: PageServerLoad = async ({
         viewId,
         machineId: away,
         reconnectingMs,
-        ...(await hubFailure(response)),
+        ...hubFailure(await refusedOf(response)),
       },
     };
   }
