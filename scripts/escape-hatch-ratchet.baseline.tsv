@@ -424,7 +424,7 @@ suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/work
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/workspace/gesture.svelte.ts	1
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte	1
 suppression	biome-ignore lint/style/useErrorCause	packages/core/src/state-file.ts	1
-suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/artifacts/service.ts	1
+suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/artifacts/access.ts	1
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/browsers.ts	1
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/connections.ts	5
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/fleet-mcp.ts	2
