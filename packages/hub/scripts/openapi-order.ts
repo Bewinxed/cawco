@@ -22,6 +22,8 @@ const NAMED = new Set([
 ]);
 /** Keys whose value is a list whose order says nothing. */
 const SETS = new Set(["required", "enum"]);
+/** Keys whose value is data, not schema: left as written. */
+const DATA = new Set(["default", "const", "example"]);
 
 const isSchema = (value: unknown): value is Schema =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -77,11 +79,15 @@ const memberKey = (member: unknown): string => {
  * `mapping`) and every unordered list (`required`, `enum`) goes by name; a
  * union's members go by {@link memberKey}, their whole text only breaking a
  * tie. Each part is put in order before the union that holds it, so the keys
- * compare ordered parts. A `type` list stays as the generator writes it: its
+ * compare ordered parts. A `default`, `const` or `example` is data and stays as
+ * written. A `type` list stays as the generator writes it: its
  * kinds are the checker's own primitives, made in one order before any module
  * is read, and openapi.ts splits it by its order (`typeMembers`).
  */
 export const inOneOrder = (value: unknown, key?: string): unknown => {
+  if (key !== undefined && DATA.has(key)) {
+    return value;
+  }
   if (Array.isArray(value)) {
     const items = value.map((item) => inOneOrder(item));
     if (key !== undefined && SETS.has(key)) {
