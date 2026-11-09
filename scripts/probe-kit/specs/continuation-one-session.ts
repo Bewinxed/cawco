@@ -28,13 +28,12 @@
  *
  *   bun scripts/probe-kit/run.ts continuation-one-session
  */
+
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import type {
-  ContinuationJob,
-  InstanceStatus,
-} from "../../../packages/core/src/protocol";
+import type { InstanceStatus } from "../../../packages/core/src/protocol";
 import { MODEL, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The words the trigger refuses the fold in. */
@@ -56,27 +55,18 @@ const turnTaken = async (fleet: KitFleet, title: string): Promise<string> => {
 /** `source` continued from its asks, as its own `continue_session` asks it: one session. */
 const continueFromAsks = (fleet: KitFleet, source: string) =>
   readWithin(30_000, async (signal) => {
-    const response = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/instances/:id/continue", {
-        path: { id: source },
-        body: {
-          asksOnly: true,
-          askedBy: source,
-          target: {
-            harness: "claude",
-            model: MODEL.claude,
-            permissionMode: "bypassPermissions",
-          },
+    const response = await hubAt(fleet.base, { signal })
+      .api.instances({ id: source })
+      .continue.post({
+        asksOnly: true,
+        askedBy: source,
+        target: {
+          harness: "claude",
+          model: MODEL.claude,
+          permissionMode: "bypassPermissions",
         },
-      }),
-      { signal }
-    );
-    const body = (await response.json().catch(() => ({}))) as {
-      continuationId?: string;
-      targetInstanceId?: string;
-    };
+      });
+    const body = dataOf(response);
     return { status: response.status, body };
   });
 
@@ -85,9 +75,9 @@ const settled = (fleet: KitFleet, id: string) =>
   until(
     `continuation ${id}'s end`,
     async () =>
-      (
-        await fleet.api<ContinuationJob[]>(hubRequest("GET /api/continuations"))
-      ).find((one) => one.id === id),
+      (await fleet.api((hub) => hub.api.continuations.get())).find(
+        (one) => one.id === id
+      ),
     (one) => one !== undefined && ["started", "failed"].includes(one.stage),
     180_000
   ).catch((error: Error) => ({

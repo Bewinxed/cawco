@@ -18,6 +18,7 @@
 import {
   type HubAnswer,
   type HubClient,
+  type HubData,
   refusalText,
   unwrap,
 } from "@cawco/agent/hub-client";
@@ -67,7 +68,7 @@ const call = async <A extends HubAnswer>(
   hub: string | undefined,
   what: string,
   request: (client: HubClient) => Promise<A>
-): Promise<Extract<A, { error: null }>["data"]> => {
+): Promise<HubData<A>> => {
   if (!hub) {
     throw new RelayError("no hub found");
   }

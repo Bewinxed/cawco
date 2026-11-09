@@ -66,7 +66,6 @@ import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { browserExecutable } from "../../../packages/agent/src/capabilities";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import {
   isAlive,
@@ -76,6 +75,7 @@ import {
 import { leakWords } from "../../../packages/core/src/words/leaks";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const THRESHOLD_GIB = 0.25;
 const MEMORY_WAIT_MS = 180_000;
@@ -378,30 +378,28 @@ const spec: Spec = {
     await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo leak > README.md && git add -A && git commit -qm 'First commit'`
       .env({ ...process.env, HOME: home })
       .quiet();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Leak notice",
-          machineId: MACHINE,
-          cwd: repo,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Leak notice",
+        machineId: MACHINE,
+        cwd: repo,
       })
     );
     const parent = await fleet.spawn("claude", "Parent", repo, {
       projectId: project.id,
     });
     try {
-      const item = await fleet.api<{ instanceId: string; workItemId: string }>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      const item = delegateStarted(
+        await fleet.api((hub) =>
+          hub.api["work-items"].post({
             parentInstanceId: parent,
             title: "Leak in a workspace",
             prompt: `${TAG}: run the commands.`,
             harness: "claude",
             model: "claude-haiku-4-5",
             cwd: repo,
-          },
-        })
+          })
+        )
       );
       const workspace = await until(
         "the delegate's workspace",

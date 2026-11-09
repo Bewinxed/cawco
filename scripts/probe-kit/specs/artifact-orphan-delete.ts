@@ -33,11 +33,11 @@ import type {
   ToolArgs,
   ToolName,
 } from "../../../packages/core/src/hub-request";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 import { shaped } from "../words";
 
 const CHILD = "PROBE-ORPHAN-CHILD";
@@ -123,13 +123,6 @@ const respond = (request: Seen): Reply => {
   }
   return text("ok");
 };
-
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-}
-
 /** A session's own credential, as its tools call the hub with it. */
 const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
   await fleet.sessionCredential(id);
@@ -181,13 +174,11 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Orphan pages",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Orphan pages",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {
@@ -197,9 +188,9 @@ const run = async (kit: Kit) => {
     projectId: project.id,
   });
 
-  const started = await fleet.api<Started>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Mock the edit surface",
         prompt: `${CHILD}: mock the edit surface as a page, then stop.`,
@@ -207,8 +198,8 @@ const run = async (kit: Kit) => {
         model: "claude-haiku-4-5",
         cwd: src,
         lands: "none",
-      },
-    })
+      })
+    )
   );
   await until(
     "the child's item failed as blocked",

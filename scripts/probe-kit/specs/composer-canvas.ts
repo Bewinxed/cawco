@@ -81,11 +81,11 @@
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import { type Box, box } from "../geom";
+import { hubAt } from "../hub";
 import {
   COMPOSER,
   type Kit,
@@ -121,12 +121,6 @@ const respond = (request: Seen): Reply => ({
   everyMs: 5,
   words: [request.tools ? "ok" : "Probe title"],
 });
-
-interface Read {
-  draft?: boolean;
-  outline?: string;
-}
-
 interface On {
   base: string;
   fleet: KitFleet;
@@ -1723,8 +1717,8 @@ const removeCheck = async (
     }),
     [STAGE, CHIP]
   );
-  const listed = await fleet.api<{ id: string }[]>(
-    hubRequest("GET /api/instances/:id/artifacts", { path: { id: session } })
+  const listed = await fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts.get()
   );
   kit.check(
     "13: Remove folds the drawn canvas as Done does (its runs on --dur-grow-exit), leaves no canvas in the message, and the session still lists the artifact",
@@ -1946,11 +1940,7 @@ const syncCheck = async (on: On) => {
   // (c) Cut after that stroke, once the hub holds it.
   const hubDrawn = () =>
     fleet
-      .api<{ file: { elements: { isDeleted?: boolean }[] } }>(
-        hubRequest("GET /api/artifacts/:artifact/export", {
-          path: { artifact: id },
-        })
-      )
+      .api((hub) => hub.api.artifacts({ artifact: id }).export.get())
       .then((out) => out.file.elements.filter((el) => !el.isDeleted).length);
   const held = await until(
     "the hub holds the stroke",
@@ -2496,10 +2486,8 @@ const chipCheck = async (on: On): Promise<string | null> => {
     kit.check("6: Done leaves a chip", false, on.said.slice(-4).join(" | "));
     return null;
   }
-  const exported = await fleet.api<{ png: string | null }>(
-    hubRequest("GET /api/artifacts/:artifact/export", {
-      path: { artifact: id },
-    })
+  const exported = await fleet.api((hub) =>
+    hub.api.artifacts({ artifact: id }).export.get()
   );
   const name = (
     await page.textContent(`${CHIP} [data-slot="att-name"]`)
@@ -2528,11 +2516,8 @@ const chipCheck = async (on: On): Promise<string | null> => {
 const sendCheck = async (on: On, id: string) => {
   const { kit, page, fleet, session } = on;
   const read = () =>
-    fleet.sessionApi<Read>(
-      session,
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
-        path: { id: session, artifact: id },
-      })
+    fleet.sessionApi(session, (hub) =>
+      hub.api.instances({ id: session }).artifacts({ artifact: id }).get()
     );
   const before = await read();
   const rows = await page.locator('[data-slot="turn"][data-you]').count();
@@ -2724,13 +2709,7 @@ const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   const label = width ? `${view} ${width}px` : view;
   // The session's panel shows what an earlier run docked: closed, so its
   // drawer stands over nothing this run presses.
-  await fetchHub(
-    fetch,
-    on.fleet.base,
-    hubRequest("DELETE /api/instances/:id/preview", {
-      path: { id: on.session },
-    })
-  );
+  await hubAt(on.fleet.base).api.instances({ id: on.session }).preview.delete();
   const page = await kit.page(view);
   if (width) {
     await page.setViewportSize({ width, height: VIEWS[view].height });

@@ -49,7 +49,6 @@ import { join } from "node:path";
 import type { Boundary } from "../../../packages/agent/src/boundary/state";
 import { BROWSER_GATE_PORT } from "../../../packages/core/src/browser";
 import type { HarnessKind } from "../../../packages/core/src/harness/kinds";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import {
   MACHINE,
@@ -58,7 +57,9 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 import { legacyClaudeOptions } from "../legacy-claude";
 
 const MCP_VERSION = "1.11.0";
@@ -524,25 +525,24 @@ const standUp = async (kit: Kit) => {
   );
 
   // The fleet's chrome-devtools, as a person adds it.
-  const put = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PUT /api/fleet/mcp/:name", {
-      path: { name: "chrome-devtools" },
-      body: {
-        config: {
-          command: "npx",
-          args: [
-            "-y",
-            `chrome-devtools-mcp@${MCP_VERSION}`,
-            "--no-usage-statistics",
-          ],
-        },
-        enabled: true,
+  const put = await hubAt(fleet.base)
+    .api.fleet.mcp({ name: "chrome-devtools" })
+    .put({
+      config: {
+        command: "npx",
+        args: [
+          "-y",
+          `chrome-devtools-mcp@${MCP_VERSION}`,
+          "--no-usage-statistics",
+        ],
       },
-    })
+      enabled: true,
+    });
+  kit.check(
+    "the fleet runs chrome-devtools-mcp",
+    put.error === null,
+    String(put.status)
   );
-  kit.check("the fleet runs chrome-devtools-mcp", put.ok, String(put.status));
   await until(
     "the machine's sync set the fleet's chrome-devtools",
     async () =>
@@ -579,13 +579,11 @@ const standUp = async (kit: Kit) => {
     gateUrl,
     { env: { [SHELL_PREFIX]: "" } }
   );
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Workspace bash rules",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Workspace bash rules",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   const parent = await fleet.spawn("claude", "Full Send parent", repo, {
@@ -598,17 +596,17 @@ const standUp = async (kit: Kit) => {
     cwd: string,
     title: string
   ): Promise<Delegate> => {
-    const made = await fleet.api<{ instanceId: string | null }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const made = delegateStarted(
+      await fleet.api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: parent,
           title,
           prompt: `PROBE-WBR-BRIEF ${title}: wait for the person's steps.`,
           harness,
           model: MODEL[harness],
           cwd,
-        },
-      })
+        })
+      )
     );
     const id = made.instanceId as string;
     await until(
@@ -660,9 +658,9 @@ const ruleLegs = async (kit: Kit, fleet: KitFleet, claude: Delegate) => {
   const askedLines = await askLines(askMark);
   // Answered here, by Full Send: nothing of the delegate's is left with the
   // hub for the person, and the command ran.
-  const left = (
-    await fleet.api<{ instanceId: string }[]>(hubRequest("GET /api/pending"))
-  ).filter((ask) => ask.instanceId === claude.id);
+  const left = (await fleet.api((hub) => hub.api.pending.get())).filter(
+    (ask) => ask.instanceId === claude.id
+  );
   kit.check(
     "w2: the repository's ask rule asks for `echo probe-ask-rule`, Full Send answers it, and it runs",
     askedLines.length > 0 &&

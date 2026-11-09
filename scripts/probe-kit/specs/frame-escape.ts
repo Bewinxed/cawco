@@ -25,7 +25,6 @@
  *   bun scripts/probe-kit/run.ts frame-escape
  */
 import type { Frame, Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 
@@ -94,17 +93,14 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Frame escape", fleet.repo);
-  const { id } = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: session },
-      body: {
-        kind: "page",
-        does: "judge",
-        title: "Frame escape",
-        ask: "Judge this page: pin anything that reads wrong",
-        name: "frame-escape",
-        html: PAGE,
-      },
+  const { id } = await fleet.api((hub) =>
+    hub.api.instances({ id: session }).artifacts.post({
+      kind: "page",
+      does: "judge",
+      title: "Frame escape",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "frame-escape",
+      html: PAGE,
     })
   );
   const base = await fleet.dashboard();

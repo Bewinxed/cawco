@@ -21,8 +21,9 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import { PortPool } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 import { respond } from "./hub-loopback";
 
@@ -113,11 +114,9 @@ const run = async (kit: Kit) => {
     () => "",
     (error: Error) => error.message
   );
-  const health = (await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("GET /health")
-  ).then((r) => r.json())) as { hubId?: string };
+  const health = (await hubAt(fleet.base)
+    .health.get()
+    .then((r) => dataOf(r))) as { hubId?: string };
   kit.check(
     "3: with the port its own again, the fleet's hub answers there with the id the fleet wrote beside its database, and hubUp passes",
     passed === "" && health.hubId === own,
