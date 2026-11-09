@@ -363,11 +363,10 @@
       },
     },
     {
-      // The kit imports no feature component and no route; what it needs of
-      // them comes in as a prop or a snippet. A module that itself reaches
-      // the kit is scripts/import-rules-check.ts's. The tool cards' output
-      // block is a named exception until markdown takes it as a slot: the
-      // kit's markdown draws a tool's output through it.
+      // The kit imports no feature component, no route and no product module
+      // (lib/cawco); what it needs of them comes in as a prop, a snippet or a
+      // class set. A module that itself reaches the kit is
+      // scripts/import-rules-check.ts's.
       "includes": ["apps/dashboard/src/lib/components/ui/**", "!**/*.jsonc"],
       "linter": {
         "rules": {
@@ -392,12 +391,12 @@
                     "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
                   },
                   {
-                    "group": [
-                      "**/features/**",
-                      "**/routes/**",
-                      "!#lib/components/features/tool-cards/OutputBlock.svelte",
-                    ],
+                    "group": ["**/features/**", "**/routes/**"],
                     "message": "lib/components/ui imports no feature component and no route; pass it in as a prop or a snippet.",
+                  },
+                  {
+                    "group": ["#lib/cawco/**", "**/cawco/**"],
+                    "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
                   },
                 ],
                 "paths": {
@@ -706,6 +705,174 @@
                     "message": "Secure-context only. Use copyToClipboard() from $lib/platform/copy, or the use-clipboard hook.",
                   },
                 ],
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // The dashboard's layers: what the kit (components/ui, held by its own
+      // override above) stands on (lib/platform, lib/hooks, the lib root's
+      // own modules) depends on nothing above it. These overrides restate
+      // the root's, the members' and the sheet override's options, as an
+      // override's options replace them.
+      "includes": [
+        "apps/dashboard/src/lib/hooks/**",
+        "apps/dashboard/src/lib/*.ts",
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                  {
+                    "group": [
+                      "#lib/cawco/**",
+                      "#lib/components/features/**",
+                      "**/cawco/**",
+                      "**/components/features/**",
+                      "../features/**",
+                      "../../features/**",
+                    ],
+                    "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // lib/platform stands under the kit as well.
+      "includes": ["apps/dashboard/src/lib/platform/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                  {
+                    "group": [
+                      "#lib/cawco/**",
+                      "#lib/components/features/**",
+                      "**/cawco/**",
+                      "**/components/features/**",
+                      "../features/**",
+                      "../../features/**",
+                    ],
+                    "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
+                  },
+                  {
+                    "group": [
+                      "#lib/components/**",
+                      "!#lib/components/icons/**",
+                      "../components/**",
+                      "../../components/**",
+                    ],
+                    "message": "lib/platform stands under the kit: what both need lives here, and the kit imports it.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // The kit's own states files: a sheet's rules and the kit's.
+      "includes": ["apps/dashboard/src/lib/components/ui/**/*.stories.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                  {
+                    "group": [
+                      "#lib/cawco/**",
+                      "#lib/components/features/**",
+                      "**/cawco/**",
+                      "**/components/features/**",
+                      "../features/**",
+                      "../../features/**",
+                    ],
+                    "message": "The kit and what it stands on (lib/platform, lib/hooks, the lib root's modules) import nothing above them: a product module (lib/cawco) or a feature passes what it needs in as a prop, a snippet or a class set.",
+                  },
+                  {
+                    "group": [
+                      "**/cawco/client.svelte",
+                      "**/cawco/client.svelte.js",
+                      "./client.svelte",
+                      "./client.svelte.js",
+                      "../client.svelte",
+                      "../client.svelte.js",
+                    ],
+                    "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
+                  },
+                ],
+                "paths": {
+                  "$app/navigation": "The stage stubs $app/navigation; a story never needs it.",
+                  "$app/state": "The stage stubs $app/state; a story never needs it.",
+                  "$app/stores": "The stage stubs $app/stores; a story never needs it.",
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
               },
             },
           },
