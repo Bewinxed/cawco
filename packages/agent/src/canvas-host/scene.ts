@@ -7,6 +7,7 @@ import {
   keptOnRemake,
 } from "@cawco/core/canvas";
 import { toSegment } from "@cawco/core/shapes";
+import { toHost } from "@cawco/preview/overlay/host-origin";
 /**
  * The canvas's scene on its doc (Projects spec §5.10, D23–D25): Excalidraw
  * bound to the artifact's doc by y-excalidraw, the agent's writes converted
@@ -58,7 +59,6 @@ import {
   type YEvent,
   Map as YMap,
 } from "yjs";
-import { toHost } from "../preview-overlay/host-origin";
 import { bindingMade } from "./bound";
 import { clock, progressOf, tokenMs } from "./motion";
 import type { CanvasHold } from "./replica";
@@ -633,7 +633,7 @@ export const fitScene = (api: ExcalidrawImperativeAPI): void => {
 };
 
 /**
- * Ink on a canvas is its own freedraw (preview-overlay ink.ts): when a pen
+ * Ink on a canvas is its own freedraw (preview overlay/ink.ts): when a pen
  * lifts off a freedraw it drew, the overlay hears where the stroke ended
  * (`cawco:stroke-end`: its id, its last point in the window, its box on the
  * canvas, the elements whose boxes it crosses) and puts the stroke's icon
