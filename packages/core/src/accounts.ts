@@ -960,8 +960,9 @@ export const accountProvidersOf = (
   harness: string,
   model: string | null | undefined
 ): AccountProvider[] => {
-  if (traitsOf(harness).accountModel === "dir") {
-    return [CLAUDE_PROVIDER];
+  const sole = traitsOf(harness).soleProvider;
+  if (sole !== null) {
+    return [sole];
   }
   const slash = model?.indexOf("/") ?? -1;
   const prefix = model && slash > 0 ? model.slice(0, slash) : undefined;
