@@ -17,8 +17,8 @@ import { machineLabel } from "@cawco/core/machine-names";
 import type { ModeAsk, SendRefusal } from "@cawco/core/session-messages";
 import { nameOf, signinState } from "../accounts/model.svelte";
 import { signedInHere } from "../accounts/switch.svelte";
-import { type BoardRow, cawco } from "../client.svelte";
-import { conversationHref } from "../links";
+import { cawco } from "../client.svelte";
+import { type BoardRow, conversationHref } from "../links";
 import { permissionModeLabel } from "../permission-modes";
 import { speakerName } from "./speaker";
 
