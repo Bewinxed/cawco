@@ -117,12 +117,12 @@
     globalThis as unknown as {
       __cawcoDebug: {
         frame: (frame: PulseFrame) => void;
-        state: {
-          status: string;
+        connectionState: { status: string };
+        sessionsState: {
           sessions: Record<string, ReturnType<typeof blankSession>>;
-          workItems: Record<string, WorkItemSummary>;
-          plans: Record<string, HeldPlan>;
         };
+        workItemsState: { workItems: Record<string, WorkItemSummary> };
+        plansState: { plans: Record<string, HeldPlan> };
         adoptInstances: (rows: InstanceRow[]) => void;
       };
     }
@@ -155,7 +155,7 @@
     detailed: null,
     at: now,
   };
-  debug.state.sessions[ID] = session;
+  debug.sessionsState.sessions[ID] = session;
   // At work, as its pulse says: written onto the session, as the socket's is.
   debug.frame({
     kind: "pulse",
@@ -206,7 +206,7 @@
       status: "online",
     });
   }
-  debug.state.plans[ID] = {
+  debug.plansState.plans[ID] = {
     rev: 1,
     plan: {
       source: "cawco",
@@ -293,7 +293,7 @@
       waitReason: null,
       waitUntil: null,
     };
-    debug.state.workItems[item.id] = item;
+    debug.workItemsState.workItems[item.id] = item;
     entered.set(item.instanceId, "none");
   });
 
@@ -303,7 +303,7 @@
   // bench says the hub is reached, after the page has said it is reaching.
   $effect(() => {
     if (details && cawco.status !== "connected") {
-      debug.state.status = "connected";
+      debug.connectionState.status = "connected";
     }
   });
 
@@ -311,13 +311,13 @@
   const lent = $derived(composerBindings.get(ID));
 
   onMount(() => () => {
-    for (const id of Object.keys(debug.state.workItems)) {
+    for (const id of Object.keys(debug.workItemsState.workItems)) {
       if (id.startsWith("wi-tray-")) {
-        delete debug.state.workItems[id];
+        delete debug.workItemsState.workItems[id];
       }
     }
-    delete debug.state.sessions[ID];
-    delete debug.state.plans[ID];
+    delete debug.sessionsState.sessions[ID];
+    delete debug.plansState.plans[ID];
     debug.adoptInstances([]);
     if (details) {
       cawco.machines.splice(
