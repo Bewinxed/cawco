@@ -97,14 +97,7 @@
   } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
   import { goto } from "$app/navigation";
-  import {
-    cawco,
-    type ForkSource,
-    forkSession,
-    machineFs,
-    projectAtFolder,
-    spawnSession,
-  } from "../client.svelte";
+  import { type ForkSource, forkSession, spawnSession } from "../client.svelte";
   import Choice from "../config/Choice.svelte";
   import {
     type ContinueSource,
@@ -139,6 +132,8 @@
   } from "../spawnPrefs.svelte";
   import { accountsStore, placementFor } from "../stores/accounts.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { machineFs } from "../stores/machines";
+  import { projectAtFolder, projectsStore } from "../stores/projects.svelte";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -698,7 +693,9 @@
       ? cwd.trim()
       : `${cwd.trim().replace(/\/+$/u, "")}/${repoPath(repo).split("/").pop() ?? ""}`
   );
-  const project = $derived(cawco.projects.find((row) => row.id === projectId));
+  const project = $derived(
+    projectsStore.projects.find((row) => row.id === projectId)
+  );
   /** A fork its source had no mode for (spawn/new-session `startFork`): Start forks it. Never on a continuation. */
   const forking = $derived(continueFrom ? undefined : prefill?.fork);
   /**
@@ -710,7 +707,7 @@
     const id = continueFrom
       ? boardStore.instanceIndex.byId.get(continueFrom.instanceId)?.projectId
       : undefined;
-    return id ? cawco.project(id) : null;
+    return id ? projectsStore.project(id) : null;
   });
   const locked = $derived(
     Boolean(
@@ -940,10 +937,10 @@
   interface Offered {
     machine: string | undefined;
     place: NonNullable<ReturnType<typeof checkoutOn>>;
-    row: (typeof cawco.projects)[number];
+    row: (typeof projectsStore.projects)[number];
   }
   const projectItems = $derived<ProjectItem[]>(
-    cawco.projects
+    projectsStore.projects
       .flatMap((row): Offered[] => {
         if (machineIds.length === 0) {
           return boardStore.machines.flatMap((one) => {
@@ -1867,7 +1864,7 @@
     id: string | undefined,
     target: string
   ): string | undefined {
-    const attached = id ? cawco.project(id) : null;
+    const attached = id ? projectsStore.project(id) : null;
     return attached && placedOn(attached, target) ? attached.id : undefined;
   }
   /**

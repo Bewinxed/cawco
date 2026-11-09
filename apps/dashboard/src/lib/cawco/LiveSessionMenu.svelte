@@ -41,17 +41,7 @@
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import {
-    archiveWorkspace,
-    cawco,
-    deleteTranscript,
-    discardSession,
-    keepSession,
-    machineControl,
-    removeSession,
-    workspaceHeld,
-    workspaceWaiting,
-  } from "./client.svelte";
+  import { cawco, discardSession, keepSession } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import {
     archive,
@@ -67,6 +57,15 @@
   import { sessionName } from "./session-name";
   import { startFork } from "./spawn/new-session.svelte";
   import { boardStore } from "./stores/board.svelte";
+  import {
+    archiveWorkspace,
+    deleteTranscript,
+    machineControl,
+    removeSession,
+    workspaceHeld,
+    workspaceWaiting,
+  } from "./stores/machines";
+  import { sessionsStore } from "./stores/sessions.svelte";
   import { TRY_AGAIN } from "./unanswered";
   import OpenItems from "./workspace/OpenItems.svelte";
   import { focusAfterMenu } from "./workspace/open-beside.svelte";
@@ -97,7 +96,7 @@
     running && cawco.activityOf(instance.id) === "working"
   );
 
-  const session = $derived(cawco.session(instance.id) ?? null);
+  const session = $derived(sessionsStore.session(instance.id) ?? null);
   /** The SDK session a fork branches from. */
   const forkable = $derived(session?.sessionId ?? instance.sessionId ?? null);
   const machine = $derived(

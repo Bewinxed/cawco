@@ -7,12 +7,12 @@
    */
   import { DAY_MS } from "@cawco/core/time";
   import { untrack } from "svelte";
+  import { routineHref } from "#lib/cawco/links.js";
   import {
     changeRoutine,
     type RoutineState,
     readRoutine,
-  } from "#lib/cawco/client.svelte.js";
-  import { routineHref } from "#lib/cawco/links.js";
+  } from "#lib/cawco/stores/projects.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import type { MessageMetadata } from "../types";
