@@ -520,7 +520,7 @@ export function createDelegationMcp(options: {
     }
     return [
       ...all.filter(
-        (tool) =>
+        (tool: { name: string }) =>
           allows(actor, tool.name) &&
           (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
           (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&

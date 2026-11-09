@@ -86,6 +86,14 @@ const responseFormat = () => z.enum(RESPONSE_FORMATS).optional();
  */
 export const STAMPED_KEY = "__cawco";
 
+/** No value: names the type of a tool's arguments on its definition, for tool-args.ts to read. */
+declare const argsTaken: unique symbol;
+
+/** What a tool takes, as a caller writes it: read off the definition's zod input. */
+export interface Takes<A> {
+  readonly [argsTaken]?: A;
+}
+
 export interface McpTool {
   annotations?: ToolAnnotations;
   /** The call: arguments parsed, the domain answer run and presented. */
@@ -148,7 +156,7 @@ export function tool<T extends z.ZodRawShape, R, N extends string = string>(
   run: (args: z.infer<z.ZodObject<T>>, format: ResponseFormat) => Promise<R>,
   present: Presenter<Answered<R>, z.infer<z.ZodObject<T>>>,
   options: ToolOptions<Answered<R>, z.infer<z.ZodObject<T>>> = {}
-): McpTool & { name: N } {
+): McpTool & { name: N } & Takes<z.input<z.ZodObject<T>>> {
   const defined = toolOn<undefined>()(
     name,
     description,
@@ -186,7 +194,7 @@ export const toolOn =
     ) => Promise<R>,
     present: Presenter<Answered<R>, z.infer<z.ZodObject<T>>>,
     options: ToolOptions<Answered<R>, z.infer<z.ZodObject<T>>> = {}
-  ): McpToolOn<C> & { name: N } => {
+  ): McpToolOn<C> & { name: N } & Takes<z.input<z.ZodObject<T>>> => {
     const formats = (present as unknown) !== sentence;
     const shape = formats
       ? { ...input, response_format: responseFormat() }

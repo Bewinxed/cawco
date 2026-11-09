@@ -66,15 +66,12 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
-import type {
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
 import { movedLine, restoredWords } from "../../../packages/core/src/injected";
 import { commandLines } from "../../../packages/core/src/process-identity";
+import type { Sending } from "../../../packages/core/src/sending";
 import { workWords } from "../../../packages/core/src/words/work";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { welcomed } from "../../lib/keeper-dial";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";

@@ -43,16 +43,13 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
-import type {
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
 import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
 } from "../../../packages/core/src/safe-git";
+import type { Sending } from "../../../packages/core/src/sending";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { welcomed } from "../../lib/keeper-dial";
 import { toolCall, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
