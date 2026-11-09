@@ -875,7 +875,6 @@ suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/hub/src/ski
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/hub/src/transcript.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/preview/src/overlay/ink.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	packages/preview/src/overlay/page.ts	1
-suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/boundary-check.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/lint/switch-exhaustiveness.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/probe-kit/specs/held-reorder.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	scripts/probe-kit/specs/host-scratch.ts	1
