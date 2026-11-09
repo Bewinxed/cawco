@@ -35,6 +35,7 @@
     failureClause,
     failureWords,
     hubFetch,
+    hubJson,
     hubRefusal,
   } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
@@ -59,11 +60,9 @@
   async function read() {
     try {
       await readAuth();
-      const response = await hubFetch(hubRequest("GET /api/devices"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      ({ devices, current } = (await response.json()) as {
+      ({ devices, current } = (await hubJson(
+        hubRequest("GET /api/devices")
+      )) as {
         current: string | null;
         devices: OwnerDevice[];
       });
@@ -80,11 +79,9 @@
 
   async function readFind() {
     try {
-      const response = await hubFetch(hubRequest("GET /api/find/settings"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      ({ hideSecrets } = (await response.json()) as FindSettings);
+      ({ hideSecrets } = await hubJson<FindSettings>(
+        hubRequest("GET /api/find/settings")
+      ));
     } catch (error) {
       findProblem = findSecretWords.unread(failureClause(error));
     }
@@ -94,15 +91,11 @@
     findSaving = true;
     findProblem = null;
     try {
-      const response = await hubFetch(
+      ({ hideSecrets } = await hubJson<FindSettings>(
         hubRequest("PUT /api/find/settings", {
           body: { hideSecrets: next } satisfies FindSettings,
         })
-      );
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      ({ hideSecrets } = (await response.json()) as FindSettings);
+      ));
     } catch (error) {
       findProblem = failureWords(error);
     } finally {
