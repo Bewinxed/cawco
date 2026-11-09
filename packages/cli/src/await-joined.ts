@@ -7,7 +7,12 @@
  * this very code.
  */
 import { hostname } from "node:os";
-import { hubClient, reached } from "@cawco/agent/hub-client";
+import {
+  dataOf,
+  HubNotAnswering,
+  hubClient,
+  reached,
+} from "@cawco/agent/hub-client";
 import { machineFetch } from "@cawco/agent/machine-fetch";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -58,7 +63,17 @@ const readOwnRow = (
         .get()
     );
     const pairing = answer.response.headers.get("x-cawco-pairing");
-    return answer.error ? { pairing } : { pairing, row: answer.data };
+    if (answer.error) {
+      return { pairing };
+    }
+    try {
+      return { pairing, row: dataOf(answer) };
+    } catch (error) {
+      if (error instanceof HubNotAnswering) {
+        return { pairing };
+      }
+      throw error;
+    }
   });
 
 /**
