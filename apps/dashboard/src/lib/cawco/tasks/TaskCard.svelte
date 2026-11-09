@@ -37,6 +37,7 @@
   import { dragTask } from "./board-dnd.svelte.js";
   import { actionsOf, asksOf, taskProject } from "./needs.svelte";
   import TodoCount from "./TodoCount.svelte";
+  import { taskShare } from "./task-share.js";
 
   let {
     task,
@@ -69,7 +70,7 @@
   const retry = $derived(isRetry(task));
   /** What it still waits on, its own and its whole's, as the hub settles it: a task by its id, anything else by its name. */
   const waitsOn = $derived(flags.waiting);
-  const key = $derived(`task:${task.id}`);
+  const key = $derived(taskShare(task.id));
   /** A card arriving by a move flies in; it is not uncovered as a new row. */
   const flying = $derived(waiting(key));
 
