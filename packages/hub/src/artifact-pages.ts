@@ -33,12 +33,12 @@ import { BUSY_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { PreviewTarget } from "./preview";
 import {
   embedKey,
-  PreviewRefusal,
   previewFrame,
   previewTargets,
   servedByMachine,
   shownArtifact,
 } from "./preview";
+import { PreviewRefusal } from "./preview-hosts";
 import {
   changeFolderFiles,
   FolderRefusal,
