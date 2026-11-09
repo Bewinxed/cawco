@@ -91,8 +91,6 @@ import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 import { type UsageDb, usageDb } from "./usage";
 import { closeWal, useWal } from "./wal";
 
-export type { MachineLineKind } from "./schema";
-
 /** The store's own members and the stores it wires in. */
 interface HubStore {
   /** Accounts, where they are signed in, how they route, and their limits. */
