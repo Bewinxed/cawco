@@ -28,7 +28,6 @@
 import { Database } from "bun:sqlite";
 import { readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { hubRequest } from "../../packages/core/src/hub-request";
 import { DAY_MS, HOUR_MS } from "../../packages/core/src/time";
 import { MACHINE, type Reply, type Seen, until } from "../scratch-fleet";
 import { writeClaudeTranscript } from "./claude-transcripts";
@@ -350,26 +349,21 @@ export async function scaleFleet(
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Scale",
-        machineId: MACHINE,
-        cwd: fleet.workdir,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Scale",
+      machineId: MACHINE,
+      cwd: fleet.workdir,
     })
   );
   for (let n = 0; n < TASKS; n += 1) {
-    await fleet.api(
-      hubRequest("POST /api/projects/:id/tasks", {
-        path: { id: project.id },
-        body: {
-          title: `Task ${n}: ${wordsOf(6, "probe").join("").trim()}`,
-          labels: [`area-${n % 7}`, ...(n % 3 === 0 ? ["bug"] : [])],
-          description: wordsOf(80, "description").join(""),
-          acceptance: wordsOf(30, "acceptance").join(""),
-          todos: [0, 1, 2].map((todo) => `To-do ${todo} of task ${n}`),
-        },
+    await fleet.api((hub) =>
+      hub.api.projects({ id: project.id }).tasks.post({
+        title: `Task ${n}: ${wordsOf(6, "probe").join("").trim()}`,
+        labels: [`area-${n % 7}`, ...(n % 3 === 0 ? ["bug"] : [])],
+        description: wordsOf(80, "description").join(""),
+        acceptance: wordsOf(30, "acceptance").join(""),
+        todos: [0, 1, 2].map((todo) => `To-do ${todo} of task ${n}`),
       })
     );
   }

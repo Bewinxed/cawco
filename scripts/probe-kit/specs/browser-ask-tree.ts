@@ -70,15 +70,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
+import type { BrowserKey } from "../../../packages/core/src/browser";
 import type {
-  BrowserKey,
-  ListedBrowser,
-} from "../../../packages/core/src/browser";
-import {
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
@@ -87,6 +83,7 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { caw } from "../caw-head";
 import { doorOf, liveBrowser, servedSite } from "../gated-pages";
+import { payloadOf } from "../hub";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import { oauthProvider } from "../oauth-provider";
 
@@ -99,16 +96,6 @@ const STALE_CREDENTIAL = "Invalid session credential";
 const SERVER = "ProbeSignIn";
 /** A work item's states while it runs (work-item-state.ts `LIVE`). */
 const LIVE_ITEM: ReadonlySet<string> = new Set(["starting", "running"]);
-
-interface Parked {
-  instanceId?: string;
-  payload: {
-    browserAsk?: { key: string; origin: string };
-    connectAsk?: { server: string };
-    routedTo?: string;
-  };
-  requestId?: string;
-}
 
 const callAs = async <N extends ToolName, const A>(
   fleet: KitFleet,
@@ -154,15 +141,10 @@ const shieldPage = async (
   }
 };
 
-const pending = (fleet: KitFleet) =>
-  fleet.api<Parked[]>(hubRequest("GET /api/pending"));
+const pending = (fleet: KitFleet) => fleet.api((hub) => hub.api.pending.get());
 
 /** The ask `requestId` of the session's, once it waits on the person. */
-const parkedOf = (
-  fleet: KitFleet,
-  instanceId: string,
-  requestId?: string
-): Promise<Parked | undefined> =>
+const parkedOf = (fleet: KitFleet, instanceId: string, requestId?: string) =>
   until(
     `${instanceId.slice(0, 8)}'s ask waiting on the person`,
     async () =>
@@ -303,11 +285,8 @@ const legNeedsYou = async (
     })
   );
   await fleet
-    .api(
-      hubRequest("POST /api/browsers/:key/handback", {
-        path: { key: at.key },
-        body: { machineId: MACHINE },
-      })
+    .api((hub) =>
+      hub.api.browsers({ key: at.key }).handback.post({ machineId: MACHINE })
     )
     .catch(() => undefined);
   await call.catch(() => undefined);
@@ -328,16 +307,13 @@ const legConnect = async (
   const provider = oauthProvider();
   try {
     const saved = await fleet
-      .api<{ auth?: { mode?: string } }>(
-        hubRequest("PUT /api/fleet/mcp/:name", {
-          path: { name: SERVER },
-          body: {
-            config: {
-              type: "http",
-              url: `http://127.0.0.1:${provider.port}/mcp`,
-            },
-            enabled: true,
+      .api((hub) =>
+        hub.api.fleet.mcp({ name: SERVER }).put({
+          config: {
+            type: "http",
+            url: `http://127.0.0.1:${provider.port}/mcp`,
           },
+          enabled: true,
         })
       )
       .catch((error: unknown) => ({ error: String(error) }));
@@ -352,7 +328,7 @@ const legConnect = async (
       "(i) the deep delegate's connect ask waiting on the person",
       async () =>
         (await pending(fleet)).find(
-          (one) => one.instanceId === at.deep && one.payload.connectAsk
+          (one) => one.instanceId === at.deep && payloadOf(one).connectAsk
         ),
       Boolean,
       60_000
@@ -552,13 +528,10 @@ const askedAgain = async (
   const expected = await pageOf();
   const before = await shieldPage(fleet, at.key);
   await fleet
-    .api(
-      hubRequest("POST /api/browsers/:key/takeover", {
-        path: { key: at.key },
-        body: {
-          requestId: settled.slice("parked ".length),
-          machineId: MACHINE,
-        },
+    .api((hub) =>
+      hub.api.browsers({ key: at.key }).takeover.post({
+        requestId: settled.slice("parked ".length),
+        machineId: MACHINE,
       })
     )
     .catch(() => undefined);
@@ -569,11 +542,8 @@ const askedAgain = async (
     60_000
   ).catch(() => undefined);
   await fleet
-    .api(
-      hubRequest("POST /api/browsers/:key/handback", {
-        path: { key: at.key },
-        body: { machineId: MACHINE },
-      })
+    .api((hub) =>
+      hub.api.browsers({ key: at.key }).handback.post({ machineId: MACHINE })
     )
     .catch(() => undefined);
   const answered = await asking.then(
@@ -698,17 +668,14 @@ const legSlept = async ({ check }: Kit, at: Reopening): Promise<void> => {
   );
   const ended = await quietEnd(at, "(l)");
   await fleet
-    .api(
-      hubRequest("POST /api/browsers/:key/stop", {
-        path: { key: at.key },
-        body: { machineId: MACHINE },
-      })
+    .api((hub) =>
+      hub.api.browsers({ key: at.key }).stop.post({ machineId: MACHINE })
     )
     .catch(() => undefined);
   const asleep = await until(
     "(l) the project's browser asleep",
     async () =>
-      (await fleet.api<ListedBrowser[]>(hubRequest("GET /api/browsers"))).find(
+      (await fleet.api((hub) => hub.api.browsers.get())).find(
         (one) => one.key === at.key
       )?.state ?? "none",
     (state) => state === "asleep",
@@ -745,14 +712,12 @@ const run = async (kit: Kit) => {
     fleet.launch("agent", [], { DOCKER_HOST: "unix:///nonexistent" });
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Ask tree",
-          machineId: MACHINE,
-          cwd: fleet.repo,
-          caw: false,
-        },
+    const project = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: "Ask tree",
+        machineId: MACHINE,
+        cwd: fleet.repo,
+        caw: false,
       })
     );
     const key: BrowserKey = `project:${project.id}`;
@@ -802,11 +767,8 @@ const run = async (kit: Kit) => {
         item,
         child
       );
-      await fleet.api(
-        hubRequest("PATCH /api/instances/:id", {
-          path: { id: child },
-          body: { title },
-        })
+      await fleet.api((hub) =>
+        hub.api.instances({ id: child }).patch({ title })
       );
       return { id: child, workspace };
     };
@@ -859,7 +821,7 @@ const run = async (kit: Kit) => {
       "(b) the deep delegate's browser ask waiting on the person",
       async () =>
         (await pending(fleet)).find(
-          (one) => one.instanceId === deep.id && one.payload.browserAsk
+          (one) => one.instanceId === deep.id && payloadOf(one).browserAsk
         ),
       Boolean,
       60_000
@@ -870,7 +832,7 @@ const run = async (kit: Kit) => {
     check(
       "(b) the delegate two deep, its page open and driven, calls browser_ask: the ask waits on the person, routed to no agent, and none is parked on the sessions above it",
       !!parked &&
-        parked.payload.routedTo === undefined &&
+        payloadOf(parked).routedTo === undefined &&
         elsewhereParked === 0,
       JSON.stringify({ parked, elsewhereParked })
     );
@@ -933,11 +895,10 @@ const run = async (kit: Kit) => {
     if (drawn) {
       await card.getByRole("button", { name: askWords.takeOver }).click();
     } else {
-      await fleet.api(
-        hubRequest("POST /api/browsers/:key/takeover", {
-          path: { key },
-          body: { requestId: parked.requestId, machineId: MACHINE },
-        })
+      await fleet.api((hub) =>
+        hub.api
+          .browsers({ key })
+          .takeover.post({ requestId: parked.requestId, machineId: MACHINE })
       );
     }
     const front = await until(
@@ -952,11 +913,9 @@ const run = async (kit: Kit) => {
       (path) => path === `/session/${deep.id}`,
       30_000
     ).catch(() => new URL(page.url()).pathname);
-    const listed = (
-      await fleet.api<{ key: string; origin?: string }[]>(
-        hubRequest("GET /api/browsers")
-      )
-    ).find((one) => one.key === key);
+    const listed = (await fleet.api((hub) => hub.api.browsers.get())).find(
+      (one) => one.key === key
+    );
     check(
       "(d) with the asker's older page on the same origin, and a newer tab of its own and another session's opened there after the ask, Take over on the top session's card brings the sign-in page the agent drove and asked about to the front, its band naming the origin, and takes the person to the asking delegate's session",
       front === asked &&
@@ -975,11 +934,8 @@ const run = async (kit: Kit) => {
 
     // (e) Handed back: the call answers with the origin.
     await fleet
-      .api(
-        hubRequest("POST /api/browsers/:key/handback", {
-          path: { key },
-          body: { machineId: MACHINE },
-        })
+      .api((hub) =>
+        hub.api.browsers({ key }).handback.post({ machineId: MACHINE })
       )
       .catch(() => undefined);
     const answered = await call.then(
@@ -1038,7 +994,7 @@ const run = async (kit: Kit) => {
       "(f) the second ask waiting on the person",
       async () =>
         (await pending(fleet)).find(
-          (one) => one.instanceId === deep.id && one.payload.browserAsk
+          (one) => one.instanceId === deep.id && payloadOf(one).browserAsk
         ),
       Boolean,
       60_000
@@ -1046,11 +1002,10 @@ const run = async (kit: Kit) => {
     await third.send("Target.closeTarget", { targetId: asked });
     third.close();
     const take = await fleet
-      .api<unknown>(
-        hubRequest("POST /api/browsers/:key/takeover", {
-          path: { key },
-          body: { requestId: second?.requestId, machineId: MACHINE },
-        })
+      .api((hub) =>
+        hub.api
+          .browsers({ key })
+          .takeover.post({ requestId: second?.requestId, machineId: MACHINE })
       )
       .then(
         () => "taken",

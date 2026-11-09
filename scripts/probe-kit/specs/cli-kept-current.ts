@@ -107,7 +107,6 @@ import {
 } from "../../../packages/agent/src/tools";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { machineLabel } from "../../../packages/core/src/machine-names";
 import type { ToolStatus } from "../../../packages/core/src/tools";
 import { TOOL_CATALOG, toolSpec } from "../../../packages/core/src/tools";
@@ -119,6 +118,7 @@ import {
   updatesOwed,
 } from "../../../packages/hub/src/tool-releases";
 import { delay, MACHINE, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
 
@@ -869,14 +869,9 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
     await cliToolsPage(kit, fleet, { behind, off }, row);
 
     // (i) The fleet pins a version, and a press carrying none installs it.
-    const pinned = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("PUT /api/tools/:id", {
-        path: { id: "claude" },
-        body: { pinnedVersion: PIN },
-      })
-    );
+    const pinned = await hubAt(fleet.base)
+      .api.tools({ id: "claude" })
+      .put({ pinnedVersion: PIN });
     const before = (await behind.calls()).length;
     const answer = await press(fleet, MACHINE);
     const onPin = await reached(
@@ -886,7 +881,7 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
     const ran = (await behind.calls()).slice(before);
     check(
       `(i) end to end, on a fleet that pins ${PIN}, a press carrying no pin installs ${PIN} with the native installer, and no updater runs`,
-      pinned.ok &&
+      pinned.error === null &&
         answer.kind === "answered" &&
         onPin?.version === PIN &&
         ran.join(",") === `install ${PIN}`,
@@ -931,11 +926,9 @@ const cliToolsPage = async (
 ): Promise<void> => {
   const { check } = kit;
   const hostname =
-    (
-      await fleet.api<{ hostname: string; machineId: string }[]>(
-        hubRequest("GET /api/agents")
-      )
-    ).find((agent) => agent.machineId === MACHINE)?.hostname ?? "";
+    (await fleet.api((hub) => hub.api.agents.get())).find(
+      (agent) => agent.machineId === MACHINE
+    )?.hostname ?? "";
   const label = machineLabel(hostname);
   const head = toolWords.notUpdatedHead(NAME, NEWEST, label);
   const offHead = toolWords.notUpdatedHead(NAME, BEHIND, label);

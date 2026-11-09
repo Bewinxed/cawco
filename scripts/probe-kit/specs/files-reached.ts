@@ -36,14 +36,12 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type HubSent,
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type { HubClient } from "../../../packages/agent/src/hub-client";
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
-import type { ArtifactSummary } from "../../../packages/core/src/protocol";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
@@ -97,13 +95,11 @@ const run = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Files reached",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Files reached",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const inProject = { projectId: project.id };
@@ -160,20 +156,15 @@ const run = async (kit: Kit) => {
     )[0]?.state ?? "none";
 
   const files = (id: string) =>
-    fleet.api<ArtifactSummary[]>(
-      hubRequest("GET /api/instances/:id/artifacts/files", { path: { id } })
-    );
+    fleet.api((hub) => hub.api.instances({ id }).artifacts.files.get());
   const menu = (id: string) =>
-    fleet.api<ArtifactSummary[]>(
-      hubRequest("GET /api/instances/:id/artifacts", { path: { id } })
-    );
+    fleet.api((hub) => hub.api.instances({ id }).artifacts.get());
   const create = (
     id: string,
-    body: HubSent<"POST /api/instances/:id/artifacts">["body"]
-  ) =>
-    fleet.api<{ id: string }>(
-      hubRequest("POST /api/instances/:id/artifacts", { path: { id }, body })
-    );
+    body: Parameters<
+      ReturnType<HubClient["api"]["instances"]>["artifacts"]["post"]
+    >[0]
+  ) => fleet.api((hub) => hub.api.instances({ id }).artifacts.post(body));
 
   // The parent's conversation open on a desk, its panel the person's.
   const page = await kit.page("desk");
@@ -209,11 +200,11 @@ const run = async (kit: Kit) => {
       held.some((one) => one.id === working.id),
     `files [${before.map((one) => one.name).join(", ")}]; menu [${held.map((one) => one.name).join(", ")}]`
   );
-  await fleet.api(
-    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-      path: { id: parent, artifact: working.id },
-      body: {},
-    })
+  await fleet.api((hub) =>
+    hub.api
+      .instances({ id: parent })
+      .artifacts({ artifact: working.id })
+      .show.post({})
   );
   const after = await until(
     "the shown canvas in the parent's Files",

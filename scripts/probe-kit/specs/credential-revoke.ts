@@ -25,8 +25,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** What the agent puts in place of a credential (agent redaction.ts `REDACTED`). */
@@ -76,12 +76,9 @@ const storedFor = (fleet: KitFleet, hash: string): string | undefined =>
 /** The hub's answer to an installation ack carrying `credential`: 401 once it grants nothing. */
 const ackStatus = async (fleet: KitFleet, credential: string) =>
   (
-    await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/session-identities/ack", { body: {} }),
-      { headers: { authorization: `Bearer ${credential}` } }
-    )
+    await hubAt(fleet.base, {
+      headers: { authorization: `Bearer ${credential}` },
+    }).api["session-identities"].ack.post({})
   ).status;
 
 /** A session's credential, installed: its hash as the hub keeps it. */
@@ -164,11 +161,8 @@ const run = async (kit: Kit): Promise<void> => {
   const page = await until(
     "B's transcript holds its answer",
     async () => {
-      const read = await fleet.api<{ blocks: { content: string }[] }>(
-        hubRequest("GET /api/instances/:id/transcript", {
-          path: { id: b },
-          query: { limit: "400" },
-        })
+      const read = await fleet.api((hub) =>
+        hub.api.instances({ id: b }).transcript.get({ query: { limit: "400" } })
       );
       const text = read.blocks.map((one) => one.content).join("\n");
       return text.includes("CAWCO_SESSION_CREDENTIAL=") ? text : undefined;
