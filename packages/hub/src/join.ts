@@ -58,6 +58,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { connectWords } from "@cawco/core/words/connect";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
+import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { DB_PATH, HUB_PORT } from "./config";
 import { INSTALL_CODE, type Installs } from "./installs";
@@ -932,14 +933,14 @@ export const joinRoutes = ({
         if (started.existing) {
           // A plain answer, not a declared status: the route's typed answers
           // are what the frozen iOS app's generated client switches over.
-          return new Response(
-            `An SSH add of ${started.install.target} is already running (${started.install.id}): it goes on, and a new one can start once it has ended.`,
+          return problemResponse(
             {
               status: 409,
-              headers: {
-                "content-type": "text/plain; charset=utf-8",
-                [SSH_ADD_RUNNING_HEADER]: started.install.id,
-              },
+              code: "ssh-add-already-running",
+              detail: `An SSH add of ${started.install.target} is already running (${started.install.id}): it goes on, and a new one can start once it has ended.`,
+            },
+            {
+              [SSH_ADD_RUNNING_HEADER]: started.install.id,
             }
           );
         }
