@@ -281,6 +281,23 @@ const GatePassShape = declared(
 export const GatePassSchema: z.ZodType<GatePassType> = GatePassShape;
 export type GatePassOutput = z.output<typeof GatePassShape>;
 
+const InstallsRecordShape = declared(
+  z.object({
+    draft: InstallDraftShape.nullable(),
+    installs: z.array(
+      InstallShape.omit({ keys: true }).extend({
+        code: z.string().nullable().optional(),
+        keys: InstallShape.shape.keys.optional(),
+      })
+    ),
+  }),
+  "InstallsRecord",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
+  InstallsRecordShape;
+export type InstallsRecordOutput = z.output<typeof InstallsRecordShape>;
+
 const ItemBlockShape = declared(
   z.object({
     kind: z.enum(["type", "machine", "account"]),
@@ -402,6 +419,41 @@ export type PreparedContinuationOutput = z.output<
   typeof PreparedContinuationShape
 >;
 
+const ProposedFileShape = declared(
+  z.object({ before: z.string(), content: z.string(), path: z.string() }),
+  "ProposedFile",
+  "packages/hub/src/db/stored-types.ts"
+);
+export type ProposedFileOutput = z.output<typeof ProposedFileShape>;
+
+const ProposalFileShape = declared(
+  ProposedFileShape,
+  "ProposalFile",
+  "packages/hub/src/db/stored-types.ts"
+);
+export type ProposalFileOutput = z.output<typeof ProposalFileShape>;
+
+const ProposalShape = declared(
+  z.object({
+    base: z.string(),
+    by: z.string(),
+    files: z.array(ProposalFileShape),
+    id: z.string(),
+    kind: z.enum(["archive", "rewrite"]).optional(),
+    notes: z.array(z.string()),
+    projectId: z.string(),
+    session: z.string(),
+    time: z.string(),
+    toolUseId: z.string().optional(),
+    why: z.string(),
+    withdraws: z.string().optional(),
+  }),
+  "Proposal",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
+export type ProposalOutput = z.output<typeof ProposalShape>;
+
 const StoredSendRefusalShape = declared(
   z.union([
     SendRefusalShape,
@@ -509,55 +561,3 @@ const WorkspaceFromShape = declared(
 export const WorkspaceFromSchema: z.ZodType<WorkspaceFromType> =
   WorkspaceFromShape;
 export type WorkspaceFromOutput = z.output<typeof WorkspaceFromShape>;
-
-const InstallsRecordShape = declared(
-  z.object({
-    draft: InstallDraftShape.nullable(),
-    installs: z.array(
-      InstallShape.omit({ keys: true }).extend({
-        code: z.string().nullable().optional(),
-        keys: InstallShape.shape.keys.optional(),
-      })
-    ),
-  }),
-  "InstallsRecord",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
-  InstallsRecordShape;
-export type InstallsRecordOutput = z.output<typeof InstallsRecordShape>;
-
-const ProposedFileShape = declared(
-  z.object({ before: z.string(), content: z.string(), path: z.string() }),
-  "ProposedFile",
-  "packages/hub/src/db/stored-types.ts"
-);
-export type ProposedFileOutput = z.output<typeof ProposedFileShape>;
-
-const ProposalFileShape = declared(
-  ProposedFileShape,
-  "ProposalFile",
-  "packages/hub/src/db/stored-types.ts"
-);
-export type ProposalFileOutput = z.output<typeof ProposalFileShape>;
-
-const ProposalShape = declared(
-  z.object({
-    base: z.string(),
-    by: z.string(),
-    files: z.array(ProposalFileShape),
-    id: z.string(),
-    kind: z.enum(["archive", "rewrite"]).optional(),
-    notes: z.array(z.string()),
-    projectId: z.string(),
-    session: z.string(),
-    time: z.string(),
-    toolUseId: z.string().optional(),
-    why: z.string(),
-    withdraws: z.string().optional(),
-  }),
-  "Proposal",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
-export type ProposalOutput = z.output<typeof ProposalShape>;
