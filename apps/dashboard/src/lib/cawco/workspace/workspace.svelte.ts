@@ -25,7 +25,12 @@ import { hubRequest } from "@cawco/core/hub-request";
 import type { TabNamed } from "@cawco/core/protocol";
 import { SvelteSet } from "svelte/reactivity";
 import { hubFetch } from "#lib/platform/hub-read.js";
-import { asPref, keepPrefs } from "#lib/platform/prefs.js";
+import {
+  asPref,
+  keepPrefs,
+  WORKSPACE_CTX_PREF,
+  WORKSPACE_PREF,
+} from "#lib/platform/prefs.js";
 import { store, stored as storedIn } from "#lib/platform/storage.js";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
@@ -68,10 +73,6 @@ export interface AskedContext {
   harness?: HarnessKind;
   machine?: string | null;
 }
-
-const KEY = "cawco-workspace";
-/** The pref the addresses (`ctx`) ride in, apart from the tree. */
-const CTX_KEY = "cawco-workspace-ctx";
 
 /**
  * The group the last split made. Not state and never stored: the grid reads
@@ -194,7 +195,7 @@ function restore(): void {
     return;
   }
   restored = true;
-  const kept = parseWorkspace(storedIn("local", KEY));
+  const kept = parseWorkspace(storedIn("local", WORKSPACE_PREF));
   if (kept) {
     held.root = kept.root;
     held.focusedLeaf = kept.focusedLeaf;
@@ -218,7 +219,7 @@ function save(): void {
     return;
   }
   const payload = JSON.stringify(held);
-  store("local", KEY, payload);
+  store("local", WORKSPACE_PREF, payload);
   const tree = JSON.stringify({
     v: held.v,
     root: held.root,
@@ -232,7 +233,11 @@ function save(): void {
   // restore, rather than an older strip drawn as this one.
   clearTimeout(keeping);
   keeping = setTimeout(
-    () => keepPrefs({ [KEY]: asPref(tree), [CTX_KEY]: asPref(ctx) }),
+    () =>
+      keepPrefs({
+        [WORKSPACE_PREF]: asPref(tree),
+        [WORKSPACE_CTX_PREF]: asPref(ctx),
+      }),
     KEEP_AFTER_MS
   );
 }
