@@ -20,8 +20,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
-import type { MoveJob } from "../../../packages/core/src/move";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -60,35 +58,30 @@ const run = async (kit: Kit) => {
     .cwd(repo)
     .env(env)
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Move start",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Move start",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
 
   const target = join(fleet.sandbox, "moved");
-  const started = await fleet.api<{ id?: string }>(
-    hubRequest("POST /api/projects/:id/moves", {
-      path: { id: project.id },
-      body: {
-        machineId: B,
-        path: target,
-        prompt: "PROBE-MOVE: say ok.",
-        // The mode the person picks in New session, sent as startMoving sends it.
-        spawn: {
-          harness: "claude",
-          model: "claude-haiku-4-5",
-          permissionMode: "default",
-        },
+  const started = await fleet.api((hub) =>
+    hub.api.projects({ id: project.id }).moves.post({
+      machineId: B,
+      path: target,
+      prompt: "PROBE-MOVE: say ok.",
+      // The mode the person picks in New session, sent as startMoving sends it.
+      spawn: {
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        permissionMode: "default",
       },
     })
   );
   const jobOf = async () =>
-    (await fleet.api<MoveJob[]>(hubRequest("GET /api/moves"))).find(
+    (await fleet.api((hub) => hub.api.moves.get())).find(
       (each) =>
         each.projectId === project.id &&
         (started.id === undefined || each.id === started.id)

@@ -29,11 +29,11 @@
  */
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const TAG = "PROBE-DELEGATE-INPUTS";
 const FINISH = "mcp__cawco__finish_item";
@@ -113,12 +113,7 @@ const respond = (request: Seen): Reply => {
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-  workspaceTmp: string;
-}
+type Started = ReturnType<typeof delegateStarted>;
 
 /** The fleet up, a repository in a project, and its parent session running. */
 const setUp = async (
@@ -150,13 +145,11 @@ const setUp = async (
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Delegate inputs",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Delegate inputs",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {
@@ -291,7 +284,7 @@ const refusesHubDatabase = async (
 /** A file in the parent's project's assets landed in the leaf's inputs. */
 const landsAsset = async ({ check }: Kit, started: Started): Promise<void> => {
   const landed = await readFile(
-    join(started.workspaceTmp, "inputs", ASSET),
+    join(started.workspaceTmp ?? "", "inputs", ASSET),
     "utf8"
   ).catch(() => "");
   check(
@@ -334,7 +327,7 @@ const handsOn = async (
     `${handed.status} ${handed.text.slice(0, 300)}`
   );
   const landed = await readFile(
-    join(started.workspaceTmp, "inputs", HANDED),
+    join(started.workspaceTmp ?? "", "inputs", HANDED),
     "utf8"
   ).catch(() => "");
   check(
@@ -394,9 +387,9 @@ const spec: Spec = {
     const { check } = kit;
     const { fleet, home, parent, projectId, src } = await setUp(kit);
     const delegate = (inputs: string[]) =>
-      fleet.api<Started>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      fleet
+        .api((hub) =>
+          hub.api["work-items"].post({
             parentInstanceId: parent,
             title: "Delegate inputs probe",
             prompt: `${TAG}: read your input, then finish.`,
@@ -406,9 +399,9 @@ const spec: Spec = {
             lands: "none",
             outputs: [OUTPUT],
             inputs,
-          },
-        })
-      );
+          })
+        )
+        .then(delegateStarted);
     await refusesKeys(kit, fleet, home, delegate);
     await refusesMissing(kit, fleet, delegate);
     await refusesHiddenMissing(kit, fleet, home, delegate);

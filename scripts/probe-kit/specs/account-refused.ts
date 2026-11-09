@@ -58,12 +58,6 @@ import type {
   AccountSignin,
 } from "../../../packages/core/src/accounts";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import {
-  fetchHub,
-  type HubRequest,
-  hubInit,
-  hubRequest,
-} from "../../../packages/core/src/hub-request";
 import { DAY_MS, HOUR_MS } from "../../../packages/core/src/time";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import type { ClaudeRefusal } from "../../../packages/hub/src/accounts";
@@ -74,11 +68,17 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { answerText, type HubAsk, handled, hubAt, said } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 /** `request` as the in-process hub reads it (`hub.handle`). */
-const hubAsked = (request: HubRequest): Request =>
-  new Request(`http://127.0.0.1${request.path}`, hubInit(request));
+
+/** `ask` of the in-process hub, as its routes read it (`hub.handle`). */
+const hubAskedAnswer = async (
+  hub: { handle: (r: Request) => Promise<Response> | Response },
+  ask: HubAsk
+) => said(await ask(handled((request) => hub.handle(request))));
 
 const MACHINE_A = "machine-a";
 const MACHINE_B = "machine-b";
@@ -419,26 +419,18 @@ const wayBack = async (
   );
 
   // The route runs the same check: here no machine is connected.
-  const routed = await hub.handle(
-    hubAsked(
-      hubRequest("POST /api/accounts/:id/refusal-check", {
-        path: { id: refused.id },
-      })
-    )
+  const routed = await hubAskedAnswer(hub, (client) =>
+    client.api.accounts({ id: refused.id })["refusal-check"].post()
   );
-  const routedBody = await routed.text();
+  const routedBody = routed.text;
   const machineRefused = account("four@example.com", "Four's", "org-4");
   if (auth) {
     signOutRefused(db, MACHINE_A, machineRefused.id, auth);
   }
-  const machineRoute = await hub.handle(
-    hubAsked(
-      hubRequest("POST /api/accounts/:id/refusal-check", {
-        path: { id: machineRefused.id },
-      })
-    )
+  const machineRoute = await hubAskedAnswer(hub, (client) =>
+    client.api.accounts({ id: machineRefused.id })["refusal-check"].post()
   );
-  const machineBody = await machineRoute.text();
+  const machineBody = machineRoute.text;
   kit.check(
     "D: POST /api/accounts/:id/refusal-check runs the check: an account refused account-wide is checked (no machine connected here: no verdict)",
     routed.status === 200 &&
@@ -676,22 +668,17 @@ const throughTheAgent = async (kit: Kit): Promise<void> => {
         Date.now()
       );
     }
-    const routed = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("PUT /api/accounts/routing/:provider", {
-        path: { provider: "anthropic" },
-        body: {
-          yours: { strategy: "fill-first" },
-          delegates: { strategy: "fill-first" },
-          atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
-        },
-      })
-    );
+    const routed = await hubAt(fleet.base)
+      .api.accounts.routing({ provider: "anthropic" })
+      .put({
+        yours: { strategy: "fill-first" },
+        delegates: { strategy: "fill-first" },
+        atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+      });
     kit.check(
       "E setup: routing fills R first, then W, then V",
-      routed.ok,
-      `${routed.status} ${await routed.text()}`
+      routed.error === null,
+      `${routed.status} ${answerText(routed)}`
     );
     await furnish(home, W, W_TOKEN, "w");
     await furnish(home, V, V_TOKEN, "v");
@@ -726,20 +713,17 @@ const throughTheAgent = async (kit: Kit): Promise<void> => {
 
     // The delegate's first turn on R is refused.
     const startedAt = Date.now();
-    const delegate = await fleet.api<{
-      instanceId: string;
-      workItemId: string;
-    }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const delegate = delegateStarted(
+      await fleet.api((client) =>
+        client.api["work-items"].post({
           parentInstanceId: resting,
           title: "refused delegate",
           prompt: `${DELEGATE}: say ok.`,
           harness: "claude",
           model: MODEL.claude,
           host: true,
-        },
-      })
+        })
+      )
     );
     const refusedTo = await until(
       "R signed out on both machines",
@@ -814,17 +798,17 @@ const throughTheAgent = async (kit: Kit): Promise<void> => {
     );
 
     // Placement takes R no more.
-    const next = await fleet.api<{ instanceId: string; workItemId: string }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    const next = delegateStarted(
+      await fleet.api((client) =>
+        client.api["work-items"].post({
           parentInstanceId: resting,
           title: "next delegate",
           prompt: `${NEXT}: say ok.`,
           harness: "claude",
           model: MODEL.claude,
           host: true,
-        },
-      })
+        })
+      )
     );
     kit.check(
       "E3: placement starts the next delegate on W, never on R",
