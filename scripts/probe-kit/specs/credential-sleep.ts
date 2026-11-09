@@ -2,7 +2,7 @@
  * A session's credential ends with its process, asleep included: the hub
  * revokes it as the machine says the process went to sleep (server.ts, the
  * `asleep` frame; db `revokeSessionIdentity`), and its wake, a launch, runs
- * on one minted for it then (server.ts `grantLaunch`). On a scratch fleet
+ * on one minted for it then (launches.ts `grantLaunch`). On a scratch fleet
  * (real hub, agent and sessiond; the real Claude Code CLI against the mock
  * model). Nothing here cuts a workspace, so it runs inside one too.
  *
