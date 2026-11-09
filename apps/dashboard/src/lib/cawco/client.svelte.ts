@@ -214,6 +214,14 @@ import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
+import {
+  type FrameKind,
+  type FrameOf,
+  hubOnly,
+  onFrame,
+  routeFrames,
+  takeFrame,
+} from "./hub/frames";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   type BoardRow,
@@ -1313,7 +1321,7 @@ if (import.meta.env.DEV) {
     state,
     inflight,
     adoptInstances,
-    frame: handleFrame,
+    frame: takeFrame,
     standHub,
     leaveHub,
   });
@@ -3103,7 +3111,7 @@ function adoptPending(
   for (const envelope of pending) {
     if ((askSettledHeard.get(envelope.requestId ?? "") ?? 0) <= readFrom) {
       adoptAskMachine(envelope);
-      handleFrame(envelope.payload);
+      takeFrame(envelope.payload);
     }
   }
 }
@@ -3314,11 +3322,6 @@ function settle(
   return true;
 }
 
-/** The hub's delegate-traffic push (`publishDelegateEvent`, packages/hub). */
-function delegateEventOf(frame: FramePayload): DelegateEvent | null {
-  return frame.kind === "delegate_event" ? frame.event : null;
-}
-
 /**
  * Files one of the hub's pushed delegate events under the delegate it is
  * about, in id order. The read and the pushes overlap by however long the
@@ -3371,533 +3374,545 @@ function clearTurnPhase(target: SessionState): void {
   target.thinkingSince = null;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every FramePayload kind the socket can deliver; splitting it would scatter one state machine across files
-function handleFrame(frame: FramePayload): void {
-  if (frame.kind === "fleet_mcp") {
-    if (!equal(state.fleetMcp, frame.servers)) {
-      state.fleetMcp = frame.servers;
+function takeFleetMcp(frame: FrameOf<"fleet_mcp">): void {
+  if (!equal(state.fleetMcp, frame.servers)) {
+    state.fleetMcp = frame.servers;
+  }
+}
+
+function takePermissionSettled(frame: FrameOf<"permission_settled">): void {
+  // The hub's word that the ask is over, whoever settled it: the card goes,
+  // and a read already on its way cannot bring it back.
+  hearSettled(frame.requestId);
+  const target = state.sessions[frame.instanceId];
+  const parked = target?.pending.find((p) => p.requestId === frame.requestId);
+  if (target && parked) {
+    target.pending = target.pending.filter(
+      (p) => p.requestId !== frame.requestId
+    );
+    trackWorking(target);
+  }
+  // Withdrawn, not answered: the composer folds back, and the transcript
+  // says why the ask is gone. One the hub could not show anyone was never
+  // parked here, and its reason is the only word of it.
+  if (target && frame.outcome === "cancelled" && (parked || frame.reason)) {
+    const question = parked
+      ? questionsOf(parked.toolName, parked.input) !== null
+      : frame.toolName === ASK_USER_QUESTION;
+    addNote(target, withdrawnNote(frame.instanceId, question, frame.reason));
+  }
+  // Answered somewhere else while this tab held the card (another tab, the
+  // app, a session, the harness): it says what won and where.
+  // With an answer of this tab's still out, the winner may be that answer
+  // or another device's: the line waits for the hub's word on ours, said
+  // if it was refused (`streamEffectsFor`, `permission.answer`).
+  if (target && parked && frame.outcome === "answered" && frame.answer) {
+    const note = answeredNote(
+      frame.instanceId,
+      questionsOf(parked.toolName, parked.input) !== null,
+      frame.answer,
+      speakerName(target.harness)
+    );
+    if (answeredHere(frame.requestId)) {
+      answeredWhileOurs.set(frame.requestId, note);
+    } else {
+      addNote(target, note);
     }
+  }
+}
+
+function takePreview(frame: FrameOf<"preview">): void {
+  heardFrame(`preview:${frame.instanceId}`);
+  const previous = state.previews[frame.instanceId];
+  const sameRevision = previous?.revision === frame.revision;
+  const next = {
+    ...(sameRevision ? previous : {}),
+    ...frame,
+  };
+  if (!equal(previous, next)) {
+    state.previews[frame.instanceId] = next;
+  }
+  // A show: one opened, or moved on, after the page's first read of the
+  // fleet. What that read finds open was open before the page came, and is
+  // no show to bring forward (ProjectConversation's Preview, ProjectPage's
+  // Decisions, SideSheet's snap all follow `previewRequests`).
+  if (
+    state.liveRead &&
+    frame.state === "open" &&
+    (previous?.state !== "open" || !sameRevision)
+  ) {
+    revealPreview(frame.instanceId);
+  }
+}
+
+/** The board, whole (`instances`) or as what moved (`instances_delta`), and what rides along with it. */
+function takeBoard(frame: BoardFrame): void {
+  takeBoardPreviews(frame);
+  takeBoardMachines(frame);
+  takeBoardContinuations(frame);
+  takeBoardMoves(frame);
+  takePreviewSettings(frame);
+  takeBoardNotices(frame);
+  takeBoardRows(frame);
+  settleOpenings();
+  takeBoardPulses(frame);
+}
+
+type BoardFrame = FrameOf<"instances" | "instances_delta">;
+
+/** The previews the board lists; one it no longer lists is closed. */
+function takeBoardPreviews(frame: BoardFrame): void {
+  if (!frame.previews) {
     return;
   }
-  if (frame.kind === "permission_settled") {
-    // The hub's word that the ask is over, whoever settled it: the card goes,
-    // and a read already on its way cannot bring it back.
-    hearSettled(frame.requestId);
-    const target = state.sessions[frame.instanceId];
-    const parked = target?.pending.find((p) => p.requestId === frame.requestId);
-    if (target && parked) {
-      target.pending = target.pending.filter(
+  const current = new Set(frame.previews.map((preview) => preview.instanceId));
+  for (const [id, preview] of Object.entries(state.previews)) {
+    if (!current.has(id) && preview.state !== "closed") {
+      heardFrame(`preview:${id}`);
+      state.previews[id] = { ...preview, state: "closed" };
+    }
+  }
+  for (const preview of frame.previews) {
+    takePreview(preview);
+  }
+}
+
+/**
+ * The machines ride along so a daemon registering — the moment its auth
+ * state is decided — reaches the rail without a re-fetch.
+ */
+function takeBoardMachines(frame: BoardFrame): void {
+  if (frame.kind === "instances") {
+    adoptMachines(frame.agents);
+  } else if (frame.agents || frame.removedAgents) {
+    adoptMachines(
+      patchRows(
+        state.machines,
+        frame.agents ?? [],
+        frame.removedAgents ?? [],
+        (row) => row.machineId
+      )
+    );
+  }
+}
+
+/** The continuations the hub carries, and the ids its folds left behind. */
+function takeBoardContinuations(frame: BoardFrame): void {
+  if (frame.continuations) {
+    adoptContinuations(frame.continuations);
+  }
+  // Whole whenever it moved: a session folded into its continuation
+  // leaves its tab on the session it is now (SessionSurface).
+  if (frame.formerIds && !equal(state.formerIds, frame.formerIds)) {
+    state.formerIds = frame.formerIds;
+  }
+}
+
+/** The project moves, handed whole with every snapshot. */
+function takeBoardMoves(frame: BoardFrame): void {
+  if (frame.kind === "instances") {
+    state.moves = frame.moves;
+  }
+}
+
+/** The fleet's preview mode, as the board carries it. */
+function takePreviewSettings(frame: BoardFrame): void {
+  if (
+    frame.previewSettings &&
+    !equal(state.previewSettings, frame.previewSettings)
+  ) {
+    state.previewSettings = frame.previewSettings;
+  }
+}
+
+/** The notices acknowledged anywhere, and whether the hub's record of them is whole. */
+function takeBoardNotices(frame: BoardFrame): void {
+  // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
+  if (frame.noticesSeen) {
+    notices.adopt(frame.noticesSeen);
+  }
+  // The hub's notices record damaged (notices off), or whole again once reset.
+  if (frame.noticesDamaged !== undefined) {
+    notices.adoptDamaged(frame.noticesDamaged);
+  }
+}
+
+/** The board's rows: the snapshot whole, a delta by what moved. */
+function takeBoardRows(frame: BoardFrame): void {
+  if (frame.kind === "instances") {
+    adoptInstances(frame.instances);
+    state.liveRead = true;
+  } else {
+    patchInstances(frame.upserts, frame.removed);
+  }
+}
+
+/** A spawn the hub took is answered by the row it opened. */
+function settleOpenings(): void {
+  for (const [id, requestId] of opening) {
+    if (instanceIndex.byId.has(id)) {
+      opening.delete(id);
+      settle(requestId, (waiter) => waiter.resolve(undefined));
+    }
+  }
+}
+
+/**
+ * Every connection seeds now-state; subsequent changes arrive as pulses.
+ * A merge, not a replace: a per-instance `pulse` frame is not ordered
+ * against a snapshot the hub took moments before the `instances` frame
+ * carrying it left, so whichever pulse actually happened later, by its
+ * own `at`, is the one kept.
+ */
+function takeBoardPulses(frame: BoardFrame): void {
+  if (frame.kind !== "instances") {
+    return;
+  }
+  for (const [id, pulse] of Object.entries(frame.pulses)) {
+    const held = pulses.get(id);
+    if (!held || pulse.at >= held.at) {
+      takePulse(id, pulse);
+    }
+  }
+  for (const [id, pulse] of pulses) {
+    const held = state.sessions[id];
+    if (held) {
+      applyPulse(held, pulse);
+    }
+  }
+  if (!equal(state.hubBuild, frame.hubBuild)) {
+    state.hubBuild = frame.hubBuild;
+  }
+}
+
+function takeUsage(frame: FrameOf<"usage">): void {
+  // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
+  heardFrame("usage");
+  adoptUsageLimits(frame);
+  adoptSpend(frame.spend);
+  // The hub says this when an account's reading, sign-in or catalog moved.
+  readAccounts();
+}
+
+function takeWorkItem(frame: FrameOf<"work_item">): void {
+  heardFrame(`work_item:${frame.item.id}`);
+  if (!equal(state.workItems[frame.item.id], frame.item)) {
+    state.workItems[frame.item.id] = frame.item;
+  }
+}
+
+function takeProjectCap(frame: FrameOf<"project.cap">): void {
+  heardFrame(`project.cap:${frame.projectId}`);
+  const project = state.projects.find((row) => row.id === frame.projectId);
+  if (project) {
+    project.cap = frame.cap;
+  }
+}
+
+function takeActions(frame: FrameOf<"actions">): void {
+  heardFrame("actions");
+  state.actions = frame.actions;
+}
+
+function takeWatchNotices(frame: FrameOf<"fleet_watch.notices">): void {
+  heardFrame("fleet_watch.notices");
+  state.watchNotices = frame.notices;
+}
+
+function takeArtifactNeeds(frame: FrameOf<"artifact.needs">): void {
+  state.artifactNeeds = frame.needs;
+  state.artifactNotices = frame.notices;
+}
+
+function takeLawsBroken(frame: FrameOf<"laws.broken">): void {
+  state.lawsBroken = frame.broken;
+}
+
+function takeHubRestart(frame: FrameOf<"hub.restart">): void {
+  state.restart = frame.restart
+    ? {
+        until: Date.now() + frame.restart.withinMs,
+        version: frame.restart.version,
+      }
+    : null;
+}
+
+function takeProjectStop(frame: FrameOf<"project.stop">): void {
+  for (const listener of projectStopListeners) {
+    listener(frame);
+  }
+}
+
+// A browser changed (a take-over, its state, its page's origin): every view of one follows.
+function takeBrowsers(frame: FrameOf<"browser_list">): void {
+  state.browsers = frame.browsers;
+}
+
+// HTTPS on the tailnet name changed: Needs you's step moves on, or ticks.
+function takeTailnet(frame: FrameOf<"tailnet.https">): void {
+  heardFrame("tailnet.https");
+  const ticked =
+    state.tailnetHttps?.state === "needs" && frame.tailnet.state === "serving";
+  state.tailnetHttps = frame.tailnet;
+  state.tailnetTicked = ticked;
+  if (ticked) {
+    setTimeout(() => {
+      state.tailnetTicked = false;
+    }, TAILNET_TICK_MS);
+  }
+}
+
+function takeFleetFetch(frame: FrameOf<"fleet.fetch">): void {
+  for (const listener of fleetFetchListeners) {
+    listener.heard(frame);
+  }
+}
+
+function takeQuestionsMoved(): void {
+  state.questionsMoved += 1;
+}
+
+function takeTasksChanged(frame: FrameOf<"tasks.changed">): void {
+  state.tasksChanged[frame.projectId] =
+    (state.tasksChanged[frame.projectId] ?? 0) + 1;
+  if (frame.taskId) {
+    const named = `${frame.projectId}/${frame.taskId}`;
+    state.taskChanged[named] = (state.taskChanged[named] ?? 0) + 1;
+  } else {
+    state.tasksChangedUnnamed[frame.projectId] =
+      (state.tasksChangedUnnamed[frame.projectId] ?? 0) + 1;
+  }
+}
+
+function takeDecisionsChanged(frame: FrameOf<"decisions.changed">): void {
+  state.decisionsChanged[frame.projectId] =
+    (state.decisionsChanged[frame.projectId] ?? 0) + 1;
+}
+
+function takeBlocksChanged(frame: FrameOf<"blocks.changed">): void {
+  state.blocksChanged[frame.projectId] =
+    (state.blocksChanged[frame.projectId] ?? 0) + 1;
+}
+
+function takeStarters(frame: FrameOf<"starters.changed">): void {
+  state.starters[`${frame.place}:${frame.projectId}`] = frame.starters;
+}
+
+function takeProjectOffer(frame: FrameOf<"project_offer">): void {
+  heardFrame(`project_offer:${frame.instanceId}`);
+  if (frame.offer) {
+    state.projectOffers[frame.instanceId] = frame.offer;
+  } else {
+    delete state.projectOffers[frame.instanceId];
+  }
+}
+
+function takePulseFrame(frame: FrameOf<"pulse">): void {
+  const previous = pulses.get(frame.instanceId);
+  if (previous && previous.at > frame.pulse.at) {
+    return;
+  }
+  // The daemon's coarse now-state, broadcast — this is the whole of what the
+  // rail knows about a session this browser has not subscribed to. Field
+  // by field: a pulse inside a turn moves its row's time and tool, and
+  // wakes no list that files the session by its activity.
+  takePulse(frame.instanceId, frame.pulse);
+  const held = state.sessions[frame.instanceId];
+  if (held) {
+    applyPulse(held, frame.pulse);
+  }
+}
+
+function takeError(frame: FrameOf<"error">): void {
+  const { instanceId, message, modeAsk } = frame;
+  if (
+    settle(frame.requestId, (waiter) =>
+      waiter.reject(modeAsk ? new ModeUnchosen(modeAsk) : new Error(message))
+    )
+  ) {
+    return;
+  }
+  if (instanceId) {
+    const target = session(instanceId);
+    // A relaunch that never came up has no init frame to end its wait.
+    target.relaunching = false;
+    addNote(target, errorMessage(instanceId, message));
+  } else {
+    console.error("[cawco] hub error:", message);
+  }
+}
+
+function takeControlResult(frame: FrameOf<"control_result">): void {
+  const answered = settle(frame.requestId, (waiter) =>
+    frame.ok
+      ? waiter.resolve(frame.result, {
+          unanswered: frame.unanswered ?? [],
+          failed: frame.failed ?? [],
+        })
+      : waiter.reject(
+          new Error(
+            frame.error ?? "The machine could not carry out that request."
+          )
+        )
+  );
+  if (answered) {
+    return;
+  }
+  // Fire-and-forget controls (interrupt, permission replies) still report failure.
+  if (!frame.ok && frame.instanceId) {
+    addNote(
+      session(frame.instanceId),
+      errorMessage(
+        frame.instanceId,
+        frame.error ?? "The machine could not carry out that request."
+      )
+    );
+  }
+}
+
+/** Every project move, whole, on each change (and `heardMove` between). */
+function takeMoves(frame: FrameOf<"moves">): void {
+  state.moves = frame.moves;
+}
+
+/**
+ * An ask the hub parked: on its session, and off any other it stood on
+ * before (its session folded into the one it went on in).
+ */
+function takePermissionRequest(frame: FrameOf<"permission_request">): void {
+  const target = session(frame.instanceId);
+  const { routedTo } = frame as { routedTo?: "parent" };
+  // An ask is parked in one session: one the hub parked again under
+  // another (its session folded into the one it went on in) leaves
+  // the session it stood in.
+  for (const other of Object.values(state.sessions)) {
+    if (
+      other !== target &&
+      other.pending.some((p) => p.requestId === frame.requestId)
+    ) {
+      other.pending = other.pending.filter(
         (p) => p.requestId !== frame.requestId
       );
-      trackWorking(target);
+      trackWorking(other);
     }
-    // Withdrawn, not answered: the composer folds back, and the transcript
-    // says why the ask is gone. One the hub could not show anyone was never
-    // parked here, and its reason is the only word of it.
-    if (target && frame.outcome === "cancelled" && (parked || frame.reason)) {
-      const question = parked
-        ? questionsOf(parked.toolName, parked.input) !== null
-        : frame.toolName === ASK_USER_QUESTION;
-      addNote(target, withdrawnNote(frame.instanceId, question, frame.reason));
-    }
-    // Answered somewhere else while this tab held the card (another tab, the
-    // app, a session, the harness): it says what won and where.
-    // With an answer of this tab's still out, the winner may be that answer
-    // or another device's: the line waits for the hub's word on ours, said
-    // if it was refused (`streamEffectsFor`, `permission.answer`).
-    if (target && parked && frame.outcome === "answered" && frame.answer) {
-      const note = answeredNote(
-        frame.instanceId,
-        questionsOf(parked.toolName, parked.input) !== null,
-        frame.answer,
-        speakerName(target.harness)
-      );
-      if (answeredHere(frame.requestId)) {
-        answeredWhileOurs.set(frame.requestId, note);
-      } else {
-        addNote(target, note);
-      }
-    }
-    return;
   }
-  if (frame.kind === "preview") {
-    heardFrame(`preview:${frame.instanceId}`);
-    const previous = state.previews[frame.instanceId];
-    const sameRevision = previous?.revision === frame.revision;
-    const next = {
-      ...(sameRevision ? previous : {}),
-      ...frame,
-    };
-    if (!equal(previous, next)) {
-      state.previews[frame.instanceId] = next;
-    }
-    // A show: one opened, or moved on, after the page's first read of the
-    // fleet. What that read finds open was open before the page came, and is
-    // no show to bring forward (ProjectConversation's Preview, ProjectPage's
-    // Decisions, SideSheet's snap all follow `previewRequests`).
-    if (
-      state.liveRead &&
-      frame.state === "open" &&
-      (previous?.state !== "open" || !sameRevision)
-    ) {
-      revealPreview(frame.instanceId);
-    }
-    return;
+  const existing = target.pending.find((p) => p.requestId === frame.requestId);
+  if (existing) {
+    // A re-broadcast (the parent died) clears the tag, so the ask returns
+    // to the user's queue; a fresh arrival keeps it out. Either way the
+    // stored entry follows the latest word from the hub.
+    existing.routedTo = routedTo;
+    existing.raisedAt = frame.raisedAt;
+    existing.presentation = frame.presentation;
+    // A proposal's session moved on (a fold): its card follows.
+    existing.originInstanceId = frame.originInstanceId;
+    existing.heard = hearAsk();
+  } else {
+    target.pending.push({
+      heard: hearAsk(),
+      requestId: frame.requestId,
+      instanceId: frame.instanceId,
+      toolName: frame.toolName,
+      input: frame.input,
+      presentation: frame.presentation,
+      suggestions: frame.suggestions,
+      routedTo,
+      toolUseId: frame.toolUseId,
+      raisedAt: frame.raisedAt,
+      originInstanceId: frame.originInstanceId,
+      browserAsk: frame.browserAsk,
+      connectAsk: frame.connectAsk,
+    });
   }
-  if (frame.kind === "instances" || frame.kind === "instances_delta") {
-    if (frame.previews) {
-      const current = new Set(
-        frame.previews.map((preview) => preview.instanceId)
-      );
-      for (const [id, preview] of Object.entries(state.previews)) {
-        if (!current.has(id) && preview.state !== "closed") {
-          heardFrame(`preview:${id}`);
-          state.previews[id] = { ...preview, state: "closed" };
-        }
-      }
-      for (const preview of frame.previews) {
-        handleFrame(preview);
-      }
-    }
-    // The machines ride along so a daemon registering — the moment its auth
-    // state is decided — reaches the rail without a re-fetch.
-    if (frame.kind === "instances") {
-      adoptMachines(frame.agents);
-    } else if (frame.agents || frame.removedAgents) {
-      adoptMachines(
-        patchRows(
-          state.machines,
-          frame.agents ?? [],
-          frame.removedAgents ?? [],
-          (row) => row.machineId
-        )
-      );
-    }
-    if (frame.continuations) {
-      adoptContinuations(frame.continuations);
-    }
-    if (frame.kind === "instances") {
-      state.moves = frame.moves;
-    }
-    // Whole whenever it moved: a session folded into its continuation
-    // leaves its tab on the session it is now (SessionSurface).
-    if (frame.formerIds && !equal(state.formerIds, frame.formerIds)) {
-      state.formerIds = frame.formerIds;
-    }
-    if (
-      frame.previewSettings &&
-      !equal(state.previewSettings, frame.previewSettings)
-    ) {
-      state.previewSettings = frame.previewSettings;
-    }
-    // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
-    if (frame.noticesSeen) {
-      notices.adopt(frame.noticesSeen);
-    }
-    // The hub's notices record damaged (notices off), or whole again once reset.
-    if (frame.noticesDamaged !== undefined) {
-      notices.adoptDamaged(frame.noticesDamaged);
-    }
-    if (frame.kind === "instances") {
-      adoptInstances(frame.instances);
-      state.liveRead = true;
-    } else {
-      patchInstances(frame.upserts, frame.removed);
-    }
-    // A spawn the hub took is answered by the row it opened.
-    for (const [id, requestId] of opening) {
-      if (instanceIndex.byId.has(id)) {
-        opening.delete(id);
-        settle(requestId, (waiter) => waiter.resolve(undefined));
-      }
-    }
-    // Every connection seeds now-state; subsequent changes arrive as pulses.
-    // A merge, not a replace: a per-instance `pulse` frame is not ordered
-    // against a snapshot the hub took moments before the `instances` frame
-    // carrying it left, so whichever pulse actually happened later, by its
-    // own `at`, is the one kept.
-    if (frame.kind === "instances") {
-      for (const [id, pulse] of Object.entries(frame.pulses)) {
-        const held = pulses.get(id);
-        if (!held || pulse.at >= held.at) {
-          takePulse(id, pulse);
-        }
-      }
-      for (const [id, pulse] of pulses) {
-        const held = state.sessions[id];
-        if (held) {
-          applyPulse(held, pulse);
-        }
-      }
-      if (!equal(state.hubBuild, frame.hubBuild)) {
-        state.hubBuild = frame.hubBuild;
-      }
-    }
-    return;
-  }
-
-  if (frame.kind === "usage") {
-    // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
-    heardFrame("usage");
-    adoptUsageLimits(frame);
-    adoptSpend(frame.spend);
-    // The hub says this when an account's reading, sign-in or catalog moved.
-    readAccounts();
-    return;
-  }
-
-  if (frame.kind === "work_item") {
-    heardFrame(`work_item:${frame.item.id}`);
-    if (!equal(state.workItems[frame.item.id], frame.item)) {
-      state.workItems[frame.item.id] = frame.item;
-    }
-    return;
-  }
-
-  if (frame.kind === "project.cap") {
-    heardFrame(`project.cap:${frame.projectId}`);
-    const project = state.projects.find((row) => row.id === frame.projectId);
-    if (project) {
-      project.cap = frame.cap;
-    }
-    return;
-  }
-
-  if (frame.kind === "actions") {
-    heardFrame("actions");
-    state.actions = frame.actions;
-    return;
-  }
-
-  if (frame.kind === "hub_auth") {
-    takeAuthFrame(frame);
-    return;
-  }
-
-  if (frame.kind === "installs") {
-    takeInstallsFrame(frame);
-    return;
-  }
-
-  if (frame.kind === "fleet_watch.notices") {
-    heardFrame("fleet_watch.notices");
-    state.watchNotices = frame.notices;
-    return;
-  }
-
-  if (frame.kind === "artifact.needs") {
-    state.artifactNeeds = frame.needs;
-    state.artifactNotices = frame.notices;
-    return;
-  }
-
-  if (frame.kind === "laws.broken") {
-    state.lawsBroken = frame.broken;
-    return;
-  }
-
-  if (frame.kind === "hub.restart") {
-    state.restart = frame.restart
-      ? {
-          until: Date.now() + frame.restart.withinMs,
-          version: frame.restart.version,
-        }
-      : null;
-    return;
-  }
-
-  if (frame.kind === "project.stop") {
-    for (const listener of projectStopListeners) {
-      listener(frame);
-    }
-    return;
-  }
-
-  if (frame.kind === "projects.changed") {
-    rereadProjects();
-    return;
-  }
-
-  // The person's presence, and the machines that count toward it.
-  if (frame.kind === "person") {
-    takePerson(frame.person);
-    return;
-  }
-
-  // Something that needs the person, shown on the desk tab they use.
-  if (frame.kind === "desk_alert") {
-    showDeskAlert(frame, instanceIndex);
-    return;
-  }
-
-  // A browser changed (a take-over, its state, its page's origin): every view of one follows.
-  if (frame.kind === "browser_list") {
-    state.browsers = frame.browsers;
-    return;
-  }
-
-  // The stream relay's journey moved: every place that draws it follows.
-  if (frame.kind === "stream_relay.journey") {
-    keepRelayJourney(frame.journey);
-    return;
-  }
-
-  // HTTPS on the tailnet name changed: Needs you's step moves on, or ticks.
-  if (frame.kind === "tailnet.https") {
-    heardFrame("tailnet.https");
-    const ticked =
-      state.tailnetHttps?.state === "needs" &&
-      frame.tailnet.state === "serving";
-    state.tailnetHttps = frame.tailnet;
-    state.tailnetTicked = ticked;
-    if (ticked) {
-      setTimeout(() => {
-        state.tailnetTicked = false;
-      }, TAILNET_TICK_MS);
-    }
-    return;
-  }
-
-  if (frame.kind === "fleet.fetch") {
-    for (const listener of fleetFetchListeners) {
-      listener.heard(frame);
-    }
-    return;
-  }
-
-  if (frame.kind === "questions.moved") {
-    state.questionsMoved += 1;
-    return;
-  }
-
-  if (frame.kind === "tasks.changed") {
-    state.tasksChanged[frame.projectId] =
-      (state.tasksChanged[frame.projectId] ?? 0) + 1;
-    if (frame.taskId) {
-      const named = `${frame.projectId}/${frame.taskId}`;
-      state.taskChanged[named] = (state.taskChanged[named] ?? 0) + 1;
-    } else {
-      state.tasksChangedUnnamed[frame.projectId] =
-        (state.tasksChangedUnnamed[frame.projectId] ?? 0) + 1;
-    }
-    return;
-  }
-
-  if (frame.kind === "decisions.changed") {
-    state.decisionsChanged[frame.projectId] =
-      (state.decisionsChanged[frame.projectId] ?? 0) + 1;
-    return;
-  }
-
-  if (frame.kind === "blocks.changed") {
-    state.blocksChanged[frame.projectId] =
-      (state.blocksChanged[frame.projectId] ?? 0) + 1;
-    return;
-  }
-
-  if (frame.kind === "starters.changed") {
-    state.starters[`${frame.place}:${frame.projectId}`] = frame.starters;
-    return;
-  }
-
-  if (frame.kind === "project_offer") {
-    heardFrame(`project_offer:${frame.instanceId}`);
-    if (frame.offer) {
-      state.projectOffers[frame.instanceId] = frame.offer;
-    } else {
-      delete state.projectOffers[frame.instanceId];
-    }
-    return;
-  }
-
-  if (frame.kind === "pulse") {
-    const previous = pulses.get(frame.instanceId);
-    if (previous && previous.at > frame.pulse.at) {
-      return;
-    }
-    // The daemon's coarse now-state, broadcast — this is the whole of what the
-    // rail knows about a session this browser has not subscribed to. Field
-    // by field: a pulse inside a turn moves its row's time and tool, and
-    // wakes no list that files the session by its activity.
-    takePulse(frame.instanceId, frame.pulse);
-    const held = state.sessions[frame.instanceId];
-    if (held) {
-      applyPulse(held, frame.pulse);
-    }
-    return;
-  }
-
-  if (frame.kind === "error") {
-    const { instanceId, message, modeAsk } = frame;
-    if (
-      settle(frame.requestId, (waiter) =>
-        waiter.reject(modeAsk ? new ModeUnchosen(modeAsk) : new Error(message))
-      )
-    ) {
-      return;
-    }
-    if (instanceId) {
-      const target = session(instanceId);
-      // A relaunch that never came up has no init frame to end its wait.
-      target.relaunching = false;
-      addNote(target, errorMessage(instanceId, message));
-    } else {
-      console.error("[cawco] hub error:", message);
-    }
-    return;
-  }
-
-  if (frame.kind === "control_result") {
-    const answered = settle(frame.requestId, (waiter) =>
-      frame.ok
-        ? waiter.resolve(frame.result, {
-            unanswered: frame.unanswered ?? [],
-            failed: frame.failed ?? [],
-          })
-        : waiter.reject(
-            new Error(
-              frame.error ?? "The machine could not carry out that request."
-            )
-          )
-    );
-    if (answered) {
-      return;
-    }
-    // Fire-and-forget controls (interrupt, permission replies) still report failure.
-    if (!frame.ok && frame.instanceId) {
-      addNote(
-        session(frame.instanceId),
-        errorMessage(
-          frame.instanceId,
-          frame.error ?? "The machine could not carry out that request."
-        )
-      );
-    }
-    return;
-  }
-
-  // The hub's own record of what a delegate asked and was answered: the reader
-  // of this traffic is the parent's delegate card.
-  const delegateEvent = delegateEventOf(frame);
-  if (delegateEvent) {
-    hearDelegateEvent(delegateEvent);
-    return;
-  }
-
-  // Every project move, whole, on each change (and `heardMove` between). A
-  // move's progress travels machine → hub only, never as its own frame.
-  if (frame.kind === "moves") {
-    state.moves = frame.moves;
-    return;
-  }
-  if (frame.kind === "move_progress") {
-    return;
-  }
-  // A command's slot wait travels machine → hub only; its item's status carries it.
-  if (frame.kind === "command_queue") {
-    return;
-  }
-  // A borrower's ask for a fresh sign-in travels machine → hub only.
-  if (frame.kind === "account_borrow") {
-    return;
-  }
-  // A stage's change travels machine → hub only; a sheet's pane reads it in the sheet's doc.
-  if (frame.kind === "stage") {
-    return;
-  }
-  // A machine's browsers travel machine → hub only; the hub's browser registry reads them.
-  if (frame.kind === "browsers") {
-    return;
-  }
-  // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
-  if (frame.kind === "browser_handback") {
-    return;
-  }
-  // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
-  if (frame.kind === "stream_relay") {
-    return;
-  }
-  // A place's stage clone travels machine → hub only; the hub files it as a workspace.
-  if (frame.kind === "stage-clone") {
-    return;
-  }
-  // A machine's fleet report and its items' converge travel machine → hub
-  // only; screens read the hub's row.
-  if (frame.kind === "fleet_report" || frame.kind === "fleet_converge") {
-    return;
-  }
-
-  const target = session(frame.instanceId);
-
-  switch (frame.kind) {
-    case "permission_request": {
-      const { routedTo } = frame as { routedTo?: "parent" };
-      // An ask is parked in one session: one the hub parked again under
-      // another (its session folded into the one it went on in) leaves
-      // the session it stood in.
-      for (const other of Object.values(state.sessions)) {
-        if (
-          other !== target &&
-          other.pending.some((p) => p.requestId === frame.requestId)
-        ) {
-          other.pending = other.pending.filter(
-            (p) => p.requestId !== frame.requestId
-          );
-          trackWorking(other);
-        }
-      }
-      const existing = target.pending.find(
-        (p) => p.requestId === frame.requestId
-      );
-      if (existing) {
-        // A re-broadcast (the parent died) clears the tag, so the ask returns
-        // to the user's queue; a fresh arrival keeps it out. Either way the
-        // stored entry follows the latest word from the hub.
-        existing.routedTo = routedTo;
-        existing.raisedAt = frame.raisedAt;
-        existing.presentation = frame.presentation;
-        // A proposal's session moved on (a fold): its card follows.
-        existing.originInstanceId = frame.originInstanceId;
-        existing.heard = hearAsk();
-        break;
-      }
-      target.pending.push({
-        heard: hearAsk(),
-        requestId: frame.requestId,
-        instanceId: frame.instanceId,
-        toolName: frame.toolName,
-        input: frame.input,
-        presentation: frame.presentation,
-        suggestions: frame.suggestions,
-        routedTo,
-        toolUseId: frame.toolUseId,
-        raisedAt: frame.raisedAt,
-        originInstanceId: frame.originInstanceId,
-        browserAsk: frame.browserAsk,
-        connectAsk: frame.connectAsk,
-      });
-      break;
-    }
-
-    case "asleep":
-    case "delegate_event":
-    case "frame":
-    case "held_send":
-    case "recovery_unavailable":
-    case "rejected":
-    case "scratch_worktree":
-    case "send":
-    case "session_address":
-    case "stopped":
-    case "taken_send":
-      // Every other FramePayload kind (instances, usage, delegate events,
-      // fleet watch's notices, …) is handled above, before this switch is reached.
-      break;
-  }
-
   trackWorking(target);
   target.lastActivityAt = new Date();
 }
+
+/** The kinds of a session's frame that say no more than that it moved. */
+const TOUCH_KINDS = [
+  "asleep",
+  "frame",
+  "held_send",
+  "recovery_unavailable",
+  "rejected",
+  "scratch_worktree",
+  "send",
+  "session_address",
+  "stopped",
+  "taken_send",
+] as const satisfies readonly FrameKind[];
+type TouchKind = (typeof TOUCH_KINDS)[number];
+
+/** A session's frame that says no more than that it moved: its session is held, its activity stamped. */
+function touchSession(frame: FrameOf<TouchKind>): void {
+  const target = session(frame.instanceId);
+  trackWorking(target);
+  target.lastActivityAt = new Date();
+}
+
+/** Every kind of frame the socket delivers, routed to what takes it. */
+routeFrames([
+  onFrame("fleet_mcp", takeFleetMcp),
+  onFrame("permission_settled", takePermissionSettled),
+  onFrame("preview", takePreview),
+  onFrame("instances", takeBoard),
+  onFrame("instances_delta", takeBoard),
+  onFrame("usage", takeUsage),
+  onFrame("work_item", takeWorkItem),
+  onFrame("project.cap", takeProjectCap),
+  onFrame("actions", takeActions),
+  onFrame("hub_auth", takeAuthFrame),
+  onFrame("installs", takeInstallsFrame),
+  onFrame("fleet_watch.notices", takeWatchNotices),
+  onFrame("artifact.needs", takeArtifactNeeds),
+  onFrame("laws.broken", takeLawsBroken),
+  onFrame("hub.restart", takeHubRestart),
+  onFrame("project.stop", takeProjectStop),
+  onFrame("projects.changed", rereadProjects),
+  // The person's presence, and the machines that count toward it.
+  onFrame("person", (frame) => takePerson(frame.person)),
+  // Something that needs the person, shown on the desk tab they use.
+  onFrame("desk_alert", (frame) => showDeskAlert(frame, instanceIndex)),
+  onFrame("browser_list", takeBrowsers),
+  // The stream relay's journey moved: every place that draws it follows.
+  onFrame("stream_relay.journey", (frame) => keepRelayJourney(frame.journey)),
+  onFrame("tailnet.https", takeTailnet),
+  onFrame("fleet.fetch", takeFleetFetch),
+  onFrame("questions.moved", takeQuestionsMoved),
+  onFrame("tasks.changed", takeTasksChanged),
+  onFrame("decisions.changed", takeDecisionsChanged),
+  onFrame("blocks.changed", takeBlocksChanged),
+  onFrame("starters.changed", takeStarters),
+  onFrame("project_offer", takeProjectOffer),
+  onFrame("pulse", takePulseFrame),
+  onFrame("error", takeError),
+  onFrame("control_result", takeControlResult),
+  // The hub's own record of what a delegate asked and was answered: the reader
+  // of this traffic is the parent's delegate card.
+  onFrame("delegate_event", (frame) => hearDelegateEvent(frame.event)),
+  onFrame("permission_request", takePermissionRequest),
+  ...TOUCH_KINDS.map((kind) => onFrame(kind, touchSession)),
+  onFrame("moves", takeMoves),
+  // A move's progress travels machine → hub only, never as its own frame.
+  ...hubOnly("move_progress"),
+  // A command's slot wait travels machine → hub only; its item's status carries it.
+  ...hubOnly("command_queue"),
+  // A borrower's ask for a fresh sign-in travels machine → hub only.
+  ...hubOnly("account_borrow"),
+  // A stage's change travels machine → hub only; a sheet's pane reads it in the sheet's doc.
+  ...hubOnly("stage"),
+  // A machine's browsers travel machine → hub only; the hub's browser registry reads them.
+  ...hubOnly("browsers"),
+  // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
+  ...hubOnly("browser_handback"),
+  // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
+  ...hubOnly("stream_relay"),
+  // A place's stage clone travels machine → hub only; the hub files it as a workspace.
+  ...hubOnly("stage-clone"),
+  // A machine's fleet report and its items' converge travel machine → hub
+  // only; screens read the hub's row.
+  ...hubOnly("fleet_report", "fleet_converge"),
+]);
 
 /* ------------------------------------------------------------------ *
  * The Ledger Protocol binding
@@ -3922,7 +3937,7 @@ const streamHost: StreamHost = {
   applyFrame: (sessionId, frame) => {
     const payload = frame as SessionStreamFrame;
     if (payload.kind !== "transcript") {
-      handleFrame(payload);
+      takeFrame(payload);
       return;
     }
     const target = session(sessionId);
@@ -5882,7 +5897,7 @@ function takeMessage(message: unknown): void {
   // The hub's own refusal names the request it answers on the envelope
   // alone: read from the payload only, it settled nothing, and whoever
   // asked waited out the timeout while the reason went to the console.
-  handleFrame(
+  takeFrame(
     payload.kind === "error" && !payload.requestId
       ? { ...payload, requestId: envelope.requestId }
       : payload
