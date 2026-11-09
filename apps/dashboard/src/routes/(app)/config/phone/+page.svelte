@@ -12,6 +12,7 @@
   import {
     failureClause,
     hubFetch,
+    hubJson,
     hubRefusal,
   } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
@@ -49,11 +50,9 @@
 
   async function read() {
     try {
-      const response = await hubFetch(hubRequest("GET /api/push"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      ({ devices } = (await response.json()) as { devices: Device[] });
+      ({ devices } = await hubJson<{ devices: Device[] }>(
+        hubRequest("GET /api/push")
+      ));
       loaded = true;
     } catch (error) {
       readError = `Could not read the push settings — ${failureClause(error)}.`;
