@@ -139,6 +139,7 @@ export class FleetConverger {
   #healing: Promise<void> = Promise.resolve();
   /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
   #fleetQueue: Promise<unknown> = Promise.resolve();
+  // These flags are widened with `as boolean`: biome's noUnnecessaryConditions reads `= false` as always false, and noInferrableTypes refuses `: boolean = false`.
   /** A fleet report the hub is owed and not yet read ({@link reportFleet}). */
   #fleetReportOwed = false as boolean;
   /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
