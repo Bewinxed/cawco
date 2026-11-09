@@ -39,6 +39,7 @@
   import { goto } from "$app/navigation";
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
+  import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
   import {
     answeredOr,
     archiveWorkspace,
@@ -461,15 +462,15 @@
 
     <ContextMenu.Separator />
 
-    <ContextMenu.CopyItem
+    <ContextMenuCopyItem
       disabled={!instance.cwd}
       text={instance.cwd}
       what="Path"
     >
       Copy path
-    </ContextMenu.CopyItem>
-    <ContextMenu.CopyItem text={instance.id} what="Session id">
+    </ContextMenuCopyItem>
+    <ContextMenuCopyItem text={instance.id} what="Session id">
       Copy id
-    </ContextMenu.CopyItem>
+    </ContextMenuCopyItem>
   </ContextMenu.Content>
 </ContextMenu.Lazy>
