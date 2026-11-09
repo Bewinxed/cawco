@@ -20,13 +20,9 @@ export const workItemOut = (item: WorkItemRow) => ({
   waitUntil: iso(item.waitUntil),
 });
 
-/**
- * A workspace as the API answers it: when it was made, the ISO string it is
- * sent as. `heldAt`, which may be null, stays typed as a date: the shipped
- * app's openapi.json declares it an optional date-time, and a nullable
- * string is what the wire check refuses against it.
- */
+/** A workspace as the API answers it: its times the ISO strings they are sent as. */
 export const workspaceOut = (workspace: WorkspaceRow) => ({
   ...workspace,
   createdAt: workspace.createdAt.toISOString(),
+  heldAt: iso(workspace.heldAt),
 });
