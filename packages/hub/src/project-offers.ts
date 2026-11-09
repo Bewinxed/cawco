@@ -25,7 +25,6 @@ import type {
   ProjectOfferReason,
   ProjectOfferSummary,
 } from "@cawco/core/frames";
-import { machineCalled } from "@cawco/core/machine-names";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { PlanStep } from "@cawco/core/plan";
 import type { ProjectNote } from "@cawco/core/project-conversation";
@@ -37,6 +36,7 @@ import { z } from "zod";
 import type { DbShape } from "./db";
 import type { ProjectOfferRow, ProjectRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
+import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
 import { FolderRefusal, refused } from "./project-folder";
 import { normaliseRemote } from "./projects";
@@ -244,7 +244,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         const where =
           other.machineId === row.machineId
             ? ""
-            : ` on ${machineCalled(other.machineId, db.listAgents())}`;
+            : ` on ${machineName(db, other.machineId)}`;
         return `Another session is working in ${remote}${where}. Make this one a project?`;
       }
     }
