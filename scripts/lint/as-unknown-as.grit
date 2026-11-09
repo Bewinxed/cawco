@@ -1,0 +1,10 @@
+language js
+
+// An assertion through `unknown` (`x as unknown as T`) TypeScript accepts
+// whatever the two types are: it steps around the type checker. Counted per
+// occurrence by scripts/escape-hatch-ratchet.ts, which runs this plugin alone
+// (Biome has no per-file count of its own); the span is the asserted type,
+// the shape the ratchet holds.
+`$x as unknown as $t` as $hit where {
+  register_diagnostic(span=$t, message="An assertion through unknown: parse the value (a schema) or type it.")
+}
