@@ -5,8 +5,7 @@ import type { PageFault } from "../page-faults";
  * artifact_update, artifact_show, artifact_delete, comment_read): a hand-off
  * to the parent, a change held as the next version, an artifact or a pin the
  * session doesn't hold, a preview whose server isn't there. The hub says
- * them from here, and the probe kit finds them by these same words
- * (scripts/probe-words-check.ts refuses a copy).
+ * them from here.
  */
 export const artifactToolWords = {
   /** The head of `artifact_read`'s faults: what a browser met as it drew the page at this revision (core page-faults.ts). */

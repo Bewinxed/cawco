@@ -2,8 +2,7 @@
  * What a session start says: the New session form (its title and Start, the
  * permission modes' names and the mode chip, the Full Send confirmation, a
  * move's Start), which the dashboard renders from here, and what the hub
- * logs of a start it refused (hub server.ts). The probe kit finds them by
- * these same words (scripts/probe-words-check.ts refuses a copy). The app
+ * logs of a start it refused (hub server.ts). The app
  * draws none of it, so it is not written into it (scripts/words-swift.ts).
  */
 

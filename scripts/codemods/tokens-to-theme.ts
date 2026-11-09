@@ -5,7 +5,7 @@
  * `@theme`, where each token is declared once under the name Tailwind reads
  * it by. Nothing generates it any more.
  *
- * Run on a tree that still has `apps/dashboard/src/lib/tokens/tokens.css`, it
+ * Run on a tree that still has the dashboard's generated tokens stylesheet, it
  * does everything:
  *
  *   A. builds the rename map from the old theme's `@theme inline` lines

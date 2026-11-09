@@ -16,7 +16,7 @@ import type { CapabilityCallsIn } from "./db/capability-calls";
  *
  * - A `tool_use` counts one `tool` call of its name.
  * - An MCP server's tool also counts one `mcp` call of the server
- *   ({@link serverOf}): Claude Code and pi name it `mcp__<server>__<tool>`,
+ *   ({@link CALL_NAMING}): Claude Code and pi name it `mcp__<server>__<tool>`,
  *   OpenCode `<server>_<tool>`.
  * - A skill counts a `skill` call instead of a tool call: Claude Code's
  *   `Skill` tool (`input.skill`), OpenCode's `skill` tool (`input.name`),
