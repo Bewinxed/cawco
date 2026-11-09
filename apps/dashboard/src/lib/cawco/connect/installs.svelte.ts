@@ -394,7 +394,7 @@ class Connect {
     const sending = this.#unsaved;
     this.#unsaved = {};
     this.#sending = sending;
-    hubData(this.#send(sending))
+    this.#send(sending)
       .then((read) => {
         this.#sending = null;
         this.#saveRetryMs = RETRY_FIRST_MS;
@@ -442,7 +442,9 @@ class Connect {
    */
   #send(draft: Partial<DraftFields>) {
     const edit: InstallDraftEdit = { stamp: this.#stamp(), draft };
-    return hub.api.installs.draft.patch(edit, { fetch: { keepalive: true } });
+    return hubData(
+      hub.api.installs.draft.patch(edit, { fetch: { keepalive: true } })
+    );
   }
 
   /** A tab chosen: the draft's way in, what was typed in each tab kept. */

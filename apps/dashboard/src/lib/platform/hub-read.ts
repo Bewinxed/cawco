@@ -85,8 +85,8 @@ export class MachineAwayError extends Error {
  * comes back so too, as Eden's 503, its `value` the error `fetch` rejected
  * with and no answer beside it.
  */
-export interface Refused {
-  error: { status: unknown; value: unknown };
+export interface Refused<E extends HubError = HubError> {
+  error: E;
   response: Response;
 }
 
@@ -120,7 +120,7 @@ function textValue(text: string): unknown {
  * Whether `refused` is a request that got no answer at all: Eden hands back
  * what `fetch` rejected with as its value, with no answer beside it.
  */
-export const unanswered = (refused: Refused): boolean =>
+const unanswered = (refused: Refused): boolean =>
   refused.error.value instanceof Error;
 
 /**
@@ -242,17 +242,55 @@ async function answerOf<T>(response: Response): Promise<T> {
  * An answer as Eden's client hands one back (hub.ts): answered, its `data`;
  * refused, its `error` and the answer itself ({@link Refused}).
  */
-export type HubAnswer<T> =
-  | { data: T; error: null; response: Response; status: number }
-  | {
-      data: null;
-      error: { status: unknown; value: unknown };
-      response: Response;
-      status: number;
-    };
+export type HubAnswer<T, E extends HubError = HubError> =
+  Answered<T> | { data: null; error: E; response: Response; status: number };
+
+/** Eden's answer when the route answered, its body as Eden read it. */
+interface Answered<T> {
+  data: T;
+  error: null;
+  response: Response;
+  status: number;
+}
+
+/** A refusal's status and the body Eden read, as Eden types them for its route. */
+interface HubError {
+  status: unknown;
+  value: unknown;
+}
 
 /** What a refused request throws: the hub's refusal in its own words, or the caller's. */
-type Refusal = (refused: Refused) => Error;
+type Refusal<E extends HubError = HubError> = (refused: Refused<E>) => Error;
+
+/**
+ * How a request to the hub ended, for a caller that reads a refusal of its
+ * own (a conflict's latest version, a gone project, a message in place):
+ * answered, its body ({@link bodyOf}); refused, the {@link Refused} its
+ * status narrows. A request that got no answer rejects with what `fetch`
+ * threw. Every other caller reads through {@link hubData} or
+ * {@link hubDone}; no caller holds Eden's answer itself (lint
+ * house/eden-answers-read).
+ */
+export type HubAsked<T, E extends HubError = HubError> =
+  { ok: true; value: T } | { ok: false; refused: Refused<E> };
+
+/** Whether Eden's answer is the route's (no refusal beside it). */
+const answered = <T, E extends HubError>(
+  answer: HubAnswer<T, E>
+): answer is Answered<T> => answer.error === null;
+
+/** `call` as it ended ({@link HubAsked}). */
+export async function hubAsk<T, E extends HubError>(
+  call: Promise<HubAnswer<T, E>>
+): Promise<HubAsked<T, E>> {
+  const answer = await call;
+  if (answered(answer)) {
+    return { ok: true, value: bodyOf(answer) };
+  }
+  const refused = { error: answer.error, response: answer.response };
+  refusedAnswer(refused);
+  return { ok: false, refused };
+}
 
 /**
  * A refused answer as `refusal` words it. A request that got no answer
@@ -282,7 +320,7 @@ const NO_CONTENT = 204;
  * text, is the hub not answering at its own status ({@link noAnswer}). A
  * 204 says it has no body, and is answered as Eden reads it.
  */
-function bodyOf<T>(answer: Extract<HubAnswer<T>, { error: null }>): T {
+function bodyOf<T>(answer: Answered<T>): T {
   const kind = answer.response.headers.get("content-type") ?? "";
   if (
     typeof answer.data === "string" &&
@@ -299,18 +337,17 @@ function bodyOf<T>(answer: Extract<HubAnswer<T>, { error: null }>): T {
  * through Eden (hub.ts): refused, `refusal`'s error is thrown, the hub's
  * refusal in its own words ({@link hubRefusal}) unless the caller words it
  * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`);
- * answered, its body ({@link bodyOf}). `call` may be an answer already
- * awaited, for a caller that reads one status of it as no refusal first.
+ * answered, its body ({@link bodyOf}).
  */
-export async function hubData<T>(
-  call: Promise<HubAnswer<T>> | HubAnswer<T>,
-  refusal: Refusal = hubRefusal
+export async function hubData<T, E extends HubError>(
+  call: Promise<HubAnswer<T, E>>,
+  refusal: Refusal<E> = hubRefusal
 ): Promise<T> {
-  const answer = await call;
-  if (answer.error) {
-    throw refusalOf(answer, refusal);
+  const asked = await hubAsk(call);
+  if (!asked.ok) {
+    throw refusal(asked.refused);
   }
-  return bodyOf(answer);
+  return asked.value;
 }
 
 /**
@@ -348,14 +385,8 @@ export async function hubReached(
 export async function hubRead<T>(
   call: Promise<HubAnswer<T>>
 ): Promise<HubRead<T>> {
-  const answer = await call;
-  if (answer.error) {
-    return {
-      ok: false,
-      ...hubFailure({ error: answer.error, response: answer.response }),
-    };
-  }
-  return { ok: true, value: bodyOf(answer) };
+  const asked = await hubAsk(call);
+  return asked.ok ? asked : { ok: false, ...hubFailure(asked.refused) };
 }
 
 /**
