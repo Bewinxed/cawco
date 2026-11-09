@@ -42,11 +42,9 @@
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
   import {
-    answeredOr,
     archiveWorkspace,
     cawco,
     deleteTranscript,
-    didntAnswer,
     discardSession,
     keepSession,
     machineControl,
@@ -62,6 +60,7 @@
     home,
     unarchive,
   } from "./home/home-state.svelte";
+  import { answeredOr, didntAnswer } from "./hub/control";
   import { conversationHref } from "./links";
   import { heldByMove } from "./move.svelte";
   import { stopOnRow } from "./session-acts.svelte";
