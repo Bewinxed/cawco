@@ -22,29 +22,13 @@
 </script>
 
 <script lang="ts">
-  import { inlineBlockName } from "@cawco/core/inline-blocks";
-  import type { Snippet } from "svelte";
+  import type { ComponentProps } from "svelte";
   import { untrack } from "svelte";
   import {
     Streamdown,
     theme as streamdownTheme,
     type Theme,
   } from "svelte-streamdown";
-  import { markMentions } from "#lib/cawco/find/mention.svelte.js";
-  import { markdownBlocksHere } from "#lib/cawco/markdown-blocks.js";
-  import {
-    markdownFleetHere,
-    plainReferenceOf,
-    writtenLabel,
-  } from "#lib/cawco/markdown-fleet.js";
-  import { outsideCode } from "#lib/cawco/outside-code.js";
-  import {
-    markSkills,
-    skillNamed,
-    skillsHere,
-    skillWords,
-  } from "#lib/cawco/skill-chips.js";
-  import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { track } from "#lib/platform/track.js";
   import { PROSE } from "#lib/prose.js";
@@ -56,54 +40,34 @@
     invert = false,
     streaming = false,
     fades = false,
-    said = false,
-    blocksAt,
     look,
     class: className,
-  }: MarkdownLooks & {
-    source: string;
-    invert?: boolean;
-    streaming?: boolean;
-    /** Its prose root's own utilities, over the house prose (a surface whose
+    marks = (words: string) => words,
+    code,
+    codespan,
+    link,
+  }: MarkdownLooks &
+    Pick<ComponentProps<typeof Streamdown>, "code" | "codespan" | "link"> & {
+      source: string;
+      invert?: boolean;
+      streaming?: boolean;
+      /** Its prose root's own utilities, over the house prose (a surface whose
         type the prose takes, as the release notes' panel). */
-    class?: string;
-    /**
-     * Fade in what each streamed chunk adds, and the last words a message
-     * draws as it settles. Only ever the words a chunk ADDS: the text already
-     * on screen when this mounts — a conversation opened mid-answer, a row
-     * the virtualiser remounted — is never replayed.
-     */
-    fades?: boolean;
-    /**
-     * The person's own words: each `/name` of a skill the session has is
-     * drawn as its chip (skill-chips.ts `markSkills`), and every mention the
-     * composer wrote is a session's reference (mention.svelte.ts
-     * `markMentions`).
-     */
-    said?: boolean;
-    /**
-     * The reply these words are, in a transcript that draws an agent's
-     * blocks (markdown-blocks.ts): a named `openui` fence is its block, by
-     * this reply. Left out, every fence is code.
-     */
-    blocksAt?: string;
-  } = $props();
-
-  /** The block component a transcript provides; none elsewhere. */
-  const Block = markdownBlocksHere();
-
-  /**
-   * The skills of the session whose words these are (SessionPane): a code
-   * span that is exactly one's name, with or without its slash, is its
-   * chip, in anyone's words.
-   */
-  const skills = skillsHere();
-  /**
-   * What this markdown reads of the fleet, as its host provides it: a
-   * reference's chip and a skill's. None on the stage or in a comment
-   * card's thread, which draw each reference as its label and load no store.
-   */
-  const fleet = markdownFleetHere();
+      class?: string;
+      /**
+       * Fade in what each streamed chunk adds, and the last words a message
+       * draws as it settles. Only ever the words a chunk ADDS: the text already
+       * on screen when this mounts — a conversation opened mid-answer, a row
+       * the virtualiser remounted — is never replayed.
+       */
+      fades?: boolean;
+      /**
+       * The words as the host marks them before they are drawn (cawco/Markdown:
+       * a mention as a session's reference, a skill as its chip): the source
+       * as it is when none is given.
+       */
+      marks?: (words: string) => string;
+    } = $props();
 
   // Streamdown's stock themes hardcode a Tailwind palette (bg-gray-100,
   // text-blue-600, marker:hidden) that would out-shout PROSE. Blank every
@@ -111,7 +75,8 @@
   // table wrapper needs its own scroll container. Groups left at their
   // defaults — alerts, footnotes, citations, popovers — are streamdown chrome
   // that prose says nothing about, and the `code` group is not here because a
-  // fence never reaches streamdown's renderer (see the snippet below).
+  // fence never reaches streamdown's renderer (the host's `code` snippet,
+  // cawco/Markdown).
   const PLAIN: Theme = {
     ...streamdownTheme,
     link: { base: "", blocked: "" },
@@ -151,7 +116,8 @@
   /**
    * The link destinations drawn: streamdown's own (`*`: http, https, mailto
    * and tel) and CawCo's rich references (`cawco:`, core references.ts),
-   * which the `link` snippet below draws. Any other scheme stays blocked.
+   * which the host's `link` snippet draws (cawco/Markdown). Any other
+   * scheme stays blocked.
    */
   const LINKS = ["*", "cawco:"];
 
@@ -183,25 +149,8 @@
    * message settles is drawn then, faded in like one more chunk.
    */
   const drawn = $derived(
-    marked(streaming ? source.slice(0, source.search(/\S*$/u)) : source)
+    marks(streaming ? source.slice(0, source.search(/\S*$/u)) : source)
   );
-
-  /**
-   * Words as drawn, outside their code: each mention a session's reference
-   * (mention.svelte.ts `markMentions`), and in the person's own each skill
-   * marked.
-   */
-  function marked(words: string): string {
-    // An agent's reply with no "@" holds no mention: drawn as written, with
-    // no walk of its lines on every chunk.
-    if (!(said || words.includes("@"))) {
-      return words;
-    }
-    const named = said ? skillWords(skills().keys()) : null;
-    return outsideCode(words, (run) =>
-      markMentions(run, said, (between) => markSkills(between, named))
-    );
-  }
 
   /** A fence's opening or closing line: three or more backticks or tildes. */
   const FENCE = /^\s{0,3}(`{3,}|~{3,})/u;
@@ -245,7 +194,7 @@
     )
   );
   const content = $derived(
-    upto >= source.length ? drawn : marked(source.slice(0, upto))
+    upto >= source.length ? drawn : marks(source.slice(0, upto))
   );
   $effect(() => {
     if (untrack(() => upto >= source.length)) {
@@ -368,94 +317,10 @@
     renderHtml={literal}
     static={!tokens}
     theme={PLAIN}
+    {code}
+    {codespan}
+    {link}
   >
-    <!-- A fence is code, and the console has one surface for code: the same well a
-	     tool result opens into, painted by the same highlighter. Streamdown can
-	     highlight fences itself, but it resolves one theme at a time and
-	     writes it as inline colours — registering a custom pair through its
-	     `shikiThemes` pins every fence to whichever theme is listed first, and
-	     following the appearance instead means re-tokenizing every block on every
-	     switch, through a second highlighter with a second cache. Ours paints each token
-	     with a house code token that carries both appearances. The well is
-	     `not-prose`, so prose's `pre` and `code` dressing leaves it alone;
-	     inline code (`codespan`) keeps it, because it is prose, not a
-	     listing. -->
-    {#snippet code({
-      token,
-      incomplete,
-    }: {
-      token: { lang?: string; meta?: string; text: string };
-      incomplete?: boolean;
-    })}
-      {@const name =
-        Block && blocksAt !== undefined
-          ? inlineBlockName(token.lang, token.meta)
-          : null}
-      {#if Block && blocksAt !== undefined && name}
-        <!-- A named openui fence in a reply is the agent's block
-             (tsk-330), drawn in place of its code; one still open is
-             being written. -->
-        <Block
-          at={blocksAt}
-          {name}
-          source={token.text}
-          streaming={streaming && !!incomplete}
-        />
-      {:else}
-        <div class="not-prose my-3">
-          <OutputBlock language={token.lang} text={token.text} />
-        </div>
-      {/if}
-    {/snippet}
-    <!-- A code span naming a skill of this session, exactly, is that
-         skill's chip (SkillChip); any other is code. -->
-    {#snippet codespan({
-      token,
-      children,
-    }: {
-      token: { text: string };
-      children: Snippet;
-    })}
-      {@const skill = skillNamed(skills(), token.text)}
-      {@const Chip = fleet()?.SkillChip}
-      {#if skill && Chip}
-        <Chip {skill} />
-      {:else}
-        <code>{@render children()}</code>
-      {/if}
-    {/snippet}
-    <!-- A link: a `cawco:` reference is drawn as its kind's element (a
-         session as its chip), or as its label alone when the dashboard
-         knows no such kind or id (references.ts). Any other link is the
-         anchor streamdown draws (its Link element), `href` being the
-         destination streamdown allowed. -->
-    {#snippet link({
-      children,
-      href,
-      token,
-    }: {
-      children: Snippet;
-      href?: string | null;
-      /** The fields of marked's link token read here. */
-      token: { href: string; text?: string; title?: string | null };
-    })}
-      {@const drawn = (fleet()?.referenceOf ?? plainReferenceOf)(token.href)}
-      {#if drawn.draw === "element"}
-        <drawn.element
-          id={drawn.id}
-          kind={drawn.kind}
-          label={writtenLabel(token.text)}
-        />
-      {:else if drawn.draw === "label"}
-        {@render children()}
-      {:else if token.href.startsWith("/")}
-        <a href={token.href} title={token.title}>{@render children()}</a>
-      {:else}
-        <a {href} rel="noopener noreferrer" target="_blank" title={token.title}
-          >{@render children()}</a
-        >
-      {/if}
-    {/snippet}
     <!-- Agents write prices and shell variables, not formulas: `$…$` and
          `\(…\)` read as the characters they are. Streamdown lexes them as math,
          and its fallback would draw the formula without its delimiters. -->
