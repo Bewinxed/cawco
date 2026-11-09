@@ -1,31 +1,21 @@
 import type {
   FleetAgent,
-  FleetConfig,
   FleetSkillMeta,
   MarketplaceLink,
 } from "@cawco/core/fleet";
 import type { FleetFetchFrame } from "@cawco/core/frames";
-import { hubRequest } from "@cawco/core/hub-request";
 import type { RuleRow } from "@cawco/core/rules";
 import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
-import { failureWords, hubJson } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { failureWords, hubRefusal } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
-import type {
-  DelegateTypesPayload,
-  ProjectCatalogPayload,
-  ProjectDelegateType,
-  ProjectTypes,
-} from "../delegate-types";
+import type { ProjectDelegateType, ProjectTypes } from "../delegate-types";
 import type {
   FleetMemoryDocRow,
   FleetMemoryRow,
   FleetSnapshot,
 } from "../fleet";
-import type { HooksPayload } from "../hooks";
-import type { RulesPayload } from "../rules";
-import type { ProjectRow } from "../stores/projects.svelte";
-import type { ToolsSnapshot } from "../tools";
 
 /**
  * What the Configure area reads from the hub, held once for every section so
@@ -64,7 +54,7 @@ class Slot<T> {
 
 export interface FleetState {
   agents: FleetAgent[];
-  config: FleetConfig;
+  config: FleetSnapshot["config"];
   /** Marketplace links with no row yet: under way, or refused (fleet.ts `FleetSnapshot`). */
   links: MarketplaceLink[];
   memory: FleetMemoryRow | null;
@@ -82,19 +72,27 @@ const flashMs = () => dur("--dur-fade") * 3;
 
 export class ConfigStore {
   readonly rules = new Slot("the rules", async () => {
-    const payload = await hubJson<RulesPayload>(hubRequest("GET /api/rules"));
+    const answer = await hub.api.rules.get();
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    const payload = answer.data;
     return payload.rules;
   });
   readonly hooks = new Slot("the hooks", async () => {
-    const payload = await hubJson<HooksPayload>(
-      hubRequest("GET /api/fleet/hooks")
-    );
+    const answer = await hub.api.fleet.hooks.get();
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    const payload = answer.data;
     return payload.hooks;
   });
   readonly types = new Slot("the delegate types", async () => {
-    const payload = await hubJson<DelegateTypesPayload>(
-      hubRequest("GET /api/delegate-types")
-    );
+    const answer = await hub.api["delegate-types"].get();
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    const payload = answer.data;
     return payload.types;
   });
   /**
@@ -104,14 +102,20 @@ export class ConfigStore {
   readonly projectTypes = new Slot(
     "the projects' delegate types",
     async (): Promise<ProjectTypes[]> => {
-      const projects = await hubJson<ProjectRow[]>(
-        hubRequest("GET /api/projects")
-      );
+      const answer = await hub.api.projects.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      const projects = answer.data;
       const catalogs = await Promise.all(
         projects.map(async ({ id, name }) => {
-          const catalog = await hubJson<ProjectCatalogPayload>(
-            hubRequest("GET /api/projects/:id/delegate-types", { path: { id } })
-          );
+          const catalogAnswer = await hub.api
+            .projects({ id })
+            ["delegate-types"].get();
+          if (catalogAnswer.error) {
+            throw hubRefusal(catalogAnswer);
+          }
+          const catalog = catalogAnswer.data;
           return {
             project: { id, name },
             types: catalog.types.filter(
@@ -129,9 +133,11 @@ export class ConfigStore {
   readonly fleet = new Slot(
     "the fleet's setup",
     async (): Promise<FleetState> => {
-      const snapshot = await hubJson<FleetSnapshot>(
-        hubRequest("GET /api/fleet")
-      );
+      const answer = await hub.api.fleet.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      const snapshot = answer.data;
       return {
         config: snapshot.config,
         links: snapshot.links,
@@ -145,9 +151,11 @@ export class ConfigStore {
   readonly tools = new Slot(
     "the tool catalog",
     async (): Promise<ToolsState> => {
-      const snapshot = await hubJson<ToolsSnapshot>(
-        hubRequest("GET /api/tools")
-      );
+      const answer = await hub.api.tools.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      const snapshot = answer.data;
       return {
         catalog: snapshot.catalog,
         policies: snapshot.policies,
