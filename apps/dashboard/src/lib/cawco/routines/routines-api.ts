@@ -6,13 +6,14 @@
  * proposed (actions.ts). A row's actions are the hub's routine routes; a
  * refusal is thrown in the hub's own sentence.
  */
+
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type { ConnectionView } from "@cawco/core/connections";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
-import { send } from "#lib/cawco/project-tasks.js";
+import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** One run, as the hub answers it (times in ms). */
 export type RoutineRun = RoutineRunView;
@@ -108,19 +109,26 @@ export async function readRoutinesPage(
 ): Promise<RoutinesPage> {
   const id = encodeURIComponent(projectId);
   const [routines, ingress, relays, actions, connections] = await Promise.all([
-    send<Routine[]>(
-      hubRequest("GET /api/routines", { query: { projectId: id } })
+    hubJson<Routine[]>(
+      hubRequest("GET /api/routines", { query: { projectId: id } }),
+      { failure: refusedOrUnreached }
     ),
-    send<IngressRead>(
-      hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } })
+    hubJson<IngressRead>(
+      hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } }),
+      { failure: refusedOrUnreached }
     ),
-    send<RelayView[]>(
-      hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } })
+    hubJson<RelayView[]>(
+      hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } }),
+      { failure: refusedOrUnreached }
     ),
-    send<{ actions: ApprovedActionView[] }>(
-      hubRequest("GET /api/actions", { query: { projectId: id } })
+    hubJson<{ actions: ApprovedActionView[] }>(
+      hubRequest("GET /api/actions", { query: { projectId: id } }),
+      { failure: refusedOrUnreached }
     ),
-    send<{ connections: ConnectionView[] }>(hubRequest("GET /api/connections")),
+    hubJson<{ connections: ConnectionView[] }>(
+      hubRequest("GET /api/connections"),
+      { failure: refusedOrUnreached }
+    ),
   ]);
   /** Each connection by its name: what polls and `conn:` sources name it by. */
   const connectionOf = new Map(
@@ -208,7 +216,7 @@ export interface RoutineFormHub {
  */
 export const routineFormHub: RoutineFormHub = {
   create: (projectId, draft) =>
-    send(
+    hubJson(
       hubRequest("POST /api/routines", {
         body: {
           projectId,
@@ -219,19 +227,22 @@ export const routineFormHub: RoutineFormHub = {
           timeZone: draft.timeZone,
           delegateType: draft.delegateType,
         },
-      })
+      }),
+      { failure: refusedOrUnreached }
     ),
   preview: (cron, timeZone) =>
-    send(
+    hubJson(
       hubRequest("GET /api/routines/schedule", {
         query: { cron: cron.trim(), timeZone },
-      })
+      }),
+      { failure: refusedOrUnreached }
     ),
   types: async (projectId) => {
-    const catalog = await send<{ types: TypeChoice[] }>(
+    const catalog = await hubJson<{ types: TypeChoice[] }>(
       hubRequest("GET /api/projects/:id/delegate-types", {
         path: { id: projectId },
-      })
+      }),
+      { failure: refusedOrUnreached }
     );
     return catalog.types.map(({ name, description }) => ({
       name,
@@ -245,19 +256,25 @@ export const updateRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
 ): Promise<Routine> =>
-  send(
+  hubJson(
     hubRequest("PATCH /api/routines/:id", {
       path: { id: routineId },
       body: change,
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** Runs a routine now, beside its schedule: the run the hub started. */
 export const runRoutineNow = (routineId: string): Promise<RoutineRun> =>
-  send(hubRequest("POST /api/routines/:id/run", { path: { id: routineId } }));
+  hubJson(
+    hubRequest("POST /api/routines/:id/run", { path: { id: routineId } }),
+    { failure: refusedOrUnreached }
+  );
 
 /** Deletes a routine; its past runs stay in the project's history. */
 export const deleteRoutine = (
   routineId: string
 ): Promise<{ deleted: boolean }> =>
-  send(hubRequest("DELETE /api/routines/:id", { path: { id: routineId } }));
+  hubJson(hubRequest("DELETE /api/routines/:id", { path: { id: routineId } }), {
+    failure: refusedOrUnreached,
+  });
