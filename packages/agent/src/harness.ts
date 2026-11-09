@@ -460,13 +460,15 @@ export interface SubagentChange {
 export interface CarryHost {
   /** Whether a reattach has claimed the session's child and is deciding it. */
   adopting: (instanceId: string) => boolean;
-  /** Why the session's process cannot be ended now, in words; nothing when it is at rest. */
-  awake: (
+  /**
+   * Why the session's process cannot be ended for a move now, in words:
+   * what stopping it would lose that its resume on the new account does not
+   * bring back. `later` when that is only work it holds for later. Nothing
+   * when it is at rest.
+   */
+  awakeForMove: (
     instanceId: string,
-    session: HarnessSession,
-    serverBusy: undefined,
-    keepAliveAside: boolean,
-    forMove: boolean
+    session: HarnessSession
   ) => Promise<{ why: string; unsure?: true; later?: true } | undefined>;
   /** The session is no longer carried: its process ended for the carry, or found gone. */
   drop: (
