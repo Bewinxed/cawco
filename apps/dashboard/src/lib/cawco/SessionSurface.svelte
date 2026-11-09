@@ -29,11 +29,6 @@
    */
   import { onMount, untrack } from "svelte";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
-  import {
-    readTranscript,
-    type ServerTail,
-    syncSubscriptions,
-  } from "#lib/cawco/client.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import FirstRunHere from "#lib/cawco/home/FirstRunHere.svelte";
@@ -53,6 +48,11 @@
   import { continuationsStore } from "#lib/cawco/stores/continuations.svelte.js";
   import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { sessionsStore } from "#lib/cawco/stores/sessions.svelte.js";
+  import { syncSubscriptions } from "#lib/cawco/stores/subscriptions.svelte.js";
+  import {
+    readTranscript,
+    type ServerTail,
+  } from "#lib/cawco/stores/transcript-reads.svelte.js";
   import { fullSize } from "#lib/cawco/workspace/full-size.svelte.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
