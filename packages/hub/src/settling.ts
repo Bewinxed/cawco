@@ -52,9 +52,9 @@ import { decidesWords } from "@cawco/core/words/decides";
 import { routeLine } from "@cawco/core/words/decides-lines";
 import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
-import { decidesTable, SettleRefusal } from "./decides-file";
+import { decidesTable } from "./decides-file";
 import { sessionLabel } from "./labels";
-import { projectRefusalOf } from "./project-refusal";
+import { refusal } from "./refusal";
 import {
   SESSION_TITLE_MAX,
   type WorkItemRequest,
@@ -271,12 +271,12 @@ const onIt = (deps: SettlingDeps, kept: CardSettlingRow | undefined) =>
     : deps.live(kept.workItemId));
 
 export const createSettling = (deps: SettlingDeps) => {
-  /** Card `card`'s member on page `row`, by the project's table, and the table's problems. */
+  /** Card `card`'s member on page `row`, by the project's table, and the table's problems; the folder's refusal when the table does not read off it. */
   const routeOf = async (
     fleet: FleetDecides,
     row: ArtifactRow,
     card: DecisionCard
-  ): Promise<Routed & { problems: string[] }> => {
+  ) => {
     const table = await decidesTable(
       {
         projectId: row.projectId,
@@ -287,14 +287,15 @@ export const createSettling = (deps: SettlingDeps) => {
       fleet
     );
     if (table instanceof ElysiaStatus) {
-      throw projectRefusalOf(table);
+      return table;
     }
     const id = card.kind ? table.routes[card.kind] : undefined;
-    return {
+    const routed: Routed & { problems: string[] } = {
       member: (id && memberOf(fleet, id)) || BUILT_IN.you,
       where: row.projectId ? "project" : "fleet",
       problems: table.problems,
     };
+    return routed;
   };
 
   /** Whether Caw can be reached for a card on project `projectId`'s page (null: none): only while he leads it. */
@@ -610,19 +611,16 @@ export const createSettling = (deps: SettlingDeps) => {
       : {};
   };
 
-  /** Refuses `settler` unless it wrote the card: the asker's cards are its writer's. */
-  const writerOnly = (
-    settler: InstanceRow,
-    row: ArtifactRow,
-    name: string
-  ): void => {
+  /** The refusal of `settler` unless it wrote the card: the asker's cards are its writer's. */
+  const writerOnly = (settler: InstanceRow, row: ArtifactRow, name: string) => {
     if (settler.id === row.instanceId || settler.id === row.madeBy) {
       return;
     }
     const writerId = row.madeBy ?? row.instanceId;
     const writer = writerId ? deps.instance(writerId) : undefined;
-    throw new SettleRefusal(
+    return refusal(
       403,
+      "settle-asker-writer-only",
       decidesWords.settleAsker(
         name,
         writer ? sessionLink(writer.id, sessionLabel(writer).name) : ""
@@ -698,15 +696,19 @@ export const createSettling = (deps: SettlingDeps) => {
       cards: DecisionCard[],
       all: DecisionCard[],
       state: Record<string, ChoiceEntry>
-    ): Promise<Record<string, string>> => {
+    ) => {
+      const lines: Record<string, string> = {};
       if (!all.some((card) => card.kind !== null) || cards.length === 0) {
-        return {};
+        return lines;
       }
       const fleet = deps.db.fleet();
       const routes = new Map<string, Routed>();
       let problems: string[] = [];
       for (const card of cards) {
         const read = await routeOf(fleet, row, card);
+        if (read instanceof ElysiaStatus) {
+          return read;
+        }
         routes.set(card.id, read);
         ({ problems } = read);
       }
@@ -744,42 +746,48 @@ export const createSettling = (deps: SettlingDeps) => {
 
     /**
      * The member `settler` settles card `card` of page `row` for, and how
-     * it signs; refused in one sentence when it may not: a card the person
-     * decides is his alone; the asker's is its writer's; Caw's is the
-     * conversation's; an agent member's, its session's in the ledger.
+     * it signs; its 403 refusal, in one sentence, when it may not: a card
+     * the person decides is his alone; the asker's is its writer's; Caw's
+     * is the conversation's; an agent member's, its session's in the
+     * ledger. The folder's refusal when the table does not read off it.
      */
     settler: async (
       settler: InstanceRow,
       row: ArtifactRow,
       card: DecisionCard
-    ): Promise<
-      Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }
-    > => {
+    ) => {
       const fleet = deps.db.fleet();
-      const { member, where } = await routeOf(fleet, row, card);
+      const routed = await routeOf(fleet, row, card);
+      if (routed instanceof ElysiaStatus) {
+        return routed;
+      }
+      const { member, where } = routed;
       const name = kindName(fleet, card.kind);
       const kept = deps.db.settling(row.id, card.id);
-      const signed = {
+      const signed: Pick<SettledBy, "by" | "name" | "runs"> & {
+        member: Member;
+      } = {
         member,
         by: member.id,
         name: member.name,
         runs: runsOf(member, settler, row.projectId),
       };
       if (member.type === "you" || kept?.route === "you") {
-        throw new SettleRefusal(
+        return refusal(
           403,
+          "settle-yours-only",
           decidesWords.settleYours(name, decidesWords.here(where === "project"))
         );
       }
       if (member.type === "asker") {
-        writerOnly(settler, row, name);
-        return signed;
+        return writerOnly(settler, row, name) ?? signed;
       }
       if (mayRun(settler, row, member, kept)) {
         return signed;
       }
-      throw new SettleRefusal(
+      return refusal(
         403,
+        "settle-member-only",
         decidesWords.settleMember(name, member.name)
       );
     },
