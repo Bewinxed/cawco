@@ -77,7 +77,7 @@ export const connectionState = $state({
   /**
    * When the hub is said unreachable (epoch ms): {@link OUTAGE_GRACE} after
    * the first close, null again once it answers. Retries in between leave
-   * it. A deadline, not a flag: `cawco.hub` reads it against the clock.
+   * it. A deadline, not a flag: `connectionStore.hub` reads it against the clock.
    */
   outageAt: null as number | null,
   /**

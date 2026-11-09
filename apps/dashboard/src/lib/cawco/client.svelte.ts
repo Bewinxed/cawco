@@ -335,7 +335,7 @@ function readFleet(delay = 1000): void {
  * when that read landed. A hub restart is the usual case — its daemons take a
  * few seconds to register again, so a dashboard that connects in that window
  * reads every machine offline, and the board's first-read gate
- * (`cawco.catalogsRead`) then waits on catalogs nobody ever asked for.
+ * (`catalogStore.catalogsRead`) then waits on catalogs nobody ever asked for.
  */
 function adoptMachines(incoming: Machine[]): void {
   const wasOnline = holdMachines(incoming);
