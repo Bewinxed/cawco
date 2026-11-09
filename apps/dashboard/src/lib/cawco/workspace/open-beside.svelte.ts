@@ -74,7 +74,7 @@ export function openBeside(sessionId: string, ctx?: Context | null): void {
   }
   // As a drag from the board records it, before the session lands.
   if (ctx) {
-    workingSet.visit(sessionId, ctx);
+    workingSet.visit(sessionId, workspace.openIds, ctx);
   }
   workspace.split(workspace.focusedLeafId, "right", sessionId);
   focusGroup = workspace.focusedLeafId;
