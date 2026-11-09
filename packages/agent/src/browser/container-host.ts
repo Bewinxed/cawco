@@ -48,12 +48,7 @@ import { machineId } from "@cawco/core/machine-id";
 import { stunServer } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
-import {
-  type MachineNetwork,
-  machineNetwork,
-  type Placement,
-  placementOf,
-} from "./egress";
+import { machineNetwork, type Placement, placementOf } from "./egress";
 import { hubPacUrl } from "./hub-pac";
 import { ensureImage } from "./image";
 import {
@@ -81,6 +76,7 @@ import {
   type BrowserRecord,
   browserOwner,
   httpAnswers,
+  type MachineNetwork,
   type Progress,
   portsOf,
 } from "./state";
