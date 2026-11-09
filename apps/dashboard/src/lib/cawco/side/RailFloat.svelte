@@ -14,7 +14,12 @@
    */
   import type { Snippet } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { dur, easeDrawer, easeOut, motionOk } from "../motion/curves.svelte";
+  import {
+    dur,
+    easeDrawer,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
 
   let { children }: { children: Snippet } = $props();
 

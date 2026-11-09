@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   /**
    * The scrim's own element, drawn through its overlay primitive's `child`
    * (dialog's, alert dialog's, sheet's, drawer's): fading out, it lets
@@ -6,8 +7,7 @@
    * said on the root for the screen's edges (page-marks), and it is the one
    * scrim only while none stands under it (scrim-stack).
    */
-  import { scrimMark } from "#lib/cawco/page-marks.js";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
+  import { scrimMark } from "#lib/platform/page-marks.js";
   import { scrimStack } from "./scrim-stack.js";
 
   let { props, open }: { props: Record<string, unknown>; open: boolean } =

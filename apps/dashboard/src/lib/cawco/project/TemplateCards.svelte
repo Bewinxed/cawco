@@ -22,8 +22,6 @@
    */
   import { onboardingWords } from "@cawco/core/words/onboarding";
   import { RadioGroup } from "bits-ui";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -31,6 +29,8 @@
     iconCardsVariants,
     iconCardVariants,
   } from "#lib/components/ui/icon-card/index.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import Caw, { LEDGE_LINE, SAFE_MARGIN } from "../home/Caw.svelte";
   import CawPosePicture from "../home/CawPosePicture.svelte";
   import CardFace from "./CardFace.svelte";

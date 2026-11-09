@@ -43,16 +43,6 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import {
-    dur,
-    ease,
-    easeOut,
-    lifting,
-    motionOk,
-    pinned as pinnedOut,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { growTo } from "#lib/cawco/motion/hang.js";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
@@ -79,16 +69,30 @@
     IconSplitDown,
     IconSplitRight,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import type { HubRead } from "#lib/platform/hub-read.js";
+  import {
+    dur,
+    ease,
+    easeOut,
+    lifting,
+    motionOk,
+    pinned as pinnedOut,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { growTo } from "#lib/platform/motion/hang.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
+  import {
+    integrate,
+    type Sample,
+    sampleAt,
+  } from "#lib/platform/motion/spring.js";
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
   import { ACTIVITY_LABEL, FAILED_LABEL, UNKNOWN_LABEL } from "../activity";
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
-  import { frameSize } from "../frame-observer";
-  import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
   import { markHue } from "../mark";
-  import { integrate, type Sample, sampleAt } from "../motion/spring";
   import { folderOf } from "../projects";
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";

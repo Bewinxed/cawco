@@ -19,7 +19,7 @@
 -->
 <script>
   import { onMount } from "svelte";
-  import { hangShadow } from "../../../apps/dashboard/src/lib/cawco/motion/hung-shadow.ts";
+  import { hangShadow } from "../../../apps/dashboard/src/lib/platform/motion/hung-shadow.ts";
   import ArtifactMenu from "../../../apps/dashboard/src/lib/cawco/preview/ArtifactMenu.svelte";
   import CommentRail from "../../../apps/dashboard/src/lib/cawco/preview/CommentRail.svelte";
   import PinCard from "../../../apps/dashboard/src/lib/cawco/preview/PinCard.svelte";

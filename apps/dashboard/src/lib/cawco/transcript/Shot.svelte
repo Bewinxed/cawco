@@ -109,9 +109,9 @@
 </script>
 
 <script lang="ts">
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { reveal, revealHere } from "#lib/cawco/motion/curves.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { reveal, revealHere } from "#lib/platform/motion/curves.svelte.js";
   import {
     type LightboxShot,
     lightbox,

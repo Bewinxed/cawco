@@ -2,8 +2,8 @@
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { z } from "zod";
 import { HarnessKindSchema, ModelUseSchema } from "#lib/cawco/stored-shapes.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { MODEL_STORAGE_PREFIX } from "../models.svelte";
-import { readJson, writeJson } from "../storage";
 
 export interface ModelUse {
   lastSpawnAt?: string;

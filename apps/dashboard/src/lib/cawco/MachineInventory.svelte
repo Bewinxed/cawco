@@ -8,13 +8,13 @@
   } from "@cawco/core/fleet";
   import { machineLabel } from "@cawco/core/machine-names";
   import { skillsWords as words } from "@cawco/core/words/skills";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconChevronDown, IconChevronRight, IconLaptop } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
   import type { Machine } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";

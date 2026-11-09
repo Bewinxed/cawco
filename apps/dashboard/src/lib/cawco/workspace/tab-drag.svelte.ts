@@ -31,7 +31,7 @@
 
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { flushSync } from "svelte";
-import { motionOk } from "../motion/curves.svelte";
+import { motionOk } from "#lib/platform/motion/curves.svelte.js";
 import {
   clearHints,
   coarse,

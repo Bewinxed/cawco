@@ -43,13 +43,13 @@
    * growing, with the same outcomes.
    */
   import { onMount, tick, untrack } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { keyed } from "#lib/cawco/motion/keyed.svelte.js";
-  import { track } from "#lib/cawco/track.js";
   import { IconSearch } from "#lib/icons.js";
+  import { felt } from "#lib/platform/feel.svelte.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { keyed } from "#lib/platform/motion/keyed.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import { formatAgeShort } from "#lib/utils/time.js";
-  import { felt } from "../feel.svelte";
   import {
     GrownShape,
     type LineBox,

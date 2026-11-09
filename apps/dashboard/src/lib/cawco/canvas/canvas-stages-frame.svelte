@@ -7,7 +7,7 @@
    * grips standing in it as the stage stands them, with no stage, iframe or
    * hub. The handles are inert here: a drag has no canvas to resize.
    */
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import CanvasGrip from "./CanvasGrip.svelte";
   import type { GrabValue, Handle } from "./stage.svelte";
 

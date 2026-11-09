@@ -32,7 +32,6 @@
    */
   import { HOUR_MS } from "@cawco/core/time";
   import { graphWords as words } from "@cawco/core/words/graph";
-  import { ease } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
@@ -44,6 +43,7 @@
     IconPlus,
     IconReset,
   } from "#lib/icons.js";
+  import { ease } from "#lib/platform/motion/curves.svelte.js";
   import ChoiceList, { toChosen } from "./ChoiceList.svelte";
   import CurveChoices from "./CurveChoices.svelte";
   import { figureOf } from "./figures";

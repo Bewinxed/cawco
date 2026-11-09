@@ -1,4 +1,4 @@
-import { failureWords } from "#lib/cawco/hub-read.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 
 /**
  * What a menu item that runs something does with its select: the menu stays

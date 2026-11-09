@@ -65,11 +65,11 @@
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
+  import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
+  import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { dur, motionOk } from "../motion/curves.svelte";
-  import { scrollMotion } from "../motion/keyed.svelte";
-  import { popOut } from "../motion/pop.svelte";
   import { send } from "../project-tasks";
   import { planAsked, takePlan } from "../reference-things.svelte";
   import {

@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
 
   /**
    * One editor's question (its delete's), asked in that editor's own footer,
